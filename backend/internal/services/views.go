@@ -364,6 +364,197 @@ func Governance(ctx context.Context) (models.GovernanceSummary, error) {
 	}, nil
 }
 
+func Topology(ctx context.Context) (models.TopologyGraph, error) {
+	graph := models.TopologyGraph{
+		Nodes: []models.TopologyNode{},
+		Edges: []models.TopologyEdge{},
+	}
+	nodeSeen := make(map[string]bool)
+	edgeSeen := make(map[string]bool)
+	projectCatalog := make(map[string]models.ProjectCatalog)
+	roleCatalog := make(map[string]map[string]models.ProjectRole)
+
+	addNode := func(node models.TopologyNode) {
+		if nodeSeen[node.ID] {
+			return
+		}
+		nodeSeen[node.ID] = true
+		graph.Nodes = append(graph.Nodes, node)
+	}
+	addEdge := func(edge models.TopologyEdge) {
+		if edgeSeen[edge.ID] {
+			return
+		}
+		edgeSeen[edge.ID] = true
+		graph.Edges = append(graph.Edges, edge)
+	}
+	ensureProjectNode := func(projectID string) {
+		projectNodeID := "project:" + projectID
+		project, ok := projectCatalog[projectID]
+		if ok {
+			addNode(models.TopologyNode{
+				ID:          projectNodeID,
+				Label:       project.Name,
+				Kind:        "project",
+				ProjectID:   project.ID,
+				Description: project.Description,
+				Meta: map[string]string{
+					"kind": project.Kind,
+				},
+			})
+			return
+		}
+
+		addNode(models.TopologyNode{
+			ID:          projectNodeID,
+			Label:       projectID,
+			Kind:        "project",
+			ProjectID:   projectID,
+			Description: "Referenced by persisted rules or bundle grants that do not exist in the seeded demo catalog yet.",
+			Meta: map[string]string{
+				"kind":   "external",
+				"source": "database",
+			},
+		})
+	}
+	ensureRoleNode := func(projectID, roleKey string) {
+		ensureProjectNode(projectID)
+
+		roleNode := models.TopologyNode{
+			ID:          roleNodeID(projectID, roleKey),
+			Label:       roleLabel(roleKey),
+			Kind:        "role",
+			ProjectID:   projectID,
+			Description: "Referenced by persisted rules or grants outside the seeded role catalog.",
+			Meta: map[string]string{
+				"role_key": roleKey,
+				"source":   "database",
+			},
+		}
+
+		if roles, ok := roleCatalog[projectID]; ok {
+			if role, ok := roles[roleKey]; ok {
+				roleNode.Label = role.Label
+				roleNode.Description = role.Description
+				roleNode.Meta = map[string]string{
+					"role_key": role.Key,
+				}
+			}
+		}
+
+		addNode(roleNode)
+		addEdge(models.TopologyEdge{
+			ID:     "contains:" + projectID + ":" + roleKey,
+			Source: "project:" + projectID,
+			Target: roleNode.ID,
+			Kind:   "contains",
+			Label:  "defines",
+		})
+	}
+
+	for _, project := range demo.Projects() {
+		projectCatalog[project.ID] = project
+		roleCatalog[project.ID] = make(map[string]models.ProjectRole, len(project.Roles))
+		ensureProjectNode(project.ID)
+
+		for _, role := range project.Roles {
+			roleCatalog[project.ID][role.Key] = role
+			ensureRoleNode(project.ID, role.Key)
+		}
+	}
+
+	appViews, err := ListApplications(ctx)
+	if err != nil {
+		return graph, err
+	}
+	for _, app := range appViews {
+		nodeID := "application:" + app.Application.ID
+		ensureProjectNode(app.Application.ProjectID)
+		addNode(models.TopologyNode{
+			ID:          nodeID,
+			Label:       app.Application.Name,
+			Kind:        "application",
+			ProjectID:   app.Application.ProjectID,
+			Description: app.Application.Description,
+			Meta: map[string]string{
+				"claim_name":  app.Application.ClaimName,
+				"format_type": app.Application.FormatType,
+				"consumer":    app.Application.Consumer,
+			},
+		})
+		addEdge(models.TopologyEdge{
+			ID:     "consumes:" + app.Application.ID,
+			Source: nodeID,
+			Target: "project:" + app.Application.ProjectID,
+			Kind:   "application",
+			Label:  "consumes",
+		})
+	}
+
+	bundles, err := db.GetAllBundles(ctx)
+	if err != nil {
+		return graph, err
+	}
+	for _, bundle := range bundles {
+		bundleID := "bundle:" + bundle.ID
+		addNode(models.TopologyNode{
+			ID:          bundleID,
+			Label:       bundle.Name,
+			Kind:        "bundle",
+			Description: bundle.Description,
+		})
+
+		roles, err := db.GetRolesForBundle(ctx, bundle.ID)
+		if err != nil {
+			return graph, err
+		}
+		for _, role := range roles {
+			ensureRoleNode(role.ProjectID, role.RoleKey)
+			addEdge(models.TopologyEdge{
+				ID:     "bundle-role:" + bundle.ID + ":" + role.ProjectID + ":" + role.RoleKey,
+				Source: bundleID,
+				Target: roleNodeID(role.ProjectID, role.RoleKey),
+				Kind:   "bundle",
+				Label:  "grants",
+			})
+		}
+	}
+
+	rules, err := db.GetActiveMappingRules(ctx)
+	if err != nil {
+		return graph, err
+	}
+	for _, rule := range rules {
+		ensureRoleNode(rule.SourceProject, rule.SourceRole)
+		ensureRoleNode(rule.TargetProject, rule.TargetRole)
+		addEdge(models.TopologyEdge{
+			ID:     "rule:" + rule.ID,
+			Source: roleNodeID(rule.SourceProject, rule.SourceRole),
+			Target: roleNodeID(rule.TargetProject, rule.TargetRole),
+			Kind:   "rule",
+			Label:  "maps",
+			Meta: map[string]string{
+				"version": fmt.Sprintf("%d", rule.Version),
+			},
+		})
+	}
+
+	sort.Slice(graph.Nodes, func(i, j int) bool {
+		if graph.Nodes[i].Kind == graph.Nodes[j].Kind {
+			if graph.Nodes[i].Label == graph.Nodes[j].Label {
+				return graph.Nodes[i].ID < graph.Nodes[j].ID
+			}
+			return graph.Nodes[i].Label < graph.Nodes[j].Label
+		}
+		return graph.Nodes[i].Kind < graph.Nodes[j].Kind
+	})
+	sort.Slice(graph.Edges, func(i, j int) bool {
+		return graph.Edges[i].ID < graph.Edges[j].ID
+	})
+
+	return graph, nil
+}
+
 func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.EffectiveRole, []models.Bundle, error) {
 	roleMap := make(map[roleKey]*models.EffectiveRole)
 
@@ -512,4 +703,22 @@ func ensureBundles(bundles []models.Bundle) []models.Bundle {
 		return []models.Bundle{}
 	}
 	return bundles
+}
+
+func roleNodeID(projectID, roleKey string) string {
+	return "role:" + projectID + ":" + roleKey
+}
+
+func roleLabel(roleKey string) string {
+	words := strings.Fields(strings.NewReplacer("_", " ", "-", " ").Replace(roleKey))
+	for i, word := range words {
+		if word == "" {
+			continue
+		}
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	if len(words) == 0 {
+		return roleKey
+	}
+	return strings.Join(words, " ")
 }

@@ -201,3 +201,26 @@ type GovernanceSummary struct {
 	ExpiringGrants  []DirectGrant   `json:"expiring_grants"`
 	CleanupHints    []string        `json:"cleanup_hints"`
 }
+
+type TopologyNode struct {
+	ID          string            `json:"id"`
+	Label       string            `json:"label"`
+	Kind        string            `json:"kind"`
+	ProjectID   string            `json:"project_id,omitempty"`
+	Description string            `json:"description,omitempty"`
+	Meta        map[string]string `json:"meta,omitempty"`
+}
+
+type TopologyEdge struct {
+	ID      string            `json:"id"`
+	Source  string            `json:"source"`
+	Target  string            `json:"target"`
+	Kind    string            `json:"kind"`
+	Label   string            `json:"label"`
+	Meta    map[string]string `json:"meta,omitempty"`
+}
+
+type TopologyGraph struct {
+	Nodes []TopologyNode `json:"nodes"`
+	Edges []TopologyEdge `json:"edges"`
+}

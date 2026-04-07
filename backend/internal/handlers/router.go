@@ -34,6 +34,7 @@ func NewRouter() *http.ServeMux {
 
 	// Project Views
 	mux.HandleFunc("GET /api/v1/projects", withCORS(withAuth(handleGetProjects)))
+	mux.HandleFunc("GET /api/v1/topology", withCORS(withAuth(handleGetTopology)))
 
 	// Rules Routes
 	mux.HandleFunc("GET /api/v1/rules/mapping", withCORS(withAuth(handleGetMappingRules)))

@@ -79,3 +79,13 @@ func handleGetBundleImpact(w http.ResponseWriter, r *http.Request) {
 
 	jsonResponse(w, http.StatusOK, impact)
 }
+
+func handleGetTopology(w http.ResponseWriter, r *http.Request) {
+	topology, err := services.Topology(r.Context())
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "VIEW_ERROR", err.Error())
+		return
+	}
+
+	jsonResponse(w, http.StatusOK, topology)
+}

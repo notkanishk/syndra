@@ -20,6 +20,7 @@ export default function Sidebar() {
         <p className="px-3 pt-4 pb-1 text-xs font-semibold text-muted uppercase tracking-wider">Policy Engine</p>
         <Link href="/bundles" className="block px-3 py-2 text-sm text-muted hover:text-foreground hover:bg-surfaceHover rounded-md transition-colors">Bundles</Link>
         <Link href="/policies" className="block px-3 py-2 text-sm text-muted hover:text-foreground hover:bg-surfaceHover rounded-md transition-colors">Mapping Rules</Link>
+        <Link href="/graph" className="block px-3 py-2 text-sm text-muted hover:text-foreground hover:bg-surfaceHover rounded-md transition-colors">God Mode</Link>
         
         <p className="px-3 pt-4 pb-1 text-xs font-semibold text-muted uppercase tracking-wider">Governance</p>
         <Link href="/audit" className="block px-3 py-2 text-sm text-muted hover:text-foreground hover:bg-surfaceHover rounded-md transition-colors">Audit Log</Link>
