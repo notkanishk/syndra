@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: mkauth_postgres
+    environment:
+      POSTGRES_USER: mkauth
+      POSTGRES_PASSWORD: mkauth_secure_password # Change in production
+      POSTGRES_DB: mkauthdb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mkauth"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: mkauth_redis
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mkauth_backend
+    environment:
+      - DB_DSN=postgres://mkauth:mkauth_secure_password@postgres:5432/mkauthdb?sslmode=disable
+      - REDIS_URL=redis:6379
+      - PORT=8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    container_name: mkauth_ui
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
