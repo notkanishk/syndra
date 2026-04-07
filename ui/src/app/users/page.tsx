@@ -1,34 +1,51 @@
+import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+
 export default function UsersView() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in-up">
       <header>
-        <h1 className="text-3xl font-bold">User-Centric View</h1>
-        <p className="text-zinc-400 mt-2">Visually trace source vs derived underlying roles across projects.</p>
+        <h1 className="text-3xl font-bold text-foreground">Users &amp; Access</h1>
+        <p className="text-muted mt-2">Trace source vs derived roles across projects for any user.</p>
       </header>
-      
-      <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
-        <h3 className="text-lg font-medium">Access Lineage</h3>
-        <p className="text-sm text-zinc-500 mt-1">Select a user to explicitly answer: "Why does this user have access to X?"</p>
-        
-        {/* Placeholder table for user roles grouped by project */}
-        <div className="mt-4 border border-zinc-800 rounded bg-zinc-950 p-4">
-          <div className="flex justify-between border-b border-zinc-800 pb-2 mb-2 text-sm font-semibold">
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Access Lineage</CardTitle>
+        </CardHeader>
+        <p className="text-sm text-muted mb-4">
+          Select a user to answer: &ldquo;Why does this user have access to X?&rdquo;
+        </p>
+
+        <div className="border border-border rounded-lg overflow-hidden">
+          <div className="grid grid-cols-3 gap-4 px-4 py-3 bg-surfaceHover border-b border-border text-xs font-semibold text-muted uppercase tracking-wider">
             <span>Project</span>
-            <span>Bundle / Source Component</span>
-            <span>Raw Role Name</span>
+            <span>Source</span>
+            <span>Role Key</span>
           </div>
-          <div className="flex justify-between text-sm text-zinc-300">
-            <span>Machine Shop</span>
-            <span className="text-emerald-400 font-medium">Student Bundle (Derived)</span>
-            <span className="font-mono text-xs">basic_tool_use</span>
-          </div>
-          <div className="flex justify-between text-sm text-zinc-300 mt-2">
-            <span>Door Access</span>
-            <span className="text-blue-400 font-medium">Direct Rule (Source)</span>
-            <span className="font-mono text-xs">3d_lab_pin</span>
+          <div className="divide-y divide-border">
+            <div className="grid grid-cols-3 gap-4 px-4 py-3 text-sm">
+              <span className="text-foreground font-medium">Machine Shop</span>
+              <Badge variant="secondary" className="w-fit">Student Bundle (Derived)</Badge>
+              <span className="font-mono text-xs text-muted">basic_tool_use</span>
+            </div>
+            <div className="grid grid-cols-3 gap-4 px-4 py-3 text-sm">
+              <span className="text-foreground font-medium">Door Access</span>
+              <Badge variant="outline" className="w-fit border-primary text-primary">Direct Rule</Badge>
+              <span className="font-mono text-xs text-muted">3d_lab_pin</span>
+            </div>
+            <div className="grid grid-cols-3 gap-4 px-4 py-3 text-sm">
+              <span className="text-foreground font-medium">3D Printing</span>
+              <Badge variant="secondary" className="w-fit">Propagated (Auto)</Badge>
+              <span className="font-mono text-xs text-muted">printer_user</span>
+            </div>
           </div>
         </div>
-      </div>
+
+        <p className="text-xs text-muted mt-4 italic">
+          Live user lookups will be available once Zitadel machine keys are configured.
+        </p>
+      </Card>
     </div>
   );
 }

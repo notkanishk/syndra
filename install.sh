@@ -13,7 +13,8 @@ fi
 
 echo "Pulling Docker Images and starting MkAuth stack..."
 docker compose pull
-docker compose up -d --build
+docker compose build --no-cache ui
+docker compose up -d --force-recreate
 
 echo "Installation complete! MkAuth is running."
 echo "UI is accessible at http://<LXC_IP>:3000"
