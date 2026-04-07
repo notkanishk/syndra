@@ -1,0 +1,43 @@
+# OS
+.DS_Store
+
+# Go
+bin/
+/backend/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/backend/vendor/
+
+# Node/Next.js
+/ui/node_modules/
+/ui/.next/
+/ui/out/
+/ui/build/
+/ui/.swc/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+
+# Zitadel Machine Key (CRITICAL: Do not commit this)
+zitadel-machine-key.json
+*/zitadel-machine-key.json
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
