@@ -5,34 +5,42 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+
+	"mkauth/internal/zitadel"
 )
 
-// ZitadelEvent represents a generic event pushed from Zitadel Webhooks
-type ZitadelEvent struct {
-	EventType   string `json:"event_type"`
-	AggregateID string `json:"aggregate_id"`
-	// Additional payload attributes will sit here
+// WebhookPayload represents our stripped down interpretation of a Zitadel event payload
+type WebhookPayload struct {
+	UserID        string `json:"user_id"`
+	SourceProject string `json:"source_project"`
+	RoleKey       string `json:"role_key"`
 }
 
-// HandleZitadelWebhook receives events like 'user.changed' to trigger a Redis refresh mappings
+// HandleZitadelWebhook executes the async policy propagation flow.
+// When Zitadel fires an event (e.g. User Granted Role), this endpoint receives it,
+// queries the local Postgres DB for dependent logic policies, and initiates follow-up API calls.
 func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var event ZitadelEvent
+	var event WebhookPayload
 	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
-		http.Error(w, "Invalid payload", http.StatusBadRequest)
+		jsonErrorResponse(w, http.StatusBadRequest, "INVALID_PAYLOAD", "Cannot parse webhook event")
 		return
 	}
 
-	// Log the incoming event from Zitadel
-	log.Printf("Received Zitadel Webhook: %s for User/Aggregate ID: %s", event.EventType, event.AggregateID)
+	log.Printf("[HOOK] Webhook received: User: %s, Project: %s, Role: %s", event.UserID, event.SourceProject, event.RoleKey)
 
-	// TODO: Flag the user's role mapping in Redis as "dirty" to force a sync
-	// db.Redis.Set(context.Background(), fmt.Sprintf("user:%s:dirty", event.AggregateID), "true", 0)
+	// Fire the Orchestrator loop using the inbound event data!
+	err := zitadel.EnforceMappingRules(r.Context(), event.UserID, event.SourceProject, event.RoleKey)
+	if err != nil {
+		log.Printf("[HOOK ERROR] Execution failure inside Orchestrator: %v", err)
+		jsonErrorResponse(w, http.StatusInternalServerError, "ORCHESTRATOR_FAULT", err.Error())
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "Webhook processed and state marked for invalidation.")
+	fmt.Fprintln(w, "Webhook processed and dependent rules enforced.")
 }
