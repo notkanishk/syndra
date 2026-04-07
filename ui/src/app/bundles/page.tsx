@@ -4,6 +4,11 @@ import { useEffect, useState, useCallback } from "react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 
+interface BundleRole {
+  zitadel_project_id: string;
+  zitadel_role_key: string;
+}
+
 interface Bundle {
   id: string;
   name: string;
@@ -18,6 +23,9 @@ export default function BundlesView() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState({ name: "", description: "" });
+  const [expandedBundle, setExpandedBundle] = useState<string | null>(null);
+  const [bundleRoles, setBundleRoles] = useState<Record<string, BundleRole[]>>({});
+  const [newRole, setNewRole] = useState({ project_id: "", role_key: "" });
 
   const loadBundles = useCallback(async () => {
     setLoading(true);
@@ -31,6 +39,16 @@ export default function BundlesView() {
       setLoading(false);
     }
   }, []);
+
+  const loadBundleRoles = async (bundleId: string) => {
+    try {
+      const res = await fetch(`/api/proxy/bundles/${bundleId}/roles`);
+      const data = await res.json();
+      setBundleRoles(prev => ({ ...prev, [bundleId]: Array.isArray(data) ? data : [] }));
+    } catch (err) {
+      console.error("Failed to load bundle roles", err);
+    }
+  };
 
   useEffect(() => {
     loadBundles();
@@ -57,6 +75,23 @@ export default function BundlesView() {
       setError(err.message);
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleAddRole = async (bundleId: string) => {
+    if (!newRole.project_id || !newRole.role_key) return;
+    try {
+      const res = await fetch(`/api/proxy/bundles/${bundleId}/roles`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newRole),
+      });
+      if (res.ok) {
+        setNewRole({ project_id: "", role_key: "" });
+        loadBundleRoles(bundleId);
+      }
+    } catch (err) {
+      console.error("Failed to add role", err);
     }
   };
 
@@ -135,16 +170,80 @@ export default function BundlesView() {
         ) : (
           <div className="space-y-3">
             {bundles.map((bundle) => (
-              <div key={bundle.id} className="p-4 border border-border rounded-lg bg-surfaceHover transition-colors hover:border-primary/50">
-                <div className="flex items-center justify-between">
+              <div key={bundle.id} className="border border-border rounded-lg bg-surfaceHover overflow-hidden transition-all hover:border-primary/30">
+                <div 
+                  className="p-4 flex items-center justify-between cursor-pointer hover:bg-surface"
+                  onClick={() => {
+                    if (expandedBundle === bundle.id) {
+                      setExpandedBundle(null);
+                    } else {
+                      setExpandedBundle(bundle.id);
+                      loadBundleRoles(bundle.id);
+                    }
+                  }}
+                >
                   <div>
-                    <h3 className="font-semibold text-foreground">{bundle.name}</h3>
-                    <p className="text-sm text-muted mt-0.5">{bundle.description || "No description"}</p>
+                    <h3 className="font-semibold text-foreground flex items-center gap-2">
+                      {bundle.name}
+                      {expandedBundle === bundle.id ? (
+                        <span className="text-[10px] text-muted">▼</span>
+                      ) : (
+                        <span className="text-[10px] text-muted">▶</span>
+                      )}
+                    </h3>
+                    <p className="text-xs text-muted mt-0.5">{bundle.description || "No description"}</p>
                   </div>
                   <Badge variant="secondary">
                     {new Date(bundle.created_at).toLocaleDateString()}
                   </Badge>
                 </div>
+
+                {expandedBundle === bundle.id && (
+                  <div className="px-4 pb-4 pt-2 border-t border-border bg-surface/50 animate-fade-in-down">
+                    <div className="mb-4">
+                      <h4 className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">Roles in Bundle</h4>
+                      {!bundleRoles[bundle.id] ? (
+                        <p className="text-xs text-muted">Loading roles...</p>
+                      ) : bundleRoles[bundle.id].length === 0 ? (
+                        <p className="text-xs text-muted italic">No roles added yet.</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {bundleRoles[bundle.id].map((r, idx) => (
+                            <Badge key={idx} variant="outline" className="text-[10px] py-0 px-1.5 border-primary/20 bg-primary/5 text-primary">
+                              {r.zitadel_project_id}:{r.zitadel_role_key}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-4 border-t border-border/50">
+                      <h4 className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">Add Role to Bundle</h4>
+                      <div className="grid grid-cols-2 gap-2 mb-2">
+                        <input
+                          type="text"
+                          placeholder="Project ID"
+                          value={newRole.project_id}
+                          onChange={(e) => setNewRole({ ...newRole, project_id: e.target.value })}
+                          className="px-2 py-1.5 rounded bg-surface border border-border text-xs focus:outline-none focus:border-primary transition-colors"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Role Key"
+                          value={newRole.role_key}
+                          onChange={(e) => setNewRole({ ...newRole, role_key: e.target.value })}
+                          className="px-2 py-1.5 rounded bg-surface border border-border text-xs focus:outline-none focus:border-primary transition-colors"
+                        />
+                      </div>
+                      <button 
+                        onClick={() => handleAddRole(bundle.id)}
+                        className="w-full py-1.5 bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-bold uppercase tracking-wider rounded transition-colors"
+                      >
+                        + Add Role
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

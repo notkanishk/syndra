@@ -12,31 +12,106 @@ import (
 
 const cacheTTL = 24 * time.Hour
 
+// UserGrant represents a simple role held by a user in Zitadel
+type UserGrant struct {
+	ProjectID string
+	RoleKey   string
+}
+
+// fetchBaseGrants simulates fetching the user's primary roles from Zitadel.
+// In Phase 2, this will call the real Zitadel Management API using MgmtClient.
+func fetchBaseGrants(ctx context.Context, userID string) ([]UserGrant, error) {
+	// MOCK DATA for development:
+	// If userID is "dev_admin", they have "admin" role in project "platform"
+	if userID == "dev_admin" {
+		return []UserGrant{
+			{ProjectID: "platform", RoleKey: "admin"},
+		}, nil
+	}
+
+	// Default: return empty for now
+	return []UserGrant{}, nil
+}
+
 // CompileUserCache builds a flat JSON claims map for a given user+project
-// and stores it in Redis for sub-millisecond retrieval by the Data Plane.
-//
-// The key format is: mapping:<userID>:<projectID>
-// The value is a JSON object of claim keys → role arrays.
+// by evaluating all mapping rules against the user's current roles.
 func CompileUserCache(ctx context.Context, userID, projectID string) error {
-	// 1. Query all active mapping rules that target this project
-	rules, err := db.GetActiveMappingRules(ctx)
+	// 1. Fetch user's base roles from Zitadel (mocked)
+	baseGrants, err := fetchBaseGrants(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("cache compile: failed to fetch base grants: %w", err)
+	}
+
+	// 2. Load all active mapping rules
+	allRules, err := db.GetActiveMappingRules(ctx)
 	if err != nil {
 		return fmt.Errorf("cache compile: failed to load rules: %w", err)
 	}
 
-	// 2. Build the derived roles for this project
-	derivedRoles := []string{}
-	for _, rule := range rules {
-		if rule.TargetProject == projectID {
-			derivedRoles = append(derivedRoles, rule.TargetRole)
+	activeRoles := make(map[string]map[string]bool) // projectID -> map[roleKey]exists
+	for _, g := range baseGrants {
+		if activeRoles[g.ProjectID] == nil {
+			activeRoles[g.ProjectID] = make(map[string]bool)
+		}
+		activeRoles[g.ProjectID][g.RoleKey] = true
+	}
+
+	// Fetch user's assigned bundles from MkAuth DB
+	userBundles, err := db.GetBundlesForUser(ctx, userID)
+	if err != nil {
+		log.Printf("[CACHE WARN] Failed to fetch bundles for %s: %v", userID, err)
+	}
+	for _, b := range userBundles {
+		roles, err := db.GetRolesForBundle(ctx, b.ID)
+		if err != nil {
+			log.Printf("[CACHE WARN] Failed to fetch roles for bundle %s: %v", b.ID, err)
+			continue
+		}
+		for _, r := range roles {
+			if activeRoles[r.ProjectID] == nil {
+				activeRoles[r.ProjectID] = make(map[string]bool)
+			}
+			activeRoles[r.ProjectID][r.RoleKey] = true
 		}
 	}
 
-	// 3. Construct the claims payload
+	// 3. Iterative Role Resolution (Forward Pass)
+	// We start with the user's base roles and see which rules they activate.
+
+	// Simple fixed-point iteration (max passes = number of rules)
+	changed := true
+	for i := 0; i < len(allRules) && changed; i++ {
+		changed = false
+		for _, rule := range allRules {
+			// If user has the source role...
+			if activeRoles[rule.SourceProject] != nil && activeRoles[rule.SourceProject][rule.SourceRole] {
+				// ...and doesn't yet have the target role
+				if activeRoles[rule.TargetProject] == nil {
+					activeRoles[rule.TargetProject] = make(map[string]bool)
+				}
+				if !activeRoles[rule.TargetProject][rule.TargetRole] {
+					activeRoles[rule.TargetProject][rule.TargetRole] = true
+					changed = true
+				}
+			}
+		}
+	}
+
+	// 4. Extract derived roles for the specifically requested project
+	derivedRoles := []string{}
+	if activeRoles[projectID] != nil {
+		for role := range activeRoles[projectID] {
+			derivedRoles = append(derivedRoles, role)
+		}
+	}
+
+	// 5. Construct the claims payload
 	claims := map[string]interface{}{
-		"derived_roles": derivedRoles,
-		"compiled_at":   time.Now().UTC().Format(time.RFC3339),
-		"source":        "mkauth_cache_compiler",
+		"roles":       derivedRoles,
+		"user_id":     userID,
+		"project_id":  projectID,
+		"compiled_at": time.Now().UTC().Format(time.RFC3339),
+		"source":      "mkauth_cache_compiler_v1",
 	}
 
 	data, err := json.Marshal(claims)
@@ -44,14 +119,14 @@ func CompileUserCache(ctx context.Context, userID, projectID string) error {
 		return fmt.Errorf("cache compile: marshal failed: %w", err)
 	}
 
-	// 4. Write to Redis with TTL
+	// 6. Write to Redis
 	cacheKey := fmt.Sprintf("mapping:%s:%s", userID, projectID)
 	err = db.Redis.Set(ctx, cacheKey, string(data), cacheTTL).Err()
 	if err != nil {
 		return fmt.Errorf("cache compile: redis write failed: %w", err)
 	}
 
-	log.Printf("[CACHE] Compiled %d derived roles for %s → %s", len(derivedRoles), userID, projectID)
+	log.Printf("[CACHE] Successfully compiled %d roles for %s in %s", len(derivedRoles), userID, projectID)
 	return nil
 }
 
@@ -76,7 +151,7 @@ func InvalidateUser(ctx context.Context, userID string) error {
 	return nil
 }
 
-// RebuildUserCache invalidates + recompiles cache for a user triggered by webhooks.
+// RebuildUserCache invalidates + recompiles cache for a user.
 func RebuildUserCache(ctx context.Context, userID string, projectIDs []string) {
 	_ = InvalidateUser(ctx, userID)
 	for _, pid := range projectIDs {

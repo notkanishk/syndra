@@ -11,8 +11,10 @@ COPY . .
 
 # Fetch dependencies
 RUN go get github.com/jackc/pgx/v5/pgxpool
+RUN go get github.com/jackc/pgx/v5/stdlib
 RUN go get github.com/redis/go-redis/v9
-RUN go get github.com/zitadel/zitadel-go/v3
+RUN go get github.com/golang-migrate/migrate/v4/database/pgx/v5
+RUN go get github.com/golang-migrate/migrate/v4/source/file
 RUN go mod tidy
 
 # Build the binary
@@ -21,8 +23,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o mkauth ./cmd/api
 # Final Stage (Minimal)
 FROM alpine:latest
 
-WORKDIR /root/
+WORKDIR /app
 COPY --from=builder /app/mkauth .
+COPY --from=builder /app/db ./db
 
 EXPOSE 8080
 CMD ["./mkauth"]

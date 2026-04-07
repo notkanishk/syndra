@@ -14,6 +14,12 @@ func NewRouter() *http.ServeMux {
 	// Bundle Routes
 	mux.HandleFunc("GET /api/v1/bundles", withCORS(withAuth(handleGetBundles)))
 	mux.HandleFunc("POST /api/v1/bundles", withCORS(withAuth(handleCreateBundle)))
+	mux.HandleFunc("GET /api/v1/bundles/{id}/roles", withCORS(withAuth(handleGetBundleRoles)))
+	mux.HandleFunc("POST /api/v1/bundles/{id}/roles", withCORS(withAuth(handleAddRoleToBundle)))
+
+	// User-Bundle Assignments
+	mux.HandleFunc("GET /api/v1/users/{id}/bundles", withCORS(withAuth(handleGetUserBundles)))
+	mux.HandleFunc("POST /api/v1/users/{id}/bundles", withCORS(withAuth(handleAssignBundleToUser)))
 
 	// Rules Routes
 	mux.HandleFunc("GET /api/v1/rules/mapping", withCORS(withAuth(handleGetMappingRules)))

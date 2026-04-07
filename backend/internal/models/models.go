@@ -18,6 +18,13 @@ type Bundle struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+// BundleRole represents a specific Zitadel role mapped to a bundle
+type BundleRole struct {
+	BundleID  string `json:"bundle_id"`
+	ProjectID string `json:"zitadel_project_id"`
+	RoleKey   string `json:"zitadel_role_key"`
+}
+
 // MappingRule defines absolute policy logic
 // IF SourceProject + SourceRole THEN ADD TargetProject + TargetRole
 type MappingRule struct {
