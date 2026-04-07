@@ -24,6 +24,9 @@ func main() {
 
 	// Setup webhook routing for the event engine
 	http.HandleFunc("/api/webhooks/zitadel", handlers.HandleZitadelWebhook)
+	
+	// Setup the fast-path Data Plane interface for Zitadel Actions
+	http.HandleFunc("/api/action/inject", handlers.HandleActionInject)
 
 	fmt.Println("Control Plane Backend Listening on :8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
