@@ -9,6 +9,12 @@ COPY go.mod ./
 
 COPY . .
 
+# Fetch dependencies
+RUN go get github.com/jackc/pgx/v5/pgxpool
+RUN go get github.com/redis/go-redis/v9
+RUN go get github.com/zitadel/zitadel-go/v3
+RUN go mod tidy
+
 # Build the binary
 RUN CGO_ENABLED=0 GOOS=linux go build -o mkauth ./cmd/api
 
