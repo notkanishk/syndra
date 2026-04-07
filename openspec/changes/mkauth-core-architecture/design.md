@@ -27,6 +27,8 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   **Application-Centric View:** Shows the roles an app consumes, its claim-shaping rules, and includes a **Token Simulator** to preview the exact JWT payloads the app will receive.
 *   **Project View:** Displays roles natively defined in Zitadel, who currently has them, and which bundles/policies actively utilize them.
 *   **Bundle / Policy View:** Displays definitions of bundles, affected projects, and the ultimate impacted user pool.
+*   **Access Requests / Governance View:** Surfaces pending access requests, expiring direct grants, and cleanup hints so admins can review the system from a least-privilege perspective.
+*   **Topology Graph / God Mode View:** A macroscopic graph of projects, roles, bundles, applications, and mapping rules for visual exploration and debugging.
 
 ## 5. UI, UX, & Governance
 *   **Aesthetic & Style:** Inspired by Linear/Stripe. Clean, enterprise-grade layout using distinct cards, soft shadows, and moderate whitespace to prevent intimidating non-technical staff. Dark/light modes prominently feature **vibrant accent colors** to highlight primary actions.
@@ -45,7 +47,11 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   [x] **Smart Cache Compiler**: Iterative, transitive role resolution in Go.
 *   [x] **Mapping Rules**: Rule management API and UI.
 *   [x] **Bundles**: Role aggregation and User-Bundle assignments.
+*   [x] **Access Workflows**: Direct grants with optional expiry plus request/approval flows.
 *   [x] **Cycle Detection**: DFS validation on rule creation.
 *   [x] **Audit Logging**: Mandatory tracking for all admin actions.
+*   [x] **Governance Summary**: Pending requests, expiring grants, and cleanup hints.
+*   [x] **Topology Graph**: Visual "God Mode" graph and supporting API.
+*   [x] **Seeded Demo Catalog**: Users, projects, applications, and dummy relationships for local testing.
 *   [/] **Zitadel Integration**: Currently stubbed for local dev; needs M2M credentials for live sync.
-*   [ ] **Visual Graph View**: Roadmap feature for v1.1.
+*   [ ] **Production Rollout**: Final deployment with actual keys, networking, and live Zitadel credentials.
