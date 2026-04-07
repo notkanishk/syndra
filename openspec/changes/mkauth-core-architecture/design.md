@@ -39,4 +39,13 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   **Deployment:** Docker Compose running inside a Proxmox LXC (Linux Container). This provides a robust 1-command installation and update mechanism via an `update.sh` script that pulls GitHub changes and restarts the stack without downtime.
 *   **Backend / Orchestrator:** Go (Golang) running in a dedicated container. Chosen for its strict security boundary and low-latency response times for the Data Plane.
 *   **Frontend Dashboard:** Next.js (React) running in a dedicated container.
-*   **Data Stores:** Dedicated Docker containers for Redis (runtime fast mapping) and PostgreSQL (Control Plane policy engine).
+
+## 7. Current Implementation Status (v1.0-Bundles)
+*   [x] **Secure Data Plane**: Bearer token authentication enforced on all routes.
+*   [x] **Smart Cache Compiler**: Iterative, transitive role resolution in Go.
+*   [x] **Mapping Rules**: Rule management API and UI.
+*   [x] **Bundles**: Role aggregation and User-Bundle assignments.
+*   [x] **Cycle Detection**: DFS validation on rule creation.
+*   [x] **Audit Logging**: Mandatory tracking for all admin actions.
+*   [/] **Zitadel Integration**: Currently stubbed for local dev; needs M2M credentials for live sync.
+*   [ ] **Visual Graph View**: Roadmap feature for v1.1.
