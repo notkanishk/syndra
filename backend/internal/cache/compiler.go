@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"time"
 
 	"mkauth/internal/db"
+	"mkauth/internal/demo"
 )
 
 const cacheTTL = 24 * time.Hour
@@ -21,16 +23,16 @@ type UserGrant struct {
 // fetchBaseGrants simulates fetching the user's primary roles from Zitadel.
 // In Phase 2, this will call the real Zitadel Management API using MgmtClient.
 func fetchBaseGrants(ctx context.Context, userID string) ([]UserGrant, error) {
-	// MOCK DATA for development:
-	// If userID is "dev_admin", they have "admin" role in project "platform"
-	if userID == "dev_admin" {
-		return []UserGrant{
-			{ProjectID: "platform", RoleKey: "admin"},
-		}, nil
+	_ = ctx
+	grants := demo.BaseGrants(userID)
+	result := make([]UserGrant, 0, len(grants))
+	for _, grant := range grants {
+		result = append(result, UserGrant{
+			ProjectID: grant.ProjectID,
+			RoleKey:   grant.RoleKey,
+		})
 	}
-
-	// Default: return empty for now
-	return []UserGrant{}, nil
+	return result, nil
 }
 
 // CompileUserCache builds a flat JSON claims map for a given user+project
@@ -104,6 +106,7 @@ func CompileUserCache(ctx context.Context, userID, projectID string) error {
 			derivedRoles = append(derivedRoles, role)
 		}
 	}
+	sort.Strings(derivedRoles)
 
 	// 5. Construct the claims payload
 	claims := map[string]interface{}{

@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 
 	"mkauth/internal/db"
 	"mkauth/internal/handlers"
+	"mkauth/internal/seed"
 	"mkauth/internal/zitadel"
 )
 
@@ -16,6 +18,10 @@ func main() {
 	// Initialize connections safely (They read ENVs and connect)
 	db.ConnectPostgres()
 	db.ConnectRedis()
+
+	if err := seed.EnsureDemoData(context.Background()); err != nil {
+		log.Fatalf("Demo seed failed: %v", err)
+	}
 
 	// Initialize Zitadel service account auth
 	if err := zitadel.InitClient(); err != nil {

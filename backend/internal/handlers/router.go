@@ -15,11 +15,23 @@ func NewRouter() *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/bundles", withCORS(withAuth(handleGetBundles)))
 	mux.HandleFunc("POST /api/v1/bundles", withCORS(withAuth(handleCreateBundle)))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/roles", withCORS(withAuth(handleGetBundleRoles)))
+	mux.HandleFunc("GET /api/v1/bundles/{id}/impact", withCORS(withAuth(handleGetBundleImpact)))
 	mux.HandleFunc("POST /api/v1/bundles/{id}/roles", withCORS(withAuth(handleAddRoleToBundle)))
 
+	// Explorer Views
+	mux.HandleFunc("GET /api/v1/catalog", withCORS(withAuth(handleGetCatalog)))
+	mux.HandleFunc("GET /api/v1/users", withCORS(withAuth(handleGetUsers)))
 	// User-Bundle Assignments
 	mux.HandleFunc("GET /api/v1/users/{id}/bundles", withCORS(withAuth(handleGetUserBundles)))
 	mux.HandleFunc("POST /api/v1/users/{id}/bundles", withCORS(withAuth(handleAssignBundleToUser)))
+	mux.HandleFunc("GET /api/v1/users/{id}/access", withCORS(withAuth(handleGetUserAccess)))
+
+	// Application Views
+	mux.HandleFunc("GET /api/v1/applications", withCORS(withAuth(handleGetApplications)))
+	mux.HandleFunc("GET /api/v1/applications/{id}/simulate", withCORS(withAuth(handleSimulateApplication)))
+
+	// Project Views
+	mux.HandleFunc("GET /api/v1/projects", withCORS(withAuth(handleGetProjects)))
 
 	// Rules Routes
 	mux.HandleFunc("GET /api/v1/rules/mapping", withCORS(withAuth(handleGetMappingRules)))

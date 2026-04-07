@@ -24,7 +24,10 @@ func CreateBundle(ctx context.Context, name string, description string) (string,
 }
 
 func AddRoleToBundle(ctx context.Context, bundleID, zitadelProjectID, zitadelRoleKey string) error {
-	query := `INSERT INTO bundle_roles (bundle_id, zitadel_project_id, zitadel_role_key) VALUES ($1, $2, $3);`
+	query := `
+		INSERT INTO bundle_roles (bundle_id, zitadel_project_id, zitadel_role_key)
+		VALUES ($1, $2, $3)
+		ON CONFLICT DO NOTHING;`
 	_, err := PG.Exec(ctx, query, bundleID, zitadelProjectID, zitadelRoleKey)
 	if err != nil {
 		return fmt.Errorf("failed to map role to bundle: %w", err)
@@ -71,7 +74,10 @@ func GetRolesForBundle(ctx context.Context, bundleID string) ([]models.BundleRol
 }
 
 func AssignBundleToUser(ctx context.Context, userID, bundleID string) error {
-	query := `INSERT INTO user_bundle_assignments (user_id, bundle_id) VALUES ($1, $2);`
+	query := `
+		INSERT INTO user_bundle_assignments (user_id, bundle_id)
+		VALUES ($1, $2)
+		ON CONFLICT DO NOTHING;`
 	_, err := PG.Exec(ctx, query, userID, bundleID)
 	if err != nil {
 		return fmt.Errorf("failed to assign bundle: %w", err)

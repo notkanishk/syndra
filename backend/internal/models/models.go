@@ -55,3 +55,117 @@ type AuditLog struct {
 	ResourceID string    `json:"resource_id"`
 	CreatedAt  time.Time `json:"created_at"`
 }
+
+type UserProfile struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Title    string `json:"title"`
+	Team     string `json:"team"`
+	Status   string `json:"status"`
+	Avatar   string `json:"avatar"`
+	Location string `json:"location"`
+}
+
+type ProjectRole struct {
+	Key         string `json:"key"`
+	Label       string `json:"label"`
+	Description string `json:"description"`
+}
+
+type ProjectCatalog struct {
+	ID          string        `json:"id"`
+	Name        string        `json:"name"`
+	Kind        string        `json:"kind"`
+	Description string        `json:"description"`
+	Roles       []ProjectRole `json:"roles"`
+}
+
+type ApplicationCatalog struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	ProjectID   string `json:"project_id"`
+	Description string `json:"description"`
+	Consumer    string `json:"consumer"`
+	ClaimName   string `json:"claim_name"`
+	FormatType  string `json:"format_type"`
+}
+
+type RoleGrant struct {
+	ProjectID string `json:"project_id"`
+	RoleKey   string `json:"role_key"`
+}
+
+type RoleReason struct {
+	Kind          string `json:"kind"`
+	Description   string `json:"description"`
+	BundleID      string `json:"bundle_id,omitempty"`
+	BundleName    string `json:"bundle_name,omitempty"`
+	TriggerProject string `json:"trigger_project,omitempty"`
+	TriggerRole   string `json:"trigger_role,omitempty"`
+}
+
+type EffectiveRole struct {
+	ProjectID   string       `json:"project_id"`
+	ProjectName string       `json:"project_name"`
+	RoleKey     string       `json:"role_key"`
+	IsSource    bool         `json:"is_source"`
+	Reasons     []RoleReason `json:"reasons"`
+}
+
+type ProjectAccessView struct {
+	ProjectID         string          `json:"project_id"`
+	ProjectName       string          `json:"project_name"`
+	SourceRoles       []EffectiveRole `json:"source_roles"`
+	DerivedRoles      []EffectiveRole `json:"derived_roles"`
+	EffectiveRoleKeys []string        `json:"effective_role_keys"`
+}
+
+type UserAccessView struct {
+	User         UserProfile        `json:"user"`
+	Bundles      []Bundle          `json:"bundles"`
+	Projects     []ProjectAccessView `json:"projects"`
+	CleanupHints []string          `json:"cleanup_hints"`
+}
+
+type UserListItem struct {
+	User               UserProfile `json:"user"`
+	BundleCount        int         `json:"bundle_count"`
+	EffectiveRoleCount int         `json:"effective_role_count"`
+	KeyProjects        []string    `json:"key_projects"`
+}
+
+type ApplicationView struct {
+	Application       ApplicationCatalog `json:"application"`
+	ConsumedRoles     []string           `json:"consumed_roles"`
+	AssignedUserCount int                `json:"assigned_user_count"`
+}
+
+type ApplicationSimulation struct {
+	Application  ApplicationCatalog      `json:"application"`
+	User         UserProfile             `json:"user"`
+	RawRoles     []string                `json:"raw_roles"`
+	CustomClaims map[string]interface{}  `json:"custom_claims"`
+}
+
+type ProjectSummary struct {
+	Project         ProjectCatalog `json:"project"`
+	MemberCount     int            `json:"member_count"`
+	BundleCount     int            `json:"bundle_count"`
+	RuleInCount     int            `json:"rule_in_count"`
+	RuleOutCount    int            `json:"rule_out_count"`
+	ActiveRoleKeys  []string       `json:"active_role_keys"`
+	SampleMembers   []string       `json:"sample_members"`
+}
+
+type CatalogResponse struct {
+	Users        []UserProfile        `json:"users"`
+	Projects     []ProjectCatalog     `json:"projects"`
+	Applications []ApplicationCatalog `json:"applications"`
+}
+
+type BundleImpact struct {
+	BundleID   string        `json:"bundle_id"`
+	RoleCount  int           `json:"role_count"`
+	Users      []UserProfile `json:"users"`
+}
