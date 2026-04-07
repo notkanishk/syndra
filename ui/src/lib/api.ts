@@ -5,6 +5,17 @@ const CLIENT_API = "/api/proxy";
 
 const API_KEY = process.env.MKAUTH_API_KEY || "";
 
+async function fetchServerJson(path: string) {
+  const res = await fetch(`${SERVER_API}${path}`, {
+    cache: "no-store",
+    headers: { "Authorization": `Bearer ${API_KEY}` },
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch ${path}`);
+  }
+  return res.json();
+}
+
 export function getServerApiBase() {
   return SERVER_API;
 }
@@ -16,13 +27,25 @@ export function getClientApiBase() {
 // --- Server-side fetchers (used in Server Components) ---
 
 export async function fetchBundles() {
-  const res = await fetch(`${SERVER_API}/bundles`, { cache: "no-store", headers: { "Authorization": `Bearer ${API_KEY}` } });
-  if (!res.ok) throw new Error("Failed to fetch bundles");
-  return res.json();
+  return fetchServerJson("/bundles");
 }
 
 export async function fetchMappingRules() {
-  const res = await fetch(`${SERVER_API}/rules/mapping`, { cache: "no-store", headers: { "Authorization": `Bearer ${API_KEY}` } });
-  if (!res.ok) throw new Error("Failed to fetch mapping rules");
-  return res.json();
+  return fetchServerJson("/rules/mapping");
+}
+
+export async function fetchCatalog() {
+  return fetchServerJson("/catalog");
+}
+
+export async function fetchApplications() {
+  return fetchServerJson("/applications");
+}
+
+export async function fetchProjects() {
+  return fetchServerJson("/projects");
+}
+
+export async function fetchAudit(limit = 6) {
+  return fetchServerJson(`/audit?limit=${limit}`);
 }

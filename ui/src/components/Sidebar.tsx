@@ -15,6 +15,7 @@ export default function Sidebar() {
         <p className="px-3 pt-4 pb-1 text-xs font-semibold text-muted uppercase tracking-wider">Identity</p>
         <Link href="/users" className="block px-3 py-2 text-sm text-muted hover:text-foreground hover:bg-surfaceHover rounded-md transition-colors">Users &amp; Access</Link>
         <Link href="/applications" className="block px-3 py-2 text-sm text-muted hover:text-foreground hover:bg-surfaceHover rounded-md transition-colors">Applications</Link>
+        <Link href="/projects" className="block px-3 py-2 text-sm text-muted hover:text-foreground hover:bg-surfaceHover rounded-md transition-colors">Projects</Link>
         
         <p className="px-3 pt-4 pb-1 text-xs font-semibold text-muted uppercase tracking-wider">Policy Engine</p>
         <Link href="/bundles" className="block px-3 py-2 text-sm text-muted hover:text-foreground hover:bg-surfaceHover rounded-md transition-colors">Bundles</Link>

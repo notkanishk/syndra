@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { useEffect, useState } from "react";
+
 import { Badge } from "@/components/ui/Badge";
+import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 
 interface BundleRole {
   zitadel_project_id: string;
   zitadel_role_key: string;
+}
+
+interface BundleImpact {
+  role_count: number;
+  users: Array<{ id: string; name: string }>;
 }
 
 interface Bundle {
@@ -16,8 +22,19 @@ interface Bundle {
   created_at: string;
 }
 
+interface ProjectCatalog {
+  id: string;
+  name: string;
+  roles: Array<{ key: string; label: string }>;
+}
+
+interface CatalogResponse {
+  projects: ProjectCatalog[];
+}
+
 export default function BundlesView() {
   const [bundles, setBundles] = useState<Bundle[]>([]);
+  const [catalog, setCatalog] = useState<ProjectCatalog[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -25,37 +42,45 @@ export default function BundlesView() {
   const [form, setForm] = useState({ name: "", description: "" });
   const [expandedBundle, setExpandedBundle] = useState<string | null>(null);
   const [bundleRoles, setBundleRoles] = useState<Record<string, BundleRole[]>>({});
-  const [newRole, setNewRole] = useState({ project_id: "", role_key: "" });
+  const [bundleImpact, setBundleImpact] = useState<Record<string, BundleImpact>>({});
+  const [newRole, setNewRole] = useState({ project_id: "printing", role_key: "member" });
 
-  const loadBundles = useCallback(async () => {
+  async function loadBundles() {
     setLoading(true);
     try {
       const res = await fetch("/api/proxy/bundles");
       const data = await res.json();
       setBundles(Array.isArray(data) ? data : []);
-    } catch {
-      setBundles([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }
 
-  const loadBundleRoles = async (bundleId: string) => {
-    try {
-      const res = await fetch(`/api/proxy/bundles/${bundleId}/roles`);
-      const data = await res.json();
-      setBundleRoles(prev => ({ ...prev, [bundleId]: Array.isArray(data) ? data : [] }));
-    } catch (err) {
-      console.error("Failed to load bundle roles", err);
-    }
-  };
+  async function loadCatalog() {
+    const res = await fetch("/api/proxy/catalog");
+    const data: CatalogResponse = await res.json();
+    setCatalog(Array.isArray(data?.projects) ? data.projects : []);
+  }
+
+  async function loadBundleDetails(bundleId: string) {
+    const [rolesRes, impactRes] = await Promise.all([
+      fetch(`/api/proxy/bundles/${bundleId}/roles`),
+      fetch(`/api/proxy/bundles/${bundleId}/impact`),
+    ]);
+
+    const roles = await rolesRes.json();
+    const impact = await impactRes.json();
+    setBundleRoles((current) => ({ ...current, [bundleId]: Array.isArray(roles) ? roles : [] }));
+    setBundleImpact((current) => ({ ...current, [bundleId]: impact }));
+  }
 
   useEffect(() => {
     loadBundles();
-  }, [loadBundles]);
+    loadCatalog();
+  }, []);
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  async function handleCreate(event: React.FormEvent) {
+    event.preventDefault();
     setCreating(true);
     setError("");
     try {
@@ -70,43 +95,37 @@ export default function BundlesView() {
       }
       setForm({ name: "", description: "" });
       setFormOpen(false);
-      loadBundles();
-    } catch (err: any) {
-      setError(err.message);
+      await loadBundles();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create bundle");
     } finally {
       setCreating(false);
     }
-  };
+  }
 
-  const handleAddRole = async (bundleId: string) => {
-    if (!newRole.project_id || !newRole.role_key) return;
-    try {
-      const res = await fetch(`/api/proxy/bundles/${bundleId}/roles`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newRole),
-      });
-      if (res.ok) {
-        setNewRole({ project_id: "", role_key: "" });
-        loadBundleRoles(bundleId);
-      }
-    } catch (err) {
-      console.error("Failed to add role", err);
+  async function handleAddRole(bundleId: string) {
+    const res = await fetch(`/api/proxy/bundles/${bundleId}/roles`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newRole),
+    });
+    if (res.ok) {
+      await loadBundleDetails(bundleId);
     }
-  };
+  }
+
+  const selectedProject = catalog.find((project) => project.id === newRole.project_id);
 
   return (
     <div className="space-y-6 animate-fade-in-up">
       <header>
         <h1 className="text-3xl font-bold text-foreground">Bundles</h1>
-        <p className="text-muted mt-2">
-          Group multiple roles into a single assignable unit. Assign a bundle to a user and all underlying roles propagate automatically.
-        </p>
+        <p className="text-muted mt-2">Group role sets into reusable assignments and inspect the user pool currently influenced by each bundle.</p>
       </header>
 
       <Card>
         <div className="flex items-center justify-between mb-6">
-          <CardTitle>Defined Bundles</CardTitle>
+          <CardTitle>Bundle / Policy View</CardTitle>
           {!formOpen && (
             <button
               onClick={() => setFormOpen(true)}
@@ -123,7 +142,7 @@ export default function BundlesView() {
             {error && (
               <div className="mb-4 p-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-500 text-sm">{error}</div>
             )}
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-xs font-medium text-muted mb-1.5">Bundle Name</label>
                 <input
@@ -131,26 +150,26 @@ export default function BundlesView() {
                   required
                   placeholder="e.g. Student Access"
                   value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-md border border-border bg-surface text-foreground text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
+                  onChange={(event) => setForm({ ...form, name: event.target.value })}
+                  className="w-full px-3 py-2 rounded-md border border-border bg-surface text-foreground text-sm"
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium text-muted mb-1.5">Description</label>
                 <input
                   type="text"
-                  placeholder="e.g. Basic access for enrolled students"
+                  placeholder="Role bundle purpose"
                   value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  className="w-full px-3 py-2 rounded-md border border-border bg-surface text-foreground text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
+                  onChange={(event) => setForm({ ...form, description: event.target.value })}
+                  className="w-full px-3 py-2 rounded-md border border-border bg-surface text-foreground text-sm"
                 />
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <button type="submit" disabled={creating} className="bg-primary hover:bg-primaryHover text-white px-4 py-2 rounded-md font-medium text-sm transition-all disabled:opacity-50">
+              <button type="submit" disabled={creating} className="bg-primary text-white px-4 py-2 rounded-md font-medium text-sm disabled:opacity-50">
                 {creating ? "Creating..." : "Create Bundle"}
               </button>
-              <button type="button" onClick={() => { setFormOpen(false); setError(""); }} className="px-4 py-2 rounded-md font-medium text-sm text-muted hover:text-foreground transition-colors">
+              <button type="button" onClick={() => setFormOpen(false)} className="px-4 py-2 rounded-md font-medium text-sm text-muted hover:text-foreground">
                 Cancel
               </button>
             </div>
@@ -159,87 +178,100 @@ export default function BundlesView() {
 
         {loading ? (
           <div className="text-center py-10">
-            <div className="inline-block w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
             <p className="text-muted mt-3 text-sm">Loading bundles...</p>
-          </div>
-        ) : bundles.length === 0 ? (
-          <div className="text-center py-10 border border-dashed border-border rounded-lg">
-            <p className="text-muted">No bundles defined yet.</p>
-            <p className="text-xs text-muted mt-1">Create your first bundle to group roles together.</p>
           </div>
         ) : (
           <div className="space-y-3">
             {bundles.map((bundle) => (
               <div key={bundle.id} className="border border-border rounded-lg bg-surfaceHover overflow-hidden transition-all hover:border-primary/30">
-                <div 
+                <div
                   className="p-4 flex items-center justify-between cursor-pointer hover:bg-surface"
                   onClick={() => {
                     if (expandedBundle === bundle.id) {
                       setExpandedBundle(null);
-                    } else {
-                      setExpandedBundle(bundle.id);
-                      loadBundleRoles(bundle.id);
+                      return;
                     }
+                    setExpandedBundle(bundle.id);
+                    loadBundleDetails(bundle.id);
                   }}
                 >
                   <div>
-                    <h3 className="font-semibold text-foreground flex items-center gap-2">
-                      {bundle.name}
-                      {expandedBundle === bundle.id ? (
-                        <span className="text-[10px] text-muted">▼</span>
-                      ) : (
-                        <span className="text-[10px] text-muted">▶</span>
-                      )}
-                    </h3>
+                    <h3 className="font-semibold text-foreground">{bundle.name}</h3>
                     <p className="text-xs text-muted mt-0.5">{bundle.description || "No description"}</p>
                   </div>
-                  <Badge variant="secondary">
-                    {new Date(bundle.created_at).toLocaleDateString()}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">
+                      {bundleImpact[bundle.id]?.users?.length || 0} users
+                    </Badge>
+                    <Badge variant="outline">{new Date(bundle.created_at).toLocaleDateString()}</Badge>
+                  </div>
                 </div>
 
                 {expandedBundle === bundle.id && (
-                  <div className="px-4 pb-4 pt-2 border-t border-border bg-surface/50 animate-fade-in-down">
-                    <div className="mb-4">
-                      <h4 className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">Roles in Bundle</h4>
-                      {!bundleRoles[bundle.id] ? (
-                        <p className="text-xs text-muted">Loading roles...</p>
-                      ) : bundleRoles[bundle.id].length === 0 ? (
-                        <p className="text-xs text-muted italic">No roles added yet.</p>
-                      ) : (
-                        <div className="flex flex-wrap gap-2">
-                          {bundleRoles[bundle.id].map((r, idx) => (
-                            <Badge key={idx} variant="outline" className="text-[10px] py-0 px-1.5 border-primary/20 bg-primary/5 text-primary">
-                              {r.zitadel_project_id}:{r.zitadel_role_key}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
+                  <div className="px-4 pb-4 pt-2 border-t border-border bg-surface/50 animate-fade-in-up space-y-4">
+                    <div>
+                      <h4 className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">Contained Roles</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {(bundleRoles[bundle.id] || []).map((role) => (
+                          <Badge key={`${role.zitadel_project_id}-${role.zitadel_role_key}`} variant="outline" className="border-primary/20 bg-primary/5 text-primary">
+                            {role.zitadel_project_id}:{role.zitadel_role_key}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">Impacted Users</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {(bundleImpact[bundle.id]?.users || []).map((user) => (
+                          <Badge key={user.id} variant="secondary">
+                            {user.name}
+                          </Badge>
+                        ))}
+                        {(bundleImpact[bundle.id]?.users || []).length === 0 && (
+                          <p className="text-xs text-muted italic">No users assigned yet.</p>
+                        )}
+                      </div>
                     </div>
 
                     <div className="pt-4 border-t border-border/50">
                       <h4 className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">Add Role to Bundle</h4>
-                      <div className="grid grid-cols-2 gap-2 mb-2">
-                        <input
-                          type="text"
-                          placeholder="Project ID"
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+                        <select
                           value={newRole.project_id}
-                          onChange={(e) => setNewRole({ ...newRole, project_id: e.target.value })}
-                          className="px-2 py-1.5 rounded bg-surface border border-border text-xs focus:outline-none focus:border-primary transition-colors"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Role Key"
+                          onChange={(event) => {
+                            const projectId = event.target.value;
+                            const project = catalog.find((item) => item.id === projectId);
+                            setNewRole({
+                              project_id: projectId,
+                              role_key: project?.roles[0]?.key || "",
+                            });
+                          }}
+                          className="px-2 py-2 rounded bg-surface border border-border text-sm"
+                        >
+                          {catalog.map((project) => (
+                            <option key={project.id} value={project.id}>
+                              {project.name}
+                            </option>
+                          ))}
+                        </select>
+                        <select
                           value={newRole.role_key}
-                          onChange={(e) => setNewRole({ ...newRole, role_key: e.target.value })}
-                          className="px-2 py-1.5 rounded bg-surface border border-border text-xs focus:outline-none focus:border-primary transition-colors"
-                        />
+                          onChange={(event) => setNewRole({ ...newRole, role_key: event.target.value })}
+                          className="px-2 py-2 rounded bg-surface border border-border text-sm"
+                        >
+                          {(selectedProject?.roles || []).map((role) => (
+                            <option key={role.key} value={role.key}>
+                              {role.label}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                      <button 
+                      <button
                         onClick={() => handleAddRole(bundle.id)}
-                        className="w-full py-1.5 bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-bold uppercase tracking-wider rounded transition-colors"
+                        className="w-full py-2 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold uppercase tracking-wider rounded transition-colors"
                       >
-                        + Add Role
+                        Add Role
                       </button>
                     </div>
                   </div>
