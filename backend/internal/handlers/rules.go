@@ -42,8 +42,14 @@ func handleCreateMappingRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.SourceProject == "" || req.TargetProject == "" {
-		jsonErrorResponse(w, http.StatusBadRequest, "VALIDATION_FAILED", "Source and Target projects are strictly required")
+	if req.SourceProject == "" || req.TargetProject == "" || req.SourceRole == "" || req.TargetRole == "" {
+		jsonErrorResponse(w, http.StatusBadRequest, "VALIDATION_FAILED", "All four fields (source_project, source_role, target_project, target_role) are required")
+		return
+	}
+
+	// Circular dependency guard
+	if err := db.DetectCycleOnInsert(r.Context(), req.SourceProject, req.SourceRole, req.TargetProject, req.TargetRole); err != nil {
+		jsonErrorResponse(w, http.StatusConflict, "CYCLE_DETECTED", err.Error())
 		return
 	}
 
@@ -53,10 +59,29 @@ func handleCreateMappingRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Future hook: Trigger Redis/Zitadel cache invalidation here!
+	// Audit log
+	_ = db.InsertAuditLog(r.Context(), "system", "-", "mapping_rule.created", id)
 
 	jsonResponse(w, http.StatusCreated, CreateMappingRuleResponse{
 		ID:      id,
 		Message: "Mapping Rule integrated seamlessly.",
 	})
+}
+
+func handleUpdateMappingRule(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		jsonErrorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "Missing rule ID")
+		return
+	}
+
+	if err := db.UpdateMappingRule(r.Context(), id); err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "UPDATE_FAILED", err.Error())
+		return
+	}
+
+	// Audit log
+	_ = db.InsertAuditLog(r.Context(), "system", "-", "mapping_rule.version_bumped", id)
+
+	jsonResponse(w, http.StatusOK, map[string]string{"message": "Version incremented successfully"})
 }

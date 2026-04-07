@@ -34,6 +34,7 @@ services:
       - DB_DSN=postgres://mkauth:mkauth_secure_password@postgres:5432/mkauthdb?sslmode=disable
       - REDIS_URL=redis:6379
       - PORT=8080
+      - MKAUTH_API_KEY=dev_auth_token_secret  # Basic auth until Zitadel M2M is ready
     ports:
       - "8080:8080"
     depends_on:
@@ -53,6 +54,7 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8080
       - BACKEND_URL=http://backend:8080
+      - MKAUTH_API_KEY=dev_auth_token_secret  # Proxies this to backend
     restart: unless-stopped
 
 volumes:

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 )
 
 // NewRouter constructs the global multiplexer for API requests
@@ -11,18 +12,42 @@ func NewRouter() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// Bundle Routes
-	mux.HandleFunc("GET /api/v1/bundles", withCORS(handleGetBundles))
-	mux.HandleFunc("POST /api/v1/bundles", withCORS(handleCreateBundle))
+	mux.HandleFunc("GET /api/v1/bundles", withCORS(withAuth(handleGetBundles)))
+	mux.HandleFunc("POST /api/v1/bundles", withCORS(withAuth(handleCreateBundle)))
 
 	// Rules Routes
-	mux.HandleFunc("GET /api/v1/rules/mapping", withCORS(handleGetMappingRules))
-	mux.HandleFunc("POST /api/v1/rules/mapping", withCORS(handleCreateMappingRule))
+	mux.HandleFunc("GET /api/v1/rules/mapping", withCORS(withAuth(handleGetMappingRules)))
+	mux.HandleFunc("POST /api/v1/rules/mapping", withCORS(withAuth(handleCreateMappingRule)))
+	mux.HandleFunc("PUT /api/v1/rules/mapping/{id}", withCORS(withAuth(handleUpdateMappingRule)))
+
+	// Audit Logs
+	mux.HandleFunc("GET /api/v1/audit", withCORS(withAuth(handleGetAuditLogs)))
 
 	// Data Plane existing routes
-	mux.HandleFunc("POST /api/webhooks/zitadel", withCORS(HandleZitadelWebhook))
-	mux.HandleFunc("POST /api/action/inject", withCORS(HandleActionInject))
+	mux.HandleFunc("POST /api/webhooks/zitadel", withCORS(HandleZitadelWebhook)) // Webhook verifies its own payload
+	mux.HandleFunc("POST /api/action/inject", withCORS(HandleActionInject))      // Action inject verifies itself or uses a specific different mechanism if needed, but typically wide open locally
 
 	return mux
+}
+
+// withAuth verifies the MKAUTH_API_KEY for protected endpoints
+func withAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		expectedKey := os.Getenv("MKAUTH_API_KEY")
+		if expectedKey == "" {
+			// If not set, allow dev access (or default to blocked, but for this dev setup let's block if missing to enforce it)
+			jsonErrorResponse(w, http.StatusInternalServerError, "SERVER_ERROR", "Server missing auth configuration")
+			return
+		}
+
+		authHeader := r.Header.Get("Authorization")
+		if authHeader != "Bearer "+expectedKey {
+			jsonErrorResponse(w, http.StatusUnauthorized, "UNAUTHORIZED", "Missing or invalid authorization token")
+			return
+		}
+
+		next(w, r)
+	}
 }
 
 // withCORS is a basic CORS middleware ensuring Next.js UI binds seamlessly

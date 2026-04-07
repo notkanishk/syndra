@@ -11,6 +11,7 @@ interface MappingRule {
   source_role: string;
   target_project: string;
   target_role: string;
+  version?: number;
 }
 
 export default function PoliciesView() {
@@ -64,20 +65,36 @@ export default function PoliciesView() {
             {rules.map((rule) => (
               <div
                 key={rule.id}
-                className="p-4 border border-border rounded-lg bg-surfaceHover flex items-center flex-wrap gap-2 text-sm transition-colors hover:border-primary/50"
+                className="flex flex-col gap-2 p-4 border border-border rounded-lg bg-surfaceHover transition-colors hover:border-primary/50"
               >
-                <span className="font-mono text-muted font-semibold">IF</span>
-                <Badge variant="outline" className="border-primary text-primary">
-                  {rule.source_project}
-                </Badge>
-                <Badge variant="secondary">{rule.source_role}</Badge>
+                <div className="flex items-center flex-wrap gap-2 text-sm">
+                  <span className="font-mono text-muted font-semibold">IF</span>
+                  <Badge variant="outline" className="border-primary text-primary">
+                    {rule.source_project}
+                  </Badge>
+                  <Badge variant="secondary">{rule.source_role}</Badge>
 
-                <span className="font-mono text-muted font-semibold mx-1">→ THEN ADD</span>
+                  <span className="font-mono text-muted font-semibold mx-1">→ THEN ADD</span>
 
-                <Badge variant="outline" className="border-emerald-500 text-emerald-600 dark:text-emerald-400">
-                  {rule.target_project}
-                </Badge>
-                <Badge variant="secondary">{rule.target_role}</Badge>
+                  <Badge variant="outline" className="border-emerald-500 text-emerald-600 dark:text-emerald-400">
+                    {rule.target_project}
+                  </Badge>
+                  <Badge variant="secondary">{rule.target_role}</Badge>
+                </div>
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
+                  <span className="text-xs text-muted">Version {rule.version || 1}</span>
+                  <button 
+                    onClick={async () => {
+                      try {
+                        await fetch(`/api/proxy/rules/mapping/${rule.id}`, { method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({}) });
+                        loadRules();
+                      } catch(e) {}
+                    }}
+                    className="text-xs text-primary hover:text-primaryHover font-medium transition-colors"
+                  >
+                    Bump Version
+                  </button>
+                </div>
               </div>
             ))}
           </div>

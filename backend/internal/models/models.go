@@ -38,3 +38,13 @@ type ClaimProfile struct {
 	FormatType string    `json:"format_type"` // e.g., "csv", "array"
 	CreatedAt  time.Time `json:"created_at"`
 }
+
+// AuditLog tracks who granted what and when
+type AuditLog struct {
+	ID         string    `json:"id"`
+	ActorID    string    `json:"actor_id"`
+	TargetID   string    `json:"target_id"`
+	Action     string    `json:"action"`
+	ResourceID string    `json:"resource_id"`
+	CreatedAt  time.Time `json:"created_at"`
+}

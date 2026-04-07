@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
 	"mkauth/internal/models"
 )
 
@@ -69,6 +68,19 @@ func CreateMappingRule(ctx context.Context, sourceProject, sourceRole, targetPro
 		return "", fmt.Errorf("failed to insert mapping rule (may be duplicate): %w", err)
 	}
 	return id, nil
+}
+
+func UpdateMappingRule(ctx context.Context, id string) error {
+	// Increment version only, indicating this rule's logic or downstream effects were reviewed/refreshed
+	query := `UPDATE mapping_rules SET version = version + 1 WHERE id = $1;`
+	tag, err := PG.Exec(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to update mapping rule version: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("mapping rule not found")
+	}
+	return nil
 }
 
 func GetActiveMappingRules(ctx context.Context) ([]models.MappingRule, error) {
