@@ -22,14 +22,10 @@ func main() {
 		log.Printf("Zitadel Init Warning: %v", err)
 	}
 
-	// Setup webhook routing for the event engine
-	http.HandleFunc("/api/webhooks/zitadel", handlers.HandleZitadelWebhook)
-	
-	// Setup the fast-path Data Plane interface for Zitadel Actions
-	http.HandleFunc("/api/action/inject", handlers.HandleActionInject)
+	mux := handlers.NewRouter()
 
 	fmt.Println("Control Plane Backend Listening on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatal(err)
 	}
 }
