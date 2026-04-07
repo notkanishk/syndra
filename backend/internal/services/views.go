@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"mkauth/internal/cache"
 	"mkauth/internal/db"
@@ -323,14 +324,62 @@ func BundleImpact(ctx context.Context, bundleID string) (models.BundleImpact, er
 	}, nil
 }
 
+func UserDirectGrants(ctx context.Context, userID string) ([]models.DirectGrant, error) {
+	return db.GetDirectGrantsForUser(ctx, userID, true)
+}
+
+func Governance(ctx context.Context) (models.GovernanceSummary, error) {
+	requests, err := db.GetAccessRequests(ctx, "pending")
+	if err != nil {
+		return models.GovernanceSummary{}, err
+	}
+
+	expiring, err := db.GetExpiringDirectGrants(ctx, 14*24*time.Hour)
+	if err != nil {
+		return models.GovernanceSummary{}, err
+	}
+
+	cleanupHints := []string{}
+	bundles, err := db.GetAllBundles(ctx)
+	if err != nil {
+		return models.GovernanceSummary{}, err
+	}
+	for _, bundle := range bundles {
+		impact, err := BundleImpact(ctx, bundle.ID)
+		if err != nil {
+			return models.GovernanceSummary{}, err
+		}
+		if len(impact.Users) == 0 {
+			cleanupHints = append(cleanupHints, fmt.Sprintf("Bundle %q is unused and can be reviewed for cleanup.", bundle.Name))
+		}
+	}
+	if len(requests) == 0 {
+		cleanupHints = append(cleanupHints, "No pending requests right now, so approvals are caught up.")
+	}
+
+	return models.GovernanceSummary{
+		PendingRequests: requests,
+		ExpiringGrants:  expiring,
+		CleanupHints:    cleanupHints,
+	}, nil
+}
+
 func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.EffectiveRole, []models.Bundle, error) {
 	roleMap := make(map[roleKey]*models.EffectiveRole)
 
-	for _, grant := range demo.BaseGrants(userID) {
+	directGrants, err := db.GetDirectGrantsForUser(ctx, userID, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, grant := range directGrants {
 		key := roleKey{projectID: grant.ProjectID, roleKey: grant.RoleKey}
+		description := "Direct Zitadel grant"
+		if grant.Reason != "" {
+			description = grant.Reason
+		}
 		upsertRole(roleMap, key, true, models.RoleReason{
 			Kind:        "direct",
-			Description: "Direct Zitadel grant",
+			Description: description,
 		})
 	}
 

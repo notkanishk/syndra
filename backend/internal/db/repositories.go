@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"mkauth/internal/models"
 )
@@ -181,6 +182,163 @@ func InsertAuditLog(ctx context.Context, actorID, targetID, action, resourceID s
 	_, err := PG.Exec(ctx, query, actorID, targetID, action, resourceID)
 	if err != nil {
 		return fmt.Errorf("failed to insert audit log: %w", err)
+	}
+	return nil
+}
+
+// -------------------------------------------------------------
+// DIRECT ROLE GRANTS
+// -------------------------------------------------------------
+
+func UpsertDirectGrant(ctx context.Context, userID, projectID, roleKey, grantedBy, reason string, expiresAt *time.Time) (string, error) {
+	query := `
+		INSERT INTO direct_role_grants (
+			user_id, zitadel_project_id, zitadel_role_key, granted_by, reason, expires_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (user_id, zitadel_project_id, zitadel_role_key)
+		DO UPDATE SET
+			granted_by = EXCLUDED.granted_by,
+			reason = EXCLUDED.reason,
+			expires_at = EXCLUDED.expires_at,
+			updated_at = CURRENT_TIMESTAMP
+		RETURNING id;`
+
+	var id string
+	if err := PG.QueryRow(ctx, query, userID, projectID, roleKey, grantedBy, reason, expiresAt).Scan(&id); err != nil {
+		return "", fmt.Errorf("failed to upsert direct grant: %w", err)
+	}
+	return id, nil
+}
+
+func GetDirectGrantsForUser(ctx context.Context, userID string, includeExpired bool) ([]models.DirectGrant, error) {
+	query := `
+		SELECT id, user_id, zitadel_project_id, zitadel_role_key, granted_by, COALESCE(reason, ''), expires_at, created_at, updated_at
+		FROM direct_role_grants
+		WHERE user_id = $1`
+	if !includeExpired {
+		query += ` AND (expires_at IS NULL OR expires_at > NOW())`
+	}
+	query += ` ORDER BY created_at DESC`
+
+	rows, err := PG.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var grants []models.DirectGrant
+	for rows.Next() {
+		var grant models.DirectGrant
+		if err := rows.Scan(&grant.ID, &grant.UserID, &grant.ProjectID, &grant.RoleKey, &grant.GrantedBy, &grant.Reason, &grant.ExpiresAt, &grant.CreatedAt, &grant.UpdatedAt); err != nil {
+			return nil, err
+		}
+		grants = append(grants, grant)
+	}
+	return grants, nil
+}
+
+func GetExpiringDirectGrants(ctx context.Context, within time.Duration) ([]models.DirectGrant, error) {
+	query := `
+		SELECT id, user_id, zitadel_project_id, zitadel_role_key, granted_by, COALESCE(reason, ''), expires_at, created_at, updated_at
+		FROM direct_role_grants
+		WHERE expires_at IS NOT NULL
+		  AND expires_at > NOW()
+		  AND expires_at <= NOW() + $1::interval
+		ORDER BY expires_at ASC`
+
+	rows, err := PG.Query(ctx, query, fmt.Sprintf("%f seconds", within.Seconds()))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var grants []models.DirectGrant
+	for rows.Next() {
+		var grant models.DirectGrant
+		if err := rows.Scan(&grant.ID, &grant.UserID, &grant.ProjectID, &grant.RoleKey, &grant.GrantedBy, &grant.Reason, &grant.ExpiresAt, &grant.CreatedAt, &grant.UpdatedAt); err != nil {
+			return nil, err
+		}
+		grants = append(grants, grant)
+	}
+	return grants, nil
+}
+
+// -------------------------------------------------------------
+// ACCESS REQUESTS
+// -------------------------------------------------------------
+
+func CreateAccessRequest(ctx context.Context, requesterID, projectID, roleKey, justification string, durationDays *int) (string, error) {
+	query := `
+		INSERT INTO access_requests (
+			requester_user_id, zitadel_project_id, zitadel_role_key, justification, duration_days
+		)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id`
+
+	var id string
+	if err := PG.QueryRow(ctx, query, requesterID, projectID, roleKey, justification, durationDays).Scan(&id); err != nil {
+		return "", fmt.Errorf("failed to create access request: %w", err)
+	}
+	return id, nil
+}
+
+func GetAccessRequests(ctx context.Context, status string) ([]models.AccessRequest, error) {
+	query := `
+		SELECT id, requester_user_id, zitadel_project_id, zitadel_role_key, justification, duration_days, status, COALESCE(reviewer_user_id, ''), COALESCE(review_note, ''), created_at, resolved_at
+		FROM access_requests`
+	args := []interface{}{}
+	if status != "" {
+		query += ` WHERE status = $1`
+		args = append(args, status)
+	}
+	query += ` ORDER BY created_at DESC`
+
+	rows, err := PG.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var requests []models.AccessRequest
+	for rows.Next() {
+		var req models.AccessRequest
+		if err := rows.Scan(&req.ID, &req.RequesterID, &req.ProjectID, &req.RoleKey, &req.Justification, &req.DurationDays, &req.Status, &req.ReviewerID, &req.ReviewNote, &req.CreatedAt, &req.ResolvedAt); err != nil {
+			return nil, err
+		}
+		requests = append(requests, req)
+	}
+	return requests, nil
+}
+
+func GetAccessRequestByID(ctx context.Context, id string) (models.AccessRequest, error) {
+	query := `
+		SELECT id, requester_user_id, zitadel_project_id, zitadel_role_key, justification, duration_days, status, COALESCE(reviewer_user_id, ''), COALESCE(review_note, ''), created_at, resolved_at
+		FROM access_requests
+		WHERE id = $1`
+
+	var req models.AccessRequest
+	if err := PG.QueryRow(ctx, query, id).Scan(&req.ID, &req.RequesterID, &req.ProjectID, &req.RoleKey, &req.Justification, &req.DurationDays, &req.Status, &req.ReviewerID, &req.ReviewNote, &req.CreatedAt, &req.ResolvedAt); err != nil {
+		return req, fmt.Errorf("failed to fetch access request: %w", err)
+	}
+	return req, nil
+}
+
+func ResolveAccessRequest(ctx context.Context, id, status, reviewerID, reviewNote string) error {
+	query := `
+		UPDATE access_requests
+		SET status = $2,
+			reviewer_user_id = $3,
+			review_note = $4,
+			resolved_at = CURRENT_TIMESTAMP
+		WHERE id = $1`
+
+	tag, err := PG.Exec(ctx, query, id, status, reviewerID, reviewNote)
+	if err != nil {
+		return fmt.Errorf("failed to resolve access request: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("access request not found")
 	}
 	return nil
 }

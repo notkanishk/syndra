@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"mkauth/internal/db"
-	"mkauth/internal/demo"
 )
 
 const cacheTTL = 24 * time.Hour
@@ -23,8 +22,10 @@ type UserGrant struct {
 // fetchBaseGrants simulates fetching the user's primary roles from Zitadel.
 // In Phase 2, this will call the real Zitadel Management API using MgmtClient.
 func fetchBaseGrants(ctx context.Context, userID string) ([]UserGrant, error) {
-	_ = ctx
-	grants := demo.BaseGrants(userID)
+	grants, err := db.GetDirectGrantsForUser(ctx, userID, false)
+	if err != nil {
+		return nil, err
+	}
 	result := make([]UserGrant, 0, len(grants))
 	for _, grant := range grants {
 		result = append(result, UserGrant{

@@ -169,3 +169,35 @@ type BundleImpact struct {
 	RoleCount  int           `json:"role_count"`
 	Users      []UserProfile `json:"users"`
 }
+
+type DirectGrant struct {
+	ID         string     `json:"id"`
+	UserID     string     `json:"user_id"`
+	ProjectID  string     `json:"project_id"`
+	RoleKey    string     `json:"role_key"`
+	GrantedBy  string     `json:"granted_by"`
+	Reason     string     `json:"reason"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+}
+
+type AccessRequest struct {
+	ID           string     `json:"id"`
+	RequesterID  string     `json:"requester_id"`
+	ProjectID    string     `json:"project_id"`
+	RoleKey      string     `json:"role_key"`
+	Justification string    `json:"justification"`
+	DurationDays *int       `json:"duration_days,omitempty"`
+	Status       string     `json:"status"`
+	ReviewerID   string     `json:"reviewer_id,omitempty"`
+	ReviewNote   string     `json:"review_note,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	ResolvedAt   *time.Time `json:"resolved_at,omitempty"`
+}
+
+type GovernanceSummary struct {
+	PendingRequests []AccessRequest `json:"pending_requests"`
+	ExpiringGrants  []DirectGrant   `json:"expiring_grants"`
+	CleanupHints    []string        `json:"cleanup_hints"`
+}

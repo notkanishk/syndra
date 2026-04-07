@@ -22,6 +22,8 @@ func NewRouter() *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/catalog", withCORS(withAuth(handleGetCatalog)))
 	mux.HandleFunc("GET /api/v1/users", withCORS(withAuth(handleGetUsers)))
 	// User-Bundle Assignments
+	mux.HandleFunc("GET /api/v1/users/{id}/grants", withCORS(withAuth(handleGetUserDirectGrants)))
+	mux.HandleFunc("POST /api/v1/users/{id}/grants", withCORS(withAuth(handleUpsertUserDirectGrant)))
 	mux.HandleFunc("GET /api/v1/users/{id}/bundles", withCORS(withAuth(handleGetUserBundles)))
 	mux.HandleFunc("POST /api/v1/users/{id}/bundles", withCORS(withAuth(handleAssignBundleToUser)))
 	mux.HandleFunc("GET /api/v1/users/{id}/access", withCORS(withAuth(handleGetUserAccess)))
@@ -40,6 +42,10 @@ func NewRouter() *http.ServeMux {
 
 	// Audit Logs
 	mux.HandleFunc("GET /api/v1/audit", withCORS(withAuth(handleGetAuditLogs)))
+	mux.HandleFunc("GET /api/v1/requests", withCORS(withAuth(handleGetAccessRequests)))
+	mux.HandleFunc("POST /api/v1/requests", withCORS(withAuth(handleCreateAccessRequest)))
+	mux.HandleFunc("POST /api/v1/requests/{id}/decision", withCORS(withAuth(handleResolveAccessRequest)))
+	mux.HandleFunc("GET /api/v1/governance/summary", withCORS(withAuth(handleGetGovernanceSummary)))
 
 	// Data Plane existing routes
 	mux.HandleFunc("POST /api/webhooks/zitadel", withCORS(HandleZitadelWebhook)) // Webhook verifies its own payload

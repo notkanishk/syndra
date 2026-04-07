@@ -11,6 +11,16 @@ interface Bundle {
   description: string;
 }
 
+interface ProjectCatalog {
+  id: string;
+  name: string;
+  roles: Array<{ key: string; label: string }>;
+}
+
+interface CatalogResponse {
+  projects: ProjectCatalog[];
+}
+
 interface UserListItem {
   user: {
     id: string;
@@ -34,6 +44,15 @@ interface AccessRole {
   }>;
 }
 
+interface DirectGrant {
+  id: string;
+  project_id: string;
+  role_key: string;
+  granted_by: string;
+  reason: string;
+  expires_at?: string | null;
+}
+
 interface UserAccessView {
   user: UserListItem["user"];
   bundles: Bundle[];
@@ -51,11 +70,19 @@ export default function UsersView() {
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [allBundles, setAllBundles] = useState<Bundle[]>([]);
+  const [projects, setProjects] = useState<ProjectCatalog[]>([]);
   const [selectedUser, setSelectedUser] = useState<string>("");
   const [access, setAccess] = useState<UserAccessView | null>(null);
+  const [grants, setGrants] = useState<DirectGrant[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [loadingAccess, setLoadingAccess] = useState(false);
   const [message, setMessage] = useState("");
+  const [grantForm, setGrantForm] = useState({
+    project_id: "printing",
+    role_key: "member",
+    reason: "Advanced admin override",
+    duration_days: "14",
+  });
 
   async function loadUsers(search = "") {
     setLoadingUsers(true);
@@ -72,10 +99,16 @@ export default function UsersView() {
     }
   }
 
-  async function loadBundles() {
-    const res = await fetch("/api/proxy/bundles");
-    const data = await res.json();
-    setAllBundles(Array.isArray(data) ? data : []);
+  async function loadReferenceData() {
+    const [bundleRes, catalogRes] = await Promise.all([
+      fetch("/api/proxy/bundles"),
+      fetch("/api/proxy/catalog"),
+    ]);
+
+    const bundles = await bundleRes.json();
+    const catalog: CatalogResponse = await catalogRes.json();
+    setAllBundles(Array.isArray(bundles) ? bundles : []);
+    setProjects(Array.isArray(catalog?.projects) ? catalog.projects : []);
   }
 
   async function loadAccess(userId: string) {
@@ -84,9 +117,14 @@ export default function UsersView() {
     }
     setLoadingAccess(true);
     try {
-      const res = await fetch(`/api/proxy/users/${userId}/access`);
-      const data = await res.json();
-      setAccess(data);
+      const [accessRes, grantsRes] = await Promise.all([
+        fetch(`/api/proxy/users/${userId}/access`),
+        fetch(`/api/proxy/users/${userId}/grants`),
+      ]);
+      const accessData = await accessRes.json();
+      const grantData = await grantsRes.json();
+      setAccess(accessData);
+      setGrants(Array.isArray(grantData) ? grantData : []);
     } finally {
       setLoadingAccess(false);
     }
@@ -94,14 +132,14 @@ export default function UsersView() {
 
   useEffect(() => {
     loadUsers();
-    loadBundles();
+    loadReferenceData();
   }, []);
 
   useEffect(() => {
     loadAccess(selectedUser);
   }, [selectedUser]);
 
-  async function handleAssign(bundleId: string) {
+  async function handleAssignBundle(bundleId: string) {
     if (!selectedUser) {
       return;
     }
@@ -121,11 +159,41 @@ export default function UsersView() {
     setMessage(body.message || "Failed to assign bundle.");
   }
 
+  async function handleGrantSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!selectedUser) {
+      return;
+    }
+    const durationDays = Number.parseInt(grantForm.duration_days, 10);
+    const res = await fetch(`/api/proxy/users/${selectedUser}/grants`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: grantForm.project_id,
+        role_key: grantForm.role_key,
+        granted_by: "alice.rivera",
+        reason: grantForm.reason,
+        duration_days: Number.isNaN(durationDays) ? 0 : durationDays,
+      }),
+    });
+
+    if (res.ok) {
+      setMessage("Direct grant saved.");
+      await Promise.all([loadUsers(query), loadAccess(selectedUser)]);
+      return;
+    }
+
+    const body = await res.json().catch(() => ({}));
+    setMessage(body.message || "Failed to save direct grant.");
+  }
+
+  const selectedProject = projects.find((project) => project.id === grantForm.project_id);
+
   return (
     <div className="space-y-6 animate-fade-in-up">
       <header>
         <h1 className="text-3xl font-bold text-foreground">Users & Access</h1>
-        <p className="text-muted mt-2">Trace source roles, derived roles, and bundle influence for each demo persona.</p>
+        <p className="text-muted mt-2">Trace lineage, assign bundles, and issue temporary direct grants for advanced operators.</p>
       </header>
 
       <div className="grid grid-cols-1 xl:grid-cols-[0.95fr,1.25fr] gap-6">
@@ -281,39 +349,115 @@ export default function UsersView() {
             )}
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Assign Bundle</CardTitle>
-            </CardHeader>
-            <p className="text-sm text-muted">Use the seeded bundles to test assignment flows and see lineage update immediately.</p>
-            {message && <p className="mt-3 text-sm text-primary">{message}</p>}
-            <div className="mt-4 space-y-3">
-              {allBundles.map((bundle) => {
-                const isAssigned = Boolean(access?.bundles.some((entry) => entry.id === bundle.id));
-                return (
-                  <div key={bundle.id} className="rounded-xl border border-border bg-surfaceHover p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-foreground">{bundle.name}</p>
-                        <p className="mt-1 text-sm text-muted">{bundle.description}</p>
+          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Assign Bundle</CardTitle>
+              </CardHeader>
+              <p className="text-sm text-muted">Normal admin flow for reusable access sets.</p>
+              {message && <p className="mt-3 text-sm text-primary">{message}</p>}
+              <div className="mt-4 space-y-3">
+                {allBundles.map((bundle) => {
+                  const isAssigned = Boolean(access?.bundles.some((entry) => entry.id === bundle.id));
+                  return (
+                    <div key={bundle.id} className="rounded-xl border border-border bg-surfaceHover p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-foreground">{bundle.name}</p>
+                          <p className="mt-1 text-sm text-muted">{bundle.description}</p>
+                        </div>
+                        <button
+                          onClick={() => handleAssignBundle(bundle.id)}
+                          disabled={isAssigned}
+                          className={`rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${
+                            isAssigned
+                              ? "bg-muted/10 text-muted"
+                              : "bg-primary/10 text-primary hover:bg-primary hover:text-white"
+                          }`}
+                        >
+                          {isAssigned ? "Assigned" : "Assign"}
+                        </button>
                       </div>
-                      <button
-                        onClick={() => handleAssign(bundle.id)}
-                        disabled={isAssigned}
-                        className={`rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${
-                          isAssigned
-                            ? "bg-muted/10 text-muted"
-                            : "bg-primary/10 text-primary hover:bg-primary hover:text-white"
-                        }`}
-                      >
-                        {isAssigned ? "Assigned" : "Assign"}
-                      </button>
                     </div>
+                  );
+                })}
+              </div>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Advanced Direct Grant</CardTitle>
+              </CardHeader>
+              <p className="text-sm text-muted">Issue a raw role directly, optionally with an expiry for temporary access.</p>
+              <form onSubmit={handleGrantSubmit} className="mt-4 space-y-3">
+                <select
+                  value={grantForm.project_id}
+                  onChange={(event) => {
+                    const projectId = event.target.value;
+                    const project = projects.find((entry) => entry.id === projectId);
+                    setGrantForm({
+                      ...grantForm,
+                      project_id: projectId,
+                      role_key: project?.roles[0]?.key || "",
+                    });
+                  }}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+                >
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={grantForm.role_key}
+                  onChange={(event) => setGrantForm({ ...grantForm, role_key: event.target.value })}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+                >
+                  {(selectedProject?.roles || []).map((role) => (
+                    <option key={role.key} value={role.key}>
+                      {role.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={grantForm.reason}
+                  onChange={(event) => setGrantForm({ ...grantForm, reason: event.target.value })}
+                  placeholder="Why this direct grant exists"
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  value={grantForm.duration_days}
+                  onChange={(event) => setGrantForm({ ...grantForm, duration_days: event.target.value })}
+                  placeholder="Duration in days (0 = permanent)"
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+                />
+                <button type="submit" className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white">
+                  Save Direct Grant
+                </button>
+              </form>
+
+              <div className="mt-5 space-y-3">
+                {grants.map((grant) => (
+                  <div key={grant.id} className="rounded-xl border border-border bg-surfaceHover p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-semibold text-foreground">
+                        {grant.project_id}:{grant.role_key}
+                      </p>
+                      <Badge variant={grant.expires_at ? "outline" : "secondary"}>
+                        {grant.expires_at ? `Expires ${new Date(grant.expires_at).toLocaleDateString()}` : "Permanent"}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-sm text-muted">{grant.reason || "No reason recorded"}</p>
+                    <p className="mt-1 text-xs text-muted">Granted by {grant.granted_by}</p>
                   </div>
-                );
-              })}
-            </div>
-          </Card>
+                ))}
+              </div>
+            </Card>
+          </div>
         </div>
       </div>
     </div>

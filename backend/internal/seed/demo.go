@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"mkauth/internal/cache"
 	"mkauth/internal/db"
@@ -21,6 +22,9 @@ func EnsureDemoData(ctx context.Context) error {
 	if err := seedBundles(ctx); err != nil {
 		return err
 	}
+	if err := seedDirectGrants(ctx); err != nil {
+		return err
+	}
 	if err := seedRules(ctx); err != nil {
 		return err
 	}
@@ -31,6 +35,9 @@ func EnsureDemoData(ctx context.Context) error {
 		return err
 	}
 	if err := seedAuditLogs(ctx); err != nil {
+		return err
+	}
+	if err := seedAccessRequests(ctx); err != nil {
 		return err
 	}
 
@@ -127,6 +134,22 @@ func seedRules(ctx context.Context) error {
 	return nil
 }
 
+func seedDirectGrants(ctx context.Context) error {
+	for _, user := range demo.Users() {
+		for _, grant := range demo.BaseGrants(user.ID) {
+			if _, err := db.UpsertDirectGrant(ctx, user.ID, grant.ProjectID, grant.RoleKey, "seed", "Seeded demo direct grant", nil); err != nil {
+				return err
+			}
+		}
+	}
+
+	expiresAt := time.Now().UTC().Add(5 * 24 * time.Hour)
+	if _, err := db.UpsertDirectGrant(ctx, "ava_guest", "printing", "member", "seed", "Temporary residency printer access", &expiresAt); err != nil {
+		return err
+	}
+	return nil
+}
+
 func seedClaimProfiles(ctx context.Context) error {
 	for _, app := range demo.Applications() {
 		if _, err := db.PG.Exec(ctx, `
@@ -192,5 +215,24 @@ func seedAuditLogs(ctx context.Context) error {
 		}
 	}
 
+	return nil
+}
+
+func seedAccessRequests(ctx context.Context) error {
+	requests, err := db.GetAccessRequests(ctx, "")
+	if err != nil {
+		return err
+	}
+	if len(requests) > 0 {
+		return nil
+	}
+
+	durationDays := 21
+	if _, err := db.CreateAccessRequest(ctx, "ava_guest", "laser", "trainee", "Needs supervised laser access during the current residency block.", &durationDays); err != nil {
+		return err
+	}
+	if _, err := db.CreateAccessRequest(ctx, "sam_student", "finance", "material_checkout", "Helping with weekend materials desk coverage.", nil); err != nil {
+		return err
+	}
 	return nil
 }
