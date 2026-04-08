@@ -23,9 +23,10 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   **Cache Invalidation:** A webhook listener actively updates Redis the moment an out-of-band change happens in Zitadel, ensuring the cache is never stale.
 
 ### The Bridge Plane (Provisioning)
-*   **Components:** LLDAP Sync Service (Go/Python), LLDAP Server.
-*   **Behavior:** For legacy systems that do not support OIDC (TrueNAS Samba, UniFi Access), MkAuth acts as a provisioning bridge. The Sync Service translates Zitadel roles into LLDAP groups using a flattened namespace (e.g., `samba_share_admin`).
-*   **Identity Reflection:** Since SSO users (Google/OIDC) lack local passwords, MkAuth manages an independent "Shadow Password" specifically for LDAP/Samba authentication.
+*   **Components:** LLDAP Sync Service (Go), LLDAP Server.
+*   **Orchestrated Flow:** Zitadel webhooks are received ONLY by the **MkAuth Backend**. The Backend validates the change against its policy engine and, if a sync is required, emits a **Provisioning Intent** to the Sync Service via an internal encrypted channel.
+*   **Isolation:** The Sync Service is a private worker that does not expose external ports; it only reacts to verified Backend commands to manage LLDAP groups and user passwords.
+*   **Identity Reflection:** MkAuth manages the "Shadow Password" vault; these secrets are pushed to the Sync Service only during the physical propagation event.
 
 ## 3. The Logic Engine & Policy Rules
 *   **Explicit Mapping Rules:** Instead of fragile deep inheritance trees, MkAuth uses flat conditional rules (e.g., `IF project:printing role:user THEN ADD project:door_access role:3d_lab_pin`).
