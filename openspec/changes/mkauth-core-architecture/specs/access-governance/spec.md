@@ -8,7 +8,12 @@ The system MUST allow direct role grants to be assigned to a user with an option
 - **THEN** the system stores the grant and includes it in effective access until it expires
 
 ### Requirement: Access requests and decisions
-The system MUST allow users to create access requests and admins to approve or reject them with a review note.
+The system MUST allow users to create access requests (either directly for a Bundle/Role or via the Service Catalog) and admins to approve or reject them with a review note.
+
+#### Scenario: Service-initiated request
+- **WHEN** a user requests access to the "Printing Lab" service
+- **THEN** the system MUST generate an access request for the associated `printing_staff` bundle.
+- **AND** the admin MUST see the original service context in the approval queue (e.g., "User requested access to Printing Lab service").
 
 #### Scenario: Resolve a pending request
 - **WHEN** an admin approves a pending request

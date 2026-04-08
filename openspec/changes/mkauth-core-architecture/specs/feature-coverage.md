@@ -20,6 +20,7 @@ Legend:
 | `user-management` | Unified view of all roles across projects, access lineage ("Why?"), bundle vs direct grants. | **Integrated** | `backend/internal/services/views.go`, `ui/src/app/users/*`, `openspec/changes/mkauth-core-architecture/specs/user-management/spec.md` | Lineage is visualized via role reasoning tree in UI; groupings by project context is the default view. |
 | `role-management` | Create roles in Zitadel projects, clone/snapshot existing role metadata, global disambiguation labels. | **Not integrated** | `openspec/changes/mkauth-core-architecture/specs/role-management/spec.md` | New spec defined; requires backend implementation for role creation flow. |
 | `automation-policies`| Define "Welcome" bundles for new accounts, automatic assignment triggers, global default status. | **Not integrated** | `openspec/changes/mkauth-core-architecture/specs/automation-policies/spec.md` | New spec defined; requires webhook/sync worker implementation. |
+| `service-catalog` | Standard user portal; request access to services (apps); auto-mapping to bundles/roles. | **Not integrated** | `openspec/changes/mkauth-core-architecture/specs/service-catalog/spec.md` | New spec defines the user-facing service abstraction and request flow. |
 
 ## Architecture/design feature coverage (planned in design.md)
 
@@ -46,6 +47,7 @@ Legend:
 | **Topology “God Mode”** | Macro graph view for exploration and debugging. | **Integrated** | `ui/src/app/graph/page.tsx`, `backend/internal/handlers/router.go` | Implemented with lane layout + node inspector. |
 | **Command palette** | `⌘K` palette for power users. | **Not integrated** | (no references found in UI) | Could be added later without changing backend contracts. |
 | **UI style (Linear/Stripe)** | Clean cards, shadows, whitespace; dark/light with accent colors. | **Partial** | `ui/src/app/*`, `ui/src/components/*` | Visual intent appears present; explicit theme toggle / mode persistence not evidenced. |
+| **Separated FE/BE** | Decoupled containers for Frontend (Session) and Backend (Service). | **Partial** | `docker-compose.yml`, `design.md` | Containers are split; full OIDC user session auth flow on FE is Phase 2. |
 | **Deployment workflow** | Docker Compose in LXC, update script pulls + rebuilds stack. | **Integrated** | `docker-compose.yml`, `update.sh`, `install.sh` | `update.sh` performs `git pull origin main` + `docker compose build/up`. |
 
 ## Practical takeaways (what this matrix implies)

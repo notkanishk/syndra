@@ -5,8 +5,9 @@
 * **Purpose:** To simplify and manage complex hierarchical permissions across various makerspace systems (digital SSO and physical access) without bloating Zitadel with complex mapping logic.
 
 ## 2. Primary Objectives (Main Aims)
-* **Easy Application Claim Selection:** Downstream applications can effortlessly select and receive enriched claims (roles) derived from any project in the ecosystem, shaped to their specific JWT requirements.
-* **Unified User Claim Management:** Admins have a single "God-Mode" interface to view, audit, and manage a user's entire identity footprint across all projects, explicitly visualizing how each permission was granted (Access Lineage).
+*   **Easy Application Claim Selection:** Downstream applications can effortlessly select and receive enriched claims (roles) derived from any project in the ecosystem, shaped to their specific JWT requirements.
+*   **Unified User Claim Management:** Admins have a single "God-Mode" interface to view, audit, and manage a user's entire identity footprint with total "Access Lineage" visibility.
+*   **Service-Centric Self-Service:** Standard users can browse a catalog of **Services** (Applications) and request access to them without needing to understand or manage underlying roles.
 
 ## 3. The Architectural Split
 The system is divided into two distinct planes to balance complex logic with ultra-low latency token authorization.
@@ -36,15 +37,19 @@ The system is divided into two distinct planes to balance complex logic with ult
 
 ## 5. UI, UX, & Governance
 *   **Aesthetic & Style:** Inspired by Linear/Stripe. Clean, enterprise-grade layout using distinct cards, soft shadows, and moderate whitespace to prevent intimidating non-technical staff. Dark/light modes prominently feature **vibrant accent colors** to highlight primary actions.
-*   **Role Assignment UX:** "Assign once, propagate correctly." Admins can assign raw roles (advanced) or Bundles (normal users). Selecting a Bundle explicitly previews exactly which underlying roles will be applied across which projects before confirmation, ensuring total transparency. Power users can trigger this instantly via a `⌘K` Command Palette.
-*   **Secondary Visual Graph View:** A dedicated "God-Mode" page using node-based visual logic (e.g., React Flow) lets admins see a macroscopic, overhead view of how all Rules, Projects, and Roles interconnect across the entire makerspace.
-*   **Governance & Cleanup:** The system routinely flags **Cleanup Suggestions** (unused roles, redundant mappings) and **Least-Privilege Hints** (detecting users with excessive or unused permissions).
+*   **View Differentiation (Admin vs User):**
+    *   **Admin View:** Focused on projects, raw roles, mapping rules, and global auditing. Authenticated via user session + admin role check.
+    *   **User Portal:** Focused on the **Service Catalog** (Applications). Standard users see a simplified view showing only what services they have access to and a simplified "Request Access" flow.
+*   **Role Assignment UX:** "Assign once, propagate correctly." Admins can assign raw roles (advanced) or Bundles (normal users). Selecting a Bundle explicitly previews exactly which underlying roles will be applied.
 *   **Audit Logging & Self-Service:** Strict timeline tracking of Who granted What, and When. Temporary/Semester roles auto-expire, and users can trigger self-service permission requests for admin approval.
 
 ## 6. Technical Stack & Deployment
-*   **Deployment:** Docker Compose running inside a Proxmox LXC (Linux Container). This provides a robust 1-command installation and update mechanism via an `update.sh` script that pulls GitHub changes and restarts the stack without downtime.
-*   **Backend / Orchestrator:** Go (Golang) running in a dedicated container. Chosen for its strict security boundary and low-latency response times for the Data Plane.
-*   **Frontend Dashboard:** Next.js (React) running in a dedicated container.
+*   **Deployment:** Docker Compose running inside a Proxmox LXC (Linux Container). This provides a robust 1-command installation and update mechanism via an `update.sh` script that pulls GitHub changes and restarts the stack without downtime. The stack uses **Separate Containers** for Frontend and Backend to enable independent scaling and clear authentication boundaries.
+*   **Authentication & Identity:**
+    *   **Backend:** Authenticates via a high-scoped **Machine-to-Machine (Service Account)** token from Zitadel. It exposes a JSON API secured by an internal API key.
+    *   **Frontend:** Authenticates via **User Session (OIDC)**. The frontend proxies requests to the backend using its own service credentials, but filters data based on the logged-in user's identity and permissions.
+*   **Backend / Orchestrator:** Go (Golang).
+*   **Frontend Dashboard:** Next.js (React).
 
 ## 7. Current Implementation Status (v1.0-Bundles)
 *   [x] **Secure Data Plane**: Bearer token authentication enforced on all routes.
