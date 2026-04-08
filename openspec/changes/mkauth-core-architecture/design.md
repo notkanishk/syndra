@@ -4,7 +4,11 @@
 * **Zitadel is the Absolute Source of Truth:** Zitadel holds the final, authoritative list of users and roles. MkAuth sits on top as an orchestration and policy layer.
 * **Purpose:** To simplify and manage complex hierarchical permissions across various makerspace systems (digital SSO and physical access) without bloating Zitadel with complex mapping logic.
 
-## 2. The Architectural Split
+## 2. Primary Objectives (Main Aims)
+* **Easy Application Claim Selection:** Downstream applications can effortlessly select and receive enriched claims (roles) derived from any project in the ecosystem, shaped to their specific JWT requirements.
+* **Unified User Claim Management:** Admins have a single "God-Mode" interface to view, audit, and manage a user's entire identity footprint across all projects, explicitly visualizing how each permission was granted (Access Lineage).
+
+## 3. The Architectural Split
 The system is divided into two distinct planes to balance complex logic with ultra-low latency token authorization.
 
 ### The Control Plane (Slow & Smart)
