@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -45,17 +45,20 @@ export default function AdminRequestsView() {
     });
   }
 
-  async function loadRequests(filter = statusFilter) {
+  const loadRequests = useCallback(async (filter = statusFilter) => {
     const query = filter === "all" ? "" : `?status=${filter}`;
     const res = await fetch(`/api/proxy/requests${query}`);
     const data = await res.json();
     setRequests(Array.isArray(data) ? data : []);
-  }
+  }, [statusFilter]);
 
   useEffect(() => {
-    loadCatalog();
-    loadRequests("pending");
-  }, []);
+    async function initialize() {
+      await Promise.all([loadCatalog(), loadRequests("pending")]);
+    }
+
+    initialize();
+  }, [loadRequests]);
 
   async function submitRequest(event: React.FormEvent) {
     event.preventDefault();
@@ -239,4 +242,3 @@ export default function AdminRequestsView() {
     </div>
   );
 }
-

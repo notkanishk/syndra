@@ -74,21 +74,24 @@ async function proxy(request: NextRequest, method: "GET" | "POST" | "PUT", path:
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
-  return proxy(request, "GET", params.path);
+  const { path } = await params;
+  return proxy(request, "GET", path);
 }
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
-  return proxy(request, "POST", params.path);
+  const { path } = await params;
+  return proxy(request, "POST", path);
 }
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
-  return proxy(request, "PUT", params.path);
+  const { path } = await params;
+  return proxy(request, "PUT", path);
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 
 interface BundleRole {
   zitadel_project_id: string;

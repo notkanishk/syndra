@@ -1,7 +1,6 @@
 import Sidebar from '@/components/Sidebar';
 import './globals.css';
 import { Inter } from 'next/font/google';
-import { redirect } from 'next/navigation';
 
 import { getSession } from '@/lib/session';
 
@@ -18,8 +17,15 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const session = await getSession();
+
   if (!session) {
-    redirect("/login");
+    return (
+      <html lang="en">
+        <body className={`${inter.className} bg-background text-foreground`}>
+          {children}
+        </body>
+      </html>
+    );
   }
 
   return (

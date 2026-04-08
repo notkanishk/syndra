@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -84,7 +84,7 @@ export default function UsersView() {
     duration_days: "14",
   });
 
-  async function loadUsers(search = "") {
+  const loadUsers = useCallback(async (search = "") => {
     setLoadingUsers(true);
     try {
       const res = await fetch(`/api/proxy/users${search ? `?q=${encodeURIComponent(search)}` : ""}`);
@@ -97,7 +97,7 @@ export default function UsersView() {
     } finally {
       setLoadingUsers(false);
     }
-  }
+  }, [selectedUser]);
 
   async function loadReferenceData() {
     const [bundleRes, catalogRes] = await Promise.all([
@@ -131,9 +131,12 @@ export default function UsersView() {
   }
 
   useEffect(() => {
-    loadUsers();
-    loadReferenceData();
-  }, []);
+    async function initialize() {
+      await Promise.all([loadUsers(), loadReferenceData()]);
+    }
+
+    initialize();
+  }, [loadUsers]);
 
   useEffect(() => {
     loadAccess(selectedUser);
