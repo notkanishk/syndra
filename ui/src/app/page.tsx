@@ -1,8 +1,131 @@
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
-import { fetchApplications, fetchAudit, fetchBundles, fetchCatalog, fetchMappingRules, fetchProjects } from "@/lib/api";
+import { fetchApplications, fetchAudit, fetchBundles, fetchCatalog, fetchMappingRules, fetchProjects, getServerApiBase } from "@/lib/api";
+import { getSession } from "@/lib/session";
+
+async function fetchSessionRequests(userId: string) {
+  try {
+    const res = await fetch(`${getServerApiBase()}/requests`, {
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${process.env.MKAUTH_API_KEY || ""}` },
+    });
+    if (!res.ok) {
+      return [];
+    }
+
+    const data = await res.json();
+    if (!Array.isArray(data)) {
+      return [];
+    }
+
+    return data.filter((entry) => entry?.requester_id === userId);
+  } catch {
+    return [];
+  }
+}
 
 export default async function Home() {
+  const session = await getSession();
+  if (!session) {
+    return null;
+  }
+
+  if (session.role === "user") {
+    const [apps, access, requests] = await Promise.all([
+      fetchApplications().catch(() => []),
+      fetch(`${getServerApiBase()}/users/${session.id}/access`, {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${process.env.MKAUTH_API_KEY || ""}` },
+      }).then(async (res) => (res.ok ? res.json() : null)).catch(() => null),
+      fetchSessionRequests(session.id),
+    ]);
+
+    const activeProjects = new Set(
+      Array.isArray(access?.projects)
+        ? access.projects
+            .filter((project: { effective_role_keys?: string[] }) => Array.isArray(project.effective_role_keys) && project.effective_role_keys.length > 0)
+            .map((project: { project_id: string }) => project.project_id)
+        : []
+    );
+    const pendingProjects = new Set(
+      Array.isArray(requests)
+        ? requests
+            .filter((request: { status?: string }) => request.status === "pending")
+            .map((request: { project_id: string }) => request.project_id)
+        : []
+    );
+
+    return (
+      <div className="space-y-8 animate-fade-in-up">
+        <header>
+          <p className="text-sm font-semibold uppercase tracking-[0.28em] text-primary">Member Portal</p>
+          <h1 className="mt-3 text-3xl font-bold text-foreground tracking-tight">Welcome back, {session.name}</h1>
+          <p className="mt-2 text-muted">
+            Browse your available services, check what is already active, and request new access without diving into raw Zitadel roles.
+          </p>
+        </header>
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <Card>
+            <CardHeader>
+              <CardTitle>Identity</CardTitle>
+            </CardHeader>
+            <p className="text-2xl font-semibold">{session.title}</p>
+            <p className="mt-2 text-sm text-muted">{session.team} • {session.location}</p>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Active Services</CardTitle>
+            </CardHeader>
+            <p className="text-4xl font-bold text-primary">{activeProjects.size}</p>
+            <p className="mt-2 text-sm text-muted">Applications currently available to your session.</p>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Pending Reviews</CardTitle>
+            </CardHeader>
+            <p className="text-4xl font-bold text-primary">{pendingProjects.size}</p>
+            <p className="mt-2 text-sm text-muted">Requests still waiting in the governance queue.</p>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Service Catalog</CardTitle>
+          </CardHeader>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {Array.isArray(apps) && apps.map((entry: { application: { id: string; name: string; description: string; project_id: string; consumer: string } }) => {
+              const status = activeProjects.has(entry.application.project_id)
+                ? "Active"
+                : pendingProjects.has(entry.application.project_id)
+                  ? "Pending"
+                  : "No Access";
+
+              return (
+                <div key={entry.application.id} className="rounded-2xl border border-border bg-surfaceHover p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-lg font-semibold text-foreground">{entry.application.name}</p>
+                      <p className="mt-1 text-sm text-muted">{entry.application.description}</p>
+                    </div>
+                    <Badge variant={status === "Active" ? "secondary" : "outline"}>{status}</Badge>
+                  </div>
+                  <p className="mt-4 text-xs uppercase tracking-[0.22em] text-muted">{entry.application.consumer}</p>
+                  <a
+                    href="/requests"
+                    className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white"
+                  >
+                    {status === "No Access" ? "Request Access" : "View Requests"}
+                  </a>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   let bundleCount = 0;
   let ruleCount = 0;
   let userCount = 0;
