@@ -1,29 +1,51 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-muted: var(--muted);
+
+  --animate-fade-in-up: fadeInUp 0.3s ease-out;
+
+  @keyframes fadeInUp {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
 
 @layer base {
   :root {
-    --background: #ffffff; /* Clean white */
-    --foreground: #111827; /* Gray 900 */
+    --background: #ffffff;
+    --foreground: #111827;
     --surface: #ffffff;
-    --surface-hover: #f3f4f6; /* Gray 100 */
-    --border: #e5e7eb; /* Gray 200 */
-    --primary: #4f46e5; /* Indigo 600 */
-    --primary-hover: #4338ca; /* Indigo 700 */
-    --muted: #6b7280; /* Gray 500 */
+    --surface-hover: #f3f4f6;
+    --border: #e5e7eb;
+    --primary: #4f46e5;
+    --primary-hover: #4338ca;
+    --muted: #6b7280;
   }
 
   @media (prefers-color-scheme: dark) {
     :root {
-      --background: #09090b; /* Zinc 950 */
+      --background: #09090b;
       --foreground: #fafafa;
-      --surface: #18181b; /* Zinc 900 */
-      --surface-hover: #27272a; /* Zinc 800 */
-      --border: #27272a; /* Zinc 800 */
-      --primary: #6366f1; /* Indigo 500 */
-      --primary-hover: #818cf8; /* Indigo 400 */
-      --muted: #a1a1aa; /* Zinc 400 */
+      --surface: #18181b;
+      --surface-hover: #27272a;
+      --border: #27272a;
+      --primary: #6366f1;
+      --primary-hover: #818cf8;
+      --muted: #a1a1aa;
     }
   }
 }
@@ -35,16 +57,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-@layer components {
-  /* Subtle glass card base */
-  .glass-card {
-    background-color: var(--surface);
-    border: 1px solid var(--border);
-    transition: all 0.2s ease-in-out;
-  }
-  
-  .glass-card:hover {
-    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+@utility glass-card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  transition: all 0.2s ease-in-out;
+
+  &:hover {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+      0 4px 6px -2px rgba(0, 0, 0, 0.05);
     border-color: var(--primary);
   }
 }
