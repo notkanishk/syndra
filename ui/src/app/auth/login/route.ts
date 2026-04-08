@@ -3,16 +3,20 @@ import { NextResponse } from "next/server";
 
 import { SESSION_COOKIE_NAME, createSessionValue } from "@/lib/session";
 
+function redirectTo(path: string) {
+  return NextResponse.redirect(path, { status: 307 });
+}
+
 export async function POST(request: Request) {
   const formData = await request.formData();
   const userId = formData.get("userId");
   if (typeof userId !== "string") {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return redirectTo("/login");
   }
 
   const sessionValue = createSessionValue(userId);
   if (!sessionValue) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return redirectTo("/login");
   }
 
   const requestUrl = new URL(request.url);
@@ -26,5 +30,5 @@ export async function POST(request: Request) {
     maxAge: 60 * 60 * 12,
   });
 
-  return NextResponse.redirect(new URL("/", request.url));
+  return redirectTo("/");
 }

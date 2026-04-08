@@ -33,6 +33,10 @@ function readSession(request: NextRequest) {
   }
 }
 
+function redirectTo(path: string) {
+  return NextResponse.redirect(path, { status: 307 });
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -47,15 +51,15 @@ export function middleware(request: NextRequest) {
   const session = readSession(request);
 
   if (!session && pathname !== "/login") {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return redirectTo("/login");
   }
 
   if (session && pathname === "/login") {
-    return NextResponse.redirect(new URL("/", request.url));
+    return redirectTo("/");
   }
 
   if (session?.role === "user" && ADMIN_ONLY_PATHS.some((entry) => pathname.startsWith(entry))) {
-    return NextResponse.redirect(new URL("/", request.url));
+    return redirectTo("/");
   }
 
   return NextResponse.next();
