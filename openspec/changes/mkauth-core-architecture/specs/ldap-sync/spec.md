@@ -1,0 +1,27 @@
+# Requirement: LLDAP Sync & Group Mapping
+
+The system MUST provide a reliable synchronization mechanism to reflect Zitadel identity state into an LLDAP server for use by legacy protocols (Samba, UniFi).
+
+## Group Flattening & Translation
+Since LLDAP lacks Zitadel's project-based hierarchy, MkAuth MUST translate roles into a flattened group namespace.
+
+### Scenario: Mapping a Samba role
+- **GIVEN** a Zitadel role `share_admin` in project `Samba`
+- **WHEN** the "Sync to LLDAP" toggle is enabled for this role
+- **THEN** the Sync Service MUST create/manage a group in LLDAP named `samba_share_admin`.
+- **AND** all users with that Zitadel role MUST be members of that LLDAP group.
+
+## Shadow Password Management
+To enable Samba authentication for OIDC-based users, MkAuth MUST manage a secondary "Shadow Password" specifically for LLDAP.
+
+### Scenario: Setting a Samba password
+- **WHEN** a user sets a password in the MkAuth portal for "Samba Access"
+- **THEN** the system MUST enforce complexity requirements:
+    - Minimum 12 characters.
+    - Diversity of character sets (Upper, Lower, Numeric, Symbol).
+    - Entropy check to prevent common patterns.
+- **AND** the password MUST be securely hashed and transmitted to the LLDAP server.
+
+## Sync Policy
+- **One-Way Authority**: Zitadel/MkAuth remains the absolute source of truth. Manual changes in LLDAP MUST be overwritten during the next sync cycle.
+- **Membership Cleanup**: When a user loses a role in Zitadel, they MUST be removed from the corresponding LLDAP group within a configurable sync window (e.g., 5 minutes).

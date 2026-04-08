@@ -22,6 +22,11 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   **Behavior:** During a user login flow to a downstream application, Zitadel triggers an Action v2 script. The script pings MkAuth's fast Redis endpoint, which returns pre-compiled, flattened roles filtered specifically for that application. The Action injects these roles directly into the JWT.
 *   **Cache Invalidation:** A webhook listener actively updates Redis the moment an out-of-band change happens in Zitadel, ensuring the cache is never stale.
 
+### The Bridge Plane (Provisioning)
+*   **Components:** LLDAP Sync Service (Go/Python), LLDAP Server.
+*   **Behavior:** For legacy systems that do not support OIDC (TrueNAS Samba, UniFi Access), MkAuth acts as a provisioning bridge. The Sync Service translates Zitadel roles into LLDAP groups using a flattened namespace (e.g., `samba_share_admin`).
+*   **Identity Reflection:** Since SSO users (Google/OIDC) lack local passwords, MkAuth manages an independent "Shadow Password" specifically for LDAP/Samba authentication.
+
 ## 3. The Logic Engine & Policy Rules
 *   **Explicit Mapping Rules:** Instead of fragile deep inheritance trees, MkAuth uses flat conditional rules (e.g., `IF project:printing role:user THEN ADD project:door_access role:3d_lab_pin`).
 *   **Versioned Policies:** All rules are explicitly versioned in the database, tracking changes over time and enabling seamless rollbacks if a policy breaks access.
@@ -44,10 +49,11 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   **Audit Logging & Self-Service:** Strict timeline tracking of Who granted What, and When. Temporary/Semester roles auto-expire, and users can trigger self-service permission requests for admin approval.
 
 ## 6. Technical Stack & Deployment
-*   **Deployment:** Docker Compose running inside a Proxmox LXC (Linux Container). This provides a robust 1-command installation and update mechanism via an `update.sh` script that pulls GitHub changes and restarts the stack without downtime. The stack uses **Separate Containers** for Frontend and Backend to enable independent scaling and clear authentication boundaries.
+*   **Deployment:** Docker Compose running inside a Proxmox LXC (Linux Container). This provides a robust 1-command installation and update mechanism via an `update.sh` script that pulls GitHub changes and restarts the stack without downtime. The stack uses **Separate Containers** for Frontend, Backend, and the LLDAP Sync Service to ensure isolation and security.
 *   **Authentication & Identity:**
     *   **Backend:** Authenticates via a high-scoped **Machine-to-Machine (Service Account)** token from Zitadel. It exposes a JSON API secured by an internal API key.
     *   **Frontend:** Authenticates via **User Session (OIDC)**. The frontend proxies requests to the backend using its own service credentials, but filters data based on the logged-in user's identity and permissions.
+    *   **Sync Service:** A dedicated worker that synchronizes identity state from MkAuth/Zitadel into the LLDAP server.
 *   **Backend / Orchestrator:** Go (Golang).
 *   **Frontend Dashboard:** Next.js (React).
 

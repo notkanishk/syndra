@@ -21,6 +21,8 @@ Legend:
 | `role-management` | Create roles in Zitadel projects, clone/snapshot existing role metadata, global disambiguation labels. | **Not integrated** | `openspec/changes/mkauth-core-architecture/specs/role-management/spec.md` | New spec defined; requires backend implementation for role creation flow. |
 | `automation-policies`| Define "Welcome" bundles for new accounts, automatic assignment triggers, global default status. | **Not integrated** | `openspec/changes/mkauth-core-architecture/specs/automation-policies/spec.md` | New spec defined; requires webhook/sync worker implementation. |
 | `service-catalog` | Standard user portal; request access to services (apps); auto-mapping to bundles/roles. | **Not integrated** | `openspec/changes/mkauth-core-architecture/specs/service-catalog/spec.md` | New spec defines the user-facing service abstraction and request flow. |
+| `ldap-sync` | Bridge Zitadel (OIDC) to LLDAP (Hardware); prefix-flattening; shadow password management. | **Not integrated** | `openspec/changes/mkauth-core-architecture/specs/ldap-sync/spec.md` | Defines the translation layer for TrueNAS (Samba) and UniFi access. |
+| `provisioning` | Event-driven identity sync engine; fault-tolerant LLDAP writes; secure credential rotation. | **Not integrated** | `openspec/changes/mkauth-core-architecture/specs/provisioning/spec.md` | Defines the sync worker's behavior and security perimeter. |
 
 ## Architecture/design feature coverage (planned in design.md)
 
