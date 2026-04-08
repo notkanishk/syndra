@@ -17,3 +17,7 @@ The system MUST track which bundles are assigned as "Default" and ensure only on
 ### Scenario: Admin dashboard visibility
 - **WHEN** viewing the list of bundles
 - **THEN** any bundle marked as a "Welcome" bundle MUST be visually highlighted with a status badge (e.g., `Default`).
+
+## Implementation: Actions v2 Event Triggers
+Monitoring for new user accounts MUST utilize the **Zitadel Actions v2** event mechanism.
+- **Post-Registration Flow**: The "Welcome Bundle" assignment MUST be integrated into the v2 `post_user_registration` flow or similar event-level hook to ensure immediate propagation upon account creation.

@@ -18,9 +18,9 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   **Zero-Trust Context:** The MkAuth backend inherently distrusts the UI. It validates the logged-in admin's personal permissions first before executing mutations via the Service Account.
 
 ### The Data Plane (Fast & Dumb)
-*   **Components:** Local Redis Cache, Zitadel Actions v2.
-*   **Behavior:** During a user login flow to a downstream application, Zitadel triggers an Action v2 script. The script pings MkAuth's fast Redis endpoint, which returns pre-compiled, flattened roles filtered specifically for that application. The Action injects these roles directly into the JWT.
-*   **Cache Invalidation:** A webhook listener actively updates Redis the moment an out-of-band change happens in Zitadel, ensuring the cache is never stale.
+*   **Components:** Local Redis Cache, **Zitadel Actions v2**.
+*   **Behavior:** During a user login flow to a downstream application, Zitadel triggers an **Actions v2** script. This script executes within the v2 execution environment, pings MkAuth's fast Redis endpoint, and receives pre-compiled, flattened roles. The roles are then injected directly into the JWT via the v2 context's native claim manipulation APIs.
+*   **Version Pinning:** Actions v1 is deprecated and MUST NOT be used. All custom JWT logic MUST reside in the modern v2 flow.
 
 ### The Bridge Plane (Provisioning)
 *   **Components:** LLDAP Sync Service (Go), LLDAP Server.

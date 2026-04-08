@@ -55,6 +55,7 @@ Legend:
 ## Practical takeaways (what this matrix implies)
 
 - The repo already reflects a **“v1 doc baseline”**: seeded demo catalog + governance workflows + topology graph + cache/action simulation.
+- For a detailed timeline of future implementation steps, see the **[Development Roadmap](file:///Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/openspec/changes/mkauth-core-architecture/ROADMAP.md)**.
 - The main remaining “Phase 2” gap is **real Zitadel integration** (M2M management client, real webhook validation + syncing, and true per-admin authZ).
 - Some design bullets are implemented by **equivalent behavior** (e.g., topology UI uses a lane-based SVG renderer rather than React Flow).
 

@@ -25,3 +25,8 @@ The system MUST support "selecting" claims from other projects by utilizing mapp
 - **GIVEN** a mapping rule: `IF project:printing role:calibrator THEN ADD project:doors role:3d_lab_pin`
 - **WHEN** the "Door Controller" application (Project: doors) requests claims for a user with the Printing Calibrator role
 - **THEN** the JWT MUST include the `3d_lab_pin` role.
+
+## Implementation: Actions v2 Integration
+The data plane MUST be implemented as a Zitadel **Actions v2** script that runs during the `token_response` or `userinfo_response` flows.
+- **SetCustomClaims**: The script MUST use the v2 `claims` namespace to inject the pre-compiled roles from the MkAuth cache.
+- **Latency Budget**: V2 execution MUST be optimized for sub-millisecond response times to match Zitadel's high-speed token issue performance.
