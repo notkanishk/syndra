@@ -3,12 +3,26 @@ import { NextResponse } from "next/server";
 
 import { SESSION_COOKIE_NAME } from "@/lib/session";
 
-function redirectTo(path: string) {
-  return NextResponse.redirect(path, { status: 307 });
+function buildRedirectUrl(request: Request, path: string) {
+  const requestUrl = new URL(request.url);
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+
+  const url = new URL(request.url);
+  url.protocol = forwardedProto ? `${forwardedProto}:` : requestUrl.protocol;
+  url.host = forwardedHost || request.headers.get("host") || requestUrl.host;
+  url.pathname = path;
+  url.search = "";
+
+  return url;
 }
 
-export async function POST() {
+function redirectTo(request: Request, path: string) {
+  return NextResponse.redirect(buildRedirectUrl(request, path), { status: 307 });
+}
+
+export async function POST(request: Request) {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE_NAME);
-  return redirectTo("/login");
+  return redirectTo(request, "/login");
 }

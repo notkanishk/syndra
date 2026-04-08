@@ -33,8 +33,11 @@ function readSession(request: NextRequest) {
   }
 }
 
-function redirectTo(path: string) {
-  return NextResponse.redirect(path, { status: 307 });
+function redirectTo(request: NextRequest, path: string) {
+  const url = request.nextUrl.clone();
+  url.pathname = path;
+  url.search = "";
+  return NextResponse.redirect(url, { status: 307 });
 }
 
 export function middleware(request: NextRequest) {
@@ -51,15 +54,15 @@ export function middleware(request: NextRequest) {
   const session = readSession(request);
 
   if (!session && pathname !== "/login") {
-    return redirectTo("/login");
+    return redirectTo(request, "/login");
   }
 
   if (session && pathname === "/login") {
-    return redirectTo("/");
+    return redirectTo(request, "/");
   }
 
   if (session?.role === "user" && ADMIN_ONLY_PATHS.some((entry) => pathname.startsWith(entry))) {
-    return redirectTo("/");
+    return redirectTo(request, "/");
   }
 
   return NextResponse.next();
