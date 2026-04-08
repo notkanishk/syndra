@@ -21,6 +21,19 @@ The system MUST provide a governance summary that includes pending requests, exp
 - **WHEN** an admin opens the governance summary
 - **THEN** the system shows the current pending requests and any grants that are approaching expiry
 
+### Requirement: Bulk Operation Mode
+The system MUST provide a high-efficiency mode for performing mass assignments or revocations across multiple users.
+
+#### Scenario: Entering bulk mode
+- **WHEN** an admin toggles "Bulk Mode" on the user list
+- **THEN** checkboxes MUST appear for each user, and a floating contextual action bar MUST be displayed.
+
+#### Scenario: Performing a bulk grant
+- **GIVEN** three users are selected in Bulk Mode
+- **WHEN** the admin chooses "Grant Bundle" and selects the "Contractor" bundle
+- **THEN** MkAuth MUST initiate the assignment process for all selected users simultaneously.
+- **AND** a summary confirmation MUST be displayed before the operation is finalized.
+
 ### Requirement: Direct grants affect lineage
 The system MUST include direct grants in the effective access computation and lineage views.
 

@@ -18,6 +18,17 @@ The system MUST support both high-level "Bundle" assignments and fine-grained "D
 - **WHEN** an admin assigns this bundle to a new user
 - **THEN** all underlying roles MUST propagate to the user's effective access list across the respective projects.
 
+## Advanced Filter Engine
+The system MUST allow admins to filter the global user list across multiple dimensions to perform precise audits and maintenance.
+
+### Scenario: Filtering by project and role
+- **WHEN** an admin applies a filter for `Project: Printing Lab` AND `Role: Calibrator`
+- **THEN** only users who possess that specific role in that specific project context MUST be displayed.
+
+### Scenario: Temporal filtering
+- **WHEN** an admin filters by `Account Age: < 30 days`
+- **THEN** the list MUST show only newly created users who may need their "Welcome" assignments verified.
+
 ## Governance & Cleanup
 The system MUST identify potential security risks or redundant permissions for a user.
 
