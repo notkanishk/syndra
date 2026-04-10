@@ -12,10 +12,10 @@ This document defines the high-level phases for the MkAuth implementation, trans
 
 ## Phase 2: Contract Hardening and Test Foundation (Immediate Next Step)
 *Objective: Formalize schemas, validation, authorization boundaries, and backend-first regression coverage before expanding the live integration surface.*
-- [ ] **Contract Hardening**: Introduce purpose-built request/response/domain types, strict validation, and durable API error contracts.
-- [ ] **Backend-First Test Matrix**: Add full unit and handler coverage for mission-critical backend flows, especially mapping rules, grants, access requests, claims, and webhooks.
-- [ ] **Persistence Invariants**: Strengthen database constraints so critical domain rules are enforced below the application layer as well.
-- [ ] **Documentation Sync**: Keep OpenSpec, roadmap, and coverage docs aligned with the hardened contracts and any drift corrections.
+- [x] **Contract Hardening**: Introduce purpose-built request/response/domain types, strict validation, and durable API error contracts.
+- [x] **Backend-First Test Matrix**: Add full unit and handler coverage for mission-critical backend flows, especially mapping rules, grants, access requests, claims, and webhooks.
+- [x] **Persistence Invariants**: Strengthen database constraints so critical domain rules are enforced below the application layer as well.
+- [x] **Documentation Sync**: Keep OpenSpec, roadmap, and coverage docs aligned with the hardened contracts and any drift corrections.
 
 ## Phase 3: The Orchestration Core (Target: Digital Parity)
 *Objective: Transition from hardened local flows to real Zitadel integration and container isolation.*

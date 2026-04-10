@@ -25,13 +25,20 @@ type ActionResponse struct {
 // Performance is critical: It hits Redis directly and returns the pre-calculated claims.
 func HandleActionInject(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		jsonErrorResponse(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only POST is supported")
 		return
 	}
 
 	var req ActionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid payload", http.StatusBadRequest)
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
+	}
+	if !trimmedNonEmpty(req.UserID) || !trimmedNonEmpty(req.ProjectID) {
+		jsonValidationErrorResponse(w, "user_id and project_id are required", map[string]string{
+			"user_id":    "required",
+			"project_id": "required",
+		})
 		return
 	}
 
@@ -43,8 +50,7 @@ func HandleActionInject(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Log the cache miss, but never fail an active login flow. Return empty custom claims.
 		log.Printf("[DATA PLANE WARNING] Cache miss or error for %s: %v", cacheKey, err)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ActionResponse{CustomClaims: map[string]interface{}{}})
+		jsonResponse(w, http.StatusOK, ActionResponse{CustomClaims: map[string]interface{}{}})
 		return
 	}
 
@@ -52,14 +58,12 @@ func HandleActionInject(w http.ResponseWriter, r *http.Request) {
 	var claims map[string]interface{}
 	if err := json.Unmarshal([]byte(val), &claims); err != nil {
 		log.Printf("[DATA PLANE ERROR] Malformed cache data for %s: %v", cacheKey, err)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ActionResponse{CustomClaims: map[string]interface{}{}})
+		jsonResponse(w, http.StatusOK, ActionResponse{CustomClaims: map[string]interface{}{}})
 		return
 	}
 
 	// 4. Return sub-millisecond JSON payload to Zitadel Actions pipeline
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ActionResponse{
+	jsonResponse(w, http.StatusOK, ActionResponse{
 		CustomClaims: claims,
 	})
 }

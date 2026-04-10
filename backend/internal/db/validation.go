@@ -18,6 +18,18 @@ func DetectCycleOnInsert(ctx context.Context, sourceProject, sourceRole, targetP
 		return fmt.Errorf("cycle detection: failed to load rules: %w", err)
 	}
 
+	if hasCycleWithRules(rules, sourceProject, sourceRole, targetProject, targetRole) {
+		return fmt.Errorf(
+			"circular dependency detected: adding %s:%s → %s:%s would create a cycle",
+			sourceProject, sourceRole, targetProject, targetRole,
+		)
+	}
+
+	return nil
+}
+
+func hasCycleWithRules(rules []models.MappingRule, sourceProject, sourceRole, targetProject, targetRole string) bool {
+
 	type node struct {
 		Project string
 		Role    string
@@ -56,13 +68,10 @@ func DetectCycleOnInsert(ctx context.Context, sourceProject, sourceRole, targetP
 	}
 
 	if hasCycle(proposedTgt) {
-		return fmt.Errorf(
-			"circular dependency detected: adding %s:%s → %s:%s would create a cycle",
-			sourceProject, sourceRole, targetProject, targetRole,
-		)
+		return true
 	}
 
-	return nil
+	return false
 }
 
 // GetAuditLogs retrieves the most recent audit log entries.

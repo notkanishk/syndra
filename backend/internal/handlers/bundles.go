@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
+	"strings"
 
 	"mkauth/internal/db"
 )
@@ -14,6 +14,11 @@ type AddRoleToBundleRequest struct {
 
 type AssignBundleRequest struct {
 	BundleID string `json:"bundle_id"`
+}
+
+type CreateBundleRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
 func handleGetBundles(w http.ResponseWriter, r *http.Request) {
@@ -30,12 +35,14 @@ func handleGetBundles(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleCreateBundle(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
+	var req CreateBundleRequest
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErrorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid JSON")
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		jsonValidationErrorResponse(w, "name is required", map[string]string{"name": "required"})
 		return
 	}
 
@@ -61,9 +68,21 @@ func handleGetBundleRoles(w http.ResponseWriter, r *http.Request) {
 
 func handleAddRoleToBundle(w http.ResponseWriter, r *http.Request) {
 	bundleID := r.PathValue("id")
+	if strings.TrimSpace(bundleID) == "" {
+		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
+		return
+	}
+
 	var req AddRoleToBundleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErrorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid JSON")
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
+	}
+	if !trimmedNonEmpty(req.ProjectID) || !trimmedNonEmpty(req.RoleKey) {
+		jsonValidationErrorResponse(w, "project_id and role_key are required", map[string]string{
+			"project_id": "required",
+			"role_key":   "required",
+		})
 		return
 	}
 
@@ -88,9 +107,17 @@ func handleGetUserBundles(w http.ResponseWriter, r *http.Request) {
 
 func handleAssignBundleToUser(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
+	if strings.TrimSpace(userID) == "" {
+		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
+		return
+	}
 	var req AssignBundleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErrorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid JSON")
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
+	}
+	if !trimmedNonEmpty(req.BundleID) {
+		jsonValidationErrorResponse(w, "bundle_id is required", map[string]string{"bundle_id": "required"})
 		return
 	}
 

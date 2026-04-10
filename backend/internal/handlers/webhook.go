@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 
@@ -23,13 +21,21 @@ type WebhookPayload struct {
 // rebuilds the Redis cache, and initiates follow-up API calls.
 func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		jsonErrorResponse(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only POST is supported")
 		return
 	}
 
 	var event WebhookPayload
-	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
-		jsonErrorResponse(w, http.StatusBadRequest, "INVALID_PAYLOAD", "Cannot parse webhook event")
+	if err := decodeJSONStrict(r.Body, &event); err != nil {
+		jsonValidationErrorResponse(w, "Invalid webhook payload", map[string]string{"body": err.Error()})
+		return
+	}
+	if !trimmedNonEmpty(event.UserID) || !trimmedNonEmpty(event.SourceProject) || !trimmedNonEmpty(event.RoleKey) {
+		jsonValidationErrorResponse(w, "user_id, source_project, and role_key are required", map[string]string{
+			"user_id":        "required",
+			"source_project": "required",
+			"role_key":       "required",
+		})
 		return
 	}
 
@@ -50,6 +56,5 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "Webhook processed: cache rebuilt + rules enforced.")
+	jsonResponse(w, http.StatusOK, map[string]string{"message": "Webhook processed: cache rebuilt + rules enforced"})
 }

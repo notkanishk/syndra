@@ -5,8 +5,8 @@
 - [ ] Verify local Bun installation (`bun -v`)
 
 ## Phase 2: Environment Purge
-- [ ] Delete `ui/node_modules`
-- [ ] Delete `ui/package-lock.json`
+- [x] Delete `ui/node_modules`
+- [x] Delete `ui/package-lock.json`
 
 ## Phase 3: Bun Initialization
 - [ ] Run `bun install` in `ui/` to generate `bun.lockb`

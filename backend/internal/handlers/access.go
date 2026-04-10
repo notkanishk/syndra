@@ -1,13 +1,10 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
 
-	"mkauth/internal/cache"
-	"mkauth/internal/db"
 	"mkauth/internal/demo"
 	"mkauth/internal/services"
 )
@@ -47,12 +44,23 @@ func handleGetUserDirectGrants(w http.ResponseWriter, r *http.Request) {
 func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	var req UpsertDirectGrantRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErrorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid JSON")
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
 		return
 	}
-	if req.ProjectID == "" || req.RoleKey == "" {
-		jsonErrorResponse(w, http.StatusBadRequest, "VALIDATION_FAILED", "project_id and role_key are required")
+	if !trimmedNonEmpty(userID) {
+		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
+		return
+	}
+	if !trimmedNonEmpty(req.ProjectID) || !trimmedNonEmpty(req.RoleKey) {
+		jsonValidationErrorResponse(w, "project_id and role_key are required", map[string]string{
+			"project_id": "required",
+			"role_key":   "required",
+		})
+		return
+	}
+	if req.DurationDays < 0 {
+		jsonValidationErrorResponse(w, "duration_days must be zero or greater", map[string]string{"duration_days": "min=0"})
 		return
 	}
 
@@ -67,20 +75,24 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 		expiresAt = &expiry
 	}
 
-	id, err := db.UpsertDirectGrant(r.Context(), userID, req.ProjectID, req.RoleKey, grantedBy, req.Reason, expiresAt)
+	id, err := dbUpsertDirectGrant(r.Context(), userID, req.ProjectID, req.RoleKey, grantedBy, req.Reason, expiresAt)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	cache.RebuildUserCache(r.Context(), userID, allApplicationProjectIDs())
-	_ = db.InsertAuditLog(r.Context(), grantedBy, userID, "direct_grant.upserted", id)
+	cacheRebuildUser(r.Context(), userID, allApplicationProjectIDs())
+	_ = dbInsertAuditLog(r.Context(), grantedBy, userID, "direct_grant.upserted", id)
 	jsonResponse(w, http.StatusOK, map[string]string{"id": id, "message": "Direct grant saved"})
 }
 
 func handleGetAccessRequests(w http.ResponseWriter, r *http.Request) {
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
-	requests, err := db.GetAccessRequests(r.Context(), status)
+	if status != "" && status != "pending" && status != "approved" && status != "rejected" {
+		jsonValidationErrorResponse(w, "status must be one of pending, approved, rejected", map[string]string{"status": "enum"})
+		return
+	}
+	requests, err := dbGetAccessRequests(r.Context(), status)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -90,12 +102,21 @@ func handleGetAccessRequests(w http.ResponseWriter, r *http.Request) {
 
 func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 	var req CreateAccessRequestRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErrorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid JSON")
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
 		return
 	}
-	if req.RequesterID == "" || req.ProjectID == "" || req.RoleKey == "" || req.Justification == "" {
-		jsonErrorResponse(w, http.StatusBadRequest, "VALIDATION_FAILED", "requester_id, project_id, role_key, and justification are required")
+	if !trimmedNonEmpty(req.RequesterID) || !trimmedNonEmpty(req.ProjectID) || !trimmedNonEmpty(req.RoleKey) || !trimmedNonEmpty(req.Justification) {
+		jsonValidationErrorResponse(w, "requester_id, project_id, role_key, and justification are required", map[string]string{
+			"requester_id":   "required",
+			"project_id":     "required",
+			"role_key":       "required",
+			"justification":  "required",
+		})
+		return
+	}
+	if req.DurationDays < 0 {
+		jsonValidationErrorResponse(w, "duration_days must be zero or greater", map[string]string{"duration_days": "min=0"})
 		return
 	}
 
@@ -103,37 +124,46 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 	if req.DurationDays > 0 {
 		durationDays = &req.DurationDays
 	}
-	id, err := db.CreateAccessRequest(r.Context(), req.RequesterID, req.ProjectID, req.RoleKey, req.Justification, durationDays)
+	id, err := dbCreateAccessRequest(r.Context(), req.RequesterID, req.ProjectID, req.RoleKey, req.Justification, durationDays)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	_ = db.InsertAuditLog(r.Context(), req.RequesterID, req.RequesterID, "access_request.created", id)
+	_ = dbInsertAuditLog(r.Context(), req.RequesterID, req.RequesterID, "access_request.created", id)
 	jsonResponse(w, http.StatusCreated, map[string]string{"id": id})
 }
 
 func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 	requestID := r.PathValue("id")
+	if !trimmedNonEmpty(requestID) {
+		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
+		return
+	}
+
 	var req ResolveAccessRequestRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErrorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid JSON")
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
 		return
 	}
 
 	status := strings.ToLower(strings.TrimSpace(req.Status))
 	if status != "approved" && status != "rejected" {
-		jsonErrorResponse(w, http.StatusBadRequest, "VALIDATION_FAILED", "status must be approved or rejected")
+		jsonValidationErrorResponse(w, "status must be approved or rejected", map[string]string{"status": "enum"})
+		return
+	}
+	if status == "approved" && !trimmedNonEmpty(req.ReviewerID) {
+		jsonValidationErrorResponse(w, "reviewer_id is required when approving a request", map[string]string{"reviewer_id": "required_when=status:approved"})
 		return
 	}
 
-	request, err := db.GetAccessRequestByID(r.Context(), requestID)
+	request, err := dbGetAccessRequestByID(r.Context(), requestID)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
 	}
 
-	if err := db.ResolveAccessRequest(r.Context(), requestID, status, req.ReviewerID, req.ReviewNote); err != nil {
+	if err := dbResolveAccessRequest(r.Context(), requestID, status, req.ReviewerID, req.ReviewNote); err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
@@ -144,18 +174,18 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 			expiry := time.Now().UTC().Add(time.Duration(*request.DurationDays) * 24 * time.Hour)
 			expiresAt = &expiry
 		}
-		if _, err := db.UpsertDirectGrant(r.Context(), request.RequesterID, request.ProjectID, request.RoleKey, req.ReviewerID, "Approved from access request", expiresAt); err != nil {
+		if _, err := dbUpsertDirectGrant(r.Context(), request.RequesterID, request.ProjectID, request.RoleKey, req.ReviewerID, "Approved from access request", expiresAt); err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 			return
 		}
-		cache.RebuildUserCache(r.Context(), request.RequesterID, allApplicationProjectIDs())
+		cacheRebuildUser(r.Context(), request.RequesterID, allApplicationProjectIDs())
 	}
 
 	actor := req.ReviewerID
 	if actor == "" {
 		actor = "system"
 	}
-	_ = db.InsertAuditLog(r.Context(), actor, request.RequesterID, "access_request."+status, requestID)
+	_ = dbInsertAuditLog(r.Context(), actor, request.RequesterID, "access_request."+status, requestID)
 	jsonResponse(w, http.StatusOK, map[string]string{"message": "Request resolved"})
 }
 

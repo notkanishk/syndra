@@ -102,10 +102,19 @@ func jsonResponse(w http.ResponseWriter, status int, payload interface{}) {
 
 // jsonError defines standard API error shape
 type ErrorResponse struct {
-	Error   string `json:"error"`
-	Message string `json:"message"`
+	Error   string            `json:"error"`
+	Message string            `json:"message"`
+	Details map[string]string `json:"details,omitempty"`
 }
 
 func jsonErrorResponse(w http.ResponseWriter, status int, errStr, msg string) {
 	jsonResponse(w, status, ErrorResponse{Error: errStr, Message: msg})
+}
+
+func jsonValidationErrorResponse(w http.ResponseWriter, msg string, details map[string]string) {
+	jsonResponse(w, http.StatusBadRequest, ErrorResponse{
+		Error:   "VALIDATION_FAILED",
+		Message: msg,
+		Details: details,
+	})
 }

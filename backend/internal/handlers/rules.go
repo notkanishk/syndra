@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
+	"strings"
 
 	"mkauth/internal/db"
 )
@@ -37,13 +37,31 @@ func handleGetMappingRules(w http.ResponseWriter, r *http.Request) {
 
 func handleCreateMappingRule(w http.ResponseWriter, r *http.Request) {
 	var req CreateMappingRuleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErrorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid JSON body")
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
 		return
 	}
 
+	req.SourceProject = strings.TrimSpace(req.SourceProject)
+	req.SourceRole = strings.TrimSpace(req.SourceRole)
+	req.TargetProject = strings.TrimSpace(req.TargetProject)
+	req.TargetRole = strings.TrimSpace(req.TargetRole)
+
 	if req.SourceProject == "" || req.TargetProject == "" || req.SourceRole == "" || req.TargetRole == "" {
-		jsonErrorResponse(w, http.StatusBadRequest, "VALIDATION_FAILED", "All four fields (source_project, source_role, target_project, target_role) are required")
+		jsonValidationErrorResponse(w, "source_project, source_role, target_project, and target_role are required", map[string]string{
+			"source_project": "required",
+			"source_role":    "required",
+			"target_project": "required",
+			"target_role":    "required",
+		})
+		return
+	}
+
+	if req.SourceProject == req.TargetProject && req.SourceRole == req.TargetRole {
+		jsonValidationErrorResponse(w, "mapping rule cannot point to itself", map[string]string{
+			"source_project": "must_not_equal_target",
+			"source_role":    "must_not_equal_target",
+		})
 		return
 	}
 
