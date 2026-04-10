@@ -30,3 +30,18 @@ The system MUST support "selecting" claims from other projects by utilizing mapp
 The data plane MUST be implemented as a Zitadel **Actions v2** script that runs during the `token_response` or `userinfo_response` flows.
 - **SetCustomClaims**: The script MUST use the v2 `claims` namespace to inject the pre-compiled roles from the MkAuth cache.
 - **Latency Budget**: V2 execution MUST be optimized for sub-millisecond response times to match Zitadel's high-speed token issue performance.
+- **Compatibility Boundary**: Zitadel Actions v2 MUST remain the only supported source-of-truth-facing claim integration model.
+
+
+## Claim contract hardening
+The system MUST treat claim-shaping payloads and action responses as hardened contracts, with strict validation and regression coverage for every supported format.
+
+### Scenario: Unsupported claim format blocked
+- **WHEN** an application configuration declares an unknown claim format
+- **THEN** the backend MUST reject or fail the configuration deterministically
+- **AND** automated tests MUST verify that unsupported formats do not silently degrade into a permissive payload
+
+### Scenario: Internal contract does not replace Actions v2
+- **WHEN** MkAuth introduces or changes an internal payload between the UI, backend, or sync service
+- **THEN** that change MUST NOT replace, bypass, or redefine the Zitadel Actions v2 compatibility contract
+- **AND** the source-of-truth-facing claim path MUST remain anchored to the Actions v2 flow

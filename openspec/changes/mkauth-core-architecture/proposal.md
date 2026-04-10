@@ -25,3 +25,7 @@ MkAuth has moved beyond the original bundle-and-mapping prototype into a usable 
 * Affects backend read models, seed data, and the control-plane API.
 * Affects the Next.js dashboard navigation and graph/access views.
 * Establishes the spec baseline for future implementation changes and doc updates.
+
+## Immediate Priority Note
+
+The current v1 feature surface is now documented, but the next immediate project milestone is **contract hardening and backend-first testing**. Before MkAuth expands its live Zitadel integration surface, the application should formalize its request and response schemas, strengthen its persistence invariants, add comprehensive mission-critical backend tests, and reconcile any spec drift between the documented target behavior and the current implementation.

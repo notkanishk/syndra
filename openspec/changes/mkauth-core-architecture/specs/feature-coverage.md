@@ -1,8 +1,10 @@
 # Feature Coverage Matrix (Planned vs Integrated)
 
-Last updated: 2026-04-09
+Last updated: 2026-04-10
 
 This document compares the **initially planned** MkAuth feature surface (as described in `openspec/changes/mkauth-core-architecture/design.md`) against what is **already integrated in the repo** (backend + UI). It is meant to be a durable “reality check” that future specs/design changes can reference.
+
+Immediate priority note: the repo now needs a dedicated **contract hardening and backend-first testing** wave. Several capabilities are functionally present, but their schemas, validation boundaries, test coverage, and documentation alignment are not yet strong enough to treat them as production-grade.
 
 Legend:
 - **Integrated**: present end-to-end (API/storage + UI where applicable) or otherwise usable in the intended flow.
@@ -55,6 +57,16 @@ Legend:
 ## Practical takeaways (what this matrix implies)
 
 - The repo already reflects a **“v1 doc baseline”**: seeded demo catalog + governance workflows + topology graph + cache/action simulation.
-- For a detailed timeline of future implementation steps, see the **[Development Roadmap](file:///Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/openspec/changes/mkauth-core-architecture/ROADMAP.md)**.
-- The main remaining “Phase 2” gap is **real Zitadel integration**: live OIDC sessions, M2M management writes, real webhook validation + syncing, and true per-admin backend authZ.
+- For a detailed timeline of future implementation steps, see `openspec/changes/mkauth-core-architecture/ROADMAP.md`.
+- The main remaining post-hardening orchestration gap is **real Zitadel integration**: live OIDC sessions, M2M management writes, real webhook validation + syncing, and true per-admin backend authZ.
 - Some design bullets are implemented by **equivalent behavior** (e.g., topology UI uses a lane-based SVG renderer rather than React Flow).
+
+
+## Immediate next step
+
+The highest-priority follow-up is to harden the backend and shared contract surface before expanding live integration work. That includes:
+- strict backend request validation and stable error contracts
+- purpose-built transport/domain/persistence/UI type boundaries
+- stronger Postgres invariants for critical authorization state
+- backend-first unit and handler coverage for every mission-critical flow
+- synchronization of OpenSpec capability specs whenever contract semantics change

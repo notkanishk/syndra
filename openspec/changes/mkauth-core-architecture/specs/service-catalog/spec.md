@@ -40,3 +40,12 @@ Standard users MUST be able to manage legacy credentials (e.g., Samba Passwords)
 - **GIVEN** a user has NO access to any LDAP-enabled services
 - **WHEN** they visit the MkAuth Portal
 - **THEN** the "Infrastructure Credentials" section MUST be completely hidden to prevent confusion.
+
+
+### Requirement: Service request contract stays aligned
+The system MUST keep the documented service-request abstraction aligned with the implemented backend contract and clearly mark any temporary fallback behavior.
+
+#### Scenario: Temporary project-role fallback
+- **WHEN** the portal still submits requests through a lower-level project/role contract instead of a dedicated service-mapping contract
+- **THEN** the implementation status MUST be documented as partial
+- **AND** the follow-up hardening work MUST define the intended service-level contract explicitly

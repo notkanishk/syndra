@@ -16,17 +16,20 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   **Components:** MkAuth UI Dashboard, Backend API, Local Policy DB (e.g., Postgres/SQLite).
 *   **Behavior:** When an admin assigns a role or bundle, MkAuth evaluates dependencies and structural mapping rules. It then calls the Zitadel Management API using an independent, highly-scoped Machine-to-Machine (Service Account) token to actually grant the roles.
 *   **Zero-Trust Context:** The MkAuth backend inherently distrusts the UI. It validates the logged-in admin's personal permissions first before executing mutations via the Service Account.
+*   **Credential Rule:** A dedicated service user account is still required for backend-owned Management API operations, but it MUST be least-privileged, server-side only, rotated, and never exposed to the frontend or the sync service.
 
 ### The Data Plane (Fast & Dumb)
 *   **Components:** Local Redis Cache, **Zitadel Actions v2**.
 *   **Behavior:** During a user login flow to a downstream application, Zitadel triggers an **Actions v2** script. This script executes within the v2 execution environment, pings MkAuth's fast Redis endpoint, and receives pre-compiled, flattened roles. The roles are then injected directly into the JWT via the v2 context's native claim manipulation APIs.
 *   **Version Pinning:** Actions v1 is deprecated and MUST NOT be used. All custom JWT logic MUST reside in the modern v2 flow.
+*   **Compatibility Rule:** All source-of-truth-facing claim and event assumptions MUST remain compatible with Zitadel Actions v2. MkAuth MUST NOT introduce an alternate Zitadel-facing contract model outside that boundary.
 
 ### The Bridge Plane (Provisioning)
 *   **Components:** LLDAP Sync Service (Go), LLDAP Server.
 *   **Orchestrated Flow:** Zitadel webhooks are received ONLY by the **MkAuth Backend**. The Backend validates the change against its policy engine and, if a sync is required, emits a **Provisioning Intent** to the Sync Service via an internal encrypted channel.
 *   **Isolation:** The Sync Service is a private worker that does not expose external ports; it only reacts to verified Backend commands to manage LLDAP groups and user passwords.
 *   **Identity Reflection:** MkAuth manages the "Shadow Password" vault; these secrets are pushed to the Sync Service only during the physical propagation event.
+*   **Internal Contract Rule:** Frontend-to-Backend and Backend-to-Sync communication may use self-defined MkAuth structures, but those internal contracts MUST be explicit, authenticated, validated, and kept separate from Zitadel-facing Actions v2 compatibility assumptions.
 
 ## 3. The Logic Engine & Policy Rules
 *   **Explicit Mapping Rules:** Instead of fragile deep inheritance trees, MkAuth uses flat conditional rules (e.g., `IF project:printing role:user THEN ADD project:door_access role:3d_lab_pin`).
@@ -72,3 +75,18 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   [/] **Frontend Session Split**: Demo-backed login, member portal navigation, and admin/member route gating are in place; live Zitadel OIDC is still pending.
 *   [/] **Zitadel Integration**: Currently stubbed for local dev; needs M2M credentials for live sync.
 *   [ ] **Production Rollout**: Final deployment with actual keys, networking, and live Zitadel credentials.
+
+
+## 8. Immediate Priority: Contract Hardening & Test Coverage
+Before MkAuth widens its live Zitadel and provisioning surface, the immediate next milestone is to harden the contract backbone of the application. That includes strict backend request decoding, bounded domain types, stable error semantics, stronger database invariants, backend-enforced authorization assumptions, and full covering backend-first tests for mission-critical flows. This hardening pass must also make Zitadel Actions v2 the explicit and only source-of-truth compatibility boundary, while allowing separately hardened internal MkAuth contracts for frontend, backend, and sync-service communication. The UI may continue to evolve, but the backend contract layer is now the highest-priority stability and security concern.
+
+## 9. Zitadel Interaction Matrix
+
+| Function or feature | Mechanism | Notes |
+| --- | --- | --- |
+| token claim enrichment for downstream applications | Actions v2 | source-of-truth claim boundary; only supported claim-integration path |
+| Zitadel-native event-driven trigger logic | Actions v2 | use for Zitadel-triggered compatibility flows where feasible |
+| backend grant or revoke operations in Zitadel | service user account | Management API path; backend-owned only |
+| mapping-rule propagation back into Zitadel | service user account | requires server-side control-plane mutation rights |
+| webhook reception and verification | backend endpoint with validated Zitadel event contract | external intake stays on backend; sync service remains private |
+| Backend -> Sync provisioning intents | internal MkAuth contract | self-defined, authenticated, and isolated from Zitadel-facing contracts |

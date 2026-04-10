@@ -45,3 +45,12 @@ The system MUST include direct grants in the effective access computation and li
 #### Scenario: Explain a user's access
 - **WHEN** a user has both bundle-derived roles and direct grants
 - **THEN** the access explanation separates the source roles from derived roles and includes the direct grant reason
+
+
+### Requirement: Current implementation scope is documented honestly
+The system MUST keep the documented distinction between the current project/role-based request flow and the intended service-to-bundle abstraction explicit until the implementation is hardened and aligned.
+
+#### Scenario: Service abstraction not yet fully integrated
+- **WHEN** the service catalog flow still relies on direct project/role request payloads under the hood
+- **THEN** the documentation MUST call that behavior partial rather than fully integrated
+- **AND** the hardening and alignment work MUST remain visible as an immediate next step

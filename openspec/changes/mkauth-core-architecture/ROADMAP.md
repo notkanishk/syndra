@@ -10,22 +10,29 @@ This document defines the high-level phases for the MkAuth implementation, trans
 - [x] **Claim Simulation**: Redis-backed cache for previewing JWT payloads.
 - [x] **Logic Specifications**: Completion of the OpenSpec (this workspace).
 
-## Phase 2: The Orchestration Core (Target: Digital Parity)
-*Objective: Transition from mock data to real Zitadel integration and container isolation.*
+## Phase 2: Contract Hardening and Test Foundation (Immediate Next Step)
+*Objective: Formalize schemas, validation, authorization boundaries, and backend-first regression coverage before expanding the live integration surface.*
+- [ ] **Contract Hardening**: Introduce purpose-built request/response/domain types, strict validation, and durable API error contracts.
+- [ ] **Backend-First Test Matrix**: Add full unit and handler coverage for mission-critical backend flows, especially mapping rules, grants, access requests, claims, and webhooks.
+- [ ] **Persistence Invariants**: Strengthen database constraints so critical domain rules are enforced below the application layer as well.
+- [ ] **Documentation Sync**: Keep OpenSpec, roadmap, and coverage docs aligned with the hardened contracts and any drift corrections.
+
+## Phase 3: The Orchestration Core (Target: Digital Parity)
+*Objective: Transition from hardened local flows to real Zitadel integration and container isolation.*
 - [x] **Container Split**: Docker Compose runs the frontend and backend as isolated services, with the UI proxying to the backend over the internal network.
 - [/] **Frontend Session Auth**: Demo-backed cookie sessions now gate Admin/User view differentiation; live Zitadel OIDC remains the next step.
 - [ ] **Zitadel Management Client**: Replace stubs with actual M2M Management API calls.
 - [ ] **Live Webhook Listener**: Implement the real-time cache invalidator for Zitadel events.
 - [ ] **Advanced Role CRUD**: Implement "Snapshot & Fork" role cloning.
 
-## Phase 3: The Infrastructure Bridge (Target: Hardware Sync)
+## Phase 4: The Infrastructure Bridge (Target: Hardware Sync)
 *Objective: Enable legacy hardware support via LLDAP and Provisioning.*
 - [ ] **Sync Service (Go)**: Build the dedicated concurrent provisioning worker.
 - [ ] **LLDAP Integration**: Implement the `{project}_{role}` group mapping logic.
 - [ ] **Shadow Password Vault**: Build the secure portal UI for setting Samba/LDAP secrets.
 - [ ] **Provisioning Intents**: Implement the internal API contract between Backend and Sync Worker.
 
-## Phase 4: Automation & Governance (Target: Operational Excellence)
+## Phase 5: Automation & Governance (Target: Operational Excellence)
 *Objective: Eliminate manual overhead through policy-driven automation.*
 - [ ] **Welcome Bundles**: Automatic role assignment for new Zitadel accounts.
 - [ ] **Auto-Expiration**: Build the cleanup scheduler for temporary grants.
