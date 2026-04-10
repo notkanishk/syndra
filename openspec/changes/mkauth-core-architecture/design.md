@@ -53,7 +53,7 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   **Deployment:** Docker Compose running inside a Proxmox LXC (Linux Container). This provides a robust 1-command installation and update mechanism via an `update.sh` script that pulls GitHub changes and restarts the stack without downtime. The stack uses **Separate Containers** for Frontend, Backend, and the LLDAP Sync Service to ensure isolation and security.
 *   **Authentication & Identity:**
     *   **Backend:** Authenticates via a high-scoped **Machine-to-Machine (Service Account)** token from Zitadel. It exposes a JSON API secured by an internal API key.
-    *   **Frontend:** Authenticates via **User Session (OIDC)**. The frontend proxies requests to the backend using its own service credentials, but filters data based on the logged-in user's identity and permissions.
+    *   **Frontend:** Target state is **User Session (OIDC)**. The current implementation uses demo cookie sessions with Admin/User view differentiation, and the frontend proxies requests to the backend using its own service credentials while filtering data based on the session role.
     *   **Sync Service:** A dedicated worker that synchronizes identity state from MkAuth/Zitadel into the LLDAP server.
 *   **Backend / Orchestrator:** Go (Golang).
 *   **Frontend Dashboard:** Next.js (React).
@@ -69,5 +69,6 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   [x] **Governance Summary**: Pending requests, expiring grants, and cleanup hints.
 *   [x] **Topology Graph**: Visual "God Mode" graph and supporting API.
 *   [x] **Seeded Demo Catalog**: Users, projects, applications, and dummy relationships for local testing.
+*   [/] **Frontend Session Split**: Demo-backed login, member portal navigation, and admin/member route gating are in place; live Zitadel OIDC is still pending.
 *   [/] **Zitadel Integration**: Currently stubbed for local dev; needs M2M credentials for live sync.
 *   [ ] **Production Rollout**: Final deployment with actual keys, networking, and live Zitadel credentials.

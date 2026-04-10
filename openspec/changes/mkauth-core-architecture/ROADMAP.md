@@ -12,8 +12,8 @@ This document defines the high-level phases for the MkAuth implementation, trans
 
 ## Phase 2: The Orchestration Core (Target: Digital Parity)
 *Objective: Transition from mock data to real Zitadel integration and container isolation.*
-- [ ] **Container Split**: Implement the Docker Compose split (Frontend vs Backend).
-- [ ] **Frontend OIDC Auth**: Enable user-session based login and Admin/User view differentiation.
+- [x] **Container Split**: Docker Compose runs the frontend and backend as isolated services, with the UI proxying to the backend over the internal network.
+- [/] **Frontend Session Auth**: Demo-backed cookie sessions now gate Admin/User view differentiation; live Zitadel OIDC remains the next step.
 - [ ] **Zitadel Management Client**: Replace stubs with actual M2M Management API calls.
 - [ ] **Live Webhook Listener**: Implement the real-time cache invalidator for Zitadel events.
 - [ ] **Advanced Role CRUD**: Implement "Snapshot & Fork" role cloning.
