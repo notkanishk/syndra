@@ -39,6 +39,25 @@ The system MUST provide a high-efficiency mode for performing mass assignments o
 - **THEN** MkAuth MUST initiate the assignment process for all selected users simultaneously.
 - **AND** a summary confirmation MUST be displayed before the operation is finalized.
 
+### Requirement: Safe bulk operation execution
+Bulk grants and revocations MUST provide preview, authorization enforcement, idempotency, and per-user outcome reporting.
+
+#### Scenario: Reviewing a bulk grant before commit
+- **GIVEN** multiple users are selected for a bulk grant
+- **WHEN** the admin proceeds to confirmation
+- **THEN** MkAuth MUST display a preview of the affected users, target bundle or role, expected derived access changes, and any users that will be skipped or rejected.
+
+#### Scenario: Partial failure handling in bulk mode
+- **WHEN** a bulk operation encounters one or more failed users
+- **THEN** MkAuth MUST return per-user results
+- **AND** the audit log MUST record the attempted bulk action and individual outcomes
+- **AND** retrying the same bulk action MUST be safe and idempotent.
+
+#### Scenario: Privileged bulk action authorization
+- **WHEN** a bulk mutation is submitted
+- **THEN** the backend MUST validate that the acting admin is authorized for the target action and scope
+- **AND** frontend selection state alone MUST NOT be trusted as authorization proof.
+
 ### Requirement: Direct grants affect lineage
 The system MUST include direct grants in the effective access computation and lineage views.
 

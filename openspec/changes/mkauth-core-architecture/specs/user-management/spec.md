@@ -19,7 +19,7 @@ The system MUST support both high-level "Bundle" assignments and fine-grained "D
 - **THEN** all underlying roles MUST propagate to the user's effective access list across the respective projects.
 
 ## Advanced Filter Engine
-The system MUST allow admins to filter the global user list across multiple dimensions to perform precise audits and maintenance.
+The system MUST allow admins to filter the global user list across multiple dimensions to perform precise audits and maintenance as part of MkAuth's admin-console-first workflow.
 
 ### Scenario: Filtering by project and role
 - **WHEN** an admin applies a filter for `Project: Printing Lab` AND `Role: Calibrator`

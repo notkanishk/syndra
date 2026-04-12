@@ -30,11 +30,18 @@ Users MUST NOT see the "Raw Roles" that make up a service unless they have `admi
 ## Infrastructure Credentials
 Standard users MUST be able to manage legacy credentials (e.g., Samba Passwords) directly through the portal, but only when they possess the relevant service access.
 
+The portal MUST present these secrets as infrastructure-specific credentials rather than as the user's primary account password.
+
 ### Scenario: Managing Samba passwords
 - **GIVEN** a user has active access to a service that requires an LLDAP identity (e.g., "Makerspace File Share")
 - **WHEN** they visit the MkAuth Portal
 - **THEN** a "Infrastructure Credentials" section MUST appear.
 - **AND** it MUST include a card for "Samba/LDAP Password" with a "Set Password" action.
+
+### Scenario: Infrastructure credential labeling
+- **WHEN** a user opens the Samba password management flow
+- **THEN** the UI MUST describe the secret as an infrastructure-specific credential for Samba/LLDAP access
+- **AND** it MUST NOT imply that this password changes the user's primary Zitadel or OIDC login
 
 ### Scenario: Restricted access to credentials
 - **GIVEN** a user has NO access to any LDAP-enabled services

@@ -17,12 +17,15 @@ This document defines the high-level phases for the MkAuth implementation, trans
 - [x] **Persistence Invariants**: Strengthen database constraints so critical domain rules are enforced below the application layer as well.
 - [x] **Documentation Sync**: Keep OpenSpec, roadmap, and coverage docs aligned with the hardened contracts and any drift corrections.
 
-## Phase 3: The Orchestration Core (Target: Digital Parity)
-*Objective: Transition from hardened local flows to real Zitadel integration and container isolation.*
+## Phase 3: Orchestration Security Boundary (Immediate Production Gate)
+*Objective: Close trust-boundary gaps before enabling broader live orchestration.*
 - [x] **Container Split**: Docker Compose runs the frontend and backend as isolated services, with the UI proxying to the backend over the internal network.
 - [/] **Frontend Session Auth**: Demo-backed cookie sessions now gate Admin/User view differentiation; live Zitadel OIDC remains the next step.
-- [ ] **Zitadel Management Client**: Replace stubs with actual M2M Management API calls.
-- [ ] **Live Webhook Listener**: Implement the real-time cache invalidator for Zitadel events.
+- [ ] **Per-Admin Backend Authorization**: Replace shared-API-key trust for privileged actions with backend-verified admin identity and authorization.
+- [ ] **Production Data Plane Security**: Harden the Redis/action-injection perimeter, authentication, timeout behavior, and safe degraded responses.
+- [ ] **Webhook Authenticity Validation**: Enforce production-grade verification for Zitadel-originated events before any downstream mutation or cache invalidation.
+- [ ] **Zitadel Management Client**: Replace stubs with actual M2M Management API calls after the above controls are in place.
+- [ ] **Live Webhook Listener**: Implement the real-time cache invalidator for validated Zitadel events.
 - [ ] **Advanced Role CRUD**: Implement "Snapshot & Fork" role cloning.
 
 ## Phase 4: The Infrastructure Bridge (Target: Hardware Sync)
@@ -37,4 +40,3 @@ This document defines the high-level phases for the MkAuth implementation, trans
 - [ ] **Welcome Bundles**: Automatic role assignment for new Zitadel accounts.
 - [ ] **Auto-Expiration**: Build the cleanup scheduler for temporary grants.
 - [ ] **Advanced Filters**: Implement the multi-dimensional search engine for user management.
-- [ ] **Security Hardening**: Perform a full audit of the internal M2M auth and Redis perimeter.

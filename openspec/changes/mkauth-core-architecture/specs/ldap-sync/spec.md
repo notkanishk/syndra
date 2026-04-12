@@ -14,6 +14,8 @@ Since LLDAP lacks Zitadel's project-based hierarchy, MkAuth MUST translate roles
 ## Shadow Password Management
 To enable Samba authentication for OIDC-based users, MkAuth MUST manage a secondary "Shadow Password" specifically for LLDAP.
 
+This secondary credential is a required infrastructure bridge for legacy makerspace systems and MUST NOT be treated as a general-purpose identity credential.
+
 ### Scenario: Setting a Samba password
 - **WHEN** a user sets a password in the MkAuth portal for "Samba Access"
 - **THEN** the system MUST enforce complexity requirements:
@@ -21,6 +23,11 @@ To enable Samba authentication for OIDC-based users, MkAuth MUST manage a second
     - Diversity of character sets (Upper, Lower, Numeric, Symbol).
     - Entropy check to prevent common patterns.
 - **AND** the password MUST be securely hashed and transmitted to the LLDAP server.
+
+### Scenario: Infrastructure-only credential boundary
+- **WHEN** MkAuth stores, displays, or transmits a Samba/LLDAP password
+- **THEN** that credential MUST be handled as an infrastructure-only secret
+- **AND** the system MUST NOT present it as the user's primary account password or identity credential
 
 ## Sync Policy
 - **One-Way Authority**: Zitadel/MkAuth remains the absolute source of truth. Manual changes in LLDAP MUST be overwritten during the next sync cycle.

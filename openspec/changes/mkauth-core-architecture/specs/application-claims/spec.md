@@ -27,10 +27,22 @@ The system MUST support "selecting" claims from other projects by utilizing mapp
 - **THEN** the JWT MUST include the `3d_lab_pin` role.
 
 ## Implementation: Actions v2 Integration
-The data plane MUST be implemented as a Zitadel **Actions v2** script that runs during the `token_response` or `userinfo_response` flows.
+The data plane MUST be implemented as a Zitadel **Actions v2**-compatible claim path that runs during the `token_response` or `userinfo_response` flows.
 - **SetCustomClaims**: The script MUST use the v2 `claims` namespace to inject the pre-compiled roles from the MkAuth cache.
-- **Latency Budget**: V2 execution MUST be optimized for sub-millisecond response times to match Zitadel's high-speed token issue performance.
+- **Deterministic Contract**: The claim response MUST remain deterministic for every supported application format.
+- **Availability Rule**: The integration MUST define explicit behavior for cache miss, backend timeout, malformed cache data, and unavailable downstream dependencies.
+- **Safe Failure Rule**: Failure behavior MUST fail closed or produce an explicitly documented minimal claim set, depending on the application's configured security posture.
+- **Performance Goal**: The path SHOULD be low-latency, but reliability and deterministic behavior under failure take precedence over a fixed micro-latency target.
 - **Compatibility Boundary**: Zitadel Actions v2 MUST remain the only supported source-of-truth-facing claim integration model.
+
+### Scenario: Cache miss during claim injection
+- **WHEN** the Actions v2 flow requests claims and no compiled cache entry exists
+- **THEN** MkAuth MUST return the documented safe fallback behavior for that application
+- **AND** the outcome MUST be observable for operators.
+
+### Scenario: Unsupported degraded behavior blocked
+- **WHEN** an application has no documented failure posture for claim injection
+- **THEN** the configuration MUST be rejected as incomplete.
 
 
 ## Claim contract hardening

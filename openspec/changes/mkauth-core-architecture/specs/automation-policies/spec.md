@@ -18,6 +18,19 @@ The system MUST track which bundles are assigned as "Default" and ensure only on
 - **WHEN** viewing the list of bundles
 - **THEN** any bundle marked as a "Welcome" bundle MUST be visually highlighted with a status badge (e.g., `Default`).
 
-## Implementation: Actions v2 Event Triggers
-Monitoring for new user accounts MUST utilize the **Zitadel Actions v2** event mechanism.
-- **Post-Registration Flow**: The "Welcome Bundle" assignment MUST be integrated into the v2 `post_user_registration` flow or similar event-level hook to ensure immediate propagation upon account creation.
+## Implementation: Event Intake and Backend-Orchestrated Assignment
+Detection of new user accounts MAY originate from Zitadel-compatible event mechanisms, but the MkAuth Backend MUST remain the sole mutation authority for assigning Welcome Bundles.
+
+- **Single Writer Rule:** Welcome-bundle assignment MUST be performed by the MkAuth Backend so audit logging, retries, idempotency, and policy evaluation remain centralized.
+- **Trigger Source:** Zitadel Actions v2 or validated backend webhook intake MAY be used to signal that a new user exists.
+- **Boundary Rule:** Zitadel-facing hooks and events MUST NOT directly become the business mutation engine for bundle assignment logic.
+
+### Scenario: New user detected through Zitadel-compatible trigger
+- **WHEN** Zitadel signals that a new user account was created
+- **THEN** MkAuth MAY accept that signal through an Actions v2-compatible event path or a validated backend webhook
+- **AND** the MkAuth Backend MUST perform the actual welcome-bundle assignment
+
+### Scenario: Welcome assignment remains backend-owned
+- **WHEN** a Welcome Bundle is configured for automatic onboarding
+- **THEN** the resulting role or bundle mutation MUST be executed by the MkAuth Backend
+- **AND** the audit trail, retry behavior, and idempotency guarantees MUST be anchored to the backend path

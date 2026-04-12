@@ -28,7 +28,9 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   **Components:** LLDAP Sync Service (Go), LLDAP Server.
 *   **Orchestrated Flow:** Zitadel webhooks are received ONLY by the **MkAuth Backend**. The Backend validates the change against its policy engine and, if a sync is required, emits a **Provisioning Intent** to the Sync Service via an internal encrypted channel.
 *   **Isolation:** The Sync Service is a private worker that does not expose external ports; it only reacts to verified Backend commands to manage LLDAP groups and user passwords.
-*   **Identity Reflection:** MkAuth manages the "Shadow Password" vault; these secrets are pushed to the Sync Service only during the physical propagation event.
+*   **Credential Bridge Requirement:** MkAuth MUST support a Samba/LLDAP-specific secondary credential because certain makerspace infrastructure still requires password-based authentication now. This is a necessary bridge capability, not a general identity model.
+*   **Identity Reflection:** MkAuth manages the "Shadow Password" vault as an infrastructure credential bridge; these secrets are pushed to the Sync Service only during the physical propagation event.
+*   **Isolation Rule:** Samba/LLDAP password handling MUST remain logically isolated from normal Zitadel/OIDC identity flows, independently auditable, and narrowly scoped to infrastructure access only.
 *   **Internal Contract Rule:** Frontend-to-Backend and Backend-to-Sync communication may use self-defined MkAuth structures, but those internal contracts MUST be explicit, authenticated, validated, and kept separate from Zitadel-facing Actions v2 compatibility assumptions.
 
 ## 3. The Logic Engine & Policy Rules
@@ -46,6 +48,7 @@ The system is divided into two distinct planes to balance complex logic with ult
 
 ## 5. UI, UX, & Governance
 *   **Aesthetic & Style:** Inspired by Linear/Stripe. Clean, enterprise-grade layout using distinct cards, soft shadows, and moderate whitespace to prevent intimidating non-technical staff. Dark/light modes prominently feature **vibrant accent colors** to highlight primary actions.
+*   **Product Priority:** MkAuth is admin-console first and user-facing second. The primary product obligation is to give administrators safe, explainable, auditable control over access. Member-facing flows remain important, but they are subordinate to administrative clarity and security.
 *   **View Differentiation (Admin vs User):**
     *   **Admin View:** Focused on projects, raw roles, mapping rules, and global auditing. Authenticated via user session + admin role check.
     *   **User Portal:** Focused on the **Service Catalog** (Applications). Standard users see a simplified view showing only what services they have access to and a simplified "Request Access" flow.
@@ -85,8 +88,9 @@ Before MkAuth widens its live Zitadel and provisioning surface, the immediate ne
 | Function or feature | Mechanism | Notes |
 | --- | --- | --- |
 | token claim enrichment for downstream applications | Actions v2 | source-of-truth claim boundary; only supported claim-integration path |
-| Zitadel-native event-driven trigger logic | Actions v2 | use for Zitadel-triggered compatibility flows where feasible |
+| Zitadel-native event-driven trigger logic | Actions v2 or validated backend webhook intake | detection and compatibility boundary only; business mutations stay backend-owned |
 | backend grant or revoke operations in Zitadel | service user account | Management API path; backend-owned only |
 | mapping-rule propagation back into Zitadel | service user account | requires server-side control-plane mutation rights |
+| welcome-bundle assignment and similar onboarding mutations | backend service account path after validated event intake | MkAuth Backend remains the single mutation authority for audit, retries, and idempotency |
 | webhook reception and verification | backend endpoint with validated Zitadel event contract | external intake stays on backend; sync service remains private |
 | Backend -> Sync provisioning intents | internal MkAuth contract | self-defined, authenticated, and isolated from Zitadel-facing contracts |

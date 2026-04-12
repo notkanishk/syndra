@@ -29,6 +29,14 @@ The system MUST maintain regression tests for application claim simulation and a
 - **WHEN** a claim profile requires a non-default format such as CSV or space-delimited output
 - **THEN** automated tests MUST verify the exact payload shape returned to the consumer
 
+### Requirement: Claim-injection degraded-mode coverage
+The system MUST maintain regression tests for cache miss, timeout, malformed cache payload, and configured safe fallback behavior in the Actions v2 claim path.
+
+#### Scenario: Cache miss fallback exercised
+- **WHEN** the claim injection path cannot find a compiled cache entry
+- **THEN** automated tests MUST verify the documented fallback behavior for the affected application
+- **AND** the tests MUST confirm that unsupported implicit fallback behavior is rejected
+
 ### Requirement: Zitadel Actions v2 compatibility coverage
 The system MUST maintain regression coverage proving that all Zitadel-facing claim and event flows remain compatible with Actions v2 expectations.
 
@@ -58,3 +66,10 @@ The system MUST add frontend tests after backend hardening for the member/admin 
 - **WHEN** a member session fetches access requests through the UI proxy
 - **THEN** automated tests MUST verify that only self-scoped records are returned
 - **AND** unauthorized admin-only paths remain blocked
+
+### Requirement: Bulk operation safety coverage
+The system MUST maintain backend tests for bulk mutation preview, authorization, per-user outcome reporting, and idempotent retry behavior.
+
+#### Scenario: Bulk mutation safety regression
+- **WHEN** a bulk grant or revoke path changes
+- **THEN** automated tests MUST verify preview accuracy, authorization enforcement, per-user outcome reporting, and safe retry semantics

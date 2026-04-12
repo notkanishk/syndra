@@ -57,6 +57,11 @@ The system MAY use self-defined structures for communication between the fronten
 - **THEN** that payload MAY use a purpose-built internal schema
 - **AND** it MUST NOT redefine or loosen the Zitadel Actions v2 compatibility requirements used at the external boundary
 
+#### Scenario: High-risk internal credential payload review
+- **WHEN** an internal Backend-to-Sync or credential-bridge payload contains infrastructure secrets such as Samba/LLDAP password material
+- **THEN** that payload MUST be treated as a high-risk internal contract
+- **AND** it MUST receive stricter validation, authentication, auditability, and design review than ordinary internal payloads
+
 ### Requirement: Service account usage is narrowly scoped
 The system MUST use a dedicated Zitadel service user account only for backend-owned management operations that require Management API access.
 
