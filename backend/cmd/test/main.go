@@ -7,7 +7,6 @@ import (
 
 	"mkauth/internal/cache"
 	"mkauth/internal/db"
-	"mkauth/internal/models"
 )
 
 func main() {
