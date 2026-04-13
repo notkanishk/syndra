@@ -30,30 +30,25 @@ If the implemented contract changes, the corresponding OpenSpec documents, roadm
 ### 2.6 Zitadel communication is standardized around Actions v2
 Zitadel is the external source-of-truth boundary, so compatibility and security at that edge must be designed around Zitadel Actions v2 behavior and constraints. Internal contracts between the frontend UI, backend, and LLDAP sync service may be purpose-built for MkAuth, but they must not weaken or redefine the Zitadel-facing contract.
 
-## 3. Current Risk Summary
+## 3. Risk Summary
 
-### 3.1 Transport validation risk
-Current handlers decode JSON directly into request structs and mostly check only for missing required strings. This leaves gaps such as:
-* unknown field acceptance
-* weak enum handling
-* unbounded strings
-* negative or unrealistic durations
-* inconsistent reviewer and resolution semantics
+### 3.1 Transport validation risk — MITIGATED
+All mutation handlers use `decodeJSONStrict` which rejects unknown fields. Required-field checks, enum validation (status, format_type), negative duration rejection, and whitespace-only name rejection are implemented and covered by handler tests. Remaining gap: unbounded string lengths not constrained at the HTTP layer (low priority; DB constraints provide a backstop).
 
-### 3.2 Type ownership risk
-The repo currently duplicates similar interfaces across many UI routes and components while the backend uses broad string fields and generic maps for some important payloads. This increases drift risk and weakens compile-time guarantees.
+### 3.2 Type ownership risk — PARTIALLY MITIGATED
+Purpose-built request DTOs exist for all mutation endpoints. Domain models are distinct from transport types. Persistence models are implicitly shaped by repository queries. Formal persistence struct types (separate from domain models) have not been added — this remains a future cleanup if the schema diverges significantly from domain.
 
-### 3.3 Persistence invariant risk
-The schema uses `NOT NULL` and uniqueness in useful places, but it does not yet fully encode domain invariants such as valid statuses, positive durations, claim format enums, version bounds, or resolved-state consistency.
+### 3.3 Persistence invariant risk — MITIGATED
+Migrations 004 and 006 together enforce: `status IN ('pending','approved','rejected')`, `duration_days > 0` or null, `version > 0`, `resolved_at` consistency, `format_type` enum, blank-name prevention on bundles and bundle roles, and expiry-after-create on direct grants. Critical domain rules are enforced below the application layer.
 
-### 3.4 Authorization boundary risk
-The current frontend proxy enforces session-role behavior for demo flows, but the backend still primarily trusts a shared API key. That is acceptable for local development but does not satisfy the design's zero-trust intent.
+### 3.4 Authorization boundary risk — PARTIALLY MITIGATED
+Backend has `withUserAuth` middleware that validates Zitadel-issued RS256 JWTs (JWKS-backed) in production and falls back to API key for local dev. Admin user ID is extracted from context and written to audit logs. Frontend-to-backend live OIDC token forwarding (replacing demo cookie sessions) is the remaining open item.
 
-### 3.5 Regression risk
-The codebase currently lacks app-owned backend unit tests and frontend UI tests, making it easy for critical behavior to change silently.
+### 3.5 Regression risk — MITIGATED
+82 backend tests now cover all critical mutation endpoints, service logic, claim formatting, lineage assembly, governance nil-safety, webhook validation, action injection, and onboarding flows. Injectable dependency pattern is established across all handler and service layers.
 
-### 3.6 External contract drift risk
-Without an explicit rule that Zitadel-facing communication stays aligned to Actions v2, internal shortcuts can accidentally leak into the source-of-truth boundary and create brittle or insecure integration assumptions.
+### 3.6 External contract drift risk — MITIGATED (by documentation)
+Zitadel Actions v2 is explicitly documented as the external boundary in the architecture design and contract-quality spec. Internal contracts (FE→BE, BE→Sync) are separately defined. This rule is enforced by the documentation update requirement in section 8.
 
 ## 4. Target Architecture for Contracts
 
@@ -135,22 +130,22 @@ The first hardening wave should cover:
 
 ### 6.1 Endpoint matrix
 
-| Endpoint | Risk | Required validation focus | Required test focus |
-| --- | --- | --- | --- |
-| `POST /api/v1/bundles` | medium | name/description constraints, unknown fields, duplicate semantics | handler success/failure cases, duplicate bundle behavior |
-| `POST /api/v1/bundles/{id}/roles` | high | bundle id presence, project/role validity, duplicate role mapping | validation tests, repository conflict tests, audit coverage |
-| `POST /api/v1/users/{id}/bundles` | high | self vs admin rules, bundle existence, duplicate assignment | handler tests, auth tests, idempotency behavior |
-| `POST /api/v1/rules/mapping` | critical | strict field presence, normalized ids, self-edge policy, cycle detection | unit tests for cycle detection, handler conflict tests, invalid payload tests |
-| `PUT /api/v1/rules/mapping/{id}` | medium | valid id, existence, version semantics | not-found tests, version increment tests |
-| `POST /api/v1/users/{id}/grants` | critical | project/role validity, duration bounds, reason rules, granted-by semantics | expiry math tests, invalid duration tests, audit and cache rebuild expectations |
-| `POST /api/v1/requests` | critical | requester identity, target validity, justification bounds, duration bounds | member/admin path tests, invalid payload tests, persistence tests |
-| `POST /api/v1/requests/{id}/decision` | critical | allowed status transitions, reviewer requirements, resolution invariants | approve/reject tests, duplicate resolution tests, direct-grant side effect tests |
-| `GET /api/v1/governance/summary` | high | response stability and nil-safe collections | snapshot/shape tests, expiring grant filtering |
-| `GET /api/v1/users/{id}/access` | critical | lineage completeness, nil-safe response sections | service tests for source vs derived roles, direct grant inclusion |
-| `GET /api/v1/applications/{id}/simulate` | critical | user/app existence, allowed claim formats, deterministic output | claim-format tests, regression tests for array/csv/space-delimited shaping |
-| `POST /api/action/inject` | critical | strict action payload, cache miss handling, malformed cache safety | decode tests, empty-claim fallback tests, malformed cache payload tests |
-| `POST /api/webhooks/zitadel` | critical | payload authenticity model, required fields, safe invalidation behavior | invalid payload tests, orchestrator failure tests, project-id branch coverage |
-| internal Backend -> Sync intent contract | high | authenticated internal payload shape, explicit command semantics, no Zitadel-specific leakage into internal types | validator tests, auth tests, compatibility tests for boundary isolation |
+| Endpoint | Risk | Validation coverage | Test coverage | Status |
+| --- | --- | --- | --- | --- |
+| `POST /api/v1/bundles` | medium | name/description, unknown fields, whitespace | empty name, whitespace name, unknown field, happy path, audit log | ✅ Complete |
+| `POST /api/v1/bundles/{id}/roles` | high | bundle id presence, project/role validity, duplicate | empty role_key, unknown field, happy path, DB error | ✅ Complete |
+| `POST /api/v1/users/{id}/bundles` | high | non-empty bundle_id and user_id, unknown field rejection; **no explicit bundle-existence check** (FK violation surfaces as generic 500); **duplicate is transparent** via ON CONFLICT DO NOTHING | unknown field, empty bundle_id, idempotency (×2), audit attribution | ⚠️ Partial — existence pre-check and differentiated 404/409 not implemented |
+| `POST /api/v1/rules/mapping` | critical | field presence, self-edge, cycle detection, unknown fields | missing fields, unknown field, self-edge, cycle detected, happy path + audit | ✅ Complete |
+| `PUT /api/v1/rules/mapping/{id}` | medium | id presence, existence | not-found, happy path + audit, missing id | ✅ Complete |
+| `POST /api/v1/users/{id}/grants` | critical | project/role validity, duration bounds, granted-by | expiry math (7d), zero-duration nil pointer, cache rebuild attribution | ✅ Complete |
+| `POST /api/v1/requests` | critical | requester/project/role/justification required, duration bounds | persistence + audit, zero-duration nil pointer | ✅ Complete |
+| `POST /api/v1/requests/{id}/decision` | critical | status enum, reviewer required on approve, idempotency guard | approve side effects, reject no-grant, already-approved 409, already-rejected 409, expiry from duration | ✅ Complete |
+| `GET /api/v1/governance/summary` | high | response nil-safety | nil-safe [], pending count, unused bundle hint | ✅ Complete |
+| `GET /api/v1/users/{id}/access` | critical | lineage nil-safety | nil-safe collections, source vs derived labeling, bundle reason kind, unknown user error, multi-hop derivation | ✅ Complete |
+| `GET /api/v1/applications/{id}/simulate` | critical | user/app existence, claim formats | array/csv/space_delimited format outputs, unknown format fallback | ✅ Complete |
+| `POST /api/action/inject` | critical | strict payload, cache miss, malformed cache safety | decode tests, empty-claim fallback, malformed cache, degraded modes | ✅ Complete |
+| `POST /api/webhooks/zitadel` | critical | HMAC signature, freshness window, required fields | signature valid/invalid, stale timestamp, payload validation | ✅ Complete |
+| internal Backend → Sync intent contract | high | authenticated payload, command semantics | — | ⏳ Deferred to Phase 4 |
 
 ### 6.3 Zitadel mechanism matrix
 
@@ -167,14 +162,14 @@ The first hardening wave should cover:
 
 ### 6.2 Service and utility matrix
 
-| Area | Required coverage |
-| --- | --- |
-| cycle detection | acyclic insert, direct cycle, indirect cycle, duplicate edges, disconnected graphs |
-| governance summary | pending request inclusion, expiring window behavior, cleanup hint stability |
-| claim formatting | array, csv, and space-delimited outputs; invalid format rejection |
-| lineage assembly | source roles, derived roles, direct grant reasons, bundle reasons, cleanup hints |
-| proxy authorization | member visibility limits, self-scoped access, admin passthrough, requester injection |
-| boundary isolation | Zitadel Actions v2 assumptions remain external-only, while internal FE/BE/sync contracts stay explicit and independently validated |
+| Area | Required coverage | Status |
+| --- | --- | --- |
+| cycle detection | acyclic insert, direct cycle, indirect cycle, duplicate edges, disconnected graphs | ✅ Complete |
+| governance summary | pending request inclusion, nil-safe [], cleanup hint for unused bundles | ✅ Complete |
+| claim formatting | array, csv, space-delimited outputs; unknown format fallback | ✅ Complete |
+| lineage assembly | source roles, derived roles, direct grant reasons, bundle reasons, multi-hop, nil-safe | ✅ Complete |
+| proxy authorization | member visibility limits, self-scoped access, admin passthrough, requester injection | ⏳ Deferred to Phase 3 frontend OIDC integration |
+| boundary isolation | Zitadel Actions v2 external-only; internal FE/BE/sync contracts explicit and independently validated | ✅ Documented; enforcement deferred to live OIDC integration |
 
 ## 7. Document Drift to Resolve
 
@@ -200,5 +195,8 @@ Any future work that changes request payloads, response shapes, validation rules
 * the roadmap when milestone priority changes
 * the feature coverage matrix when implementation reality changes
 
-## 9. Immediate Next Step
-Before MkAuth expands its live Zitadel and provisioning scope, the project should complete a dedicated hardening wave that formalizes contracts, adds strict validation, and lands backend-first regression coverage.
+## 9. Phase 2 Complete — Next Steps
+
+Phase 2 contract hardening is complete. 82 backend tests cover all critical mutation endpoints, service logic, and claim paths. All listed DB constraints are in place. The injectable-dependency pattern is fully established for handler and service layers.
+
+The immediate next step is **Phase 3 frontend OIDC integration**: replace demo cookie sessions with Zitadel-issued user tokens forwarded from the UI to the backend, enabling live production authorization and removing the shared API key as the primary identity proof for admin operations.

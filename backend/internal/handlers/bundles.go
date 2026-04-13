@@ -3,8 +3,6 @@ package handlers
 import (
 	"net/http"
 	"strings"
-
-	"mkauth/internal/db"
 )
 
 type AddRoleToBundleRequest struct {
@@ -22,7 +20,7 @@ type CreateBundleRequest struct {
 }
 
 func handleGetBundles(w http.ResponseWriter, r *http.Request) {
-	bundles, err := db.GetAllBundles(r.Context())
+	bundles, err := dbGetAllBundles(r.Context())
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -46,7 +44,7 @@ func handleCreateBundle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := db.CreateBundle(r.Context(), req.Name, req.Description)
+	id, err := dbCreateBundle(r.Context(), req.Name, req.Description)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -56,13 +54,13 @@ func handleCreateBundle(w http.ResponseWriter, r *http.Request) {
 	if actor == "" {
 		actor = "system"
 	}
-	_ = db.InsertAuditLog(r.Context(), actor, "-", "bundle.created", id)
+	_ = dbInsertAuditLog(r.Context(), actor, "-", "bundle.created", id)
 	jsonResponse(w, http.StatusCreated, map[string]string{"id": id})
 }
 
 func handleGetBundleRoles(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	roles, err := db.GetRolesForBundle(r.Context(), id)
+	roles, err := dbGetRolesForBundle(r.Context(), id)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -90,7 +88,7 @@ func handleAddRoleToBundle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.AddRoleToBundle(r.Context(), bundleID, req.ProjectID, req.RoleKey); err != nil {
+	if err := dbAddRoleToBundle(r.Context(), bundleID, req.ProjectID, req.RoleKey); err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
@@ -99,13 +97,13 @@ func handleAddRoleToBundle(w http.ResponseWriter, r *http.Request) {
 	if actor == "" {
 		actor = "system"
 	}
-	_ = db.InsertAuditLog(r.Context(), actor, "-", "bundle.role_added", bundleID+":"+req.RoleKey)
+	_ = dbInsertAuditLog(r.Context(), actor, "-", "bundle.role_added", bundleID+":"+req.RoleKey)
 	jsonResponse(w, http.StatusOK, map[string]string{"message": "Role added to bundle"})
 }
 
 func handleGetUserBundles(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
-	bundles, err := db.GetBundlesForUser(r.Context(), userID)
+	bundles, err := dbGetBundlesForUser(r.Context(), userID)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -129,7 +127,7 @@ func handleAssignBundleToUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.AssignBundleToUser(r.Context(), userID, req.BundleID); err != nil {
+	if err := dbAssignBundleToUser(r.Context(), userID, req.BundleID); err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
@@ -138,6 +136,6 @@ func handleAssignBundleToUser(w http.ResponseWriter, r *http.Request) {
 	if actor == "" {
 		actor = "system"
 	}
-	_ = db.InsertAuditLog(r.Context(), actor, userID, "bundle.assigned", req.BundleID)
+	_ = dbInsertAuditLog(r.Context(), actor, userID, "bundle.assigned", req.BundleID)
 	jsonResponse(w, http.StatusOK, map[string]string{"message": "Bundle assigned to user"})
 }

@@ -298,14 +298,14 @@ func ListProjects(ctx context.Context) ([]models.ProjectSummary, error) {
 }
 
 func BundleImpact(ctx context.Context, bundleID string) (models.BundleImpact, error) {
-	roles, err := db.GetRolesForBundle(ctx, bundleID)
+	roles, err := svcGetRolesForBundle(ctx, bundleID)
 	if err != nil {
 		return models.BundleImpact{}, err
 	}
 
 	impactedUsers := []models.UserProfile{}
 	for _, user := range demo.Users() {
-		bundles, err := db.GetBundlesForUser(ctx, user.ID)
+		bundles, err := svcGetBundlesForUser(ctx, user.ID)
 		if err != nil {
 			return models.BundleImpact{}, err
 		}
@@ -325,22 +325,22 @@ func BundleImpact(ctx context.Context, bundleID string) (models.BundleImpact, er
 }
 
 func UserDirectGrants(ctx context.Context, userID string) ([]models.DirectGrant, error) {
-	return db.GetDirectGrantsForUser(ctx, userID, true)
+	return svcGetDirectGrantsForUser(ctx, userID, true)
 }
 
 func Governance(ctx context.Context) (models.GovernanceSummary, error) {
-	requests, err := db.GetAccessRequests(ctx, "pending")
+	requests, err := svcGetAccessRequests(ctx, "pending")
 	if err != nil {
 		return models.GovernanceSummary{}, err
 	}
 
-	expiring, err := db.GetExpiringDirectGrants(ctx, 14*24*time.Hour)
+	expiring, err := svcGetExpiringDirectGrants(ctx, 14*24*time.Hour)
 	if err != nil {
 		return models.GovernanceSummary{}, err
 	}
 
 	cleanupHints := []string{}
-	bundles, err := db.GetAllBundles(ctx)
+	bundles, err := svcGetAllBundles(ctx)
 	if err != nil {
 		return models.GovernanceSummary{}, err
 	}
@@ -355,6 +355,13 @@ func Governance(ctx context.Context) (models.GovernanceSummary, error) {
 	}
 	if len(requests) == 0 {
 		cleanupHints = append(cleanupHints, "No pending requests right now, so approvals are caught up.")
+	}
+
+	if requests == nil {
+		requests = []models.AccessRequest{}
+	}
+	if expiring == nil {
+		expiring = []models.DirectGrant{}
 	}
 
 	return models.GovernanceSummary{
@@ -558,7 +565,7 @@ func Topology(ctx context.Context) (models.TopologyGraph, error) {
 func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.EffectiveRole, []models.Bundle, error) {
 	roleMap := make(map[roleKey]*models.EffectiveRole)
 
-	directGrants, err := db.GetDirectGrantsForUser(ctx, userID, false)
+	directGrants, err := svcGetDirectGrantsForUser(ctx, userID, false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -574,13 +581,13 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 		})
 	}
 
-	bundles, err := db.GetBundlesForUser(ctx, userID)
+	bundles, err := svcGetBundlesForUser(ctx, userID)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	for _, bundle := range bundles {
-		roles, err := db.GetRolesForBundle(ctx, bundle.ID)
+		roles, err := svcGetRolesForBundle(ctx, bundle.ID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -595,7 +602,7 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 		}
 	}
 
-	rules, err := db.GetActiveMappingRules(ctx)
+	rules, err := svcGetActiveMappingRules(ctx)
 	if err != nil {
 		return nil, nil, err
 	}

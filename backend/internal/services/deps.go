@@ -2,8 +2,10 @@ package services
 
 import (
 	"context"
+	"time"
 
 	"mkauth/internal/db"
+	"mkauth/internal/models"
 )
 
 // Onboarding DB injectable vars — allows tests to exercise TriggerOnboarding
@@ -26,5 +28,30 @@ var (
 	}
 	svcFailOnboardingTrigger = func(ctx context.Context, triggerID, errMsg string) error {
 		return db.FailOnboardingTrigger(ctx, triggerID, errMsg)
+	}
+
+	// Governance and lineage injectable vars — allows tests to exercise
+	// Governance, ExplainUserAccess, BundleImpact, and collectUserRoles
+	// without a live database connection.
+	svcGetAccessRequests = func(ctx context.Context, status string) ([]models.AccessRequest, error) {
+		return db.GetAccessRequests(ctx, status)
+	}
+	svcGetExpiringDirectGrants = func(ctx context.Context, within time.Duration) ([]models.DirectGrant, error) {
+		return db.GetExpiringDirectGrants(ctx, within)
+	}
+	svcGetAllBundles = func(ctx context.Context) ([]models.Bundle, error) {
+		return db.GetAllBundles(ctx)
+	}
+	svcGetBundlesForUser = func(ctx context.Context, userID string) ([]models.Bundle, error) {
+		return db.GetBundlesForUser(ctx, userID)
+	}
+	svcGetRolesForBundle = func(ctx context.Context, bundleID string) ([]models.BundleRole, error) {
+		return db.GetRolesForBundle(ctx, bundleID)
+	}
+	svcGetDirectGrantsForUser = func(ctx context.Context, userID string, includeExpired bool) ([]models.DirectGrant, error) {
+		return db.GetDirectGrantsForUser(ctx, userID, includeExpired)
+	}
+	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
+		return db.GetActiveMappingRules(ctx)
 	}
 )

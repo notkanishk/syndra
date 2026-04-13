@@ -15,6 +15,20 @@ var (
 	dbResolveAccessRequest = db.ResolveAccessRequest
 	dbInsertAuditLog       = db.InsertAuditLog
 
+	// Bundle handler injectable vars.
+	dbCreateBundle       = db.CreateBundle
+	dbGetAllBundles      = db.GetAllBundles
+	dbGetRolesForBundle  = db.GetRolesForBundle
+	dbAddRoleToBundle    = db.AddRoleToBundle
+	dbGetBundlesForUser  = db.GetBundlesForUser
+	dbAssignBundleToUser = db.AssignBundleToUser
+
+	// Rules handler injectable vars.
+	dbGetActiveMappingRules = db.GetActiveMappingRules
+	dbCreateMappingRule     = db.CreateMappingRule
+	dbUpdateMappingRule     = db.UpdateMappingRule
+	dbDetectCycleOnInsert   = db.DetectCycleOnInsert
+
 	cacheRebuildUser = cache.RebuildUserCache
 
 	// Data-plane injectable vars — used by HandleActionInject and degradedResponse.

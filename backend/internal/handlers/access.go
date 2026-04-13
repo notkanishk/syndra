@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -160,6 +161,12 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 	request, err := dbGetAccessRequestByID(r.Context(), requestID)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+
+	if request.Status == "approved" || request.Status == "rejected" {
+		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RESOLVED",
+			fmt.Sprintf("access request is already %s", request.Status))
 		return
 	}
 

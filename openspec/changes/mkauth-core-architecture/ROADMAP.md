@@ -10,17 +10,17 @@ This document defines the high-level phases for the MkAuth implementation, trans
 - [x] **Claim Simulation**: Redis-backed cache for previewing JWT payloads.
 - [x] **Logic Specifications**: Completion of the OpenSpec (this workspace).
 
-## Phase 2: Contract Hardening and Test Foundation (Immediate Next Step)
+## Phase 2: Contract Hardening and Test Foundation ✅ Complete
 *Objective: Formalize schemas, validation, authorization boundaries, and backend-first regression coverage before expanding the live integration surface.*
-- [x] **Contract Hardening**: Introduce purpose-built request/response/domain types, strict validation, and durable API error contracts.
-- [x] **Backend-First Test Matrix**: Add full unit and handler coverage for mission-critical backend flows, especially mapping rules, grants, access requests, claims, and webhooks.
-- [x] **Persistence Invariants**: Strengthen database constraints so critical domain rules are enforced below the application layer as well.
-- [x] **Documentation Sync**: Keep OpenSpec, roadmap, and coverage docs aligned with the hardened contracts and any drift corrections.
+- [x] **Contract Hardening**: `decodeJSONStrict` rejects unknown fields on all mutation endpoints; required-field, enum, duration, and idempotency guards implemented and tested. Injectable-dependency pattern established across all handlers and services.
+- [x] **Backend-First Test Matrix**: 82 tests covering all critical mutation endpoints (bundles, rules, grants, access requests, governance, lineage, claim formatting, webhook, action injection, onboarding).
+- [x] **Persistence Invariants**: Migrations 004 and 006 enforce status enums, positive durations, version bounds, resolution consistency, format_type enums, blank-name prevention, and expiry-after-create.
+- [x] **Documentation Sync**: OpenSpec design, tasks, and roadmap updated to reflect implementation state and current risks.
 
-## Phase 3: Orchestration Security Boundary (In Progress — backend controls complete, UI token forwarding pending)
+## Phase 3: Orchestration Security Boundary (In Progress — immediate next step: frontend OIDC)
 *Objective: Close trust-boundary gaps before enabling broader live orchestration.*
 - [x] **Container Split**: Docker Compose runs the frontend and backend as isolated services, with the UI proxying to the backend over the internal network.
-- [/] **Frontend Session Auth**: Demo-backed cookie sessions gate Admin/User view differentiation; live Zitadel OIDC and token forwarding from UI to backend remain the next step.
+- [ ] **Frontend Session Auth**: Demo-backed cookie sessions gate Admin/User view differentiation; **live Zitadel OIDC and token forwarding from UI to backend is the immediate next step**.
 - [x] **Backend User-Token Authorization**: `withUserAuth` middleware validates Zitadel-issued RS256 JWTs (JWKS-backed, 1-hour cache) in production; falls back to API key in local-dev. Acting admin user ID stored in request context for audit attribution.
 - [x] **Production Data Plane Security**: 50 ms Redis timeout; `claim_failure_mode` per project (`fail_closed` | `minimal_safe`); explicit `degradedResponse` for all failure paths; `pgx.ErrNoRows` vs real DB faults correctly distinguished; `[DATA PLANE]` structured logging.
 - [x] **Webhook Authenticity Validation**: HMAC-SHA256 over `(X-Zitadel-Timestamp + "\n" + body)` — timestamp is part of the signed input preventing replay attacks; 5-minute freshness window enforced independently.

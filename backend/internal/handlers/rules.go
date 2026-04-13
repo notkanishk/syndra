@@ -3,8 +3,6 @@ package handlers
 import (
 	"net/http"
 	"strings"
-
-	"mkauth/internal/db"
 )
 
 type CreateMappingRuleRequest struct {
@@ -20,7 +18,7 @@ type CreateMappingRuleResponse struct {
 }
 
 func handleGetMappingRules(w http.ResponseWriter, r *http.Request) {
-	rules, err := db.GetActiveMappingRules(r.Context())
+	rules, err := dbGetActiveMappingRules(r.Context())
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -66,19 +64,19 @@ func handleCreateMappingRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Circular dependency guard
-	if err := db.DetectCycleOnInsert(r.Context(), req.SourceProject, req.SourceRole, req.TargetProject, req.TargetRole); err != nil {
+	if err := dbDetectCycleOnInsert(r.Context(), req.SourceProject, req.SourceRole, req.TargetProject, req.TargetRole); err != nil {
 		jsonErrorResponse(w, http.StatusConflict, "CYCLE_DETECTED", err.Error())
 		return
 	}
 
-	id, err := db.CreateMappingRule(r.Context(), req.SourceProject, req.SourceRole, req.TargetProject, req.TargetRole)
+	id, err := dbCreateMappingRule(r.Context(), req.SourceProject, req.SourceRole, req.TargetProject, req.TargetRole)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusConflict, "CONFLICT_ERROR", "Likely duplication: "+err.Error())
 		return
 	}
 
 	// Audit log
-	_ = db.InsertAuditLog(r.Context(), "system", "-", "mapping_rule.created", id)
+	_ = dbInsertAuditLog(r.Context(), "system", "-", "mapping_rule.created", id)
 
 	jsonResponse(w, http.StatusCreated, CreateMappingRuleResponse{
 		ID:      id,
@@ -93,13 +91,13 @@ func handleUpdateMappingRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.UpdateMappingRule(r.Context(), id); err != nil {
+	if err := dbUpdateMappingRule(r.Context(), id); err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "UPDATE_FAILED", err.Error())
 		return
 	}
 
 	// Audit log
-	_ = db.InsertAuditLog(r.Context(), "system", "-", "mapping_rule.version_bumped", id)
+	_ = dbInsertAuditLog(r.Context(), "system", "-", "mapping_rule.version_bumped", id)
 
 	jsonResponse(w, http.StatusOK, map[string]string{"message": "Version incremented successfully"})
 }
