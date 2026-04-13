@@ -15,7 +15,7 @@ The system is divided into two distinct planes to balance complex logic with ult
 ### The Control Plane (Slow & Smart)
 *   **Components:** MkAuth UI Dashboard, Backend API, Local Policy DB (e.g., Postgres/SQLite).
 *   **Behavior:** When an admin assigns a role or bundle, MkAuth evaluates dependencies and structural mapping rules. It then calls the Zitadel Management API using an independent, highly-scoped Machine-to-Machine (Service Account) token to actually grant the roles.
-*   **Zero-Trust Context:** The MkAuth backend inherently distrusts the UI. It validates the logged-in admin's personal permissions first before executing mutations via the Service Account.
+*   **Zero-Trust Context:** The MkAuth backend inherently distrusts the UI. Privileged frontend-to-backend requests MUST carry a Zitadel-issued user access token, and the backend MUST validate that token and the logged-in admin's personal permissions before executing mutations via the Service Account.
 *   **Credential Rule:** A dedicated service user account is still required for backend-owned Management API operations, but it MUST be least-privileged, server-side only, rotated, and never exposed to the frontend or the sync service.
 
 ### The Data Plane (Fast & Dumb)
@@ -50,7 +50,7 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   **Aesthetic & Style:** Inspired by Linear/Stripe. Clean, enterprise-grade layout using distinct cards, soft shadows, and moderate whitespace to prevent intimidating non-technical staff. Dark/light modes prominently feature **vibrant accent colors** to highlight primary actions.
 *   **Product Priority:** MkAuth is admin-console first and user-facing second. The primary product obligation is to give administrators safe, explainable, auditable control over access. Member-facing flows remain important, but they are subordinate to administrative clarity and security.
 *   **View Differentiation (Admin vs User):**
-    *   **Admin View:** Focused on projects, raw roles, mapping rules, and global auditing. Authenticated via user session + admin role check.
+    *   **Admin View:** Focused on projects, raw roles, mapping rules, and global auditing. Admins sign in through a Zitadel-backed user session, and privileged backend actions are authorized from the admin's Zitadel-issued user access token.
     *   **User Portal:** Focused on the **Service Catalog** (Applications). Standard users see a simplified view showing only what services they have access to and a simplified "Request Access" flow.
 *   **Role Assignment UX:** "Assign once, propagate correctly." Admins can assign raw roles (advanced) or Bundles (normal users). Selecting a Bundle explicitly previews exactly which underlying roles will be applied.
 *   **Audit Logging & Self-Service:** Strict timeline tracking of Who granted What, and When. Temporary/Semester roles auto-expire, and users can trigger self-service permission requests for admin approval.
@@ -58,8 +58,9 @@ The system is divided into two distinct planes to balance complex logic with ult
 ## 6. Technical Stack & Deployment
 *   **Deployment:** Docker Compose running inside a Proxmox LXC (Linux Container). This provides a robust 1-command installation and update mechanism via an `update.sh` script that pulls GitHub changes and restarts the stack without downtime. The stack uses **Separate Containers** for Frontend, Backend, and the LLDAP Sync Service to ensure isolation and security.
 *   **Authentication & Identity:**
-    *   **Backend:** Authenticates via a high-scoped **Machine-to-Machine (Service Account)** token from Zitadel. It exposes a JSON API secured by an internal API key.
-    *   **Frontend:** Target state is **User Session (OIDC)**. The current implementation uses demo cookie sessions with Admin/User view differentiation, and the frontend proxies requests to the backend using its own service credentials while filtering data based on the session role.
+    *   **Backend:** Uses a high-scoped **Machine-to-Machine (Service Account)** token from Zitadel only for backend-owned Management API operations after authorization succeeds. Privileged frontend-originated requests are authorized from a Zitadel-issued user access token validated by the backend.
+    *   **Frontend:** Target state is **User Session (OIDC)** backed by Zitadel-issued user access tokens. The current implementation uses demo cookie sessions with Admin/User view differentiation, and the frontend proxies requests to the backend using an internal guard credential only as a temporary development measure.
+    *   **Internal API Key Rule:** A shared internal API key MAY remain as defense-in-depth for service-to-service traffic, but it MUST NOT be treated as sufficient production authorization for privileged actions.
     *   **Sync Service:** A dedicated worker that synchronizes identity state from MkAuth/Zitadel into the LLDAP server.
 *   **Backend / Orchestrator:** Go (Golang).
 *   **Frontend Dashboard:** Next.js (React).
@@ -89,6 +90,7 @@ Before MkAuth widens its live Zitadel and provisioning surface, the immediate ne
 | --- | --- | --- |
 | token claim enrichment for downstream applications | Actions v2 | source-of-truth claim boundary; only supported claim-integration path |
 | Zitadel-native event-driven trigger logic | Actions v2 or validated backend webhook intake | detection and compatibility boundary only; business mutations stay backend-owned |
+| privileged frontend-to-backend admin actions | Zitadel-issued user access token validated by backend | backend identifies and authorizes the acting user directly; shared internal API key is optional defense-in-depth only |
 | backend grant or revoke operations in Zitadel | service user account | Management API path; backend-owned only |
 | mapping-rule propagation back into Zitadel | service user account | requires server-side control-plane mutation rights |
 | welcome-bundle assignment and similar onboarding mutations | backend service account path after validated event intake | MkAuth Backend remains the single mutation authority for audit, retries, and idempotency |

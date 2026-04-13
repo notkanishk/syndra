@@ -94,6 +94,8 @@ MkAuth should distinguish between:
 * external source-of-truth contracts: Zitadel-facing communication, which must remain Actions v2-compatible and security-hardened
 * internal control-plane contracts: frontend UI to backend and backend to sync-service payloads, which may be self-defined as long as they are explicit, validated, authenticated, and isolated from the external boundary
 
+For privileged frontend-to-backend requests, the preferred production contract is simple: the frontend sends a Zitadel-issued user access token, the backend validates it, and the backend makes the authorization decision. A shared internal API key may remain as an internal service guard, but it must not be the primary authorization proof for admin mutations.
+
 ### 4.6 Zitadel integration responsibility split
 MkAuth should use two different mechanisms for two different classes of work:
 * Zitadel Actions v2: token-time claim shaping and Zitadel-native event-triggered compatibility paths
@@ -160,7 +162,7 @@ The first hardening wave should cover:
 | backend reads or writes to grants, roles, memberships, or project assignments in Zitadel | service user account | requires Management API access that Actions v2 is not meant to replace | scope to least privilege, store credentials only server-side, rotate keys |
 | mapping-rule propagation back into Zitadel | service user account | this is a backend control-plane mutation against the source of truth | require audit logging and idempotent retry behavior |
 | administrative reconciliation jobs against Zitadel | service user account | long-running or bulk management work belongs in the backend control plane | isolate scopes, rate-limit, and add rollback-aware logging |
-| frontend-to-backend admin actions | internal MkAuth contract, then backend uses service user account if needed | keeps secrets and Zitadel management access out of the UI | frontend never talks directly to Zitadel management APIs |
+| frontend-to-backend admin actions | Zitadel-issued user access token validated by backend, then backend uses service user account if needed | keeps secrets and Zitadel management access out of the UI while preserving the acting user's identity | frontend never talks directly to Zitadel management APIs; shared internal API keys are optional defense-in-depth only |
 | backend-to-sync-service provisioning intents | internal MkAuth contract | this is not a Zitadel contract and should stay private to MkAuth | mutually authenticate services and validate every command payload |
 
 ### 6.2 Service and utility matrix

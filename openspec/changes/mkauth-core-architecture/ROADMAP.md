@@ -21,7 +21,7 @@ This document defines the high-level phases for the MkAuth implementation, trans
 *Objective: Close trust-boundary gaps before enabling broader live orchestration.*
 - [x] **Container Split**: Docker Compose runs the frontend and backend as isolated services, with the UI proxying to the backend over the internal network.
 - [/] **Frontend Session Auth**: Demo-backed cookie sessions now gate Admin/User view differentiation; live Zitadel OIDC remains the next step.
-- [ ] **Per-Admin Backend Authorization**: Replace shared-API-key trust for privileged actions with backend-verified admin identity and authorization.
+- [ ] **Backend User-Token Authorization**: Replace shared-API-key trust for privileged actions with Zitadel-issued user access tokens validated by the backend and enforced through backend-owned authorization checks.
 - [ ] **Production Data Plane Security**: Harden the Redis/action-injection perimeter, authentication, timeout behavior, and safe degraded responses.
 - [ ] **Webhook Authenticity Validation**: Enforce production-grade verification for Zitadel-originated events before any downstream mutation or cache invalidation.
 - [ ] **Zitadel Management Client**: Replace stubs with actual M2M Management API calls after the above controls are in place.

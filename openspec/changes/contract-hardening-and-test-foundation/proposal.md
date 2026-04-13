@@ -8,7 +8,7 @@ The next immediate step must therefore be hardening and formalizing the applicat
 
 * Defines a dedicated quality contract for backend and frontend request/response schemas, domain types, and persistence invariants.
 * Establishes backend-first validation and testing standards for all mission-critical endpoints and service logic.
-* Documents the current contract drift between specs and implementation, especially around service-catalog access requests, authorization boundaries, and transport model consistency.
+* Documents the current contract drift between specs and implementation, especially around service-catalog access requests, authorization boundaries, and the shift from shared internal API-key trust toward Zitadel-issued user access tokens for privileged frontend requests.
 * Makes Zitadel Actions v2 compatibility the required external contract boundary for source-of-truth communication, while allowing hardened purpose-built contracts for internal service-to-service communication.
 * Updates the roadmap and existing architecture docs so hardening and testing are explicitly the immediate next step.
 

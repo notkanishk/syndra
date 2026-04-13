@@ -59,6 +59,13 @@ The system MUST maintain tests and review gates for all backend flows that use t
 - **WHEN** a backend feature changes how it grants, revokes, or reconciles Zitadel-managed state
 - **THEN** automated tests MUST verify authorization boundaries, audit behavior, retry safety, and least-privilege assumptions for the service account path
 
+### Requirement: User-token backend-authorization coverage
+The system MUST maintain tests proving that privileged frontend-originated requests are authorized from validated user identity rather than from a shared internal API key alone.
+
+#### Scenario: Shared API key without valid user identity
+- **WHEN** a privileged request reaches the backend with only an internal service credential and no valid user identity proof
+- **THEN** automated tests MUST verify that production authorization rules reject or block the action
+
 ### Requirement: Frontend critical-path contract tests
 The system MUST add frontend tests after backend hardening for the member/admin proxy boundary and the highest-risk request flows.
 

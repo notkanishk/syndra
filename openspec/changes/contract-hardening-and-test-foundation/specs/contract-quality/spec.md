@@ -70,3 +70,12 @@ The system MUST use a dedicated Zitadel service user account only for backend-ow
 - **THEN** the backend MAY use a dedicated service user account to call the Zitadel Management API
 - **AND** that credential MUST remain server-side, least-privileged, and independently auditable
 - **AND** the frontend MUST NOT use it directly
+
+### Requirement: User identity is preserved to the backend boundary
+The system MUST use a Zitadel-issued user access token as the primary identity proof for privileged frontend-to-backend requests in production.
+
+#### Scenario: Privileged admin request reaches backend
+- **WHEN** a privileged admin action is submitted from the frontend
+- **THEN** the request MUST carry a Zitadel-issued user access token
+- **AND** the backend MUST validate that token and authorize the acting user directly
+- **AND** a shared internal API key alone MUST NOT be treated as sufficient production authorization
