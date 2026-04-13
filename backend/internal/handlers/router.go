@@ -5,6 +5,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
+
+	"mkauth/internal/auth"
 )
 
 // NewRouter constructs the global multiplexer for API requests
@@ -12,67 +15,125 @@ func NewRouter() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// Bundle Routes
-	mux.HandleFunc("GET /api/v1/bundles", withCORS(withAuth(handleGetBundles)))
-	mux.HandleFunc("POST /api/v1/bundles", withCORS(withAuth(handleCreateBundle)))
-	mux.HandleFunc("GET /api/v1/bundles/{id}/roles", withCORS(withAuth(handleGetBundleRoles)))
-	mux.HandleFunc("GET /api/v1/bundles/{id}/impact", withCORS(withAuth(handleGetBundleImpact)))
-	mux.HandleFunc("POST /api/v1/bundles/{id}/roles", withCORS(withAuth(handleAddRoleToBundle)))
+	mux.HandleFunc("GET /api/v1/bundles", withCORS(withUserAuth(handleGetBundles)))
+	mux.HandleFunc("POST /api/v1/bundles", withCORS(withUserAuth(handleCreateBundle)))
+	mux.HandleFunc("GET /api/v1/bundles/{id}/roles", withCORS(withUserAuth(handleGetBundleRoles)))
+	mux.HandleFunc("GET /api/v1/bundles/{id}/impact", withCORS(withUserAuth(handleGetBundleImpact)))
+	mux.HandleFunc("POST /api/v1/bundles/{id}/roles", withCORS(withUserAuth(handleAddRoleToBundle)))
 
 	// Explorer Views
-	mux.HandleFunc("GET /api/v1/catalog", withCORS(withAuth(handleGetCatalog)))
-	mux.HandleFunc("GET /api/v1/users", withCORS(withAuth(handleGetUsers)))
+	mux.HandleFunc("GET /api/v1/catalog", withCORS(withUserAuth(handleGetCatalog)))
+	mux.HandleFunc("GET /api/v1/users", withCORS(withUserAuth(handleGetUsers)))
 	// User-Bundle Assignments
-	mux.HandleFunc("GET /api/v1/users/{id}/grants", withCORS(withAuth(handleGetUserDirectGrants)))
-	mux.HandleFunc("POST /api/v1/users/{id}/grants", withCORS(withAuth(handleUpsertUserDirectGrant)))
-	mux.HandleFunc("GET /api/v1/users/{id}/bundles", withCORS(withAuth(handleGetUserBundles)))
-	mux.HandleFunc("POST /api/v1/users/{id}/bundles", withCORS(withAuth(handleAssignBundleToUser)))
-	mux.HandleFunc("GET /api/v1/users/{id}/access", withCORS(withAuth(handleGetUserAccess)))
+	mux.HandleFunc("GET /api/v1/users/{id}/grants", withCORS(withUserAuth(handleGetUserDirectGrants)))
+	mux.HandleFunc("POST /api/v1/users/{id}/grants", withCORS(withUserAuth(handleUpsertUserDirectGrant)))
+	mux.HandleFunc("GET /api/v1/users/{id}/bundles", withCORS(withUserAuth(handleGetUserBundles)))
+	mux.HandleFunc("POST /api/v1/users/{id}/bundles", withCORS(withUserAuth(handleAssignBundleToUser)))
+	mux.HandleFunc("GET /api/v1/users/{id}/access", withCORS(withUserAuth(handleGetUserAccess)))
 
 	// Application Views
-	mux.HandleFunc("GET /api/v1/applications", withCORS(withAuth(handleGetApplications)))
-	mux.HandleFunc("GET /api/v1/applications/{id}/simulate", withCORS(withAuth(handleSimulateApplication)))
+	mux.HandleFunc("GET /api/v1/applications", withCORS(withUserAuth(handleGetApplications)))
+	mux.HandleFunc("GET /api/v1/applications/{id}/simulate", withCORS(withUserAuth(handleSimulateApplication)))
 
 	// Project Views
-	mux.HandleFunc("GET /api/v1/projects", withCORS(withAuth(handleGetProjects)))
-	mux.HandleFunc("GET /api/v1/topology", withCORS(withAuth(handleGetTopology)))
+	mux.HandleFunc("GET /api/v1/projects", withCORS(withUserAuth(handleGetProjects)))
+	mux.HandleFunc("GET /api/v1/topology", withCORS(withUserAuth(handleGetTopology)))
 
 	// Rules Routes
-	mux.HandleFunc("GET /api/v1/rules/mapping", withCORS(withAuth(handleGetMappingRules)))
-	mux.HandleFunc("POST /api/v1/rules/mapping", withCORS(withAuth(handleCreateMappingRule)))
-	mux.HandleFunc("PUT /api/v1/rules/mapping/{id}", withCORS(withAuth(handleUpdateMappingRule)))
+	mux.HandleFunc("GET /api/v1/rules/mapping", withCORS(withUserAuth(handleGetMappingRules)))
+	mux.HandleFunc("POST /api/v1/rules/mapping", withCORS(withUserAuth(handleCreateMappingRule)))
+	mux.HandleFunc("PUT /api/v1/rules/mapping/{id}", withCORS(withUserAuth(handleUpdateMappingRule)))
 
 	// Audit Logs
-	mux.HandleFunc("GET /api/v1/audit", withCORS(withAuth(handleGetAuditLogs)))
-	mux.HandleFunc("GET /api/v1/requests", withCORS(withAuth(handleGetAccessRequests)))
-	mux.HandleFunc("POST /api/v1/requests", withCORS(withAuth(handleCreateAccessRequest)))
-	mux.HandleFunc("POST /api/v1/requests/{id}/decision", withCORS(withAuth(handleResolveAccessRequest)))
-	mux.HandleFunc("GET /api/v1/governance/summary", withCORS(withAuth(handleGetGovernanceSummary)))
+	mux.HandleFunc("GET /api/v1/audit", withCORS(withUserAuth(handleGetAuditLogs)))
+	mux.HandleFunc("GET /api/v1/requests", withCORS(withUserAuth(handleGetAccessRequests)))
+	mux.HandleFunc("POST /api/v1/requests", withCORS(withUserAuth(handleCreateAccessRequest)))
+	mux.HandleFunc("POST /api/v1/requests/{id}/decision", withCORS(withUserAuth(handleResolveAccessRequest)))
+	mux.HandleFunc("GET /api/v1/governance/summary", withCORS(withUserAuth(handleGetGovernanceSummary)))
 
-	// Data Plane existing routes
-	mux.HandleFunc("POST /api/webhooks/zitadel", withCORS(HandleZitadelWebhook)) // Webhook verifies its own payload
-	mux.HandleFunc("POST /api/action/inject", withCORS(HandleActionInject))      // Action inject verifies itself or uses a specific different mechanism if needed, but typically wide open locally
+	// Operator: onboarding trigger log
+	mux.HandleFunc("GET /api/v1/onboarding/triggers", withCORS(withUserAuth(handleGetOnboardingTriggers)))
+
+	// Data Plane routes — verified by their own mechanisms (HMAC / Redis)
+	mux.HandleFunc("POST /api/webhooks/zitadel", withCORS(HandleZitadelWebhook))
+	mux.HandleFunc("POST /api/action/inject", withCORS(HandleActionInject))
 
 	return mux
 }
 
-// withAuth verifies the MKAUTH_API_KEY for protected endpoints
-func withAuth(next http.HandlerFunc) http.HandlerFunc {
+// withUserAuth is the primary authorization middleware for all admin API routes.
+//
+// Production mode (ZITADEL_DOMAIN set): requires a Zitadel-issued RS256 JWT in
+// the Authorization header. Validates signature, issuer, audience, and expiry.
+// Stores the extracted admin user ID in the request context for audit attribution.
+//
+// Local-dev mode (ZITADEL_DOMAIN unset): falls back to shared API key
+// (MKAUTH_API_KEY) so existing tooling continues to work without a live Zitadel
+// instance. The shared key is never sufficient in production.
+func withUserAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		expectedKey := os.Getenv("MKAUTH_API_KEY")
-		if expectedKey == "" {
-			// If not set, allow dev access (or default to blocked, but for this dev setup let's block if missing to enforce it)
+		domain := os.Getenv("ZITADEL_DOMAIN")
+
+		if domain == "" {
+			// Local-dev fallback: shared API key
+			withAPIKeyAuth(next)(w, r)
+			return
+		}
+
+		// Production: Zitadel-issued user access token required
+		audience := os.Getenv("ZITADEL_AUDIENCE")
+		if audience == "" {
+			log.Printf("[AUTH] ZITADEL_AUDIENCE is not set; rejecting request")
 			jsonErrorResponse(w, http.StatusInternalServerError, "SERVER_ERROR", "Server missing auth configuration")
 			return
 		}
 
-		authHeader := r.Header.Get("Authorization")
-		if authHeader != "Bearer "+expectedKey {
+		rawToken := extractBearerToken(r)
+		if rawToken == "" {
+			log.Printf("[AUTH] Missing bearer token from %s %s", r.Method, r.URL.Path)
 			jsonErrorResponse(w, http.StatusUnauthorized, "UNAUTHORIZED", "Missing or invalid authorization token")
 			return
 		}
 
+		adminUserID, err := auth.ValidateToken(r.Context(), rawToken, domain, audience)
+		if err != nil {
+			log.Printf("[AUTH] Token validation failed for %s %s: %v", r.Method, r.URL.Path, err)
+			jsonErrorResponse(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid or expired token")
+			return
+		}
+
+		log.Printf("[AUTH] Authorized admin=%s for %s %s", adminUserID, r.Method, r.URL.Path)
+		ctx := withAdminUserID(r.Context(), adminUserID)
+		next(w, r.WithContext(ctx))
+	}
+}
+
+// withAPIKeyAuth verifies the MKAUTH_API_KEY shared secret.
+// Used as the auth mechanism in local-dev mode and as defense-in-depth for
+// data-plane routes that have their own verification (HMAC, Redis).
+func withAPIKeyAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		expectedKey := os.Getenv("MKAUTH_API_KEY")
+		if expectedKey == "" {
+			jsonErrorResponse(w, http.StatusInternalServerError, "SERVER_ERROR", "Server missing auth configuration")
+			return
+		}
+		if extractBearerToken(r) != expectedKey {
+			jsonErrorResponse(w, http.StatusUnauthorized, "UNAUTHORIZED", "Missing or invalid authorization token")
+			return
+		}
 		next(w, r)
 	}
+}
+
+// extractBearerToken parses the Authorization header and returns the token string,
+// or empty string if the header is absent or not in Bearer format.
+func extractBearerToken(r *http.Request) string {
+	h := r.Header.Get("Authorization")
+	if !strings.HasPrefix(h, "Bearer ") {
+		return ""
+	}
+	return strings.TrimPrefix(h, "Bearer ")
 }
 
 // withCORS is a basic CORS middleware ensuring Next.js UI binds seamlessly
@@ -81,12 +142,12 @@ func withCORS(next http.HandlerFunc) http.HandlerFunc {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		
+
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		
+
 		next(w, r)
 	}
 }

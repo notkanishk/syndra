@@ -2,8 +2,12 @@ package db
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"mkauth/internal/models"
 )
@@ -341,4 +345,158 @@ func ResolveAccessRequest(ctx context.Context, id, status, reviewerID, reviewNot
 		return fmt.Errorf("access request not found")
 	}
 	return nil
+}
+
+// -------------------------------------------------------------
+// CLAIM FAILURE MODE (Data Plane Security Boundary)
+// -------------------------------------------------------------
+
+// GetClaimFailureMode returns the configured degraded-mode behavior for a project's
+// claim profile. Returns ("fail_closed", nil, nil) if the project has no claim
+// profile configured — fail_closed is always the safe default.
+func GetClaimFailureMode(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
+	query := `
+		SELECT claim_failure_mode, minimal_safe_claims
+		FROM claim_profiles
+		WHERE zitadel_project_id = $1`
+
+	var mode string
+	var rawClaims []byte
+	err := PG.QueryRow(ctx, query, projectID).Scan(&mode, &rawClaims)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// No claim profile configured for this project — fail_closed is the safe default
+			return "fail_closed", nil, nil
+		}
+		// Real DB fault: surface it so the caller can log and operators can see it
+		return "fail_closed", nil, fmt.Errorf("query claim failure mode for project %s: %w", projectID, err)
+	}
+
+	if rawClaims == nil {
+		return mode, nil, nil
+	}
+
+	var claims map[string]interface{}
+	if err := json.Unmarshal(rawClaims, &claims); err != nil {
+		return "fail_closed", nil, fmt.Errorf("malformed minimal_safe_claims for project %s: %w", projectID, err)
+	}
+	return mode, claims, nil
+}
+
+// -------------------------------------------------------------
+// ONBOARDING TRIGGERS (Backend-Owned Onboarding)
+// -------------------------------------------------------------
+
+// InsertOnboardingTrigger records a new onboarding event using the idempotency key.
+// Returns (id, true, nil) on insert, ("", false, nil) if the key already exists (duplicate).
+func InsertOnboardingTrigger(ctx context.Context, userID, source, idempotencyKey string) (string, bool, error) {
+	query := `
+		INSERT INTO onboarding_triggers (user_id, source, idempotency_key)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (idempotency_key) DO NOTHING
+		RETURNING id`
+
+	var id string
+	err := PG.QueryRow(ctx, query, userID, source, idempotencyKey).Scan(&id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// ON CONFLICT DO NOTHING — idempotency key already exists, safe to skip
+			return "", false, nil
+		}
+		// Real DB fault: surface it so the caller records the failure and retries
+		return "", false, fmt.Errorf("insert onboarding trigger (key=%s): %w", idempotencyKey, err)
+	}
+	return id, true, nil
+}
+
+// CompleteOnboardingTrigger marks a trigger as completed with the assigned bundle.
+func CompleteOnboardingTrigger(ctx context.Context, triggerID, bundleID string) error {
+	query := `
+		UPDATE onboarding_triggers
+		SET status = 'completed', bundle_id = $2, completed_at = NOW()
+		WHERE id = $1`
+	_, err := PG.Exec(ctx, query, triggerID, bundleID)
+	if err != nil {
+		return fmt.Errorf("failed to complete onboarding trigger: %w", err)
+	}
+	return nil
+}
+
+// FailOnboardingTrigger marks a trigger as failed with an error message.
+func FailOnboardingTrigger(ctx context.Context, triggerID, errMsg string) error {
+	query := `
+		UPDATE onboarding_triggers
+		SET status = 'failed', error_message = $2, completed_at = NOW()
+		WHERE id = $1`
+	_, err := PG.Exec(ctx, query, triggerID, errMsg)
+	if err != nil {
+		return fmt.Errorf("failed to record onboarding failure: %w", err)
+	}
+	return nil
+}
+
+// GetOnboardingTriggers returns all onboarding triggers ordered by creation time.
+func GetOnboardingTriggers(ctx context.Context) ([]OnboardingTrigger, error) {
+	query := `
+		SELECT id, user_id, source, idempotency_key, status,
+		       COALESCE(bundle_id::text, ''), COALESCE(error_message, ''),
+		       created_at, completed_at
+		FROM onboarding_triggers
+		ORDER BY created_at DESC`
+
+	rows, err := PG.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query onboarding triggers: %w", err)
+	}
+	defer rows.Close()
+
+	var triggers []OnboardingTrigger
+	for rows.Next() {
+		var t OnboardingTrigger
+		if err := rows.Scan(&t.ID, &t.UserID, &t.Source, &t.IdempotencyKey,
+			&t.Status, &t.BundleID, &t.ErrorMessage, &t.CreatedAt, &t.CompletedAt); err != nil {
+			return nil, err
+		}
+		triggers = append(triggers, t)
+	}
+	return triggers, nil
+}
+
+// GetWelcomeBundle returns the ID of the first bundle marked as a welcome bundle,
+// or the first bundle in the system if none is specifically designated.
+// Returns an error if no bundles exist.
+func GetWelcomeBundle(ctx context.Context) (string, error) {
+	// Prefer a bundle explicitly named "Welcome" or "welcome" (convention-based)
+	query := `
+		SELECT id FROM bundles
+		WHERE LOWER(name) LIKE '%welcome%'
+		ORDER BY created_at ASC
+		LIMIT 1`
+
+	var id string
+	err := PG.QueryRow(ctx, query).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+
+	// Fallback: first bundle in the system
+	query = `SELECT id FROM bundles ORDER BY created_at ASC LIMIT 1`
+	err = PG.QueryRow(ctx, query).Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("no bundles available for welcome assignment: %w", err)
+	}
+	return id, nil
+}
+
+// OnboardingTrigger is the DB representation of an onboarding_triggers row.
+type OnboardingTrigger struct {
+	ID             string     `json:"id"`
+	UserID         string     `json:"user_id"`
+	Source         string     `json:"source"`
+	IdempotencyKey string     `json:"idempotency_key"`
+	Status         string     `json:"status"`
+	BundleID       string     `json:"bundle_id,omitempty"`
+	ErrorMessage   string     `json:"error_message,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	CompletedAt    *time.Time `json:"completed_at,omitempty"`
 }

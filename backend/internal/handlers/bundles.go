@@ -52,7 +52,11 @@ func handleCreateBundle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = db.InsertAuditLog(r.Context(), "system", "-", "bundle.created", id)
+	actor := getAdminUserID(r.Context())
+	if actor == "" {
+		actor = "system"
+	}
+	_ = db.InsertAuditLog(r.Context(), actor, "-", "bundle.created", id)
 	jsonResponse(w, http.StatusCreated, map[string]string{"id": id})
 }
 
@@ -91,7 +95,11 @@ func handleAddRoleToBundle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = db.InsertAuditLog(r.Context(), "system", "-", "bundle.role_added", bundleID+":"+req.RoleKey)
+	actor := getAdminUserID(r.Context())
+	if actor == "" {
+		actor = "system"
+	}
+	_ = db.InsertAuditLog(r.Context(), actor, "-", "bundle.role_added", bundleID+":"+req.RoleKey)
 	jsonResponse(w, http.StatusOK, map[string]string{"message": "Role added to bundle"})
 }
 
@@ -126,6 +134,10 @@ func handleAssignBundleToUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = db.InsertAuditLog(r.Context(), "system", userID, "bundle.assigned", req.BundleID)
+	actor := getAdminUserID(r.Context())
+	if actor == "" {
+		actor = "system"
+	}
+	_ = db.InsertAuditLog(r.Context(), actor, userID, "bundle.assigned", req.BundleID)
 	jsonResponse(w, http.StatusOK, map[string]string{"message": "Bundle assigned to user"})
 }

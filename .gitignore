@@ -1,5 +1,6 @@
 # OS
 .DS_Store
+.cache/
 
 # Go
 bin/
@@ -11,6 +12,8 @@ bin/
 *.dylib
 *.test
 *.out
+/backend/.gocache/
+/backend/.gomodcache/
 /backend/vendor/
 
 # Node/Next.js
