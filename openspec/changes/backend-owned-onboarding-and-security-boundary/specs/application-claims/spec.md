@@ -12,3 +12,12 @@ The system MUST define a documented production failure posture for every applica
 - **WHEN** the production claim path encounters a failure condition and no degraded-mode posture was configured
 - **THEN** the configuration MUST be treated as incomplete
 - **AND** the system MUST reject or block that production claim path until the posture is explicitly defined
+
+---
+
+## Implementation notes (Phase 3)
+
+- `backend/db/migrations/000005_security_boundary.up.sql` — adds `claim_failure_mode TEXT NOT NULL DEFAULT 'fail_closed' CHECK (... IN ('fail_closed', 'minimal_safe'))` and `minimal_safe_claims JSONB` to `claim_profiles`
+- `backend/internal/db/repositories.go` — `GetClaimFailureMode(ctx, projectID)`: returns the configured mode and optional minimal safe claims; `pgx.ErrNoRows` (no profile) returns `fail_closed` as the safe default; real DB faults return an error that is logged and visible
+- `backend/internal/handlers/action.go` — `degradedResponse(ctx, projectID)`: called on Redis timeout (50 ms budget), cache miss, or malformed data; reads the configured mode and returns the appropriate payload; all paths are explicit — no implicit fallback exists
+- Structured log prefix `[DATA PLANE]` with cache hit/miss/timeout/malformed labels makes degraded outcomes observable to operators

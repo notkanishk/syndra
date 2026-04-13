@@ -7,8 +7,6 @@ import (
 	"log"
 	"net/http"
 	"time"
-
-	"mkauth/internal/db"
 )
 
 // ActionRequest outlines the minimal expected payload from a Zitadel Action ping
@@ -58,7 +56,7 @@ func HandleActionInject(w http.ResponseWriter, r *http.Request) {
 	redisCtx, cancel := context.WithTimeout(r.Context(), redisTimeout)
 	defer cancel()
 
-	val, err := db.Redis.Get(redisCtx, cacheKey).Result()
+	val, err := redisGetClaims(redisCtx, cacheKey)
 	if err != nil {
 		if redisCtx.Err() != nil {
 			log.Printf("[DATA PLANE] Redis timeout for key=%s after %v", cacheKey, redisTimeout)
@@ -89,7 +87,7 @@ func HandleActionInject(w http.ResponseWriter, r *http.Request) {
 // fail_closed (default): empty claims — applications must handle absent custom claims
 // minimal_safe: a small configured set of claims that are always safe to emit
 func degradedResponse(ctx context.Context, projectID string) ActionResponse {
-	mode, minimalClaims, err := db.GetClaimFailureMode(ctx, projectID)
+	mode, minimalClaims, err := dbGetClaimFailureMode(ctx, projectID)
 	if err != nil {
 		// Cannot determine configured mode — default to fail_closed
 		log.Printf("[DATA PLANE] Could not load failure mode for project=%s (defaulting to fail_closed): %v", projectID, err)

@@ -17,15 +17,16 @@ This document defines the high-level phases for the MkAuth implementation, trans
 - [x] **Persistence Invariants**: Strengthen database constraints so critical domain rules are enforced below the application layer as well.
 - [x] **Documentation Sync**: Keep OpenSpec, roadmap, and coverage docs aligned with the hardened contracts and any drift corrections.
 
-## Phase 3: Orchestration Security Boundary (Immediate Production Gate)
+## Phase 3: Orchestration Security Boundary (In Progress — backend controls complete, UI token forwarding pending)
 *Objective: Close trust-boundary gaps before enabling broader live orchestration.*
 - [x] **Container Split**: Docker Compose runs the frontend and backend as isolated services, with the UI proxying to the backend over the internal network.
-- [/] **Frontend Session Auth**: Demo-backed cookie sessions now gate Admin/User view differentiation; live Zitadel OIDC remains the next step.
-- [ ] **Backend User-Token Authorization**: Replace shared-API-key trust for privileged actions with Zitadel-issued user access tokens validated by the backend and enforced through backend-owned authorization checks.
-- [ ] **Production Data Plane Security**: Harden the Redis/action-injection perimeter, authentication, timeout behavior, and safe degraded responses.
-- [ ] **Webhook Authenticity Validation**: Enforce production-grade verification for Zitadel-originated events before any downstream mutation or cache invalidation.
-- [ ] **Zitadel Management Client**: Replace stubs with actual M2M Management API calls after the above controls are in place.
-- [ ] **Live Webhook Listener**: Implement the real-time cache invalidator for validated Zitadel events.
+- [/] **Frontend Session Auth**: Demo-backed cookie sessions gate Admin/User view differentiation; live Zitadel OIDC and token forwarding from UI to backend remain the next step.
+- [x] **Backend User-Token Authorization**: `withUserAuth` middleware validates Zitadel-issued RS256 JWTs (JWKS-backed, 1-hour cache) in production; falls back to API key in local-dev. Acting admin user ID stored in request context for audit attribution.
+- [x] **Production Data Plane Security**: 50 ms Redis timeout; `claim_failure_mode` per project (`fail_closed` | `minimal_safe`); explicit `degradedResponse` for all failure paths; `pgx.ErrNoRows` vs real DB faults correctly distinguished; `[DATA PLANE]` structured logging.
+- [x] **Webhook Authenticity Validation**: HMAC-SHA256 over `(X-Zitadel-Timestamp + "\n" + body)` — timestamp is part of the signed input preventing replay attacks; 5-minute freshness window enforced independently.
+- [x] **Backend-Owned Onboarding Infrastructure**: `onboarding_triggers` table with idempotency key; `TriggerOnboarding` service records, assigns welcome bundle, and writes audit log; triggered by `role_key == "new_user"` on verified webhook; operator view at `GET /api/v1/onboarding/triggers`.
+- [ ] **Zitadel Management Client**: Replace stubs with actual M2M Management API calls after frontend token forwarding is in place.
+- [ ] **Live Webhook Listener**: Real-time cache invalidation from live Zitadel events (requires M2M client).
 - [ ] **Advanced Role CRUD**: Implement "Snapshot & Fork" role cloning.
 
 ## Phase 4: The Infrastructure Bridge (Target: Hardware Sync)
