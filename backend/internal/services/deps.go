@@ -78,4 +78,11 @@ var (
 	svcDbGetAllReferencedRoleKeys = func(ctx context.Context) ([][2]string, error) {
 		return db.GetAllReferencedRoleKeys(ctx)
 	}
+
+	// Provisioning intent injectable vars.
+	svcInsertProvisioningIntent = func(ctx context.Context, targetUID, action, lldapGroup,
+		sourceProject, sourceRole, webhookEventID, idempotencyKey string) (string, bool, error) {
+		return db.InsertProvisioningIntent(ctx, targetUID, action, lldapGroup,
+			sourceProject, sourceRole, webhookEventID, idempotencyKey)
+	}
 )

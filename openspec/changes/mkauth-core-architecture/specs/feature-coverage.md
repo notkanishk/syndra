@@ -4,7 +4,7 @@ Last updated: 2026-04-14
 
 This document compares the **initially planned** MkAuth feature surface (as described in `openspec/changes/mkauth-core-architecture/design.md`) against what is **already integrated in the repo** (backend + UI). It is meant to be a durable “reality check” that future specs/design changes can reference.
 
-Phase 3 is fully complete. All orchestration security boundary items are Integrated: backend JWT auth, HMAC webhooks, data-plane degraded behavior, idempotent onboarding, frontend OIDC token forwarding, Zitadel M2M client, event-type-aware webhook dispatch, and Advanced Role CRUD (Snapshot & Fork). The next priority is Phase 4: the LLDAP infrastructure bridge.
+Phase 3 is fully complete. Phase 4 is in progress: Provisioning Intents (backend-side intent emission, LLDAP group flattening, sync service polling API) are Integrated. Remaining Phase 4 items: Shadow Password Vault, Sync Service (go-ldap/v3 worker), LLDAP Integration (end-to-end wiring).
 
 Legend:
 - **Integrated**: present end-to-end (API/storage + UI where applicable) or otherwise usable in the intended flow.
@@ -24,7 +24,7 @@ Legend:
 | `automation-policies`| Define "Welcome" bundles for new accounts, backend-owned automatic assignment after validated event intake, and global default status. | **Partial** | `backend/internal/services/onboarding.go`, `backend/internal/db/repositories.go` (`InsertOnboardingTrigger`, `GetWelcomeBundle`), `backend/db/migrations/000005_security_boundary.up.sql` (`onboarding_triggers`), `backend/internal/handlers/onboarding.go` | Backend-owned `TriggerOnboarding` service and idempotency infrastructure are implemented; triggered by webhook `role_key == "new_user"` signal. Full automation policy configuration UI and Actions v2 trigger path remain ahead. |
 | `service-catalog` | Standard user portal; request access to services (apps); auto-mapping to bundles/roles. | **Partial** | `ui/src/app/page.tsx`, `ui/src/app/requests/page.tsx`, `ui/src/components/Sidebar.tsx`, `openspec/changes/mkauth-core-architecture/specs/service-catalog/spec.md` | A member-facing portal and self-service request page now exist behind demo session auth, but service requests still resolve to direct project/role picks rather than app-to-bundle automation. |
 | `ldap-sync` | Bridge Zitadel (OIDC) to LLDAP (Hardware); prefix-flattening; shadow password management as an infrastructure-only credential bridge. | **Not integrated** | `openspec/changes/mkauth-core-architecture/specs/ldap-sync/spec.md` | Defines the translation layer and now clarifies that Samba/LLDAP password handling is required but isolated from primary identity flows; implementation still remains ahead. |
-| `provisioning` | Event-driven identity sync engine; fault-tolerant LLDAP writes; secure credential rotation. | **Not integrated** | `openspec/changes/mkauth-core-architecture/specs/provisioning/spec.md` | Implemented as a Go-native concurrent worker using `go-ldap/v3`. |
+| `provisioning` | Event-driven identity sync engine; fault-tolerant LLDAP writes; secure credential rotation. | **Partial** | `backend/internal/services/provisioning.go`, `backend/internal/services/lldap.go`, `backend/internal/handlers/intents.go`, `backend/db/migrations/000009_provisioning_intents.up.sql` | Backend-side intent emission implemented: `provisioning_intents` table with four-state status machine, `FlattenLLDAPGroup` group naming, webhook integration, sync service polling API. Sync Service consumer (go-ldap/v3 worker) remains ahead. |
 
 ## Architecture/design feature coverage (planned in design.md)
 
@@ -65,4 +65,4 @@ Legend:
 
 ## Immediate next step
 
-Phase 3 is complete. Next: Phase 4 — LLDAP infrastructure bridge (Sync Service, LLDAP Integration, Shadow Password Vault, Provisioning Intents).
+Phase 4 is in progress. Next: Shadow Password Vault (credential bridge for Samba/LLDAP), then Sync Service, then LLDAP Integration (end-to-end wiring).

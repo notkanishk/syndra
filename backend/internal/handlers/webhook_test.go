@@ -193,6 +193,7 @@ func resetWebhookDeps(t *testing.T) {
 	origInsert := dbInsertWebhookEvent
 	origComplete := dbCompleteWebhookEvent
 	origFail := dbFailWebhookEvent
+	origEmitIntent := webhookEmitProvisioningIntent
 	t.Cleanup(func() {
 		cacheRebuildUser = origRebuild
 		cacheInvalidateUser = origInvalidate
@@ -202,6 +203,7 @@ func resetWebhookDeps(t *testing.T) {
 		dbInsertWebhookEvent = origInsert
 		dbCompleteWebhookEvent = origComplete
 		dbFailWebhookEvent = origFail
+		webhookEmitProvisioningIntent = origEmitIntent
 	})
 }
 
@@ -219,6 +221,7 @@ func setupNoopWebhookDeps(t *testing.T) {
 	}
 	dbCompleteWebhookEvent = func(_ context.Context, _ string) error { return nil }
 	dbFailWebhookEvent = func(_ context.Context, _, _ string) error { return nil }
+	webhookEmitProvisioningIntent = func(_ context.Context, _, _, _, _, _ string) error { return nil }
 }
 
 func postWebhook(t *testing.T, body []byte) *httptest.ResponseRecorder {
@@ -403,6 +406,88 @@ func TestWebhook_UserDeactivatedNoRoleKeyRequired(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 (no role_key needed), got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestWebhook_GrantAdded_EmitsAddIntent(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	var emittedAction, emittedUID, emittedProject, emittedRole string
+	webhookEmitProvisioningIntent = func(_ context.Context, uid, action, project, role, _ string) error {
+		emittedUID = uid
+		emittedAction = action
+		emittedProject = project
+		emittedRole = role
+		return nil
+	}
+
+	body := []byte(`{"event_type":"grant_added","user_id":"u1","source_project":"p1","role_key":"editor"}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if emittedAction != "add" {
+		t.Errorf("expected add intent, got %q", emittedAction)
+	}
+	if emittedUID != "u1" || emittedProject != "p1" || emittedRole != "editor" {
+		t.Errorf("wrong intent args: uid=%s project=%s role=%s", emittedUID, emittedProject, emittedRole)
+	}
+}
+
+func TestWebhook_GrantRemoved_EmitsRemoveIntent(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	var emittedAction string
+	webhookEmitProvisioningIntent = func(_ context.Context, _, action, _, _, _ string) error {
+		emittedAction = action
+		return nil
+	}
+
+	body := []byte(`{"event_type":"grant_removed","user_id":"u1","source_project":"p1","role_key":"editor"}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if emittedAction != "remove" {
+		t.Errorf("expected remove intent, got %q", emittedAction)
+	}
+}
+
+func TestWebhook_GrantAdded_IntentFailureNonFatal(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	webhookEmitProvisioningIntent = func(_ context.Context, _, _, _, _, _ string) error {
+		return fmt.Errorf("intent DB unavailable")
+	}
+
+	body := []byte(`{"event_type":"grant_added","user_id":"u1","source_project":"p1","role_key":"editor"}`)
+	rr := postWebhook(t, body)
+
+	// Should still return 200 — intent failure is non-fatal.
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 (intent failure non-fatal), got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestWebhook_UserDeactivated_NoIntentEmitted(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	var intentCalled bool
+	webhookEmitProvisioningIntent = func(_ context.Context, _, _, _, _, _ string) error {
+		intentCalled = true
+		return nil
+	}
+
+	body := []byte(`{"event_type":"user_deactivated","user_id":"u1","source_project":"p1"}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if intentCalled {
+		t.Error("should NOT emit provisioning intent for user_deactivated in Change 1")
 	}
 }
 

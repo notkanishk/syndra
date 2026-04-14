@@ -47,6 +47,13 @@ var (
 	svcCreateRole        = services.CreateRole
 	svcGlobalRoleCatalog = services.GlobalRoleCatalog
 
+	// Provisioning intent injectable vars.
+	webhookEmitProvisioningIntent = services.EmitProvisioningIntent
+	dbGetProvisioningIntents      = db.GetProvisioningIntents
+	dbClaimPendingIntents         = db.ClaimPendingIntents
+	dbCompleteIntent              = db.CompleteIntent
+	dbFailIntent                  = db.FailIntent
+
 	// Data-plane injectable vars — used by HandleActionInject and degradedResponse.
 	// Separate from the control-plane vars above so tests can exercise the degraded
 	// paths without a live Redis instance or database connection.

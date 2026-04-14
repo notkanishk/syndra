@@ -36,10 +36,10 @@ This document defines the high-level phases for the MkAuth implementation, trans
 
 ## Phase 4: The Infrastructure Bridge (Target: Hardware Sync)
 *Objective: Enable legacy hardware support via LLDAP and Provisioning.*
-- [ ] **Sync Service (Go)**: Build the dedicated concurrent provisioning worker.
-- [ ] **LLDAP Integration**: Implement the `{project}_{role}` group mapping logic.
-- [ ] **Shadow Password Vault**: Build the secure portal UI for setting Samba/LDAP secrets.
-- [ ] **Provisioning Intents**: Implement the internal API contract between Backend and Sync Worker.
+- [x] **Provisioning Intents**: Backend-side intent emission on grant changes, LLDAP group flattening, sync service polling API. Migration 000009. 22 new tests.
+- [ ] **Shadow Password Vault**: Credential bridge for Samba/LLDAP secondary authentication.
+- [ ] **Sync Service (Go)**: Dedicated concurrent provisioning worker consuming intents via `go-ldap/v3`.
+- [ ] **LLDAP Integration**: End-to-end wiring, reconciliation loop, Docker-compose LLDAP container.
 
 ## Phase 5: Automation & Governance (Target: Operational Excellence)
 *Objective: Eliminate manual overhead through policy-driven automation.*

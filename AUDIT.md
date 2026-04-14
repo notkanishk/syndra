@@ -40,12 +40,15 @@ internal/
     webhook.go                     — Zitadel webhook intake (6 event types, HMAC verified, dedup)
     webhook_events.go              — Operator endpoint for webhook event history
     roles.go                       — Role creation (with clone) and global catalog
+    intents.go                     — Provisioning intent handlers (operator view + sync service API)
     action.go                      — Data plane claim injection (50ms Redis timeout)
     health.go                      — /healthz endpoint (Postgres ping)
   models/models.go                 — All domain types (Role, CatalogRole, bundles, grants, topology, etc.)
   services/
     onboarding.go                  — Backend-owned welcome bundle assignment
     roles.go                       — Role creation service (clone resolution, Zitadel propagation, catalog)
+    lldap.go                       — LLDAP group name flattening ({project}_{role} convention)
+    provisioning.go                — Provisioning intent emission (webhook → LLDAP sync bridge)
     views.go                       — Governance summary, user access views, topology
     deps.go                        — Injectable function vars for services
   seed/                            — Demo data seeding
@@ -56,7 +59,7 @@ internal/
     keyfile.go                     — Service account key loader (PKCS1/PKCS8 PEM)
     orchestrator.go                — Role writeback orchestration (mapping rules, grants)
     deps.go                        — Injectable function vars for testability
-db/migrations/                     — 8 sequential SQL migrations
+db/migrations/                     — 9 sequential SQL migrations
 ```
 
 ### Frontend (`/ui`)
@@ -94,7 +97,7 @@ src/
 
 ---
 
-## API Endpoints (45 routes)
+## API Endpoints (49 routes)
 
 ### Control Plane (all require auth via `withUserAuth`)
 
@@ -128,6 +131,15 @@ src/
 | GET | `/api/v1/roles` | `handleGetGlobalRoleCatalog` | Global role catalog |
 | GET | `/api/v1/onboarding/triggers` | `handleGetOnboardingTriggers` | Onboarding trigger log |
 | GET | `/api/v1/webhook/events` | `handleGetWebhookEvents` | Webhook event history |
+| GET | `/api/v1/intents` | `handleGetProvisioningIntents` | Provisioning intent history |
+
+### Sync Service API (API-key auth)
+
+| Method | Path | Handler | Purpose |
+|--------|------|---------|---------|
+| POST | `/api/v1/intents/claim` | `handleClaimIntents` | Atomic claim pending intents (FOR UPDATE SKIP LOCKED) |
+| POST | `/api/v1/intents/{id}/complete` | `handleCompleteIntent` | Mark intent completed |
+| POST | `/api/v1/intents/{id}/fail` | `handleFailIntent` | Record intent failure |
 
 ### Data Plane (own auth mechanisms)
 
@@ -162,6 +174,7 @@ src/
 | `onboarding_triggers` | Idempotent welcome bundle log | Unique idempotency key |
 | `webhook_events` | Webhook event persistence/dedup | Unique idempotency key, status enum |
 | `roles` | MkAuth-managed role metadata | Unique (project, role_key), clone provenance |
+| `provisioning_intents` | LLDAP sync intent queue | Unique idempotency key, four-state status machine |
 
 ### Migrations
 
@@ -173,6 +186,7 @@ src/
 6. `000006_governance_integrity` — Bundle name checks, expiry ordering
 7. `000007_webhook_events` — Webhook event persistence and deduplication
 8. `000008_roles` — MkAuth-managed role metadata with clone provenance
+9. `000009_provisioning_intents` — LLDAP sync intent queue with four-state status machine
 
 ---
 
@@ -264,14 +278,17 @@ Zitadel (IdP) ──PKCE──> Next.js Frontend ──Bearer JWT──> Go Back
 | `internal/handlers` | `bundles_test.go` | ~13 | Empty name, whitespace, unknown fields, idempotent assignment, audit attribution |
 | `internal/handlers` | `rules_test.go` | ~8 | Missing fields, unknown fields, self-edge, cycle detection via handler, version increment |
 | `internal/handlers` | `access_flow_test.go` | ~8 | Expiry math, zero-duration nil pointer, cache rebuild, access request persistence, idempotency 409 |
-| `internal/handlers` | `webhook_test.go` | ~4 | HMAC signature validation, timestamp freshness |
+| `internal/handlers` | `webhook_test.go` | ~16 | HMAC signature validation, timestamp freshness, event dispatch, dedup, provisioning intent emission |
+| `internal/handlers` | `intents_test.go` | ~8 | Intent operator view, pending poll, acknowledge/complete/fail transitions |
 | `internal/handlers` | `action_test.go` | ~5 | Cache miss fail_closed, cache miss minimal_safe, malformed cache data, DB outage defaults |
 | `internal/handlers` | `contracts_test.go` | ~4 | Strict decoding, trailing tokens, unknown fields |
 | `internal/cache` | `compiler_test.go` | 5 | Empty grants, direct grants, transitive rules, bundle roles, fixed-point termination |
 | `internal/services` | `onboarding_test.go` | ~6 | Trigger insertion, bundle assignment, audit logging, idempotency |
+| `internal/services` | `lldap_test.go` | 5 | Group flattening: basic, lowercase, mixed case, underscores, multiple spaces |
+| `internal/services` | `provisioning_test.go` | 5 | Intent emission: success, duplicate, unknown project, DB failure, audit failure |
 | `internal/services` | `views_test.go` | ~9 | Nil-safe collections, pending count, unused bundle hints, source vs derived roles |
 
-**Total: 145 backend tests, all passing.**
+**Total: 170 backend tests, all passing.**
 
 ### Frontend (Vitest)
 
@@ -410,12 +427,14 @@ Error codes: `VALIDATION_FAILED`, `UNAUTHORIZED`, `DB_ERROR`, `WEBHOOK_UNAUTHORI
 ```
 Request → withMaxBody (1MB) → withSecurityHeaders → ServeMux routing
                                                        │
-                                     ┌─────────────────┴──────────────────┐
-                                     │                                    │
-                              withCORS + withUserAuth              withCORS only
-                              (control plane routes)          (data plane routes)
-                                     │                                    │
-                              JWT/API key validation          HMAC/Redis verification
-                                     │                                    │
-                                  Handler                             Handler
+                                     ┌─────────────────┼──────────────────┐
+                                     │                 │                  │
+                              withCORS +        withCORS +          withCORS only
+                              withUserAuth      withAPIKeyAuth     (data plane)
+                              (control plane)   (sync service)
+                                     │                 │                  │
+                              JWT/API key        API key only      HMAC/Redis
+                              validation         validation        verification
+                                     │                 │                  │
+                                  Handler           Handler           Handler
 ```

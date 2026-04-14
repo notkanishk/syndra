@@ -125,9 +125,9 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 	var processingErr error
 	switch event.EventType {
 	case "grant_added", "grant_changed":
-		processingErr = processGrantAdded(r.Context(), event)
+		processingErr = processGrantAdded(r.Context(), event, eventID)
 	case "grant_removed":
-		processingErr = processGrantRemoved(r.Context(), event)
+		processingErr = processGrantRemoved(r.Context(), event, eventID)
 	case "user_deactivated", "user_locked":
 		processingErr = processUserDeactivated(r.Context(), event)
 	case "user_created":
@@ -152,8 +152,9 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 // processGrantAdded handles grant_added and grant_changed events:
-// rebuild cache, enforce mapping rules, trigger onboarding for new_user.
-func processGrantAdded(ctx context.Context, event WebhookPayload) error {
+// rebuild cache, enforce mapping rules, trigger onboarding for new_user,
+// and emit a provisioning intent for LLDAP sync.
+func processGrantAdded(ctx context.Context, event WebhookPayload, eventID string) error {
 	if len(event.ProjectIDs) > 0 {
 		cacheRebuildUser(ctx, event.UserID, event.ProjectIDs)
 	} else {
@@ -171,16 +172,28 @@ func processGrantAdded(ctx context.Context, event WebhookPayload) error {
 			log.Printf("[WEBHOOK] Onboarding trigger failed for user=%s: %v", event.UserID, err)
 		}
 	}
+
+	// Emit provisioning intent for LLDAP sync.
+	if err := webhookEmitProvisioningIntent(ctx, event.UserID, "add", event.SourceProject, event.RoleKey, eventID); err != nil {
+		log.Printf("[WEBHOOK] Provisioning intent emission failed: %v", err)
+		// Non-fatal: the Zitadel-side grant succeeded, intent can be retried.
+	}
 	return nil
 }
 
 // processGrantRemoved handles grant_removed events:
-// invalidate cache, revoke derived grants through mapping rules.
-func processGrantRemoved(ctx context.Context, event WebhookPayload) error {
+// invalidate cache, revoke derived grants through mapping rules,
+// and emit a provisioning intent for LLDAP sync.
+func processGrantRemoved(ctx context.Context, event WebhookPayload, eventID string) error {
 	_ = cacheInvalidateUser(ctx, event.UserID)
 
 	if err := webhookRevokeMappingRules(ctx, event.UserID, event.SourceProject, event.RoleKey); err != nil {
 		return fmt.Errorf("revocation failure: %v", err)
+	}
+
+	// Emit provisioning intent for LLDAP sync.
+	if err := webhookEmitProvisioningIntent(ctx, event.UserID, "remove", event.SourceProject, event.RoleKey, eventID); err != nil {
+		log.Printf("[WEBHOOK] Provisioning intent emission failed: %v", err)
 	}
 	return nil
 }

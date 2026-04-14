@@ -240,6 +240,24 @@ type Role struct {
 	UpdatedAt         time.Time `json:"updated_at"`
 }
 
+// ProvisioningIntent represents a pending infrastructure mutation
+// to be consumed by the Sync Service for LLDAP group management.
+type ProvisioningIntent struct {
+	ID             string     `json:"id"`
+	TargetUID      string     `json:"target_uid"`
+	Action         string     `json:"action"`
+	LLDAPGroup     string     `json:"lldap_group"`
+	SourceProject  string     `json:"source_project"`
+	SourceRole     string     `json:"source_role"`
+	WebhookEventID string     `json:"webhook_event_id,omitempty"`
+	IdempotencyKey string     `json:"idempotency_key"`
+	Status         string     `json:"status"`
+	ErrorMessage   string     `json:"error_message,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	AcknowledgedAt *time.Time `json:"acknowledged_at,omitempty"`
+	CompletedAt    *time.Time `json:"completed_at,omitempty"`
+}
+
 // CatalogRole is the computed view for the global role inventory.
 type CatalogRole struct {
 	ProjectID         string `json:"project_id"`
