@@ -39,11 +39,13 @@ internal/
     views.go                       — Catalog, user list, application views, simulation
     webhook.go                     — Zitadel webhook intake (6 event types, HMAC verified, dedup)
     webhook_events.go              — Operator endpoint for webhook event history
+    roles.go                       — Role creation (with clone) and global catalog
     action.go                      — Data plane claim injection (50ms Redis timeout)
     health.go                      — /healthz endpoint (Postgres ping)
-  models/models.go                 — All domain types (227 lines)
+  models/models.go                 — All domain types (Role, CatalogRole, bundles, grants, topology, etc.)
   services/
     onboarding.go                  — Backend-owned welcome bundle assignment
+    roles.go                       — Role creation service (clone resolution, Zitadel propagation, catalog)
     views.go                       — Governance summary, user access views, topology
     deps.go                        — Injectable function vars for services
   seed/                            — Demo data seeding
@@ -54,7 +56,7 @@ internal/
     keyfile.go                     — Service account key loader (PKCS1/PKCS8 PEM)
     orchestrator.go                — Role writeback orchestration (mapping rules, grants)
     deps.go                        — Injectable function vars for testability
-db/migrations/                     — 6 sequential SQL migrations
+db/migrations/                     — 8 sequential SQL migrations
 ```
 
 ### Frontend (`/ui`)
@@ -92,7 +94,7 @@ src/
 
 ---
 
-## API Endpoints (41 routes)
+## API Endpoints (45 routes)
 
 ### Control Plane (all require auth via `withUserAuth`)
 
@@ -122,7 +124,10 @@ src/
 | POST | `/api/v1/requests` | `handleCreateAccessRequest` | Submit access request |
 | POST | `/api/v1/requests/{id}/decision` | `handleResolveAccessRequest` | Approve/reject request |
 | GET | `/api/v1/governance/summary` | `handleGetGovernanceSummary` | Pending + expiring items |
+| POST | `/api/v1/roles` | `handleCreateRole` | Create role (with optional clone) |
+| GET | `/api/v1/roles` | `handleGetGlobalRoleCatalog` | Global role catalog |
 | GET | `/api/v1/onboarding/triggers` | `handleGetOnboardingTriggers` | Onboarding trigger log |
+| GET | `/api/v1/webhook/events` | `handleGetWebhookEvents` | Webhook event history |
 
 ### Data Plane (own auth mechanisms)
 
@@ -139,7 +144,7 @@ src/
 
 ---
 
-## Database Schema (6 migrations)
+## Database Schema (8 migrations)
 
 ### Tables
 
@@ -155,6 +160,8 @@ src/
 | `audit_logs` | Who did what when | Actor, target, action, resource_id, timestamp |
 | `claim_failure_mode` | Per-project degraded behavior | Enum (fail_closed/minimal_safe) |
 | `onboarding_triggers` | Idempotent welcome bundle log | Unique idempotency key |
+| `webhook_events` | Webhook event persistence/dedup | Unique idempotency key, status enum |
+| `roles` | MkAuth-managed role metadata | Unique (project, role_key), clone provenance |
 
 ### Migrations
 
@@ -164,6 +171,8 @@ src/
 4. `000004_contract_hardening` — Non-blank checks, enum constraints, duration validation, no self-edges
 5. `000005_security_boundary` — Claim failure modes + onboarding triggers
 6. `000006_governance_integrity` — Bundle name checks, expiry ordering
+7. `000007_webhook_events` — Webhook event persistence and deduplication
+8. `000008_roles` — MkAuth-managed role metadata with clone provenance
 
 ---
 
@@ -262,7 +271,7 @@ Zitadel (IdP) ──PKCE──> Next.js Frontend ──Bearer JWT──> Go Back
 | `internal/services` | `onboarding_test.go` | ~6 | Trigger insertion, bundle assignment, audit logging, idempotency |
 | `internal/services` | `views_test.go` | ~9 | Nil-safe collections, pending count, unused bundle hints, source vs derived roles |
 
-**Total: ~87+ backend tests, all passing.**
+**Total: 145 backend tests, all passing.**
 
 ### Frontend (Vitest)
 

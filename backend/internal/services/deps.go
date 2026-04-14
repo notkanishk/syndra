@@ -54,4 +54,28 @@ var (
 	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
 		return db.GetActiveMappingRules(ctx)
 	}
+
+	// Role management injectable vars.
+	svcDbCreateRole = func(ctx context.Context, projectID, roleKey, displayName, description, group, createdBy string,
+		clonedFromProject, clonedFromRole *string) (string, error) {
+		return db.CreateRole(ctx, projectID, roleKey, displayName, description, group, createdBy, clonedFromProject, clonedFromRole)
+	}
+	svcDbGetRole = func(ctx context.Context, projectID, roleKey string) (models.Role, error) {
+		return db.GetRole(ctx, projectID, roleKey)
+	}
+	svcDbDeleteRole = func(ctx context.Context, id string) error {
+		return db.DeleteRole(ctx, id)
+	}
+	svcDbGetAllLocalRoles = func(ctx context.Context) ([]models.Role, error) {
+		return db.GetAllLocalRoles(ctx)
+	}
+	svcDbGetRoleUsageCounts = func(ctx context.Context) (map[string]db.RoleUsage, error) {
+		return db.GetRoleUsageCounts(ctx)
+	}
+	svcDbGetAssignedUserCounts = func(ctx context.Context) (map[string]int, error) {
+		return db.GetAssignedUserCounts(ctx)
+	}
+	svcDbGetAllReferencedRoleKeys = func(ctx context.Context) ([][2]string, error) {
+		return db.GetAllReferencedRoleKeys(ctx)
+	}
 )

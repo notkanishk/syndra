@@ -55,6 +55,10 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/v1/requests/{id}/decision", withCORS(withUserAuth(handleResolveAccessRequest)))
 	mux.HandleFunc("GET /api/v1/governance/summary", withCORS(withUserAuth(handleGetGovernanceSummary)))
 
+	// Role Management
+	mux.HandleFunc("POST /api/v1/roles", withCORS(withUserAuth(handleCreateRole)))
+	mux.HandleFunc("GET /api/v1/roles", withCORS(withUserAuth(handleGetGlobalRoleCatalog)))
+
 	// Operator: event and trigger logs
 	mux.HandleFunc("GET /api/v1/onboarding/triggers", withCORS(withUserAuth(handleGetOnboardingTriggers)))
 	mux.HandleFunc("GET /api/v1/webhook/events", withCORS(withUserAuth(handleGetWebhookEvents)))

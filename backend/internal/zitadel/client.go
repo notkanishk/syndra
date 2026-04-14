@@ -138,6 +138,61 @@ func (c *managementClient) ListUserGrants(ctx context.Context, userID string) ([
 	return result.Result, nil
 }
 
+func (c *managementClient) AddProjectRole(ctx context.Context, projectID, roleKey, displayName, group string) error {
+	path := fmt.Sprintf("/management/v1/projects/%s/roles", projectID)
+	body := map[string]any{
+		"roleKey":     roleKey,
+		"displayName": displayName,
+		"group":       group,
+	}
+
+	resp, err := c.doRequest(ctx, http.MethodPost, path, body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+func (c *managementClient) ListProjectRoles(ctx context.Context, projectID string) ([]ProjectRoleResult, error) {
+	path := fmt.Sprintf("/management/v1/projects/%s/roles/_search", projectID)
+	body := map[string]any{}
+
+	resp, err := c.doRequest(ctx, http.MethodPost, path, body)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read list project roles response: %w", err)
+	}
+
+	var result struct {
+		Result []ProjectRoleResult `json:"result"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("decode list project roles response: %w", err)
+	}
+	return result.Result, nil
+}
+
+func (c *managementClient) UpdateProjectRole(ctx context.Context, projectID, roleKey, displayName, group string) error {
+	path := fmt.Sprintf("/management/v1/projects/%s/roles/%s", projectID, roleKey)
+	body := map[string]any{
+		"displayName": displayName,
+		"group":       group,
+	}
+
+	resp, err := c.doRequest(ctx, http.MethodPut, path, body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
 func (c *managementClient) GetUser(ctx context.Context, userID string) (*ZitadelUser, error) {
 	path := fmt.Sprintf("/management/v1/users/%s", userID)
 

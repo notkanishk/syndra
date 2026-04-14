@@ -43,6 +43,10 @@ var (
 	dbFailWebhookEvent         = db.FailWebhookEvent
 	dbGetWebhookEvents         = db.GetWebhookEvents
 
+	// Role management injectable vars.
+	svcCreateRole        = services.CreateRole
+	svcGlobalRoleCatalog = services.GlobalRoleCatalog
+
 	// Data-plane injectable vars — used by HandleActionInject and degradedResponse.
 	// Separate from the control-plane vars above so tests can exercise the degraded
 	// paths without a live Redis instance or database connection.

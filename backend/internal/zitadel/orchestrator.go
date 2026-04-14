@@ -23,6 +23,13 @@ type ZitadelUser struct {
 	State       string `json:"state"`
 }
 
+// ProjectRoleResult represents a role definition within a Zitadel project.
+type ProjectRoleResult struct {
+	Key         string `json:"key"`
+	DisplayName string `json:"displayName"`
+	Group       string `json:"group"`
+}
+
 // ZitadelClient is the interface over the Zitadel Management API.
 // The live implementation is wired in InitClient once credentials are available.
 type ZitadelClient interface {
@@ -31,6 +38,9 @@ type ZitadelClient interface {
 	RemoveUserGrant(ctx context.Context, userID, grantID string) error
 	ListUserGrants(ctx context.Context, userID string) ([]UserGrant, error)
 	GetUser(ctx context.Context, userID string) (*ZitadelUser, error)
+	AddProjectRole(ctx context.Context, projectID, roleKey, displayName, group string) error
+	ListProjectRoles(ctx context.Context, projectID string) ([]ProjectRoleResult, error)
+	UpdateProjectRole(ctx context.Context, projectID, roleKey, displayName, group string) error
 }
 
 // EnforceMappingRules is triggered when a user is modified.

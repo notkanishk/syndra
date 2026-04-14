@@ -16,6 +16,23 @@ type mockClient struct {
 	removeGrantCalls []removeGrantCall
 	listGrantsResult []UserGrant
 	getUserResult    *ZitadelUser
+	addRoleCalls     []addRoleCall
+	listRolesResult  []ProjectRoleResult
+	updateRoleCalls  []updateRoleCall
+}
+
+type addRoleCall struct {
+	ProjectID   string
+	RoleKey     string
+	DisplayName string
+	Group       string
+}
+
+type updateRoleCall struct {
+	ProjectID   string
+	RoleKey     string
+	DisplayName string
+	Group       string
 }
 
 type addGrantCall struct {
@@ -56,6 +73,20 @@ func (m *mockClient) ListUserGrants(_ context.Context, _ string) ([]UserGrant, e
 
 func (m *mockClient) GetUser(_ context.Context, _ string) (*ZitadelUser, error) {
 	return m.getUserResult, nil
+}
+
+func (m *mockClient) AddProjectRole(_ context.Context, projectID, roleKey, displayName, group string) error {
+	m.addRoleCalls = append(m.addRoleCalls, addRoleCall{projectID, roleKey, displayName, group})
+	return nil
+}
+
+func (m *mockClient) ListProjectRoles(_ context.Context, _ string) ([]ProjectRoleResult, error) {
+	return m.listRolesResult, nil
+}
+
+func (m *mockClient) UpdateProjectRole(_ context.Context, projectID, roleKey, displayName, group string) error {
+	m.updateRoleCalls = append(m.updateRoleCalls, updateRoleCall{projectID, roleKey, displayName, group})
+	return nil
 }
 
 // stubGetActiveMappingRules replaces db.GetActiveMappingRules for testing.

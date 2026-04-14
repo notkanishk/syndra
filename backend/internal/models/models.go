@@ -224,3 +224,33 @@ type TopologyGraph struct {
 	Nodes []TopologyNode `json:"nodes"`
 	Edges []TopologyEdge `json:"edges"`
 }
+
+// Role represents a role created/managed through MkAuth, stored locally.
+type Role struct {
+	ID                string    `json:"id"`
+	ProjectID         string    `json:"project_id"`
+	RoleKey           string    `json:"role_key"`
+	DisplayName       string    `json:"display_name"`
+	Description       string    `json:"description"`
+	Group             string    `json:"group"`
+	ClonedFromProject string    `json:"cloned_from_project,omitempty"`
+	ClonedFromRole    string    `json:"cloned_from_role,omitempty"`
+	CreatedBy         string    `json:"created_by"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
+// CatalogRole is the computed view for the global role inventory.
+type CatalogRole struct {
+	ProjectID         string `json:"project_id"`
+	ProjectName       string `json:"project_name"`
+	RoleKey           string `json:"role_key"`
+	DisplayName       string `json:"display_name"`
+	Description       string `json:"description"`
+	BundleCount       int    `json:"bundle_count"`
+	RuleCount         int    `json:"rule_count"`
+	AssignedUserCount int    `json:"assigned_user_count"`
+	IsUnused          bool   `json:"is_unused"`
+	Source            string `json:"source"`        // "mkauth" | "demo" | "referenced"
+	DisplayLabel      string `json:"display_label"` // "Printing Lab: admin"
+}
