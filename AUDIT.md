@@ -48,8 +48,11 @@ internal/
   seed/                            — Demo data seeding
   demo/                            — Static demo catalog (users, projects, apps)
   zitadel/
-    client.go                      — M2M service account (stub, Phase 3)
-    orchestrator.go                — Role writeback orchestration (stub)
+    client.go                      — M2M management client (direct HTTP, JWT profile auth)
+    token.go                       — Token lifecycle (RS256 assertion, caching, thread-safe refresh)
+    keyfile.go                     — Service account key loader (PKCS1/PKCS8 PEM)
+    orchestrator.go                — Role writeback orchestration (mapping rules, grants)
+    deps.go                        — Injectable function vars for testability
 db/migrations/                     — 6 sequential SQL migrations
 ```
 

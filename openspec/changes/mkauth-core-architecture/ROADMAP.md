@@ -17,7 +17,7 @@ This document defines the high-level phases for the MkAuth implementation, trans
 - [x] **Persistence Invariants**: Migrations 004 and 006 enforce status enums, positive durations, version bounds, resolution consistency, format_type enums, blank-name prevention, and expiry-after-create.
 - [x] **Documentation Sync**: OpenSpec design, tasks, and roadmap updated to reflect implementation state and current risks.
 
-## Phase 3: Orchestration Security Boundary (In Progress — next step: Zitadel Management Client)
+## Phase 3: Orchestration Security Boundary (In Progress — next step: Live Webhook Listener)
 *Objective: Close trust-boundary gaps before enabling broader live orchestration.*
 - [x] **Container Split**: Docker Compose runs the frontend and backend as isolated services, with the UI proxying to the backend over the internal network.
 - [x] **Frontend Session Auth**: PKCE authorization code flow implemented in Next.js without external libraries. `ui/src/lib/oidc.ts` handles PKCE crypto, token exchange, and Zitadel claim parsing. `ui/src/app/auth/zitadel/route.ts` initiates the flow; `ui/src/app/auth/callback/route.ts` exchanges the code and creates a session. The `mkauth_session` cookie uses a discriminated union (`demo | oidc`); OIDC sessions carry the raw access token and are forwarded as `Authorization: Bearer <token>` by both the proxy route and SSR server components. Demo users remain active when `ZITADEL_DOMAIN` is unset.
@@ -30,7 +30,7 @@ This document defines the high-level phases for the MkAuth implementation, trans
 - [x] **Backend Reliability** (Audit): `GET /healthz` health check endpoint, graceful shutdown with `signal.NotifyContext` and connection cleanup.
 - [x] **Frontend Type Safety** (Audit): Generic typed API fetchers (`Promise<T>` replacing `Promise<any>`), shared `types.ts` mirroring Go models, Vitest test infrastructure with session module coverage.
 - [x] **Cache Compiler Test Coverage** (Audit): Injectable deps pattern extended to `cache/` package; 5 tests covering empty grants, direct grants, mapping rule transitivity, bundle role inclusion, and fixed-point termination.
-- [ ] **Zitadel Management Client**: Replace stubs with actual M2M Management API calls after frontend token forwarding is in place.
+- [x] **Zitadel Management Client**: Direct HTTP client for Zitadel Management API v1 using JWT profile M2M auth (RS256 assertion, token caching, retry with backoff). Implements `AddUserGrant`, `RemoveUserGrant`, `ListUserGrants`, `GetUser`. Zero new dependencies — reuses `golang-jwt/jwt/v5` and stdlib `net/http`. Graceful degradation to local-policy-only mode when credentials absent. 22 tests covering key loading, token lifecycle, all API methods, retry logic, and orchestrator integration.
 - [ ] **Live Webhook Listener**: Real-time cache invalidation from live Zitadel events (requires M2M client).
 - [ ] **Advanced Role CRUD**: Implement "Snapshot & Fork" role cloning.
 

@@ -201,4 +201,4 @@ Phase 2 contract hardening is complete. 82 backend tests cover all critical muta
 
 Phase 3 frontend OIDC integration is complete. The UI now performs a PKCE authorization code flow against Zitadel (`ui/src/lib/oidc.ts`, `ui/src/app/auth/zitadel/route.ts`, `ui/src/app/auth/callback/route.ts`). Zitadel-issued access tokens are stored in the session and forwarded to the backend on every API call. The shared API key is no longer the primary authorization proof for admin operations when `ZITADEL_DOMAIN` is set.
 
-The immediate next step is the **Zitadel Management Client**: replace the stub `MgmtClient` in `backend/internal/zitadel/client.go` with an actual M2M Management API client, enabling live role CRUD and grant reconciliation against Zitadel.
+The **Zitadel Management Client** is now implemented: `backend/internal/zitadel/client.go` contains a direct HTTP client for Management API v1 with JWT profile M2M auth, token caching, retry with backoff, and 22 tests. The immediate next step is the **Live Webhook Listener**: wire real-time Zitadel event subscriptions to drive cache invalidation and orchestration.

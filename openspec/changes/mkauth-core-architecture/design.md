@@ -59,7 +59,7 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   **Deployment:** Docker Compose running inside a Proxmox LXC (Linux Container). This provides a robust 1-command installation and update mechanism via an `update.sh` script that pulls GitHub changes and restarts the stack without downtime. The stack uses **Separate Containers** for Frontend, Backend, and the LLDAP Sync Service to ensure isolation and security.
 *   **Authentication & Identity:**
     *   **Backend:** Uses a high-scoped **Machine-to-Machine (Service Account)** token from Zitadel only for backend-owned Management API operations after authorization succeeds. Privileged frontend-originated requests are authorized from a Zitadel-issued user access token validated by the backend.
-    *   **Frontend:** Target state is **User Session (OIDC)** backed by Zitadel-issued user access tokens. The current implementation uses demo cookie sessions with Admin/User view differentiation, and the frontend proxies requests to the backend using an internal guard credential only as a temporary development measure.
+    *   **Frontend:** **User Session (OIDC)** backed by Zitadel-issued user access tokens. The PKCE authorization code flow is implemented: the UI performs login via Zitadel, stores the access token in an `mkauth_session` cookie (discriminated union: `demo | oidc`), and forwards it as `Authorization: Bearer <token>` on all backend requests — both through the proxy route and SSR server-component fetches. Demo cookie sessions with Admin/User view differentiation remain active as a local-dev fallback when `ZITADEL_DOMAIN` is unset.
     *   **Internal API Key Rule:** A shared internal API key MAY remain as defense-in-depth for service-to-service traffic, but it MUST NOT be treated as sufficient production authorization for privileged actions.
     *   **Sync Service:** A dedicated worker that synchronizes identity state from MkAuth/Zitadel into the LLDAP server.
 *   **Backend / Orchestrator:** Go (Golang).
@@ -76,8 +76,8 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   [x] **Governance Summary**: Pending requests, expiring grants, and cleanup hints.
 *   [x] **Topology Graph**: Visual "God Mode" graph and supporting API.
 *   [x] **Seeded Demo Catalog**: Users, projects, applications, and dummy relationships for local testing.
-*   [/] **Frontend Session Split**: Demo-backed login, member portal navigation, and admin/member route gating are in place; live Zitadel OIDC is still pending.
-*   [/] **Zitadel Integration**: Currently stubbed for local dev; needs M2M credentials for live sync.
+*   [x] **Frontend Session Split**: PKCE authorization code flow implemented (`ui/src/lib/oidc.ts`, `ui/src/app/auth/zitadel/route.ts`, `ui/src/app/auth/callback/route.ts`). Zitadel access tokens stored in session cookie and forwarded as `Authorization: Bearer <token>` on all backend requests. Demo mode remains active when `ZITADEL_DOMAIN` is unset.
+*   [x] **Zitadel Integration**: M2M Management Client implemented (direct HTTP, JWT profile auth, retry with backoff). Requires `ZITADEL_MACHINE_KEY_PATH` for live sync; degrades gracefully without it.
 *   [ ] **Production Rollout**: Final deployment with actual keys, networking, and live Zitadel credentials.
 
 

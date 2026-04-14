@@ -4,14 +4,32 @@ import (
 	"context"
 	"fmt"
 	"log"
-
-	"mkauth/internal/db"
 )
 
-// ZitadelClient is a minimal interface over the Zitadel Management API.
+// UserGrant represents a Zitadel user grant (role assignment to a project).
+type UserGrant struct {
+	ID        string   `json:"id"`
+	UserID    string   `json:"userId"`
+	ProjectID string   `json:"projectId"`
+	RoleKeys  []string `json:"roleKeys"`
+}
+
+// ZitadelUser represents a Zitadel user profile.
+type ZitadelUser struct {
+	ID          string `json:"id"`
+	Username    string `json:"userName"`
+	DisplayName string `json:"displayName"`
+	Email       string `json:"email"`
+	State       string `json:"state"`
+}
+
+// ZitadelClient is the interface over the Zitadel Management API.
 // The live implementation is wired in InitClient once credentials are available.
 type ZitadelClient interface {
 	AddUserGrant(ctx context.Context, userID, projectID string, roleKeys []string) error
+	RemoveUserGrant(ctx context.Context, userID, grantID string) error
+	ListUserGrants(ctx context.Context, userID string) ([]UserGrant, error)
+	GetUser(ctx context.Context, userID string) (*ZitadelUser, error)
 }
 
 // EnforceMappingRules is triggered when a user is modified.
@@ -19,29 +37,22 @@ type ZitadelClient interface {
 // and pushes grants back to Zitadel when the client is live.
 func EnforceMappingRules(ctx context.Context, userID, sourceProjectID, sourceRoleKey string) error {
 	if MgmtClient == nil {
-		log.Println("ℹ️  Skipping orchestration: Zitadel client is not initialized (local-policy-only mode).")
+		log.Println("[ZITADEL] Skipping orchestration: client not initialized (local-policy-only mode).")
 		return nil
 	}
 
-	liveClient, ok := MgmtClient.(ZitadelClient)
-	if !ok {
-		log.Println("⚠️  MgmtClient does not implement ZitadelClient interface; skipping orchestration.")
-		return nil
-	}
-
-	// Fetch all mapping rules and apply those matching the triggering role
-	rules, err := db.GetActiveMappingRules(ctx)
+	rules, err := dbGetActiveMappingRules(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to query mapping rules: %v", err)
 	}
 
 	for _, rule := range rules {
 		if rule.SourceProject == sourceProjectID && rule.SourceRole == sourceRoleKey {
-			log.Printf("📌 Rule matched: propagating %s:%s → %s:%s for user %s",
+			log.Printf("[ZITADEL] Rule matched: propagating %s:%s -> %s:%s for user %s",
 				sourceProjectID, sourceRoleKey, rule.TargetProject, rule.TargetRole, userID)
 
-			if err := liveClient.AddUserGrant(ctx, userID, rule.TargetProject, []string{rule.TargetRole}); err != nil {
-				log.Printf("[ERROR] Zitadel grant failed: %v", err)
+			if err := MgmtClient.AddUserGrant(ctx, userID, rule.TargetProject, []string{rule.TargetRole}); err != nil {
+				log.Printf("[ZITADEL ERROR] Grant failed: %v", err)
 				// Don't abort — try subsequent rules
 			}
 		}
@@ -56,15 +67,10 @@ func AssignUserToRole(ctx context.Context, userID, projectID, roleKey string) er
 		return fmt.Errorf("zitadel client uninitialized; operating in local-policy-only mode")
 	}
 
-	liveClient, ok := MgmtClient.(ZitadelClient)
-	if !ok {
-		return fmt.Errorf("MgmtClient does not implement ZitadelClient")
-	}
-
-	if err := liveClient.AddUserGrant(ctx, userID, projectID, []string{roleKey}); err != nil {
+	if err := MgmtClient.AddUserGrant(ctx, userID, projectID, []string{roleKey}); err != nil {
 		return fmt.Errorf("AddUserGrant failed: %v", err)
 	}
 
-	log.Printf("✅ Granted %s → %s to %s via Zitadel API.", projectID, roleKey, userID)
+	log.Printf("[ZITADEL] Granted %s -> %s to %s via Management API.", projectID, roleKey, userID)
 	return nil
 }
