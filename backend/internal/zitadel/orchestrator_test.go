@@ -12,6 +12,7 @@ import (
 type mockClient struct {
 	addGrantCalls    []addGrantCall
 	addGrantErr      error
+	updateGrantCalls []updateGrantCall
 	removeGrantCalls []removeGrantCall
 	listGrantsResult []UserGrant
 	getUserResult    *ZitadelUser
@@ -23,6 +24,12 @@ type addGrantCall struct {
 	RoleKeys  []string
 }
 
+type updateGrantCall struct {
+	UserID   string
+	GrantID  string
+	RoleKeys []string
+}
+
 type removeGrantCall struct {
 	UserID  string
 	GrantID string
@@ -31,6 +38,11 @@ type removeGrantCall struct {
 func (m *mockClient) AddUserGrant(_ context.Context, userID, projectID string, roleKeys []string) error {
 	m.addGrantCalls = append(m.addGrantCalls, addGrantCall{userID, projectID, roleKeys})
 	return m.addGrantErr
+}
+
+func (m *mockClient) UpdateUserGrant(_ context.Context, userID, grantID string, roleKeys []string) error {
+	m.updateGrantCalls = append(m.updateGrantCalls, updateGrantCall{userID, grantID, roleKeys})
+	return nil
 }
 
 func (m *mockClient) RemoveUserGrant(_ context.Context, userID, grantID string) error {
@@ -151,5 +163,152 @@ func TestAssignUserToRole_NilClient(t *testing.T) {
 	}
 	if err.Error() != "zitadel client uninitialized; operating in local-policy-only mode" {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// --- RevokeMappingRules tests ---
+
+func TestRevokeMappingRules_NilClient(t *testing.T) {
+	resetDeps(t)
+	MgmtClient = nil
+
+	err := RevokeMappingRules(context.Background(), "user-1", "proj-src", "trigger")
+	if err != nil {
+		t.Fatalf("expected nil error for nil client, got: %v", err)
+	}
+}
+
+func TestRevokeMappingRules_SoleRole_RemovesGrant(t *testing.T) {
+	resetDeps(t)
+
+	mock := &mockClient{
+		listGrantsResult: []UserGrant{
+			{ID: "g-abc", UserID: "user-42", ProjectID: "proj-tgt", RoleKeys: []string{"propagated"}},
+		},
+	}
+	MgmtClient = mock
+
+	origGetRules := dbGetActiveMappingRules
+	dbGetActiveMappingRules = func(_ context.Context) ([]models.MappingRule, error) {
+		return []models.MappingRule{
+			{ID: "r1", SourceProject: "proj-src", SourceRole: "trigger", TargetProject: "proj-tgt", TargetRole: "propagated"},
+		}, nil
+	}
+	t.Cleanup(func() { dbGetActiveMappingRules = origGetRules })
+
+	err := RevokeMappingRules(context.Background(), "user-42", "proj-src", "trigger")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Sole role on grant → RemoveUserGrant called.
+	if len(mock.removeGrantCalls) != 1 {
+		t.Fatalf("expected 1 RemoveUserGrant call, got %d", len(mock.removeGrantCalls))
+	}
+	if mock.removeGrantCalls[0].GrantID != "g-abc" {
+		t.Errorf("unexpected grant ID: %s", mock.removeGrantCalls[0].GrantID)
+	}
+	if len(mock.updateGrantCalls) != 0 {
+		t.Error("should not call UpdateUserGrant for sole-role grant")
+	}
+}
+
+func TestRevokeMappingRules_MultiRole_UpdatesGrant(t *testing.T) {
+	resetDeps(t)
+
+	mock := &mockClient{
+		listGrantsResult: []UserGrant{
+			// Grant has TWO roles — only "propagated" should be removed.
+			{ID: "g-multi", UserID: "user-42", ProjectID: "proj-tgt", RoleKeys: []string{"propagated", "manual-role"}},
+		},
+	}
+	MgmtClient = mock
+
+	origGetRules := dbGetActiveMappingRules
+	dbGetActiveMappingRules = func(_ context.Context) ([]models.MappingRule, error) {
+		return []models.MappingRule{
+			{ID: "r1", SourceProject: "proj-src", SourceRole: "trigger", TargetProject: "proj-tgt", TargetRole: "propagated"},
+		}, nil
+	}
+	t.Cleanup(func() { dbGetActiveMappingRules = origGetRules })
+
+	err := RevokeMappingRules(context.Background(), "user-42", "proj-src", "trigger")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Multi-role grant → UpdateUserGrant called with remaining roles.
+	if len(mock.removeGrantCalls) != 0 {
+		t.Error("should NOT call RemoveUserGrant for multi-role grant")
+	}
+	if len(mock.updateGrantCalls) != 1 {
+		t.Fatalf("expected 1 UpdateUserGrant call, got %d", len(mock.updateGrantCalls))
+	}
+	call := mock.updateGrantCalls[0]
+	if call.GrantID != "g-multi" {
+		t.Errorf("unexpected grant ID: %s", call.GrantID)
+	}
+	if len(call.RoleKeys) != 1 || call.RoleKeys[0] != "manual-role" {
+		t.Errorf("expected remaining roles [manual-role], got %v", call.RoleKeys)
+	}
+}
+
+func TestRevokeMappingRules_NoMatchingGrant(t *testing.T) {
+	resetDeps(t)
+
+	mock := &mockClient{
+		listGrantsResult: []UserGrant{
+			{ID: "g-1", UserID: "user-1", ProjectID: "other-proj", RoleKeys: []string{"other-role"}},
+		},
+	}
+	MgmtClient = mock
+
+	origGetRules := dbGetActiveMappingRules
+	dbGetActiveMappingRules = func(_ context.Context) ([]models.MappingRule, error) {
+		return []models.MappingRule{
+			{ID: "r1", SourceProject: "p", SourceRole: "r", TargetProject: "tgt", TargetRole: "derived"},
+		}, nil
+	}
+	t.Cleanup(func() { dbGetActiveMappingRules = origGetRules })
+
+	err := RevokeMappingRules(context.Background(), "user-1", "p", "r")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// No matching grant → no removal attempted.
+	if len(mock.removeGrantCalls) != 0 {
+		t.Errorf("expected 0 removals, got %d", len(mock.removeGrantCalls))
+	}
+}
+
+func TestRevokeMappingRules_ErrorContinues(t *testing.T) {
+	resetDeps(t)
+
+	mock := &mockClient{
+		listGrantsResult: []UserGrant{
+			{ID: "g1", UserID: "u1", ProjectID: "t1", RoleKeys: []string{"a"}},
+			{ID: "g2", UserID: "u1", ProjectID: "t2", RoleKeys: []string{"b"}},
+		},
+	}
+	// RemoveUserGrant always succeeds (mock default returns nil)
+	MgmtClient = mock
+
+	origGetRules := dbGetActiveMappingRules
+	dbGetActiveMappingRules = func(_ context.Context) ([]models.MappingRule, error) {
+		return []models.MappingRule{
+			{ID: "r1", SourceProject: "p", SourceRole: "r", TargetProject: "t1", TargetRole: "a"},
+			{ID: "r2", SourceProject: "p", SourceRole: "r", TargetProject: "t2", TargetRole: "b"},
+		}, nil
+	}
+	t.Cleanup(func() { dbGetActiveMappingRules = origGetRules })
+
+	err := RevokeMappingRules(context.Background(), "u1", "p", "r")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(mock.removeGrantCalls) != 2 {
+		t.Errorf("expected 2 removals, got %d", len(mock.removeGrantCalls))
 	}
 }

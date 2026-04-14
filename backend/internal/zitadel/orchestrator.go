@@ -27,6 +27,7 @@ type ZitadelUser struct {
 // The live implementation is wired in InitClient once credentials are available.
 type ZitadelClient interface {
 	AddUserGrant(ctx context.Context, userID, projectID string, roleKeys []string) error
+	UpdateUserGrant(ctx context.Context, userID, grantID string, roleKeys []string) error
 	RemoveUserGrant(ctx context.Context, userID, grantID string) error
 	ListUserGrants(ctx context.Context, userID string) ([]UserGrant, error)
 	GetUser(ctx context.Context, userID string) (*ZitadelUser, error)
@@ -54,6 +55,76 @@ func EnforceMappingRules(ctx context.Context, userID, sourceProjectID, sourceRol
 			if err := MgmtClient.AddUserGrant(ctx, userID, rule.TargetProject, []string{rule.TargetRole}); err != nil {
 				log.Printf("[ZITADEL ERROR] Grant failed: %v", err)
 				// Don't abort — try subsequent rules
+			}
+		}
+	}
+
+	return nil
+}
+
+// RevokeMappingRules is the inverse of EnforceMappingRules.
+// When a source role is removed, it revokes any derived grants that were
+// propagated through mapping rules. Role-aware: if a grant contains multiple
+// roles, only the derived role is removed (via UpdateUserGrant); the grant
+// is only deleted when it would become empty.
+func RevokeMappingRules(ctx context.Context, userID, sourceProjectID, sourceRoleKey string) error {
+	if MgmtClient == nil {
+		log.Println("[ZITADEL] Skipping revocation: client not initialized (local-policy-only mode).")
+		return nil
+	}
+
+	rules, err := dbGetActiveMappingRules(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to query mapping rules: %v", err)
+	}
+
+	// Fetch user's current grants once.
+	grants, err := MgmtClient.ListUserGrants(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to list user grants for revocation: %v", err)
+	}
+
+	// Index: "projectID:roleKey" -> grant (full object, needed to inspect all roles).
+	type grantRef struct {
+		grant UserGrant
+	}
+	grantIndex := make(map[string]*grantRef)
+	for _, g := range grants {
+		ref := &grantRef{grant: g}
+		for _, rk := range g.RoleKeys {
+			grantIndex[g.ProjectID+":"+rk] = ref
+		}
+	}
+
+	for _, rule := range rules {
+		if rule.SourceProject == sourceProjectID && rule.SourceRole == sourceRoleKey {
+			key := rule.TargetProject + ":" + rule.TargetRole
+			ref, exists := grantIndex[key]
+			if !exists {
+				continue
+			}
+
+			g := ref.grant
+			if len(g.RoleKeys) == 1 {
+				// Only role on the grant — delete the entire grant.
+				log.Printf("[ZITADEL] Removing grant %s (sole role %s:%s) for user %s",
+					g.ID, rule.TargetProject, rule.TargetRole, userID)
+				if err := MgmtClient.RemoveUserGrant(ctx, userID, g.ID); err != nil {
+					log.Printf("[ZITADEL ERROR] Grant removal failed: %v", err)
+				}
+			} else {
+				// Multiple roles — update the grant to remove only the derived role.
+				remaining := make([]string, 0, len(g.RoleKeys)-1)
+				for _, rk := range g.RoleKeys {
+					if rk != rule.TargetRole {
+						remaining = append(remaining, rk)
+					}
+				}
+				log.Printf("[ZITADEL] Updating grant %s: removing role %s, keeping %v for user %s",
+					g.ID, rule.TargetRole, remaining, userID)
+				if err := MgmtClient.UpdateUserGrant(ctx, userID, g.ID, remaining); err != nil {
+					log.Printf("[ZITADEL ERROR] Grant update failed: %v", err)
+				}
 			}
 		}
 	}

@@ -5,6 +5,8 @@ import (
 
 	"mkauth/internal/cache"
 	"mkauth/internal/db"
+	"mkauth/internal/services"
+	"mkauth/internal/zitadel"
 )
 
 var (
@@ -29,7 +31,17 @@ var (
 	dbUpdateMappingRule     = db.UpdateMappingRule
 	dbDetectCycleOnInsert   = db.DetectCycleOnInsert
 
-	cacheRebuildUser = cache.RebuildUserCache
+	cacheRebuildUser    = cache.RebuildUserCache
+	cacheInvalidateUser = cache.InvalidateUser
+
+	// Webhook handler injectable vars.
+	webhookEnforceMappingRules = zitadel.EnforceMappingRules
+	webhookRevokeMappingRules  = zitadel.RevokeMappingRules
+	webhookTriggerOnboarding   = services.TriggerOnboarding
+	dbInsertWebhookEvent       = db.InsertWebhookEvent
+	dbCompleteWebhookEvent     = db.CompleteWebhookEvent
+	dbFailWebhookEvent         = db.FailWebhookEvent
+	dbGetWebhookEvents         = db.GetWebhookEvents
 
 	// Data-plane injectable vars — used by HandleActionInject and degradedResponse.
 	// Separate from the control-plane vars above so tests can exercise the degraded

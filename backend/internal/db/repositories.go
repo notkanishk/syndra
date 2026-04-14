@@ -500,3 +500,107 @@ type OnboardingTrigger struct {
 	CreatedAt      time.Time  `json:"created_at"`
 	CompletedAt    *time.Time `json:"completed_at,omitempty"`
 }
+
+// --- Webhook Events ---
+
+// WebhookEvent is the DB representation of a webhook_events row.
+type WebhookEvent struct {
+	ID             string     `json:"id"`
+	EventType      string     `json:"event_type"`
+	UserID         string     `json:"user_id"`
+	SourceProject  string     `json:"source_project"`
+	RoleKey        string     `json:"role_key,omitempty"`
+	IdempotencyKey string     `json:"idempotency_key"`
+	Status         string     `json:"status"`
+	ErrorMessage   string     `json:"error_message,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	ProcessedAt    *time.Time `json:"processed_at,omitempty"`
+}
+
+// InsertWebhookEvent records a received webhook event using the idempotency key.
+// Returns (id, true, nil) on insert, ("", false, nil) if the key already exists.
+func InsertWebhookEvent(ctx context.Context, eventType, userID, sourceProject, roleKey, idempotencyKey string) (string, bool, error) {
+	query := `
+		INSERT INTO webhook_events (event_type, user_id, source_project, role_key, idempotency_key)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (idempotency_key) DO NOTHING
+		RETURNING id`
+
+	var id string
+	err := PG.QueryRow(ctx, query, eventType, userID, sourceProject, roleKey, idempotencyKey).Scan(&id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("insert webhook event (key=%s): %w", idempotencyKey, err)
+	}
+	return id, true, nil
+}
+
+// CompleteWebhookEvent marks an event as processed.
+func CompleteWebhookEvent(ctx context.Context, eventID string) error {
+	query := `
+		UPDATE webhook_events
+		SET status = 'processed', processed_at = NOW()
+		WHERE id = $1`
+	_, err := PG.Exec(ctx, query, eventID)
+	if err != nil {
+		return fmt.Errorf("complete webhook event: %w", err)
+	}
+	return nil
+}
+
+// FailWebhookEvent marks an event as failed with an error message.
+func FailWebhookEvent(ctx context.Context, eventID, errMsg string) error {
+	query := `
+		UPDATE webhook_events
+		SET status = 'failed', error_message = $2, processed_at = NOW()
+		WHERE id = $1`
+	_, err := PG.Exec(ctx, query, eventID, errMsg)
+	if err != nil {
+		return fmt.Errorf("fail webhook event: %w", err)
+	}
+	return nil
+}
+
+// GetWebhookEvents returns webhook events ordered by creation time.
+// If statusFilter is non-empty, only events with that status are returned.
+func GetWebhookEvents(ctx context.Context, statusFilter string) ([]WebhookEvent, error) {
+	var query string
+	var args []any
+
+	if statusFilter != "" {
+		query = `
+			SELECT id, event_type, user_id, source_project, COALESCE(role_key, ''),
+			       idempotency_key, status, COALESCE(error_message, ''),
+			       created_at, processed_at
+			FROM webhook_events
+			WHERE status = $1
+			ORDER BY created_at DESC`
+		args = []any{statusFilter}
+	} else {
+		query = `
+			SELECT id, event_type, user_id, source_project, COALESCE(role_key, ''),
+			       idempotency_key, status, COALESCE(error_message, ''),
+			       created_at, processed_at
+			FROM webhook_events
+			ORDER BY created_at DESC`
+	}
+
+	rows, err := PG.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query webhook events: %w", err)
+	}
+	defer rows.Close()
+
+	var events []WebhookEvent
+	for rows.Next() {
+		var e WebhookEvent
+		if err := rows.Scan(&e.ID, &e.EventType, &e.UserID, &e.SourceProject, &e.RoleKey,
+			&e.IdempotencyKey, &e.Status, &e.ErrorMessage, &e.CreatedAt, &e.ProcessedAt); err != nil {
+			return nil, err
+		}
+		events = append(events, e)
+	}
+	return events, nil
+}

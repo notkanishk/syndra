@@ -37,7 +37,8 @@ internal/
     rules.go                       — Mapping rule handlers
     access.go                      — Direct grants, access requests, governance
     views.go                       — Catalog, user list, application views, simulation
-    webhook.go                     — Zitadel webhook intake (HMAC-SHA256 verified)
+    webhook.go                     — Zitadel webhook intake (6 event types, HMAC verified, dedup)
+    webhook_events.go              — Operator endpoint for webhook event history
     action.go                      — Data plane claim injection (50ms Redis timeout)
     health.go                      — /healthz endpoint (Postgres ping)
   models/models.go                 — All domain types (227 lines)

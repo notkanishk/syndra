@@ -55,8 +55,9 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/v1/requests/{id}/decision", withCORS(withUserAuth(handleResolveAccessRequest)))
 	mux.HandleFunc("GET /api/v1/governance/summary", withCORS(withUserAuth(handleGetGovernanceSummary)))
 
-	// Operator: onboarding trigger log
+	// Operator: event and trigger logs
 	mux.HandleFunc("GET /api/v1/onboarding/triggers", withCORS(withUserAuth(handleGetOnboardingTriggers)))
+	mux.HandleFunc("GET /api/v1/webhook/events", withCORS(withUserAuth(handleGetWebhookEvents)))
 
 	// Data Plane routes — verified by their own mechanisms (HMAC / Redis)
 	mux.HandleFunc("POST /api/webhooks/zitadel", withCORS(HandleZitadelWebhook))

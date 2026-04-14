@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,8 +10,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
+
+	"mkauth/internal/db"
 )
 
 // signWebhook computes the correct HMAC-SHA256 over (tsHeader + "\n" + body).
@@ -175,3 +179,232 @@ func TestHandleZitadelWebhook_RejectsStaleTimestamp(t *testing.T) {
 		t.Fatalf("expected WEBHOOK_STALE, got %s", got.Error)
 	}
 }
+
+// --- Event type dispatch tests ---
+
+// resetWebhookDeps saves and restores injectable vars for webhook handler tests.
+func resetWebhookDeps(t *testing.T) {
+	t.Helper()
+	origRebuild := cacheRebuildUser
+	origInvalidate := cacheInvalidateUser
+	origEnforce := webhookEnforceMappingRules
+	origRevoke := webhookRevokeMappingRules
+	origOnboard := webhookTriggerOnboarding
+	origInsert := dbInsertWebhookEvent
+	origComplete := dbCompleteWebhookEvent
+	origFail := dbFailWebhookEvent
+	t.Cleanup(func() {
+		cacheRebuildUser = origRebuild
+		cacheInvalidateUser = origInvalidate
+		webhookEnforceMappingRules = origEnforce
+		webhookRevokeMappingRules = origRevoke
+		webhookTriggerOnboarding = origOnboard
+		dbInsertWebhookEvent = origInsert
+		dbCompleteWebhookEvent = origComplete
+		dbFailWebhookEvent = origFail
+	})
+}
+
+// setupNoopWebhookDeps configures all webhook deps as no-ops for isolated testing.
+func setupNoopWebhookDeps(t *testing.T) {
+	t.Helper()
+	resetWebhookDeps(t)
+	cacheRebuildUser = func(_ context.Context, _ string, _ []string) {}
+	cacheInvalidateUser = func(_ context.Context, _ string) error { return nil }
+	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error { return nil }
+	webhookRevokeMappingRules = func(_ context.Context, _, _, _ string) error { return nil }
+	webhookTriggerOnboarding = func(_ context.Context, _, _, _ string) error { return nil }
+	dbInsertWebhookEvent = func(_ context.Context, _, _, _, _, _ string) (string, bool, error) {
+		return "evt-1", true, nil
+	}
+	dbCompleteWebhookEvent = func(_ context.Context, _ string) error { return nil }
+	dbFailWebhookEvent = func(_ context.Context, _, _ string) error { return nil }
+}
+
+func postWebhook(t *testing.T, body []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	t.Setenv("ZITADEL_WEBHOOK_SECRET", "")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/webhooks/zitadel", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	HandleZitadelWebhook(rr, req)
+	return rr
+}
+
+func TestWebhook_EventTypeDefault(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	var enforceCalled bool
+	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error {
+		enforceCalled = true
+		return nil
+	}
+
+	// No event_type field → should default to grant_added
+	body := []byte(`{"user_id":"u1","source_project":"p1","role_key":"editor"}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if !enforceCalled {
+		t.Error("expected EnforceMappingRules to be called for default grant_added")
+	}
+}
+
+func TestWebhook_GrantRemoved(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	var revokeCalled bool
+	var invalidateCalled bool
+	webhookRevokeMappingRules = func(_ context.Context, _, _, _ string) error {
+		revokeCalled = true
+		return nil
+	}
+	cacheInvalidateUser = func(_ context.Context, _ string) error {
+		invalidateCalled = true
+		return nil
+	}
+
+	body := []byte(`{"event_type":"grant_removed","user_id":"u1","source_project":"p1","role_key":"editor"}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if !revokeCalled {
+		t.Error("expected RevokeMappingRules to be called")
+	}
+	if !invalidateCalled {
+		t.Error("expected cache invalidation")
+	}
+}
+
+func TestWebhook_UserDeactivated(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	var invalidateCalled bool
+	var enforceCalled, revokeCalled bool
+	cacheInvalidateUser = func(_ context.Context, _ string) error {
+		invalidateCalled = true
+		return nil
+	}
+	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error {
+		enforceCalled = true
+		return nil
+	}
+	webhookRevokeMappingRules = func(_ context.Context, _, _, _ string) error {
+		revokeCalled = true
+		return nil
+	}
+
+	body := []byte(`{"event_type":"user_deactivated","user_id":"u1","source_project":"p1"}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if !invalidateCalled {
+		t.Error("expected cache invalidation")
+	}
+	if enforceCalled {
+		t.Error("enforce should NOT be called for user_deactivated")
+	}
+	if revokeCalled {
+		t.Error("revoke should NOT be called for user_deactivated")
+	}
+}
+
+func TestWebhook_UserCreated(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	var onboardCalled bool
+	webhookTriggerOnboarding = func(_ context.Context, userID, _, _ string) error {
+		onboardCalled = true
+		if userID != "u-new" {
+			t.Errorf("expected userID u-new, got %s", userID)
+		}
+		return nil
+	}
+
+	body := []byte(`{"event_type":"user_created","user_id":"u-new","source_project":"p1"}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if !onboardCalled {
+		t.Error("expected onboarding trigger for user_created")
+	}
+}
+
+func TestWebhook_InvalidEventType(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	body := []byte(`{"event_type":"bogus","user_id":"u1","source_project":"p1","role_key":"x"}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "event_type") {
+		t.Error("expected error about event_type")
+	}
+}
+
+func TestWebhook_DeduplicationSkips(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	// Second insert returns duplicate
+	dbInsertWebhookEvent = func(_ context.Context, _, _, _, _, _ string) (string, bool, error) {
+		return "", false, nil
+	}
+
+	var enforceCalled bool
+	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error {
+		enforceCalled = true
+		return nil
+	}
+
+	body := []byte(`{"user_id":"u1","source_project":"p1","role_key":"editor"}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if enforceCalled {
+		t.Error("should NOT process duplicate event")
+	}
+	if !strings.Contains(rr.Body.String(), "Duplicate") {
+		t.Error("expected duplicate message in response")
+	}
+}
+
+func TestWebhook_GrantAddedRequiresRoleKey(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	body := []byte(`{"event_type":"grant_added","user_id":"u1","source_project":"p1"}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "role_key") {
+		t.Error("expected error about role_key")
+	}
+}
+
+func TestWebhook_UserDeactivatedNoRoleKeyRequired(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	body := []byte(`{"event_type":"user_deactivated","user_id":"u1","source_project":"p1"}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 (no role_key needed), got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// Verify the unused import doesn't cause issues — db is used for type reference in deps.
+var _ = db.WebhookEvent{}

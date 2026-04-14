@@ -80,6 +80,20 @@ func (c *managementClient) AddUserGrant(ctx context.Context, userID, projectID s
 	return nil
 }
 
+func (c *managementClient) UpdateUserGrant(ctx context.Context, userID, grantID string, roleKeys []string) error {
+	path := fmt.Sprintf("/management/v1/users/%s/grants/%s", userID, grantID)
+	body := map[string]any{
+		"roleKeys": roleKeys,
+	}
+
+	resp, err := c.doRequest(ctx, http.MethodPut, path, body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
 func (c *managementClient) RemoveUserGrant(ctx context.Context, userID, grantID string) error {
 	path := fmt.Sprintf("/management/v1/users/%s/grants/%s", userID, grantID)
 
