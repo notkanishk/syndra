@@ -44,8 +44,13 @@ func ConnectPostgres() {
 		log.Fatalf("Failed to create migration driver: %v", err)
 	}
 
+	migPath := os.Getenv("MIGRATION_PATH")
+	if migPath == "" {
+		migPath = "file:///app/db/migrations"
+	}
+
 	m, err := migrate.NewWithDatabaseInstance(
-		"file:///app/db/migrations",
+		migPath,
 		"postgres", driver)
 	if err != nil {
 		log.Fatalf("Migration initialization failed: %v", err)

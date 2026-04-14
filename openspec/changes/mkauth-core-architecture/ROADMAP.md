@@ -25,6 +25,11 @@ This document defines the high-level phases for the MkAuth implementation, trans
 - [x] **Production Data Plane Security**: 50 ms Redis timeout; `claim_failure_mode` per project (`fail_closed` | `minimal_safe`); explicit `degradedResponse` for all failure paths; `pgx.ErrNoRows` vs real DB faults correctly distinguished; `[DATA PLANE]` structured logging.
 - [x] **Webhook Authenticity Validation**: HMAC-SHA256 over `(X-Zitadel-Timestamp + "\n" + body)` — timestamp is part of the signed input preventing replay attacks; 5-minute freshness window enforced independently.
 - [x] **Backend-Owned Onboarding Infrastructure**: `onboarding_triggers` table with idempotency key; `TriggerOnboarding` service records, assigns welcome bundle, and writes audit log; triggered by `role_key == "new_user"` on verified webhook; operator view at `GET /api/v1/onboarding/triggers`.
+- [x] **HTTP Security Hardening** (Audit): Configurable CORS origin (replaces wildcard `*`), security response headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`), constant-time API key comparison, 1 MB request body limits on all endpoints.
+- [x] **Local Dev Workflow** (Audit): `.env.example`, configurable `MIGRATION_PATH` for Docker-free operation, root `Makefile` with `dev`/`test`/`lint` targets.
+- [x] **Backend Reliability** (Audit): `GET /healthz` health check endpoint, graceful shutdown with `signal.NotifyContext` and connection cleanup.
+- [x] **Frontend Type Safety** (Audit): Generic typed API fetchers (`Promise<T>` replacing `Promise<any>`), shared `types.ts` mirroring Go models, Vitest test infrastructure with session module coverage.
+- [x] **Cache Compiler Test Coverage** (Audit): Injectable deps pattern extended to `cache/` package; 5 tests covering empty grants, direct grants, mapping rule transitivity, bundle role inclusion, and fixed-point termination.
 - [ ] **Zitadel Management Client**: Replace stubs with actual M2M Management API calls after frontend token forwarding is in place.
 - [ ] **Live Webhook Listener**: Real-time cache invalidation from live Zitadel events (requires M2M client).
 - [ ] **Advanced Role CRUD**: Implement "Snapshot & Fork" role cloning.

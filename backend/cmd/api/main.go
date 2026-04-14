@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"mkauth/internal/db"
 	"mkauth/internal/handlers"
@@ -30,8 +33,36 @@ func main() {
 
 	mux := handlers.NewRouter()
 
-	fmt.Println("Control Plane Backend Listening on :8080")
-	if err := http.ListenAndServe(":8080", mux); err != nil {
-		log.Fatal(err)
+	server := &http.Server{
+		Addr:    ":8080",
+		Handler: mux,
 	}
+
+	// Start server in background
+	go func() {
+		fmt.Println("Control Plane Backend Listening on :8080")
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server error: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	<-ctx.Done()
+
+	fmt.Println("\nShutting down gracefully...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Server shutdown error: %v", err)
+	}
+
+	db.PG.Close()
+	if err := db.Redis.Close(); err != nil {
+		log.Printf("Redis close error: %v", err)
+	}
+
+	fmt.Println("Server stopped.")
 }

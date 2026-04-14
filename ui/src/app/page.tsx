@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { fetchApplications, fetchAudit, fetchBundles, fetchCatalog, fetchMappingRules, fetchProjects, fetchWithAuth } from "@/lib/api";
+import type { AccessRequest, UserAccessView } from "@/lib/types";
 import { getSession } from "@/lib/session";
 
 export default async function Home() {
@@ -14,27 +15,23 @@ export default async function Home() {
   if (session.role === "user") {
     const [apps, access, allRequests] = await Promise.all([
       fetchApplications(token).catch(() => []),
-      fetchWithAuth(`/users/${session.id}/access`, token).catch(() => null),
-      fetchWithAuth("/requests", token).catch(() => []),
+      fetchWithAuth<UserAccessView>(`/users/${session.id}/access`, token).catch(() => null),
+      fetchWithAuth<AccessRequest[]>("/requests", token).catch(() => []),
     ]);
 
     const requests = Array.isArray(allRequests)
-      ? allRequests.filter((entry: { requester_id?: string }) => entry?.requester_id === session.id)
+      ? allRequests.filter((entry) => entry?.requester_id === session.id)
       : [];
 
     const activeProjects = new Set(
-      Array.isArray(access?.projects)
-        ? access.projects
-            .filter((project: { effective_role_keys?: string[] }) => Array.isArray(project.effective_role_keys) && project.effective_role_keys.length > 0)
-            .map((project: { project_id: string }) => project.project_id)
-        : []
+      access?.projects
+        ?.filter((project) => Array.isArray(project.effective_role_keys) && project.effective_role_keys.length > 0)
+        .map((project) => project.project_id) ?? []
     );
     const pendingProjects = new Set(
-      Array.isArray(requests)
-        ? requests
-            .filter((request: { status?: string }) => request.status === "pending")
-            .map((request: { project_id: string }) => request.project_id)
-        : []
+      requests
+        .filter((request) => request.status === "pending")
+        .map((request) => request.project_id)
     );
 
     return (
@@ -76,7 +73,7 @@ export default async function Home() {
             <CardTitle>Service Catalog</CardTitle>
           </CardHeader>
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            {Array.isArray(apps) && apps.map((entry: { application: { id: string; name: string; description: string; project_id: string; consumer: string } }) => {
+            {Array.isArray(apps) && apps.map((entry) => {
               const status = activeProjects.has(entry.application.project_id)
                 ? "Active"
                 : pendingProjects.has(entry.application.project_id)

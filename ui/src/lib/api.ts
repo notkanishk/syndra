@@ -1,7 +1,8 @@
 import { getSession } from "@/lib/session";
+import type { AuditLog, ApplicationView, Bundle, CatalogResponse, MappingRule, ProjectSummary } from "@/lib/types";
 
 // Server-side fetches go directly to the backend container
-const SERVER_API = "http://backend:8080/api/v1";
+const SERVER_API = `${process.env.BACKEND_URL || "http://backend:8080"}/api/v1`;
 // Client-side fetches go through our Next.js proxy route
 const CLIENT_API = "/api/proxy";
 
@@ -36,8 +37,7 @@ async function resolveAuthToken(explicitToken?: string): Promise<string> {
   return API_KEY;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function fetchServerJson(path: string, token?: string): Promise<any> {
+async function fetchServerJson<T = unknown>(path: string, token?: string): Promise<T> {
   const authToken = await resolveAuthToken(token);
   const res = await fetch(`${SERVER_API}${path}`, {
     cache: "no-store",
@@ -46,7 +46,7 @@ async function fetchServerJson(path: string, token?: string): Promise<any> {
   if (!res.ok) {
     throw new Error(`Failed to fetch ${path}: ${res.status}`);
   }
-  return res.json();
+  return res.json() as Promise<T>;
 }
 
 export function getServerApiBase() {
@@ -58,9 +58,8 @@ export function getClientApiBase() {
 }
 
 // Generic authenticated fetch for ad-hoc SSR calls in pages
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function fetchWithAuth(path: string, token?: string): Promise<any> {
-  return fetchServerJson(path, token);
+export async function fetchWithAuth<T = unknown>(path: string, token?: string): Promise<T> {
+  return fetchServerJson<T>(path, token);
 }
 
 // --- Server-side fetchers (used in Server Components) ---
@@ -68,26 +67,26 @@ export async function fetchWithAuth(path: string, token?: string): Promise<any> 
 // have the session in scope to avoid a redundant cookie read, or omit it to
 // let resolveAuthToken read it automatically.
 
-export async function fetchBundles(token?: string) {
-  return fetchServerJson("/bundles", token);
+export async function fetchBundles(token?: string): Promise<Bundle[]> {
+  return fetchServerJson<Bundle[]>("/bundles", token);
 }
 
-export async function fetchMappingRules(token?: string) {
-  return fetchServerJson("/rules/mapping", token);
+export async function fetchMappingRules(token?: string): Promise<MappingRule[]> {
+  return fetchServerJson<MappingRule[]>("/rules/mapping", token);
 }
 
-export async function fetchCatalog(token?: string) {
-  return fetchServerJson("/catalog", token);
+export async function fetchCatalog(token?: string): Promise<CatalogResponse> {
+  return fetchServerJson<CatalogResponse>("/catalog", token);
 }
 
-export async function fetchApplications(token?: string) {
-  return fetchServerJson("/applications", token);
+export async function fetchApplications(token?: string): Promise<ApplicationView[]> {
+  return fetchServerJson<ApplicationView[]>("/applications", token);
 }
 
-export async function fetchProjects(token?: string) {
-  return fetchServerJson("/projects", token);
+export async function fetchProjects(token?: string): Promise<ProjectSummary[]> {
+  return fetchServerJson<ProjectSummary[]>("/projects", token);
 }
 
-export async function fetchAudit(limit = 6, token?: string) {
-  return fetchServerJson(`/audit?limit=${limit}`, token);
+export async function fetchAudit(limit = 6, token?: string): Promise<AuditLog[]> {
+  return fetchServerJson<AuditLog[]>(`/audit?limit=${limit}`, token);
 }

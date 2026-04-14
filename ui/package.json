@@ -7,7 +7,8 @@
     "dev": "bun next dev",
     "build": "bun next build",
     "start": "bun next start",
-    "lint": "bun next lint"
+    "lint": "bun next lint",
+    "test": "vitest run"
   },
   "dependencies": {
     "react": "^19",
@@ -15,15 +16,16 @@
     "next": "^15"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@tailwindcss/postcss": "^4",
     "@types/bun": "latest",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "latest",
+    "eslint": "^9",
+    "eslint-config-next": "^15",
     "postcss": "^8",
     "tailwindcss": "^4",
-    "@tailwindcss/postcss": "^4",
-    "eslint": "^9",
-    "eslint-config-next": "^15"
+    "typescript": "^5",
+    "vitest": "^4.1.4"
   }
 }

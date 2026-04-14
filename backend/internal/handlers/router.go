@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -11,8 +12,11 @@ import (
 )
 
 // NewRouter constructs the global multiplexer for API requests
-func NewRouter() *http.ServeMux {
+func NewRouter() http.Handler {
 	mux := http.NewServeMux()
+
+	// Health check — no auth, no CORS
+	mux.HandleFunc("GET /healthz", handleHealthCheck)
 
 	// Bundle Routes
 	mux.HandleFunc("GET /api/v1/bundles", withCORS(withUserAuth(handleGetBundles)))
@@ -58,7 +62,7 @@ func NewRouter() *http.ServeMux {
 	mux.HandleFunc("POST /api/webhooks/zitadel", withCORS(HandleZitadelWebhook))
 	mux.HandleFunc("POST /api/action/inject", withCORS(HandleActionInject))
 
-	return mux
+	return withMaxBody(withSecurityHeaders(mux))
 }
 
 // withUserAuth is the primary authorization middleware for all admin API routes.
@@ -118,7 +122,7 @@ func withAPIKeyAuth(next http.HandlerFunc) http.HandlerFunc {
 			jsonErrorResponse(w, http.StatusInternalServerError, "SERVER_ERROR", "Server missing auth configuration")
 			return
 		}
-		if extractBearerToken(r) != expectedKey {
+		if subtle.ConstantTimeCompare([]byte(extractBearerToken(r)), []byte(expectedKey)) != 1 {
 			jsonErrorResponse(w, http.StatusUnauthorized, "UNAUTHORIZED", "Missing or invalid authorization token")
 			return
 		}
@@ -136,12 +140,17 @@ func extractBearerToken(r *http.Request) string {
 	return strings.TrimPrefix(h, "Bearer ")
 }
 
-// withCORS is a basic CORS middleware ensuring Next.js UI binds seamlessly
+// withCORS sets CORS headers using the CORS_ORIGIN env var (default http://localhost:3000).
 func withCORS(next http.HandlerFunc) http.HandlerFunc {
+	origin := os.Getenv("CORS_ORIGIN")
+	if origin == "" {
+		origin = "http://localhost:3000"
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
@@ -152,8 +161,26 @@ func withCORS(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// withSecurityHeaders adds standard security response headers to all responses.
+func withSecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// withMaxBody limits request body size to 1 MB to prevent abuse.
+func withMaxBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+		next.ServeHTTP(w, r)
+	})
+}
+
 // jsonResponse simplifies writing standard struct definitions to HTTP streams
-func jsonResponse(w http.ResponseWriter, status int, payload interface{}) {
+func jsonResponse(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(payload); err != nil {

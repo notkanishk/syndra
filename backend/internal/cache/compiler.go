@@ -7,8 +7,6 @@ import (
 	"log"
 	"sort"
 	"time"
-
-	"mkauth/internal/db"
 )
 
 const cacheTTL = 24 * time.Hour
@@ -22,7 +20,7 @@ type UserGrant struct {
 // fetchBaseGrants simulates fetching the user's primary roles from Zitadel.
 // In Phase 2, this will call the real Zitadel Management API using MgmtClient.
 func fetchBaseGrants(ctx context.Context, userID string) ([]UserGrant, error) {
-	grants, err := db.GetDirectGrantsForUser(ctx, userID, false)
+	grants, err := dbGetDirectGrantsForUser(ctx, userID, false)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +44,7 @@ func CompileUserCache(ctx context.Context, userID, projectID string) error {
 	}
 
 	// 2. Load all active mapping rules
-	allRules, err := db.GetActiveMappingRules(ctx)
+	allRules, err := dbGetActiveMappingRules(ctx)
 	if err != nil {
 		return fmt.Errorf("cache compile: failed to load rules: %w", err)
 	}
@@ -60,22 +58,15 @@ func CompileUserCache(ctx context.Context, userID, projectID string) error {
 	}
 
 	// Fetch user's assigned bundles from MkAuth DB
-	userBundles, err := db.GetBundlesForUser(ctx, userID)
+	userBundles, err := dbGetBundlesForUser(ctx, userID)
 	if err != nil {
 		log.Printf("[CACHE WARN] Failed to fetch bundles for %s: %v", userID, err)
 	}
-	for _, b := range userBundles {
-		roles, err := db.GetRolesForBundle(ctx, b.ID)
-		if err != nil {
-			log.Printf("[CACHE WARN] Failed to fetch roles for bundle %s: %v", b.ID, err)
-			continue
+	for _, r := range grantsToBundleRoles(ctx, userBundles) {
+		if activeRoles[r.ProjectID] == nil {
+			activeRoles[r.ProjectID] = make(map[string]bool)
 		}
-		for _, r := range roles {
-			if activeRoles[r.ProjectID] == nil {
-				activeRoles[r.ProjectID] = make(map[string]bool)
-			}
-			activeRoles[r.ProjectID][r.RoleKey] = true
-		}
+		activeRoles[r.ProjectID][r.RoleKey] = true
 	}
 
 	// 3. Iterative Role Resolution (Forward Pass)
@@ -110,7 +101,7 @@ func CompileUserCache(ctx context.Context, userID, projectID string) error {
 	sort.Strings(derivedRoles)
 
 	// 5. Construct the claims payload
-	claims := map[string]interface{}{
+	claims := map[string]any{
 		"roles":       derivedRoles,
 		"user_id":     userID,
 		"project_id":  projectID,
@@ -125,7 +116,7 @@ func CompileUserCache(ctx context.Context, userID, projectID string) error {
 
 	// 6. Write to Redis
 	cacheKey := fmt.Sprintf("mapping:%s:%s", userID, projectID)
-	err = db.Redis.Set(ctx, cacheKey, string(data), cacheTTL).Err()
+	err = redisSet(ctx, cacheKey, string(data), cacheTTL)
 	if err != nil {
 		return fmt.Errorf("cache compile: redis write failed: %w", err)
 	}
@@ -137,21 +128,18 @@ func CompileUserCache(ctx context.Context, userID, projectID string) error {
 // InvalidateUser removes all cached entries for a user across all projects.
 func InvalidateUser(ctx context.Context, userID string) error {
 	pattern := fmt.Sprintf("mapping:%s:*", userID)
-	iter := db.Redis.Scan(ctx, 0, pattern, 100).Iterator()
-
-	count := 0
-	for iter.Next(ctx) {
-		if err := db.Redis.Del(ctx, iter.Val()).Err(); err != nil {
-			log.Printf("[CACHE] Failed to delete key %s: %v", iter.Val(), err)
-		}
-		count++
-	}
-
-	if err := iter.Err(); err != nil {
+	keys, err := redisScanKeys(ctx, pattern)
+	if err != nil {
 		return fmt.Errorf("cache invalidate: scan error: %w", err)
 	}
 
-	log.Printf("[CACHE] Invalidated %d cached entries for user %s", count, userID)
+	for _, key := range keys {
+		if err := redisDel(ctx, key); err != nil {
+			log.Printf("[CACHE] Failed to delete key %s: %v", key, err)
+		}
+	}
+
+	log.Printf("[CACHE] Invalidated %d cached entries for user %s", len(keys), userID)
 	return nil
 }
 
