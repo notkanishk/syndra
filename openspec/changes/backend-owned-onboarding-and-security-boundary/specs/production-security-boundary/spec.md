@@ -43,7 +43,31 @@ The system MUST leave an auditable trail for onboarding and other high-risk orch
 
 ---
 
-## Implementation notes (Phase 3)
+## Implementation notes (Phase 3 — frontend OIDC)
+
+The "Backend authorization is authoritative" requirement is now fully satisfied end-to-end. The frontend no longer relies on a shared API key as the primary identity proof for privileged requests.
+
+**Frontend PKCE authorization code flow**
+- `ui/src/lib/oidc.ts` — PKCE crypto (`generateCodeVerifier`, `generateCodeChallenge`, `generateState`), token exchange (`exchangeCodeForToken`), and claim parsing (`parseJwtClaims`, `extractSessionFields`); no external auth library
+- `ui/src/app/auth/zitadel/route.ts` — generates PKCE verifier/challenge/state; sets a short-lived `mkauth_pkce` HttpOnly cookie scoped to `/auth/callback`; redirects to Zitadel `/oauth/v2/authorize`
+- `ui/src/app/auth/callback/route.ts` — validates `state` (CSRF) and PKCE TTL; exchanges code for token; parses Zitadel claims to extract `sub`, display name, email, and admin role; stores raw access token in `mkauth_session` cookie
+
+**Session and token forwarding**
+- `ui/src/lib/session.ts` — `mkauth_session` cookie now uses a discriminated union (`type: "demo" | "oidc"`); OIDC sessions carry `accessToken` (raw JWT) and `expiresAt`; `getSession()` rejects expired OIDC tokens before they reach the backend
+- `ui/src/app/api/proxy/[...path]/route.ts` — forwards `session.accessToken` as `Authorization: Bearer <token>` for OIDC sessions
+- `ui/src/lib/api.ts` — all SSR server-component fetchers accept an optional `token` parameter; when `ZITADEL_DOMAIN` is set every backend call carries the user's JWT; fallback to shared API key only in demo/local-dev mode
+
+**Admin role determination**
+- Role (`admin` | `user`) is derived from `urn:zitadel:iam:org:project:roles` in the Zitadel access token; the key is configurable via `ZITADEL_ADMIN_ROLE_KEY` env var (default `"admin"`)
+
+**Required env vars (UI)**
+- `ZITADEL_DOMAIN` — activates OIDC mode; login page shows "Continue with Zitadel" instead of demo picker
+- `ZITADEL_CLIENT_ID` — PKCE public client app ID registered in Zitadel
+- `ZITADEL_ADMIN_ROLE_KEY` — role key that maps to admin in the UI (default `"admin"`)
+
+---
+
+## Implementation notes (Phase 3 — backend security boundary)
 
 All requirements above are satisfied by the implementation shipped in this change.
 

@@ -13,21 +13,31 @@ const ADMIN_ONLY_PATHS = [
   "/users",
 ];
 
-function readSession(request: NextRequest) {
+function readSession(request: NextRequest): { userId: string; role: string } | null {
   const raw = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  if (!raw) {
-    return null;
-  }
+  if (!raw) return null;
 
   try {
     const normalized = raw.replace(/-/g, "+").replace(/_/g, "/");
     const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
     const decoded = atob(padded);
-    const parsed = JSON.parse(decoded) as { userId?: string; role?: string };
-    if (!parsed.userId || (parsed.role !== "admin" && parsed.role !== "user")) {
-      return null;
+    const parsed = JSON.parse(decoded) as {
+      type?: string;
+      userId?: string;
+      role?: string;
+      expiresAt?: number;
+    };
+
+    if (parsed.type === "oidc") {
+      if (!parsed.userId || (parsed.role !== "admin" && parsed.role !== "user")) return null;
+      // Reject expired OIDC tokens — redirect to login for re-auth
+      if (typeof parsed.expiresAt === "number" && Date.now() / 1000 > parsed.expiresAt) return null;
+      return { userId: parsed.userId, role: parsed.role };
     }
-    return parsed;
+
+    // type === "demo" or legacy (no type field)
+    if (!parsed.userId || (parsed.role !== "admin" && parsed.role !== "user")) return null;
+    return { userId: parsed.userId, role: parsed.role };
   } catch {
     return null;
   }

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+import { PKCE_COOKIE_NAME } from "@/lib/oidc";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
 
 function buildRedirectUrl(request: Request, path: string) {
@@ -24,5 +25,6 @@ function redirectTo(request: Request, path: string) {
 export async function POST(request: Request) {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE_NAME);
+  cookieStore.delete({ name: PKCE_COOKIE_NAME, path: "/auth/callback" });
   return redirectTo(request, "/login");
 }

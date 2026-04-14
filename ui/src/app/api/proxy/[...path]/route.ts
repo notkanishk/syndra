@@ -36,10 +36,18 @@ async function proxy(request: NextRequest, method: "GET" | "POST" | "PUT", path:
   const target = new URL(`${BACKEND_URL}/api/v1/${path.join("/")}`);
   target.search = request.nextUrl.search;
 
+  if (session.sessionType === "oidc" && !session.accessToken) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const authToken = session.sessionType === "oidc" && session.accessToken
+    ? session.accessToken
+    : API_KEY;
+
   const init: RequestInit = {
     method,
     headers: {
-      "Authorization": `Bearer ${API_KEY}`,
+      "Authorization": `Bearer ${authToken}`,
     },
     cache: "no-store",
   };

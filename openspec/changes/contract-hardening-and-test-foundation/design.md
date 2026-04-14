@@ -41,8 +41,8 @@ Purpose-built request DTOs exist for all mutation endpoints. Domain models are d
 ### 3.3 Persistence invariant risk — MITIGATED
 Migrations 004 and 006 together enforce: `status IN ('pending','approved','rejected')`, `duration_days > 0` or null, `version > 0`, `resolved_at` consistency, `format_type` enum, blank-name prevention on bundles and bundle roles, and expiry-after-create on direct grants. Critical domain rules are enforced below the application layer.
 
-### 3.4 Authorization boundary risk — PARTIALLY MITIGATED
-Backend has `withUserAuth` middleware that validates Zitadel-issued RS256 JWTs (JWKS-backed) in production and falls back to API key for local dev. Admin user ID is extracted from context and written to audit logs. Frontend-to-backend live OIDC token forwarding (replacing demo cookie sessions) is the remaining open item.
+### 3.4 Authorization boundary risk — MITIGATED
+Backend has `withUserAuth` middleware that validates Zitadel-issued RS256 JWTs (JWKS-backed) in production and falls back to API key for local dev. Admin user ID is extracted from context and written to audit logs. Frontend OIDC token forwarding is now implemented: the UI performs a PKCE authorization code flow against Zitadel, stores the raw access token in the session cookie, and forwards it as `Authorization: Bearer <token>` on both proxy requests (`ui/src/app/api/proxy/[...path]/route.ts`) and SSR server component fetches (`ui/src/lib/api.ts`). When `ZITADEL_DOMAIN` is set the shared API key is no longer used as the primary authorization proof.
 
 ### 3.5 Regression risk — MITIGATED
 82 backend tests now cover all critical mutation endpoints, service logic, claim formatting, lineage assembly, governance nil-safety, webhook validation, action injection, and onboarding flows. Injectable dependency pattern is established across all handler and service layers.
@@ -195,8 +195,10 @@ Any future work that changes request payloads, response shapes, validation rules
 * the roadmap when milestone priority changes
 * the feature coverage matrix when implementation reality changes
 
-## 9. Phase 2 Complete — Next Steps
+## 9. Phase 2 and Phase 3 Complete — Next Steps
 
 Phase 2 contract hardening is complete. 82 backend tests cover all critical mutation endpoints, service logic, and claim paths. All listed DB constraints are in place. The injectable-dependency pattern is fully established for handler and service layers.
 
-The immediate next step is **Phase 3 frontend OIDC integration**: replace demo cookie sessions with Zitadel-issued user tokens forwarded from the UI to the backend, enabling live production authorization and removing the shared API key as the primary identity proof for admin operations.
+Phase 3 frontend OIDC integration is complete. The UI now performs a PKCE authorization code flow against Zitadel (`ui/src/lib/oidc.ts`, `ui/src/app/auth/zitadel/route.ts`, `ui/src/app/auth/callback/route.ts`). Zitadel-issued access tokens are stored in the session and forwarded to the backend on every API call. The shared API key is no longer the primary authorization proof for admin operations when `ZITADEL_DOMAIN` is set.
+
+The immediate next step is the **Zitadel Management Client**: replace the stub `MgmtClient` in `backend/internal/zitadel/client.go` with an actual M2M Management API client, enabling live role CRUD and grant reconciliation against Zitadel.

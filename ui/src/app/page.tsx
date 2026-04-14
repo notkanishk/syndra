@@ -1,28 +1,7 @@
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
-import { fetchApplications, fetchAudit, fetchBundles, fetchCatalog, fetchMappingRules, fetchProjects, getServerApiBase } from "@/lib/api";
+import { fetchApplications, fetchAudit, fetchBundles, fetchCatalog, fetchMappingRules, fetchProjects, fetchWithAuth } from "@/lib/api";
 import { getSession } from "@/lib/session";
-
-async function fetchSessionRequests(userId: string) {
-  try {
-    const res = await fetch(`${getServerApiBase()}/requests`, {
-      cache: "no-store",
-      headers: { Authorization: `Bearer ${process.env.MKAUTH_API_KEY || ""}` },
-    });
-    if (!res.ok) {
-      return [];
-    }
-
-    const data = await res.json();
-    if (!Array.isArray(data)) {
-      return [];
-    }
-
-    return data.filter((entry) => entry?.requester_id === userId);
-  } catch {
-    return [];
-  }
-}
 
 export default async function Home() {
   const session = await getSession();
@@ -30,15 +9,18 @@ export default async function Home() {
     return null;
   }
 
+  const token = session.accessToken;
+
   if (session.role === "user") {
-    const [apps, access, requests] = await Promise.all([
-      fetchApplications().catch(() => []),
-      fetch(`${getServerApiBase()}/users/${session.id}/access`, {
-        cache: "no-store",
-        headers: { Authorization: `Bearer ${process.env.MKAUTH_API_KEY || ""}` },
-      }).then(async (res) => (res.ok ? res.json() : null)).catch(() => null),
-      fetchSessionRequests(session.id),
+    const [apps, access, allRequests] = await Promise.all([
+      fetchApplications(token).catch(() => []),
+      fetchWithAuth(`/users/${session.id}/access`, token).catch(() => null),
+      fetchWithAuth("/requests", token).catch(() => []),
     ]);
+
+    const requests = Array.isArray(allRequests)
+      ? allRequests.filter((entry: { requester_id?: string }) => entry?.requester_id === session.id)
+      : [];
 
     const activeProjects = new Set(
       Array.isArray(access?.projects)
@@ -134,32 +116,32 @@ export default async function Home() {
   let recentAudit: Array<{ id: string; action: string; target_id: string; created_at: string }> = [];
 
   try {
-    const bundles = await fetchBundles();
+    const bundles = await fetchBundles(token);
     bundleCount = Array.isArray(bundles) ? bundles.length : 0;
   } catch {}
 
   try {
-    const rules = await fetchMappingRules();
+    const rules = await fetchMappingRules(token);
     ruleCount = Array.isArray(rules) ? rules.length : 0;
   } catch {}
 
   try {
-    const catalog = await fetchCatalog();
+    const catalog = await fetchCatalog(token);
     userCount = Array.isArray(catalog?.users) ? catalog.users.length : 0;
   } catch {}
 
   try {
-    const apps = await fetchApplications();
+    const apps = await fetchApplications(token);
     appCount = Array.isArray(apps) ? apps.length : 0;
   } catch {}
 
   try {
-    const projects = await fetchProjects();
+    const projects = await fetchProjects(token);
     projectCount = Array.isArray(projects) ? projects.length : 0;
   } catch {}
 
   try {
-    const audit = await fetchAudit(4);
+    const audit = await fetchAudit(4, token);
     recentAudit = Array.isArray(audit) ? audit : [];
   } catch {}
 

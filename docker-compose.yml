@@ -34,6 +34,9 @@ services:
       - PORT=8080
       - MKAUTH_API_KEY=dev_auth_token_secret  # Basic auth until Zitadel M2M is ready
       - MKAUTH_SEED_DEMO=true
+      # Zitadel OIDC (Phase 3) — uncomment and fill in to enable live JWT validation
+      # - ZITADEL_DOMAIN=your-instance.zitadel.cloud
+      # - ZITADEL_AUDIENCE=your-pkce-client-id
     ports:
       - "8080:8080"
     depends_on:
@@ -53,7 +56,11 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8080
       - BACKEND_URL=http://backend:8080
-      - MKAUTH_API_KEY=dev_auth_token_secret  # Proxies this to backend
+      - MKAUTH_API_KEY=dev_auth_token_secret  # Proxies this to backend (demo mode only)
+      # Zitadel OIDC (Phase 3) — uncomment and fill in to enable live token forwarding
+      # - ZITADEL_DOMAIN=your-instance.zitadel.cloud  # Must match backend
+      # - ZITADEL_CLIENT_ID=your-pkce-client-id        # From Zitadel console (Native/PKCE app)
+      # - ZITADEL_ADMIN_ROLE_KEY=admin                 # Role key from your project settings
     restart: unless-stopped
 
 volumes:

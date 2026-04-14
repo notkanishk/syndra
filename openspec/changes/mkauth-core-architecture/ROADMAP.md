@@ -17,10 +17,10 @@ This document defines the high-level phases for the MkAuth implementation, trans
 - [x] **Persistence Invariants**: Migrations 004 and 006 enforce status enums, positive durations, version bounds, resolution consistency, format_type enums, blank-name prevention, and expiry-after-create.
 - [x] **Documentation Sync**: OpenSpec design, tasks, and roadmap updated to reflect implementation state and current risks.
 
-## Phase 3: Orchestration Security Boundary (In Progress — immediate next step: frontend OIDC)
+## Phase 3: Orchestration Security Boundary (In Progress — next step: Zitadel Management Client)
 *Objective: Close trust-boundary gaps before enabling broader live orchestration.*
 - [x] **Container Split**: Docker Compose runs the frontend and backend as isolated services, with the UI proxying to the backend over the internal network.
-- [ ] **Frontend Session Auth**: Demo-backed cookie sessions gate Admin/User view differentiation; **live Zitadel OIDC and token forwarding from UI to backend is the immediate next step**.
+- [x] **Frontend Session Auth**: PKCE authorization code flow implemented in Next.js without external libraries. `ui/src/lib/oidc.ts` handles PKCE crypto, token exchange, and Zitadel claim parsing. `ui/src/app/auth/zitadel/route.ts` initiates the flow; `ui/src/app/auth/callback/route.ts` exchanges the code and creates a session. The `mkauth_session` cookie uses a discriminated union (`demo | oidc`); OIDC sessions carry the raw access token and are forwarded as `Authorization: Bearer <token>` by both the proxy route and SSR server components. Demo users remain active when `ZITADEL_DOMAIN` is unset.
 - [x] **Backend User-Token Authorization**: `withUserAuth` middleware validates Zitadel-issued RS256 JWTs (JWKS-backed, 1-hour cache) in production; falls back to API key in local-dev. Acting admin user ID stored in request context for audit attribution.
 - [x] **Production Data Plane Security**: 50 ms Redis timeout; `claim_failure_mode` per project (`fail_closed` | `minimal_safe`); explicit `degradedResponse` for all failure paths; `pgx.ErrNoRows` vs real DB faults correctly distinguished; `[DATA PLANE]` structured logging.
 - [x] **Webhook Authenticity Validation**: HMAC-SHA256 over `(X-Zitadel-Timestamp + "\n" + body)` — timestamp is part of the signed input preventing replay attacks; 5-minute freshness window enforced independently.
