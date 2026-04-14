@@ -29,14 +29,15 @@ services:
       dockerfile: Dockerfile
     container_name: mkauth_backend
     environment:
-      - DB_DSN=postgres://mkauth:mkauth_secure_password@postgres:5432/mkauthdb?sslmode=disable
-      - REDIS_URL=redis:6379
-      - PORT=8080
-      - MKAUTH_API_KEY=dev_auth_token_secret  # Basic auth until Zitadel M2M is ready
-      - MKAUTH_SEED_DEMO=true
-      # Zitadel OIDC (Phase 3) — uncomment and fill in to enable live JWT validation
-      # - ZITADEL_DOMAIN=your-instance.zitadel.cloud
-      # - ZITADEL_AUDIENCE=your-pkce-client-id
+      - DB_DSN=${DB_DSN:-postgres://mkauth:mkauth_secure_password@postgres:5432/mkauthdb?sslmode=disable}
+      - REDIS_URL=${REDIS_URL:-redis:6379}
+      - PORT=${PORT:-8080}
+      - MKAUTH_API_KEY=${MKAUTH_API_KEY:-dev_auth_token_secret}
+      - MKAUTH_SEED_DEMO=${MKAUTH_SEED_DEMO:-true}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
+      - MIGRATION_PATH=${MIGRATION_PATH:-file:///app/db/migrations}
+      - ZITADEL_DOMAIN=${ZITADEL_DOMAIN:-}
+      - ZITADEL_AUDIENCE=${ZITADEL_AUDIENCE:-}
     ports:
       - "8080:8080"
     depends_on:
@@ -54,13 +55,12 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
-      - BACKEND_URL=http://backend:8080
-      - MKAUTH_API_KEY=dev_auth_token_secret  # Proxies this to backend (demo mode only)
-      # Zitadel OIDC (Phase 3) — uncomment and fill in to enable live token forwarding
-      # - ZITADEL_DOMAIN=your-instance.zitadel.cloud  # Must match backend
-      # - ZITADEL_CLIENT_ID=your-pkce-client-id        # From Zitadel console (Native/PKCE app)
-      # - ZITADEL_ADMIN_ROLE_KEY=admin                 # Role key from your project settings
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+      - BACKEND_URL=${BACKEND_URL:-http://backend:8080}
+      - MKAUTH_API_KEY=${MKAUTH_API_KEY:-dev_auth_token_secret}
+      - ZITADEL_DOMAIN=${ZITADEL_DOMAIN:-}
+      - ZITADEL_CLIENT_ID=${ZITADEL_CLIENT_ID:-}
+      - ZITADEL_ADMIN_ROLE_KEY=${ZITADEL_ADMIN_ROLE_KEY:-admin}
     restart: unless-stopped
 
 volumes:
