@@ -16,6 +16,29 @@ The service MUST implement a concurrent sync loop using **Go Channels**.
 - **Buffered Channels**: High-volume webhooks from Zitadel MUST be pushed into a buffered channel to prevent blocking the HTTP listener.
 - **Worker Pool**: A pool of goroutines MUST consume from this channel to execute LDAP mutations in parallel, strictly maintaining order per UID to avoid race conditions on group membership.
 
+## Zitadel Grant Reconciliation
+The system MUST periodically verify that Zitadel grants match MkAuth's local mapping-rule policy state.
+
+### Scenario: Zitadel grant drift detected
+- **WHEN** MkAuth detects grants in Zitadel that do not match the expected mapping-rule outcomes
+- **THEN** the system MUST correct the grants and log the drift for operator review
+
+> **Status:** Deferred to Phase 5. Currently `EnforceMappingRules` runs only on webhook events, not periodically.
+
+## Compensating Revocations on Partial Failure
+When a multi-rule enforcement operation partially fails, the system MUST support compensating revocations rather than leaving inconsistent state.
+
+### Scenario: Partial enforcement failure
+- **WHEN** `EnforceMappingRules` successfully grants some derived roles but fails on others
+- **THEN** the system MUST either complete all grants or revert the successful ones
+- **AND** the partial state and recovery action MUST be visible to operators
+
+### Scenario: Partial revocation failure
+- **WHEN** `RevokeMappingRules` successfully revokes some derived roles but fails on others
+- **THEN** the system MUST log the inconsistent state and make it visible for operator remediation
+
+> **Status:** Deferred to Phase 5. Currently best-effort log-and-continue.
+
 ### LLDAP Client Integration
 The service MUST utilize **`go-ldap/ldap/v3`** for all directory operations.
 - **Persistent Connections**: The service MUST maintain a pool of long-lived LDAPS connections with automatic re-bind logic on disconnect.

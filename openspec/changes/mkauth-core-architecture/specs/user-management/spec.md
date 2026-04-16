@@ -35,3 +35,5 @@ The system MUST identify potential security risks or redundant permissions for a
 ### Scenario: Flagging excessive permissions
 - **WHEN** a user has roles across more than 5 projects or has direct grants that have not been used/reviewed in 6 months
 - **THEN** the system MUST surface these as "Cleanup Hints" in the user management view.
+
+> **Status:** The Advanced Filter Engine and Governance & Cleanup requirements above are specified but deferred to Phase 5. Currently only basic project-level filtering exists.

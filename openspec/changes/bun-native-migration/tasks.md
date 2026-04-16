@@ -1,22 +1,24 @@
-# Tasks: Bun Migration
+# Tasks: Bun Migration — ARCHIVED
+
+> Bun adoption was completed outside of formal OpenSpec tracking. All items below reflect final state.
 
 ## Phase 1: Preparation
-- [ ] Create Change Proposal (Done)
-- [ ] Verify local Bun installation (`bun -v`)
+- [x] Create Change Proposal
+- [x] Verify local Bun installation
 
 ## Phase 2: Environment Purge
 - [x] Delete `ui/node_modules`
 - [x] Delete `ui/package-lock.json`
 
 ## Phase 3: Bun Initialization
-- [ ] Run `bun install` in `ui/` to generate `bun.lockb`
-- [ ] Remove `engines.node` from `ui/package.json`
-- [ ] Add `@types/bun` to `devDependencies`
+- [x] Run `bun install` in `ui/` to generate `bun.lock`
+- [x] Remove `engines.node` from `ui/package.json`
+- [x] Add `@types/bun` to `devDependencies`
 
 ## Phase 4: Infrastructure
-- [ ] Refactor `ui/Dockerfile` for `oven/bun`
-- [ ] Verify build with `bun run build`
+- [x] Refactor `ui/Dockerfile` for `oven/bun`
+- [x] Verify build with `bun run build`
 
 ## Phase 5: Verification
-- [ ] Run `bun run dev` and test UI accessibility
-- [ ] Verify `docker-compose up` with the new Bun-based image
+- [x] Run `bun run dev` and test UI accessibility
+- [x] Verify `docker-compose up` with the new Bun-based image

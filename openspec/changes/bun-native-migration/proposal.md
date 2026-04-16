@@ -1,11 +1,13 @@
-# Proposal: Bun-Native Migration
+# Proposal: Bun-Native Migration — ARCHIVED
+
+> **Status:** Archived. Bun adoption is complete. The UI uses `bun.lock`, `bun run`, and `oven/bun` Docker images. This change is closed.
 
 ## Objective
 Transition the MkAuth UI to a **Bun-native** ecosystem. This replaces the legacy Node.js environment with an all-in-one toolkit that optimizes build times and simplifies the containerized runtime stack.
 
 ## Scope
 - **Development**: Migrate all local scripts and dev servers to `bun run`.
-- **Package Management**: Adopt `bun install` and `bun.lockb` as the project standards.
+- **Package Management**: Adopt `bun install` and `bun.lock` as the project standards.
 - **Production**: Standardize on the Bun runtime for Dockerized deployments.
 
 ## Context

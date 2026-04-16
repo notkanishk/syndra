@@ -66,6 +66,23 @@ The system MUST include direct grants in the effective access computation and li
 - **THEN** the access explanation separates the source roles from derived roles and includes the direct grant reason
 
 
+### Requirement: Grant expiration enforcement
+The system MUST automatically revoke expired direct grants rather than relying on query-time filtering or manual cleanup.
+
+#### Scenario: Expired grant is revoked
+- **WHEN** a direct grant's `expires_at` timestamp passes
+- **THEN** a background scheduler MUST revoke the grant within a configurable enforcement window
+- **AND** trigger cache invalidation and LLDAP provisioning intents for the affected user
+
+#### Scenario: Expired grant does not confer access
+- **WHEN** a grant has expired but has not yet been processed by the enforcement scheduler
+- **THEN** the effective access computation MUST exclude the expired grant
+
+> **Status:** Deferred to Phase 5. Currently grants persist in DB after `expires_at` with no enforcement. The governance summary surfaces approaching expirations.
+
+### Requirement: Bulk operations deferred
+> **Status:** The bulk operation requirements (Bulk Mode, Safe bulk execution) above are specified but deferred to Phase 5. No bulk grant/revoke endpoints or UI currently exist.
+
 ### Requirement: Current implementation scope is documented honestly
 The system MUST keep the documented distinction between the current project/role-based request flow and the intended service-to-bundle abstraction explicit until the implementation is hardened and aligned.
 

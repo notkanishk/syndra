@@ -57,3 +57,26 @@ The system MUST treat claim-shaping payloads and action responses as hardened co
 - **WHEN** MkAuth introduces or changes an internal payload between the UI, backend, or sync service
 - **THEN** that change MUST NOT replace, bypass, or redefine the Zitadel Actions v2 compatibility contract
 - **AND** the source-of-truth-facing claim path MUST remain anchored to the Actions v2 flow
+
+## Production degraded behavior
+The system MUST define a documented production failure posture for every application that depends on the Actions v2-compatible claim path.
+
+### Scenario: Application-specific degraded posture configured
+- **WHEN** an application is configured for claim shaping
+- **THEN** MkAuth MUST require a documented degraded-mode posture for cache miss, timeout, malformed cache data, or unavailable dependencies
+- **AND** the allowed posture MUST be either fail-closed or an explicitly documented minimal safe fallback
+
+### Scenario: Implicit fallback prohibited
+- **WHEN** the production claim path encounters a failure condition and no degraded-mode posture was configured
+- **THEN** the configuration MUST be treated as incomplete
+- **AND** the system MUST reject or block that production claim path until the posture is explicitly defined
+
+## Actions v2 Script Deployment
+The Zitadel Actions v2 script that calls MkAuth's data plane MUST be maintained in the MkAuth repository with deployment documentation.
+
+### Scenario: Actions v2 script is version-controlled
+- **WHEN** MkAuth is deployed against a Zitadel instance
+- **THEN** the Actions v2 script source, deployment guide, and failure-mode expectations MUST be available in the repository
+- **AND** the script MUST be tested against the documented degraded-mode behavior
+
+> **Status:** Deferred to Phase 5. The `POST /api/action/inject` data plane endpoint exists but the Zitadel-side Actions v2 script is not in the repo.

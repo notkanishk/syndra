@@ -39,3 +39,17 @@ This secondary credential is a required infrastructure bridge for legacy makersp
 ## Sync Policy
 - **One-Way Authority**: Zitadel/MkAuth remains the absolute source of truth. Manual changes in LLDAP MUST be overwritten during the next sync cycle.
 - **Membership Cleanup**: When a user loses a role in Zitadel, they MUST be removed from the corresponding LLDAP group within a configurable sync window (e.g., 5 minutes).
+
+## LLDAP Reconciliation Loop
+The system MUST periodically verify that LLDAP group memberships match MkAuth's authoritative provisioning state, independent of the event-driven intent pipeline.
+
+### Scenario: Drift detected in LLDAP
+- **WHEN** a reconciliation cycle finds LLDAP memberships that do not match the expected state derived from MkAuth grants and mapping rules
+- **THEN** the system MUST correct LLDAP to match MkAuth's authoritative state
+- **AND** log the drift for operator review
+
+### Scenario: Missed intent recovery
+- **WHEN** the sync service missed intents due to a crash or network partition
+- **THEN** the reconciliation loop MUST detect and correct the resulting drift without requiring manual intervention
+
+> **Status:** Deferred to Phase 5. The sync service currently operates on an event-driven intent model with no periodic full-sync.

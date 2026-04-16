@@ -34,3 +34,22 @@ Detection of new user accounts MAY originate from Zitadel-compatible event mecha
 - **WHEN** a Welcome Bundle is configured for automatic onboarding
 - **THEN** the resulting role or bundle mutation MUST be executed by the MkAuth Backend
 - **AND** the audit trail, retry behavior, and idempotency guarantees MUST be anchored to the backend path
+
+### Scenario: Retry-safe onboarding mutation
+- **WHEN** MkAuth retries a previously attempted welcome-bundle assignment
+- **THEN** the operation MUST be idempotent
+- **AND** the system MUST avoid duplicate grants while preserving operator visibility into the retry outcome
+
+## Configuration-Driven Welcome Bundle Selection
+The system MUST allow admins to explicitly designate a welcome bundle through a configuration interface rather than relying on name-matching conventions.
+
+### Scenario: Explicit welcome bundle designation
+- **WHEN** an admin configures a specific bundle as the welcome default
+- **THEN** the system MUST use that explicit configuration for all onboarding assignments
+- **AND** MUST NOT fall back to name-matching heuristics
+
+### Scenario: Welcome bundle visible in admin UI
+- **WHEN** viewing the list of bundles
+- **THEN** the explicitly configured welcome bundle MUST be visually highlighted with a status badge
+
+> **Status:** Deferred to Phase 5. Currently `GetWelcomeBundle` returns the first bundle with "welcome" in its name, or the first bundle overall.

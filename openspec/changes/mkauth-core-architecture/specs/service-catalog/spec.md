@@ -56,3 +56,18 @@ The system MUST keep the documented service-request abstraction aligned with the
 - **WHEN** the portal still submits requests through a lower-level project/role contract instead of a dedicated service-mapping contract
 - **THEN** the implementation status MUST be documented as partial
 - **AND** the follow-up hardening work MUST define the intended service-level contract explicitly
+
+### Requirement: Service-to-bundle mapping
+The system MUST map service access requests to specific bundles or role sets, replacing the current fallback to raw project/role selection.
+
+#### Scenario: Service request resolves to bundle
+- **WHEN** a user requests access to a published service
+- **THEN** the system MUST automatically resolve the request to the configured bundle or role set for that service
+- **AND** the user MUST NOT need to understand or select raw projects or roles
+
+#### Scenario: Service configuration requires bundle mapping
+- **WHEN** an admin publishes a service in the catalog
+- **THEN** the admin MUST associate it with at least one bundle or explicit role set
+- **AND** a service without this mapping MUST NOT appear as requestable
+
+> **Status:** Deferred to Phase 5. Currently service requests fall through to direct project/role picks.

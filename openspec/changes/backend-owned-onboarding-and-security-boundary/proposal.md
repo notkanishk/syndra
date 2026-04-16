@@ -1,3 +1,5 @@
+> **Spec consolidation note:** The 4 modified capability specs originally in this change have been merged into their canonical locations. See [automation-policies](../mkauth-core-architecture/specs/automation-policies/spec.md), [application-claims](../mkauth-core-architecture/specs/application-claims/spec.md), [contract-quality](../contract-hardening-and-test-foundation/specs/contract-quality/spec.md), [backend-api-testing](../contract-hardening-and-test-foundation/specs/backend-api-testing/spec.md). Implementation details are in [IMPLEMENTATION.md](IMPLEMENTATION.md). The only spec unique to this change is [production-security-boundary](specs/production-security-boundary/spec.md).
+
 ## Why
 
 MkAuth's architecture now clearly says two important things:
