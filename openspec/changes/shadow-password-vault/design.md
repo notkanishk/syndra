@@ -8,6 +8,14 @@ Key design choices:
 - **One credential per user**: `UNIQUE(user_id)` + upsert. The audit table tracks the full history; the credentials table holds only the current state.
 - **No provisioning intents for passwords**: Provisioning intents model group membership mutations. Password sync is a different concern with a different lifecycle — the sync service checks for a shadow credential when processing any user intent.
 
+## Research Conundrum
+
+The current MkAuth implementation assumes the sync service can retrieve a pre-hashed Argon2id shadow credential from MkAuth and propagate it directly into LLDAP during sync. That assumption is now under review.
+
+At the time of writing, MkAuth has not yet proven that the target LLDAP deployment actually supports the intended password update semantics for pre-hashed credentials. This is especially important because the production target is an external LLDAP server running outside the MkAuth Compose stack, currently planned as a separately managed Proxmox LXC deployment.
+
+Until that compatibility is confirmed, the Shadow Password Vault should be treated as an internal MkAuth capability that is implemented and auditable, but not yet fully validated for end-to-end LLDAP password propagation.
+
 ## Technical Specification
 
 ### 1. Database Schema (Migration 000010)
@@ -113,7 +121,9 @@ Injectable deps added to `handlers/deps.go`. Routes registered in `router.go`.
 
 ### 7. Sync Service Integration
 
-Password changes do NOT emit provisioning intents. The sync service checks `GET /shadow-credentials/{uid}/hash` when processing any provisioning intent for a user, and transmits the hash via LDAP `PasswordModify` over LDAPS.
+Password changes do NOT emit provisioning intents. The sync service currently checks `GET /shadow-credentials/{uid}/hash` when processing any provisioning intent for a user.
+
+However, the exact mechanism for propagating that credential into a real LLDAP deployment remains a research item. MkAuth must not treat the current assumption of direct pre-hashed password propagation as production-ready until LLDAP compatibility is verified against the actual target deployment.
 
 ## Verification
 

@@ -22,7 +22,14 @@ This secondary credential is a required infrastructure bridge for legacy makersp
     - Minimum 12 characters.
     - Diversity of character sets (Upper, Lower, Numeric, Symbol).
     - Entropy check to prevent common patterns.
-- **AND** the password MUST be securely hashed and transmitted to the LLDAP server.
+- **AND** the system MUST use a password propagation mechanism that is proven compatible with the target LLDAP deployment.
+
+### Scenario: Compatibility research before password sync rollout
+- **GIVEN** MkAuth stores an infrastructure-only shadow credential for LLDAP-backed services
+- **WHEN** the team prepares to enable end-to-end password synchronization into a real LLDAP deployment
+- **THEN** the team MUST first verify that the target LLDAP server supports the intended password update flow and hash semantics
+- **AND** MkAuth MUST NOT assume that writing a pre-hashed credential through a plain LDAP attribute update is valid until that compatibility is confirmed
+- **AND** password-sync rollout MAY remain paused while the rest of MkAuth development continues
 
 ### Scenario: Infrastructure-only credential boundary
 - **WHEN** MkAuth stores, displays, or transmits a Samba/LLDAP password
