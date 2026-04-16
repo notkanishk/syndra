@@ -38,7 +38,7 @@ This document defines the high-level phases for the MkAuth implementation, trans
 *Objective: Enable legacy hardware support via LLDAP and Provisioning.*
 - [x] **Provisioning Intents**: Backend-side intent emission on grant changes, LLDAP group flattening, sync service polling API. Migration 000009. 22 new tests.
 - [x] **Shadow Password Vault**: Argon2id-hashed infrastructure-only credentials for Samba/LLDAP, self-service set/clear/status API, dedicated audit trail, sync service hash retrieval. Migration 000010. 23 new tests.
-- [ ] **Sync Service (Go)**: Dedicated concurrent provisioning worker consuming intents via `go-ldap/v3`.
+- [x] **Sync Service (Go)**: Independent Docker container polling backend intents, executing LLDAP group mutations via `go-ldap/v3`, syncing shadow passwords, per-UID ordering, auto-reconnect. User profile endpoint for displayName/mail provisioning. 32 sync tests + backend profile endpoint.
 - [ ] **LLDAP Integration**: End-to-end wiring, reconciliation loop, Docker-compose LLDAP container.
 
 ## Phase 5: Automation & Governance (Target: Operational Excellence)

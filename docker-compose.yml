@@ -63,6 +63,26 @@ services:
       - ZITADEL_ADMIN_ROLE_KEY=${ZITADEL_ADMIN_ROLE_KEY:-admin}
     restart: unless-stopped
 
+  sync:
+    build:
+      context: ./sync
+      dockerfile: Dockerfile
+    container_name: mkauth_sync
+    environment:
+      - BACKEND_URL=http://backend:8080
+      - MKAUTH_API_KEY=${MKAUTH_API_KEY:-dev_auth_token_secret}
+      - LLDAP_URL=${LLDAP_URL:-ldaps://lldap:636}
+      - LLDAP_BIND_DN=${LLDAP_BIND_DN:-cn=admin,ou=people,dc=example,dc=com}
+      - LLDAP_BIND_PASSWORD=${LLDAP_BIND_PASSWORD:-}
+      - LLDAP_BASE_DN=${LLDAP_BASE_DN:-dc=example,dc=com}
+      - LLDAP_INSECURE_SKIP_VERIFY=${LLDAP_INSECURE_SKIP_VERIFY:-false}
+      - SYNC_POLL_INTERVAL=${SYNC_POLL_INTERVAL:-10s}
+      - SYNC_WORKER_COUNT=${SYNC_WORKER_COUNT:-5}
+      - SYNC_INTENT_LIMIT=${SYNC_INTENT_LIMIT:-50}
+    depends_on:
+      - backend
+    restart: unless-stopped
+
 volumes:
   pgdata:
   redisdata:

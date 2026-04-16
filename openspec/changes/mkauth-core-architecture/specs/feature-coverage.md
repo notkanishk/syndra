@@ -4,7 +4,7 @@ Last updated: 2026-04-14
 
 This document compares the **initially planned** MkAuth feature surface (as described in `openspec/changes/mkauth-core-architecture/design.md`) against what is **already integrated in the repo** (backend + UI). It is meant to be a durable “reality check” that future specs/design changes can reference.
 
-Phase 3 is fully complete. Phase 4 is in progress: Provisioning Intents and Shadow Password Vault are Integrated. Remaining Phase 4 items: Sync Service (go-ldap/v3 worker), LLDAP Integration (end-to-end wiring).
+Phase 3 is fully complete. Phase 4 is in progress: Provisioning Intents, Shadow Password Vault, and Sync Service are Integrated. Remaining Phase 4 item: LLDAP Integration (end-to-end wiring, reconciliation loop, Docker Compose LLDAP container).
 
 Legend:
 - **Integrated**: present end-to-end (API/storage + UI where applicable) or otherwise usable in the intended flow.
@@ -24,7 +24,7 @@ Legend:
 | `automation-policies`| Define "Welcome" bundles for new accounts, backend-owned automatic assignment after validated event intake, and global default status. | **Partial** | `backend/internal/services/onboarding.go`, `backend/internal/db/repositories.go` (`InsertOnboardingTrigger`, `GetWelcomeBundle`), `backend/db/migrations/000005_security_boundary.up.sql` (`onboarding_triggers`), `backend/internal/handlers/onboarding.go` | Backend-owned `TriggerOnboarding` service and idempotency infrastructure are implemented; triggered by webhook `role_key == "new_user"` signal. Full automation policy configuration UI and Actions v2 trigger path remain ahead. |
 | `service-catalog` | Standard user portal; request access to services (apps); auto-mapping to bundles/roles. | **Partial** | `ui/src/app/page.tsx`, `ui/src/app/requests/page.tsx`, `ui/src/components/Sidebar.tsx`, `openspec/changes/mkauth-core-architecture/specs/service-catalog/spec.md` | A member-facing portal and self-service request page now exist behind demo session auth, but service requests still resolve to direct project/role picks rather than app-to-bundle automation. |
 | `ldap-sync` | Bridge Zitadel (OIDC) to LLDAP (Hardware); prefix-flattening; shadow password management as an infrastructure-only credential bridge. | **Partial** | `openspec/changes/mkauth-core-architecture/specs/ldap-sync/spec.md`, `backend/internal/services/vault.go`, `backend/internal/handlers/vault.go`, `backend/db/migrations/000010_shadow_password_vault.up.sql` | Shadow Password Vault is Integrated: Argon2id credential storage, self-service API (set/clear/status), dedicated audit trail, sync service hash retrieval. LLDAP group flattening implemented. Remaining: Sync Service consumer (go-ldap/v3 worker) and end-to-end LLDAP wiring. |
-| `provisioning` | Event-driven identity sync engine; fault-tolerant LLDAP writes; secure credential rotation. | **Partial** | `backend/internal/services/provisioning.go`, `backend/internal/services/lldap.go`, `backend/internal/handlers/intents.go`, `backend/db/migrations/000009_provisioning_intents.up.sql` | Backend-side intent emission implemented: `provisioning_intents` table with four-state status machine, `FlattenLLDAPGroup` group naming, webhook integration, sync service polling API. Sync Service consumer (go-ldap/v3 worker) remains ahead. |
+| `provisioning` | Event-driven identity sync engine; fault-tolerant LLDAP writes; secure credential rotation. | **Integrated** | `backend/internal/services/provisioning.go`, `backend/internal/services/lldap.go`, `backend/internal/handlers/intents.go`, `sync/internal/worker/worker.go`, `sync/internal/ldap/client.go` | Full provisioning pipeline: backend emits intents, Sync Service (independent Docker container) polls and claims intents, executes LLDAP group mutations via go-ldap/v3, syncs shadow passwords, per-UID ordering, auto-reconnect. User provisioning with Zitadel UID + displayName + mail. Remaining: LLDAP container in Docker Compose, end-to-end integration testing, reconciliation loop. |
 
 ## Architecture/design feature coverage (planned in design.md)
 
@@ -65,4 +65,4 @@ Legend:
 
 ## Immediate next step
 
-Phase 4 is in progress. Provisioning Intents and Shadow Password Vault are complete. Next: Sync Service (go-ldap/v3 worker), then LLDAP Integration (end-to-end wiring, reconciliation loop, Docker Compose LLDAP container).
+Phase 4 is in progress. Provisioning Intents, Shadow Password Vault, and Sync Service are complete. Next: LLDAP Integration (Docker Compose LLDAP container, end-to-end wiring, reconciliation loop).

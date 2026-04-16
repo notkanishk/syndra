@@ -76,6 +76,9 @@ func NewRouter() http.Handler {
 	// Shadow Password Vault (sync service — internal, API-key auth)
 	mux.HandleFunc("GET /api/v1/shadow-credentials/{uid}/hash", withCORS(withAPIKeyAuth(handleGetShadowCredentialHash)))
 
+	// User Profile (sync service — internal, API-key auth)
+	mux.HandleFunc("GET /api/v1/users/{uid}/profile", withCORS(withAPIKeyAuth(handleGetUserProfile)))
+
 	// Operator: event and trigger logs
 	mux.HandleFunc("GET /api/v1/onboarding/triggers", withCORS(withUserAuth(handleGetOnboardingTriggers)))
 	mux.HandleFunc("GET /api/v1/webhook/events", withCORS(withUserAuth(handleGetWebhookEvents)))
