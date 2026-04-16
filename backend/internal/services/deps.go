@@ -85,4 +85,18 @@ var (
 		return db.InsertProvisioningIntent(ctx, targetUID, action, lldapGroup,
 			sourceProject, sourceRole, webhookEventID, idempotencyKey)
 	}
+
+	// Shadow Password Vault injectable vars.
+	svcUpsertShadowCredential = func(ctx context.Context, userID, hash, algorithm, saltParams string) (string, error) {
+		return db.UpsertShadowCredential(ctx, userID, hash, algorithm, saltParams)
+	}
+	svcDeleteShadowCredential = func(ctx context.Context, userID string) error {
+		return db.DeleteShadowCredential(ctx, userID)
+	}
+	svcHasShadowCredential = func(ctx context.Context, userID string) (models.ShadowCredentialStatus, error) {
+		return db.HasShadowCredential(ctx, userID)
+	}
+	svcInsertShadowCredentialAudit = func(ctx context.Context, userID, action, actorID, ipAddress string) error {
+		return db.InsertShadowCredentialAudit(ctx, userID, action, actorID, ipAddress)
+	}
 )

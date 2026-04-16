@@ -54,6 +54,13 @@ var (
 	dbCompleteIntent              = db.CompleteIntent
 	dbFailIntent                  = db.FailIntent
 
+	// Shadow Password Vault injectable vars.
+	svcSetShadowPassword       = services.SetShadowPassword
+	svcClearShadowPassword     = services.ClearShadowPassword
+	dbHasShadowCredential      = db.HasShadowCredential
+	dbGetShadowCredential      = db.GetShadowCredential
+	dbGetShadowCredentialAudit = db.GetShadowCredentialAudit
+
 	// Data-plane injectable vars — used by HandleActionInject and degradedResponse.
 	// Separate from the control-plane vars above so tests can exercise the degraded
 	// paths without a live Redis instance or database connection.

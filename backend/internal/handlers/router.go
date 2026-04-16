@@ -67,6 +67,15 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/v1/intents/{id}/complete", withCORS(withAPIKeyAuth(handleCompleteIntent)))
 	mux.HandleFunc("POST /api/v1/intents/{id}/fail", withCORS(withAPIKeyAuth(handleFailIntent)))
 
+	// Shadow Password Vault (user-facing, self-only)
+	mux.HandleFunc("PUT /api/v1/users/{uid}/shadow-credential", withCORS(withUserAuth(handleSetShadowCredential)))
+	mux.HandleFunc("DELETE /api/v1/users/{uid}/shadow-credential", withCORS(withUserAuth(handleClearShadowCredential)))
+	mux.HandleFunc("GET /api/v1/users/{uid}/shadow-credential/status", withCORS(withUserAuth(handleGetShadowCredentialStatus)))
+	mux.HandleFunc("GET /api/v1/users/{uid}/shadow-credential/audit", withCORS(withUserAuth(handleGetShadowCredentialAudit)))
+
+	// Shadow Password Vault (sync service — internal, API-key auth)
+	mux.HandleFunc("GET /api/v1/shadow-credentials/{uid}/hash", withCORS(withAPIKeyAuth(handleGetShadowCredentialHash)))
+
 	// Operator: event and trigger logs
 	mux.HandleFunc("GET /api/v1/onboarding/triggers", withCORS(withUserAuth(handleGetOnboardingTriggers)))
 	mux.HandleFunc("GET /api/v1/webhook/events", withCORS(withUserAuth(handleGetWebhookEvents)))

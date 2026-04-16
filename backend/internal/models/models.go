@@ -258,6 +258,39 @@ type ProvisioningIntent struct {
 	CompletedAt    *time.Time `json:"completed_at,omitempty"`
 }
 
+// ShadowCredential stores a secondary Argon2id-hashed password for LLDAP/Samba access.
+type ShadowCredential struct {
+	ID             string     `json:"id"`
+	UserID         string     `json:"user_id"`
+	CredentialHash string     `json:"credential_hash,omitempty"`
+	Algorithm      string     `json:"algorithm"`
+	SaltParams     string     `json:"salt_params,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	RotatedAt      *time.Time `json:"rotated_at,omitempty"`
+	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+}
+
+// ShadowCredentialAudit records credential lifecycle events.
+type ShadowCredentialAudit struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
+	Action    string    `json:"action"`
+	ActorID   string    `json:"actor_id"`
+	IPAddress string    `json:"ip_address"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ShadowCredentialStatus is the user-facing view (no hash exposed).
+type ShadowCredentialStatus struct {
+	HasCredential bool       `json:"has_credential"`
+	Algorithm     string     `json:"algorithm,omitempty"`
+	CreatedAt     *time.Time `json:"created_at,omitempty"`
+	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
+	RotatedAt     *time.Time `json:"rotated_at,omitempty"`
+	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
+}
+
 // CatalogRole is the computed view for the global role inventory.
 type CatalogRole struct {
 	ProjectID         string `json:"project_id"`
