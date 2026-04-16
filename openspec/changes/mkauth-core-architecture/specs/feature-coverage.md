@@ -1,6 +1,8 @@
 # Feature Coverage Matrix (Planned vs Integrated)
 
-Last updated: 2026-04-14
+> **Navigation:** See [INDEX.md](../../../INDEX.md) for the full spec graph. See [ROADMAP.md](../ROADMAP.md) for phase timeline.
+
+Last updated: 2026-04-17
 
 This document compares the **initially planned** MkAuth feature surface (as described in `openspec/changes/mkauth-core-architecture/design.md`) against what is **already integrated in the repo** (backend + UI). It is meant to be a durable “reality check” that future specs/design changes can reference.
 
@@ -66,3 +68,18 @@ Legend:
 ## Immediate next step
 
 Phase 4 is in progress. Provisioning Intents, Shadow Password Vault, and Sync Service are complete at the code level. The next step for the LLDAP bridge is research and compatibility validation against the real external LLDAP deployment before resuming end-to-end integration work.
+
+## Implementing changes by capability
+
+| Capability | Implementing Changes |
+|-----------|---------------------|
+| `demo-catalog` | [core-architecture](../proposal.md) |
+| `access-governance` | [core-architecture](../proposal.md), [contract-hardening](../../contract-hardening-and-test-foundation/proposal.md) |
+| `topology-graph` | [core-architecture](../proposal.md) |
+| `application-claims` | [core-architecture](../proposal.md), [contract-hardening](../../contract-hardening-and-test-foundation/proposal.md), [backend-onboarding](../../backend-owned-onboarding-and-security-boundary/proposal.md) |
+| `user-management` | [core-architecture](../proposal.md) |
+| `role-management` | [advanced-role-crud](../../advanced-role-crud/proposal.md) |
+| `automation-policies` | [backend-onboarding](../../backend-owned-onboarding-and-security-boundary/proposal.md) |
+| `service-catalog` | [core-architecture](../proposal.md) (partial) |
+| `ldap-sync` | [shadow-password-vault](../../shadow-password-vault/proposal.md), [sync-service](../../sync-service/proposal.md) |
+| `provisioning` | [provisioning-intents](../../provisioning-intents/proposal.md), [sync-service](../../sync-service/proposal.md) |

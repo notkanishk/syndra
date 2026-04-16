@@ -1,5 +1,7 @@
 # MkAuth Core Architecture Design
 
+> **Navigation:** See [INDEX.md](../../INDEX.md) for the full spec graph. See [ROADMAP.md](ROADMAP.md) for phase timeline. See [feature-coverage.md](specs/feature-coverage.md) for planned vs integrated.
+
 ## 1. Mission & Core Philosophy
 * **Zitadel is the Absolute Source of Truth:** Zitadel holds the final, authoritative list of users and roles. MkAuth sits on top as an orchestration and policy layer.
 * **Purpose:** To simplify and manage complex hierarchical permissions across various makerspace systems (digital SSO and physical access) without bloating Zitadel with complex mapping logic.
@@ -96,3 +98,10 @@ Before MkAuth widens its live Zitadel and provisioning surface, the immediate ne
 | welcome-bundle assignment and similar onboarding mutations | backend service account path after validated event intake | MkAuth Backend remains the single mutation authority for audit, retries, and idempotency |
 | webhook reception and verification | backend endpoint with validated Zitadel event contract | external intake stays on backend; sync service remains private |
 | Backend -> Sync provisioning intents | internal MkAuth contract | self-defined, authenticated, and isolated from Zitadel-facing contracts |
+
+## 10. IdP Chain: Google Workspace -> Zitadel
+
+Google Workspace is the sole Identity Provider. Users authenticate via Google, which federates into Zitadel as a configured external IdP. MkAuth never sees Google credentials directly.
+
+* **Account Lifecycle Gap**: Zitadel does not auto-detect when a Google Workspace account is suspended or deleted. A future dedicated service (Phase 6, separate Docker container) will poll Google Workspace monthly via the Admin SDK Directory API to verify all Zitadel users still have active Google accounts. Suspended or deleted accounts trigger user deactivation in Zitadel via the Management API, which cascades through MkAuth's existing webhook pipeline (`user_deactivated` -> cache invalidation -> LLDAP membership revocation).
+* **Scope Boundary**: MkAuth does not manage the Google Workspace -> Zitadel federation configuration. That is a Zitadel admin console concern. MkAuth's responsibility begins at the Zitadel webhook boundary.
