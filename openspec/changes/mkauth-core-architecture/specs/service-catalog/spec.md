@@ -1,3 +1,5 @@
+> **Status:** Partial (service-to-bundle mapping deferred P5) | [< Index](../../../../INDEX.md) | [Feature Coverage](../feature-coverage.md)
+
 # Requirement: Service Catalog (User Portal)
 
 Standard users MUST have a simplified, high-level view of the ecosystem focused on Applications/Services rather than underlying Zitadel roles.

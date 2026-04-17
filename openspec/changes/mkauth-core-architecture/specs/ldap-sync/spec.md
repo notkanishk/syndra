@@ -1,3 +1,5 @@
+> **Status:** Partial (reconciliation deferred P5, password compat unresolved) | [< Index](../../../../INDEX.md) | [Feature Coverage](../feature-coverage.md)
+
 # Requirement: LLDAP Sync & Group Mapping
 
 The system MUST provide a reliable synchronization mechanism to reflect Zitadel identity state into an LLDAP server for use by legacy protocols (Samba, UniFi).

@@ -1,3 +1,5 @@
+> **Status:** Integrated | [< Index](../../../../INDEX.md)
+
 ## ADDED Requirements
 
 ### Requirement: Backend-first test coverage for mission-critical flows

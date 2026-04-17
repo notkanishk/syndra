@@ -1,3 +1,5 @@
+> **Status:** Integrated | [< Index](../../../../INDEX.md) | [Feature Coverage](../feature-coverage.md)
+
 # Requirement: Advanced Role Management
 
 The system MUST provide a robust interface for creating and cloning roles within Zitadel projects.

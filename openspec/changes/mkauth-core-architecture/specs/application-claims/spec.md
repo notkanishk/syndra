@@ -1,3 +1,5 @@
+> **Status:** Partial (Actions v2 script not in repo, deferred P5) | [< Index](../../../../INDEX.md) | [Feature Coverage](../feature-coverage.md)
+
 # Requirement: Application Claim Selection & Shaping
 
 The system MUST provide a way for downstream applications to define which roles they consume and how those roles are presented in the JWT.

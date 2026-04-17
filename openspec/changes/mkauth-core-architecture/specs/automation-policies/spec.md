@@ -1,3 +1,5 @@
+> **Status:** Partial (config UI deferred P5) | [< Index](../../../../INDEX.md) | [Feature Coverage](../feature-coverage.md)
+
 # Requirement: Automation & Welcome Policies
 
 The system MUST support automatic assignment of bundles to users based on system-wide triggers.

@@ -1,3 +1,5 @@
+> **Status:** Integrated | [< Index](../../../../INDEX.md)
+
 # Requirement: Production Trust Boundary
 
 > Implementation details for all requirements below are in [IMPLEMENTATION.md](../../IMPLEMENTATION.md).

@@ -1,3 +1,5 @@
+> **Status:** Partial (reconciliation, compensating revocations deferred P5) | [< Index](../../../../INDEX.md) | [Feature Coverage](../feature-coverage.md)
+
 ## Orchestrated Sync Flow
 The Sync Service MUST operate strictly as a downstream worker for the MkAuth Backend.
 

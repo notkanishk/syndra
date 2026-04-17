@@ -1,3 +1,5 @@
+> **Status:** Integrated | [< Index](../../../../INDEX.md) | [Feature Coverage](../feature-coverage.md)
+
 ## ADDED Requirements
 
 ### Requirement: Seeded demo catalog

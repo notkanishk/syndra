@@ -1,3 +1,5 @@
+> **Status:** Integrated (bulk ops, expiry enforcement deferred P5) | [< Index](../../../../INDEX.md) | [Feature Coverage](../feature-coverage.md)
+
 ## ADDED Requirements
 
 ### Requirement: Direct grants with expiry

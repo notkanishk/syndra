@@ -1,3 +1,5 @@
+> **Status:** Not integrated (all deferred P5) | [< Index](../../../../INDEX.md) | [Feature Coverage](../feature-coverage.md)
+
 # Requirement: Operational Readiness
 
 Cross-cutting operational requirements for production-grade deployment. All items in this spec are deferred to Phase 5.

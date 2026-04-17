@@ -1,3 +1,5 @@
+> **Status:** Integrated | [< Index](../../../../INDEX.md)
+
 ## ADDED Requirements
 
 ### Requirement: Strict API request contracts

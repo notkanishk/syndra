@@ -1,3 +1,5 @@
+> **Status:** Integrated (advanced filters deferred P5) | [< Index](../../../../INDEX.md) | [Feature Coverage](../feature-coverage.md)
+
 # Requirement: Unified User access Management
 
 The system MUST provide a comprehensive view of a user's access across all projects and groups in the ecosystem.
