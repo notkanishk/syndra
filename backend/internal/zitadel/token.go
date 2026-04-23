@@ -139,3 +139,26 @@ func (tm *tokenManager) buildAssertion(now time.Time) (string, error) {
 
 	return token.SignedString(tm.privKey)
 }
+
+// MintM2MToken mints a one-shot Zitadel M2M access token via the JWT profile
+// grant from the service-account key at keyPath. Intended for CLI use
+// (`backend/cmd/mkauth-token`) — no caching, no ambient singleton state.
+// Each call performs a fresh LoadServiceAccountKey + token exchange.
+//
+// This is the exported entry point the shell scripts use for the
+// ZITADEL_MACHINE_KEY_PATH flow; the backend server itself reaches the same
+// endpoint through the cached tokenManager in InitClient().
+func MintM2MToken(ctx context.Context, domain, keyPath string) (string, error) {
+	if domain == "" {
+		return "", fmt.Errorf("domain is required")
+	}
+	if keyPath == "" {
+		return "", fmt.Errorf("keyPath is required")
+	}
+	saKey, privKey, err := LoadServiceAccountKey(keyPath)
+	if err != nil {
+		return "", fmt.Errorf("load service account key: %w", err)
+	}
+	tm := newTokenManager(domain, saKey, privKey)
+	return tm.Token(ctx)
+}

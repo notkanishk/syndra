@@ -138,3 +138,34 @@ P3 review flagged two stale references to the superseded paste flow that the fra
 - [x] `openspec/changes/mkauth-core-architecture/specs/application-claims/spec.md` env-var description updated.
 - [x] `.env.example` `ROTATED_AT` header updated.
 - [x] Grep audit confirms remaining "paste" references are contrastive ("never by copy-paste") or historical review notes in this change-dir.
+
+### `.env` auto-load (2026-04-24)
+
+Operator-asked: scripts didn't read `.env` from the repo root, forcing a `set -a && . .env` pre-step that nobody remembers on first incident.
+
+- [x] `zitadel/actions/register.sh`: inline loader after `set -euo pipefail`, before the `${VAR:?…}` checks. Resolves `_ENV_FILE` from `SCRIPT_DIR/../..`, parses KEY=VALUE lines with regex allowlist, strips optional surrounding quotes, skips blanks/comments, respects CLI-override invariant via `[[ -z "${!_k+x}" ]]`. Silent when `.env` is absent.
+- [x] `zitadel/actions/rotate.sh`: same loader block.
+- [x] `scripts/smoke-test-action-v2.sh`: same loader block, `_ENV_FILE` resolved from `SCRIPT_DIR/..` (one level up, not two).
+- [x] All three scripts: required-env error messages appended with "(set in .env or export)".
+- [x] Loader behaviour validated with a mock `.env` exercising plain values, double/single-quoted values, literal `${KEY}` values, leading-whitespace tolerance, invalid-no-equals lines, `#` comments. CLI-override invariant verified (parent-shell `KEY=cli_override` wins over `.env` `KEY=value_a`). Missing-file path is silent (loader returns; downstream `${…:?}` still triggers the clear "required" error).
+- [x] `zitadel/actions/SIGNING_KEY.md` Lifecycle section notes the auto-load + CLI-override invariant.
+- [x] `openspec/changes/zitadel-actions-v2-deployment/DEPLOY.md` Prerequisites + Step 1 rewritten around the `.env`-first flow; inline `KEY=val make …` shown as the override path.
+- [x] `openspec/changes/zitadel-actions-v2-deployment/IMPLEMENTATION.md` new "`.env` auto-load (2026-04-24)" subsection recording the decision, the CLI-override invariant, and the inline-vs-shared-helper tradeoff.
+- [x] `bash -n` clean on all three scripts.
+- [x] `openspec validate zitadel-actions-v2-deployment --strict` — passes.
+- [x] `mcp__codebase-memory-mcp__detect_changes` + `index_repository` refresh.
+
+### M2M token CLI (2026-04-24)
+
+Review found the machine-key mint path in register.sh/rotate.sh was shelling out to a non-existent helper (`go run ./backend/cmd/test -action=mint-m2m-token` — backend/cmd/test is the DB/Redis regression harness, not a token helper). Operators relying on `ZITADEL_MACHINE_KEY_PATH` hit a silent failure with stderr swallowed.
+
+- [x] `backend/internal/zitadel/token.go`: new exported `MintM2MToken(ctx, domain, keyPath) (string, error)` — one-shot JWT-profile grant; wraps LoadServiceAccountKey + newTokenManager.Token.
+- [x] `backend/cmd/mkauth-token/main.go`: new CLI that reads ZITADEL_DOMAIN + ZITADEL_MACHINE_KEY_PATH from env, calls MintM2MToken, prints Bearer token to stdout. Clear errors on every failure class.
+- [x] `zitadel/actions/register.sh`: machine-key branch now runs `(cd backend && go run ./cmd/mkauth-token)` so module resolution works. No stderr silencing — operator sees the real error from the helper.
+- [x] `zitadel/actions/rotate.sh`: same fix.
+- [x] 3 new unit tests in `backend/internal/zitadel/mint_m2m_token_test.go` covering empty domain / empty keyPath / nonexistent file rejection paths.
+- [x] `DEPLOY.md` Prerequisites note that the machine-key path requires Go toolchain on the host (because it invokes `go run ./cmd/mkauth-token`).
+- [x] `bash -n` clean on both scripts; `go build ./cmd/mkauth-token` clean; `go test ./...` 226 pass (up from 223); `go vet ./...` clean.
+- [x] `openspec validate zitadel-actions-v2-deployment --strict` — passes.
+- [x] `mcp__codebase-memory-mcp__detect_changes` + `index_repository` refresh.
+- [x] **Relative-path follow-up:** resolve `ZITADEL_MACHINE_KEY_PATH` to an absolute path (anchored to `REPO_ROOT`) before the `cd backend`. `.env.example` documents relative paths as resolving against the repo root / docker-compose directory; `cd backend` had silently reinterpreted them against `backend/` and would have broken the documented `./zitadel-machine-key.json` style path. POSIX `case` covers absolute, `./...`, bare, `../...`, and `~/...` inputs. Verified with a 6-case bash harness. Both scripts updated identically.

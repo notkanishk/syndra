@@ -9,9 +9,17 @@ pre-minted M2M token, backend reachable from Zitadel).
 
 ## Prerequisites
 
+The following values must be available to the scripts — either in the
+repo-root `.env` (the scripts auto-load it) or exported in your shell.
+Explicit `export` wins over `.env`, so a one-off override like
+`ZITADEL_DOMAIN=other.example.com make zitadel-actions-register` works
+without editing `.env`.
+
 * `ZITADEL_DOMAIN` — e.g. `auth.example.org`.
 * Either `ZITADEL_M2M_TOKEN` (pre-minted Bearer) or `ZITADEL_MACHINE_KEY_PATH`
-  (service-user key file).
+  (service-user key file). When only the key path is set, the scripts shell
+  out to `backend/cmd/mkauth-token` (Go toolchain required on the host) to
+  mint a fresh token via the JWT profile grant.
 * `MKAUTH_EXTERNAL_URL` — the public URL Zitadel will POST to. Must be
   reachable from Zitadel's egress. On the Proxmox LXC deploy this is typically
   `https://mkauth.<your-domain>` — verify with `curl -I` from the Zitadel host
@@ -21,11 +29,20 @@ pre-minted M2M token, backend reachable from Zitadel).
 
 ## Step 1 — Register the Action target
 
+Assuming `.env` is populated (see `.env.example` for the keys), this is one
+command:
+
 ```bash
-export ZITADEL_DOMAIN=auth.example.org
-export MKAUTH_EXTERNAL_URL=https://auth.example.org
-export ZITADEL_MACHINE_KEY_PATH=./zitadel-machine-key.json   # or export ZITADEL_M2M_TOKEN=...
 make zitadel-actions-register
+```
+
+Or, with values provided inline instead of via `.env`:
+
+```bash
+ZITADEL_DOMAIN=auth.example.org \
+  MKAUTH_EXTERNAL_URL=https://auth.example.org \
+  ZITADEL_MACHINE_KEY_PATH=./zitadel-machine-key.json \
+  make zitadel-actions-register
 ```
 
 On first run, this creates the `mkauth-claim-injector` target, binds

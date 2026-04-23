@@ -44,6 +44,13 @@ scheduled automation buys little and adds infrastructure.
 3. From that point on, every `POST /api/action/inject` request must carry a
    valid `ZITADEL-Signature` header or receive a `401 INVALID_SIGNATURE`.
 
+All three scripts (`register.sh`, `rotate.sh`,
+`scripts/smoke-test-action-v2.sh`) automatically load `.env` from the
+repo root when present, so values filled into `.env` are available to the
+scripts and `make` targets without a prior `source`/`set -a` step. Vars
+explicitly set in the shell (`ZITADEL_DOMAIN=other.com make …`) always
+win over `.env` — the loader only exports keys that aren't already set.
+
 ## Rotation (in place, no target recreate)
 
 Use the shipped command:

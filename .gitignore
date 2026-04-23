@@ -15,6 +15,12 @@ bin/
 /backend/.gocache/
 /backend/.gomodcache/
 /backend/vendor/
+# CLI binaries from stray `go build ./cmd/<name>` invocations inside backend/.
+# The cmd packages are run via `go run`; persistent binaries here are
+# accidental artifacts, not intentional outputs.
+/backend/api
+/backend/test
+/backend/mkauth-token
 
 # Node/Next.js
 /ui/node_modules/

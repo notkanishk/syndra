@@ -42,7 +42,30 @@ MANIFEST="${SCRIPT_DIR}/targets.json"
 SIGNING_KEY_FILE="${SCRIPT_DIR}/.action-signing-key"
 PREVIOUS_KEY_FILE="${SCRIPT_DIR}/.action-signing-key.previous"
 
-: "${ZITADEL_DOMAIN:?ZITADEL_DOMAIN is required}"
+# ---- Auto-load .env from the repo root (if present) ----
+# Explicit environment wins: an already-set VAR is never overwritten by
+# .env. Silent when .env is absent (CI, bare clone, container build).
+# Parsing is deliberately narrow: KEY=VALUE lines with optional leading
+# whitespace, optional `"…"`/`'…'` quotes stripped, `#` comments and
+# blank lines ignored. `${VAR}` inside a value is kept literal — we don't
+# re-implement shell expansion here.
+_ENV_FILE="$(cd "${SCRIPT_DIR}/../.." && pwd)/.env"
+if [[ -f "$_ENV_FILE" ]]; then
+  while IFS= read -r _raw || [[ -n "$_raw" ]]; do
+    [[ "$_raw" =~ ^[[:space:]]*($|#) ]] && continue
+    [[ "$_raw" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
+    _k="${BASH_REMATCH[1]}"
+    _v="${BASH_REMATCH[2]}"
+    if [[ "$_v" =~ ^\"(.*)\"$ ]] || [[ "$_v" =~ ^\'(.*)\'$ ]]; then
+      _v="${BASH_REMATCH[1]}"
+    fi
+    [[ -z "${!_k+x}" ]] && export "$_k=$_v"
+  done < "$_ENV_FILE"
+  unset _raw _k _v
+fi
+unset _ENV_FILE
+
+: "${ZITADEL_DOMAIN:?ZITADEL_DOMAIN is required (set in .env or export)}"
 
 for bin in curl jq; do
   command -v "$bin" >/dev/null 2>&1 || { echo "error: $bin not installed" >&2; exit 1; }
@@ -54,17 +77,34 @@ if [[ ! -s "$MANIFEST" ]]; then
 fi
 
 # ---- Resolve M2M access token (same pattern as register.sh) ----
+# Relative ZITADEL_MACHINE_KEY_PATH values are resolved against the repo root
+# per .env.example's documented contract, BEFORE we cd into backend/ for the
+# `go run` module-root resolution. Without this, `./zitadel-machine-key.json`
+# would be interpreted as `backend/./zitadel-machine-key.json`.
 if [[ -n "${ZITADEL_M2M_TOKEN:-}" ]]; then
   TOKEN="$ZITADEL_M2M_TOKEN"
 elif [[ -n "${ZITADEL_MACHINE_KEY_PATH:-}" ]]; then
-  echo "Minting M2M token via backend/cmd/test..." >&2
-  TOKEN="$(cd "${SCRIPT_DIR}/../.." && go run ./backend/cmd/test -action=mint-m2m-token 2>/dev/null || true)"
+  REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+  case "$ZITADEL_MACHINE_KEY_PATH" in
+    /*)    _abs_key="$ZITADEL_MACHINE_KEY_PATH" ;;
+    '~/'*) _abs_key="$HOME/${ZITADEL_MACHINE_KEY_PATH#\~/}" ;;
+    *)     _abs_key="$REPO_ROOT/$ZITADEL_MACHINE_KEY_PATH" ;;
+  esac
+  export ZITADEL_MACHINE_KEY_PATH="$_abs_key"
+  unset _abs_key
+
+  echo "Minting M2M token via backend/cmd/mkauth-token..." >&2
+  BACKEND_DIR="${REPO_ROOT}/backend"
+  if ! TOKEN="$(cd "$BACKEND_DIR" && go run ./cmd/mkauth-token)"; then
+    echo "error: could not mint M2M token from ZITADEL_MACHINE_KEY_PATH — see mkauth-token stderr above, or provide ZITADEL_M2M_TOKEN directly" >&2
+    exit 3
+  fi
   if [[ -z "$TOKEN" ]]; then
-    echo "error: could not mint M2M token — provide ZITADEL_M2M_TOKEN directly" >&2
+    echo "error: mkauth-token returned an empty token" >&2
     exit 3
   fi
 else
-  echo "error: set ZITADEL_M2M_TOKEN or ZITADEL_MACHINE_KEY_PATH" >&2
+  echo "error: set ZITADEL_M2M_TOKEN or ZITADEL_MACHINE_KEY_PATH (in .env or export)" >&2
   exit 3
 fi
 

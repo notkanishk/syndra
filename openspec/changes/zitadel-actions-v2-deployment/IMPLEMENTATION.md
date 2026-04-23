@@ -249,6 +249,129 @@ All four now describe the `cat .action-env.fragment >> .env` redirect
 flow (with the `install -m 0600` fallback for systemd) and explicitly
 contrast against copy-paste so future readers don't re-introduce the old
 guidance.
+
+#### `.env` auto-load (2026-04-24)
+
+Operator question surfaced a real gap: `register.sh`, `rotate.sh`, and
+`scripts/smoke-test-action-v2.sh` all relied on the process environment
+for `ZITADEL_DOMAIN`, `MKAUTH_EXTERNAL_URL`, `ZITADEL_M2M_TOKEN` /
+`ZITADEL_MACHINE_KEY_PATH`, etc. — with no layer sourcing `.env`. So
+`make zitadel-actions-register` would fail `${ZITADEL_DOMAIN:?required}`
+even with a fully-populated `.env` at the repo root, forcing operators
+to remember `set -a && . .env && set +a && make …` as a workaround.
+
+Fixed by inlining a small `.env` loader at the top of each script (after
+`set -euo pipefail`, before the first `${VAR:?…}` check):
+
+* Resolves the repo root relative to the script's own location
+  (`zitadel/actions/*.sh` walks up two levels; `scripts/*.sh` walks up
+  one).
+* Silent when `.env` is absent (CI, bare clones, container builds don't
+  produce spurious errors).
+* Line-by-line parse via regex: `^[[:space:]]*KEY=VALUE$` with leading
+  whitespace tolerated, blank lines and `#` comments skipped. A single
+  layer of surrounding `"…"` or `'…'` is stripped from the value. `${VAR}`
+  inside a value is kept literal — the loader doesn't re-implement shell
+  expansion.
+* **CLI override invariant preserved**: `[[ -z "${!key+x}" ]]` before
+  export means an already-set env var is never overwritten by `.env`. A
+  one-off `ZITADEL_DOMAIN=other.example.com make zitadel-actions-register`
+  works as expected.
+* Required-env error messages sharpened: the `${…:?}` suffix now reads
+  "set in .env or export" so operators who still hit the error learn
+  immediately where the value is supposed to live.
+
+Empirically verified against a mock `.env` exercising every parsing
+branch (plain, double-quoted, single-quoted, literal `${…}`, leading
+whitespace, invalid-no-equals, `#` comment) plus the CLI-override and
+missing-file paths.
+
+Kept inline in all three scripts rather than extracted to a shared
+helper: three copies of ~15 lines, vs a shared file forcing
+`scripts/smoke-test-action-v2.sh` to cross-directory source something in
+`zitadel/actions/`. The coupling would have been worse than the
+duplication for a loader with no state, no branches, no imports.
+
+Also rejected:
+* Makefile-level `include .env; export` — fragile with quoted values
+  (Make keeps the quotes in the exported value), and would only cover
+  make-invoked runs. Inline script loader covers both `make …` and
+  `bash zitadel/actions/rotate.sh` with one mechanism.
+* `.env.local` / multi-file override support — MkAuth doesn't use these;
+  adding now is speculative.
+
+#### M2M token CLI (2026-04-24)
+
+Review pass found that both `register.sh` and `rotate.sh` had a
+`ZITADEL_MACHINE_KEY_PATH` branch that shelled out to
+`go run ./backend/cmd/test -action=mint-m2m-token`. That command doesn't
+exist in the form the scripts assumed — `backend/cmd/test/main.go` is the
+cache/DB regression harness that connects to Postgres and ignores any
+`-action` flag. So the advertised one-command machine-key flow was
+actually broken: operators who filled in `.env` with
+`ZITADEL_MACHINE_KEY_PATH` hit `fork/exec` succeeding, the test harness
+failing on missing `DB_DSN`, stderr silenced via `2>/dev/null`, and the
+scripts then reporting "could not mint M2M token — provide
+ZITADEL_M2M_TOKEN directly."
+
+Fixed by shipping a real helper:
+
+* New exported `MintM2MToken(ctx, domain, keyPath)` in
+  `backend/internal/zitadel/token.go` that reuses the existing
+  `LoadServiceAccountKey` + `newTokenManager` path to do a one-shot JWT
+  profile grant (RFC 7523) against the Zitadel token endpoint. No caching,
+  no DB/Redis side effects — safe to call from a CLI context.
+* New `backend/cmd/mkauth-token/main.go` — thin CLI that reads
+  `ZITADEL_DOMAIN` + `ZITADEL_MACHINE_KEY_PATH` from the env (auto-loaded
+  from `.env` via the script loader already in place), calls
+  `MintM2MToken`, prints the Bearer token to stdout. Clear stderr
+  messages + non-zero exit on every error class (missing env, key load
+  fail, assertion build, token exchange).
+* `register.sh` / `rotate.sh` now `cd backend && go run ./cmd/mkauth-token`
+  — module resolution works because the `go run` is inside the module
+  root. Stderr from the helper flows through to the operator verbatim
+  instead of being silenced, so a bad key file produces "key file is
+  empty" or "parse private key: ..." where before it produced a generic
+  "could not mint" error.
+* 3 new unit tests covering the rejection paths (`empty domain`, `empty
+  keyPath`, `nonexistent key file`). Full backend suite: 226 passing (up
+  from 223).
+
+No cross-module coupling beyond the existing `mkauth/internal/zitadel`
+import the backend already uses. Operators who can't install Go on the
+mint host can still use `ZITADEL_M2M_TOKEN` — the preference order
+preserves that.
+
+##### Relative-path follow-up (same day)
+
+Review caught a P1 regression immediately after the CLI landed: the
+`cd backend && go run ./cmd/mkauth-token` pattern broke relative
+`ZITADEL_MACHINE_KEY_PATH` values. `.env.example` documents these as
+resolving against the repo root (the docker-compose directory), so a
+value like `./zitadel-machine-key.json` should find the file at
+`<repo>/zitadel-machine-key.json` — but after `cd backend`, Go's
+`os.ReadFile` inside `mkauth-token` resolved it against `<repo>/backend/`
+instead, silently looking for a file in the wrong directory.
+
+Fix: resolve `ZITADEL_MACHINE_KEY_PATH` to an absolute path (anchored to
+the already-computed `REPO_ROOT`) *before* the `cd backend`, and export
+the absolute value so the child process sees it. Portable POSIX shell
+`case` handles the three real shapes operators use:
+
+* `/abs/path` → passed through unchanged.
+* `~/rel/path` → expanded against `$HOME` (bash won't expand a tilde
+  loaded from `.env` because that expansion only happens at parse time
+  for unquoted tokens).
+* everything else → prefixed with `REPO_ROOT/`.
+
+Verified with a 6-case bash harness covering absolute, `./...`, bare
+filename, `../...`, tilde, and the exact docs-example value
+`./zitadel-machine-key.json`. All resolve to paths under the repo root
+(or `$HOME` for the tilde case) regardless of which directory the
+operator invoked `make` from.
+
+Same fix applied to both `register.sh` and `rotate.sh`; both still pass
+`bash -n`.
 * **Signing-key rotation:** `SIGNING_KEY.md` updated to reflect in-place
   rotation via `UpdateTarget {"expirationSigningKey":"0s"}` instead of the
   "recreate target" workaround the first draft assumed.
