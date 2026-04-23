@@ -41,6 +41,10 @@ services:
       - ZITADEL_MACHINE_KEY_PATH=${ZITADEL_MACHINE_KEY_PATH:-}
       - ZITADEL_ADMIN_ROLE_KEY=${ZITADEL_ADMIN_ROLE_KEY:-admin}
       - ZITADEL_WEBHOOK_SECRET=${ZITADEL_WEBHOOK_SECRET:-}
+    volumes:
+      # Mount the Zitadel service account key file into the container.
+      # ZITADEL_SA_KEY_HOST_PATH on the host → ZITADEL_MACHINE_KEY_PATH inside.
+      - ${ZITADEL_SA_KEY_HOST_PATH:-/dev/null}:${ZITADEL_MACHINE_KEY_PATH:-/tmp/zitadel-sa-key.json}:ro
     ports:
       - "8080:8080"
     depends_on:
