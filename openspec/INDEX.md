@@ -15,7 +15,7 @@ Each capability has one canonical spec. **Status** lets you skip specs that aren
 | Role Management | Integrated | [spec](changes/mkauth-core-architecture/specs/role-management/spec.md) | core-architecture + advanced-role-crud |
 | User Management | Integrated (filters deferred P5) | [spec](changes/mkauth-core-architecture/specs/user-management/spec.md) | core-architecture |
 | Access Governance | Integrated (bulk ops, expiry enforcement deferred P5) | [spec](changes/mkauth-core-architecture/specs/access-governance/spec.md) | core-architecture + contract-hardening |
-| Application Claims | Partial (Actions v2 script not in repo) | [spec](changes/mkauth-core-architecture/specs/application-claims/spec.md) | core-architecture + backend-onboarding |
+| Application Claims | Integrated | [spec](changes/mkauth-core-architecture/specs/application-claims/spec.md) | core-architecture + backend-onboarding + actions-v2-deployment |
 | Service Catalog | Partial (service-to-bundle mapping deferred P5) | [spec](changes/mkauth-core-architecture/specs/service-catalog/spec.md) | core-architecture |
 | Automation Policies | Partial (welcome bundle config UI deferred P5) | [spec](changes/mkauth-core-architecture/specs/automation-policies/spec.md) | core-architecture + backend-onboarding |
 | LDAP Sync | Partial (reconciliation deferred P5, password compat unresolved) | [spec](changes/mkauth-core-architecture/specs/ldap-sync/spec.md) | core-architecture |
@@ -53,6 +53,7 @@ Every change directory has: `proposal.md` (why), `design.md` (how), `tasks.md` (
 | [Shadow Password Vault](changes/shadow-password-vault/) | 4 | Complete | [proposal](changes/shadow-password-vault/proposal.md) / [design](changes/shadow-password-vault/design.md) / [impl](changes/shadow-password-vault/IMPLEMENTATION.md) |
 | [Sync Service](changes/sync-service/) | 4 | Complete | [proposal](changes/sync-service/proposal.md) / [design](changes/sync-service/design.md) / [impl](changes/sync-service/IMPLEMENTATION.md) |
 | [Zitadel Diagnostic UI](changes/zitadel-diagnostic-ui/) | 5 | Complete | [proposal](changes/zitadel-diagnostic-ui/proposal.md) / [design](changes/zitadel-diagnostic-ui/design.md) / [impl](changes/zitadel-diagnostic-ui/IMPLEMENTATION.md) |
+| [Zitadel Actions v2 Deployment](changes/zitadel-actions-v2-deployment/) | 5 | Complete | [proposal](changes/zitadel-actions-v2-deployment/proposal.md) / [design](changes/zitadel-actions-v2-deployment/design.md) / [impl](changes/zitadel-actions-v2-deployment/IMPLEMENTATION.md) / [deploy](changes/zitadel-actions-v2-deployment/DEPLOY.md) |
 
 ## Roadmap Phase -> Change Mapping
 

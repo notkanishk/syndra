@@ -1,0 +1,31 @@
+{
+  "_comment": "Declarative config applied by register.sh. Layout matches the stable Zitadel v2 Target proto (proto/zitadel/action/v2/target.proto): name/endpoint/timeout/payloadType live at the top level of the target; interruptOnError is inside the target-type submessage. restCall (NOT restWebhook) is required for claim injection — webhook targets only consume the status code and would make this a no-op, since MkAuth returns the claim envelope in the response body.",
+  "target": {
+    "name": "mkauth-claim-injector",
+    "endpoint": "${MKAUTH_EXTERNAL_URL}/api/action/inject",
+    "timeout": "3s",
+    "payloadType": "PAYLOAD_TYPE_JSON",
+    "restCall": {
+      "interruptOnError": false,
+      "_note": "interruptOnError:false keeps token issuance unblocked if MkAuth is unreachable. MkAuth handles per-project fail_closed / minimal_safe inside the response (the handler always returns 200 with the correct envelope), so this target-level setting is purely a transport-layer safety net for MkAuth outages."
+    }
+  },
+  "executions": [
+    {
+      "condition": {
+        "function": {
+          "name": "preaccesstoken"
+        }
+      },
+      "_note": "Inject custom claims into access tokens (JWT)."
+    },
+    {
+      "condition": {
+        "function": {
+          "name": "preuserinfo"
+        }
+      },
+      "_note": "Inject the same custom claims into ID tokens / userinfo responses so OIDC clients see them consistently."
+    }
+  ]
+}

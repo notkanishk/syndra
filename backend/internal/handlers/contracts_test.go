@@ -97,7 +97,10 @@ func TestHandleActionInjectRejectsInvalidMethod(t *testing.T) {
 }
 
 func TestHandleActionInjectRejectsMissingFields(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/api/action/inject", strings.NewReader(`{"user_id":"u1"}`))
+	// v2 payload without user.id must be rejected deterministically. Unknown
+	// top-level fields (like the legacy "user_id") are accepted silently by
+	// the lenient decoder used for the Zitadel-owned schema.
+	req := httptest.NewRequest(http.MethodPost, "/api/action/inject", strings.NewReader(`{"user":{"id":""},"user_grants":[{"projectId":"p1","roles":["admin"]}]}`))
 	rr := httptest.NewRecorder()
 
 	HandleActionInject(rr, req)
@@ -106,8 +109,8 @@ func TestHandleActionInjectRejectsMissingFields(t *testing.T) {
 		t.Fatalf("expected status 400, got %d", rr.Code)
 	}
 	got := decodeErrorResponse(t, rr)
-	if got.Details["project_id"] == "" {
-		t.Fatalf("expected project_id detail")
+	if got.Details["user.id"] == "" {
+		t.Fatalf("expected user.id detail, got %v", got.Details)
 	}
 }
 

@@ -67,7 +67,7 @@ This document defines the high-level phases for the MkAuth implementation, trans
 ### Operations
 - [ ] **Rate Limiting**: Request throttling for webhook, action-injection, and shadow-password endpoints. Requires design decision (in-process vs Redis-backed).
 - [ ] **Observability**: Metrics, alerting thresholds, and operational dashboard integration beyond current structured logs.
-- [ ] **Actions v2 Deployment**: Zitadel Actions v2 script source in repo, deployment guide, and failure-mode validation against real Zitadel instance. → [application-claims spec](specs/application-claims/spec.md)
+- [x] **Actions v2 Deployment**: Zitadel Actions v2 target configuration, HMAC-verified `/api/action/inject` endpoint, and failure-mode smoke test in repo. Handler reshaped to the real v2 envelope (`append_claims[{key,value}]`), correcting prior v1 wording (`SetCustomClaims`). Target manifest, `register.sh`, signing-key capture, and `DEPLOY.md` shipped under `zitadel/actions/`. → [actions-v2-deployment](../zitadel-actions-v2-deployment/) / [application-claims spec](specs/application-claims/spec.md)
 - [ ] **CI/CD Pipeline**: Automated test runs, migration validation, container build verification.
 
 ## Phase 6: IdP Lifecycle (Target: Account Lifecycle Integrity)

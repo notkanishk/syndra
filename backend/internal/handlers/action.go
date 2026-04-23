@@ -6,54 +6,133 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
-// ActionRequest outlines the minimal expected payload from a Zitadel Action ping
-type ActionRequest struct {
-	UserID    string `json:"user_id"`
-	ProjectID string `json:"project_id"`
+// ActionV2UserRef is the subset of the Zitadel Actions v2 user block MkAuth reads.
+type ActionV2UserRef struct {
+	ID string `json:"id"`
 }
 
-// ActionResponse represents the custom claim payload injected into the Zitadel JWT
-type ActionResponse struct {
-	CustomClaims map[string]interface{} `json:"customClaims"`
+// ActionV2UserGrantRef is the subset of a Zitadel Actions v2 user grant row
+// MkAuth reads. Zitadel may emit one entry per role, so callers MUST
+// deduplicate by ProjectID before acting.
+type ActionV2UserGrantRef struct {
+	ProjectID string   `json:"projectId"`
+	Roles     []string `json:"roles"`
+}
+
+// ActionV2Request is the acceptance shape for Zitadel Actions v2
+// `function/preaccesstoken` and `function/preuserinfo` trigger payloads.
+// Only the fields MkAuth needs are declared; all other fields Zitadel sends
+// (org, userMetadata, userinfo, ...) are accepted and ignored via the
+// lenient decoder, since the v2 payload surface is owned by Zitadel and
+// expected to extend over time.
+type ActionV2Request struct {
+	Function   string                 `json:"function,omitempty"`
+	User       ActionV2UserRef        `json:"user"`
+	UserGrants []ActionV2UserGrantRef `json:"user_grants"`
+}
+
+// ActionV2Claim is one entry in the Zitadel Actions v2 append_claims list.
+type ActionV2Claim struct {
+	Key   string      `json:"key"`
+	Value interface{} `json:"value"`
+}
+
+// ActionV2Response is the envelope Zitadel Actions v2 expects back from a
+// custom-claim-injection handler. Only append_claims (and optionally
+// append_log_claims) are emitted by MkAuth; set_user_metadata is intentionally
+// omitted until a spec requires it.
+type ActionV2Response struct {
+	AppendClaims    []ActionV2Claim `json:"append_claims"`
+	AppendLogClaims []string        `json:"append_log_claims,omitempty"`
 }
 
 // redisTimeout is the maximum time the data plane will wait for a Redis response.
-// Zitadel Actions v2 have hard latency budgets; this prevents cascade failures.
+// Zitadel Actions v2 have hard latency budgets (3s target timeout); this keeps
+// the per-project Redis fetch well inside that envelope and prevents cascade
+// failures.
 const redisTimeout = 50 * time.Millisecond
 
-// HandleActionInject is the DATA PLANE entrypoint.
-// Performance is critical: it hits Redis directly and returns the pre-calculated claims.
+// HandleActionInject is the DATA PLANE entrypoint for Zitadel Actions v2.
+// Zitadel POSTs the function trigger payload (preaccesstoken or preuserinfo);
+// MkAuth returns the pre-compiled per-project claim envelope.
 //
-// Degraded behavior is explicit and per-project:
-//   - fail_closed (default): return empty claims and log a warning
-//   - minimal_safe: return a configured minimal claim set from the database
+// Project resolution:
+//   - Zero unique projects in user_grants: emit empty append_claims.
+//   - One unique project: flat claim keys (preserves the spec's "Printing
+//     Portal only gets Printing roles" least-privilege scenario).
+//   - Multiple projects: namespaced keys "mkauth.<projectID>.<claim>" so
+//     claims from different projects cannot collide in the issued token.
+//
+// Degraded behavior is resolved per-project via dbGetClaimFailureMode:
+//   - fail_closed (default): empty append_claims for that project
+//   - minimal_safe: the configured minimal claim set, wrapped in the envelope
 func HandleActionInject(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonErrorResponse(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only POST is supported")
 		return
 	}
 
-	var req ActionRequest
-	if err := decodeJSONStrict(r.Body, &req); err != nil {
+	var req ActionV2Request
+	if err := decodeJSONLenient(r.Body, &req); err != nil {
 		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
 		return
 	}
-	if !trimmedNonEmpty(req.UserID) || !trimmedNonEmpty(req.ProjectID) {
-		jsonValidationErrorResponse(w, "user_id and project_id are required", map[string]string{
-			"user_id":    "required",
-			"project_id": "required",
-		})
+	if !trimmedNonEmpty(req.User.ID) {
+		jsonValidationErrorResponse(w, "user.id is required", map[string]string{"user.id": "required"})
 		return
 	}
 
-	// 1. Construct the exact Redis key for this user querying this specific application
-	cacheKey := fmt.Sprintf("mapping:%s:%s", req.UserID, req.ProjectID)
+	projectIDs := dedupProjectIDs(req.UserGrants)
 
-	// 2. Fetch the pre-computed JWT claim mapping from Redis with a strict timeout
-	redisCtx, cancel := context.WithTimeout(r.Context(), redisTimeout)
+	switch len(projectIDs) {
+	case 0:
+		log.Printf("[DATA PLANE] No project grants in request for user=%s function=%s", req.User.ID, req.Function)
+		jsonResponse(w, http.StatusOK, ActionV2Response{AppendClaims: []ActionV2Claim{}})
+	case 1:
+		jsonResponse(w, http.StatusOK, claimsForProject(r.Context(), req.User.ID, projectIDs[0], false))
+	default:
+		merged := ActionV2Response{AppendClaims: []ActionV2Claim{}}
+		for _, pid := range projectIDs {
+			resp := claimsForProject(r.Context(), req.User.ID, pid, true)
+			merged.AppendClaims = append(merged.AppendClaims, resp.AppendClaims...)
+		}
+		jsonResponse(w, http.StatusOK, merged)
+	}
+}
+
+// dedupProjectIDs extracts unique, trimmed project IDs from the grant list,
+// preserving first-seen order so the output is deterministic for golden tests.
+func dedupProjectIDs(grants []ActionV2UserGrantRef) []string {
+	seen := make(map[string]struct{})
+	out := make([]string, 0, len(grants))
+	for _, g := range grants {
+		pid := strings.TrimSpace(g.ProjectID)
+		if pid == "" {
+			continue
+		}
+		if _, dup := seen[pid]; dup {
+			continue
+		}
+		seen[pid] = struct{}{}
+		out = append(out, pid)
+	}
+	return out
+}
+
+// claimsForProject fetches the pre-compiled claim map for a (user, project)
+// pair from Redis and converts it into the Zitadel Actions v2 append_claims
+// envelope. When namespace=true, every emitted key is prefixed with
+// "mkauth.<projectID>." so claims from different projects cannot collide
+// in the issued token. Degraded paths (Redis miss/timeout, malformed cache,
+// DB lookup failure) fall through to degradedResponse for that project.
+func claimsForProject(ctx context.Context, userID, projectID string, namespace bool) ActionV2Response {
+	cacheKey := fmt.Sprintf("mapping:%s:%s", userID, projectID)
+
+	redisCtx, cancel := context.WithTimeout(ctx, redisTimeout)
 	defer cancel()
 
 	val, err := redisGetClaims(redisCtx, cacheKey)
@@ -63,35 +142,47 @@ func HandleActionInject(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.Printf("[DATA PLANE] Cache miss for key=%s: %v", cacheKey, err)
 		}
-		jsonResponse(w, http.StatusOK, degradedResponse(r.Context(), req.ProjectID))
-		return
+		return degradedResponse(ctx, projectID, namespace)
 	}
 
-	// 3. Unmarshal the cached payload string into a valid claims map
 	var claims map[string]interface{}
 	if err := json.Unmarshal([]byte(val), &claims); err != nil {
 		log.Printf("[DATA PLANE] Malformed cache data for key=%s: %v", cacheKey, err)
-		jsonResponse(w, http.StatusOK, degradedResponse(r.Context(), req.ProjectID))
-		return
+		return degradedResponse(ctx, projectID, namespace)
 	}
 
 	log.Printf("[DATA PLANE] Cache hit for key=%s", cacheKey)
-
-	// 4. Return sub-millisecond JSON payload to Zitadel Actions pipeline
-	jsonResponse(w, http.StatusOK, ActionResponse{CustomClaims: claims})
+	return ActionV2Response{AppendClaims: claimsToEnvelope(claims, projectID, namespace)}
 }
 
-// degradedResponse returns the appropriate claim set when the cache is unavailable
-// or contains malformed data, based on the project's configured failure mode.
+// claimsToEnvelope converts a raw claim map into the append_claims list.
+// When namespace=true, keys are prefixed with "mkauth.<projectID>." so a
+// multi-project response cannot have colliding claim keys across projects.
+func claimsToEnvelope(claims map[string]interface{}, projectID string, namespace bool) []ActionV2Claim {
+	out := make([]ActionV2Claim, 0, len(claims))
+	for k, v := range claims {
+		key := k
+		if namespace {
+			key = fmt.Sprintf("mkauth.%s.%s", projectID, k)
+		}
+		out = append(out, ActionV2Claim{Key: key, Value: v})
+	}
+	return out
+}
+
+// degradedResponse returns the per-project fallback envelope when the Redis
+// fetch or cache body for that project is unusable.
 //
-// fail_closed (default): empty claims — applications must handle absent custom claims
-// minimal_safe: a small configured set of claims that are always safe to emit
-func degradedResponse(ctx context.Context, projectID string) ActionResponse {
+// fail_closed (default): empty append_claims — applications must cope with
+// absent custom claims.
+// minimal_safe: the configured minimal claim map from the DB, wrapped in the
+// v2 envelope (namespacing preserved when namespace=true).
+// DB lookup failure: defaulted to fail_closed and logged.
+func degradedResponse(ctx context.Context, projectID string, namespace bool) ActionV2Response {
 	mode, minimalClaims, err := dbGetClaimFailureMode(ctx, projectID)
 	if err != nil {
-		// Cannot determine configured mode — default to fail_closed
 		log.Printf("[DATA PLANE] Could not load failure mode for project=%s (defaulting to fail_closed): %v", projectID, err)
-		return ActionResponse{CustomClaims: map[string]interface{}{}}
+		return ActionV2Response{AppendClaims: []ActionV2Claim{}}
 	}
 
 	switch mode {
@@ -100,9 +191,9 @@ func degradedResponse(ctx context.Context, projectID string) ActionResponse {
 			minimalClaims = map[string]interface{}{}
 		}
 		log.Printf("[DATA PLANE] Degraded mode=minimal_safe for project=%s", projectID)
-		return ActionResponse{CustomClaims: minimalClaims}
-	default: // fail_closed
+		return ActionV2Response{AppendClaims: claimsToEnvelope(minimalClaims, projectID, namespace)}
+	default:
 		log.Printf("[DATA PLANE] Degraded mode=fail_closed for project=%s", projectID)
-		return ActionResponse{CustomClaims: map[string]interface{}{}}
+		return ActionV2Response{AppendClaims: []ActionV2Claim{}}
 	}
 }

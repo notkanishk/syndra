@@ -90,6 +90,12 @@ func NewRouter() http.Handler {
 	// preserving the cmdline smoke-test path.
 	mux.HandleFunc("GET /api/v1/zitadel/health", withCORS(withOperatorAuth(handleZitadelHealth)))
 
+	// Actions v2 signing-key rotation status — read-only observability.
+	// Reports the age of the currently installed signing key against the
+	// configured threshold (see rotation_status.go for semantics). Feeds the
+	// Rotation Status panel on /zitadel in the UI.
+	mux.HandleFunc("GET /api/v1/zitadel/action-rotation-status", withCORS(withOperatorAuth(HandleActionRotationStatus)))
+
 	// Zitadel Discovery — live state introspection and cross-project role management.
 	// Gated by withOperatorAuth: requires the admin project role (ZITADEL_ADMIN_ROLE_KEY).
 	mux.HandleFunc("GET /api/v1/zitadel/users", withCORS(withOperatorAuth(handleListZitadelUsers)))
@@ -107,7 +113,8 @@ func NewRouter() http.Handler {
 
 	// Data Plane routes — verified by their own mechanisms (HMAC / Redis)
 	mux.HandleFunc("POST /api/webhooks/zitadel", withCORS(HandleZitadelWebhook))
-	mux.HandleFunc("POST /api/action/inject", withCORS(HandleActionInject))
+	mux.HandleFunc("POST /api/action/inject",
+		withCORS(withZitadelActionSignature("ZITADEL_ACTION_SIGNING_KEY", HandleActionInject)))
 
 	return withMaxBody(withSecurityHeaders(mux))
 }

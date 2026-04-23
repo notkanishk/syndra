@@ -45,6 +45,16 @@ services:
       - ZITADEL_MACHINE_KEY_PATH=${ZITADEL_MACHINE_KEY_PATH:+/etc/mkauth/zitadel-sa-key.json}
       - ZITADEL_ADMIN_ROLE_KEY=${ZITADEL_ADMIN_ROLE_KEY:-admin}
       - ZITADEL_WEBHOOK_SECRET=${ZITADEL_WEBHOOK_SECRET:-}
+      # Set after running `make zitadel-actions-register` — captured once from the
+      # Action target creation response. Unset = signature verification disabled
+      # (dev mode pass-through with warning log).
+      - ZITADEL_ACTION_SIGNING_KEY=${ZITADEL_ACTION_SIGNING_KEY:-}
+      # Rotation-status observability. ROTATED_AT is an RFC3339 UTC timestamp
+      # emitted by rotate.sh; THRESHOLD_DAYS is the age at which the /zitadel
+      # UI panel flips from ok -> warn (default 90). Both feed
+      # GET /api/v1/zitadel/action-rotation-status.
+      - ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT=${ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT:-}
+      - ZITADEL_ACTION_SIGNING_KEY_ROTATION_THRESHOLD_DAYS=${ZITADEL_ACTION_SIGNING_KEY_ROTATION_THRESHOLD_DAYS:-}
     volumes:
       # Bind the host-side key file to the fixed internal path. When
       # ZITADEL_MACHINE_KEY_PATH is unset, this resolves to a /dev/null no-op
