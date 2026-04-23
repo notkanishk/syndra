@@ -83,6 +83,13 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/onboarding/triggers", withCORS(withUserAuth(handleGetOnboardingTriggers)))
 	mux.HandleFunc("GET /api/v1/webhook/events", withCORS(withUserAuth(handleGetWebhookEvents)))
 
+	// Zitadel M2M health check — exercises the full service-account path
+	// (key → token exchange → Management API call). Gated by withOperatorAuth
+	// so it's reachable from the admin UI through the standard proxy. In dev
+	// mode (no ZITADEL_DOMAIN), withUserAuth falls through to API-key auth,
+	// preserving the cmdline smoke-test path.
+	mux.HandleFunc("GET /api/v1/zitadel/health", withCORS(withOperatorAuth(handleZitadelHealth)))
+
 	// Zitadel Discovery — live state introspection and cross-project role management.
 	// Gated by withOperatorAuth: requires the admin project role (ZITADEL_ADMIN_ROLE_KEY).
 	mux.HandleFunc("GET /api/v1/zitadel/users", withCORS(withOperatorAuth(handleListZitadelUsers)))

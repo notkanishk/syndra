@@ -52,6 +52,7 @@ Every change directory has: `proposal.md` (why), `design.md` (how), `tasks.md` (
 | [Provisioning Intents](changes/provisioning-intents/) | 4 | Complete | [proposal](changes/provisioning-intents/proposal.md) / [design](changes/provisioning-intents/design.md) / [impl](changes/provisioning-intents/IMPLEMENTATION.md) |
 | [Shadow Password Vault](changes/shadow-password-vault/) | 4 | Complete | [proposal](changes/shadow-password-vault/proposal.md) / [design](changes/shadow-password-vault/design.md) / [impl](changes/shadow-password-vault/IMPLEMENTATION.md) |
 | [Sync Service](changes/sync-service/) | 4 | Complete | [proposal](changes/sync-service/proposal.md) / [design](changes/sync-service/design.md) / [impl](changes/sync-service/IMPLEMENTATION.md) |
+| [Zitadel Diagnostic UI](changes/zitadel-diagnostic-ui/) | 5 | Complete | [proposal](changes/zitadel-diagnostic-ui/proposal.md) / [design](changes/zitadel-diagnostic-ui/design.md) / [impl](changes/zitadel-diagnostic-ui/IMPLEMENTATION.md) |
 
 ## Roadmap Phase -> Change Mapping
 

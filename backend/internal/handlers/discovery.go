@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"net/http"
+	"os"
 	"strconv"
+	"time"
 
 	"mkauth/internal/zitadel"
 )
@@ -274,4 +276,61 @@ func handleRemoveZitadelGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, map[string]string{"status": "removed"})
+}
+
+// --- Health ---
+
+// zitadelHealthResponse is the diagnostic payload for the M2M smoke test.
+type zitadelHealthResponse struct {
+	Status    string `json:"status"`
+	Mode      string `json:"mode"`
+	Domain    string `json:"domain,omitempty"`
+	Projects  int    `json:"projects_total,omitempty"`
+	LatencyMs int64  `json:"latency_ms,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// handleZitadelHealth exercises the full M2M path end-to-end: the key file is
+// re-read on demand for the token assertion, exchanged for an access token
+// against /oauth/v2/token, and then used for a minimal Management API call.
+// Gated by the shared API key so operators can verify the service-account
+// configuration without needing a user bearer token.
+//
+// GET /api/v1/zitadel/health
+func handleZitadelHealth(w http.ResponseWriter, r *http.Request) {
+	domain := os.Getenv("ZITADEL_DOMAIN")
+
+	if zitadel.MgmtClient == nil {
+		jsonResponse(w, http.StatusServiceUnavailable, zitadelHealthResponse{
+			Status: "disabled",
+			Mode:   "local-policy-only",
+			Domain: domain,
+			Error:  "Management client not initialized — check ZITADEL_DOMAIN, ZITADEL_MACHINE_KEY_PATH, and backend startup logs",
+		})
+		return
+	}
+
+	start := time.Now()
+	// limit=1 keeps the response tiny while still forcing a real API round-trip.
+	result, err := zitadelListProjects(r.Context(), zitadel.SearchParams{Limit: 1})
+	latency := time.Since(start).Milliseconds()
+
+	if err != nil {
+		jsonResponse(w, http.StatusBadGateway, zitadelHealthResponse{
+			Status:    "error",
+			Mode:      "live",
+			Domain:    domain,
+			LatencyMs: latency,
+			Error:     err.Error(),
+		})
+		return
+	}
+
+	jsonResponse(w, http.StatusOK, zitadelHealthResponse{
+		Status:    "ok",
+		Mode:      "live",
+		Domain:    domain,
+		Projects:  result.Total,
+		LatencyMs: latency,
+	})
 }

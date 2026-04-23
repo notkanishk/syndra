@@ -36,6 +36,9 @@ export default function Sidebar({ session }: { session: SessionUser }) {
             <p className="px-3 pt-4 pb-1 text-xs font-semibold text-muted uppercase tracking-wider">Governance</p>
             <Link href="/audit" className="block px-3 py-2 text-sm text-muted hover:text-foreground hover:bg-surfaceHover rounded-md transition-colors">Audit Log</Link>
             <Link href="/requests" className="block px-3 py-2 text-sm text-muted hover:text-foreground hover:bg-surfaceHover rounded-md transition-colors">Access Requests</Link>
+
+            <p className="px-3 pt-4 pb-1 text-xs font-semibold text-muted uppercase tracking-wider">Operations</p>
+            <Link href="/zitadel" className="block px-3 py-2 text-sm text-muted hover:text-foreground hover:bg-surfaceHover rounded-md transition-colors">Zitadel Diagnostics</Link>
           </>
         ) : (
           <>

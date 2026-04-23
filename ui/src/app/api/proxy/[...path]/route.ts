@@ -8,7 +8,7 @@ function isSelfScoped(path: string[], userId: string) {
   return path[0] === "users" && path[1] === userId && (path[2] === "access" || path[2] === "grants");
 }
 
-function isMemberAllowed(method: "GET" | "POST" | "PUT", path: string[], userId: string) {
+function isMemberAllowed(method: "GET" | "POST" | "PUT" | "DELETE", path: string[], userId: string) {
   if (method === "GET") {
     if (path.length === 1 && (path[0] === "catalog" || path[0] === "applications" || path[0] === "requests")) {
       return true;
@@ -20,10 +20,11 @@ function isMemberAllowed(method: "GET" | "POST" | "PUT", path: string[], userId:
     return true;
   }
 
+  // Destructive methods are admin-only; non-admins always fall through to 403.
   return false;
 }
 
-async function proxy(request: NextRequest, method: "GET" | "POST" | "PUT", path: string[]) {
+async function proxy(request: NextRequest, method: "GET" | "POST" | "PUT" | "DELETE", path: string[]) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -52,7 +53,7 @@ async function proxy(request: NextRequest, method: "GET" | "POST" | "PUT", path:
     cache: "no-store",
   };
 
-  if (method !== "GET") {
+  if (method === "POST" || method === "PUT") {
     const body = await request.json();
     const payload = session.role === "admin"
       ? body
@@ -102,4 +103,12 @@ export async function PUT(
 ) {
   const { path } = await params;
   return proxy(request, "PUT", path);
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await params;
+  return proxy(request, "DELETE", path);
 }

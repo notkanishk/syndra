@@ -26,7 +26,7 @@ func LoadServiceAccountKey(path string) (*ServiceAccountKey, *rsa.PrivateKey, er
 	}
 
 	if len(data) == 0 {
-		return nil, nil, fmt.Errorf("key file is empty: %s (0 bytes) — check that ZITADEL_SA_KEY_HOST_PATH points to the real JSON file on the host and that the bind mount is correct", path)
+		return nil, nil, fmt.Errorf("key file is empty: %s (0 bytes) — check that ZITADEL_MACHINE_KEY_PATH in .env points to the real JSON file (relative paths resolve against the docker-compose directory) and that the compose bind mount is not falling through to /dev/null", path)
 	}
 
 	var sa ServiceAccountKey
