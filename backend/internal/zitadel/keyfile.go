@@ -25,9 +25,13 @@ func LoadServiceAccountKey(path string) (*ServiceAccountKey, *rsa.PrivateKey, er
 		return nil, nil, fmt.Errorf("read key file: %w", err)
 	}
 
+	if len(data) == 0 {
+		return nil, nil, fmt.Errorf("key file is empty: %s (0 bytes) — check that ZITADEL_SA_KEY_HOST_PATH points to the real JSON file on the host and that the bind mount is correct", path)
+	}
+
 	var sa ServiceAccountKey
 	if err := json.Unmarshal(data, &sa); err != nil {
-		return nil, nil, fmt.Errorf("decode key file: %w", err)
+		return nil, nil, fmt.Errorf("decode key file %s (%d bytes): %w", path, len(data), err)
 	}
 
 	if sa.Type != "serviceaccount" {

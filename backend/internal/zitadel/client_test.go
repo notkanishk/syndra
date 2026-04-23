@@ -134,6 +134,27 @@ func TestLoadServiceAccountKey_FileNotFound(t *testing.T) {
 	}
 }
 
+// TestLoadServiceAccountKey_EmptyFile guards against the silent-empty-mount
+// failure mode: if the bind mount resolves to /dev/null or a zero-byte file,
+// the error must identify the cause explicitly rather than surface an opaque
+// JSON decode error.
+func TestLoadServiceAccountKey_EmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "empty.json")
+	os.WriteFile(path, []byte{}, 0644)
+
+	_, _, err := LoadServiceAccountKey(path)
+	if err == nil {
+		t.Fatal("expected error for empty file")
+	}
+	if !strings.Contains(err.Error(), "empty") {
+		t.Errorf("error should name the empty-file condition, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), path) {
+		t.Errorf("error should include the file path, got: %v", err)
+	}
+}
+
 // --- token manager tests ---
 
 func TestTokenManager_CachedToken(t *testing.T) {

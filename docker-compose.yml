@@ -38,13 +38,18 @@ services:
       - MIGRATION_PATH=${MIGRATION_PATH:-file:///app/db/migrations}
       - ZITADEL_DOMAIN=${ZITADEL_DOMAIN:-}
       - ZITADEL_AUDIENCE=${ZITADEL_AUDIENCE:-}
-      - ZITADEL_MACHINE_KEY_PATH=${ZITADEL_MACHINE_KEY_PATH:-}
+      # ZITADEL_MACHINE_KEY_PATH in .env is a HOST path (e.g. ./zitadel-machine-key.json).
+      # Inside the container it is rewritten to the fixed mount point below, but
+      # only when the operator actually set it — when unset, the container sees
+      # an empty value and InitClient short-circuits to local-policy-only mode.
+      - ZITADEL_MACHINE_KEY_PATH=${ZITADEL_MACHINE_KEY_PATH:+/etc/mkauth/zitadel-sa-key.json}
       - ZITADEL_ADMIN_ROLE_KEY=${ZITADEL_ADMIN_ROLE_KEY:-admin}
       - ZITADEL_WEBHOOK_SECRET=${ZITADEL_WEBHOOK_SECRET:-}
     volumes:
-      # Mount the Zitadel service account key file into the container.
-      # ZITADEL_SA_KEY_HOST_PATH on the host → ZITADEL_MACHINE_KEY_PATH inside.
-      - ${ZITADEL_SA_KEY_HOST_PATH:-/dev/null}:${ZITADEL_MACHINE_KEY_PATH:-/tmp/zitadel-sa-key.json}:ro
+      # Bind the host-side key file to the fixed internal path. When
+      # ZITADEL_MACHINE_KEY_PATH is unset, this resolves to a /dev/null no-op
+      # mount and the backend skips M2M init via the env-var check above.
+      - ${ZITADEL_MACHINE_KEY_PATH:-/dev/null}:/etc/mkauth/zitadel-sa-key.json:ro
     ports:
       - "8080:8080"
     depends_on:
