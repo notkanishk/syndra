@@ -10,15 +10,24 @@ import (
 
 // mockClient records calls to the ZitadelClient interface.
 type mockClient struct {
-	addGrantCalls    []addGrantCall
-	addGrantErr      error
-	updateGrantCalls []updateGrantCall
-	removeGrantCalls []removeGrantCall
-	listGrantsResult []UserGrant
-	getUserResult    *ZitadelUser
-	addRoleCalls     []addRoleCall
-	listRolesResult  []ProjectRoleResult
-	updateRoleCalls  []updateRoleCall
+	addGrantCalls      []addGrantCall
+	addGrantErr        error
+	updateGrantCalls   []updateGrantCall
+	removeGrantCalls   []removeGrantCall
+	listGrantsResult   []UserGrant
+	listAllGrantsResult []UserGrant
+	getUserResult      *ZitadelUser
+	listUsersResult    []ZitadelUser
+	listProjectsResult []ZitadelProject
+	addRoleCalls       []addRoleCall
+	listRolesResult    []ProjectRoleResult
+	updateRoleCalls    []updateRoleCall
+	deleteRoleCalls    []deleteRoleCall
+}
+
+type deleteRoleCall struct {
+	ProjectID string
+	RoleKey   string
 }
 
 type addRoleCall struct {
@@ -67,8 +76,8 @@ func (m *mockClient) RemoveUserGrant(_ context.Context, userID, grantID string) 
 	return nil
 }
 
-func (m *mockClient) ListUserGrants(_ context.Context, _ string) ([]UserGrant, error) {
-	return m.listGrantsResult, nil
+func (m *mockClient) ListUserGrants(_ context.Context, _ string, _ SearchParams) (*SearchResult[UserGrant], error) {
+	return &SearchResult[UserGrant]{Items: m.listGrantsResult}, nil
 }
 
 func (m *mockClient) GetUser(_ context.Context, _ string) (*ZitadelUser, error) {
@@ -80,13 +89,30 @@ func (m *mockClient) AddProjectRole(_ context.Context, projectID, roleKey, displ
 	return nil
 }
 
-func (m *mockClient) ListProjectRoles(_ context.Context, _ string) ([]ProjectRoleResult, error) {
-	return m.listRolesResult, nil
+func (m *mockClient) ListProjectRoles(_ context.Context, _ string, _ SearchParams) (*SearchResult[ProjectRoleResult], error) {
+	return &SearchResult[ProjectRoleResult]{Items: m.listRolesResult}, nil
 }
 
 func (m *mockClient) UpdateProjectRole(_ context.Context, projectID, roleKey, displayName, group string) error {
 	m.updateRoleCalls = append(m.updateRoleCalls, updateRoleCall{projectID, roleKey, displayName, group})
 	return nil
+}
+
+func (m *mockClient) DeleteProjectRole(_ context.Context, projectID, roleKey string) error {
+	m.deleteRoleCalls = append(m.deleteRoleCalls, deleteRoleCall{projectID, roleKey})
+	return nil
+}
+
+func (m *mockClient) ListUsers(_ context.Context, _ SearchParams) (*SearchResult[ZitadelUser], error) {
+	return &SearchResult[ZitadelUser]{Items: m.listUsersResult}, nil
+}
+
+func (m *mockClient) ListProjects(_ context.Context, _ SearchParams) (*SearchResult[ZitadelProject], error) {
+	return &SearchResult[ZitadelProject]{Items: m.listProjectsResult}, nil
+}
+
+func (m *mockClient) ListAllGrants(_ context.Context, _ SearchParams) (*SearchResult[UserGrant], error) {
+	return &SearchResult[UserGrant]{Items: m.listAllGrantsResult}, nil
 }
 
 // stubGetActiveMappingRules replaces db.GetActiveMappingRules for testing.

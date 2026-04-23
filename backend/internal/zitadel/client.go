@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -105,10 +106,11 @@ func (c *managementClient) RemoveUserGrant(ctx context.Context, userID, grantID 
 	return nil
 }
 
-func (c *managementClient) ListUserGrants(ctx context.Context, userID string) ([]UserGrant, error) {
+func (c *managementClient) ListUserGrants(ctx context.Context, userID string, p SearchParams) (*SearchResult[UserGrant], error) {
 	// Zitadel v1: POST /management/v1/users/grants/_search with user ID as a query filter.
 	path := "/management/v1/users/grants/_search"
 	body := map[string]any{
+		"query":   searchQuery(p),
 		"queries": []map[string]any{
 			{
 				"userIdQuery": map[string]string{
@@ -130,12 +132,13 @@ func (c *managementClient) ListUserGrants(ctx context.Context, userID string) ([
 	}
 
 	var result struct {
-		Result []UserGrant `json:"result"`
+		Details searchDetails `json:"details"`
+		Result  []UserGrant   `json:"result"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return nil, fmt.Errorf("decode list grants response: %w", err)
 	}
-	return result.Result, nil
+	return &SearchResult[UserGrant]{Items: result.Result, Total: result.Details.totalInt()}, nil
 }
 
 func (c *managementClient) AddProjectRole(ctx context.Context, projectID, roleKey, displayName, group string) error {
@@ -154,9 +157,11 @@ func (c *managementClient) AddProjectRole(ctx context.Context, projectID, roleKe
 	return nil
 }
 
-func (c *managementClient) ListProjectRoles(ctx context.Context, projectID string) ([]ProjectRoleResult, error) {
+func (c *managementClient) ListProjectRoles(ctx context.Context, projectID string, p SearchParams) (*SearchResult[ProjectRoleResult], error) {
 	path := fmt.Sprintf("/management/v1/projects/%s/roles/_search", projectID)
-	body := map[string]any{}
+	body := map[string]any{
+		"query": searchQuery(p),
+	}
 
 	resp, err := c.doRequest(ctx, http.MethodPost, path, body)
 	if err != nil {
@@ -170,12 +175,13 @@ func (c *managementClient) ListProjectRoles(ctx context.Context, projectID strin
 	}
 
 	var result struct {
-		Result []ProjectRoleResult `json:"result"`
+		Details searchDetails       `json:"details"`
+		Result  []ProjectRoleResult `json:"result"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return nil, fmt.Errorf("decode list project roles response: %w", err)
 	}
-	return result.Result, nil
+	return &SearchResult[ProjectRoleResult]{Items: result.Result, Total: result.Details.totalInt()}, nil
 }
 
 func (c *managementClient) UpdateProjectRole(ctx context.Context, projectID, roleKey, displayName, group string) error {
@@ -234,6 +240,164 @@ func (c *managementClient) GetUser(ctx context.Context, userID string) (*Zitadel
 		Email:       raw.User.Human.Email.Email,
 		State:       raw.User.State,
 	}, nil
+}
+
+func (c *managementClient) ListUsers(ctx context.Context, p SearchParams) (*SearchResult[ZitadelUser], error) {
+	path := "/management/v1/users/_search"
+	body := map[string]any{
+		"query": searchQuery(p),
+	}
+
+	resp, err := c.doRequest(ctx, http.MethodPost, path, body)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read list users response: %w", err)
+	}
+
+	// Search results nest human data directly (no outer "user" wrapper per item).
+	var result struct {
+		Details searchDetails `json:"details"`
+		Result  []struct {
+			ID       string `json:"id"`
+			UserName string `json:"userName"`
+			State    string `json:"state"`
+			Human    struct {
+				Profile struct {
+					DisplayName string `json:"displayName"`
+				} `json:"profile"`
+				Email struct {
+					Email string `json:"email"`
+				} `json:"email"`
+			} `json:"human"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("decode list users response: %w", err)
+	}
+
+	users := make([]ZitadelUser, len(result.Result))
+	for i, r := range result.Result {
+		users[i] = ZitadelUser{
+			ID:          r.ID,
+			Username:    r.UserName,
+			DisplayName: r.Human.Profile.DisplayName,
+			Email:       r.Human.Email.Email,
+			State:       r.State,
+		}
+	}
+	return &SearchResult[ZitadelUser]{Items: users, Total: result.Details.totalInt()}, nil
+}
+
+func (c *managementClient) ListProjects(ctx context.Context, p SearchParams) (*SearchResult[ZitadelProject], error) {
+	path := "/management/v1/projects/_search"
+	body := map[string]any{
+		"query": searchQuery(p),
+	}
+
+	resp, err := c.doRequest(ctx, http.MethodPost, path, body)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read list projects response: %w", err)
+	}
+
+	var result struct {
+		Details searchDetails `json:"details"`
+		Result  []struct {
+			ID    string `json:"id"`
+			Name  string `json:"name"`
+			State string `json:"state"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("decode list projects response: %w", err)
+	}
+
+	projects := make([]ZitadelProject, len(result.Result))
+	for i, r := range result.Result {
+		projects[i] = ZitadelProject{
+			ID:    r.ID,
+			Name:  r.Name,
+			State: r.State,
+		}
+	}
+	return &SearchResult[ZitadelProject]{Items: projects, Total: result.Details.totalInt()}, nil
+}
+
+func (c *managementClient) ListAllGrants(ctx context.Context, p SearchParams) (*SearchResult[UserGrant], error) {
+	// Same endpoint as ListUserGrants but with no user filter — returns all org grants.
+	path := "/management/v1/users/grants/_search"
+	body := map[string]any{
+		"query": searchQuery(p),
+	}
+
+	resp, err := c.doRequest(ctx, http.MethodPost, path, body)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read list all grants response: %w", err)
+	}
+
+	var result struct {
+		Details searchDetails `json:"details"`
+		Result  []UserGrant   `json:"result"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("decode list all grants response: %w", err)
+	}
+	return &SearchResult[UserGrant]{Items: result.Result, Total: result.Details.totalInt()}, nil
+}
+
+func (c *managementClient) DeleteProjectRole(ctx context.Context, projectID, roleKey string) error {
+	path := fmt.Sprintf("/management/v1/projects/%s/roles/%s", projectID, roleKey)
+
+	resp, err := c.doRequest(ctx, http.MethodDelete, path, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+// --- Search helpers ---
+
+// searchQuery builds the pagination object for Zitadel v1 _search endpoints.
+func searchQuery(p SearchParams) map[string]any {
+	limit := p.Limit
+	if limit <= 0 {
+		limit = DefaultSearchLimit
+	}
+	q := map[string]any{
+		"limit": limit,
+		"asc":   true,
+	}
+	if p.Offset > 0 {
+		q["offset"] = strconv.Itoa(p.Offset)
+	}
+	return q
+}
+
+// searchDetails captures the pagination metadata from Zitadel _search responses.
+type searchDetails struct {
+	TotalResult string `json:"totalResult"`
+}
+
+func (d searchDetails) totalInt() int {
+	n, _ := strconv.Atoi(d.TotalResult)
+	return n
 }
 
 // --- HTTP transport layer ---

@@ -370,7 +370,7 @@ func TestListUserGrants_Success(t *testing.T) {
 		}), nil
 	}
 
-	grants, err := client.ListUserGrants(context.Background(), "u1")
+	result, err := client.ListUserGrants(context.Background(), "u1", SearchParams{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -391,11 +391,11 @@ func TestListUserGrants_Success(t *testing.T) {
 		t.Errorf("expected userIdQuery with userId=u1, got: %v", q)
 	}
 
-	if len(grants) != 2 {
-		t.Fatalf("expected 2 grants, got %d", len(grants))
+	if len(result.Items) != 2 {
+		t.Fatalf("expected 2 grants, got %d", len(result.Items))
 	}
-	if grants[0].ID != "g1" || grants[1].ProjectID != "p2" {
-		t.Errorf("unexpected grant data: %+v", grants)
+	if result.Items[0].ID != "g1" || result.Items[1].ProjectID != "p2" {
+		t.Errorf("unexpected grant data: %+v", result.Items)
 	}
 }
 

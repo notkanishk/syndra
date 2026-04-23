@@ -30,17 +30,49 @@ type ProjectRoleResult struct {
 	Group       string `json:"group"`
 }
 
+// ZitadelProject represents a Zitadel project summary.
+type ZitadelProject struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	State string `json:"state"`
+}
+
+// SearchParams controls pagination for Zitadel _search endpoints.
+type SearchParams struct {
+	Limit  int `json:"limit"`
+	Offset int `json:"offset"`
+}
+
+// DefaultSearchLimit is the default page size for _search calls. Zitadel's
+// own default is 100; we use 500 to reduce round-trips at makerspace scale.
+const DefaultSearchLimit = 500
+
+// SearchResult wraps a paginated result set with total count metadata.
+type SearchResult[T any] struct {
+	Items []T `json:"items"`
+	Total int `json:"total"`
+}
+
 // ZitadelClient is the interface over the Zitadel Management API.
 // The live implementation is wired in InitClient once credentials are available.
 type ZitadelClient interface {
+	// Users
+	GetUser(ctx context.Context, userID string) (*ZitadelUser, error)
+	ListUsers(ctx context.Context, p SearchParams) (*SearchResult[ZitadelUser], error)
+
+	// Projects & Roles
+	ListProjects(ctx context.Context, p SearchParams) (*SearchResult[ZitadelProject], error)
+	AddProjectRole(ctx context.Context, projectID, roleKey, displayName, group string) error
+	ListProjectRoles(ctx context.Context, projectID string, p SearchParams) (*SearchResult[ProjectRoleResult], error)
+	UpdateProjectRole(ctx context.Context, projectID, roleKey, displayName, group string) error
+	DeleteProjectRole(ctx context.Context, projectID, roleKey string) error
+
+	// Grants (user-role assignments)
 	AddUserGrant(ctx context.Context, userID, projectID string, roleKeys []string) error
 	UpdateUserGrant(ctx context.Context, userID, grantID string, roleKeys []string) error
 	RemoveUserGrant(ctx context.Context, userID, grantID string) error
-	ListUserGrants(ctx context.Context, userID string) ([]UserGrant, error)
-	GetUser(ctx context.Context, userID string) (*ZitadelUser, error)
-	AddProjectRole(ctx context.Context, projectID, roleKey, displayName, group string) error
-	ListProjectRoles(ctx context.Context, projectID string) ([]ProjectRoleResult, error)
-	UpdateProjectRole(ctx context.Context, projectID, roleKey, displayName, group string) error
+	ListUserGrants(ctx context.Context, userID string, p SearchParams) (*SearchResult[UserGrant], error)
+	ListAllGrants(ctx context.Context, p SearchParams) (*SearchResult[UserGrant], error)
 }
 
 // EnforceMappingRules is triggered when a user is modified.
@@ -88,8 +120,8 @@ func RevokeMappingRules(ctx context.Context, userID, sourceProjectID, sourceRole
 		return fmt.Errorf("failed to query mapping rules: %v", err)
 	}
 
-	// Fetch user's current grants once.
-	grants, err := MgmtClient.ListUserGrants(ctx, userID)
+	// Fetch ALL of the user's grants (paginate until exhausted).
+	allGrants, err := fetchAllUserGrants(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("failed to list user grants for revocation: %v", err)
 	}
@@ -99,7 +131,7 @@ func RevokeMappingRules(ctx context.Context, userID, sourceProjectID, sourceRole
 		grant UserGrant
 	}
 	grantIndex := make(map[string]*grantRef)
-	for _, g := range grants {
+	for _, g := range allGrants {
 		ref := &grantRef{grant: g}
 		for _, rk := range g.RoleKeys {
 			grantIndex[g.ProjectID+":"+rk] = ref
@@ -154,4 +186,26 @@ func AssignUserToRole(ctx context.Context, userID, projectID, roleKey string) er
 
 	log.Printf("[ZITADEL] Granted %s -> %s to %s via Management API.", projectID, roleKey, userID)
 	return nil
+}
+
+// fetchAllUserGrants paginates through all grants for a user so that operations
+// like revocation never silently miss grants beyond the first page.
+func fetchAllUserGrants(ctx context.Context, userID string) ([]UserGrant, error) {
+	var all []UserGrant
+	offset := 0
+	for {
+		result, err := MgmtClient.ListUserGrants(ctx, userID, SearchParams{
+			Limit:  DefaultSearchLimit,
+			Offset: offset,
+		})
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, result.Items...)
+		if len(all) >= result.Total || len(result.Items) == 0 {
+			break
+		}
+		offset += len(result.Items)
+	}
+	return all, nil
 }

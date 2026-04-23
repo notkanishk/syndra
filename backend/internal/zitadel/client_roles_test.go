@@ -91,19 +91,19 @@ func TestListProjectRoles_ParsesResponse(t *testing.T) {
 		domain: "test.zitadel.dev", tokens: tm, http: &http.Client{},
 	}
 
-	roles, err := client.ListProjectRoles(context.Background(), "proj-456")
+	result, err := client.ListProjectRoles(context.Background(), "proj-456", SearchParams{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(roles) != 2 {
-		t.Fatalf("expected 2 roles, got %d", len(roles))
+	if len(result.Items) != 2 {
+		t.Fatalf("expected 2 roles, got %d", len(result.Items))
 	}
-	if roles[0].Key != "admin" || roles[0].DisplayName != "Administrator" {
-		t.Errorf("unexpected first role: %+v", roles[0])
+	if result.Items[0].Key != "admin" || result.Items[0].DisplayName != "Administrator" {
+		t.Errorf("unexpected first role: %+v", result.Items[0])
 	}
-	if roles[1].Key != "member" {
-		t.Errorf("unexpected second role: %+v", roles[1])
+	if result.Items[1].Key != "member" {
+		t.Errorf("unexpected second role: %+v", result.Items[1])
 	}
 }
 

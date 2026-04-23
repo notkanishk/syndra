@@ -10,6 +10,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -165,4 +166,33 @@ func ValidateToken(ctx context.Context, tokenStr, domain, audience string) (stri
 	}
 
 	return subject, nil
+}
+
+// HasProjectRole checks whether an already-validated JWT contains a specific
+// role key in the Zitadel project roles claim (urn:zitadel:iam:org:project:roles).
+// The claim is a map of roleKey → { orgId: orgName }. This function only checks
+// for key presence. The token MUST have been validated before calling this.
+func HasProjectRole(tokenStr, roleKey string) bool {
+	parts := strings.Split(tokenStr, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return false
+	}
+	var claims map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return false
+	}
+	raw, ok := claims["urn:zitadel:iam:org:project:roles"]
+	if !ok {
+		return false
+	}
+	var roles map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &roles); err != nil {
+		return false
+	}
+	_, exists := roles[roleKey]
+	return exists
 }

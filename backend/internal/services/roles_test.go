@@ -225,8 +225,8 @@ type failingRoleClient struct{}
 func (f *failingRoleClient) AddUserGrant(_ context.Context, _, _ string, _ []string) error   { return nil }
 func (f *failingRoleClient) UpdateUserGrant(_ context.Context, _, _ string, _ []string) error { return nil }
 func (f *failingRoleClient) RemoveUserGrant(_ context.Context, _, _ string) error             { return nil }
-func (f *failingRoleClient) ListUserGrants(_ context.Context, _ string) ([]zitadel.UserGrant, error) {
-	return nil, nil
+func (f *failingRoleClient) ListUserGrants(_ context.Context, _ string, _ zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+	return &zitadel.SearchResult[zitadel.UserGrant]{}, nil
 }
 func (f *failingRoleClient) GetUser(_ context.Context, _ string) (*zitadel.ZitadelUser, error) {
 	return nil, nil
@@ -234,7 +234,17 @@ func (f *failingRoleClient) GetUser(_ context.Context, _ string) (*zitadel.Zitad
 func (f *failingRoleClient) AddProjectRole(_ context.Context, _, _, _, _ string) error {
 	return fmt.Errorf("zitadel unavailable")
 }
-func (f *failingRoleClient) ListProjectRoles(_ context.Context, _ string) ([]zitadel.ProjectRoleResult, error) {
-	return nil, nil
+func (f *failingRoleClient) ListProjectRoles(_ context.Context, _ string, _ zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ProjectRoleResult], error) {
+	return &zitadel.SearchResult[zitadel.ProjectRoleResult]{}, nil
 }
 func (f *failingRoleClient) UpdateProjectRole(_ context.Context, _, _, _, _ string) error { return nil }
+func (f *failingRoleClient) DeleteProjectRole(_ context.Context, _, _ string) error       { return nil }
+func (f *failingRoleClient) ListUsers(_ context.Context, _ zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
+	return &zitadel.SearchResult[zitadel.ZitadelUser]{}, nil
+}
+func (f *failingRoleClient) ListProjects(_ context.Context, _ zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelProject], error) {
+	return &zitadel.SearchResult[zitadel.ZitadelProject]{}, nil
+}
+func (f *failingRoleClient) ListAllGrants(_ context.Context, _ zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+	return &zitadel.SearchResult[zitadel.UserGrant]{}, nil
+}

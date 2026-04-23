@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 
 	"mkauth/internal/cache"
 	"mkauth/internal/db"
@@ -60,6 +61,60 @@ var (
 	dbHasShadowCredential      = db.HasShadowCredential
 	dbGetShadowCredential      = db.GetShadowCredential
 	dbGetShadowCredentialAudit = db.GetShadowCredentialAudit
+
+	// Zitadel discovery injectable vars.
+	// Each closure checks MgmtClient at call time (not definition time) so the
+	// nil guard in discovery handlers and these closures are defense-in-depth.
+	errNoClient = fmt.Errorf("zitadel client not initialized")
+
+	zitadelListUsers = func(ctx context.Context, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
+		if zitadel.MgmtClient == nil { return nil, errNoClient }
+		return zitadel.MgmtClient.ListUsers(ctx, p)
+	}
+	zitadelGetUser = func(ctx context.Context, userID string) (*zitadel.ZitadelUser, error) {
+		if zitadel.MgmtClient == nil { return nil, errNoClient }
+		return zitadel.MgmtClient.GetUser(ctx, userID)
+	}
+	zitadelListProjects = func(ctx context.Context, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelProject], error) {
+		if zitadel.MgmtClient == nil { return nil, errNoClient }
+		return zitadel.MgmtClient.ListProjects(ctx, p)
+	}
+	zitadelListProjectRoles = func(ctx context.Context, projectID string, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ProjectRoleResult], error) {
+		if zitadel.MgmtClient == nil { return nil, errNoClient }
+		return zitadel.MgmtClient.ListProjectRoles(ctx, projectID, p)
+	}
+	zitadelAddProjectRole = func(ctx context.Context, projectID, roleKey, displayName, group string) error {
+		if zitadel.MgmtClient == nil { return errNoClient }
+		return zitadel.MgmtClient.AddProjectRole(ctx, projectID, roleKey, displayName, group)
+	}
+	zitadelUpdateProjectRole = func(ctx context.Context, projectID, roleKey, displayName, group string) error {
+		if zitadel.MgmtClient == nil { return errNoClient }
+		return zitadel.MgmtClient.UpdateProjectRole(ctx, projectID, roleKey, displayName, group)
+	}
+	zitadelDeleteProjectRole = func(ctx context.Context, projectID, roleKey string) error {
+		if zitadel.MgmtClient == nil { return errNoClient }
+		return zitadel.MgmtClient.DeleteProjectRole(ctx, projectID, roleKey)
+	}
+	zitadelListAllGrants = func(ctx context.Context, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+		if zitadel.MgmtClient == nil { return nil, errNoClient }
+		return zitadel.MgmtClient.ListAllGrants(ctx, p)
+	}
+	zitadelListUserGrants = func(ctx context.Context, userID string, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+		if zitadel.MgmtClient == nil { return nil, errNoClient }
+		return zitadel.MgmtClient.ListUserGrants(ctx, userID, p)
+	}
+	zitadelAddUserGrant = func(ctx context.Context, userID, projectID string, roleKeys []string) error {
+		if zitadel.MgmtClient == nil { return errNoClient }
+		return zitadel.MgmtClient.AddUserGrant(ctx, userID, projectID, roleKeys)
+	}
+	zitadelUpdateUserGrant = func(ctx context.Context, userID, grantID string, roleKeys []string) error {
+		if zitadel.MgmtClient == nil { return errNoClient }
+		return zitadel.MgmtClient.UpdateUserGrant(ctx, userID, grantID, roleKeys)
+	}
+	zitadelRemoveUserGrant = func(ctx context.Context, userID, grantID string) error {
+		if zitadel.MgmtClient == nil { return errNoClient }
+		return zitadel.MgmtClient.RemoveUserGrant(ctx, userID, grantID)
+	}
 
 	// Data-plane injectable vars — used by HandleActionInject and degradedResponse.
 	// Separate from the control-plane vars above so tests can exercise the degraded

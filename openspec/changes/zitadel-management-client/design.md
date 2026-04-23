@@ -40,16 +40,35 @@ M2M authentication via JWT profile grant (RFC 7523):
 
 ```go
 type ZitadelClient interface {
-    AddUserGrant(ctx context.Context, userID, projectID string, roleKeys []string) error
-    RemoveUserGrant(ctx context.Context, userID, grantID string) error
-    ListUserGrants(ctx context.Context, userID string) ([]UserGrant, error)
+    // Users
     GetUser(ctx context.Context, userID string) (*ZitadelUser, error)
+    ListUsers(ctx context.Context, p SearchParams) (*SearchResult[ZitadelUser], error)
+
+    // Projects & Roles
+    ListProjects(ctx context.Context, p SearchParams) (*SearchResult[ZitadelProject], error)
+    AddProjectRole(ctx context.Context, projectID, roleKey, displayName, group string) error
+    ListProjectRoles(ctx context.Context, projectID string, p SearchParams) (*SearchResult[ProjectRoleResult], error)
+    UpdateProjectRole(ctx context.Context, projectID, roleKey, displayName, group string) error
+    DeleteProjectRole(ctx context.Context, projectID, roleKey string) error
+
+    // Grants (user-role assignments)
+    AddUserGrant(ctx context.Context, userID, projectID string, roleKeys []string) error
+    UpdateUserGrant(ctx context.Context, userID, grantID string, roleKeys []string) error
+    RemoveUserGrant(ctx context.Context, userID, grantID string) error
+    ListUserGrants(ctx context.Context, userID string, p SearchParams) (*SearchResult[UserGrant], error)
+    ListAllGrants(ctx context.Context, p SearchParams) (*SearchResult[UserGrant], error)
 }
 ```
+
+**Pagination types**:
+- `SearchParams`: `Limit`, `Offset` — passed to all `_search` endpoints. Default limit: 500.
+- `SearchResult[T]`: `Items []T`, `Total int` — wraps every paginated response with total count.
 
 **Response types**:
 - `UserGrant`: `ID`, `UserID`, `ProjectID`, `RoleKeys`.
 - `ZitadelUser`: `ID`, `Username`, `DisplayName`, `Email`, `State`.
+- `ZitadelProject`: `ID`, `Name`, `State`.
+- `ProjectRoleResult`: `Key`, `DisplayName`, `Group`.
 
 **`MgmtClient`** changed from `interface{} = nil` to typed `ZitadelClient`. This eliminates the two runtime type assertions (`MgmtClient.(ZitadelClient)`) that existed in `EnforceMappingRules` and `AssignUserToRole`.
 
@@ -68,12 +87,43 @@ type ZitadelClient interface {
 
 | Method | HTTP | Path | Notes |
 |--------|------|------|-------|
-| `AddUserGrant` | POST | `/management/v1/users/{userId}/grants` | Body: `{projectId, roleKeys}` |
-| `RemoveUserGrant` | DELETE | `/management/v1/users/{userId}/grants/{grantId}` | No body |
-| `ListUserGrants` | POST | `/management/v1/users/grants/_search` | Body: `{queries: [{userIdQuery: {userId}}]}` — user ID is a query filter, not a path segment |
 | `GetUser` | GET | `/management/v1/users/{userId}` | Response nests human data under `user.human.profile` and `user.human.email` |
+| `ListUsers` | POST | `/management/v1/users/_search` | Paginated; search results use flat nesting (no outer `user` wrapper per item) |
+| `ListProjects` | POST | `/management/v1/projects/_search` | Paginated |
+| `AddProjectRole` | POST | `/management/v1/projects/{projectId}/roles` | Body: `{roleKey, displayName, group}` |
+| `ListProjectRoles` | POST | `/management/v1/projects/{projectId}/roles/_search` | Paginated |
+| `UpdateProjectRole` | PUT | `/management/v1/projects/{projectId}/roles/{roleKey}` | Body: `{displayName, group}` |
+| `DeleteProjectRole` | DELETE | `/management/v1/projects/{projectId}/roles/{roleKey}` | No body |
+| `AddUserGrant` | POST | `/management/v1/users/{userId}/grants` | Body: `{projectId, roleKeys}` |
+| `UpdateUserGrant` | PUT | `/management/v1/users/{userId}/grants/{grantId}` | Body: `{roleKeys}` |
+| `RemoveUserGrant` | DELETE | `/management/v1/users/{userId}/grants/{grantId}` | No body |
+| `ListUserGrants` | POST | `/management/v1/users/grants/_search` | Body: `{query, queries: [{userIdQuery}]}` — paginated |
+| `ListAllGrants` | POST | `/management/v1/users/grants/_search` | No user filter — returns all org grants; paginated |
 
 **GetUser response parsing**: Zitadel v1 nests human user data as `user.human.profile.displayName` and `user.human.email.email`. The implementation uses an intermediate struct to extract these nested fields into the flat `ZitadelUser` type.
+
+### 4a. Zitadel Discovery Endpoints (`handlers/discovery.go`)
+
+13 HTTP endpoints under `/api/v1/zitadel/` provide live state introspection and cross-project role management:
+
+| MkAuth Endpoint | HTTP | Zitadel Call | Auth |
+|-----------------|------|-------------|------|
+| `/api/v1/zitadel/users` | GET | `ListUsers` | `withOperatorAuth` |
+| `/api/v1/zitadel/users/{id}` | GET | `GetUser` | `withOperatorAuth` |
+| `/api/v1/zitadel/projects` | GET | `ListProjects` | `withOperatorAuth` |
+| `/api/v1/zitadel/projects/{id}/roles` | GET | `ListProjectRoles` | `withOperatorAuth` |
+| `/api/v1/zitadel/projects/{id}/roles` | POST | `AddProjectRole` | `withOperatorAuth` |
+| `/api/v1/zitadel/projects/{id}/roles/{key}` | PUT | `UpdateProjectRole` | `withOperatorAuth` |
+| `/api/v1/zitadel/projects/{id}/roles/{key}` | DELETE | `DeleteProjectRole` | `withOperatorAuth` |
+| `/api/v1/zitadel/grants` | GET | `ListAllGrants` | `withOperatorAuth` |
+| `/api/v1/zitadel/users/{id}/grants` | GET | `ListUserGrants` | `withOperatorAuth` |
+| `/api/v1/zitadel/users/{id}/grants` | POST | `AddUserGrant` | `withOperatorAuth` |
+| `/api/v1/zitadel/users/{id}/grants/{grantId}` | PUT | `UpdateUserGrant` | `withOperatorAuth` |
+| `/api/v1/zitadel/users/{id}/grants/{grantId}` | DELETE | `RemoveUserGrant` | `withOperatorAuth` |
+
+**Authorization**: `withOperatorAuth` wraps `withUserAuth` and additionally checks the Zitadel project roles claim (`urn:zitadel:iam:org:project:roles`) for the admin role key (configurable via `ZITADEL_ADMIN_ROLE_KEY`, default `"admin"`). In dev mode (no `ZITADEL_DOMAIN`), the role check is skipped.
+
+**Pagination**: List endpoints accept `?limit=N&offset=N` query params (max 1000, default 500). Responses include `{items, total, limit, offset}` so consumers always know if results are truncated.
 
 ### 5. Injectable Dependencies (`deps.go`)
 

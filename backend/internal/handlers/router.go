@@ -83,6 +83,21 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/onboarding/triggers", withCORS(withUserAuth(handleGetOnboardingTriggers)))
 	mux.HandleFunc("GET /api/v1/webhook/events", withCORS(withUserAuth(handleGetWebhookEvents)))
 
+	// Zitadel Discovery — live state introspection and cross-project role management.
+	// Gated by withOperatorAuth: requires the admin project role (ZITADEL_ADMIN_ROLE_KEY).
+	mux.HandleFunc("GET /api/v1/zitadel/users", withCORS(withOperatorAuth(handleListZitadelUsers)))
+	mux.HandleFunc("GET /api/v1/zitadel/users/{id}", withCORS(withOperatorAuth(handleGetZitadelUser)))
+	mux.HandleFunc("GET /api/v1/zitadel/projects", withCORS(withOperatorAuth(handleListZitadelProjects)))
+	mux.HandleFunc("GET /api/v1/zitadel/projects/{id}/roles", withCORS(withOperatorAuth(handleListZitadelProjectRoles)))
+	mux.HandleFunc("POST /api/v1/zitadel/projects/{id}/roles", withCORS(withOperatorAuth(handleCreateZitadelProjectRole)))
+	mux.HandleFunc("PUT /api/v1/zitadel/projects/{id}/roles/{key}", withCORS(withOperatorAuth(handleUpdateZitadelProjectRole)))
+	mux.HandleFunc("DELETE /api/v1/zitadel/projects/{id}/roles/{key}", withCORS(withOperatorAuth(handleDeleteZitadelProjectRole)))
+	mux.HandleFunc("GET /api/v1/zitadel/grants", withCORS(withOperatorAuth(handleListAllZitadelGrants)))
+	mux.HandleFunc("GET /api/v1/zitadel/users/{id}/grants", withCORS(withOperatorAuth(handleListZitadelUserGrants)))
+	mux.HandleFunc("POST /api/v1/zitadel/users/{id}/grants", withCORS(withOperatorAuth(handleAssignZitadelGrant)))
+	mux.HandleFunc("PUT /api/v1/zitadel/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleUpdateZitadelGrant)))
+	mux.HandleFunc("DELETE /api/v1/zitadel/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleRemoveZitadelGrant)))
+
 	// Data Plane routes — verified by their own mechanisms (HMAC / Redis)
 	mux.HandleFunc("POST /api/webhooks/zitadel", withCORS(HandleZitadelWebhook))
 	mux.HandleFunc("POST /api/action/inject", withCORS(HandleActionInject))
@@ -135,6 +150,35 @@ func withUserAuth(next http.HandlerFunc) http.HandlerFunc {
 		ctx := withAdminUserID(r.Context(), adminUserID)
 		next(w, r.WithContext(ctx))
 	}
+}
+
+// withOperatorAuth gates endpoints that require operator-level (admin) access.
+// Wraps withUserAuth then checks the Zitadel project roles claim for the admin
+// role key (ZITADEL_ADMIN_ROLE_KEY, default "admin"). In dev mode (no ZITADEL_DOMAIN),
+// the role check is skipped since auth falls back to shared API key.
+func withOperatorAuth(next http.HandlerFunc) http.HandlerFunc {
+	return withUserAuth(func(w http.ResponseWriter, r *http.Request) {
+		// In dev mode, withUserAuth already fell through to API key auth — skip role check.
+		if os.Getenv("ZITADEL_DOMAIN") == "" {
+			next(w, r)
+			return
+		}
+
+		rawToken := extractBearerToken(r)
+		adminRoleKey := os.Getenv("ZITADEL_ADMIN_ROLE_KEY")
+		if adminRoleKey == "" {
+			adminRoleKey = "admin"
+		}
+
+		if !auth.HasProjectRole(rawToken, adminRoleKey) {
+			log.Printf("[AUTH] Operator access denied for user=%s on %s %s (missing role %q)",
+				getAdminUserID(r.Context()), r.Method, r.URL.Path, adminRoleKey)
+			jsonErrorResponse(w, http.StatusForbidden, "FORBIDDEN", "Operator-level access required")
+			return
+		}
+
+		next(w, r)
+	})
 }
 
 // withAPIKeyAuth verifies the MKAUTH_API_KEY shared secret.
