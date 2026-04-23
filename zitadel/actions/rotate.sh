@@ -110,6 +110,41 @@ fi
 
 API_BASE="https://${ZITADEL_DOMAIN}/v2/actions"
 
+# zitadel_api METHOD PATH [JSON_BODY]
+# Same helper shape as register.sh. On HTTP error prints Zitadel's response
+# body verbatim so 401/403 permission failures surface the actual message
+# instead of a bare "curl: (22)". Actions v2 target rotation requires
+# IAM_OWNER on the service user; ORG_OWNER is not enough.
+zitadel_api() {
+  local method="$1" path="$2" body="${3:-}"
+  local tmp status
+  tmp="$(mktemp)"
+  # shellcheck disable=SC2064
+  trap "rm -f '$tmp'" RETURN
+  local -a args=(-sS -o "$tmp" -w '%{http_code}'
+    -X "$method" "${API_BASE}${path}"
+    -H "Authorization: Bearer ${TOKEN}")
+  if [[ -n "$body" ]]; then
+    args+=(-H 'Content-Type: application/json' -d "$body")
+  fi
+  status="$(curl "${args[@]}")"
+  if [[ "$status" -lt 200 || "$status" -ge 300 ]]; then
+    {
+      printf 'error: %s %s -> HTTP %s\n' "$method" "$path" "$status"
+      if [[ "$status" == "401" || "$status" == "403" ]]; then
+        printf '       Actions v2 target management requires IAM_OWNER on the\n'
+        printf '       service user. Assign it at Default Settings > Administrators\n'
+        printf '       in the Zitadel console. ORG_OWNER is not sufficient.\n'
+      fi
+      printf 'response body:\n'
+      cat "$tmp"
+      printf '\n'
+    } >&2
+    return 1
+  fi
+  cat "$tmp"
+}
+
 # ---- Extract target name from manifest (strip _comment/_note annotations) ----
 TARGET_NAME="$(jq -r '
   walk(
@@ -132,10 +167,7 @@ SEARCH_BODY="$(jq -n --arg n "$TARGET_NAME" '{
   filters: [{ target_name_filter: { target_name: $n, method: "TEXT_FILTER_METHOD_EQUALS" } }],
   pagination: { limit: 1 }
 }')"
-LIST_RESP="$(curl -fsS -X POST "${API_BASE}/targets/search" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H 'Content-Type: application/json' \
-  -d "$SEARCH_BODY")"
+LIST_RESP="$(zitadel_api POST /targets/search "$SEARCH_BODY")" || exit 5
 TARGET_ID="$(echo "$LIST_RESP" | jq -r '.targets[0].id // .result[0].id // empty')"
 
 if [[ -z "$TARGET_ID" || "$TARGET_ID" == "null" ]]; then
@@ -149,10 +181,7 @@ fi
 # accepts "0s" (immediate hard swap). Longer graceful periods are a roadmap
 # item; revisit this script if/when Zitadel supports them.
 echo "Rotating signing key on target_id=${TARGET_ID}..." >&2
-ROTATE_RESP="$(curl -fsS -X POST "${API_BASE}/targets/${TARGET_ID}" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H 'Content-Type: application/json' \
-  -d '{"expirationSigningKey":"0s"}')"
+ROTATE_RESP="$(zitadel_api POST "/targets/${TARGET_ID}" '{"expirationSigningKey":"0s"}')" || exit 6
 
 NEW_KEY="$(echo "$ROTATE_RESP" | jq -r '.signingKey // empty')"
 if [[ -z "$NEW_KEY" ]]; then

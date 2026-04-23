@@ -110,6 +110,44 @@ fi
 
 API_BASE="https://${ZITADEL_DOMAIN}/v2/actions"
 
+# zitadel_api METHOD PATH [JSON_BODY]
+# Authenticated call against Zitadel's v2 Actions API. On 2xx, prints the
+# response body on stdout. On 4xx/5xx, prints method + path + status +
+# Zitadel's own JSON error on stderr and returns non-zero — so the operator
+# sees what Zitadel actually complained about instead of a bare
+# "curl: (22)". 401/403 get an IAM_OWNER hint inline because Actions v2
+# target management requires instance-level permission that ORG_OWNER does
+# not cover; see DEPLOY.md "Prerequisites".
+zitadel_api() {
+  local method="$1" path="$2" body="${3:-}"
+  local tmp status
+  tmp="$(mktemp)"
+  # shellcheck disable=SC2064
+  trap "rm -f '$tmp'" RETURN
+  local -a args=(-sS -o "$tmp" -w '%{http_code}'
+    -X "$method" "${API_BASE}${path}"
+    -H "Authorization: Bearer ${TOKEN}")
+  if [[ -n "$body" ]]; then
+    args+=(-H 'Content-Type: application/json' -d "$body")
+  fi
+  status="$(curl "${args[@]}")"
+  if [[ "$status" -lt 200 || "$status" -ge 300 ]]; then
+    {
+      printf 'error: %s %s -> HTTP %s\n' "$method" "$path" "$status"
+      if [[ "$status" == "401" || "$status" == "403" ]]; then
+        printf '       Actions v2 target management requires IAM_OWNER on the\n'
+        printf '       service user. Assign it at Default Settings > Administrators\n'
+        printf '       in the Zitadel console. ORG_OWNER is not sufficient.\n'
+      fi
+      printf 'response body:\n'
+      cat "$tmp"
+      printf '\n'
+    } >&2
+    return 1
+  fi
+  cat "$tmp"
+}
+
 # ---- Render targets.json ----
 # Strip _comment/_note annotations (JSON-illegal per Zitadel's strict decoder)
 # and substitute ${MKAUTH_EXTERNAL_URL} in any endpoint string.
@@ -139,10 +177,7 @@ SEARCH_BODY="$(jq -n --arg n "$TARGET_NAME" '{
   filters: [{ target_name_filter: { target_name: $n, method: "TEXT_FILTER_METHOD_EQUALS" } }],
   pagination: { limit: 1 }
 }')"
-LIST_RESP="$(curl -fsS -X POST "${API_BASE}/targets/search" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H 'Content-Type: application/json' \
-  -d "$SEARCH_BODY" 2>/dev/null || true)"
+LIST_RESP="$(zitadel_api POST /targets/search "$SEARCH_BODY")" || exit 5
 EXISTING_ID="$(echo "$LIST_RESP" | jq -r '.targets[0].id // .result[0].id // empty' 2>/dev/null || true)"
 
 # ---- --remove path: unbind executions, retain target + signing key ----
@@ -150,10 +185,7 @@ if [[ "${1:-}" == "--remove" ]]; then
   echo "Unbinding executions for target=${TARGET_NAME}..." >&2
   echo "$RENDERED_MANIFEST" | jq -c '.executions[].condition' | while read -r cond; do
     UNBIND_BODY="$(jq -n --argjson c "$cond" '{ condition: $c, targets: [] }')"
-    curl -fsS -X PUT "${API_BASE}/executions" \
-      -H "Authorization: Bearer ${TOKEN}" \
-      -H 'Content-Type: application/json' \
-      -d "$UNBIND_BODY" >/dev/null
+    zitadel_api PUT /executions "$UNBIND_BODY" >/dev/null || exit 6
   done
   echo "Executions unbound. Target retained (run 'DELETE ${API_BASE}/targets/${EXISTING_ID:-<id>}' or use the Zitadel console to fully remove)." >&2
   exit 0
@@ -163,10 +195,7 @@ TARGET_BODY="$(echo "$RENDERED_MANIFEST" | jq '.target')"
 
 if [[ -n "$EXISTING_ID" ]]; then
   echo "Updating target id=${EXISTING_ID}..." >&2
-  curl -fsS -X POST "${API_BASE}/targets/${EXISTING_ID}" \
-    -H "Authorization: Bearer ${TOKEN}" \
-    -H 'Content-Type: application/json' \
-    -d "$TARGET_BODY" >/dev/null
+  zitadel_api POST "/targets/${EXISTING_ID}" "$TARGET_BODY" >/dev/null || exit 7
   TARGET_ID="$EXISTING_ID"
   if [[ ! -s "$SIGNING_KEY_FILE" ]]; then
     echo "warning: target exists but ${SIGNING_KEY_FILE} is missing." >&2
@@ -176,10 +205,7 @@ if [[ -n "$EXISTING_ID" ]]; then
   fi
 else
   echo "Creating target name=${TARGET_NAME}..." >&2
-  CREATE_RESP="$(curl -fsS -X POST "${API_BASE}/targets" \
-    -H "Authorization: Bearer ${TOKEN}" \
-    -H 'Content-Type: application/json' \
-    -d "$TARGET_BODY")"
+  CREATE_RESP="$(zitadel_api POST /targets "$TARGET_BODY")" || exit 8
   TARGET_ID="$(echo "$CREATE_RESP" | jq -r '.id')"
   SIGNING_KEY="$(echo "$CREATE_RESP" | jq -r '.signingKey // empty')"
   if [[ -z "$TARGET_ID" || "$TARGET_ID" == "null" ]]; then
@@ -204,10 +230,7 @@ echo "$RENDERED_MANIFEST" | jq -c '.executions[]' | while read -r exec_entry; do
     condition: .condition,
     targets: [ $tid ]
   }')"
-  curl -fsS -X PUT "${API_BASE}/executions" \
-    -H "Authorization: Bearer ${TOKEN}" \
-    -H 'Content-Type: application/json' \
-    -d "$BIND_BODY" >/dev/null
+  zitadel_api PUT /executions "$BIND_BODY" >/dev/null || exit 9
 done
 
 echo "Done. target_id=${TARGET_ID}." >&2
