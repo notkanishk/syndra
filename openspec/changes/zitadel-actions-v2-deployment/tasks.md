@@ -169,3 +169,18 @@ Review found the machine-key mint path in register.sh/rotate.sh was shelling out
 - [x] `openspec validate zitadel-actions-v2-deployment --strict` — passes.
 - [x] `mcp__codebase-memory-mcp__detect_changes` + `index_repository` refresh.
 - [x] **Relative-path follow-up:** resolve `ZITADEL_MACHINE_KEY_PATH` to an absolute path (anchored to `REPO_ROOT`) before the `cd backend`. `.env.example` documents relative paths as resolving against the repo root / docker-compose directory; `cd backend` had silently reinterpreted them against `backend/` and would have broken the documented `./zitadel-machine-key.json` style path. POSIX `case` covers absolute, `./...`, bare, `../...`, and `~/...` inputs. Verified with a 6-case bash harness. Both scripts updated identically.
+
+### Service-account permissions doc + visible HTTP errors (2026-04-24)
+
+Operator hit `HTTP 403` on first `make zitadel-actions-register` run with an ORG_OWNER-only service user. Actions v2 target management is instance-scoped; the org roles `.env.example` lists don't cover it.
+
+- [x] `DEPLOY.md`: new **Service-account permissions** subsection under Prerequisites — explains the instance-vs-org scope mismatch, tabulates the exact permissions per script call (`action.target.read`, `action.target.write`, `action.execution.write`, plus optional `action.target.delete` only for the full-removal path), and lists three narrow-to-broad assignment paths (custom instance role → prebuilt action-scoped role → `IAM_OWNER` fallback). Includes duration guidance (needed only during register + rotate; can be assigned permanently / per-run / to a separate M2M key). _(Content subsequently relocated to `zitadel/actions/PERMISSIONS.md` — see follow-up below.)_
+- [x] `DEPLOY.md` troubleshooting table: new row for `HTTP 403` pointing directly at the permissions section.
+- [x] `.env.example`: note added to the `ZITADEL_MACHINE_KEY_PATH` block clarifying the ORG roles it recommends are insufficient for Actions v2 scripts, with a pointer to `DEPLOY.md § Service-account permissions`.
+- [x] `zitadel/actions/register.sh` + `rotate.sh`: new `zitadel_api METHOD PATH [BODY]` helper replacing every `curl -fsS` call. On HTTP error prints method + path + status + Zitadel's JSON error body to stderr; 401/403 include an inline IAM_OWNER hint. Exit codes preserved.
+- [x] Helper verified against httpbin `/status/200` and `/status/403`: 200 path silent on stderr, 403 path renders the full diagnostic.
+- [x] `bash -n` clean on both scripts.
+- [x] `openspec validate zitadel-actions-v2-deployment --strict` — passes.
+- [x] `mcp__codebase-memory-mcp__index_repository` — refresh.
+- [x] **Doc relocation (review follow-up):** moved the permission matrix out of the change-scoped `DEPLOY.md` into a durable `zitadel/actions/PERMISSIONS.md` so the `.env.example` + script + troubleshooting pointers survive OpenSpec archive. DEPLOY.md section reduced to a short pointer; README Contents table + troubleshooting row + `.env.example` note all repointed at the living-tree doc.
+- [x] **Helper-hint alignment (review follow-up):** rewrote the 401/403 hint in both scripts' `zitadel_api` helpers to list the minimum permissions (`action.target.read` / `action.target.write` / `action.execution.write` / optional `action.target.delete`) and the three assignment paths narrow-first (custom role → prebuilt → IAM_OWNER), replacing the earlier "requires IAM_OWNER" line that would have led operators to over-grant.

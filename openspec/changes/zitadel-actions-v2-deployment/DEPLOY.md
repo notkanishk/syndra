@@ -27,6 +27,22 @@ without editing `.env`.
 * Local tooling: `curl`, `jq`, `python3` (only for `smoke-test-action-v2.sh`
   signed variant).
 
+### Service-account permissions
+
+Actions v2 target management lives at the **instance scope** in Zitadel.
+The org-level roles `.env.example` recommends for the backend's normal
+user/grant CRUD (`ORG_OWNER` or `ORG_USER_MANAGER +
+ORG_PROJECT_PERMISSION_EDITOR`) do NOT cover it — a fresh
+`make zitadel-actions-register` on an org-only service user fails with
+`HTTP 403`.
+
+**Canonical reference:** [`zitadel/actions/PERMISSIONS.md`](../../../zitadel/actions/PERMISSIONS.md)
+— lives under the durable operator tree, survives the OpenSpec archive
+workflow. Covers the per-call permission table, three
+narrowest-first assignment paths (custom instance role → prebuilt
+action-scoped role → `IAM_OWNER` fallback), duration guidance, and
+separate-M2M-key options.
+
 ## Step 1 — Register the Action target
 
 Assuming `.env` is populated (see `.env.example` for the keys), this is one
@@ -180,6 +196,7 @@ part of the delete.
 
 | Symptom | Probable cause | Fix |
 |---|---|---|
+| `register.sh`/`rotate.sh` exits with `HTTP 403` during `POST /v2/actions/targets*` | Service user lacks instance-scoped Actions permissions (most common when it was set up with only `ORG_OWNER`) | Grant `action.target.read`, `action.target.write`, `action.execution.write` (and optionally `action.target.delete`) at **Default Settings → Administrators**. Full matrix + narrowest-first assignment options in [`zitadel/actions/PERMISSIONS.md`](../../../zitadel/actions/PERMISSIONS.md). |
 | `401 INVALID_SIGNATURE` on every Zitadel call | `ZITADEL_ACTION_SIGNING_KEY` not set on backend, or set to the wrong value | Set `ZITADEL_ACTION_SIGNING_KEY` to the contents of `zitadel/actions/.action-signing-key` in the backend env, restart. |
 | `signature verification disabled (dev mode)` log in prod | `ZITADEL_ACTION_SIGNING_KEY` empty in container env | Same as above. |
 | `/zitadel` Rotation Status panel shows `disabled` | `ZITADEL_ACTION_SIGNING_KEY` is unset on the backend (signature verification off) | Same root cause as the two rows above — fix the env var and restart before trusting any rotation age. |

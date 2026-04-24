@@ -113,8 +113,10 @@ API_BASE="https://${ZITADEL_DOMAIN}/v2/actions"
 # zitadel_api METHOD PATH [JSON_BODY]
 # Same helper shape as register.sh. On HTTP error prints Zitadel's response
 # body verbatim so 401/403 permission failures surface the actual message
-# instead of a bare "curl: (22)". Actions v2 target rotation requires
-# IAM_OWNER on the service user; ORG_OWNER is not enough.
+# instead of a bare "curl: (22)". 401/403 hint points at PERMISSIONS.md so
+# operators don't over-grant — the narrowest assignment path is a custom
+# instance role carrying just action.target.read + action.target.write +
+# action.execution.write (action.target.delete optional).
 zitadel_api() {
   local method="$1" path="$2" body="${3:-}"
   local tmp status
@@ -132,9 +134,13 @@ zitadel_api() {
     {
       printf 'error: %s %s -> HTTP %s\n' "$method" "$path" "$status"
       if [[ "$status" == "401" || "$status" == "403" ]]; then
-        printf '       Actions v2 target management requires IAM_OWNER on the\n'
-        printf '       service user. Assign it at Default Settings > Administrators\n'
-        printf '       in the Zitadel console. ORG_OWNER is not sufficient.\n'
+        printf '       Actions v2 target management is instance-scoped — the org-level\n'
+        printf '       service-user roles (ORG_OWNER / ORG_USER_MANAGER) do not cover it.\n'
+        printf '       Minimum permissions: action.target.read, action.target.write,\n'
+        printf '       action.execution.write (plus action.target.delete for full removal).\n'
+        printf '       Assign via a narrow custom role, a prebuilt action-scoped role, or\n'
+        printf '       IAM_OWNER as a fallback. See zitadel/actions/PERMISSIONS.md for the\n'
+        printf '       least-privilege matrix and assignment paths.\n'
       fi
       printf 'response body:\n'
       cat "$tmp"

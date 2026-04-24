@@ -431,3 +431,73 @@ the documented shapes exactly.
   (d) `targets` = `repeated string` (array of ID strings),
   (e) `TargetNameFilter.target_name` (not `name`) with
   `zitadel.filter.v2.TextFilterMethod` enum.
+
+#### Service-account permissions doc + visible HTTP errors (2026-04-24)
+
+Operator hit `HTTP 403` on a first `make zitadel-actions-register` run
+because their service user was scoped only to `ORG_OWNER` — the org
+roles the backend's normal user/grant CRUD uses don't cover Actions v2
+target management, which is instance-scoped.
+
+Documentation:
+
+* `DEPLOY.md` — new **Service-account permissions** subsection under
+  Prerequisites. Explains why ORG_OWNER doesn't work, lists the exact
+  `action.target.read` + `action.target.write` + `action.execution.write`
+  (+ optional `action.target.delete`) permissions per script call,
+  and gives three narrow-to-broad assignment paths (custom instance
+  role → prebuilt action-scoped role → `IAM_OWNER` fallback). Also
+  spells out that the permissions are only needed during register and
+  rotate — steady state calls don't use them, so the role can be kept
+  permanently, assigned-and-revoked per run, or scoped to a separate
+  M2M key.
+* `DEPLOY.md` troubleshooting table — new row pointing operators who
+  hit 403 directly at the permissions section.
+* `.env.example` — note added to the `ZITADEL_MACHINE_KEY_PATH` block
+  clarifying that the ORG-level roles it lists are insufficient for the
+  Actions v2 scripts, with a pointer to the DEPLOY.md section.
+
+Script hardening (landed alongside the doc):
+
+* New `zitadel_api METHOD PATH [BODY]` helper in both `register.sh` and
+  `rotate.sh`, replacing every `curl -fsS` call. On HTTP error the
+  helper prints the method + path + status + Zitadel's own JSON error
+  body to stderr, so operators see "permission denied:
+  action.target.write" instead of a bare `curl: (22)`. 401/403 responses
+  include an inline hint pointing at the Default Settings →
+  Administrators assignment. Verified against httpbin with 200 and 403
+  fixtures; the 200 path is silent on stderr, the 403 path renders the
+  full diagnostic.
+
+##### Doc relocation + least-privilege alignment (same day)
+
+Review caught two issues with the first cut:
+
+* **Least-privilege conflict.** The runtime 401/403 hint in
+  `zitadel_api` said *"requires IAM_OWNER on the service user"* while
+  the new doc listed IAM_OWNER as the fallback and custom
+  instance-scoped roles as the preferred path. An operator following
+  the runtime hint would over-grant. Fixed by rewriting both scripts'
+  hint blocks to: (1) name the minimum permissions
+  (`action.target.read`, `action.target.write`,
+  `action.execution.write`, optional `action.target.delete`), (2)
+  enumerate the three assignment paths narrow-first (custom role →
+  prebuilt → IAM_OWNER), and (3) point at the canonical doc.
+* **Pointer rot from archive workflow.** The first version put the
+  canonical content in `openspec/changes/zitadel-actions-v2-deployment/DEPLOY.md`
+  and pointed `.env.example` at that path. When this change is
+  archived, the path becomes `openspec/changes/archive/...` and every
+  long-lived pointer rots. Fixed by extracting the canonical content to
+  a new durable file:
+
+  * **`zitadel/actions/PERMISSIONS.md`** (new) — full matrix, assignment
+    paths, duration guidance, separate-M2M-key options. Lives under the
+    operator tree so it survives any OpenSpec reorganization.
+  * `DEPLOY.md` Prerequisites subsection reduced to a short pointer at
+    the durable doc.
+  * `DEPLOY.md` troubleshooting row, `.env.example` note, and
+    `zitadel/actions/README.md` Contents table all repoint at
+    `zitadel/actions/PERMISSIONS.md`.
+
+  Any future archive of this change will leave `PERMISSIONS.md` and the
+  other living-tree pointers untouched.

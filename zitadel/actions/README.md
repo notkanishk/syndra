@@ -31,7 +31,9 @@ So the "script" for MkAuth's v2 Action is a combination of:
 |------|---------|
 | `targets.json` | Declarative target + execution config. Edit this to change endpoint, timeout, or trigger bindings. |
 | `register.sh` | Apply `targets.json` against the configured Zitadel instance. Captures the target signing key on first run. |
+| `rotate.sh` | One-shot in-place rotation of the target signing key; writes a ready-to-append env fragment. |
 | `SIGNING_KEY.md` | How to handle the one-time signing key Zitadel returns. |
+| `PERMISSIONS.md` | Canonical reference for the instance-scoped Zitadel permissions the scripts require (answers "why does `HTTP 403` happen with ORG_OWNER?"). |
 
 ## Quick start
 
