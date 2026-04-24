@@ -1,4 +1,4 @@
-> **Status:** Integrated (bulk ops, expiry enforcement deferred P5) | [< Index](../../../../INDEX.md) | [Feature Coverage](../feature-coverage.md)
+> **Status:** Integrated (bulk ops deferred P5) | [< Index](../../../../INDEX.md) | [Feature Coverage](../feature-coverage.md)
 
 ## ADDED Requirements
 
@@ -80,7 +80,24 @@ The system MUST automatically revoke expired direct grants rather than relying o
 - **WHEN** a grant has expired but has not yet been processed by the enforcement scheduler
 - **THEN** the effective access computation MUST exclude the expired grant
 
-> **Status:** Deferred to Phase 5. Currently grants persist in DB after `expires_at` with no enforcement. The governance summary surfaces approaching expirations.
+#### Scenario: Concurrent renewal is not revoked
+- **GIVEN** the scheduler has selected a grant as a candidate based on its `expires_at`
+- **WHEN** the grant is renewed (via an in-place upsert that preserves the row ID) before the scheduler completes its delete step
+- **THEN** the grant MUST NOT be deleted
+- **AND** no provisioning intent, audit entry, cache invalidation, or Zitadel cascade MUST be produced for that grant
+
+#### Scenario: Scheduler retries on transient delete failure
+- **WHEN** the guarded delete step fails due to a transient database error
+- **THEN** the candidate grants MUST remain in the database
+- **AND** no downstream side effects MUST be produced
+- **AND** the sweep MUST be retried on the next tick
+
+#### Scenario: Zitadel cascade is best-effort
+- **WHEN** the Zitadel derived-grant cascade fails for an expired grant
+- **THEN** the local delete, audit log, and cache invalidation MUST still succeed
+- **AND** the orphan MUST be logged for the future reconciler to clean up
+
+> **Status:** Integrated. `backend/internal/services/expiry` runs a periodic sweep (interval + batch size configurable via `EXPIRY_SCHEDULER_INTERVAL` / `EXPIRY_SCHEDULER_BATCH_SIZE`; default `5m` / `500`) that emits LLDAP removal intents, hard-deletes expired rows, invalidates the user cache, writes a `direct_grant.revoked_by_expiry` audit entry, and best-effort cascades derived Zitadel grants. Zitadel failures are log-and-continue — orphaned derived grants inherit the Phase-5 deferred "Partial Failure Rollback" compromise.
 
 ### Requirement: Bulk operations deferred
 > **Status:** The bulk operation requirements (Bulk Mode, Safe bulk execution) above are specified but deferred to Phase 5. No bulk grant/revoke endpoints or UI currently exist.

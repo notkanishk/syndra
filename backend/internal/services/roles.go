@@ -10,7 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"mkauth/internal/demo"
+	"mkauth/internal/directory"
 	"mkauth/internal/models"
 	"mkauth/internal/zitadel"
 )
@@ -84,6 +84,12 @@ func CreateRole(ctx context.Context, req CreateRoleRequest, createdBy string) (m
 			}
 			return models.Role{}, fmt.Errorf("zitadel role creation failed: %w", err)
 		}
+		// Drop the directory's cached role list for this project so the next
+		// GET /api/v1/projects/{id}/roles (and any catalog-driven UI picker)
+		// sees the new role immediately instead of waiting out the TTL.
+		// Matches the invalidation pattern in handlers/discovery.go for the
+		// raw /api/v1/zitadel/projects/{id}/roles POST/PUT/DELETE path.
+		directory.Default.InvalidateProject(req.ProjectID)
 		log.Printf("[ROLES] Propagated role %s:%s to Zitadel", req.ProjectID, req.RoleKey)
 	} else {
 		log.Printf("[ROLES] Skipping Zitadel propagation (local-policy-only mode)")
@@ -116,8 +122,11 @@ func resolveRoleMetadata(ctx context.Context, projectID, roleKey string) (roleMe
 		return roleMetadata{}, fmt.Errorf("lookup role %s:%s: %w", projectID, roleKey, err)
 	}
 
-	// Try demo catalog.
-	proj, ok := demo.FindProject(projectID)
+	// Try the directory source (live Zitadel or demo fallback).
+	proj, ok, dirErr := directory.Default.FindProject(ctx, projectID)
+	if dirErr != nil {
+		return roleMetadata{}, fmt.Errorf("lookup project %s in directory: %w", projectID, dirErr)
+	}
 	if ok {
 		for _, role := range proj.Roles {
 			if role.Key == roleKey {
@@ -160,15 +169,23 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 		}
 	}
 
-	// 2. Demo catalog roles.
-	for _, proj := range demo.Projects() {
+	// 2. Directory-source roles. Source tag is "zitadel" in live mode or "demo"
+	// when the directory is falling back to the local catalog — the UI
+	// distinguishes discovered directory roles from operator-created
+	// ("mkauth") ones and from persisted references.
+	dirProjects, err := directory.Default.Projects(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load projects from directory: %w", err)
+	}
+	dirSource := directory.Default.Tag()
+	for _, proj := range dirProjects {
 		for _, role := range proj.Roles {
 			key := proj.ID + ":" + role.Key
 			if _, exists := seen[key]; !exists {
 				seen[key] = &catalogEntry{
 					projectID: proj.ID, roleKey: role.Key,
 					displayName: role.Label, description: role.Description,
-					source: "demo",
+					source: dirSource,
 				}
 			}
 		}
@@ -200,12 +217,25 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 		return nil, fmt.Errorf("load assigned user counts: %w", err)
 	}
 
+	// Pre-index directory project names so building the catalog doesn't fan
+	// out another ProjectName lookup per role.
+	projectNames := make(map[string]string, len(dirProjects))
+	for _, p := range dirProjects {
+		projectNames[p.ID] = p.Name
+	}
+
 	// Build catalog.
 	catalog := make([]models.CatalogRole, 0, len(seen))
 	for key, entry := range seen {
 		usage := usageCounts[key]
 		assignedUsers := userCounts[key]
-		projectName := demo.ProjectName(entry.projectID)
+		projectName, ok := projectNames[entry.projectID]
+		if !ok {
+			// Referenced role pointing at a project not currently visible in
+			// the directory — render the ID rather than the empty string so
+			// operators see which project needs attention.
+			projectName = entry.projectID
+		}
 
 		cr := models.CatalogRole{
 			ProjectID:         entry.projectID,

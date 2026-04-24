@@ -52,7 +52,8 @@ This document defines the high-level phases for the MkAuth implementation, trans
 
 ### Automation
 - [ ] **Welcome Bundle Configuration**: Admin UI for explicitly designating default bundles; replace convention-based name matching (`GetWelcomeBundle`) with configuration-driven selection. → [automation-policies spec](specs/automation-policies/spec.md)
-- [ ] **Grant Expiration Scheduler**: Background worker to auto-revoke expired direct grants, trigger cache invalidation, and emit LLDAP removal intents. Currently grants persist in DB after `expires_at` with no enforcement. → [access-governance spec](specs/access-governance/spec.md)
+- [x] **Grant Expiration Scheduler**: Background worker (`backend/internal/services/expiry`) sweeps expired direct grants every `EXPIRY_SCHEDULER_INTERVAL` (default 5m), emits LLDAP removal intents, hard-deletes rows, invalidates the user cache, writes `direct_grant.revoked_by_expiry` audit entries, and best-effort cascades derived Zitadel grants. 14 new tests. → [grant-expiration-scheduler](../grant-expiration-scheduler/) / [access-governance spec](specs/access-governance/spec.md)
+- [x] **Live Zitadel Data Source**: `backend/internal/directory/` provides a `Source` seam that swaps the admin UI's users/projects/roles backing from the hardcoded demo catalog to the live Zitadel Management API when `ZITADEL_DOMAIN` + `ZITADEL_MACHINE_KEY_PATH` are configured. Includes a 30s TTL cache, targeted invalidation on mutation, an overlay over `claim_profiles` for application metadata, and seed-skip-in-live-mode behavior. Frontend contracts unchanged; 10 new tests. → [live-zitadel-data-source](../live-zitadel-data-source/) / [user-management spec](specs/user-management/spec.md)
 - [ ] **Service Catalog Abstraction**: Close the gap between the spec'd service-to-bundle request mapping and the current project/role fallback. → [service-catalog spec](specs/service-catalog/spec.md)
 
 ### Consistency & Safety

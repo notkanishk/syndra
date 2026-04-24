@@ -10,7 +10,7 @@ import (
 
 	"mkauth/internal/cache"
 	"mkauth/internal/db"
-	"mkauth/internal/demo"
+	"mkauth/internal/directory"
 	"mkauth/internal/models"
 )
 
@@ -19,19 +19,36 @@ type roleKey struct {
 	roleKey   string
 }
 
-func Catalog() models.CatalogResponse {
-	return models.CatalogResponse{
-		Users:        demo.Users(),
-		Projects:     demo.Projects(),
-		Applications: demo.Applications(),
+func Catalog(ctx context.Context) (models.CatalogResponse, error) {
+	users, err := directory.Default.Users(ctx)
+	if err != nil {
+		return models.CatalogResponse{}, err
 	}
+	projects, err := directory.Default.Projects(ctx)
+	if err != nil {
+		return models.CatalogResponse{}, err
+	}
+	apps, err := directory.Default.Applications(ctx)
+	if err != nil {
+		return models.CatalogResponse{}, err
+	}
+	return models.CatalogResponse{
+		Users:        users,
+		Projects:     projects,
+		Applications: apps,
+	}, nil
 }
 
 func ListUsers(ctx context.Context, query string) ([]models.UserListItem, error) {
 	var items []models.UserListItem
 	query = strings.ToLower(strings.TrimSpace(query))
 
-	for _, user := range demo.Users() {
+	users, err := directory.Default.Users(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, user := range users {
 		if query != "" && !matchesUser(user, query) {
 			continue
 		}
@@ -68,9 +85,12 @@ func ListUsers(ctx context.Context, query string) ([]models.UserListItem, error)
 }
 
 func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessView, error) {
-	user, ok := demo.FindUser(userID)
+	user, ok, err := directory.Default.FindUser(ctx, userID)
+	if err != nil {
+		return models.UserAccessView{}, err
+	}
 	if !ok {
-		return models.UserAccessView{}, fmt.Errorf("user %q not found in demo catalog", userID)
+		return models.UserAccessView{}, fmt.Errorf("user %q not found in directory", userID)
 	}
 
 	roleMap, bundles, err := collectUserRoles(ctx, userID)
@@ -141,8 +161,14 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 }
 
 func ListApplications(ctx context.Context) ([]models.ApplicationView, error) {
-	users := demo.Users()
-	apps := demo.Applications()
+	users, err := directory.Default.Users(ctx)
+	if err != nil {
+		return nil, err
+	}
+	apps, err := directory.Default.Applications(ctx)
+	if err != nil {
+		return nil, err
+	}
 	views := make([]models.ApplicationView, 0, len(apps))
 
 	for _, app := range apps {
@@ -157,9 +183,14 @@ func ListApplications(ctx context.Context) ([]models.ApplicationView, error) {
 			}
 		}
 
+		consumedRoles, err := directory.Default.RoleKeysForProject(ctx, app.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+
 		views = append(views, models.ApplicationView{
 			Application:       app,
-			ConsumedRoles:     demo.RoleKeysForProject(app.ProjectID),
+			ConsumedRoles:     consumedRoles,
 			AssignedUserCount: assignedCount,
 		})
 	}
@@ -168,12 +199,18 @@ func ListApplications(ctx context.Context) ([]models.ApplicationView, error) {
 }
 
 func SimulateApplication(ctx context.Context, appID, userID string) (models.ApplicationSimulation, error) {
-	app, ok := demo.FindApplication(appID)
+	app, ok, err := directory.Default.FindApplication(ctx, appID)
+	if err != nil {
+		return models.ApplicationSimulation{}, err
+	}
 	if !ok {
 		return models.ApplicationSimulation{}, fmt.Errorf("application %q not found", appID)
 	}
 
-	user, ok := demo.FindUser(userID)
+	user, ok, err := directory.Default.FindUser(ctx, userID)
+	if err != nil {
+		return models.ApplicationSimulation{}, err
+	}
 	if !ok {
 		return models.ApplicationSimulation{}, fmt.Errorf("user %q not found", userID)
 	}
@@ -214,8 +251,15 @@ func SimulateApplication(ctx context.Context, appID, userID string) (models.Appl
 }
 
 func ListProjects(ctx context.Context) ([]models.ProjectSummary, error) {
-	projectSummaries := make([]models.ProjectSummary, 0, len(demo.Projects()))
-	allUsers := demo.Users()
+	projects, err := directory.Default.Projects(ctx)
+	if err != nil {
+		return nil, err
+	}
+	allUsers, err := directory.Default.Users(ctx)
+	if err != nil {
+		return nil, err
+	}
+	projectSummaries := make([]models.ProjectSummary, 0, len(projects))
 	rules, err := db.GetActiveMappingRules(ctx)
 	if err != nil {
 		return nil, err
@@ -225,7 +269,7 @@ func ListProjects(ctx context.Context) ([]models.ProjectSummary, error) {
 		return nil, err
 	}
 
-	for _, project := range demo.Projects() {
+	for _, project := range projects {
 		memberCount := 0
 		sampleMembers := []string{}
 		activeRoleSet := make(map[string]bool)
@@ -304,7 +348,11 @@ func BundleImpact(ctx context.Context, bundleID string) (models.BundleImpact, er
 	}
 
 	impactedUsers := []models.UserProfile{}
-	for _, user := range demo.Users() {
+	users, err := directory.Default.Users(ctx)
+	if err != nil {
+		return models.BundleImpact{}, err
+	}
+	for _, user := range users {
 		bundles, err := svcGetBundlesForUser(ctx, user.ID)
 		if err != nil {
 			return models.BundleImpact{}, err
@@ -459,7 +507,11 @@ func Topology(ctx context.Context) (models.TopologyGraph, error) {
 		})
 	}
 
-	for _, project := range demo.Projects() {
+	dirProjects, err := directory.Default.Projects(ctx)
+	if err != nil {
+		return graph, err
+	}
+	for _, project := range dirProjects {
 		projectCatalog[project.ID] = project
 		roleCatalog[project.ID] = make(map[string]models.ProjectRole, len(project.Roles))
 		ensureProjectNode(project.ID)
@@ -575,7 +627,7 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 		if grant.Reason != "" {
 			description = grant.Reason
 		}
-		upsertRole(roleMap, key, true, models.RoleReason{
+		upsertRole(ctx, roleMap, key, true, models.RoleReason{
 			Kind:        "direct",
 			Description: description,
 		})
@@ -593,7 +645,7 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 		}
 		for _, role := range roles {
 			key := roleKey{projectID: role.ProjectID, roleKey: role.RoleKey}
-			upsertRole(roleMap, key, true, models.RoleReason{
+			upsertRole(ctx, roleMap, key, true, models.RoleReason{
 				Kind:        "bundle",
 				Description: fmt.Sprintf("Granted by bundle %s", bundle.Name),
 				BundleID:    bundle.ID,
@@ -616,7 +668,7 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 			}
 
 			targetKey := roleKey{projectID: rule.TargetProject, roleKey: rule.TargetRole}
-			if upsertRole(roleMap, targetKey, false, models.RoleReason{
+			if upsertRole(ctx, roleMap, targetKey, false, models.RoleReason{
 				Kind:           "mapping",
 				Description:    fmt.Sprintf("Derived from %s:%s", rule.SourceProject, rule.SourceRole),
 				TriggerProject: rule.SourceProject,
@@ -633,12 +685,18 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 	return roleMap, bundles, nil
 }
 
-func upsertRole(roleMap map[roleKey]*models.EffectiveRole, key roleKey, isSource bool, reason models.RoleReason) bool {
+func upsertRole(ctx context.Context, roleMap map[roleKey]*models.EffectiveRole, key roleKey, isSource bool, reason models.RoleReason) bool {
 	current := roleMap[key]
 	if current == nil {
+		// Best-effort project name — never block lineage resolution on a
+		// directory lookup failure. Fall back to the raw project ID.
+		projectName := key.projectID
+		if name, err := directory.Default.ProjectName(ctx, key.projectID); err == nil {
+			projectName = name
+		}
 		current = &models.EffectiveRole{
 			ProjectID:   key.projectID,
-			ProjectName: demo.ProjectName(key.projectID),
+			ProjectName: projectName,
 			RoleKey:     key.roleKey,
 			IsSource:    isSource,
 		}

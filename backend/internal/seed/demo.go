@@ -10,10 +10,16 @@ import (
 	"mkauth/internal/cache"
 	"mkauth/internal/db"
 	"mkauth/internal/demo"
+	"mkauth/internal/zitadel"
 )
 
 func EnsureDemoData(ctx context.Context) error {
 	if !demoEnabled() {
+		if liveDirectoryActive() {
+			log.Println("[SEED] Live Zitadel directory active; skipping demo seed. Set MKAUTH_SEED_DEMO=true to force-enable.")
+		} else {
+			log.Println("[SEED] Demo seed disabled via MKAUTH_SEED_DEMO.")
+		}
 		return nil
 	}
 
@@ -52,9 +58,38 @@ func EnsureDemoData(ctx context.Context) error {
 	return nil
 }
 
+// demoEnabled decides whether EnsureDemoData runs. The explicit env override
+// wins in both directions so operators can force-enable in live mode (useful
+// for integration tests against a staging Zitadel) or force-disable in demo
+// mode (useful for reproducing empty-DB behavior locally). When unset, the
+// default is "off when the live directory is active, on otherwise" —
+// exactly what a freshly-configured production deployment wants.
+//
+// Keying off the post-Init client state (rather than raw env presence) keeps
+// this decision aligned with directory.Init: if ZITADEL_MACHINE_KEY_PATH is
+// set but unreadable, InitClient fails, MgmtClient stays nil, the directory
+// falls back to demoSource — and the seed must also run so the app doesn't
+// end up serving the demo catalog on top of an empty DB.
 func demoEnabled() bool {
 	value := strings.ToLower(strings.TrimSpace(os.Getenv("MKAUTH_SEED_DEMO")))
-	return value == "" || value == "1" || value == "true" || value == "yes"
+	switch value {
+	case "1", "true", "yes":
+		return true
+	case "0", "false", "no":
+		return false
+	}
+	return !liveDirectoryActive()
+}
+
+// liveDirectoryActive reports whether the live Zitadel Management client is
+// ready. This is the exact signal directory.Init uses to select the source,
+// so seed gating and directory mode can never disagree.
+//
+// MUST be called after zitadel.InitClient() has run. main.go enforces this
+// ordering. Tests that call EnsureDemoData directly without InitClient see
+// MgmtClient == nil, which correctly treats them as demo mode.
+func liveDirectoryActive() bool {
+	return zitadel.MgmtClient != nil
 }
 
 func seedBundles(ctx context.Context) error {

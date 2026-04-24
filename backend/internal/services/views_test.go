@@ -377,8 +377,9 @@ func TestUpsertRoleDeduplicatesReason(t *testing.T) {
 		BundleName:  "Engineering",
 	}
 
-	firstAdded := upsertRole(roleMap, key, true, reason)
-	secondAdded := upsertRole(roleMap, key, true, reason)
+	ctx := context.Background()
+	firstAdded := upsertRole(ctx, roleMap, key, true, reason)
+	secondAdded := upsertRole(ctx, roleMap, key, true, reason)
 
 	if !firstAdded {
 		t.Fatalf("expected first insert to add role")

@@ -7,7 +7,12 @@ import (
 )
 
 func handleGetCatalog(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, http.StatusOK, services.Catalog())
+	catalog, err := services.Catalog(r.Context())
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "VIEW_ERROR", err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, catalog)
 }
 
 func handleGetUsers(w http.ResponseWriter, r *http.Request) {

@@ -268,6 +268,77 @@ func GetExpiringDirectGrants(ctx context.Context, within time.Duration) ([]model
 	return grants, nil
 }
 
+// GetExpiredDirectGrants returns direct role grants whose expires_at is in the
+// past, ordered by expires_at ascending (oldest first). Used by the expiry
+// scheduler to sweep grants needing cleanup. limit caps the batch size.
+func GetExpiredDirectGrants(ctx context.Context, limit int) ([]models.DirectGrant, error) {
+	query := `
+		SELECT id, user_id, zitadel_project_id, zitadel_role_key, granted_by, COALESCE(reason, ''), expires_at, created_at, updated_at
+		FROM direct_role_grants
+		WHERE expires_at IS NOT NULL
+		  AND expires_at <= NOW()
+		ORDER BY expires_at ASC
+		LIMIT $1`
+
+	rows, err := PG.Query(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var grants []models.DirectGrant
+	for rows.Next() {
+		var grant models.DirectGrant
+		if err := rows.Scan(&grant.ID, &grant.UserID, &grant.ProjectID, &grant.RoleKey, &grant.GrantedBy, &grant.Reason, &grant.ExpiresAt, &grant.CreatedAt, &grant.UpdatedAt); err != nil {
+			return nil, err
+		}
+		grants = append(grants, grant)
+	}
+	return grants, nil
+}
+
+// DeleteExpiredDirectGrantsByIDs atomically hard-deletes direct role grants
+// for a specific user BUT only rows whose expires_at is still in the past at
+// the moment of the DELETE. Rows that were concurrently renewed via
+// UpsertDirectGrant (which uses ON CONFLICT DO UPDATE and therefore preserves
+// the row ID while pushing expires_at forward) will not satisfy the predicate
+// and will survive.
+//
+// The RETURNING clause guarantees the caller sees the exact set of rows that
+// were actually removed; downstream steps (intent emission, audit, cascade)
+// MUST be driven from this returned slice, not from the pre-fetch snapshot.
+//
+// The user_id scoping is defensive: it guarantees a caller cannot delete
+// another user's grants even if IDs were mis-grouped upstream.
+func DeleteExpiredDirectGrantsByIDs(ctx context.Context, userID string, ids []string) ([]models.DirectGrant, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	query := `
+		DELETE FROM direct_role_grants
+		WHERE user_id = $1
+		  AND id = ANY($2::uuid[])
+		  AND expires_at IS NOT NULL
+		  AND expires_at <= NOW()
+		RETURNING id, user_id, zitadel_project_id, zitadel_role_key, granted_by, COALESCE(reason, ''), expires_at, created_at, updated_at`
+
+	rows, err := PG.Query(ctx, query, userID, ids)
+	if err != nil {
+		return nil, fmt.Errorf("failed to delete expired direct grants: %w", err)
+	}
+	defer rows.Close()
+
+	var deleted []models.DirectGrant
+	for rows.Next() {
+		var g models.DirectGrant
+		if err := rows.Scan(&g.ID, &g.UserID, &g.ProjectID, &g.RoleKey, &g.GrantedBy, &g.Reason, &g.ExpiresAt, &g.CreatedAt, &g.UpdatedAt); err != nil {
+			return nil, err
+		}
+		deleted = append(deleted, g)
+	}
+	return deleted, nil
+}
+
 // -------------------------------------------------------------
 // ACCESS REQUESTS
 // -------------------------------------------------------------
@@ -348,8 +419,41 @@ func ResolveAccessRequest(ctx context.Context, id, status, reviewerID, reviewNot
 }
 
 // -------------------------------------------------------------
-// CLAIM FAILURE MODE (Data Plane Security Boundary)
+// CLAIM PROFILES
 // -------------------------------------------------------------
+
+// ClaimProfileRow is the application-facing view of the claim_profiles table.
+// Used by the directory layer to overlay claim-shaping metadata on top of live
+// Zitadel project discovery.
+type ClaimProfileRow struct {
+	ProjectID  string
+	ClaimName  string
+	FormatType string
+}
+
+// ListClaimProfiles returns every claim_profiles row. Used to overlay
+// application metadata (ClaimName, FormatType) on live Zitadel projects when
+// the directory layer is running in live mode.
+func ListClaimProfiles(ctx context.Context) ([]ClaimProfileRow, error) {
+	rows, err := PG.Query(ctx, `SELECT zitadel_project_id, claim_name, format_type FROM claim_profiles`)
+	if err != nil {
+		return nil, fmt.Errorf("list claim profiles: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ClaimProfileRow
+	for rows.Next() {
+		var r ClaimProfileRow
+		if err := rows.Scan(&r.ProjectID, &r.ClaimName, &r.FormatType); err != nil {
+			return nil, fmt.Errorf("scan claim profile row: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate claim profiles: %w", err)
+	}
+	return out, nil
+}
 
 // GetClaimFailureMode returns the configured degraded-mode behavior for a project's
 // claim profile. Returns ("fail_closed", nil, nil) if the project has no claim

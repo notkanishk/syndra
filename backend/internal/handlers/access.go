@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
 
-	"mkauth/internal/demo"
+	"mkauth/internal/directory"
 	"mkauth/internal/services"
 )
 
@@ -82,7 +84,7 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cacheRebuildUser(r.Context(), userID, allApplicationProjectIDs())
+	rebuildUserCacheOrSkip(r.Context(), userID)
 	_ = dbInsertAuditLog(r.Context(), grantedBy, userID, "direct_grant.upserted", id)
 	jsonResponse(w, http.StatusOK, map[string]string{"id": id, "message": "Direct grant saved"})
 }
@@ -185,7 +187,7 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 			return
 		}
-		cacheRebuildUser(r.Context(), request.RequesterID, allApplicationProjectIDs())
+		rebuildUserCacheOrSkip(r.Context(), request.RequesterID)
 	}
 
 	actor := req.ReviewerID
@@ -205,10 +207,36 @@ func handleGetGovernanceSummary(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, summary)
 }
 
-func allApplicationProjectIDs() []string {
-	projectIDs := make([]string, 0, len(demo.Applications()))
-	for _, app := range demo.Applications() {
+// rebuildUserCacheOrSkip pulls the project scope from the directory and
+// rebuilds the user's compiled claims. On directory failure it logs and
+// skips the rebuild, leaving previously compiled claims in place — see
+// allApplicationProjectIDs for the rationale.
+func rebuildUserCacheOrSkip(ctx context.Context, userID string) {
+	projectIDs, err := allApplicationProjectIDs(ctx)
+	if err != nil {
+		log.Printf("[ACCESS] Skipping cache rebuild for user %s: directory lookup failed: %v", userID, err)
+		return
+	}
+	cacheRebuildUser(ctx, userID, projectIDs)
+}
+
+// allApplicationProjectIDs returns the set of project IDs the cache compiler
+// should rebuild for. Pulled from the directory (live Zitadel or demo fallback).
+//
+// Returns an error on directory failure so the caller can skip the rebuild
+// entirely. cache.RebuildUserCache starts by wiping every mapping:<user>:*
+// key; calling it with an empty slice would leave the Actions v2 path serving
+// degraded (fail_closed or minimal_safe) output for this user until the next
+// rebuild triggers. Preserving the last-known-good compiled claims is
+// strictly safer than nuking them on a transient Zitadel blip.
+func allApplicationProjectIDs(ctx context.Context) ([]string, error) {
+	apps, err := directory.Default.Applications(ctx)
+	if err != nil {
+		return nil, err
+	}
+	projectIDs := make([]string, 0, len(apps))
+	for _, app := range apps {
 		projectIDs = append(projectIDs, app.ProjectID)
 	}
-	return projectIDs
+	return projectIDs, nil
 }

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"mkauth/internal/directory"
 	"mkauth/internal/zitadel"
 )
 
@@ -140,6 +141,7 @@ func handleCreateZitadelProjectRole(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
 		return
 	}
+	directory.Default.InvalidateProject(projectID)
 	jsonResponse(w, http.StatusCreated, map[string]string{"status": "created"})
 }
 
@@ -161,6 +163,7 @@ func handleUpdateZitadelProjectRole(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
 		return
 	}
+	directory.Default.InvalidateProject(projectID)
 	jsonResponse(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
@@ -176,6 +179,7 @@ func handleDeleteZitadelProjectRole(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
 		return
 	}
+	directory.Default.InvalidateProject(projectID)
 	jsonResponse(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
