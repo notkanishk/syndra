@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { JsonView } from "@/components/ui/JsonView";
+import { SkeletonCardList } from "@/components/ui/Skeleton";
 
 interface UserProfile {
   id: string;
@@ -44,6 +48,11 @@ export default function ApplicationsView() {
   const [simulation, setSimulation] = useState<SimulationResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [simulating, setSimulating] = useState(false);
+  // Compare-with state — when set, fetches a second simulation and shows
+  // both panels side-by-side with diff highlighting.
+  const [compareUser, setCompareUser] = useState<string>("");
+  const [compareSimulation, setCompareSimulation] = useState<SimulationResponse | null>(null);
+  const [comparing, setComparing] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -93,6 +102,25 @@ export default function ApplicationsView() {
     simulate();
   }, [selectedApp, selectedUser]);
 
+  // Run the compare simulation in parallel when a second user is picked.
+  useEffect(() => {
+    async function simulateCompare() {
+      if (!selectedApp || !compareUser) {
+        setCompareSimulation(null);
+        return;
+      }
+      setComparing(true);
+      try {
+        const res = await fetch(`/api/proxy/applications/${selectedApp}/simulate?user_id=${compareUser}`);
+        setCompareSimulation(await res.json());
+      } finally {
+        setComparing(false);
+      }
+    }
+
+    simulateCompare();
+  }, [selectedApp, compareUser]);
+
   const activeApp = applications.find((app) => app.application.id === selectedApp);
 
   return (
@@ -104,7 +132,14 @@ export default function ApplicationsView() {
 
       {loading ? (
         <Card>
-          <p className="text-sm text-muted">Loading application catalog...</p>
+          <SkeletonCardList count={3} />
+        </Card>
+      ) : applications.length === 0 ? (
+        <Card>
+          <EmptyState
+            title="No applications registered"
+            description="Add an OIDC, API, or SAML application in Zitadel to start shaping its claims. Newly registered apps appear here automatically."
+          />
         </Card>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-[1.05fr,1.15fr] gap-6">
@@ -154,7 +189,7 @@ export default function ApplicationsView() {
               <CardHeader>
                 <CardTitle>Token Simulator</CardTitle>
               </CardHeader>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <label className="text-sm text-muted">
                   Application
                   <select
@@ -184,15 +219,47 @@ export default function ApplicationsView() {
                     ))}
                   </select>
                 </label>
+
+                <label className="text-sm text-muted">
+                  Compare with (optional)
+                  <select
+                    value={compareUser}
+                    onChange={(event) => setCompareUser(event.target.value)}
+                    className="mt-2 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                  >
+                    <option value="">— off —</option>
+                    {users.filter((u) => u.id !== selectedUser).map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
 
-              <div className="mt-4 rounded-xl border border-border bg-background p-4 font-mono text-sm overflow-x-auto">
-                <pre className="text-emerald-500">
-                  {simulating || !simulation
-                    ? "Simulating token..."
-                    : JSON.stringify(simulation.custom_claims, null, 2)}
-                </pre>
-              </div>
+              {compareUser ? (
+                <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  <SimulationPanel
+                    title={users.find((u) => u.id === selectedUser)?.name ?? "Primary"}
+                    busy={simulating}
+                    simulation={simulation}
+                    diffAgainst={compareSimulation?.custom_claims}
+                  />
+                  <SimulationPanel
+                    title={users.find((u) => u.id === compareUser)?.name ?? "Compare"}
+                    busy={comparing}
+                    simulation={compareSimulation}
+                    diffAgainst={simulation?.custom_claims}
+                  />
+                </div>
+              ) : (
+                <SimulationPanel
+                  title={users.find((u) => u.id === selectedUser)?.name ?? "Token"}
+                  busy={simulating}
+                  simulation={simulation}
+                  className="mt-4"
+                />
+              )}
 
               <div className="mt-4 flex flex-wrap gap-2">
                 {(simulation?.raw_roles || []).map((role) => (
@@ -228,6 +295,33 @@ export default function ApplicationsView() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+interface SimulationPanelProps {
+  title: string;
+  busy: boolean;
+  simulation: SimulationResponse | null;
+  diffAgainst?: Record<string, unknown>;
+  className?: string;
+}
+
+function SimulationPanel({ title, busy, simulation, diffAgainst, className = "" }: SimulationPanelProps) {
+  const json = simulation ? JSON.stringify(simulation.custom_claims, null, 2) : "";
+  return (
+    <div className={`rounded-xl border border-border bg-background ${className}`}>
+      <div className="flex items-center justify-between border-b border-border px-3 py-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">{title}</p>
+        {simulation && <CopyButton text={json} label="Copy JSON" />}
+      </div>
+      <div className="overflow-x-auto p-4 font-mono">
+        {busy || !simulation ? (
+          <p className="text-xs text-muted">Simulating token…</p>
+        ) : (
+          <JsonView value={simulation.custom_claims} compareWith={diffAgainst} />
+        )}
+      </div>
     </div>
   );
 }

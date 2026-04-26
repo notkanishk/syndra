@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 // --- Backend response shapes (mirror backend/internal/zitadel & handlers) ---
 
@@ -335,6 +336,8 @@ function ProjectsSection() {
   const [newRole, setNewRole] = useState({ key: "", displayName: "", group: "" });
   const [editing, setEditing] = useState<string>("");
   const [editDraft, setEditDraft] = useState({ displayName: "", group: "" });
+  const [pendingDeleteKey, setPendingDeleteKey] = useState<string>("");
+  const [deleting, setDeleting] = useState(false);
 
   const loadProjects = useCallback(async () => {
     try {
@@ -393,14 +396,22 @@ function ProjectsSection() {
     }
   };
 
-  const onDelete = async (key: string) => {
-    if (!confirm(`Delete role "${key}" from this project? This cannot be undone.`)) return;
+  const onDelete = (key: string) => {
+    setPendingDeleteKey(key);
+  };
+
+  const onDeleteConfirm = async () => {
+    const key = pendingDeleteKey;
+    setDeleting(true);
     try {
       await apiSend("DELETE", `zitadel/projects/${selectedId}/roles/${key}`);
       setFlash({ kind: "ok", msg: `Role ${key} deleted` });
+      setPendingDeleteKey("");
       await loadRoles(selectedId);
     } catch (err) {
       setFlash({ kind: "err", msg: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -523,6 +534,17 @@ function ProjectsSection() {
           {flash.msg}
         </p>
       )}
+
+      <ConfirmModal
+        open={Boolean(pendingDeleteKey)}
+        title={`Delete role "${pendingDeleteKey}"?`}
+        description="This removes the role from the project in Zitadel. Any user grants referencing it will need re-keying. This cannot be undone."
+        confirmLabel="Delete role"
+        variant="destructive"
+        isPending={deleting}
+        onCancel={() => setPendingDeleteKey("")}
+        onConfirm={onDeleteConfirm}
+      />
     </Card>
   );
 }
@@ -542,6 +564,8 @@ function UsersSection() {
   const [newGrant, setNewGrant] = useState({ projectId: "", roleKeys: "" });
   const [editing, setEditing] = useState<string>("");
   const [editDraft, setEditDraft] = useState("");
+  const [pendingRevoke, setPendingRevoke] = useState<{ id: string; label: string } | null>(null);
+  const [revoking, setRevoking] = useState(false);
 
   const loadDirectory = useCallback(async () => {
     try {
@@ -626,14 +650,23 @@ function UsersSection() {
     }
   };
 
-  const onRevoke = async (grantId: string, label: string) => {
-    if (!confirm(`Revoke grant for ${label}? This removes the user's access immediately.`)) return;
+  const onRevoke = (grantId: string, label: string) => {
+    setPendingRevoke({ id: grantId, label });
+  };
+
+  const onRevokeConfirm = async () => {
+    if (!pendingRevoke) return;
+    const { id } = pendingRevoke;
+    setRevoking(true);
     try {
-      await apiSend("DELETE", `zitadel/users/${selectedId}/grants/${grantId}`);
+      await apiSend("DELETE", `zitadel/users/${selectedId}/grants/${id}`);
       setFlash({ kind: "ok", msg: "Grant revoked" });
+      setPendingRevoke(null);
       await loadGrants(selectedId);
     } catch (err) {
       setFlash({ kind: "err", msg: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setRevoking(false);
     }
   };
 
@@ -759,6 +792,17 @@ function UsersSection() {
           {flash.msg}
         </p>
       )}
+
+      <ConfirmModal
+        open={Boolean(pendingRevoke)}
+        title="Revoke this grant?"
+        description={`This removes ${pendingRevoke?.label ?? "the user's"} access immediately. The user will lose any roles tied to this grant.`}
+        confirmLabel="Revoke"
+        variant="destructive"
+        isPending={revoking}
+        onCancel={() => setPendingRevoke(null)}
+        onConfirm={onRevokeConfirm}
+      />
     </Card>
   );
 }

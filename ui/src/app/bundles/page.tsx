@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardTitle } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SkeletonCardList } from "@/components/ui/Skeleton";
+import { SubmitButton } from "@/components/ui/SubmitButton";
+import { toastError, toastSuccess } from "@/lib/toast";
 
 interface BundleRole {
   zitadel_project_id: string;
@@ -38,12 +42,15 @@ export default function BundlesView() {
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [error, setError] = useState("");
   const [form, setForm] = useState({ name: "", description: "" });
   const [expandedBundle, setExpandedBundle] = useState<string | null>(null);
   const [bundleRoles, setBundleRoles] = useState<Record<string, BundleRole[]>>({});
   const [bundleImpact, setBundleImpact] = useState<Record<string, BundleImpact>>({});
-  const [newRole, setNewRole] = useState({ project_id: "printing", role_key: "member" });
+  // Defaults are populated from the live catalog once loadCatalog resolves.
+  // Starting empty avoids serializing demo identifiers ("printing", "member")
+  // into production HTML, and avoids a 400 if the form is submitted before
+  // the live catalog returns.
+  const [newRole, setNewRole] = useState({ project_id: "", role_key: "" });
 
   async function loadBundles() {
     setLoading(true);
@@ -59,7 +66,19 @@ export default function BundlesView() {
   async function loadCatalog() {
     const res = await fetch("/api/proxy/catalog");
     const data: CatalogResponse = await res.json();
-    setCatalog(Array.isArray(data?.projects) ? data.projects : []);
+    const projects = Array.isArray(data?.projects) ? data.projects : [];
+    setCatalog(projects);
+    // Populate form defaults from the first available project once the
+    // catalog resolves, but only if the user hasn't already picked something.
+    if (projects.length > 0) {
+      setNewRole((current) => {
+        if (current.project_id) return current;
+        return {
+          project_id: projects[0].id,
+          role_key: projects[0].roles[0]?.key ?? "",
+        };
+      });
+    }
   }
 
   async function loadBundleDetails(bundleId: string) {
@@ -82,7 +101,6 @@ export default function BundlesView() {
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
     setCreating(true);
-    setError("");
     try {
       const res = await fetch("/api/proxy/bundles", {
         method: "POST",
@@ -96,21 +114,29 @@ export default function BundlesView() {
       setForm({ name: "", description: "" });
       setFormOpen(false);
       await loadBundles();
+      toastSuccess("Bundle created", `"${form.name}" is ready to be assigned.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create bundle");
+      toastError(err instanceof Error ? err.message : "Failed to create bundle");
     } finally {
       setCreating(false);
     }
   }
 
   async function handleAddRole(bundleId: string) {
-    const res = await fetch(`/api/proxy/bundles/${bundleId}/roles`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newRole),
-    });
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/proxy/bundles/${bundleId}/roles`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newRole),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || "Failed to add role to bundle");
+      }
       await loadBundleDetails(bundleId);
+      toastSuccess("Role added to bundle");
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : "Failed to add role");
     }
   }
 
@@ -139,9 +165,6 @@ export default function BundlesView() {
         {formOpen && (
           <form onSubmit={handleCreate} className="mb-6 border border-border rounded-lg p-6 bg-surfaceHover animate-fade-in-up">
             <h3 className="text-sm font-semibold text-foreground mb-4">Create Bundle</h3>
-            {error && (
-              <div className="mb-4 p-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-500 text-sm">{error}</div>
-            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-xs font-medium text-muted mb-1.5">Bundle Name</label>
@@ -166,9 +189,7 @@ export default function BundlesView() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <button type="submit" disabled={creating} className="bg-primary text-white px-4 py-2 rounded-md font-medium text-sm disabled:opacity-50">
-                {creating ? "Creating..." : "Create Bundle"}
-              </button>
+              <SubmitButton isPending={creating} pendingLabel="Creating…" label="Create Bundle" />
               <button type="button" onClick={() => setFormOpen(false)} className="px-4 py-2 rounded-md font-medium text-sm text-muted hover:text-foreground">
                 Cancel
               </button>
@@ -177,9 +198,13 @@ export default function BundlesView() {
         )}
 
         {loading ? (
-          <div className="text-center py-10">
-            <p className="text-muted mt-3 text-sm">Loading bundles...</p>
-          </div>
+          <SkeletonCardList count={3} />
+        ) : bundles.length === 0 ? (
+          <EmptyState
+            title="No bundles yet"
+            description="Group related roles into a bundle so you can assign access in one click instead of granting individual roles."
+            action={{ label: "Create Bundle", onClick: () => setFormOpen(true) }}
+          />
         ) : (
           <div className="space-y-3">
             {bundles.map((bundle) => (
@@ -209,14 +234,50 @@ export default function BundlesView() {
 
                 {expandedBundle === bundle.id && (
                   <div className="px-4 pb-4 pt-2 border-t border-border bg-surface/50 animate-fade-in-up space-y-4">
+                    {(() => {
+                      const roles = bundleRoles[bundle.id] || [];
+                      const distinctProjects = Array.from(
+                        new Set(roles.map((r) => r.zitadel_project_id)),
+                      );
+                      return distinctProjects.length > 0 ? (
+                        <div>
+                          <h4 className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">
+                            Affected projects ({distinctProjects.length})
+                          </h4>
+                          <div className="flex flex-wrap gap-2">
+                            {distinctProjects.map((projectId) => {
+                              const project = catalog.find((p) => p.id === projectId);
+                              return (
+                                <Badge key={projectId} variant="secondary" title={projectId}>
+                                  {project?.name ?? projectId}
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
+
                     <div>
                       <h4 className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">Contained Roles</h4>
                       <div className="flex flex-wrap gap-2">
-                        {(bundleRoles[bundle.id] || []).map((role) => (
-                          <Badge key={`${role.zitadel_project_id}-${role.zitadel_role_key}`} variant="outline" className="border-primary/20 bg-primary/5 text-primary">
-                            {role.zitadel_project_id}:{role.zitadel_role_key}
-                          </Badge>
-                        ))}
+                        {(bundleRoles[bundle.id] || []).map((role) => {
+                          const project = catalog.find((p) => p.id === role.zitadel_project_id);
+                          const projectLabel = project?.name ?? role.zitadel_project_id;
+                          const roleLabel =
+                            project?.roles.find((r) => r.key === role.zitadel_role_key)?.label
+                            ?? role.zitadel_role_key;
+                          return (
+                            <Badge
+                              key={`${role.zitadel_project_id}-${role.zitadel_role_key}`}
+                              variant="outline"
+                              className="border-primary/20 bg-primary/5 text-primary"
+                              title={`${role.zitadel_project_id}:${role.zitadel_role_key}`}
+                            >
+                              {projectLabel} · {roleLabel}
+                            </Badge>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -269,9 +330,10 @@ export default function BundlesView() {
                       </div>
                       <button
                         onClick={() => handleAddRole(bundle.id)}
-                        className="w-full py-2 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold uppercase tracking-wider rounded transition-colors"
+                        disabled={!newRole.project_id || !newRole.role_key}
+                        className="w-full py-2 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold uppercase tracking-wider rounded transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        Add Role
+                        {newRole.project_id ? "Add Role" : "Loading project catalog…"}
                       </button>
                     </div>
                   </div>

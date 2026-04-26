@@ -1,5 +1,7 @@
+import RequestAccessButton from "@/components/RequestAccessButton";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { fetchApplications, fetchAudit, fetchBundles, fetchCatalog, fetchMappingRules, fetchProjects, fetchWithAuth } from "@/lib/api";
 import type { AccessRequest, UserAccessView } from "@/lib/types";
 import { getSession } from "@/lib/session";
@@ -72,8 +74,14 @@ export default async function Home() {
           <CardHeader>
             <CardTitle>Service Catalog</CardTitle>
           </CardHeader>
+          {(!Array.isArray(apps) || apps.length === 0) ? (
+            <EmptyState
+              title="No services available yet"
+              description="Your administrator hasn't published any apps you can request. Check back later or reach out for help."
+            />
+          ) : (
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            {Array.isArray(apps) && apps.map((entry) => {
+            {apps.map((entry) => {
               const status = activeProjects.has(entry.application.project_id)
                 ? "Active"
                 : pendingProjects.has(entry.application.project_id)
@@ -90,16 +98,16 @@ export default async function Home() {
                     <Badge variant={status === "Active" ? "secondary" : "outline"}>{status}</Badge>
                   </div>
                   <p className="mt-4 text-xs uppercase tracking-[0.22em] text-muted">{entry.application.consumer}</p>
-                  <a
-                    href="/requests"
-                    className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white"
-                  >
-                    {status === "No Access" ? "Request Access" : "View Requests"}
-                  </a>
+                  <RequestAccessButton
+                    projectId={entry.application.project_id}
+                    serviceName={entry.application.name}
+                    status={status as "Active" | "Pending" | "No Access"}
+                  />
                 </div>
               );
             })}
           </div>
+          )}
         </Card>
       </div>
     );
@@ -146,7 +154,7 @@ export default async function Home() {
     <div className="space-y-8 animate-fade-in-up">
       <header>
         <h1 className="text-3xl font-bold text-foreground tracking-tight">Overview</h1>
-        <p className="text-muted mt-2">MkAuth Identity Orchestrator with demo data spanning control-plane workflows, lineage, and token simulation.</p>
+        <p className="text-muted mt-2">Identity orchestrator across control-plane workflows, access lineage, and token simulation.</p>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
@@ -171,7 +179,7 @@ export default async function Home() {
             <CardTitle>Users</CardTitle>
           </CardHeader>
           <p className="text-4xl font-bold text-primary">{userCount}</p>
-          <p className="text-sm text-muted mt-1">Seeded personas to exercise flows</p>
+          <p className="text-sm text-muted mt-1">Identities sourced from the directory</p>
         </Card>
 
         <Card>
@@ -199,13 +207,13 @@ export default async function Home() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="rounded-xl border border-border bg-surfaceHover p-4">
               <p className="text-xs uppercase tracking-[0.24em] text-muted">Control Plane</p>
-              <p className="mt-2 text-lg font-semibold">Bundles, rules, assignments, and audit are wired up.</p>
-              <p className="mt-2 text-sm text-muted">The UI now has seeded data for every major admin view instead of empty states.</p>
+              <p className="mt-2 text-lg font-semibold">Bundles, mapping rules, and direct grants flow through the same audit and policy engine.</p>
+              <p className="mt-2 text-sm text-muted">Every privileged action is audit-logged with the acting admin&apos;s identity.</p>
             </div>
             <div className="rounded-xl border border-border bg-surfaceHover p-4">
               <p className="text-xs uppercase tracking-[0.24em] text-muted">Data Plane</p>
               <p className="mt-2 text-lg font-semibold">Token simulation runs against compiled Redis claims.</p>
-              <p className="mt-2 text-sm text-muted">Zitadel writeback stays stub-friendly, but the cache and claim shaping flow are testable now.</p>
+              <p className="mt-2 text-sm text-muted">Zitadel Actions v2 reads pre-flattened claims for sub-millisecond JWT enrichment.</p>
             </div>
           </div>
         </Card>
@@ -216,7 +224,11 @@ export default async function Home() {
           </CardHeader>
           <div className="space-y-3">
             {recentAudit.length === 0 ? (
-              <p className="text-sm text-muted">Audit events will appear here once the backend is seeded.</p>
+              <EmptyState
+                title="No activity yet"
+                description="Admin actions will appear here as they happen."
+                action={{ label: "Open audit log", href: "/audit" }}
+              />
             ) : (
               recentAudit.map((entry) => (
                 <div key={entry.id} className="rounded-xl border border-border bg-surfaceHover p-4">

@@ -90,3 +90,24 @@ export async function fetchProjects(token?: string): Promise<ProjectSummary[]> {
 export async function fetchAudit(limit = 6, token?: string): Promise<AuditLog[]> {
   return fetchServerJson<AuditLog[]>(`/audit?limit=${limit}`, token);
 }
+
+// SystemMode mirrors the backend SystemModeResponse. `directory` reports the
+// active source ("zitadel" | "demo"); `degraded` is true iff the env requested
+// live Zitadel but the directory fell back to demo (unexpected fallback).
+export interface SystemMode {
+  directory: "zitadel" | "demo";
+  seed_active: boolean;
+  zitadel_configured: boolean;
+  degraded: boolean;
+}
+
+// fetchSystemMode reads /system/mode for chrome-level diagnostics. Returns
+// null on any failure (auth, network, decoding) so the caller can render a
+// silent steady-state instead of breaking the layout.
+export async function fetchSystemMode(token?: string): Promise<SystemMode | null> {
+  try {
+    return await fetchServerJson<SystemMode>("/system/mode", token);
+  } catch {
+    return null;
+  }
+}

@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SubmitButton } from "@/components/ui/SubmitButton";
+import { toastError, toastSuccess } from "@/lib/toast";
 import type { SessionUser } from "@/lib/session";
 
 interface AppView {
@@ -27,6 +30,8 @@ interface AccessRequest {
   justification: string;
   duration_days?: number | null;
   status: string;
+  reviewer_id?: string;
+  review_note?: string;
   created_at: string;
 }
 
@@ -34,11 +39,14 @@ export default function UserRequestsView({ session }: { session: SessionUser }) 
   const [apps, setApps] = useState<AppView[]>([]);
   const [projects, setProjects] = useState<CatalogResponse["projects"]>([]);
   const [requests, setRequests] = useState<AccessRequest[]>([]);
-  const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  // Defaults populate from the live catalog after `load()`. Empty initial
+  // values avoid leaking demo identifiers into production HTML and surface
+  // an explicit "loading" state until the catalog returns.
   const [form, setForm] = useState({
-    project_id: "printing",
-    role_key: "member",
-    justification: "Requesting access to complete current makerspace work.",
+    project_id: "",
+    role_key: "",
+    justification: "",
     duration_days: "14",
   });
 
@@ -73,26 +81,30 @@ export default function UserRequestsView({ session }: { session: SessionUser }) 
 
   async function submitRequest(event: React.FormEvent) {
     event.preventDefault();
-    const durationDays = Number.parseInt(form.duration_days, 10);
-    const res = await fetch("/api/proxy/requests", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        project_id: form.project_id,
-        role_key: form.role_key,
-        justification: form.justification,
-        duration_days: Number.isNaN(durationDays) ? 0 : durationDays,
-      }),
-    });
-
-    if (res.ok) {
-      setMessage("Request submitted for review.");
+    setSubmitting(true);
+    try {
+      const durationDays = Number.parseInt(form.duration_days, 10);
+      const res = await fetch("/api/proxy/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project_id: form.project_id,
+          role_key: form.role_key,
+          justification: form.justification,
+          duration_days: Number.isNaN(durationDays) ? 0 : durationDays,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || "Failed to submit request.");
+      }
       load();
-      return;
+      toastSuccess("Request submitted", "We'll notify your administrator for review.");
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : "Failed to submit request.");
+    } finally {
+      setSubmitting(false);
     }
-
-    const body = await res.json().catch(() => ({}));
-    setMessage(body.message || "Failed to submit request.");
   }
 
   const selectedProject = projects.find((project) => project.id === form.project_id);
@@ -115,17 +127,20 @@ export default function UserRequestsView({ session }: { session: SessionUser }) 
           <div className="space-y-3 rounded-2xl border border-border bg-surfaceHover p-4">
             <p className="text-xs uppercase tracking-[0.24em] text-muted">Published services</p>
             <div className="space-y-2">
-              {apps.map((entry) => (
-                <div key={entry.application.id} className="rounded-xl border border-border bg-background p-3">
-                  <p className="font-semibold text-foreground">{entry.application.name}</p>
-                  <p className="mt-1 text-sm text-muted">{entry.application.description}</p>
-                </div>
-              ))}
+              {apps.length === 0 ? (
+                <p className="text-sm text-muted">No services have been published yet. Ask your admin which apps are available.</p>
+              ) : (
+                apps.map((entry) => (
+                  <div key={entry.application.id} className="rounded-xl border border-border bg-background p-3">
+                    <p className="font-semibold text-foreground">{entry.application.name}</p>
+                    <p className="mt-1 text-sm text-muted">{entry.application.description}</p>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
           <form onSubmit={submitRequest} className="mt-4 space-y-3">
-            {message && <p className="text-sm text-primary">{message}</p>}
             <select
               value={form.project_id}
               onChange={(event) => {
@@ -159,6 +174,7 @@ export default function UserRequestsView({ session }: { session: SessionUser }) 
             <textarea
               value={form.justification}
               onChange={(event) => setForm({ ...form, justification: event.target.value })}
+              placeholder="Why do you need this access?"
               className="min-h-28 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
             />
             <input
@@ -169,9 +185,13 @@ export default function UserRequestsView({ session }: { session: SessionUser }) 
               className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
               placeholder="Duration in days"
             />
-            <button type="submit" className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white">
-              Submit My Request
-            </button>
+<SubmitButton
+              isPending={submitting}
+              pendingLabel="Submitting…"
+              disabled={!form.project_id || !form.role_key || !form.justification.trim()}
+              className="w-full"
+              label={form.project_id ? "Submit My Request" : "Loading services…"}
+            />
           </form>
         </Card>
 
@@ -181,25 +201,44 @@ export default function UserRequestsView({ session }: { session: SessionUser }) 
           </CardHeader>
           <div className="space-y-3">
             {requests.length === 0 ? (
-              <p className="text-sm text-muted">No requests submitted yet.</p>
+              <EmptyState
+                title="No requests submitted yet"
+                description="Submit a request above and you'll see your status timeline here."
+              />
             ) : (
-              requests.map((request) => (
-                <div key={request.id} className="rounded-xl border border-border bg-surfaceHover p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-foreground">
-                        {projectNameById.get(request.project_id) || request.project_id} • {request.role_key}
-                      </p>
-                      <p className="mt-1 text-sm text-muted">{request.justification}</p>
+              requests.map((request) => {
+                const statusVariant: "outline" | "secondary" | "destructive" =
+                  request.status === "pending"
+                    ? "outline"
+                    : request.status === "rejected"
+                      ? "destructive"
+                      : "secondary";
+                return (
+                  <div key={request.id} className="rounded-xl border border-border bg-surfaceHover p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-foreground">
+                          {projectNameById.get(request.project_id) || request.project_id} • {request.role_key}
+                        </p>
+                        <p className="mt-1 text-sm text-muted">{request.justification}</p>
+                      </div>
+                      <Badge variant={statusVariant}>{request.status}</Badge>
                     </div>
-                    <Badge variant={request.status === "pending" ? "outline" : "secondary"}>{request.status}</Badge>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Badge variant="secondary">{new Date(request.created_at).toLocaleString()}</Badge>
+                      {request.duration_days ? <Badge variant="outline">{request.duration_days} day grant</Badge> : <Badge variant="outline">Permanent request</Badge>}
+                    </div>
+                    {request.status !== "pending" && (request.reviewer_id || request.review_note) && (
+                      <div className="mt-3 rounded-lg border border-border bg-background/40 p-3 text-xs text-muted">
+                        <p>
+                          <span className="font-semibold text-foreground">Reviewed{request.reviewer_id ? ` by ${request.reviewer_id}` : ""}</span>
+                          {request.review_note ? `: ${request.review_note}` : ""}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Badge variant="secondary">{new Date(request.created_at).toLocaleString()}</Badge>
-                    {request.duration_days ? <Badge variant="outline">{request.duration_days} day grant</Badge> : <Badge variant="outline">Permanent request</Badge>}
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </Card>

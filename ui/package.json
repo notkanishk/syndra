@@ -11,9 +11,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "next": "^15",
     "react": "^19",
     "react-dom": "^19",
-    "next": "^15"
+    "sonner": "^2.0.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

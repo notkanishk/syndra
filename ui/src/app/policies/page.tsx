@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import CreateRuleForm from "@/components/CreateRuleForm";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardTitle } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SkeletonCardList } from "@/components/ui/Skeleton";
 
 interface MappingRule {
   id: string;
@@ -75,14 +77,12 @@ export default function PoliciesView() {
         </div>
 
         {loading ? (
-          <div className="text-center py-10">
-            <p className="text-muted mt-3 text-sm">Loading rules...</p>
-          </div>
+          <SkeletonCardList count={3} />
         ) : rules.length === 0 ? (
-          <div className="text-center py-10 border border-dashed border-border rounded-lg">
-            <p className="text-muted">No rules established yet.</p>
-            <p className="text-xs text-muted mt-1">Use the seeded project catalog to create a propagation path above.</p>
-          </div>
+          <EmptyState
+            title="No mapping rules yet"
+            description="Define a rule to propagate role grants from one project into another. Open the form above to pick a source role and the target role it should imply."
+          />
         ) : (
           <div className="space-y-3">
             {rules.map((rule) => (

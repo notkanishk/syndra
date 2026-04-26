@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 type NodeKind = "application" | "bundle" | "project" | "role";
 
@@ -62,11 +65,70 @@ function nodeTone(kind: NodeKind) {
   }
 }
 
+function nodeDetailHref(kind: NodeKind, projectId?: string): string {
+  switch (kind) {
+    case "application":
+      return "/applications";
+    case "bundle":
+      return "/bundles";
+    case "project":
+      return "/projects";
+    case "role":
+      return projectId ? `/projects` : "/projects";
+  }
+}
+
 export default function GraphPage() {
   const [topology, setTopology] = useState<TopologyGraph>({ nodes: [], edges: [] });
   const [loading, setLoading] = useState(true);
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
+
+  // Pan + zoom state for the topology canvas.
+  const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 });
+  const panStart = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
+  const canvasContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const onWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (!event.ctrlKey && !event.metaKey) {
+      // Allow normal vertical scroll outside the canvas; only zoom with modifier.
+      // Supports trackpad pinch (which fires deltaY with ctrlKey) and Cmd+scroll.
+      return;
+    }
+    event.preventDefault();
+    setViewport((current) => {
+      const next = current.scale * (event.deltaY < 0 ? 1.1 : 0.9);
+      const clamped = Math.max(0.4, Math.min(2.5, next));
+      return { ...current, scale: clamped };
+    });
+  };
+
+  const onPanStart = (event: React.MouseEvent<HTMLDivElement>) => {
+    // Only pan when the empty canvas surface itself is the target — not when
+    // a node button (which absolutely-positions over it) was clicked.
+    if (event.target !== event.currentTarget) return;
+    panStart.current = {
+      x: event.clientX,
+      y: event.clientY,
+      vx: viewport.x,
+      vy: viewport.y,
+    };
+  };
+
+  const onPanMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!panStart.current) return;
+    setViewport((current) => ({
+      ...current,
+      x: panStart.current!.vx + (event.clientX - panStart.current!.x),
+      y: panStart.current!.vy + (event.clientY - panStart.current!.y),
+    }));
+  };
+
+  const onPanEnd = () => {
+    panStart.current = null;
+  };
+
+  const resetView = () => setViewport({ x: 0, y: 0, scale: 1 });
 
   useEffect(() => {
     async function load() {
@@ -222,10 +284,57 @@ export default function GraphPage() {
           </div>
 
           {loading ? (
-            <p className="text-sm text-muted">Loading topology...</p>
+            <Skeleton className="h-72 w-full" />
+          ) : filteredNodes.length === 0 ? (
+            <EmptyState
+              title="Topology is empty"
+              description="Once projects, applications, bundles, and mapping rules exist, they'll appear here as a connected graph for visual exploration."
+            />
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-border bg-[radial-gradient(circle_at_top,_rgba(79,70,229,0.12),_transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.04),transparent)]">
-              <div className="relative min-w-[1240px]" style={{ height: canvasHeight }}>
+            <div className="relative">
+              <div className="absolute right-2 top-2 z-20 flex gap-2 rounded-lg border border-border bg-surface/80 px-1.5 py-1 backdrop-blur">
+                <button
+                  type="button"
+                  onClick={() => setViewport((v) => ({ ...v, scale: Math.min(2.5, v.scale * 1.1) }))}
+                  className="rounded px-2 py-1 text-xs text-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  aria-label="Zoom in"
+                >+</button>
+                <button
+                  type="button"
+                  onClick={() => setViewport((v) => ({ ...v, scale: Math.max(0.4, v.scale * 0.9) }))}
+                  className="rounded px-2 py-1 text-xs text-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  aria-label="Zoom out"
+                >−</button>
+                <button
+                  type="button"
+                  onClick={resetView}
+                  className="rounded px-2 py-1 text-xs text-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  aria-label="Reset view"
+                >Reset</button>
+                <span className="px-2 py-1 text-[10px] text-muted">{Math.round(viewport.scale * 100)}%</span>
+              </div>
+              <p className="absolute left-2 top-2 z-20 rounded bg-surface/80 px-2 py-1 text-[10px] text-muted backdrop-blur">
+                Drag to pan · ⌘/Ctrl + scroll to zoom
+              </p>
+            <div
+              ref={canvasContainerRef}
+              onWheel={onWheel}
+              onMouseDown={onPanStart}
+              onMouseMove={onPanMove}
+              onMouseUp={onPanEnd}
+              onMouseLeave={onPanEnd}
+              className="overflow-hidden rounded-2xl border border-border bg-[radial-gradient(circle_at_top,_rgba(79,70,229,0.12),_transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.04),transparent)] cursor-grab active:cursor-grabbing"
+              style={{ height: Math.min(canvasHeight, 720) }}
+            >
+              <div
+                className="relative min-w-[1240px]"
+                style={{
+                  height: canvasHeight,
+                  transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`,
+                  transformOrigin: "top left",
+                  transition: panStart.current ? "none" : "transform 0.1s ease-out",
+                }}
+              >
                 <div className="absolute inset-0">
                   {laneOrder.map((kind) => (
                     <div
@@ -287,6 +396,7 @@ export default function GraphPage() {
                     <button
                       key={node.id}
                       onClick={() => setSelectedNodeId(node.id)}
+                      onMouseDown={(e) => e.stopPropagation()}
                       className={`absolute rounded-2xl border p-4 text-left shadow-sm transition-all ${nodeTone(node.kind)} ${
                         isSelected ? "ring-2 ring-primary shadow-xl scale-[1.02]" : "hover:-translate-y-0.5 hover:shadow-lg"
                       }`}
@@ -311,6 +421,7 @@ export default function GraphPage() {
                 })}
               </div>
             </div>
+            </div>
           )}
         </Card>
 
@@ -327,6 +438,12 @@ export default function GraphPage() {
                   <p className="mt-2 text-sm text-muted">
                     {selectedNode.description || "This node does not have an extended description yet."}
                   </p>
+                  <Link
+                    href={nodeDetailHref(selectedNode.kind, selectedNode.project_id)}
+                    className="mt-3 inline-flex rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  >
+                    View details →
+                  </Link>
                 </div>
 
                 <div>

@@ -25,7 +25,11 @@
 }
 
 @layer base {
-  :root {
+  /* Light theme — default. Token mapping is shared between explicit
+     [data-theme="light"] and the no-attribute root so a server-rendered
+     page without the ThemeProvider attribute still gets sensible colors. */
+  :root,
+  [data-theme="light"] {
     --background: #ffffff;
     --foreground: #111827;
     --surface: #ffffff;
@@ -34,19 +38,48 @@
     --primary: #4f46e5;
     --primary-hover: #4338ca;
     --muted: #6b7280;
+
+    /* Semantic accents — vibrant, paired with white text on filled buttons. */
+    --color-success: #10b981;
+    --color-success-hover: #059669;
+    --color-warning: #f59e0b;
+    --color-warning-hover: #d97706;
+    --color-danger: #ef4444;
+    --color-danger-hover: #dc2626;
+    --color-info: #0ea5e9;
+    --color-info-hover: #0284c7;
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --background: #09090b;
-      --foreground: #fafafa;
-      --surface: #18181b;
-      --surface-hover: #27272a;
-      --border: #27272a;
-      --primary: #6366f1;
-      --primary-hover: #818cf8;
-      --muted: #a1a1aa;
-    }
+  /* Dark theme — applied either explicitly via the ThemeProvider toggle
+     or implicitly by the user's OS preference when no override is stored. */
+  [data-theme="dark"],
+  :root[data-theme-system="dark"]:not([data-theme]) {
+    --background: #09090b;
+    --foreground: #fafafa;
+    --surface: #18181b;
+    --surface-hover: #27272a;
+    --border: #27272a;
+    --primary: #818cf8;
+    --primary-hover: #a5b4fc;
+    --muted: #a1a1aa;
+
+    --color-success: #34d399;
+    --color-success-hover: #6ee7b7;
+    --color-warning: #fbbf24;
+    --color-warning-hover: #fcd34d;
+    --color-danger: #f87171;
+    --color-danger-hover: #fca5a5;
+    --color-info: #38bdf8;
+    --color-info-hover: #7dd3fc;
+  }
+
+  /* Visible focus rings for keyboard users. Pair with `focus-visible:`
+     utilities on interactive controls; this base rule covers anything that
+     forgot. Excludes mouse/touch focus to avoid noise on click. */
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 }
 
