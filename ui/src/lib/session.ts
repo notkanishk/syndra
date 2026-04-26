@@ -211,6 +211,11 @@ export async function getSession(): Promise<SessionUser | null> {
   }
 
   // Demo session
+  // Defense in depth: when ZITADEL_DOMAIN is configured, a `type: "demo"`
+  // cookie is necessarily stale (live deployments only issue OIDC sessions).
+  // Reject it so demo identity data never resolves into a production session.
+  if (process.env.ZITADEL_DOMAIN) return null;
+
   const user = getDemoUser(payload.userId);
   if (!user || user.role !== payload.role) return null;
   return user;

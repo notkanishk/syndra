@@ -55,12 +55,23 @@ async function proxy(request: NextRequest, method: "GET" | "POST" | "PUT" | "DEL
 
   if (method === "POST" || method === "PUT") {
     const body = await request.json();
-    const payload = session.role === "admin"
-      ? body
-      : {
-          ...body,
-          requester_id: session.id,
-        };
+    let payload = body;
+
+    if (session.role !== "admin") {
+      // Members can only create requests for themselves. Backend checks this
+      // independently; the proxy enforces it here as defense-in-depth.
+      payload = { ...body, requester_id: session.id };
+    } else if (session.sessionType === "demo") {
+      // Demo-mode admins authenticate via the shared API key, so the backend
+      // can't derive an authenticated principal from the request. Inject the
+      // demo session id as the audit actor for grant/request flows so audit
+      // attribution stays meaningful in local dev. In OIDC mode the backend
+      // resolves the actor from the JWT subject and ignores these fields.
+      const isGrantWrite = method === "POST" && path[0] === "users" && path[2] === "grants";
+      const isDecisionWrite = method === "POST" && path[0] === "requests" && path.length === 3 && path[2] === "decision";
+      if (isGrantWrite) payload = { ...body, granted_by: session.id };
+      else if (isDecisionWrite) payload = { ...body, reviewer_id: session.id };
+    }
 
     init.headers = {
       ...init.headers,
