@@ -18,6 +18,10 @@ func NewRouter() http.Handler {
 	// Health check — no auth, no CORS
 	mux.HandleFunc("GET /healthz", handleHealthCheck)
 
+	// System mode diagnostic — auth-gated to avoid leaking deployment posture.
+	// UI consumes this to render a "Live"/"Demo"/"Degraded" indicator.
+	mux.HandleFunc("GET /api/v1/system/mode", withCORS(withUserAuth(handleSystemMode)))
+
 	// Bundle Routes
 	mux.HandleFunc("GET /api/v1/bundles", withCORS(withUserAuth(handleGetBundles)))
 	mux.HandleFunc("POST /api/v1/bundles", withCORS(withUserAuth(handleCreateBundle)))
@@ -46,6 +50,7 @@ func NewRouter() http.Handler {
 	// Rules Routes
 	mux.HandleFunc("GET /api/v1/rules/mapping", withCORS(withUserAuth(handleGetMappingRules)))
 	mux.HandleFunc("POST /api/v1/rules/mapping", withCORS(withUserAuth(handleCreateMappingRule)))
+	mux.HandleFunc("POST /api/v1/rules/mapping/validate", withCORS(withUserAuth(handleValidateMappingRule)))
 	mux.HandleFunc("PUT /api/v1/rules/mapping/{id}", withCORS(withUserAuth(handleUpdateMappingRule)))
 
 	// Audit Logs

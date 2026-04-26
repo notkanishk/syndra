@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"mkauth/internal/cache"
@@ -12,6 +13,17 @@ import (
 	"mkauth/internal/demo"
 	"mkauth/internal/zitadel"
 )
+
+// demoSeedActive records whether EnsureDemoData populated the demo fixtures
+// during the current process. Read by /api/v1/system/mode so the frontend
+// can surface a "demo data present" signal even when the directory layer is
+// otherwise live.
+var demoSeedActive atomic.Bool
+
+// DemoSeedActive reports whether demo seed data was populated in this process.
+func DemoSeedActive() bool {
+	return demoSeedActive.Load()
+}
 
 func EnsureDemoData(ctx context.Context) error {
 	if !demoEnabled() {
@@ -55,6 +67,7 @@ func EnsureDemoData(ctx context.Context) error {
 		cache.RebuildUserCache(ctx, user.ID, projectIDs)
 	}
 
+	demoSeedActive.Store(true)
 	return nil
 }
 

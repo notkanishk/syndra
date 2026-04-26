@@ -26,7 +26,7 @@ func handleGetMappingRules(w http.ResponseWriter, r *http.Request) {
 
 	// Send [] instead of null
 	if rules == nil {
-		jsonResponse(w, http.StatusOK, []interface{}{})
+		jsonResponse(w, http.StatusOK, []any{})
 		return
 	}
 
@@ -82,6 +82,47 @@ func handleCreateMappingRule(w http.ResponseWriter, r *http.Request) {
 		ID:      id,
 		Message: "Mapping Rule integrated seamlessly.",
 	})
+}
+
+// handleValidateMappingRule reports whether a candidate rule would create a
+// cycle, without persisting anything. The UI calls this on every form-field
+// change to surface the warning inline rather than waiting for the create POST
+// to fail. Same shape as create plus a `would_cycle` and `self_reference`
+// boolean in the response.
+func handleValidateMappingRule(w http.ResponseWriter, r *http.Request) {
+	var req CreateMappingRuleRequest
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
+	}
+
+	req.SourceProject = strings.TrimSpace(req.SourceProject)
+	req.SourceRole = strings.TrimSpace(req.SourceRole)
+	req.TargetProject = strings.TrimSpace(req.TargetProject)
+	req.TargetRole = strings.TrimSpace(req.TargetRole)
+
+	type response struct {
+		WouldCycle    bool   `json:"would_cycle"`
+		SelfReference bool   `json:"self_reference"`
+		Reason        string `json:"reason,omitempty"`
+	}
+
+	if req.SourceProject == "" || req.SourceRole == "" || req.TargetProject == "" || req.TargetRole == "" {
+		// Tolerate partial input — the form calls this on every change.
+		jsonResponse(w, http.StatusOK, response{})
+		return
+	}
+
+	if req.SourceProject == req.TargetProject && req.SourceRole == req.TargetRole {
+		jsonResponse(w, http.StatusOK, response{SelfReference: true, Reason: "Source and target are the same role"})
+		return
+	}
+
+	if err := dbDetectCycleOnInsert(r.Context(), req.SourceProject, req.SourceRole, req.TargetProject, req.TargetRole); err != nil {
+		jsonResponse(w, http.StatusOK, response{WouldCycle: true, Reason: err.Error()})
+		return
+	}
+	jsonResponse(w, http.StatusOK, response{})
 }
 
 func handleUpdateMappingRule(w http.ResponseWriter, r *http.Request) {

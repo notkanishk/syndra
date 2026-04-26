@@ -13,9 +13,13 @@ import (
 )
 
 type UpsertDirectGrantRequest struct {
-	ProjectID    string `json:"project_id"`
-	RoleKey      string `json:"role_key"`
-	GrantedBy    string `json:"granted_by"`
+	ProjectID string `json:"project_id"`
+	RoleKey   string `json:"role_key"`
+	// GrantedBy is a fallback for demo/local-dev where the request context has
+	// no authenticated principal (API-key auth doesn't carry user identity).
+	// In production (Zitadel JWT auth) the authenticated subject takes
+	// precedence over this body field — clients should not send it.
+	GrantedBy    string `json:"granted_by,omitempty"`
 	Reason       string `json:"reason"`
 	DurationDays int    `json:"duration_days"`
 }
@@ -29,9 +33,25 @@ type CreateAccessRequestRequest struct {
 }
 
 type ResolveAccessRequestRequest struct {
-	Status     string `json:"status"`
-	ReviewerID string `json:"reviewer_id"`
+	Status string `json:"status"`
+	// ReviewerID is a fallback for demo/local-dev. In production the
+	// authenticated subject from the bearer token is used instead.
+	ReviewerID string `json:"reviewer_id,omitempty"`
 	ReviewNote string `json:"review_note"`
+}
+
+// resolveActor prefers the authenticated principal from the request context
+// (set by withUserAuth from a Zitadel-issued JWT). Falls back to a
+// caller-supplied body value when the context principal is empty (demo/API-key
+// mode). Returns "system" only when both are empty.
+func resolveActor(r *http.Request, bodyValue string) string {
+	if id := getAdminUserID(r.Context()); id != "" {
+		return id
+	}
+	if id := strings.TrimSpace(bodyValue); id != "" {
+		return id
+	}
+	return "system"
 }
 
 func handleGetUserDirectGrants(w http.ResponseWriter, r *http.Request) {
@@ -67,10 +87,7 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	grantedBy := req.GrantedBy
-	if grantedBy == "" {
-		grantedBy = "system"
-	}
+	grantedBy := resolveActor(r, req.GrantedBy)
 
 	var expiresAt *time.Time
 	if req.DurationDays > 0 {
@@ -133,7 +150,11 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = dbInsertAuditLog(r.Context(), req.RequesterID, req.RequesterID, "access_request.created", id)
+	// Audit actor is the authenticated principal when present (admin acting on
+	// behalf of a member, or the member themselves). Falls back to the
+	// requester so demo-mode self-requests still attribute correctly.
+	actor := resolveActor(r, req.RequesterID)
+	_ = dbInsertAuditLog(r.Context(), actor, req.RequesterID, "access_request.created", id)
 	jsonResponse(w, http.StatusCreated, map[string]string{"id": id})
 }
 
@@ -155,8 +176,10 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "status must be approved or rejected", map[string]string{"status": "enum"})
 		return
 	}
-	if status == "approved" && !trimmedNonEmpty(req.ReviewerID) {
-		jsonValidationErrorResponse(w, "reviewer_id is required when approving a request", map[string]string{"reviewer_id": "required_when=status:approved"})
+
+	reviewer := resolveActor(r, req.ReviewerID)
+	if status == "approved" && reviewer == "system" {
+		jsonValidationErrorResponse(w, "an authenticated reviewer is required when approving a request", map[string]string{"reviewer_id": "required_when=status:approved"})
 		return
 	}
 
@@ -172,7 +195,7 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := dbResolveAccessRequest(r.Context(), requestID, status, req.ReviewerID, req.ReviewNote); err != nil {
+	if err := dbResolveAccessRequest(r.Context(), requestID, status, reviewer, req.ReviewNote); err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
@@ -183,18 +206,14 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 			expiry := time.Now().UTC().Add(time.Duration(*request.DurationDays) * 24 * time.Hour)
 			expiresAt = &expiry
 		}
-		if _, err := dbUpsertDirectGrant(r.Context(), request.RequesterID, request.ProjectID, request.RoleKey, req.ReviewerID, "Approved from access request", expiresAt); err != nil {
+		if _, err := dbUpsertDirectGrant(r.Context(), request.RequesterID, request.ProjectID, request.RoleKey, reviewer, "Approved from access request", expiresAt); err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 			return
 		}
 		rebuildUserCacheOrSkip(r.Context(), request.RequesterID)
 	}
 
-	actor := req.ReviewerID
-	if actor == "" {
-		actor = "system"
-	}
-	_ = dbInsertAuditLog(r.Context(), actor, request.RequesterID, "access_request."+status, requestID)
+	_ = dbInsertAuditLog(r.Context(), reviewer, request.RequesterID, "access_request."+status, requestID)
 	jsonResponse(w, http.StatusOK, map[string]string{"message": "Request resolved"})
 }
 
