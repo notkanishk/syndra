@@ -13,10 +13,10 @@ Each capability has one canonical spec. **Status** lets you skip specs that aren
 | Capability | Status | Spec | Origin |
 |-----------|--------|------|--------|
 | Role Management | Integrated | [spec](changes/mkauth-core-architecture/specs/role-management/spec.md) | core-architecture + advanced-role-crud |
-| User Management | Integrated, live Zitadel (filters deferred P5) | [spec](changes/mkauth-core-architecture/specs/user-management/spec.md) | core-architecture + live-zitadel-data-source |
+| User Management | Integrated, live Zitadel (Title/Team/Location from Zitadel user metadata; filters deferred P5) | [spec](changes/mkauth-core-architecture/specs/user-management/spec.md) | core-architecture + live-zitadel-data-source + live-directory-identity-completeness |
 | Access Governance | Integrated (bulk ops deferred P5) | [spec](changes/mkauth-core-architecture/specs/access-governance/spec.md) | core-architecture + contract-hardening + grant-expiration-scheduler |
-| Application Claims | Integrated | [spec](changes/mkauth-core-architecture/specs/application-claims/spec.md) | core-architecture + backend-onboarding + actions-v2-deployment |
-| Service Catalog | Partial (service-to-bundle mapping deferred P5; project/role pickers live from Zitadel) | [spec](changes/mkauth-core-architecture/specs/service-catalog/spec.md) | core-architecture + live-zitadel-data-source |
+| Application Claims | Integrated (live /applications shows real Zitadel apps with OIDC/API/SAML type label) | [spec](changes/mkauth-core-architecture/specs/application-claims/spec.md) | core-architecture + backend-onboarding + actions-v2-deployment + live-directory-identity-completeness |
+| Service Catalog | Partial (service-to-bundle mapping deferred P5; project/role/application pickers live from Zitadel) | [spec](changes/mkauth-core-architecture/specs/service-catalog/spec.md) | core-architecture + live-zitadel-data-source + live-directory-identity-completeness |
 | Automation Policies | Partial (welcome bundle config UI deferred P5) | [spec](changes/mkauth-core-architecture/specs/automation-policies/spec.md) | core-architecture + backend-onboarding |
 | LDAP Sync | Partial (reconciliation deferred P5, password compat unresolved) | [spec](changes/mkauth-core-architecture/specs/ldap-sync/spec.md) | core-architecture |
 | Provisioning | Partial (reconciliation, compensating revocations deferred P5) | [spec](changes/mkauth-core-architecture/specs/provisioning/spec.md) | core-architecture |
@@ -56,6 +56,7 @@ Every change directory has: `proposal.md` (why), `design.md` (how), `tasks.md` (
 | [Zitadel Actions v2 Deployment](changes/zitadel-actions-v2-deployment/) | 5 | Complete | [proposal](changes/zitadel-actions-v2-deployment/proposal.md) / [design](changes/zitadel-actions-v2-deployment/design.md) / [impl](changes/zitadel-actions-v2-deployment/IMPLEMENTATION.md) / [deploy](changes/zitadel-actions-v2-deployment/DEPLOY.md) |
 | [Grant Expiration Scheduler](changes/grant-expiration-scheduler/) | 5 | Complete | [proposal](changes/grant-expiration-scheduler/proposal.md) / [design](changes/grant-expiration-scheduler/design.md) / [tasks](changes/grant-expiration-scheduler/tasks.md) |
 | [Live Zitadel Data Source](changes/live-zitadel-data-source/) | 5 | Complete | [proposal](changes/live-zitadel-data-source/proposal.md) / [design](changes/live-zitadel-data-source/design.md) / [tasks](changes/live-zitadel-data-source/tasks.md) |
+| [Live-Directory Identity Completeness](changes/live-directory-identity-completeness/) | 5 | Complete | [proposal](changes/live-directory-identity-completeness/proposal.md) / [design](changes/live-directory-identity-completeness/design.md) / [tasks](changes/live-directory-identity-completeness/tasks.md) |
 
 ## Roadmap Phase -> Change Mapping
 
@@ -65,5 +66,5 @@ Every change directory has: `proposal.md` (why), `design.md` (how), `tasks.md` (
 | 2: Contract Hardening | Complete | contract-hardening |
 | 3: Security Boundary | Complete | backend-onboarding, codebase-audit, zitadel-mgmt-client, webhook-listener, role-crud |
 | 4: Infrastructure Bridge | In Progress | provisioning-intents, shadow-vault, sync-service |
-| 5: Automation & Governance | In Progress | zitadel-actions-v2-deployment, grant-expiration-scheduler, live-zitadel-data-source; [remaining items](changes/mkauth-core-architecture/ROADMAP.md) |
+| 5: Automation & Governance | In Progress | zitadel-actions-v2-deployment, grant-expiration-scheduler, live-zitadel-data-source, live-directory-identity-completeness; [remaining items](changes/mkauth-core-architecture/ROADMAP.md) |
 | 6: IdP Lifecycle | Not Started | [see Roadmap](changes/mkauth-core-architecture/ROADMAP.md) |

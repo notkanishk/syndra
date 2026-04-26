@@ -111,10 +111,10 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	if !trimmedNonEmpty(req.RequesterID) || !trimmedNonEmpty(req.ProjectID) || !trimmedNonEmpty(req.RoleKey) || !trimmedNonEmpty(req.Justification) {
 		jsonValidationErrorResponse(w, "requester_id, project_id, role_key, and justification are required", map[string]string{
-			"requester_id":   "required",
-			"project_id":     "required",
-			"role_key":       "required",
-			"justification":  "required",
+			"requester_id":  "required",
+			"project_id":    "required",
+			"role_key":      "required",
+			"justification": "required",
 		})
 		return
 	}
@@ -210,9 +210,9 @@ func handleGetGovernanceSummary(w http.ResponseWriter, r *http.Request) {
 // rebuildUserCacheOrSkip pulls the project scope from the directory and
 // rebuilds the user's compiled claims. On directory failure it logs and
 // skips the rebuild, leaving previously compiled claims in place — see
-// allApplicationProjectIDs for the rationale.
+// cacheRebuildProjectIDs for the rationale.
 func rebuildUserCacheOrSkip(ctx context.Context, userID string) {
-	projectIDs, err := allApplicationProjectIDs(ctx)
+	projectIDs, err := cacheRebuildProjectIDs(ctx)
 	if err != nil {
 		log.Printf("[ACCESS] Skipping cache rebuild for user %s: directory lookup failed: %v", userID, err)
 		return
@@ -220,8 +220,13 @@ func rebuildUserCacheOrSkip(ctx context.Context, userID string) {
 	cacheRebuildUser(ctx, userID, projectIDs)
 }
 
-// allApplicationProjectIDs returns the set of project IDs the cache compiler
-// should rebuild for. Pulled from the directory (live Zitadel or demo fallback).
+// cacheRebuildProjectIDs returns the set of project IDs the cache compiler
+// should rebuild for. Pulled from directory.Projects (live Zitadel or demo
+// fallback) — NOT directory.Applications, because Applications can return a
+// partial catalog when a per-project ListApplications call fails. A partial
+// project list would cause RebuildUserCache (which deletes every
+// mapping:<user>:* key before rebuilding) to silently erase compiled claims
+// for any project whose apps were transiently unreachable.
 //
 // Returns an error on directory failure so the caller can skip the rebuild
 // entirely. cache.RebuildUserCache starts by wiping every mapping:<user>:*
@@ -229,14 +234,14 @@ func rebuildUserCacheOrSkip(ctx context.Context, userID string) {
 // degraded (fail_closed or minimal_safe) output for this user until the next
 // rebuild triggers. Preserving the last-known-good compiled claims is
 // strictly safer than nuking them on a transient Zitadel blip.
-func allApplicationProjectIDs(ctx context.Context) ([]string, error) {
-	apps, err := directory.Default.Applications(ctx)
+func cacheRebuildProjectIDs(ctx context.Context) ([]string, error) {
+	projects, err := directory.Default.Projects(ctx)
 	if err != nil {
 		return nil, err
 	}
-	projectIDs := make([]string, 0, len(apps))
-	for _, app := range apps {
-		projectIDs = append(projectIDs, app.ProjectID)
+	projectIDs := make([]string, 0, len(projects))
+	for _, p := range projects {
+		projectIDs = append(projectIDs, p.ID)
 	}
 	return projectIDs, nil
 }

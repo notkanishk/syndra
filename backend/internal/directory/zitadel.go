@@ -3,9 +3,13 @@ package directory
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"mkauth/internal/db"
 	"mkauth/internal/models"
@@ -20,10 +24,11 @@ import (
 var CacheTTL = 30 * time.Second
 
 // zitadelSource reads the directory-of-truth from the Zitadel Management API.
-// Applications are synthesized one-per-project and overlaid with the
-// claim_profiles table so operators can configure claim shaping per project
-// without surfacing Zitadel-native Application objects (OIDC clients) that
-// MkAuth doesn't otherwise model.
+// Applications are real Zitadel applications (OIDC / API / SAML clients
+// attached to projects) fetched via ListApplications and overlaid with the
+// claim_profiles table for operator-managed claim shaping. The overlay stays
+// project-keyed because Zitadel Actions v2 emits custom claims at the
+// user-grant level, which is project-scoped.
 type zitadelSource struct {
 	client zitadel.ZitadelClient
 
@@ -73,7 +78,16 @@ func (z *zitadelSource) cachePut(key string, val any) {
 
 // --- Users ------------------------------------------------------------------
 
-const usersCacheKey = "users"
+const (
+	usersCacheKey           = "users"
+	userMetadataCachePrefix = "user_metadata:"
+	// MetadataFanoutLimit caps parallel per-user metadata fetches. Sized for
+	// makerspace scale (tens of users) — higher would just burn connections
+	// without measurable gain.
+	MetadataFanoutLimit = 8
+)
+
+func userMetadataCacheKey(userID string) string { return userMetadataCachePrefix + userID }
 
 func (z *zitadelSource) Users(ctx context.Context) ([]models.UserProfile, error) {
 	if cached, ok := z.cacheGet(usersCacheKey); ok {
@@ -87,10 +101,16 @@ func (z *zitadelSource) Users(ctx context.Context) ([]models.UserProfile, error)
 		return nil, fmt.Errorf("directory: list users: %w", err)
 	}
 
-	out := make([]models.UserProfile, 0, len(items))
-	for _, u := range items {
-		out = append(out, toUserProfile(u))
+	out := make([]models.UserProfile, len(items))
+	for i, u := range items {
+		out[i] = toUserProfile(u)
 	}
+
+	// Overlay per-user metadata in parallel. Errors on individual users are
+	// logged but do not fail the whole list — a single broken user must not
+	// blank out every card on /users.
+	z.applyUserMetadataOverlay(ctx, out)
+
 	z.cachePut(usersCacheKey, out)
 	return out, nil
 }
@@ -115,7 +135,69 @@ func (z *zitadelSource) FindUser(ctx context.Context, userID string) (models.Use
 	if zu == nil {
 		return models.UserProfile{}, false, nil
 	}
-	return toUserProfile(*zu), true, nil
+	profile := toUserProfile(*zu)
+	if md, ok := z.fetchUserMetadata(ctx, profile.ID); ok {
+		applyMetadata(&profile, md)
+	}
+	return profile, true, nil
+}
+
+// applyUserMetadataOverlay fans out ListUserMetadata per user with a bounded
+// concurrency limit and merges Title/Team/Location into the corresponding
+// UserProfile entry in-place.
+func (z *zitadelSource) applyUserMetadataOverlay(ctx context.Context, users []models.UserProfile) {
+	if len(users) == 0 {
+		return
+	}
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(MetadataFanoutLimit)
+	for i := range users {
+		g.Go(func() error {
+			md, ok := z.fetchUserMetadata(gctx, users[i].ID)
+			if ok {
+				applyMetadata(&users[i], md)
+			}
+			return nil
+		})
+	}
+	// Ignoring error: goroutines never return one (metadata failures are logged
+	// and swallowed inside fetchUserMetadata to preserve partial results).
+	_ = g.Wait()
+}
+
+// fetchUserMetadata returns the cached-or-fetched metadata list for a user.
+// Individual errors are logged and the second return is false — callers
+// should treat an errored user as having no metadata rather than failing.
+func (z *zitadelSource) fetchUserMetadata(ctx context.Context, userID string) ([]zitadel.UserMetadata, bool) {
+	key := userMetadataCacheKey(userID)
+	if cached, ok := z.cacheGet(key); ok {
+		return cached.([]zitadel.UserMetadata), true
+	}
+	items, err := paginate(func(p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserMetadata], error) {
+		return z.client.ListUserMetadata(ctx, userID, p)
+	})
+	if err != nil {
+		log.Printf("[DIRECTORY] list metadata for user %s failed (skipping overlay): %v", userID, err)
+		return nil, false
+	}
+	z.cachePut(key, items)
+	return items, true
+}
+
+// applyMetadata merges well-known keys from Zitadel user metadata into a
+// UserProfile. Matching is case-insensitive so admins aren't tripped up by
+// "Title" vs "title".
+func applyMetadata(p *models.UserProfile, md []zitadel.UserMetadata) {
+	for _, m := range md {
+		switch strings.ToLower(m.Key) {
+		case "title":
+			p.Title = m.Value
+		case "team":
+			p.Team = m.Value
+		case "location":
+			p.Location = m.Value
+		}
+	}
 }
 
 // --- Projects ---------------------------------------------------------------
@@ -221,8 +303,25 @@ func (z *zitadelSource) ProjectName(ctx context.Context, projectID string) (stri
 
 // --- Applications -----------------------------------------------------------
 
-const applicationsCacheKey = "applications"
+const (
+	applicationsCacheKey     = "applications"
+	appsByProjectCachePrefix = "apps_by_project:"
+	// AppsFanoutLimit caps parallel ListApplications per project. 4 is enough
+	// to mask per-project latency without flooding the Zitadel Management API.
+	AppsFanoutLimit = 4
+)
 
+func appsByProjectCacheKey(projectID string) string {
+	return appsByProjectCachePrefix + projectID
+}
+
+// Applications returns real Zitadel applications (OIDC clients, APIs, SAML
+// SPs) across every project, overlaid with the claim_profiles table keyed by
+// project ID. Apps inherit their project's claim profile since Zitadel
+// Actions v2 emits custom claims at the user-grant level, which is
+// project-scoped. If a project's ListApplications call fails, that project's
+// apps are skipped but the rest of the list is still returned — admins
+// shouldn't lose the whole page because one project is broken.
 func (z *zitadelSource) Applications(ctx context.Context) ([]models.ApplicationCatalog, error) {
 	if cached, ok := z.cacheGet(applicationsCacheKey); ok {
 		return cached.([]models.ApplicationCatalog), nil
@@ -242,30 +341,86 @@ func (z *zitadelSource) Applications(ctx context.Context) ([]models.ApplicationC
 		overlay[r.ProjectID] = r
 	}
 
-	out := make([]models.ApplicationCatalog, 0, len(projects))
-	for _, p := range projects {
-		claimName := "roles"
-		formatType := "array"
-		if cp, ok := overlay[p.ID]; ok {
-			if cp.ClaimName != "" {
-				claimName = cp.ClaimName
+	// Fan out per-project ListApplications with bounded concurrency. Each
+	// worker writes to its own slot to avoid sharing a mutex on the result.
+	// partial flips to true if ANY project's app fetch failed; we still
+	// return what we have (admins shouldn't lose the whole list because one
+	// project is down) but we DO NOT cache the partial result, so the next
+	// call retries the failed projects rather than serving stale gaps for
+	// 30s. Per-project caches in fetchProjectApps still persist successful
+	// fetches independently.
+	perProject := make([][]zitadel.ZitadelApplication, len(projects))
+	var partial atomic.Bool
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(AppsFanoutLimit)
+	for i, p := range projects {
+		g.Go(func() error {
+			apps, ok := z.fetchProjectApps(gctx, p.ID)
+			if !ok {
+				partial.Store(true)
+				return nil
 			}
-			if cp.FormatType != "" {
-				formatType = cp.FormatType
-			}
-		}
-		out = append(out, models.ApplicationCatalog{
-			ID:          p.ID,
-			Name:        p.Name,
-			ProjectID:   p.ID,
-			Description: "",
-			Consumer:    "",
-			ClaimName:   claimName,
-			FormatType:  formatType,
+			perProject[i] = apps
+			return nil
 		})
 	}
-	z.cachePut(applicationsCacheKey, out)
+	_ = g.Wait()
+
+	out := make([]models.ApplicationCatalog, 0)
+	for i, p := range projects {
+		claimName, formatType := overlayClaim(overlay, p.ID)
+		for _, app := range perProject[i] {
+			out = append(out, models.ApplicationCatalog{
+				ID:          app.ID,
+				Name:        coalesce(app.Name, app.ID),
+				ProjectID:   p.ID,
+				Description: "",
+				Consumer:    zitadel.HumanizeAppType(app.Type),
+				ClaimName:   claimName,
+				FormatType:  formatType,
+			})
+		}
+	}
+	if !partial.Load() {
+		z.cachePut(applicationsCacheKey, out)
+	}
 	return out, nil
+}
+
+// fetchProjectApps returns the cached-or-fetched application list for a
+// single project. Errors are logged and the second return is false so the
+// per-project fan-out can skip it without aborting the whole Applications call.
+func (z *zitadelSource) fetchProjectApps(ctx context.Context, projectID string) ([]zitadel.ZitadelApplication, bool) {
+	key := appsByProjectCacheKey(projectID)
+	if cached, ok := z.cacheGet(key); ok {
+		return cached.([]zitadel.ZitadelApplication), true
+	}
+	items, err := paginate(func(p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelApplication], error) {
+		return z.client.ListApplications(ctx, projectID, p)
+	})
+	if err != nil {
+		log.Printf("[DIRECTORY] list applications for project %s failed (skipping): %v", projectID, err)
+		return nil, false
+	}
+	z.cachePut(key, items)
+	return items, true
+}
+
+// overlayClaim resolves the claim_name + format_type pair for a project,
+// falling back to the v1 defaults when the operator hasn't created a
+// claim_profiles row.
+func overlayClaim(overlay map[string]db.ClaimProfileRow, projectID string) (string, string) {
+	claimName := "roles"
+	formatType := "array"
+	if cp, ok := overlay[projectID]; ok {
+		if cp.ClaimName != "" {
+			claimName = cp.ClaimName
+		}
+		if cp.FormatType != "" {
+			formatType = cp.FormatType
+		}
+	}
+	return claimName, formatType
 }
 
 func (z *zitadelSource) FindApplication(ctx context.Context, appID string) (models.ApplicationCatalog, bool, error) {
@@ -296,10 +451,19 @@ func (z *zitadelSource) InvalidateProject(projectID string) {
 	z.cache.Delete(projectRolesCacheKey(projectID))
 	z.cache.Delete(projectsCacheKey)
 	z.cache.Delete(applicationsCacheKey)
+	z.cache.Delete(appsByProjectCacheKey(projectID))
 }
 
 func (z *zitadelSource) InvalidateUsers() {
 	z.cache.Delete(usersCacheKey)
+	// Metadata caches are keyed per-user; drop them too so a newly-set title
+	// shows up after an invalidation, not only after TTL.
+	z.cache.Range(func(k, _ any) bool {
+		if key, ok := k.(string); ok && strings.HasPrefix(key, userMetadataCachePrefix) {
+			z.cache.Delete(key)
+		}
+		return true
+	})
 }
 
 // --- Mapping helpers --------------------------------------------------------

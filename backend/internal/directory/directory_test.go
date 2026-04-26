@@ -3,10 +3,12 @@ package directory
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	"mkauth/internal/db"
+	"mkauth/internal/models"
 	"mkauth/internal/zitadel"
 )
 
@@ -57,18 +59,30 @@ func TestDemoSource_Tag(t *testing.T) {
 // directory tests. Each callable field may be set per-test to shape the
 // response; unset fields default to empty results.
 type mockDirClient struct {
+	// mu guards the counter maps below — the apps/metadata fan-outs run these
+	// methods on multiple goroutines concurrently, which would otherwise trip
+	// Go's concurrent-map-write panic.
+	mu                sync.Mutex
 	listUsersCalls    int
 	listProjectsCalls int
 	listRolesCalls    map[string]int
+	listAppsCalls     map[string]int
+	listMetadataCalls map[string]int
 
 	listUsersFn    func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error)
 	listProjectsFn func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelProject], error)
 	listRolesFn    func(context.Context, string, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ProjectRoleResult], error)
 	getUserFn      func(context.Context, string) (*zitadel.ZitadelUser, error)
+	listAppsFn     func(context.Context, string, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelApplication], error)
+	listMetadataFn func(context.Context, string, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserMetadata], error)
 }
 
 func newMockClient() *mockDirClient {
-	return &mockDirClient{listRolesCalls: map[string]int{}}
+	return &mockDirClient{
+		listRolesCalls:    map[string]int{},
+		listAppsCalls:     map[string]int{},
+		listMetadataCalls: map[string]int{},
+	}
 }
 
 func (m *mockDirClient) GetUser(ctx context.Context, id string) (*zitadel.ZitadelUser, error) {
@@ -117,6 +131,28 @@ func (m *mockDirClient) ListUserGrants(_ context.Context, _ string, _ zitadel.Se
 }
 func (m *mockDirClient) ListAllGrants(_ context.Context, _ zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
 	return &zitadel.SearchResult[zitadel.UserGrant]{}, nil
+}
+
+func (m *mockDirClient) ListApplications(ctx context.Context, projectID string, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelApplication], error) {
+	m.mu.Lock()
+	m.listAppsCalls[projectID]++
+	fn := m.listAppsFn
+	m.mu.Unlock()
+	if fn != nil {
+		return fn(ctx, projectID, p)
+	}
+	return &zitadel.SearchResult[zitadel.ZitadelApplication]{}, nil
+}
+
+func (m *mockDirClient) ListUserMetadata(ctx context.Context, userID string, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserMetadata], error) {
+	m.mu.Lock()
+	m.listMetadataCalls[userID]++
+	fn := m.listMetadataFn
+	m.mu.Unlock()
+	if fn != nil {
+		return fn(ctx, userID, p)
+	}
+	return &zitadel.SearchResult[zitadel.UserMetadata]{}, nil
 }
 
 // --- tests ------------------------------------------------------------------
@@ -190,16 +226,72 @@ func TestZitadelSource_Projects_ExpandsAndCachesRoles(t *testing.T) {
 	}
 }
 
-func TestZitadelSource_Applications_OverlayFromClaimProfiles(t *testing.T) {
+// appsFixture wires a project list plus a per-project apps map so individual
+// tests can describe a realistic (project → apps) topology without repeating
+// the boilerplate.
+func appsFixture(t *testing.T, projects []zitadel.ZitadelProject, apps map[string][]zitadel.ZitadelApplication) *mockDirClient {
+	t.Helper()
 	mc := newMockClient()
 	mc.listProjectsFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelProject], error) {
-		return &zitadel.SearchResult[zitadel.ZitadelProject]{
-			Items: []zitadel.ZitadelProject{
-				{ID: "p1", Name: "Alpha"},
-				{ID: "p2", Name: "Beta"},
-			},
-		}, nil
+		return &zitadel.SearchResult[zitadel.ZitadelProject]{Items: projects, Total: len(projects)}, nil
 	}
+	mc.listAppsFn = func(_ context.Context, projectID string, _ zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelApplication], error) {
+		list := apps[projectID]
+		return &zitadel.SearchResult[zitadel.ZitadelApplication]{Items: list, Total: len(list)}, nil
+	}
+	return mc
+}
+
+func TestZitadelSource_Applications_ReturnsRealApps(t *testing.T) {
+	// 2 projects, 1 and 2 apps respectively -> 3 ApplicationCatalog entries
+	// with distinct app IDs, each carrying its parent project.
+	mc := appsFixture(t,
+		[]zitadel.ZitadelProject{{ID: "p1", Name: "Alpha"}, {ID: "p2", Name: "Beta"}},
+		map[string][]zitadel.ZitadelApplication{
+			"p1": {{ID: "app-1", Name: "Alpha Web", Type: "OIDC"}},
+			"p2": {
+				{ID: "app-2", Name: "Beta API", Type: "API"},
+				{ID: "app-3", Name: "Beta Portal", Type: "OIDC"},
+			},
+		},
+	)
+	src := newZitadelSourceForTest(mc)
+
+	apps, err := src.Applications(context.Background())
+	if err != nil {
+		t.Fatalf("Applications error: %v", err)
+	}
+	if len(apps) != 3 {
+		t.Fatalf("expected 3 applications, got %d: %+v", len(apps), apps)
+	}
+
+	byID := map[string]models.ApplicationCatalog{}
+	for _, a := range apps {
+		byID[a.ID] = a
+	}
+	if byID["app-1"].Name != "Alpha Web" || byID["app-1"].ProjectID != "p1" || byID["app-1"].Consumer != "OIDC Client" {
+		t.Fatalf("app-1 mapping wrong: %+v", byID["app-1"])
+	}
+	if byID["app-2"].Consumer != "API" {
+		t.Fatalf("app-2 consumer should be 'API', got %q", byID["app-2"].Consumer)
+	}
+	if byID["app-3"].ProjectID != "p2" {
+		t.Fatalf("app-3 project should be p2, got %q", byID["app-3"].ProjectID)
+	}
+}
+
+func TestZitadelSource_Applications_OverlayAppliesPerProject(t *testing.T) {
+	// Claim profile on p1 flows to all its apps; p2 apps fall back to defaults.
+	mc := appsFixture(t,
+		[]zitadel.ZitadelProject{{ID: "p1", Name: "Alpha"}, {ID: "p2", Name: "Beta"}},
+		map[string][]zitadel.ZitadelApplication{
+			"p1": {
+				{ID: "app-a", Name: "Alpha Web", Type: "OIDC"},
+				{ID: "app-b", Name: "Alpha API", Type: "API"},
+			},
+			"p2": {{ID: "app-c", Name: "Beta Web", Type: "OIDC"}},
+		},
+	)
 	src := newZitadelSourceForTest(mc)
 	src.listClaimProfiles = func(context.Context) ([]db.ClaimProfileRow, error) {
 		return []db.ClaimProfileRow{
@@ -211,21 +303,239 @@ func TestZitadelSource_Applications_OverlayFromClaimProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Applications error: %v", err)
 	}
-	if len(apps) != 2 {
-		t.Fatalf("expected 2 applications, got %d", len(apps))
+	if len(apps) != 3 {
+		t.Fatalf("expected 3 apps, got %d", len(apps))
+	}
+	byID := map[string]models.ApplicationCatalog{}
+	for _, a := range apps {
+		byID[a.ID] = a
+	}
+	for _, id := range []string{"app-a", "app-b"} {
+		if byID[id].ClaimName != "x_mkauth_roles" || byID[id].FormatType != "csv" {
+			t.Fatalf("%s should inherit p1 overlay, got claim=%q format=%q", id, byID[id].ClaimName, byID[id].FormatType)
+		}
+	}
+	if byID["app-c"].ClaimName != "roles" || byID["app-c"].FormatType != "array" {
+		t.Fatalf("app-c should use defaults, got claim=%q format=%q", byID["app-c"].ClaimName, byID["app-c"].FormatType)
+	}
+}
+
+func TestZitadelSource_Applications_EmptyProjectContributesNothing(t *testing.T) {
+	mc := appsFixture(t,
+		[]zitadel.ZitadelProject{{ID: "p1", Name: "Alpha"}, {ID: "p2", Name: "Empty"}},
+		map[string][]zitadel.ZitadelApplication{
+			"p1": {{ID: "app-1", Name: "Alpha Web", Type: "OIDC"}},
+			// p2 intentionally absent → mock returns empty list.
+		},
+	)
+	src := newZitadelSourceForTest(mc)
+
+	apps, err := src.Applications(context.Background())
+	if err != nil {
+		t.Fatalf("Applications error: %v", err)
+	}
+	if len(apps) != 1 {
+		t.Fatalf("expected 1 application, got %d", len(apps))
+	}
+	if apps[0].ProjectID != "p1" {
+		t.Fatalf("expected the surviving app to belong to p1, got %q", apps[0].ProjectID)
+	}
+}
+
+func TestZitadelSource_Applications_PartialFailureStillReturns(t *testing.T) {
+	// Simulate: project p2's ListApplications errors; p1's apps must still render.
+	mc := newMockClient()
+	mc.listProjectsFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelProject], error) {
+		return &zitadel.SearchResult[zitadel.ZitadelProject]{
+			Items: []zitadel.ZitadelProject{{ID: "p1", Name: "Alpha"}, {ID: "p2", Name: "Broken"}},
+			Total: 2,
+		}, nil
+	}
+	mc.listAppsFn = func(_ context.Context, projectID string, _ zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelApplication], error) {
+		if projectID == "p2" {
+			return nil, errors.New("upstream unavailable")
+		}
+		return &zitadel.SearchResult[zitadel.ZitadelApplication]{
+			Items: []zitadel.ZitadelApplication{{ID: "app-1", Name: "Alpha Web", Type: "OIDC"}},
+			Total: 1,
+		}, nil
+	}
+	src := newZitadelSourceForTest(mc)
+
+	apps, err := src.Applications(context.Background())
+	if err != nil {
+		t.Fatalf("one broken project should not fail the whole list; got err=%v", err)
+	}
+	if len(apps) != 1 || apps[0].ID != "app-1" {
+		t.Fatalf("expected just app-1 from the healthy project, got %+v", apps)
+	}
+}
+
+func TestZitadelSource_Applications_PartialFailureNotCached(t *testing.T) {
+	// A partial Applications result must NOT poison the global cache — otherwise
+	// downstream callers that derive project scope from this list (or a stale
+	// /applications page render) would see the gap for a full TTL window.
+	// Per-project caches for the healthy projects are still allowed; only the
+	// global concatenation skips caching.
+	mc := newMockClient()
+	mc.listProjectsFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelProject], error) {
+		return &zitadel.SearchResult[zitadel.ZitadelProject]{
+			Items: []zitadel.ZitadelProject{{ID: "p1", Name: "Alpha"}, {ID: "p2", Name: "Broken"}},
+			Total: 2,
+		}, nil
+	}
+	failOnce := true
+	mc.listAppsFn = func(_ context.Context, projectID string, _ zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelApplication], error) {
+		if projectID == "p2" && failOnce {
+			return nil, errors.New("upstream unavailable")
+		}
+		if projectID == "p1" {
+			return &zitadel.SearchResult[zitadel.ZitadelApplication]{
+				Items: []zitadel.ZitadelApplication{{ID: "app-1", Name: "Alpha Web", Type: "OIDC"}},
+				Total: 1,
+			}, nil
+		}
+		// p2 second call (after recovery): return its app.
+		return &zitadel.SearchResult[zitadel.ZitadelApplication]{
+			Items: []zitadel.ZitadelApplication{{ID: "app-2", Name: "Beta API", Type: "API"}},
+			Total: 1,
+		}, nil
+	}
+	src := newZitadelSourceForTest(mc)
+
+	first, err := src.Applications(context.Background())
+	if err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	if len(first) != 1 {
+		t.Fatalf("first call should be partial (1 app), got %d", len(first))
 	}
 
-	byID := map[string]struct {
-		name, claim, format string
-	}{}
-	for _, a := range apps {
-		byID[a.ID] = struct{ name, claim, format string }{a.Name, a.ClaimName, a.FormatType}
+	// Simulate p2 recovering, then re-call. Without partial-cache-skip, the
+	// second call would return the cached partial result instead of going
+	// back upstream and seeing app-2.
+	failOnce = false
+	second, err := src.Applications(context.Background())
+	if err != nil {
+		t.Fatalf("second call: %v", err)
 	}
-	if byID["p1"].claim != "x_mkauth_roles" || byID["p1"].format != "csv" {
-		t.Fatalf("p1 overlay not applied: %+v", byID["p1"])
+	if len(second) != 2 {
+		t.Fatalf("second call should reflect recovery (2 apps), got %d: partial result was poisoning the cache", len(second))
 	}
-	if byID["p2"].claim != "roles" || byID["p2"].format != "array" {
-		t.Fatalf("p2 should use defaults: %+v", byID["p2"])
+}
+
+func TestZitadelSource_Applications_FullSuccessCachesGlobally(t *testing.T) {
+	// Counterpart to PartialFailureNotCached: when every project's apps fetch
+	// succeeds, the global catalog IS cached, so the second call hits cache
+	// (no extra upstream calls).
+	mc := appsFixture(t,
+		[]zitadel.ZitadelProject{{ID: "p1", Name: "Alpha"}, {ID: "p2", Name: "Beta"}},
+		map[string][]zitadel.ZitadelApplication{
+			"p1": {{ID: "app-1", Name: "Alpha Web", Type: "OIDC"}},
+			"p2": {{ID: "app-2", Name: "Beta API", Type: "API"}},
+		},
+	)
+	src := newZitadelSourceForTest(mc)
+
+	if _, err := src.Applications(context.Background()); err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	callsAfterFirst := mc.listAppsCalls["p1"] + mc.listAppsCalls["p2"]
+
+	if _, err := src.Applications(context.Background()); err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	callsAfterSecond := mc.listAppsCalls["p1"] + mc.listAppsCalls["p2"]
+
+	if callsAfterSecond != callsAfterFirst {
+		t.Fatalf("expected second call to hit cache (no extra upstream); got %d->%d", callsAfterFirst, callsAfterSecond)
+	}
+}
+
+func TestZitadelSource_Users_MetadataOverlay(t *testing.T) {
+	mc := newMockClient()
+	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
+		return &zitadel.SearchResult[zitadel.ZitadelUser]{
+			Items: []zitadel.ZitadelUser{
+				{ID: "u1", DisplayName: "Alice"},
+				{ID: "u2", DisplayName: "Bob"},
+			},
+			Total: 2,
+		}, nil
+	}
+	mc.listMetadataFn = func(_ context.Context, userID string, _ zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserMetadata], error) {
+		if userID == "u1" {
+			return &zitadel.SearchResult[zitadel.UserMetadata]{
+				Items: []zitadel.UserMetadata{
+					{Key: "title", Value: "Director"},
+					{Key: "Team", Value: "Operations"}, // case-insensitive match
+				},
+				Total: 2,
+			}, nil
+		}
+		return &zitadel.SearchResult[zitadel.UserMetadata]{}, nil
+	}
+	src := newZitadelSourceForTest(mc)
+
+	users, err := src.Users(context.Background())
+	if err != nil {
+		t.Fatalf("Users error: %v", err)
+	}
+
+	byID := map[string]models.UserProfile{}
+	for _, u := range users {
+		byID[u.ID] = u
+	}
+	if byID["u1"].Title != "Director" || byID["u1"].Team != "Operations" {
+		t.Fatalf("u1 metadata overlay failed: %+v", byID["u1"])
+	}
+	if byID["u1"].Location != "" {
+		t.Fatalf("u1 Location should be empty (no key set), got %q", byID["u1"].Location)
+	}
+	if byID["u2"].Title != "" || byID["u2"].Team != "" {
+		t.Fatalf("u2 should have empty metadata fields: %+v", byID["u2"])
+	}
+}
+
+func TestZitadelSource_Users_MetadataErrorDoesntFailList(t *testing.T) {
+	// One user's metadata call fails; other users still receive their overlay.
+	mc := newMockClient()
+	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
+		return &zitadel.SearchResult[zitadel.ZitadelUser]{
+			Items: []zitadel.ZitadelUser{
+				{ID: "u-good", DisplayName: "Good"},
+				{ID: "u-bad", DisplayName: "Bad"},
+			},
+			Total: 2,
+		}, nil
+	}
+	mc.listMetadataFn = func(_ context.Context, userID string, _ zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserMetadata], error) {
+		if userID == "u-bad" {
+			return nil, errors.New("metadata service down")
+		}
+		return &zitadel.SearchResult[zitadel.UserMetadata]{
+			Items: []zitadel.UserMetadata{{Key: "title", Value: "Lead"}},
+			Total: 1,
+		}, nil
+	}
+	src := newZitadelSourceForTest(mc)
+
+	users, err := src.Users(context.Background())
+	if err != nil {
+		t.Fatalf("Users should succeed with partial metadata failure, got err=%v", err)
+	}
+	if len(users) != 2 {
+		t.Fatalf("expected 2 users, got %d", len(users))
+	}
+	byID := map[string]models.UserProfile{}
+	for _, u := range users {
+		byID[u.ID] = u
+	}
+	if byID["u-good"].Title != "Lead" {
+		t.Fatalf("healthy user should still get metadata overlay, got %q", byID["u-good"].Title)
+	}
+	if byID["u-bad"].Title != "" {
+		t.Fatalf("errored user should get empty Title, got %q", byID["u-bad"].Title)
 	}
 }
 

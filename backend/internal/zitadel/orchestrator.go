@@ -67,6 +67,12 @@ type ZitadelClient interface {
 	UpdateProjectRole(ctx context.Context, projectID, roleKey, displayName, group string) error
 	DeleteProjectRole(ctx context.Context, projectID, roleKey string) error
 
+	// Applications (OIDC/API/SAML clients attached to a project)
+	ListApplications(ctx context.Context, projectID string, p SearchParams) (*SearchResult[ZitadelApplication], error)
+
+	// User metadata (arbitrary admin-managed K/V per user, used for Title/Team/Location overlays)
+	ListUserMetadata(ctx context.Context, userID string, p SearchParams) (*SearchResult[UserMetadata], error)
+
 	// Grants (user-role assignments)
 	AddUserGrant(ctx context.Context, userID, projectID string, roleKeys []string) error
 	UpdateUserGrant(ctx context.Context, userID, grantID string, roleKeys []string) error

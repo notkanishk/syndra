@@ -222,9 +222,13 @@ func TestResolveRoleMetadata_DBErrorSurfaces(t *testing.T) {
 // failingRoleClient is a minimal ZitadelClient stub where AddProjectRole always fails.
 type failingRoleClient struct{}
 
-func (f *failingRoleClient) AddUserGrant(_ context.Context, _, _ string, _ []string) error   { return nil }
-func (f *failingRoleClient) UpdateUserGrant(_ context.Context, _, _ string, _ []string) error { return nil }
-func (f *failingRoleClient) RemoveUserGrant(_ context.Context, _, _ string) error             { return nil }
+func (f *failingRoleClient) AddUserGrant(_ context.Context, _, _ string, _ []string) error {
+	return nil
+}
+func (f *failingRoleClient) UpdateUserGrant(_ context.Context, _, _ string, _ []string) error {
+	return nil
+}
+func (f *failingRoleClient) RemoveUserGrant(_ context.Context, _, _ string) error { return nil }
 func (f *failingRoleClient) ListUserGrants(_ context.Context, _ string, _ zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
 	return &zitadel.SearchResult[zitadel.UserGrant]{}, nil
 }
@@ -247,4 +251,10 @@ func (f *failingRoleClient) ListProjects(_ context.Context, _ zitadel.SearchPara
 }
 func (f *failingRoleClient) ListAllGrants(_ context.Context, _ zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
 	return &zitadel.SearchResult[zitadel.UserGrant]{}, nil
+}
+func (f *failingRoleClient) ListApplications(_ context.Context, _ string, _ zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelApplication], error) {
+	return &zitadel.SearchResult[zitadel.ZitadelApplication]{}, nil
+}
+func (f *failingRoleClient) ListUserMetadata(_ context.Context, _ string, _ zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserMetadata], error) {
+	return &zitadel.SearchResult[zitadel.UserMetadata]{}, nil
 }

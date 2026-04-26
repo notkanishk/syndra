@@ -95,13 +95,19 @@ func (stubClient) ListProjectRoles(context.Context, string, zitadel.SearchParams
 func (stubClient) UpdateProjectRole(context.Context, string, string, string, string) error {
 	return nil
 }
-func (stubClient) DeleteProjectRole(context.Context, string, string) error                 { return nil }
-func (stubClient) AddUserGrant(context.Context, string, string, []string) error            { return nil }
-func (stubClient) UpdateUserGrant(context.Context, string, string, []string) error         { return nil }
-func (stubClient) RemoveUserGrant(context.Context, string, string) error                   { return nil }
+func (stubClient) DeleteProjectRole(context.Context, string, string) error         { return nil }
+func (stubClient) AddUserGrant(context.Context, string, string, []string) error    { return nil }
+func (stubClient) UpdateUserGrant(context.Context, string, string, []string) error { return nil }
+func (stubClient) RemoveUserGrant(context.Context, string, string) error           { return nil }
 func (stubClient) ListUserGrants(context.Context, string, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
 	return &zitadel.SearchResult[zitadel.UserGrant]{}, nil
 }
 func (stubClient) ListAllGrants(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
 	return &zitadel.SearchResult[zitadel.UserGrant]{}, nil
+}
+func (stubClient) ListApplications(context.Context, string, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelApplication], error) {
+	return &zitadel.SearchResult[zitadel.ZitadelApplication]{}, nil
+}
+func (stubClient) ListUserMetadata(context.Context, string, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserMetadata], error) {
+	return &zitadel.SearchResult[zitadel.UserMetadata]{}, nil
 }

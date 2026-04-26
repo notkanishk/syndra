@@ -10,19 +10,19 @@ import (
 
 // mockClient records calls to the ZitadelClient interface.
 type mockClient struct {
-	addGrantCalls      []addGrantCall
-	addGrantErr        error
-	updateGrantCalls   []updateGrantCall
-	removeGrantCalls   []removeGrantCall
-	listGrantsResult   []UserGrant
+	addGrantCalls       []addGrantCall
+	addGrantErr         error
+	updateGrantCalls    []updateGrantCall
+	removeGrantCalls    []removeGrantCall
+	listGrantsResult    []UserGrant
 	listAllGrantsResult []UserGrant
-	getUserResult      *ZitadelUser
-	listUsersResult    []ZitadelUser
-	listProjectsResult []ZitadelProject
-	addRoleCalls       []addRoleCall
-	listRolesResult    []ProjectRoleResult
-	updateRoleCalls    []updateRoleCall
-	deleteRoleCalls    []deleteRoleCall
+	getUserResult       *ZitadelUser
+	listUsersResult     []ZitadelUser
+	listProjectsResult  []ZitadelProject
+	addRoleCalls        []addRoleCall
+	listRolesResult     []ProjectRoleResult
+	updateRoleCalls     []updateRoleCall
+	deleteRoleCalls     []deleteRoleCall
 }
 
 type deleteRoleCall struct {
@@ -113,6 +113,14 @@ func (m *mockClient) ListProjects(_ context.Context, _ SearchParams) (*SearchRes
 
 func (m *mockClient) ListAllGrants(_ context.Context, _ SearchParams) (*SearchResult[UserGrant], error) {
 	return &SearchResult[UserGrant]{Items: m.listAllGrantsResult}, nil
+}
+
+func (m *mockClient) ListApplications(_ context.Context, _ string, _ SearchParams) (*SearchResult[ZitadelApplication], error) {
+	return &SearchResult[ZitadelApplication]{}, nil
+}
+
+func (m *mockClient) ListUserMetadata(_ context.Context, _ string, _ SearchParams) (*SearchResult[UserMetadata], error) {
+	return &SearchResult[UserMetadata]{}, nil
 }
 
 // stubGetActiveMappingRules replaces db.GetActiveMappingRules for testing.
