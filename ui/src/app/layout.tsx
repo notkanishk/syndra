@@ -1,13 +1,26 @@
+import { Fraunces, Inter } from 'next/font/google';
+
 import Sidebar from '@/components/Sidebar';
-import './globals.css';
-import { Inter } from 'next/font/google';
-import { Toaster } from 'sonner';
-
-import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { Providers } from '@/components/providers';
 import { getSession } from '@/lib/session';
-import { ThemeProvider } from '@/lib/theme';
+import './globals.css';
 
-const inter = Inter({ subsets: ['latin'] });
+// Body face — high-frequency reading. CSS var consumed via @theme in globals.css.
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
+});
+
+// Display face — h1 hero surfaces only (login, page titles). Variable axes
+// kept conservative; `display: 'swap'` prevents FOUC on hero pages by allowing
+// Inter to render first while Fraunces streams in.
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  display: 'swap',
+  axes: ['SOFT', 'WONK', 'opsz'],
+  variable: '--font-fraunces',
+});
 
 export const metadata = {
   title: 'MkAuth — Control Plane',
@@ -20,30 +33,27 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const session = await getSession();
+  const fontVars = `${inter.variable} ${fraunces.variable}`;
 
   if (!session) {
     return (
-      <html lang="en">
-        <body className={`${inter.className} bg-background text-foreground`}>
-          <ThemeProvider>
-            {children}
-            <Toaster position="bottom-right" closeButton richColors />
-          </ThemeProvider>
+      <html lang="en" className={fontVars}>
+        <body className="bg-background text-on-surface antialiased">
+          <div className="bg-blob-hero" aria-hidden />
+          <Providers>{children}</Providers>
         </body>
       </html>
     );
   }
 
   return (
-    <html lang="en">
-      <body className={`${inter.className} flex h-screen bg-background text-foreground overflow-hidden`}>
-        <ThemeProvider>
+    <html lang="en" className={fontVars}>
+      <body className="flex h-screen bg-background text-on-surface overflow-hidden antialiased">
+        <div className="bg-blob-hero" aria-hidden />
+        <Providers>
           <Sidebar session={session} />
-          <main className="flex-1 overflow-y-auto p-8">
-            <ErrorBoundary>{children}</ErrorBoundary>
-          </main>
-          <Toaster position="bottom-right" closeButton richColors />
-        </ThemeProvider>
+          <main className="relative z-10 flex-1 overflow-y-auto p-8">{children}</main>
+        </Providers>
       </body>
     </html>
   );

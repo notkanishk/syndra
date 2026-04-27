@@ -43,6 +43,10 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/applications", withCORS(withUserAuth(handleGetApplications)))
 	mux.HandleFunc("GET /api/v1/applications/{id}/simulate", withCORS(withUserAuth(handleSimulateApplication)))
 
+	// Batch UID→name resolver. Powers <UserName/>/<ProjectName/>/<RoleName/>/<BundleName/>
+	// components in the dashboard so raw UUIDs never reach the visible layer.
+	mux.HandleFunc("POST /api/v1/lookup", withCORS(withUserAuth(handleLookup)))
+
 	// Project Views
 	mux.HandleFunc("GET /api/v1/projects", withCORS(withUserAuth(handleGetProjects)))
 	mux.HandleFunc("GET /api/v1/topology", withCORS(withUserAuth(handleGetTopology)))

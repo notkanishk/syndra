@@ -1,19 +1,23 @@
 import React from "react";
 import Link from "next/link";
 
+import { Eyebrow } from "@/components/ui/Eyebrow";
+
 export interface EmptyStateProps {
   title: string;
   description?: string;
   action?: { label: string; href?: string; onClick?: () => void };
   icon?: React.ReactNode;
   tone?: "neutral" | "destructive";
+  /** Optional eyebrow label rendered above the title. */
+  eyebrow?: string;
   className?: string;
 }
 
 /**
- * Explanatory empty/zero state used across the dashboard. Mirrors the
- * dashed-border treatment from the policies page so empty admin views read
- * intentionally — never blank cards or empty grids.
+ * Glass-card empty/zero state. Replaces the dashed-border treatment with the
+ * same translucent surface used by content cards so empty admin views feel
+ * intentional, not unfinished. Eyebrow + headline + body + optional CTA.
  */
 export function EmptyState({
   title,
@@ -21,34 +25,40 @@ export function EmptyState({
   action,
   icon,
   tone = "neutral",
+  eyebrow,
   className = "",
 }: EmptyStateProps) {
-  const toneClasses =
+  const toneClass =
     tone === "destructive"
-      ? "border-red-500/30 bg-red-500/5"
-      : "border-border bg-surface/40";
+      ? "text-[var(--error)]"
+      : "text-on-surface-variant";
 
   return (
     <div
       role="status"
       aria-live="polite"
-      className={`rounded-xl border border-dashed ${toneClasses} p-8 text-center ${className}`}
+      className={`glass-card p-8 text-center ${className}`}
     >
       {icon && (
-        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary-container/30 text-primary-container">
           {icon}
         </div>
       )}
-      <p className="text-sm font-semibold text-foreground">{title}</p>
+      {eyebrow && (
+        <div className="mb-2">
+          <Eyebrow tone="muted">{eyebrow}</Eyebrow>
+        </div>
+      )}
+      <p className="text-base font-semibold text-on-surface">{title}</p>
       {description && (
-        <p className="mx-auto mt-2 max-w-md text-sm text-muted">{description}</p>
+        <p className={`mx-auto mt-2 max-w-md text-sm ${toneClass}`}>{description}</p>
       )}
       {action && (
-        <div className="mt-4">
+        <div className="mt-5">
           {action.href ? (
             <Link
               href={action.href}
-              className="inline-flex rounded-lg bg-primary px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-white"
+              className="inline-flex rounded-full bg-[linear-gradient(135deg,var(--primary),var(--secondary))] px-4 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-on-primary shadow-[0_8px_24px_-8px_var(--primary),inset_0_1px_0_rgba(255,255,255,0.15)]"
             >
               {action.label}
             </Link>
@@ -56,7 +66,7 @@ export function EmptyState({
             <button
               type="button"
               onClick={action.onClick}
-              className="inline-flex rounded-lg bg-primary px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-white"
+              className="inline-flex rounded-full bg-[linear-gradient(135deg,var(--primary),var(--secondary))] px-4 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-on-primary shadow-[0_8px_24px_-8px_var(--primary),inset_0_1px_0_rgba(255,255,255,0.15)]"
             >
               {action.label}
             </button>

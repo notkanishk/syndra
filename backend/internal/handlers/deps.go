@@ -26,6 +26,9 @@ var (
 	dbGetBundlesForUser  = db.GetBundlesForUser
 	dbAssignBundleToUser = db.AssignBundleToUser
 
+	// Lookup handler injectable var (single-role accessor, used for UID→name resolution).
+	dbGetRole = db.GetRole
+
 	// Rules handler injectable vars.
 	dbGetActiveMappingRules = db.GetActiveMappingRules
 	dbCreateMappingRule     = db.CreateMappingRule

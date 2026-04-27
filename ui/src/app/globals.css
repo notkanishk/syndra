@@ -1,16 +1,85 @@
 @import "tailwindcss";
 
-@theme {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-surface: var(--surface);
-  --color-surface-hover: var(--surface-hover);
-  --color-border: var(--border);
-  --color-primary: var(--primary);
-  --color-primary-hover: var(--primary-hover);
-  --color-muted: var(--muted);
+/* ──────────────────────────────────────────────────────────────────────────
+ * Obsidian Clarity — design system
+ *
+ * Glassmorphism + minimalism for an admin console. Depth via translucent
+ * layering, backdrop blur, and ambient shadow rather than hard borders.
+ *
+ * Tokens are defined under [data-theme="dark"] (default) and [data-theme="light"]
+ * (deliberate counterpart, not auto-inverted). The @theme block maps Tailwind
+ * utility names (bg-surface-container-high, text-on-surface-variant, etc.) to
+ * these variables so utilities work uniformly across themes.
+ *
+ * The light counterpart MUST validate WCAG AA for body text (4.5:1) and
+ * primary-on-primary-container button states (3:1 large / 4.5:1 body).
+ * ────────────────────────────────────────────────────────────────────────── */
 
+@theme {
+  /* Surfaces — lifted into generic Tailwind tokens so utilities like
+     bg-surface-container-high and text-on-surface-variant resolve correctly. */
+  --color-background: var(--background);
+  --color-on-background: var(--on-background);
+  --color-surface: var(--surface);
+  --color-on-surface: var(--on-surface);
+  --color-on-surface-variant: var(--on-surface-variant);
+  --color-surface-container-lowest: var(--surface-container-lowest);
+  --color-surface-container-low: var(--surface-container-low);
+  --color-surface-container: var(--surface-container);
+  --color-surface-container-high: var(--surface-container-high);
+  --color-surface-container-highest: var(--surface-container-highest);
+
+  /* Brand */
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-primary-container: var(--primary-container);
+  --color-on-primary-container: var(--on-primary-container);
+  --color-secondary: var(--secondary);
+  --color-on-secondary: var(--on-secondary);
+  --color-secondary-container: var(--secondary-container);
+  --color-on-secondary-container: var(--on-secondary-container);
+  --color-tertiary: var(--tertiary);
+  --color-on-tertiary: var(--on-tertiary);
+
+  /* Strokes */
+  --color-outline: var(--outline);
+  --color-outline-variant: var(--outline-variant);
+
+  /* Status */
+  --color-error: var(--error);
+  --color-on-error: var(--on-error);
+  --color-error-container: var(--error-container);
+  --color-on-error-container: var(--on-error-container);
+
+  /* Legacy compatibility tokens — kept so existing utilities like
+     bg-surface, border-border, text-foreground continue to resolve while
+     pages migrate to the new ladder. Each maps to a Clarity equivalent. */
+  --color-foreground: var(--on-surface);
+  --color-surface-hover: var(--surface-container-high);
+  --color-border: var(--outline-variant);
+  --color-primary-hover: var(--primary-container);
+  --color-muted: var(--on-surface-variant);
+  --color-success: var(--success);
+  --color-success-hover: var(--success-hover);
+  --color-warning: var(--warning);
+  --color-warning-hover: var(--warning-hover);
+  --color-danger: var(--error);
+  --color-danger-hover: var(--error-container);
+  --color-info: var(--info);
+  --color-info-hover: var(--info-hover);
+
+  /* Typography — wired to next/font CSS variables exposed in layout.tsx. */
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-fraunces);
+
+  /* Radii — pill primitives + sculpted card surfaces. */
+  --radius-pill: 9999px;
+  --radius-card: 1.5rem;
+  --radius-card-lg: 2rem;
+
+  /* Animations */
   --animate-fade-in-up: fadeInUp 0.3s ease-out;
+  --animate-pulse-dot: pulseDot 1.6s ease-in-out infinite;
 
   @keyframes fadeInUp {
     0% {
@@ -22,62 +91,117 @@
       transform: translateY(0);
     }
   }
+
+  @keyframes pulseDot {
+    0%, 100% {
+      opacity: 0.5;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.35);
+    }
+  }
 }
 
 @layer base {
-  /* Light theme — default. Token mapping is shared between explicit
-     [data-theme="light"] and the no-attribute root so a server-rendered
-     page without the ThemeProvider attribute still gets sensible colors. */
+  /* ── Light theme (deliberate counterpart, not auto-inverted) ─────────── */
   :root,
   [data-theme="light"] {
-    --background: #ffffff;
-    --foreground: #111827;
-    --surface: #ffffff;
-    --surface-hover: #f3f4f6;
-    --border: #e5e7eb;
-    --primary: #4f46e5;
-    --primary-hover: #4338ca;
-    --muted: #6b7280;
+    /* Surfaces: warm-white ladder ascending from #ffffff to dim lavender. */
+    --background: #fbfaff;
+    --surface: #fbfaff;
+    --surface-container-lowest: #ffffff;
+    --surface-container-low: #f5f3ff;
+    --surface-container: #efedfa;
+    --surface-container-high: #e8e5f4;
+    --surface-container-highest: #dfdcef;
 
-    /* Semantic accents — vibrant, paired with white text on filled buttons. */
-    --color-success: #10b981;
-    --color-success-hover: #059669;
-    --color-warning: #f59e0b;
-    --color-warning-hover: #d97706;
-    --color-danger: #ef4444;
-    --color-danger-hover: #dc2626;
-    --color-info: #0ea5e9;
-    --color-info-hover: #0284c7;
+    /* Text */
+    --on-background: #1a1d2e;
+    --on-surface: #1a1d2e;
+    --on-surface-variant: #4a4d63;
+
+    /* Brand — desaturated indigo on warm-white passes WCAG AA at 4.5:1. */
+    --primary: #5057f7;
+    --on-primary: #ffffff;
+    --primary-container: #dfe3ff;
+    --on-primary-container: #131e8c;
+    --secondary: #7c3aed;
+    --on-secondary: #ffffff;
+    --secondary-container: #ede4ff;
+    --on-secondary-container: #2c0051;
+    --tertiary: #666c80;
+    --on-tertiary: #ffffff;
+
+    /* Strokes */
+    --outline: #7a7986;
+    --outline-variant: #cbcad6;
+
+    /* Status — desaturated to maintain the calm aesthetic. */
+    --error: #ba1a1a;
+    --on-error: #ffffff;
+    --error-container: #ffdad6;
+    --on-error-container: #410002;
+    --success: #047857;
+    --success-hover: #065f46;
+    --warning: #b45309;
+    --warning-hover: #92400e;
+    --info: #0369a1;
+    --info-hover: #075985;
   }
 
-  /* Dark theme — applied either explicitly via the ThemeProvider toggle
-     or implicitly by the user's OS preference when no override is stored. */
+  /* ── Dark theme — Obsidian Clarity (default aesthetic) ───────────────── */
   [data-theme="dark"],
   :root[data-theme-system="dark"]:not([data-theme]) {
-    --background: #09090b;
-    --foreground: #fafafa;
-    --surface: #18181b;
-    --surface-hover: #27272a;
-    --border: #27272a;
-    --primary: #818cf8;
-    --primary-hover: #a5b4fc;
-    --muted: #a1a1aa;
+    /* Surfaces: obsidian → indigo-tinted layers. */
+    --background: #0c1324;
+    --surface: #0c1324;
+    --surface-container-lowest: #070d1f;
+    --surface-container-low: #151b2d;
+    --surface-container: #191f31;
+    --surface-container-high: #23293c;
+    --surface-container-highest: #2e3447;
 
-    --color-success: #34d399;
-    --color-success-hover: #6ee7b7;
-    --color-warning: #fbbf24;
-    --color-warning-hover: #fcd34d;
-    --color-danger: #f87171;
-    --color-danger-hover: #fca5a5;
-    --color-info: #38bdf8;
-    --color-info-hover: #7dd3fc;
+    /* Text */
+    --on-background: #dce1fb;
+    --on-surface: #dce1fb;
+    --on-surface-variant: #c6c5d5;
+
+    /* Brand — luminous indigo/violet appears to emit light from the substrate. */
+    --primary: #bdc2ff;
+    --on-primary: #131e8c;
+    --primary-container: #818cf8;
+    --on-primary-container: #101b8a;
+    --secondary: #ddb8ff;
+    --on-secondary: #490081;
+    --secondary-container: #62259b;
+    --on-secondary-container: #d1a1ff;
+    --tertiary: #bec6e0;
+    --on-tertiary: #283044;
+
+    /* Strokes — soft, never harsh on the deep substrate. */
+    --outline: #908f9e;
+    --outline-variant: #454653;
+
+    /* Status — desaturated luminous variants. */
+    --error: #ffb4ab;
+    --on-error: #690005;
+    --error-container: #93000a;
+    --on-error-container: #ffdad6;
+    --success: #34d399;
+    --success-hover: #6ee7b7;
+    --warning: #fbbf24;
+    --warning-hover: #fcd34d;
+    --info: #60a5fa;
+    --info-hover: #93c5fd;
   }
 
-  /* Visible focus rings for keyboard users. Pair with `focus-visible:`
-     utilities on interactive controls; this base rule covers anything that
-     forgot. Excludes mouse/touch focus to avoid noise on click. */
+  /* Visible focus rings for keyboard users. Pair with `focus-visible:` utilities
+     on interactive controls; this base rule covers anything that forgot.
+     Excludes mouse/touch focus to avoid noise on click. */
   :focus-visible {
-    outline: 2px solid var(--primary);
+    outline: 2px solid var(--primary-container);
     outline-offset: 2px;
     border-radius: 4px;
   }
@@ -85,19 +209,105 @@
 
 body {
   background-color: var(--background);
-  color: var(--foreground);
+  color: var(--on-surface);
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ── Atmospheric depth ────────────────────────────────────────────────────
+ * .bg-blob-hero mounts large indigo + violet radial gradients behind hero
+ * areas to evoke the "luminous accents emitting light from within the dark
+ * substrate" aesthetic. Mounted once in the root layout; pointer-events:none
+ * so it never intercepts clicks.
+ * ───────────────────────────────────────────────────────────────────────── */
+@utility bg-blob-hero {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(
+      ellipse 80% 60% at 15% 20%,
+      color-mix(in srgb, #818cf8 12%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 70% 50% at 85% 80%,
+      color-mix(in srgb, #c084fc 10%, transparent) 0%,
+      transparent 60%
+    );
+  filter: blur(60px);
+}
+
+[data-theme="light"] .bg-blob-hero {
+  background:
+    radial-gradient(
+      ellipse 80% 60% at 15% 20%,
+      color-mix(in srgb, #818cf8 6%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 70% 50% at 85% 80%,
+      color-mix(in srgb, #c084fc 5%, transparent) 0%,
+      transparent 60%
+    );
+}
+
+/* ── Glass card surface ───────────────────────────────────────────────────
+ * Replaces the previous flat-bg card. Translucent surface-container with a
+ * 28px backdrop blur, ambient lift shadow, and a 1px white-10% top stroke
+ * (rim light effect). Hover deepens the lift.
+ * ───────────────────────────────────────────────────────────────────────── */
 @utility glass-card {
-  background-color: var(--surface);
-  border: 1px solid var(--border);
-  transition: all 0.2s ease-in-out;
+  background-color: color-mix(in srgb, var(--surface-container) 70%, transparent);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  border-radius: var(--radius-card);
+  box-shadow:
+    0 30px 60px -20px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
 
   &:hover {
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
-      0 4px 6px -2px rgba(0, 0, 0, 0.05);
-    border-color: var(--primary);
+    box-shadow:
+      0 40px 80px -20px rgba(0, 0, 0, 0.55),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
+}
+
+[data-theme="light"] .glass-card {
+  background-color: color-mix(in srgb, var(--surface-container) 85%, transparent);
+  box-shadow:
+    0 20px 40px -16px rgba(80, 87, 247, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+
+  &:hover {
+    box-shadow:
+      0 28px 56px -16px rgba(80, 87, 247, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+}
+
+/* ── Pulse dot ────────────────────────────────────────────────────────────
+ * Small animated indicator used by <Pulse/> and <Badge pulse/> for live or
+ * in-flight state. Steady (non-animated) usage achieved via `static` class.
+ * ───────────────────────────────────────────────────────────────────────── */
+@utility pulse-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background-color: currentColor;
+  animation: pulseDot 1.6s ease-in-out infinite;
+  box-shadow: 0 0 12px currentColor;
+}
+
+@utility pulse-dot-static {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background-color: currentColor;
+  box-shadow: 0 0 8px currentColor;
 }
