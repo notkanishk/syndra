@@ -1,11 +1,19 @@
 "use client";
 
+import React from "react";
+
 import { Modal } from "@/components/ui/Modal";
 
 interface ConfirmModalProps {
   open: boolean;
   title: string;
-  description: string;
+  /**
+   * Description copy. Accepts ReactNode so callers can compose Name components
+   * (e.g. <RoleName/>) inline — required for spec compliance: confirmation
+   * copy MUST display resolved entity names, never raw `project_id:role_key`
+   * strings.
+   */
+  description: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: "primary" | "destructive";

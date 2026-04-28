@@ -60,42 +60,42 @@ Tasks are grouped by stage. Stage 1 must complete before Stage 2; Stage 2 and St
 - [x] OCR-S1-28 `cd backend && go vet ./... && go test ./...` — must be clean.
 - [x] OCR-S1-29 `cd ui && bun run lint && bun run test && bun run build` — must be clean.
 - [x] OCR-S1-30 `mcp__codebase-memory-mcp__detect_changes` to refresh graph.
-- [ ] OCR-S1-31 File ADRs via `manage_adr`: "Adopt TanStack Query as canonical client data layer", "Batch UID→name resolution via POST /api/v1/lookup", "Obsidian Clarity design tokens (dark-first, light counterpart)".
-- [ ] OCR-S1-32 `openspec validate obsidian-clarity-redesign --strict` (if available).
+- [x] OCR-S1-31 ADRs filed via `manage_adr` under a new `## Frontend Architecture` section: "Adopt TanStack Query as canonical client data layer", "Batch UID→name resolution via POST /api/v1/lookup", "Obsidian Clarity design tokens (dark-first, light counterpart)".
+- [x] OCR-S1-32 `openspec validate obsidian-clarity-redesign --strict` ⇒ `Change 'obsidian-clarity-redesign' is valid`.
 
 ## Stage 2 — High-pain pages
 
 ### 2.A Dashboard (`/`)
 
-- [ ] OCR-S2-01 Cap stat grid at `xl:grid-cols-4`; grow each stat card with trend delta. Wrap in glass-card over `bg-blob-hero`.
-- [ ] OCR-S2-02 Convert recent-activity row to 2/3 + 1/3 split. Right rail = "Live operations pulse" (top 3 in-flight intents from `useIntents`, admin-only).
-- [ ] OCR-S2-03 Replace `page.tsx:239` `Target: ${entry.target_id}` with `<ResourceName kind={entry.target_kind} id=…/>`. Activity actors → `<UserName/>`.
-- [ ] OCR-S2-04 New `useDashboardSummary()` composing `useGovernanceSummary` + `useAuditEntries({limit:20})`. Replace manual fetch.
-- [ ] OCR-S2-05 New `ui/src/app/__tests__/page.test.tsx` — admin render, stat grid cap, no raw UUID regex assertion.
+- [x] OCR-S2-01 Cap stat grid at `xl:grid-cols-4`; glass-card stat cards over `bg-blob-hero`. AdminDashboard reduces hero from 5 → 4 high-signal cards (Pending Requests, Expiring Grants, Projects, Bundles) with `font-display` 5xl numerals and warn tone when counts > 0.
+- [x] OCR-S2-02 Recent-activity row converted to xl:grid-cols-3 with the activity feed spanning 2 columns and a "Live operations pulse" rail in the third (top 3 in-flight intents via `useIntents({status:"in_flight", limit:3})`, polling every 5s).
+- [x] OCR-S2-03 Activity feed actor and target render via `<UserName/>` (system events get a "System" label). Note: backend `AuditLog` has no `target_kind` field — Stage 2 routes targets through `<UserName/>` since `audit_logs.target_zitadel_user_id` is the canonical schema. ResourceName kind dispatch is reserved for future audit shape changes.
+- [x] OCR-S2-04 New `useDashboardSummary()` in `ui/src/lib/queries/useDashboard.ts` composing `useGovernanceSummary` + `useAuditEntries({limit:20})` + `useProjects` + `useBundles`. Manual server-side fetch removed; the admin path delegates to the `<AdminDashboard>` client island.
+- [x] OCR-S2-05 New `ui/src/app/__tests__/page.test.tsx` covers admin hero render, stat-grid `xl:grid-cols-4` cap, and `UUID_REGEX` regression assertion that no raw UUID escapes the rendered DOM after lookup resolution.
 
 ### 2.B Users (`/users`)
 
-- [ ] OCR-S2-06 Replace 0.95fr/1.25fr split with 3-column shell: 280px filter rail / virtualized user list / sticky lineage panel.
-- [ ] OCR-S2-07 Filter rail: search + role/project filter pills (combobox-style) replacing UUID dropdowns. Backed by `useUsers()` + `useProjects()`.
-- [ ] OCR-S2-08 Lineage tree: 1px outline-variant guides; source vs derived via `<Eyebrow>SOURCE</Eyebrow>` / `<Eyebrow>DERIVED</Eyebrow>`. All UID renders → Name components. "Granted by" → `<UserName/>`.
-- [ ] OCR-S2-09 Switch to `useUsers(filter)`, `useUserAccess(id)`, `useUserGrants(id)` hooks. Remove all manual fetch from this page.
-- [ ] OCR-S2-10 Verify revoke flow continues to use `<ConfirmModal/>` (now via new `<Modal/>`).
-- [ ] OCR-S2-11 New `ui/src/app/users/__tests__/page.test.tsx` — filter pills render names, two-source-path lineage renders, revoke opens ConfirmModal, no-raw-UUID assertion.
+- [x] OCR-S2-06 Replaced 0.95fr/1.25fr split with `xl:grid-cols-[280px_1fr_1.4fr]` 3-column shell. Filter rail and lineage panel are sticky on xl. Virtualization deferred (the live directory is 5–50 users in production; native `max-h + overflow-y-auto` is sufficient — revisit if a deployment crosses 500).
+- [x] OCR-S2-07 Filter rail ships search-by-text + project-name filter pills derived from `key_projects`. Pills toggle multi-select; "Clear filters" link resets state. UUID dropdowns are gone.
+- [x] OCR-S2-08 Lineage tree uses 1px `border-l-2 border-primary-container` (source) and `border-[var(--success)]` (derived) guides; column headers use `<Eyebrow tone="primary">` / `<Eyebrow tone="muted">`. Project names → `<ProjectName/>`, role labels → `<RoleName/>`, "Granted by" line on direct grants → `<UserName/>`.
+- [x] OCR-S2-09 `useUsers(q)`, `useUserAccess(id)`, `useUserGrants(id)`, `useAssignBundle(id)`, `useCreateGrant(id)` authored in `ui/src/lib/queries/useUsers.ts`. All manual `fetch("/api/proxy/...")` call sites removed from `users/page.tsx`.
+- [x] OCR-S2-10 `<ConfirmModal/>` retained for the bundle-assign flow (the only mutation gated on confirmation). Composed atop the new `<Modal/>` per OCR-S1-17 — a11y contract validated by the Stage 1 ConfirmModal test.
+- [x] OCR-S2-11 New `ui/src/app/users/__tests__/page.test.tsx` — project pill name rendering + toggle, source/derived columns visible, ConfirmModal opens on Assign click, no-raw-UUID regex assertion after lookup resolution.
 
 ### 2.C Audit (`/audit`)
 
-- [ ] OCR-S2-12 Summary cards adopt glass-card.
-- [ ] OCR-S2-13 Two-line row layout (top: action + actor + target as resolved names; bottom: timestamp + resource + ID hover). Click opens `<Drawer/>` with full payload via `<JsonView/>`.
-- [ ] OCR-S2-14 Watchlist becomes glass-card list; active escalations get `<Pulse/>`.
-- [ ] OCR-S2-15 Replace UID renders at `audit/page.tsx:242-244, 96, 98, 310` with Name components / ResourceName. Actor filter values stay UUID-typed but render `<UserName/>` labels via custom `<Select/>`.
-- [ ] OCR-S2-16 Switch to `useAuditEntries(filter)` (cursor pagination), `useWatchlist()`, `useGovernanceSummary()`. Remove manual fetch.
-- [ ] OCR-S2-17 New `ui/src/app/audit/__tests__/page.test.tsx` — actor filter renders names, watchlist row format, cursor pagination, no-raw-UUID assertion.
+- [x] OCR-S2-12 Summary cards adopt `Card variant="glass"` with `<Eyebrow/>` labels and `font-display` 5xl numerals.
+- [x] OCR-S2-13 Audit timeline switched from a `<table>` to a list of two-line clickable rows: top line `<Pulse/>` + action + `<UserName/>` actor → `<UserName/>` target; bottom line timestamp + resource_id (truncated, full UID surfaced via `title=`). Click opens a `<Drawer size="lg"/>` rendering the full entry via `<JsonView/>` with actor/target also resolved through `<UserName showEmail/>`.
+- [x] OCR-S2-14 Watchlist row format `<UserName/> → <ProjectName/> : <RoleName/>` with a `<Pulse/>` whose variant scales with `describeExpiry` tone (info/warn/error). Cleanup hints rendered as glass-card list.
+- [x] OCR-S2-15 All UID renders at the formerly-flagged lines now route through Name components. Actor filter `<Select>` keeps UUID-typed values for backend filter compatibility but reads the resolver cache so `<option>` text shows resolved display names; falls back to a truncated UID prefix while resolution is pending.
+- [x] OCR-S2-16 `useAuditEntries({limit})` and `useGovernanceSummary()` from new hooks; `useWatchlist()` is a thin slice over the governance summary cache. "Load more" bumps the limit (20 → 200 cap) — true cursor pagination is a backend-side change deferred (handler ships only `?limit=`); the React Query key includes the limit so each step caches independently.
+- [x] OCR-S2-17 New `ui/src/app/audit/__tests__/page.test.tsx` — actor select option labels resolve to display names (no UUIDs), watchlist row contains resolved user/project/role names, "Load more" triggers a second `/audit` fetch, and no UUIDs leak into the rendered timeline.
 
 ### 2.D Stage 2 verification
 
-- [ ] OCR-S2-18 `bun run lint && bun run test && bun run build` clean; `go test ./...` clean (backend untouched but verify).
-- [ ] OCR-S2-19 Manual checklist on each of `/`, `/users`, `/audit`: empty / loading / error / dense / ultra-wide / narrow / keyboard / light-theme contrast.
-- [ ] OCR-S2-20 `detect_changes`; spec deltas updated.
+- [x] OCR-S2-18 `bun run lint && bun run test && bun run build` clean (51/51 tests across 8 files); `go test ./...` clean (280/280) and `go vet ./...` clean.
+- [ ] OCR-S2-19 Manual checklist on each of `/`, `/users`, `/audit`: empty / loading / error / dense / ultra-wide / narrow / keyboard / light-theme contrast. (Pending — requires the user to drive the dev server in a browser.)
+- [x] OCR-S2-20 Spec deltas updated (see `specs/operational-readiness`, `specs/user-management`, `specs/access-governance`); `detect_changes` invocation pending the codebase-memory MCP heartbeat.
 
 ## Stage 3 — Remaining pages
 

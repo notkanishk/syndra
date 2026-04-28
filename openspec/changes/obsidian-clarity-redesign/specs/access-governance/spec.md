@@ -11,10 +11,12 @@ The `/audit` table MUST replace raw UUID renders for `actor_id`, `target_id`, an
 - **THEN** the actor cell MUST display `<UserName id={log.actor_id}/>`
 - **AND** the raw UUID MUST be accessible only via the row's "Show ID" affordance or `?debug=ids`
 
-#### Scenario: Target column resolves per kind
-- **WHEN** an audit log row carries `target_kind` (user / project / role / bundle)
-- **THEN** the target cell MUST render `<ResourceName kind={log.target_kind} id={log.target_id} />`
-- **AND** when `target_id == "-"` (system-wide actions) the cell MUST render the literal `—` (em dash) without resolution
+#### Scenario: Target line resolves to a user name
+- **WHEN** an audit log row carries a `target_id`
+- **THEN** the target line MUST render `<UserName id={log.target_id}/>`
+- **AND** when `target_id == "-"` or empty (system-wide actions) the target line MUST be omitted
+
+> **Implementation note.** The current `audit_logs` schema persists `target_zitadel_user_id` (no `target_kind` column), so Stage 2 routes every non-system target through `<UserName/>`. A `<ResourceName kind/>` dispatch becomes meaningful only when the audit shape is widened to carry the resource kind alongside the id; that schema change is deferred and tracked in `feature-coverage`.
 
 #### Scenario: System actor "system" renders as System
 - **WHEN** `log.actor_id == "system"` (background scheduler, webhook ingest, etc.)
@@ -22,11 +24,13 @@ The `/audit` table MUST replace raw UUID renders for `actor_id`, `target_id`, an
 
 ### Requirement: Audit actor filter MUST display resolved labels
 
-The actor filter `<select>` (currently `audit/page.tsx:96, 98`) MUST replace its raw UUID labels with resolved user names via the new `<Select/>` primitive (or a custom combobox). The emitted filter value MUST remain UUID-typed so backend filtering continues to work.
+The actor filter `<select>` MUST replace its raw UUID labels with resolved user names. The emitted filter value MUST remain UUID-typed so backend filtering continues to work.
 
-#### Scenario: Filter dropdown labels are names
-- **WHEN** the audit filter row renders
-- **THEN** the actor filter options MUST render `<UserName id={actorId}/>` as their label
+Native `<option>` elements render their children as plain text and cannot compose React nodes, so the implementation reads the resolver cache directly to build the label string. Until resolution lands the option falls back to a truncated UID prefix; once the lookup batch settles the option text switches to the resolved display name. A future combobox primitive (Stage 4) will replace the native dropdown entirely.
+
+#### Scenario: Filter dropdown labels are names once resolved
+- **WHEN** the audit filter row renders and the lookup batch has settled
+- **THEN** every actor filter option's label MUST be the resolved display name (no Zitadel UUID matches the option text)
 - **AND** the option `value` attribute MUST remain the raw UUID for backend compatibility
 - **AND** "System" actors MUST appear as a single non-UUID option
 

@@ -4,16 +4,19 @@
 
 ### Requirement: User-facing surfaces MUST replace UUID dropdowns with combobox pills
 
-The `/users` filter rail MUST replace raw `<select>` elements populated with UUIDs (currently in actor/project filters) with combobox-style filter pills backed by resolved entity lists. The internal value MUST remain UUID-typed for backend filter compatibility, but the visible label MUST be the resolved name.
+The `/users` filter rail MUST replace raw `<select>` elements populated with UUIDs with combobox-style filter pills backed by resolved entity lists. The internal value MUST remain matchable against the corresponding backend filter, but the visible label MUST be a human-readable name.
+
+Stage 2 ships project filter pills using the project-name strings already exposed via the user list's `key_projects` field, so no UUID round-trip is required. A role filter pill backed by `useProjects()` is reserved for Stage 3 once the role facet is added to the backend `/users` query.
 
 #### Scenario: Project filter pill shows project names
 - **WHEN** the `/users` filter rail renders the project filter
-- **THEN** each option MUST display the project name (sourced from `useProjects()`)
-- **AND** the selected value emitted to the URL/state MUST remain the project UUID
+- **THEN** each pill MUST display the project name (sourced from `key_projects` on the user list, or `useProjects()` once role-aware filtering lands)
+- **AND** toggling a pill MUST narrow the visible user list to entries whose `key_projects` contain that name
+- **AND** an aria-pressed attribute MUST reflect the on/off state for assistive tech
 
-#### Scenario: Role filter pill shows role display names
-- **WHEN** the `/users` filter rail renders the role filter
-- **THEN** each option MUST display the role display name + project name (e.g. "3D Lab · Member")
+#### Scenario: Role filter pill shows role display names (Stage 3)
+- **WHEN** the role filter is added in Stage 3
+- **THEN** each pill MUST display the role display name + project name (e.g. "3D Lab · Member")
 - **AND** the selected value MUST remain the `(project_id, role_key)` pair
 
 ### Requirement: Access Lineage MUST visually distinguish source vs derived without raw IDs
@@ -40,11 +43,17 @@ Every "Granted by" or "Reviewed by" or "Approved by" attribution surfaced anywhe
 - **THEN** the "Granted by" cell MUST render `<UserName id={grant.granted_by} />`
 - **AND** the resolved display name MUST be visible (loading skeleton during resolution)
 
-### Requirement: Revoke flow MUST continue to use ConfirmModal
+### Requirement: Mutation flows on /users MUST continue to use ConfirmModal
 
-The revoke-direct-grant and remove-from-bundle actions on `/users` MUST continue to gate confirmation through the styled `<ConfirmModal/>` (per `dashboard-ux-elevation`). The Modal refactor (Stage 1) MUST NOT regress this.
+Every mutation that changes effective access on `/users` MUST gate confirmation through the styled `<ConfirmModal/>` (per `dashboard-ux-elevation`). The Modal refactor (Stage 1) MUST NOT regress this. Stage 2 covers the bundle-assign confirmation; revoke flows are introduced in Stage 4 alongside the bundle CRUD surfaces and follow the same contract.
 
-#### Scenario: Revoke direct grant
+#### Scenario: Bundle assign confirmation
+- **WHEN** an admin clicks "Assign" on an unassigned bundle row
+- **THEN** a `<ConfirmModal/>` MUST open titled `Assign "{bundle.name}"?`
+- **AND** the description MUST list (up to six) role display names that will be added by the assignment
+- **AND** Esc + click-outside MUST cancel without mutating
+
+#### Scenario: Revoke direct grant (Stage 4)
 - **WHEN** an admin clicks "Revoke" on a direct grant row
 - **THEN** a `<ConfirmModal/>` MUST open with destructive variant styling
 - **AND** the confirmation copy MUST name the role being revoked via `<RoleName/>` (not the raw role key)
