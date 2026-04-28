@@ -80,25 +80,26 @@ export default function ProjectsView() {
             description="Create a project in your Zitadel instance, or check that ZITADEL_DOMAIN and ZITADEL_MACHINE_KEY_PATH are set so MkAuth can sync the live catalog."
           />
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4">
             {projects.map((entry) => (
               <div
                 key={entry.project.id}
-                className="rounded-card bg-surface-container-high p-5"
+                className="rounded-card bg-surface-container-high p-5 flex flex-col"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-lg font-semibold text-on-surface">
+                    <Eyebrow tone="primary">{entry.project.kind}</Eyebrow>
+                    <h2 className="text-xl font-semibold text-on-surface mt-1 font-display">
                       {entry.project.name}
                     </h2>
                     <p className="mt-1 text-sm text-on-surface-variant">
-                      {entry.project.description}
+                      {entry.project.description || "No description provided."}
                     </p>
                   </div>
                   <Badge variant="secondary">{entry.project.kind}</Badge>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
                   <div className="rounded-card bg-surface-container-low p-3">
                     <Eyebrow>Members</Eyebrow>
                     <p className="mt-2 text-2xl font-semibold">{entry.member_count}</p>

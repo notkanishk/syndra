@@ -1,6 +1,6 @@
 "use client";
 
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 
@@ -16,6 +16,21 @@ export interface BundleRoleRow {
   bundle_id: string;
   zitadel_project_id: string;
   zitadel_role_key: string;
+}
+
+export interface BundleImpactView {
+  role_count: number;
+  users: Array<{ id: string; name: string }>;
+}
+
+export interface CreateBundleInput {
+  name: string;
+  description: string;
+}
+
+export interface AddBundleRoleInput {
+  project_id: string;
+  role_key: string;
 }
 
 const KEYS = {
@@ -48,6 +63,18 @@ export function useBundleRoles(bundleId: string | null | undefined) {
   });
 }
 
+/** Fetch the impact preview for a single bundle. */
+export function useBundleImpact(bundleId: string | null | undefined) {
+  return useQuery({
+    queryKey: bundleId ? KEYS.impactFor(bundleId) : ["bundles", "noop", "impact"],
+    queryFn: async (): Promise<BundleImpactView | null> => {
+      if (!bundleId) return null;
+      return await request<BundleImpactView>(`/bundles/${bundleId}/impact`);
+    },
+    enabled: !!bundleId,
+  });
+}
+
 /**
  * Fan out one /bundles/{id}/roles query per bundle. Used by /projects which
  * needs the role index for every bundle to compute per-role rollups.
@@ -70,6 +97,36 @@ export function useBundleRolesByBundle(bundleIds: string[]) {
   });
   const allLoaded = results.every((r) => !r.isLoading);
   return { byId, allLoaded };
+}
+
+/** Create a new bundle. Invalidates the list. */
+export function useCreateBundle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateBundleInput) => {
+      return await request<BundleRow>("/bundles", { method: "POST", body: input });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.list });
+    },
+  });
+}
+
+/** Add a (project_id, role_key) pair to a bundle. */
+export function useAddBundleRole(bundleId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: AddBundleRoleInput) => {
+      return await request(`/bundles/${bundleId}/roles`, {
+        method: "POST",
+        body: input,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.rolesFor(bundleId) });
+      qc.invalidateQueries({ queryKey: KEYS.impactFor(bundleId) });
+    },
+  });
 }
 
 export const bundlesQueryKeys = KEYS;

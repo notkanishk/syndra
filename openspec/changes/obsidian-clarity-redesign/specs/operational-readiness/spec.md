@@ -146,3 +146,54 @@ The new `/operations` and `/grants` routes MUST verify operator-level session ro
 #### Scenario: Non-admin sees no Admin section
 - **WHEN** a non-admin session loads the sidebar
 - **THEN** the "Admin" eyebrow section MUST NOT render
+
+### Requirement: Zitadel diagnostics MUST surface live status via a polling Pulse tile
+
+The `/zitadel` page MUST render a top-level glass-card "Live status" tile that polls `useZitadelHealth()` (`GET /zitadel/health`) every 10 seconds and surfaces a `<Pulse/>` whose variant maps to the backend's response: steady-success when `status === "ok"`, warn-pulse when `status === "disabled"` (locally configured but not exercising the management API), and error-pulse when `status === "error"` or the proxy is unreachable.
+
+The polling cadence MUST pause when the tab is hidden so background polling cost stays bounded. The deeper CRUD sections (Projects, Users, Grants, Rotation) MAY continue to use the existing imperative `apiGet` / `apiSend` shape — full hook migration of those sections is out of stage scope and tracked separately.
+
+#### Scenario: Steady-state success
+- **WHEN** the `/zitadel` health probe returns `{status: "ok"}`
+- **THEN** the Live Status tile MUST render `<Pulse variant="success" static/>` (non-animating green)
+- **AND** the tile body MUST display "Connected"
+
+#### Scenario: Disabled or local-only mode
+- **WHEN** the health probe returns `{status: "disabled"}` (no Zitadel domain configured, local-policy-only mode)
+- **THEN** the tile MUST render `<Pulse variant="warn"/>` (animating amber)
+- **AND** the tile body MUST display "Disabled (local-policy-only)"
+
+#### Scenario: Backend unreachable
+- **WHEN** the health probe returns `{status: "error"}` or the request fails at the transport layer
+- **THEN** the tile MUST render `<Pulse variant="error"/>` (animating red)
+- **AND** the error detail (if any) MUST appear below the tile in the `var(--error)` tone
+
+### Requirement: Topology canvas pan/zoom MUST be preserved through the Stage 3 reskin
+
+The `/graph` page MUST preserve the existing pan/zoom mechanics (drag to pan, ⌘/Ctrl + scroll to zoom, range clamped to [0.4, 2.5], reset button) verbatim. The Stage 3 changes are restricted to chrome: the inspector moves into a glass `<Drawer/>` and the legend pills migrate to a floating top-left glass chip. Node deeplinks MUST continue to route to the corresponding capability surface (`/applications`, `/bundles`, `/projects`).
+
+#### Scenario: Click node opens Drawer
+- **WHEN** an admin clicks a node in the topology canvas
+- **THEN** the inspector Drawer MUST slide in from the right (`<Drawer size="lg"/>`)
+- **AND** the Drawer MUST render the node's metadata, connected edges, and a "View details →" deeplink to the appropriate capability surface
+- **AND** the Drawer MUST follow the same focus-trap, Esc, and click-outside semantics as `<Modal/>`
+
+#### Scenario: Pan/zoom unchanged
+- **WHEN** an admin drags the empty canvas surface or scrolls with ⌘/Ctrl held
+- **THEN** the canvas MUST pan or zoom respectively
+- **AND** the zoom level MUST remain clamped to [0.4, 2.5]
+- **AND** the "Reset" button MUST restore `{x: 0, y: 0, scale: 1}`
+
+### Requirement: Mapping rule authoring MUST happen inside a Modal
+
+The `/policies` page's CreateRuleForm MUST render inside a `<Modal/>` (focus-trap, Esc, click-outside). The form MUST debounce a `useValidateMappingRule` mutation and display cycle / self-reference warnings inline before the operator can create the rule. Rules with `would_cycle` or `self_reference` set to true MUST disable the submit button.
+
+#### Scenario: Modal-gated authoring
+- **WHEN** an admin clicks the "+ New rule" toolbar button
+- **THEN** a `<Modal/>` MUST open with the title "Create mapping rule"
+- **AND** the modal MUST follow the focus-trap, Esc, and click-outside contract from `<Modal/>`
+
+#### Scenario: Cycle warning blocks submit
+- **WHEN** the validation result returns `would_cycle: true` or `self_reference: true`
+- **THEN** the "Create rule" submit button MUST be disabled
+- **AND** a warning MUST render in the live preview panel inside the modal

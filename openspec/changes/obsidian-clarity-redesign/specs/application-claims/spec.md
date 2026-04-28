@@ -48,3 +48,22 @@ The Token Simulator (per `dashboard-ux-elevation` § Token Simulator) MUST conti
 - **WHEN** the admin selects a second user via the "Compare with" select
 - **THEN** the two payload panels MUST render side-by-side
 - **AND** every key whose values differ MUST be tinted amber on both sides
+
+### Requirement: Application page layout MUST eliminate the height mismatch on wide viewports
+
+When the registry list and the simulator stack render side-by-side on `xl` and wider, the right column MUST grow to its content height instead of stretching vertically to match the (often longer) registry list. Stage 3 enforces this by giving the parent grid `items-start`, the right column `min-h-0 h-full flex flex-col`, and the simulator `<Card/>` a `min-h-0` modifier.
+
+#### Scenario: Wide-viewport simulator height
+- **WHEN** the `/applications` page renders at `xl` or wider with at least 6 applications in the registry
+- **THEN** the simulator card height MUST be determined by its own content, not by the registry card
+- **AND** there MUST NOT be visible empty padding below the "Claim profile" card
+
+### Requirement: Token Simulator panels MUST use the code-block surface
+
+Each `<SimulationPanel/>` MUST render its JSON payload inside a `bg-surface-container-lowest` surface — the design system's "code-block" surface tone, distinguishable at a glance from the surrounding glass. The panel header MUST use `<Eyebrow/>` for the title and retain the `<CopyButton/>` on the right.
+
+#### Scenario: Code-block surface
+- **WHEN** the simulator renders a payload
+- **THEN** the panel container MUST use `bg-surface-container-lowest` and a 1px outline-variant border
+- **AND** the panel header MUST use `<Eyebrow/>` for the title
+- **AND** the `<CopyButton/>` MUST render in the header

@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 
@@ -14,6 +14,19 @@ export interface MappingRuleRow {
   created_at: string;
 }
 
+export interface CreateMappingRuleInput {
+  source_project: string;
+  source_role: string;
+  target_project: string;
+  target_role: string;
+}
+
+export interface ValidateMappingRuleResult {
+  would_cycle: boolean;
+  self_reference: boolean;
+  reason?: string;
+}
+
 const KEYS = {
   list: ["mapping-rules"] as const,
 };
@@ -25,6 +38,50 @@ export function useMappingRules() {
     queryFn: async (): Promise<MappingRuleRow[]> => {
       const data = await request<unknown>("/rules/mapping");
       return Array.isArray(data) ? (data as MappingRuleRow[]) : [];
+    },
+  });
+}
+
+/** Create a new mapping rule. Invalidates the list. */
+export function useCreateMappingRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateMappingRuleInput) => {
+      return await request<MappingRuleRow>("/rules/mapping", {
+        method: "POST",
+        body: input,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.list });
+    },
+  });
+}
+
+/**
+ * Validate a draft rule. Returns cycle / self-reference flags so the create
+ * form can warn before submission. Stateless on the backend — no cache.
+ */
+export function useValidateMappingRule() {
+  return useMutation({
+    mutationFn: async (input: CreateMappingRuleInput) => {
+      return await request<ValidateMappingRuleResult>("/rules/mapping/validate", {
+        method: "POST",
+        body: input,
+      });
+    },
+  });
+}
+
+/** Bump a rule's version (re-evaluates downstream propagation). */
+export function useBumpMappingRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      return await request(`/rules/mapping/${id}`, { method: "PUT", body: {} });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.list });
     },
   });
 }

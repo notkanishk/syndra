@@ -1,0 +1,127 @@
+// @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import BundlesView from "@/app/bundles/page";
+import { NameResolverProvider } from "@/lib/queries/useNameResolver";
+import { UUID_REGEX, makeProxyFetch } from "@/test-utils/proxyFetch";
+
+vi.mock("@/lib/toast", () => ({
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+  toastInfo: vi.fn(),
+}));
+
+const PROJECT_ID = "33333333-3333-4333-8333-333333333333";
+const USER_ID = "44444444-4444-4444-8444-444444444444";
+
+let proxy: ReturnType<typeof makeProxyFetch>;
+
+beforeEach(() => {
+  proxy = makeProxyFetch();
+  global.fetch = proxy.fetchImpl;
+
+  proxy.register("GET", /\/api\/proxy\/bundles(\?|$)/, () => [
+    { id: "b1", name: "Mentor Pack", description: "Hands-on training", created_at: new Date().toISOString() },
+  ]);
+
+  proxy.register("GET", /\/api\/proxy\/bundles\/b1\/roles/, () => [
+    { bundle_id: "b1", zitadel_project_id: PROJECT_ID, zitadel_role_key: "mentor" },
+  ]);
+
+  proxy.register("GET", /\/api\/proxy\/bundles\/b1\/impact/, () => ({
+    role_count: 1,
+    users: [{ id: USER_ID, name: "Sam Patel" }],
+  }));
+
+  proxy.register("GET", /\/api\/proxy\/catalog/, () => ({
+    projects: [
+      {
+        id: PROJECT_ID,
+        name: "Lab Ops",
+        roles: [{ key: "mentor", label: "Mentor" }],
+      },
+    ],
+  }));
+
+  proxy.register("POST", /\/api\/proxy\/lookup/, ({ body }) => {
+    const userIds = (body as { user_ids?: string[] } | undefined)?.user_ids ?? [];
+    const projectIds = (body as { project_ids?: string[] } | undefined)?.project_ids ?? [];
+    const roleKeys =
+      (body as { role_keys?: Array<{ project_id: string; role_key: string }> } | undefined)?.role_keys ?? [];
+    const users: Record<string, { display_name: string; email: string }> = {};
+    if (userIds.includes(USER_ID)) users[USER_ID] = { display_name: "Sam Patel", email: "sam@ex.org" };
+    const projects: Record<string, { name: string }> = {};
+    if (projectIds.includes(PROJECT_ID)) projects[PROJECT_ID] = { name: "Lab Ops" };
+    const roles: Record<string, { display_name: string }> = {};
+    for (const rk of roleKeys) {
+      if (rk.project_id === PROJECT_ID && rk.role_key === "mentor") {
+        roles[`${rk.project_id}:${rk.role_key}`] = { display_name: "Mentor" };
+      }
+    }
+    return { users, projects, roles, bundles: {} };
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+function renderBundles() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: 0, gcTime: 0 } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <NameResolverProvider>
+        <BundlesView />
+      </NameResolverProvider>
+    </QueryClientProvider>,
+  );
+}
+
+describe("BundlesView (Stage 3)", () => {
+  it("renders the bundle row and resolves role chips through Name components on expand", async () => {
+    renderBundles();
+    const bundleHeader = await screen.findByRole("button", { name: /Mentor Pack/ });
+    fireEvent.click(bundleHeader);
+
+    // The role chip should resolve to "Lab Ops · Mentor" — never the raw composite id.
+    await screen.findAllByText(/Mentor/);
+    await screen.findAllByText(/Lab Ops/);
+  });
+
+  it("only fetches impact data when the impact accordion is opened", async () => {
+    renderBundles();
+    const bundleHeader = await screen.findByRole("button", { name: /Mentor Pack/ });
+    fireEvent.click(bundleHeader);
+
+    // Roles always load on expand; impact must not.
+    await waitFor(() => {
+      expect(proxy.calls.some((c) => c.url.includes("/bundles/b1/roles"))).toBe(true);
+    });
+    expect(proxy.calls.some((c) => c.url.includes("/bundles/b1/impact"))).toBe(false);
+
+    // Now open the impact accordion — exactly one impact call should fire.
+    const impactToggle = await screen.findByRole("button", { name: /Impact preview/i });
+    fireEvent.click(impactToggle);
+    await waitFor(() => {
+      expect(proxy.calls.some((c) => c.url.includes("/bundles/b1/impact"))).toBe(true);
+    });
+  });
+
+  it("never renders raw Zitadel UUIDs once lookups resolve", async () => {
+    const { container } = renderBundles();
+    const bundleHeader = await screen.findByRole("button", { name: /Mentor Pack/ });
+    fireEvent.click(bundleHeader);
+    const impactToggle = await screen.findByRole("button", { name: /Impact preview/i });
+    fireEvent.click(impactToggle);
+    await screen.findAllByText(/Sam Patel/);
+    await waitFor(() => {
+      expect(proxy.calls.some((c) => c.url.includes("/lookup"))).toBe(true);
+    });
+    const text = container.textContent ?? "";
+    expect(UUID_REGEX.test(text)).toBe(false);
+  });
+});

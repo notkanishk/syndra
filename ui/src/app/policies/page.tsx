@@ -1,21 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 
 import CreateRuleForm from "@/components/CreateRuleForm";
+import { ProjectName, RoleName } from "@/components/names";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Eyebrow } from "@/components/ui/Eyebrow";
+import { Pulse } from "@/components/ui/Pulse";
 import { SkeletonCardList } from "@/components/ui/Skeleton";
-
-interface MappingRule {
-  id: string;
-  source_project: string;
-  source_role: string;
-  target_project: string;
-  target_role: string;
-  version?: number;
-}
+import { useQuery } from "@tanstack/react-query";
+import { request } from "@/lib/api-client";
+import { useBumpMappingRule, useMappingRules } from "@/lib/queries/useMappingRules";
+import { toastError, toastSuccess } from "@/lib/toast";
 
 interface ProjectCatalog {
   id: string;
@@ -23,111 +22,139 @@ interface ProjectCatalog {
   roles: Array<{ key: string; label: string }>;
 }
 
-interface CatalogResponse {
-  projects: ProjectCatalog[];
+function useCatalogProjects() {
+  return useQuery({
+    queryKey: ["catalog", "projects"],
+    queryFn: async (): Promise<ProjectCatalog[]> => {
+      const data = await request<{ projects?: ProjectCatalog[] }>("/catalog");
+      return Array.isArray(data?.projects) ? data.projects : [];
+    },
+  });
 }
 
 export default function PoliciesView() {
-  const [rules, setRules] = useState<MappingRule[]>([]);
-  const [projects, setProjects] = useState<ProjectCatalog[]>([]);
-  const [loading, setLoading] = useState(true);
+  const rulesQuery = useMappingRules();
+  const projectsQuery = useCatalogProjects();
+  const bumpRule = useBumpMappingRule();
+  const rules = useMemo(() => rulesQuery.data ?? [], [rulesQuery.data]);
+  const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data]);
+  const loading = rulesQuery.isLoading || projectsQuery.isLoading;
 
-  async function loadRules() {
-    setLoading(true);
+  const [createOpen, setCreateOpen] = useState(false);
+
+  async function handleBump(id: string) {
     try {
-      const res = await fetch("/api/proxy/rules/mapping");
-      const data = await res.json();
-      setRules(Array.isArray(data) ? data : []);
-    } finally {
-      setLoading(false);
+      await bumpRule.mutateAsync(id);
+      toastSuccess("Mapping rule version bumped");
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : "Failed to bump rule");
     }
   }
 
-  useEffect(() => {
-    async function load() {
-      const [rulesRes, catalogRes] = await Promise.all([
-        fetch("/api/proxy/rules/mapping"),
-        fetch("/api/proxy/catalog"),
-      ]);
-      const rulesData = await rulesRes.json();
-      const catalog: CatalogResponse = await catalogRes.json();
-      setRules(Array.isArray(rulesData) ? rulesData : []);
-      setProjects(Array.isArray(catalog?.projects) ? catalog.projects : []);
-      setLoading(false);
-    }
-
-    load();
-  }, []);
-
-  const projectName = (projectId: string) => projects.find((project) => project.id === projectId)?.name || projectId;
-
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6 animate-fade-in-up relative z-10">
       <header>
-        <h1 className="text-3xl font-bold text-foreground">Policy Engine</h1>
-        <p className="text-muted mt-2">
-          Define propagation rules that turn raw grants into downstream permissions across software and physical access systems.
+        <Eyebrow>Policy engine</Eyebrow>
+        <h1 className="text-3xl font-semibold text-on-surface mt-1 font-display">
+          Mapping rules
+        </h1>
+        <p className="text-on-surface-variant mt-2">
+          Define propagation rules that turn raw grants into downstream
+          permissions across software and physical access systems.
         </p>
       </header>
 
-      <Card>
+      <Card variant="glass">
         <div className="flex items-center justify-between mb-6">
-          <CardTitle>Active Mapping Rules</CardTitle>
-          <CreateRuleForm onCreated={loadRules} projects={projects} />
+          <CardTitle>Active mapping rules</CardTitle>
+          <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+            + New rule
+          </Button>
         </div>
 
         {loading ? (
           <SkeletonCardList count={3} />
         ) : rules.length === 0 ? (
           <EmptyState
+            eyebrow="No rules yet"
             title="No mapping rules yet"
-            description="Define a rule to propagate role grants from one project into another. Open the form above to pick a source role and the target role it should imply."
+            description="Define a rule to propagate role grants from one project into another. The form opens in a focused modal so you can preview cycle warnings before saving."
+            action={{ label: "Create rule", onClick: () => setCreateOpen(true) }}
           />
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {rules.map((rule) => (
-              <div
+              <article
                 key={rule.id}
-                className="flex flex-col gap-2 p-4 border border-border rounded-lg bg-surfaceHover transition-colors hover:border-primary/50"
+                className="rounded-card border border-outline-variant bg-surface-container-low p-4 transition-colors hover:border-primary-container/50"
               >
-                <div className="flex items-center flex-wrap gap-2 text-sm">
-                  <span className="font-mono text-muted font-semibold">IF</span>
-                  <Badge variant="outline" className="border-primary text-primary">
-                    {projectName(rule.source_project)}
-                  </Badge>
-                  <Badge variant="secondary">{rule.source_role}</Badge>
-
-                  <span className="font-mono text-muted font-semibold mx-1">THEN ADD</span>
-
-                  <Badge variant="outline" className="border-emerald-500 text-emerald-600 dark:text-emerald-400">
-                    {projectName(rule.target_project)}
-                  </Badge>
-                  <Badge variant="secondary">{rule.target_role}</Badge>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Pulse variant="info" />
+                    <Eyebrow tone="primary">Mapping rule</Eyebrow>
+                  </div>
+                  <Badge variant="outline">v{rule.version || 1}</Badge>
                 </div>
-                <p className="text-xs text-muted">
-                  Users who activate `{rule.source_project}:{rule.source_role}` will inherit `{rule.target_project}:{rule.target_role}` after the fixed-point pass completes.
-                </p>
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
-                  <span className="text-xs text-muted">Version {rule.version || 1}</span>
-                  <button
-                    onClick={async () => {
-                      await fetch(`/api/proxy/rules/mapping/${rule.id}`, {
-                        method: "PUT",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({}),
-                      });
-                      loadRules();
-                    }}
-                    className="text-xs text-primary hover:text-primaryHover font-medium transition-colors"
+
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                  <span className="font-mono text-on-surface-variant font-semibold">IF</span>
+                  <Badge
+                    variant="outline"
+                    className="border-primary-container/40 text-primary-container"
                   >
-                    Bump Version
-                  </button>
+                    <ProjectName id={rule.source_project} />
+                  </Badge>
+                  <Badge variant="secondary">
+                    <RoleName projectId={rule.source_project} roleKey={rule.source_role} />
+                  </Badge>
+
+                  <span className="font-mono text-on-surface-variant font-semibold mx-1">
+                    THEN ADD
+                  </span>
+
+                  <Badge
+                    variant="outline"
+                    className="border-[var(--success)]/40 text-[var(--success)]"
+                  >
+                    <ProjectName id={rule.target_project} />
+                  </Badge>
+                  <Badge variant="secondary">
+                    <RoleName projectId={rule.target_project} roleKey={rule.target_role} />
+                  </Badge>
                 </div>
-              </div>
+
+                <p className="mt-3 text-xs text-on-surface-variant">
+                  Users who activate{" "}
+                  <ProjectName id={rule.source_project} />:
+                  <RoleName projectId={rule.source_project} roleKey={rule.source_role} /> will
+                  inherit{" "}
+                  <ProjectName id={rule.target_project} />:
+                  <RoleName projectId={rule.target_project} roleKey={rule.target_role} /> after
+                  the fixed-point pass completes.
+                </p>
+
+                <div className="flex items-center justify-end mt-3 pt-3 border-t border-outline-variant/50">
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    onClick={() => handleBump(rule.id)}
+                    isPending={bumpRule.isPending && bumpRule.variables === rule.id}
+                  >
+                    Bump version →
+                  </Button>
+                </div>
+              </article>
             ))}
           </div>
         )}
       </Card>
+
+      <CreateRuleForm
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        projects={projects}
+      />
     </div>
   );
 }
