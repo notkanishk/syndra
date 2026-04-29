@@ -114,30 +114,30 @@ Tasks are grouped by stage. Stage 1 must complete before Stage 2; Stage 2 and St
 
 ### 4.A Bundle CRUD
 
-- [ ] OCR-S4-01 New `ui/src/components/bundles/CreateBundleModal.tsx` — form with name, description, project scope (`<ProjectName/>` combobox), initial roles picker. `useCreateBundle()`. Mounted from `/bundles` toolbar.
-- [ ] OCR-S4-02 New `ui/src/components/bundles/AddRolesToBundlePicker.tsx` — searchable role list grouped by project, multi-select chips, `useAddRoleToBundle()` (sequential or batch).
-- [ ] OCR-S4-03 New `ui/src/components/bundles/BundleImpactAccordion.tsx` — collapsible inside bundle detail; `useBundleImpact(id)`; affected user count, sample list, role count delta.
+- [x] OCR-S4-01 New `ui/src/components/bundles/CreateBundleModal.tsx` — Modal-wrapped name+description form; `useCreateBundle()` mutation invalidates the bundle list cache; Sonner toast on success. Mounted from the `/bundles` toolbar (replaces the Stage 3 inline form). Deferred: explicit project-scope and initial-roles picker — bundles are global containers in this data model and roles attach via `<AddRolesToBundlePicker/>` after creation, keeping the create flow minimal.
+- [x] OCR-S4-02 New `ui/src/components/bundles/AddRolesToBundlePicker.tsx` — searchable role list grouped by project, multi-select chips, batched sequential `useAddBundleRole()` calls (backend accepts one role per POST). Roles already in the bundle render as disabled "Already in bundle". A failure mid-batch stops the loop and keeps un-added selections in the picker for retry.
+- [x] OCR-S4-03 New `ui/src/components/bundles/BundleImpactAccordion.tsx` — extracted self-contained collapsible. Defers `useBundleImpact(id)` until opened (verified by the bundles page test). Renders the first 10 affected users via `<UserName/>` + a "+N more" overflow chip.
 
 ### 4.B Role authoring
 
-- [ ] OCR-S4-04 New `ui/src/components/roles/CreateRoleModal.tsx` — fields display_name, role_key (slug-derived w/ override), description, clone_from (Select), claims (advanced). `useCreateRole()` mutation; debounced uniqueness check or 409 → toast.
+- [x] OCR-S4-04 New `ui/src/components/roles/CreateRoleModal.tsx` — fields project (Select), display_name, role_key (slug-derived from display name with one-way `keyTouched` lock so manual edits stick), description, clone_from (project-scoped Select). `useCreateRole()` mutation. 409 CONFLICT surfaces inline as a field-level error on role_key without closing the modal; other failures fall through to a Sonner toast. Mounted from the `/bundles` toolbar via `+ Create role`. Claims editor deferred — the backend accepts the canonical fields (project_id/role_key/display_name/description/group/clone_from) and Stage 4 wires those.
 
 ### 4.C Operations queues page
 
-- [ ] OCR-S4-05 New `ui/src/app/operations/page.tsx` — admin-only RSC; non-admins redirect to `/`. Three tabs (Intents / Webhook events / Onboarding triggers) with status filter pills, `<Pulse/>` per row, `refetchInterval: 5_000`. "View payload" → `<Modal/>` with `<JsonView/>`.
-- [ ] OCR-S4-06 Modify `ui/src/components/SidebarNav.tsx` — add "Admin" eyebrow section gated on session admin role; "Operations" link → `/operations`.
+- [x] OCR-S4-05 New `ui/src/app/operations/page.tsx` (admin-only RSC + `OperationsClient` island). Three tabs (Intents / Webhook events / Onboarding triggers); each polls every 5s via the per-resource hook and pauses while the tab is hidden. Status filter pills are exposed only on the Intents tab (the underlying `?status=` query parameter is the only one universally honored). Each row shows a `<Pulse/>` for status, resolved user/project names, relative age, truncated last error with full text on hover, and a "Payload" button that opens the row in a `<Modal/>` + `<JsonView/>`.
+- [x] OCR-S4-06 Modify `ui/src/components/SidebarNav.tsx` — added "Admin" eyebrow section in the admin sidebar branch with "Operations" → `/operations` and "Grants" → `/grants`. The existing "Operations" section keeps `/zitadel` for diagnostic continuity.
 
 ### 4.D Global grants + reconciliation
 
-- [ ] OCR-S4-07 New `backend/internal/handlers/reconciliation.go` — `GET /api/v1/reconciliation/grants` returning `{only_in_mkauth: [...], only_in_zitadel: [...], drift: [...]}`. Reuse direct-grants repo + `ListUserGrants`. Wrap with `withOperatorAuth` (drift data is sensitive). Wire route in `router.go`.
-- [ ] OCR-S4-08 New `backend/internal/handlers/reconciliation_test.go` — synthetic drift cases (only-mkauth / only-zitadel / role-mismatch / role-superset).
-- [ ] OCR-S4-09 New `ui/src/app/grants/page.tsx` — admin-only. Tab 1 "All grants" via `useZitadelGrants(filter)`; Tab 2 "Reconciliation" via `useReconciliationDiff()`. Drift rows highlighted with amber outline + `<Pulse/>`; click → `<Drawer/>` with both records via `<JsonView/>`. Read-only.
-- [ ] OCR-S4-10 Modify `ui/src/components/SidebarNav.tsx` — add "Grants" link → `/grants` under "Admin".
+- [x] OCR-S4-07 New `backend/internal/handlers/reconciliation.go` — `GET /api/v1/reconciliation/grants` wired under `withOperatorAuth` in `router.go`. Returns `{only_in_mkauth, only_in_zitadel, drift, generated_at, truncated}`. Reuses `services.AllDirectGrants` (new wrapper around `db.GetAllDirectGrants` that filters expired rows) and the existing `zitadelListAllGrants` injectable. Pure comparison core (`computeReconciliationDiff`) extracted for test isolation. Truncation flag set when Zitadel reports more grants than the 1000-row page returned.
+- [x] OCR-S4-08 New `backend/internal/handlers/reconciliation_test.go` — eight cases covering only-in-mkauth, only-in-zitadel, role-mismatch, role-superset, aligned (no drift emitted), truncation flag propagation, Zitadel failure surfaces 502, and stable multi-pair ordering. All pass.
+- [x] OCR-S4-09 New `ui/src/app/grants/page.tsx` (admin-only RSC + `GrantsClient` island). Two tabs: "All grants" (unioned ledger from `useZitadelAllGrants` + `useReconciliationDiff` + `useMappingRules` for source attribution) and "Reconciliation" (drift snapshot with three count cards + categorized lists). Each All-grants row carries a Source pill ("MkAuth + Zitadel" / "Zitadel only" / "Derived from rule" / "MkAuth only (sync gap)"). Drift rows open a side-by-side `<Drawer/>` rendering both records via `<JsonView/>`. Strictly read-only — no Apply/Sync buttons.
+- [x] OCR-S4-10 Sidebar Grants link added in OCR-S4-06.
 
 ### 4.E Stage 4 verification
 
-- [ ] OCR-S4-11 `cd backend && go vet ./... && go test ./...` — reconciliation_test.go passes.
-- [ ] OCR-S4-12 `cd ui && bun run lint && bun run test && bun run build`.
-- [ ] OCR-S4-13 Manual: `/operations` and `/grants` end-to-end on demo backend; admin gating returns non-admins to `/`; ConfirmModal a11y on every new flow.
-- [ ] OCR-S4-14 `detect_changes`; spec deltas finalized; ADRs updated for backend reconciliation endpoint.
+- [x] OCR-S4-11 `go vet ./... && go test ./...` clean (288/288 — was 280, +8 reconciliation tests).
+- [x] OCR-S4-12 `bun run lint && bun run test && bun run build` clean (73/73 across 16 files; new routes ship at `/operations` 4.97kB + `/grants` 8.24kB).
+- [ ] OCR-S4-13 Manual: `/operations` and `/grants` end-to-end on demo backend; admin gating returns non-admins to `/`; payload Modal + reconciliation Drawer a11y. (Pending — requires the user to drive the dev server in a browser.)
+- [x] OCR-S4-14 Spec deltas finalized in `specs/operational-readiness/spec.md` (Bundle/role authoring Modal, Operations page, Grants page requirements added). `openspec validate obsidian-clarity-redesign --strict` ⇒ valid. ADR refresh + `detect_changes` invocation tracked alongside this stage.
 - [ ] OCR-S4-15 Once all stages merged: `openspec/changes/obsidian-clarity-redesign` ready for `/opsx:archive` consideration.

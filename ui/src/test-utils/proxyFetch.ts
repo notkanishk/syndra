@@ -8,9 +8,22 @@ import { vi } from "vitest";
  * resolve to `200 []` so name resolution doesn't error if a name isn't
  * stubbed; the matchers below then assert that resolved names render.
  */
-export type FetchHandler = (req: { url: string; init?: RequestInit; body?: unknown }) =>
+export type FetchHandlerResponse =
   | unknown
-  | Promise<unknown>;
+  | { __status: number; body: unknown };
+
+export type FetchHandler = (req: { url: string; init?: RequestInit; body?: unknown }) =>
+  | FetchHandlerResponse
+  | Promise<FetchHandlerResponse>;
+
+/**
+ * Helper for handlers that need to return a non-200. Tests call
+ * `respondWith(409, { error: "CONFLICT", message: "…" })` to simulate the
+ * backend's error envelopes — the stub's default behavior is 200.
+ */
+export function respondWith(status: number, body: unknown) {
+  return { __status: status, body };
+}
 
 interface RouteEntry {
   method: string;
@@ -47,6 +60,10 @@ export function makeProxyFetch() {
       if (route.method !== method) continue;
       if (!route.pattern.test(url)) continue;
       const result = await route.handler({ url, init, body });
+      if (result && typeof result === "object" && "__status" in result) {
+        const envelope = result as { __status: number; body: unknown };
+        return jsonResponse(envelope.body, envelope.__status);
+      }
       return jsonResponse(result, 200);
     }
     return jsonResponse([], 200);

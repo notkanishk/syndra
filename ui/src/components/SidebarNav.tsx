@@ -82,6 +82,13 @@ export default function SidebarNav({ isAdmin }: { isAdmin: boolean }) {
       title: "Operations",
       items: [{ href: "/zitadel", label: "Zitadel Diagnostics" }],
     },
+    {
+      title: "Admin",
+      items: [
+        { href: "/operations", label: "Operations" },
+        { href: "/grants", label: "Grants" },
+      ],
+    },
   ];
 
   const sections = isAdmin ? adminSections : memberSections;

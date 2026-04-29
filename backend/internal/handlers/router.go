@@ -115,6 +115,12 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("PUT /api/v1/zitadel/projects/{id}/roles/{key}", withCORS(withOperatorAuth(handleUpdateZitadelProjectRole)))
 	mux.HandleFunc("DELETE /api/v1/zitadel/projects/{id}/roles/{key}", withCORS(withOperatorAuth(handleDeleteZitadelProjectRole)))
 	mux.HandleFunc("GET /api/v1/zitadel/grants", withCORS(withOperatorAuth(handleListAllZitadelGrants)))
+
+	// Reconciliation: visibility-only diff between MkAuth-direct grants and
+	// Zitadel grants. Read-only — remediation is explicitly out of scope per
+	// obsidian-clarity-redesign. Operator-gated because drift data exposes
+	// the full grant inventory.
+	mux.HandleFunc("GET /api/v1/reconciliation/grants", withCORS(withOperatorAuth(handleGetReconciliationDiff)))
 	mux.HandleFunc("GET /api/v1/zitadel/users/{id}/grants", withCORS(withOperatorAuth(handleListZitadelUserGrants)))
 	mux.HandleFunc("POST /api/v1/zitadel/users/{id}/grants", withCORS(withOperatorAuth(handleAssignZitadelGrant)))
 	mux.HandleFunc("PUT /api/v1/zitadel/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleUpdateZitadelGrant)))

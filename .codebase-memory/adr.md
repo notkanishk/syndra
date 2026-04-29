@@ -1,24 +1,13 @@
-## Frontend Architecture
+## Reconciliation endpoint (Stage 4)
 
-The Next.js admin console (`ui/`) standardizes on three Stage-1 / Stage-2 decisions captured here so future maintainers don't re-litigate them.
+- **Decision (2026-04-29):** Backend exposes `GET /api/v1/reconciliation/grants` returning `{only_in_mkauth, only_in_zitadel, drift, generated_at, truncated}`. The handler is read-only and gated by `withOperatorAuth`; no remediation routes ship with it. The pure comparison core (`computeReconciliationDiff`) is extracted from the HTTP shell so tests exercise the diff math without spinning up a server.
+- **Why:** The obsidian-clarity-redesign mandates visibility-only reconciliation in this overhaul — the auto-correction path is explicitly Phase-5/6. Splitting the comparison from the IO surface keeps that future-cut clean: a remediation handler can reuse `computeReconciliationDiff` plus a remediation policy without re-hashing the math.
+- **Aligned-set rendering moved client-side.** The endpoint returns only the diff (only_in_mkauth/only_in_zitadel/drift). The "All grants" UI tab synthesizes the aligned set client-side from `useZitadelAllGrants` minus the diff buckets, plus a "Derived from rule" overlay computed against `useMappingRules`. Avoids a fourth bucket on the wire and keeps the backend snapshot strictly diff-shaped.
+- **Truncation surfaced explicitly.** Zitadel ListAllGrants is paginated; the handler caps the snapshot at 1000 grants per call and sets `truncated: true` if the total exceeds that. The UI surfaces a partial-snapshot warning rather than misleading the operator into thinking the diff is complete.
+- **Auth posture:** `withOperatorAuth` (admin role) — drift data is sensitive (full grant inventory across users + projects). The proxy isMemberAllowed returns false for /reconciliation/* defense-in-depth.
 
-### Adopt TanStack Query as the canonical client data layer
-- One `QueryClientProvider` mounts at the root via `ui/src/components/providers.tsx`.
-- Every browser-side request goes through `request<T>(path, init)` in `ui/src/lib/api-client.ts`, which targets `/api/proxy/<path>` and throws typed `ApiError` on non-2xx so React Query's `error` state is structured.
-- Per-resource hooks live under `ui/src/lib/queries/` (`useProjects`, `useBundles`, `useUsers`, `useAudit`, `useGovernance`, `useIntents`, `useDashboard`, `useNameResolver`, …). Stage 2 added the audit/users/governance/intents/dashboard slices; remaining hooks (`useApplications`, `useRoles`, `useRequests`, `useTopology`, `useOperations`, `useGrants`) are authored as their pages migrate in Stages 3–4.
-- `getQueryClient()` returns a per-request client via `cache()` from React for RSC use; mutations invalidate by query-key family rather than by URL string.
-- Defaults: `staleTime: 30s`, `gcTime: 5min`, `retry: 1`, `refetchOnWindowFocus: false`. Polling surfaces (`useIntents`) opt in via `refetchInterval`.
-- Members never receive a 200 from `/lookup`, `/users`, `/audit`, or `/intents` — the proxy `isMemberAllowed` allowlist is the boundary; admin-only pages are the only consumers of these hooks today.
+## Stage 4 UI surfaces
 
-### Batch UID → name resolution via `POST /api/v1/lookup`
-- The backend handler at `backend/internal/handlers/lookup.go` accepts `{user_ids, project_ids, role_keys[{project_id,role_key}], bundle_ids}`, caps each array at 256, and tolerates partial misses (missing IDs are absent from the response, never a 404).
-- Client-side, `<UserName/>`, `<ProjectName/>`, `<RoleName/>`, and `<BundleName/>` enqueue ids into `NameResolverProvider`'s tick-batched queue. A `requestAnimationFrame` flush issues exactly one `useQuery(['lookup', sortedKey], …)` per tick — 50 components in one render produce one request.
-- `ResolveResult<T>` is tri-state (`{value: T | undefined, resolved: boolean}`): components show a `<Skeleton/>` while `!value && !resolved`, and fall back to the `fallback` prop once `resolved === true` with no value. The `attempted` Set per type prevents missing ids from re-enqueuing forever.
-- The actor `<select>` on `/audit` reads the resolver cache directly to build option label strings (native `<option>` cannot compose React children). This is acceptable as a Stage 2 affordance; a full combobox primitive is reserved for Stage 4.
-
-### Obsidian Clarity design tokens (dark-first, light counterpart)
-- `ui/src/app/globals.css` defines two complete token sets under `[data-theme="dark"]` and `[data-theme="light"]` — the light theme is a deliberate counterpart (desaturated indigo on warm-white surfaces), not an auto-inverted mirror.
-- The Tailwind v4 `@theme {…}` block maps `--color-*` to the design tokens so utilities like `bg-surface-container-high`, `text-on-surface-variant`, `text-on-primary`, `border-outline-variant` resolve uniformly across themes.
-- Core utilities: `bg-blob-hero` (atmospheric radial-gradient layer mounted once in `<body>`), `glass-card` (translucent surface-container + 28px backdrop-filter blur + ambient shadow), `pulse-dot` (animated status indicator).
-- Typography: Inter (`--font-sans`) for body; Fraunces variable serif (`--font-display`) for h1/display surfaces. Both load via `next/font/google` with `display: 'swap'`.
-- Primary buttons use a saturated `linear-gradient(135deg, var(--primary), var(--secondary))` (NOT the `*-container` pales) so `text-on-primary` meets WCAG AA in both themes — verified during Stage 1 review.
+- **Decision (2026-04-29):** `/operations` and `/grants` ship as admin-only RSC pages that delegate immediately to client islands (`OperationsClient`, `GrantsClient`). The RSC layer's only job is `getSession()` + `redirect()` for non-admins. All polling, tab state, drawer state, and JSON drill-in lives in the client island so the page can hot-reload without re-running the session check.
+- **Why:** Mirrors the dashboard pattern (`page.tsx` thin RSC + `<AdminDashboard/>` island) and keeps the admin-gate logic in one obvious spot. Polling cadence (5s on operations, ad-hoc on grants) is owned by per-resource hooks under `ui/src/lib/queries/`, all of which respect `refetchIntervalInBackground: false` so backgrounded tabs don't hammer the proxy.
+- **Bundle/role authoring lifted into Modal.** Stage 3 had inline create-bundle and add-role forms on `/bundles`. Stage 4 moves both into focus-trapped `<Modal/>` instances and adds a `<CreateRoleModal/>` peer (with slug-derived role_key + clone-from + 409-conflict inline surfacing) so the create flows match the same governance-first ergonomics as ConfirmModal-gated mutations.

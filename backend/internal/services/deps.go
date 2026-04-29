@@ -51,6 +51,9 @@ var (
 	svcGetDirectGrantsForUser = func(ctx context.Context, userID string, includeExpired bool) ([]models.DirectGrant, error) {
 		return db.GetDirectGrantsForUser(ctx, userID, includeExpired)
 	}
+	svcGetAllDirectGrants = func(ctx context.Context, includeExpired bool) ([]models.DirectGrant, error) {
+		return db.GetAllDirectGrants(ctx, includeExpired)
+	}
 	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
 		return db.GetActiveMappingRules(ctx)
 	}

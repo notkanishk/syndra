@@ -376,6 +376,14 @@ func UserDirectGrants(ctx context.Context, userID string) ([]models.DirectGrant,
 	return svcGetDirectGrantsForUser(ctx, userID, true)
 }
 
+// AllDirectGrants returns every active MkAuth-direct grant. Active means
+// expires_at is NULL or in the future — expired rows are excluded so the
+// reconciliation handler compares like-for-like with what Zitadel currently
+// surfaces. Backs GET /api/v1/reconciliation/grants.
+func AllDirectGrants(ctx context.Context) ([]models.DirectGrant, error) {
+	return svcGetAllDirectGrants(ctx, false)
+}
+
 func Governance(ctx context.Context) (models.GovernanceSummary, error) {
 	requests, err := svcGetAccessRequests(ctx, "pending")
 	if err != nil {

@@ -242,6 +242,41 @@ func GetDirectGrantsForUser(ctx context.Context, userID string, includeExpired b
 	return grants, nil
 }
 
+// GetAllDirectGrants returns every MkAuth-direct grant in the system. When
+// includeExpired is false the result is filtered to active grants only
+// (expires_at NULL or in the future). Ordered by user/project/role for
+// deterministic pairing during reconciliation.
+func GetAllDirectGrants(ctx context.Context, includeExpired bool) ([]models.DirectGrant, error) {
+	query := `
+		SELECT id, user_id, zitadel_project_id, zitadel_role_key, granted_by, COALESCE(reason, ''), expires_at, created_at, updated_at
+		FROM direct_role_grants`
+	if !includeExpired {
+		query += ` WHERE (expires_at IS NULL OR expires_at > NOW())`
+	}
+	query += ` ORDER BY user_id, zitadel_project_id, zitadel_role_key`
+
+	rows, err := PG.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var grants []models.DirectGrant
+	for rows.Next() {
+		var grant models.DirectGrant
+		if err := rows.Scan(&grant.ID, &grant.UserID, &grant.ProjectID, &grant.RoleKey, &grant.GrantedBy, &grant.Reason, &grant.ExpiresAt, &grant.CreatedAt, &grant.UpdatedAt); err != nil {
+			return nil, err
+		}
+		grants = append(grants, grant)
+	}
+	// Surface mid-stream iteration errors so reconciliation never compares
+	// against a silently-truncated MkAuth inventory.
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return grants, nil
+}
+
 func GetExpiringDirectGrants(ctx context.Context, within time.Duration) ([]models.DirectGrant, error) {
 	query := `
 		SELECT id, user_id, zitadel_project_id, zitadel_role_key, granted_by, COALESCE(reason, ''), expires_at, created_at, updated_at

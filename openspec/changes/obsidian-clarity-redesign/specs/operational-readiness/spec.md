@@ -197,3 +197,87 @@ The `/policies` page's CreateRuleForm MUST render inside a `<Modal/>` (focus-tra
 - **WHEN** the validation result returns `would_cycle: true` or `self_reference: true`
 - **THEN** the "Create rule" submit button MUST be disabled
 - **AND** a warning MUST render in the live preview panel inside the modal
+
+### Requirement: Bundle and role authoring MUST happen inside a Modal
+
+Bundle creation, the add-roles-to-bundle picker, and role creation MUST each render inside `<Modal/>` (focus trap, Esc, click-outside, glass-card body) rather than as inline page forms. The bundles toolbar MUST expose `+ Create role` and `+ Create bundle` buttons that open `<CreateRoleModal/>` and `<CreateBundleModal/>` respectively. A bundle row's "Manage roles" action MUST open `<AddRolesToBundlePicker/>` for the selected bundle. Sonner MUST surface every mutation outcome.
+
+#### Scenario: Create bundle is gated by Modal
+- **WHEN** an admin clicks "+ Create bundle" on `/bundles`
+- **THEN** a `<Modal/>` MUST open with the title "Create a role bundle"
+- **AND** the form MUST POST `/api/v1/bundles` with `{name, description}`
+- **AND** the modal MUST close and a Sonner success toast MUST surface on 201 Created
+
+#### Scenario: Add roles to bundle is gated by Modal
+- **WHEN** an admin clicks "Manage roles" on an expanded bundle
+- **THEN** an `<AddRolesToBundlePicker/>` Modal MUST open scoped to that bundle
+- **AND** the picker MUST list every role from `GET /api/v1/roles` grouped by project
+- **AND** roles already in the bundle MUST be disabled with "Already in bundle" copy
+- **AND** the picker MUST support multi-select; Confirm MUST issue a sequential `POST /api/v1/bundles/{id}/roles` for each selection
+- **AND** any failure MUST stop the loop and keep the un-added selections in the picker for retry
+
+#### Scenario: Create role is gated by Modal
+- **WHEN** an admin clicks "+ Create role" on `/bundles`
+- **THEN** a `<Modal/>` MUST open with the title "Create a project role"
+- **AND** the role_key field MUST auto-derive from the display name (lowercase, `[a-z0-9_-]`) until the operator manually edits it
+- **AND** a "Clone from" select MUST list existing roles in the selected project so the new role can inherit display name and description
+- **AND** a 409 CONFLICT response MUST surface inline (field-level error on role_key) without closing the modal or invoking the success path
+
+### Requirement: Operations page MUST surface live operator queues
+
+The new `/operations` route MUST render three tabbed queues — Intents, Webhook events, Onboarding triggers — each backed by its own polling hook (`useIntents`, `useWebhookEvents`, `useOnboardingTriggers`) refreshing every 5 seconds and pausing while the tab is hidden. Every row MUST carry a status `<Pulse/>` whose variant follows the agreed mapping (success/warn/error/info), surface the target identity via `<UserName/>` and `<ProjectName/>` where applicable, show the relative age, truncate the last error message with full text on hover, and expose a "Payload" button that opens the raw record inside a `<Modal/>` with `<JsonView/>`.
+
+#### Scenario: Tabs render live data
+- **WHEN** an admin opens `/operations`
+- **THEN** three role-tab buttons MUST render with the labels Intents / Webhook events / Onboarding triggers
+- **AND** the Intents tab MUST be the default selection
+- **AND** the rows MUST poll on a 5-second cadence via React Query
+
+#### Scenario: Status filter pills (intents only)
+- **WHEN** the Intents tab is active
+- **THEN** an "All / pending / in_flight / succeeded / failed" pill row MUST render
+- **AND** selecting a pill MUST refetch with `?status=` so the filter is server-honored
+- **AND** webhook and onboarding tabs MUST NOT show the pill row (their backends do not support `?status=` filtering uniformly)
+
+#### Scenario: Payload modal
+- **WHEN** an admin clicks "Payload" on any row
+- **THEN** a `<Modal/>` MUST open with the row's full record rendered via `<JsonView/>`
+- **AND** the modal MUST follow the focus-trap, Esc, and click-outside contract from `<Modal/>`
+
+#### Scenario: No raw UUID escapes operator rows
+- **WHEN** any row with a user_id or project_id renders
+- **THEN** the visible label MUST resolve through `<UserName/>` and `<ProjectName/>` once the lookup batch settles
+- **AND** the raw UUID MUST appear only via the "Payload" `<JsonView/>` drill-in or a `?debug=ids` flag
+
+### Requirement: Grants page MUST present cross-source ledger and reconciliation diff
+
+The new `/grants` route MUST render two tabs: **All grants** (a unioned ledger sourced from `GET /api/v1/zitadel/grants` and `GET /api/v1/reconciliation/grants`) and **Reconciliation** (a drift snapshot). All rows on both tabs MUST resolve user/project/role names via the Name components — never raw UUIDs. The page is read-only; no remediation, sync, or apply actions MAY appear on either tab per the obsidian-clarity-redesign visibility-only mandate.
+
+#### Scenario: All grants source pills
+- **WHEN** the All grants tab renders
+- **THEN** every row MUST carry a Source pill ("MkAuth + Zitadel", "Zitadel only", "Derived from rule", or "MkAuth only (sync gap)")
+- **AND** "Derived from rule" MUST be assigned when a mapping rule's target equals the row's `(project_id, role_key)` and the same pair is absent from MkAuth direct grants
+- **AND** "MkAuth only (sync gap)" MUST be assigned when the (user, project, role) is present in the MkAuth `direct_role_grants` table but absent from the Zitadel-side grant
+
+#### Scenario: All grants filter rail
+- **WHEN** the All grants tab renders
+- **THEN** a sticky filter rail MUST surface user-text, source pills, and project pills
+- **AND** activating a filter MUST narrow the visible row set client-side without refetching
+- **AND** a "Clear filters" affordance MUST appear when any filter is active
+
+#### Scenario: Reconciliation drift summary
+- **WHEN** the Reconciliation tab renders
+- **THEN** three count cards MUST display Role mismatch, Only in MkAuth, and Only in Zitadel
+- **AND** clicking a card MUST scope the table below to that drift category
+- **AND** a green "in sync" message MUST replace the lists when all three counts are zero
+
+#### Scenario: Reconciliation drawer drill-in
+- **WHEN** an admin clicks a drift row
+- **THEN** a `<Drawer size="lg"/>` MUST slide in from the right
+- **AND** for role-mismatch entries the Drawer MUST render the MkAuth-side and Zitadel-side records side-by-side via `<JsonView/>`
+- **AND** the Drawer MUST follow the same focus-trap, Esc, and click-outside semantics as `<Modal/>`
+
+#### Scenario: No remediation actions present
+- **WHEN** either tab renders
+- **THEN** the surface MUST NOT contain "Apply", "Sync", or any other remediation button
+- **AND** auto-correction is explicitly deferred to a later change (Phase 5/6 reconciliation engine)

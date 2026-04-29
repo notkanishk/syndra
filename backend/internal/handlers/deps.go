@@ -51,6 +51,11 @@ var (
 	svcCreateRole        = services.CreateRole
 	svcGlobalRoleCatalog = services.GlobalRoleCatalog
 
+	// Reconciliation injectable vars — let tests exercise drift computation
+	// without a database or live Zitadel connection. The Zitadel side reuses
+	// zitadelListAllGrants below so a mocked MgmtClient flows through here too.
+	svcAllDirectGrants = services.AllDirectGrants
+
 	// Provisioning intent injectable vars.
 	webhookEmitProvisioningIntent = services.EmitProvisioningIntent
 	dbGetProvisioningIntents      = db.GetProvisioningIntents
