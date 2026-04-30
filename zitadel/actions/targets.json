@@ -1,31 +1,37 @@
 {
-  "_comment": "Declarative config applied by register.sh. Layout matches the stable Zitadel v2 Target proto (proto/zitadel/action/v2/target.proto): name/endpoint/timeout/payloadType live at the top level of the target; interruptOnError is inside the target-type submessage. restCall (NOT restWebhook) is required for claim injection — webhook targets only consume the status code and would make this a no-op, since MkAuth returns the claim envelope in the response body.",
-  "target": {
-    "name": "mkauth-claim-injector",
-    "endpoint": "${MKAUTH_EXTERNAL_URL}/api/action/inject",
-    "timeout": "3s",
-    "payloadType": "PAYLOAD_TYPE_JSON",
-    "restCall": {
-      "interruptOnError": false,
-      "_note": "interruptOnError:false keeps token issuance unblocked if MkAuth is unreachable. MkAuth handles per-project fail_closed / minimal_safe inside the response (the handler always returns 200 with the correct envelope), so this target-level setting is purely a transport-layer safety net for MkAuth outages."
-    }
-  },
-  "executions": [
+  "_comment": "Multi-target manifest applied by register.sh. Each target is registered by name (idempotent upsert via /v2/actions/targets/search). Each execution binds by referencing the target's name (resolved to ID at registration time). Layouts match proto/zitadel/action/v2/{target,execution,query}.proto.",
+  "targets": [
     {
-      "condition": {
-        "function": {
-          "name": "preaccesstoken"
-        }
+      "name": "mkauth-claim-injector",
+      "endpoint": "${MKAUTH_EXTERNAL_URL}/api/action/inject",
+      "timeout": "3s",
+      "payloadType": "PAYLOAD_TYPE_JSON",
+      "restCall": {
+        "interruptOnError": false,
+        "_note": "interruptOnError:false keeps token issuance unblocked if MkAuth is unreachable. Per-project fail_closed/minimal_safe is decided server-side."
       },
-      "_note": "Inject custom claims into access tokens (JWT)."
+      "_signing_key_env": "ZITADEL_ACTION_SIGNING_KEY"
     },
     {
-      "condition": {
-        "function": {
-          "name": "preuserinfo"
-        }
+      "name": "mkauth-event-listener",
+      "endpoint": "${MKAUTH_EXTERNAL_URL}/api/webhooks/zitadel",
+      "timeout": "5s",
+      "payloadType": "PAYLOAD_TYPE_JSON",
+      "restAsync": {
+        "_note": "Fire-and-forget. Zitadel does not parse the response body; failures retry per Zitadel's at-least-once delivery semantics. MkAuth's idempotency-key dedup catches replays."
       },
-      "_note": "Inject the same custom claims into ID tokens / userinfo responses so OIDC clients see them consistently."
+      "_signing_key_env": "ZITADEL_EVENT_SIGNING_KEY"
     }
+  ],
+  "executions": [
+    { "target": "mkauth-claim-injector", "condition": { "function": { "name": "preaccesstoken" } } },
+    { "target": "mkauth-claim-injector", "condition": { "function": { "name": "preuserinfo" } } },
+    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.human.added" } } },
+    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.human.selfregistered" } } },
+    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.human.deactivated" } } },
+    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.human.locked" } } },
+    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.grant.added" } } },
+    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.grant.changed" } } },
+    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.grant.removed" } } }
   ]
 }

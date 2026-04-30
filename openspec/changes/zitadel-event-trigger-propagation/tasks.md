@@ -23,16 +23,16 @@
 - [x] 3.2 Drop events at translator when `editorUserId` matches; log + 200
 
 ## 4. Deployment: multi-target manifest
-- [ ] 4.1 Reshape `targets.json` to `targets[]` + `executions[]` with named `target` reference
-- [ ] 4.2 Add `mkauth-event-listener` target (`restAsync`, 5s timeout)
-- [ ] 4.3 Add 6 `condition.event` executions for the lifecycle event names
+- [x] 4.1 Reshape `targets.json` to `targets[]` + `executions[]` with named `target` reference
+- [x] 4.2 Add `mkauth-event-listener` target (`restAsync`, 5s timeout)
+- [x] 4.3 Add 6 `condition.event` executions for the lifecycle event names
 
 ## 5. Deployment: register.sh + rotate.sh
-- [ ] 5.1 Iterate `targets[]` in `register.sh`; per-target signing-key capture
-- [ ] 5.2 Map `executions[].target` (name) → captured target IDs; bind in one pass
-- [ ] 5.3 Update `--remove` to unbind every execution and warn about per-target retention
-- [ ] 5.4 Update `rotate.sh` to accept a `--target NAME` flag (default both)
-- [ ] 5.5 Update `.action-env.fragment` writer to emit both env-var lines
+- [x] 5.1 Iterate `targets[]` in `register.sh`; per-target signing-key capture
+- [x] 5.2 Map `executions[].target` (name) → captured target IDs; bind in one pass
+- [x] 5.3 Update `--remove` to unbind every execution and warn about per-target retention
+- [x] 5.4 Update `rotate.sh` to accept a `--target NAME` flag (default both)
+- [x] 5.5 Update `.action-env.fragment` writer to emit both env-var lines
 
 ## 6. Ops + docs
 - [ ] 6.1 Add `zitadel/actions/EVENTS.md` (operator runbook)

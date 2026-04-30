@@ -1,4 +1,5 @@
 .action-signing-key
+.action-signing-key.*
 .action-signing-key.previous
-.action-signing-key.rotated_at
+.action-signing-key.previous.*
 .action-env.fragment

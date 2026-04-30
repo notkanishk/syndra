@@ -37,10 +37,21 @@
 
 set -euo pipefail
 
+if (( BASH_VERSINFO[0] < 4 )); then
+  echo "error: rotate.sh requires bash 4+ (associative arrays)" >&2
+  echo "  macOS default is bash 3; install via 'brew install bash' and rerun." >&2
+  exit 1
+fi
+
+# Optional --target NAME filter. Default: rotate every target in the manifest.
+TARGET_FILTER=""
+case "${1:-}" in
+  --target) TARGET_FILTER="${2:?--target requires a name argument}"; shift 2 ;;
+esac
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST="${SCRIPT_DIR}/targets.json"
-SIGNING_KEY_FILE="${SCRIPT_DIR}/.action-signing-key"
-PREVIOUS_KEY_FILE="${SCRIPT_DIR}/.action-signing-key.previous"
+FRAGMENT_FILE="${SCRIPT_DIR}/.action-env.fragment"
 
 # ---- Auto-load .env from the repo root (if present) ----
 # Explicit environment wins: an already-set VAR is never overwritten by
@@ -151,82 +162,126 @@ zitadel_api() {
   cat "$tmp"
 }
 
-# ---- Extract target name from manifest (strip _comment/_note annotations) ----
-TARGET_NAME="$(jq -r '
+# rotate_target NAME ENV_VAR_NAME
+# Wire flow per target:
+#   POST /v2/actions/targets/search    body: {filters:[{target_name_filter:{...}}], pagination}
+#   POST /v2/actions/targets/{id}      body: {"expirationSigningKey":"0s"}
+# Files written (all mode 0600, per-target so multi-target rotations don't
+# collide):
+#   .action-signing-key.<name>             new signing key
+#   .action-signing-key.<name>.previous    backup of prior key (when present)
+#   .action-signing-key.<name>.rotated_at  RFC3339 UTC timestamp
+# Appends two lines to FRAGMENT_FILE:
+#   <ENV_VAR>=<key>
+#   <ENV_VAR>_ROTATED_AT=<timestamp>
+# When ENV_VAR_NAME is empty the fragment lines are skipped (manifest target
+# has no _signing_key_env hint — backend isn't expected to consume the key).
+rotate_target() {
+  local name="$1" env_var="$2"
+  local key_file="${SCRIPT_DIR}/.action-signing-key.${name}"
+  local prev_file="${SCRIPT_DIR}/.action-signing-key.${name}.previous"
+  local rotated_at_file="${SCRIPT_DIR}/.action-signing-key.${name}.rotated_at"
+
+  echo "Searching for target name=${name}..." >&2
+  local search_body list_resp target_id
+  search_body="$(jq -n --arg n "$name" '{
+    filters: [{ target_name_filter: { target_name: $n, method: "TEXT_FILTER_METHOD_EQUALS" } }],
+    pagination: { limit: 1 }
+  }')"
+  list_resp="$(zitadel_api POST /targets/search "$search_body")" || exit 5
+  target_id="$(echo "$list_resp" | jq -r '.targets[0].id // .result[0].id // empty')"
+
+  if [[ -z "$target_id" || "$target_id" == "null" ]]; then
+    echo "error: no target named '${name}' found — nothing to rotate" >&2
+    echo "       run 'make zitadel-actions-register' first" >&2
+    exit 5
+  fi
+
+  # Per proto UpdateTargetRequest.expiration_signing_key: current Zitadel only
+  # accepts "0s" (immediate hard swap). Longer graceful periods are a roadmap
+  # item; revisit if/when Zitadel supports them.
+  echo "Rotating signing key on target_id=${target_id} name=${name}..." >&2
+  local rotate_resp new_key
+  rotate_resp="$(zitadel_api POST "/targets/${target_id}" '{"expirationSigningKey":"0s"}')" || exit 6
+  new_key="$(echo "$rotate_resp" | jq -r '.signingKey // empty')"
+  if [[ -z "$new_key" ]]; then
+    echo "error: UpdateTarget did not return a signingKey for ${name}. Response was:" >&2
+    echo "$rotate_resp" >&2
+    exit 6
+  fi
+
+  umask 077
+  if [[ -s "$key_file" ]]; then
+    cp "$key_file" "$prev_file"
+    echo "Previous key for ${name} backed up to ${prev_file}" >&2
+  else
+    echo "warning: no prior ${key_file} on disk — skipping backup" >&2
+  fi
+  printf '%s\n' "$new_key" > "$key_file"
+  echo "New signing key for ${name} written to ${key_file} (mode 0600)." >&2
+
+  local rotated_at
+  rotated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf '%s\n' "$rotated_at" > "$rotated_at_file"
+
+  if [[ -n "$env_var" ]]; then
+    {
+      printf '%s=%s\n' "$env_var" "$new_key"
+      printf '%s=%s\n' "${env_var}_ROTATED_AT" "$rotated_at"
+    } >> "$FRAGMENT_FILE"
+    echo "  → appended ${env_var} to ${FRAGMENT_FILE}" >&2
+  fi
+
+  echo "Rotated ${name}: target_id=${target_id} rotated_at=${rotated_at}" >&2
+}
+
+# ---- Render manifest (strip _comment/_note annotations, preserve _signing_key_env) ----
+RENDERED_MANIFEST="$(jq --arg url "${MKAUTH_EXTERNAL_URL:-}" '
   walk(
-    if type == "object"
-    then with_entries(select(.key | startswith("_") | not))
+    if type == "string" and test("\\$\\{MKAUTH_EXTERNAL_URL\\}")
+    then sub("\\$\\{MKAUTH_EXTERNAL_URL\\}"; $url)
     else . end
   )
-  | .target.name
+  | walk(
+      if type == "object"
+      then with_entries(select(
+        (.key | startswith("_") | not) or .key == "_signing_key_env"
+      ))
+      else . end
+    )
 ' "$MANIFEST")"
 
-if [[ -z "$TARGET_NAME" || "$TARGET_NAME" == "null" ]]; then
-  echo "error: could not read .target.name from ${MANIFEST}" >&2
-  exit 4
-fi
-
-# ---- Look up target ID by name ----
-# TargetNameFilter fields per proto/zitadel/action/v2/query.proto: target_name + method.
-echo "Searching for target name=${TARGET_NAME}..." >&2
-SEARCH_BODY="$(jq -n --arg n "$TARGET_NAME" '{
-  filters: [{ target_name_filter: { target_name: $n, method: "TEXT_FILTER_METHOD_EQUALS" } }],
-  pagination: { limit: 1 }
-}')"
-LIST_RESP="$(zitadel_api POST /targets/search "$SEARCH_BODY")" || exit 5
-TARGET_ID="$(echo "$LIST_RESP" | jq -r '.targets[0].id // .result[0].id // empty')"
-
-if [[ -z "$TARGET_ID" || "$TARGET_ID" == "null" ]]; then
-  echo "error: no target named '${TARGET_NAME}' found — nothing to rotate" >&2
-  echo "       run 'make zitadel-actions-register' first" >&2
-  exit 5
-fi
-
-# ---- Rotate: POST /v2/actions/targets/{id} with expirationSigningKey:0s ----
-# Per proto UpdateTargetRequest.expiration_signing_key: current Zitadel only
-# accepts "0s" (immediate hard swap). Longer graceful periods are a roadmap
-# item; revisit this script if/when Zitadel supports them.
-echo "Rotating signing key on target_id=${TARGET_ID}..." >&2
-ROTATE_RESP="$(zitadel_api POST "/targets/${TARGET_ID}" '{"expirationSigningKey":"0s"}')" || exit 6
-
-NEW_KEY="$(echo "$ROTATE_RESP" | jq -r '.signingKey // empty')"
-if [[ -z "$NEW_KEY" ]]; then
-  echo "error: UpdateTarget did not return a signingKey. Response was:" >&2
-  echo "$ROTATE_RESP" >&2
-  exit 6
-fi
-
-# ---- Back up previous key and write the new one (both mode 0600) ----
+# Reset the fragment file at the start of each rotation run so it only carries
+# the freshly-rotated keys. Operator-guidance below points at this single file.
 umask 077
-if [[ -s "$SIGNING_KEY_FILE" ]]; then
-  cp "$SIGNING_KEY_FILE" "$PREVIOUS_KEY_FILE"
-  echo "Previous key backed up to ${PREVIOUS_KEY_FILE}" >&2
+: > "$FRAGMENT_FILE"
+
+# ---- Dispatch: multi-target manifest (.targets[]) or legacy single-target (.target) ----
+if echo "$RENDERED_MANIFEST" | jq -e '.targets' >/dev/null; then
+  COUNT="$(echo "$RENDERED_MANIFEST" | jq '.targets | length')"
+  ANY_MATCHED=0
+  for ((i = 0; i < COUNT; i++)); do
+    T="$(echo "$RENDERED_MANIFEST" | jq -c ".targets[$i]")"
+    NAME="$(echo "$T" | jq -r '.name')"
+    if [[ -n "$TARGET_FILTER" && "$NAME" != "$TARGET_FILTER" ]]; then continue; fi
+    ENV_VAR="$(echo "$T" | jq -r '._signing_key_env // empty')"
+    rotate_target "$NAME" "$ENV_VAR"
+    ANY_MATCHED=1
+  done
+  if [[ -n "$TARGET_FILTER" && "$ANY_MATCHED" -eq 0 ]]; then
+    echo "error: --target ${TARGET_FILTER} did not match any target in ${MANIFEST}" >&2
+    exit 7
+  fi
 else
-  echo "warning: no prior ${SIGNING_KEY_FILE} on disk — skipping backup" >&2
+  NAME="$(echo "$RENDERED_MANIFEST" | jq -r '.target.name')"
+  if [[ -z "$NAME" || "$NAME" == "null" ]]; then
+    echo "error: could not read .target.name from ${MANIFEST}" >&2
+    exit 4
+  fi
+  rotate_target "$NAME" "ZITADEL_ACTION_SIGNING_KEY"
 fi
-printf '%s\n' "$NEW_KEY" > "$SIGNING_KEY_FILE"
-echo "New signing key written to ${SIGNING_KEY_FILE} (mode 0600)." >&2
 
-# ---- Capture rotation timestamp (RFC3339 UTC) for the Rotation Status panel ----
-# GNU and BSD date both accept -u for UTC; the ISO-8601 format is portable.
-ROTATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-ROTATED_AT_FILE="${SCRIPT_DIR}/.action-signing-key.rotated_at"
-printf '%s\n' "$ROTATED_AT" > "$ROTATED_AT_FILE"
-
-# ---- Emit a ready-to-append env fragment ----
-# Write both lines to a 0600 fragment file rather than asking the operator to
-# copy-paste from the terminal. This removes every brittle path in the paste
-# flow: shell substitution ambiguity, terminal line-wrap on long keys, stderr
-# interleaving with other output, and the outside chance that a reader copies
-# from the script source instead of its output. The operator runs a single
-# `cat >> .env` (or equivalent) to apply the values atomically.
-FRAGMENT_FILE="${SCRIPT_DIR}/.action-env.fragment"
-{
-  printf 'ZITADEL_ACTION_SIGNING_KEY=%s\n' "$NEW_KEY"
-  printf 'ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT=%s\n' "$ROTATED_AT"
-} > "$FRAGMENT_FILE"
-
-# ---- Operator guidance ----
+# ---- Operator guidance (single-shot, regardless of target count) ----
 cat >&2 <<EOF
 
 Rotation complete. Apply the new values to your backend env:
@@ -248,12 +303,12 @@ Zitadel falls back to stock claims. Because restCall.interruptOnError is
 false, user token issuance is NOT blocked during this window — custom
 claims simply disappear for the gap. Keep the restart under a minute.
 
-The old key in .action-signing-key.previous is retained for audit/rollback.
-The rotation timestamp is mirrored to .action-signing-key.rotated_at for
-local audit; MkAuth itself reads ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT from
-env at runtime, not this file.
+Per-target backups in .action-signing-key.<name>.previous are retained for
+audit/rollback. Rotation timestamps are mirrored to
+.action-signing-key.<name>.rotated_at for local audit; MkAuth itself reads
+the *_ROTATED_AT env vars at runtime, not these files.
 
 Delete ${FRAGMENT_FILE} once the values are applied.
 EOF
 
-echo "Done. target_id=${TARGET_ID} rotated_at=${ROTATED_AT}" >&2
+echo "Done." >&2

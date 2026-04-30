@@ -34,14 +34,22 @@ zitadel-actions-register:
 zitadel-actions-remove:
 	@zitadel/actions/register.sh --remove
 
-# Rotate the Actions v2 target signing key via POST /v2/actions/targets/{id}
-# with expirationSigningKey:0s. Backs up the previous key to
-# zitadel/actions/.action-signing-key.previous; writes the new key to
-# .action-signing-key; prints the operator env-swap + restart steps. Zitadel
-# does not auto-expire signing keys — run on demand (incident response,
-# compliance policy, operator handoff), not on a schedule.
+# Rotate the Actions v2 target signing key(s) via POST /v2/actions/targets/{id}
+# with expirationSigningKey:0s. Backs up the previous key per-target to
+# zitadel/actions/.action-signing-key.<name>.previous; writes the new key to
+# .action-signing-key.<name>; prints the operator env-swap + restart steps.
+# Zitadel does not auto-expire signing keys — run on demand (incident
+# response, compliance policy, operator handoff), not on a schedule.
+#
+# Usage:
+#   make zitadel-actions-rotate-key                          # rotate every target
+#   make zitadel-actions-rotate-key TARGET=mkauth-claim-injector  # rotate one
 zitadel-actions-rotate-key:
+ifdef TARGET
+	@zitadel/actions/rotate.sh --target "$(TARGET)"
+else
 	@zitadel/actions/rotate.sh
+endif
 
 # Smoke-tests the /api/action/inject endpoint on a running backend. Pass
 # BACKEND_URL=... to target a remote host; defaults to http://localhost:8080.

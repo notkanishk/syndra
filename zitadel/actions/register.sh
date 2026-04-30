@@ -37,9 +37,14 @@
 
 set -euo pipefail
 
+if (( BASH_VERSINFO[0] < 4 )); then
+  echo "error: register.sh requires bash 4+ (associative arrays)" >&2
+  echo "  macOS default is bash 3; install via 'brew install bash' and rerun." >&2
+  exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST="${SCRIPT_DIR}/targets.json"
-SIGNING_KEY_FILE="${SCRIPT_DIR}/.action-signing-key"
 
 # ---- Auto-load .env from the repo root (if present) ----
 # Explicit environment wins: an already-set VAR is never overwritten by
@@ -163,78 +168,110 @@ RENDERED_MANIFEST="$(jq --arg url "$MKAUTH_EXTERNAL_URL" '
   )
   | walk(
       if type == "object"
-      then with_entries(select(.key | startswith("_") | not))
+      then with_entries(select(
+        (.key | startswith("_") | not) or .key == "_signing_key_env"
+      ))
       else . end
     )
 ' "$MANIFEST")"
 
-TARGET_NAME="$(echo "$RENDERED_MANIFEST" | jq -r '.target.name')"
+# Map: target name -> registered/looked-up target ID. Populated as we walk
+# .targets[]; consumed when binding executions.
+declare -A TARGET_IDS
 
-# ---- Lookup existing target by name (idempotent upsert) ----
-# TargetNameFilter in proto/zitadel/action/v2/query.proto has fields
-# `target_name` and `method` (referencing zitadel.filter.v2.TextFilterMethod).
-# Sending `name` here would silently match nothing and re-running the script
-# would fall into the create path, producing duplicate targets instead of
-# idempotent updates.
-echo "Searching for target name=${TARGET_NAME}..." >&2
-SEARCH_BODY="$(jq -n --arg n "$TARGET_NAME" '{
-  filters: [{ target_name_filter: { target_name: $n, method: "TEXT_FILTER_METHOD_EQUALS" } }],
-  pagination: { limit: 1 }
-}')"
-LIST_RESP="$(zitadel_api POST /targets/search "$SEARCH_BODY")" || exit 5
-EXISTING_ID="$(echo "$LIST_RESP" | jq -r '.targets[0].id // .result[0].id // empty' 2>/dev/null || true)"
+# Process each target in the manifest.
+TARGET_COUNT="$(echo "$RENDERED_MANIFEST" | jq '.targets | length')"
+for ((i = 0; i < TARGET_COUNT; i++)); do
+  T="$(echo "$RENDERED_MANIFEST" | jq -c ".targets[$i]")"
+  TARGET_NAME="$(echo "$T" | jq -r '.name')"
+  SIGNING_KEY_ENV="$(echo "$T" | jq -r '._signing_key_env // empty')"
+  TARGET_BODY="$(echo "$T" | jq 'del(._signing_key_env)')"
+  SIGNING_KEY_FILE="${SCRIPT_DIR}/.action-signing-key.${TARGET_NAME}"
 
-# ---- --remove path: unbind executions, retain target + signing key ----
-if [[ "${1:-}" == "--remove" ]]; then
-  echo "Unbinding executions for target=${TARGET_NAME}..." >&2
-  echo "$RENDERED_MANIFEST" | jq -c '.executions[].condition' | while read -r cond; do
-    UNBIND_BODY="$(jq -n --argjson c "$cond" '{ condition: $c, targets: [] }')"
-    zitadel_api PUT /executions "$UNBIND_BODY" >/dev/null || exit 6
-  done
-  echo "Executions unbound. Target retained (run 'DELETE ${API_BASE}/targets/${EXISTING_ID:-<id>}' or use the Zitadel console to fully remove)." >&2
-  exit 0
-fi
-
-TARGET_BODY="$(echo "$RENDERED_MANIFEST" | jq '.target')"
-
-if [[ -n "$EXISTING_ID" ]]; then
-  echo "Updating target id=${EXISTING_ID}..." >&2
-  zitadel_api POST "/targets/${EXISTING_ID}" "$TARGET_BODY" >/dev/null || exit 7
-  TARGET_ID="$EXISTING_ID"
-  if [[ ! -s "$SIGNING_KEY_FILE" ]]; then
-    echo "warning: target exists but ${SIGNING_KEY_FILE} is missing." >&2
-    echo "         The signing key is only returned at target-creation time." >&2
-    echo "         To rotate: send POST ${API_BASE}/targets/${TARGET_ID} with {\"expirationSigningKey\":\"0s\"}," >&2
-    echo "         capture the new signingKey from the response, and update ZITADEL_ACTION_SIGNING_KEY." >&2
-  fi
-else
-  echo "Creating target name=${TARGET_NAME}..." >&2
-  CREATE_RESP="$(zitadel_api POST /targets "$TARGET_BODY")" || exit 8
-  TARGET_ID="$(echo "$CREATE_RESP" | jq -r '.id')"
-  SIGNING_KEY="$(echo "$CREATE_RESP" | jq -r '.signingKey // empty')"
-  if [[ -z "$TARGET_ID" || "$TARGET_ID" == "null" ]]; then
-    echo "error: CreateTarget did not return an id. Response was:" >&2
-    echo "$CREATE_RESP" >&2
-    exit 3
-  fi
-  if [[ -z "$SIGNING_KEY" ]]; then
-    echo "error: target created but no signingKey in response — aborting." >&2
-    echo "$CREATE_RESP" >&2
-    exit 4
-  fi
-  umask 077
-  printf '%s\n' "$SIGNING_KEY" > "$SIGNING_KEY_FILE"
-  echo "Signing key written to ${SIGNING_KEY_FILE} (mode 0600)." >&2
-  echo "Inject it into the backend env as ZITADEL_ACTION_SIGNING_KEY before the next deploy." >&2
-fi
-
-echo "Binding executions to target id=${TARGET_ID}..." >&2
-echo "$RENDERED_MANIFEST" | jq -c '.executions[]' | while read -r exec_entry; do
-  BIND_BODY="$(echo "$exec_entry" | jq --arg tid "$TARGET_ID" '{
-    condition: .condition,
-    targets: [ $tid ]
+  echo "Searching for target name=${TARGET_NAME}..." >&2
+  SEARCH_BODY="$(jq -n --arg n "$TARGET_NAME" '{
+    filters: [{ target_name_filter: { target_name: $n, method: "TEXT_FILTER_METHOD_EQUALS" } }],
+    pagination: { limit: 1 }
   }')"
-  zitadel_api PUT /executions "$BIND_BODY" >/dev/null || exit 9
+  LIST_RESP="$(zitadel_api POST /targets/search "$SEARCH_BODY")" || exit 5
+  EXISTING_ID="$(echo "$LIST_RESP" | jq -r '.targets[0].id // .result[0].id // empty' 2>/dev/null || true)"
+
+  if [[ "${1:-}" == "--remove" ]]; then
+    # Remove path: just record IDs so the unbind loop below can reach them.
+    [[ -n "$EXISTING_ID" ]] && TARGET_IDS[$TARGET_NAME]="$EXISTING_ID"
+    continue
+  fi
+
+  if [[ -n "$EXISTING_ID" ]]; then
+    echo "Updating target id=${EXISTING_ID} name=${TARGET_NAME}..." >&2
+    zitadel_api POST "/targets/${EXISTING_ID}" "$TARGET_BODY" >/dev/null || exit 7
+    TARGET_IDS[$TARGET_NAME]="$EXISTING_ID"
+    if [[ ! -s "$SIGNING_KEY_FILE" ]]; then
+      echo "warning: target ${TARGET_NAME} exists but ${SIGNING_KEY_FILE} is missing." >&2
+      echo "         The signing key is only returned at target-creation time." >&2
+      echo "         Rotate via: make zitadel-actions-rotate-key TARGET=${TARGET_NAME}" >&2
+    fi
+  else
+    echo "Creating target name=${TARGET_NAME}..." >&2
+    CREATE_RESP="$(zitadel_api POST /targets "$TARGET_BODY")" || exit 8
+    TARGET_ID="$(echo "$CREATE_RESP" | jq -r '.id')"
+    SIGNING_KEY="$(echo "$CREATE_RESP" | jq -r '.signingKey // empty')"
+    if [[ -z "$TARGET_ID" || "$TARGET_ID" == "null" ]]; then
+      echo "error: CreateTarget did not return an id for ${TARGET_NAME}. Response was:" >&2
+      echo "$CREATE_RESP" >&2
+      exit 3
+    fi
+    if [[ -z "$SIGNING_KEY" ]]; then
+      echo "error: target ${TARGET_NAME} created but no signingKey in response — aborting." >&2
+      echo "$CREATE_RESP" >&2
+      exit 4
+    fi
+    umask 077
+    printf '%s\n' "$SIGNING_KEY" > "$SIGNING_KEY_FILE"
+    echo "Signing key for ${TARGET_NAME} written to ${SIGNING_KEY_FILE} (mode 0600)." >&2
+    TARGET_IDS[$TARGET_NAME]="$TARGET_ID"
+
+    # Append to env-fragment file so operators can apply both keys with one
+    # `cat .action-env.fragment >> .env`.
+    FRAGMENT_FILE="${SCRIPT_DIR}/.action-env.fragment"
+    if [[ -n "$SIGNING_KEY_ENV" ]]; then
+      umask 077
+      printf '%s=%s\n' "$SIGNING_KEY_ENV" "$SIGNING_KEY" >> "$FRAGMENT_FILE"
+      printf '%s=%s\n' "${SIGNING_KEY_ENV}_ROTATED_AT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$FRAGMENT_FILE"
+      echo "  → appended ${SIGNING_KEY_ENV} to ${FRAGMENT_FILE}" >&2
+    fi
+  fi
 done
 
-echo "Done. target_id=${TARGET_ID}." >&2
+# --- Bind executions to the right target IDs ---
+echo "Binding executions..." >&2
+EXEC_COUNT="$(echo "$RENDERED_MANIFEST" | jq '.executions | length')"
+for ((i = 0; i < EXEC_COUNT; i++)); do
+  EXEC="$(echo "$RENDERED_MANIFEST" | jq -c ".executions[$i]")"
+  TARGET_NAME="$(echo "$EXEC" | jq -r '.target')"
+  COND="$(echo "$EXEC" | jq -c '.condition')"
+
+  if [[ "${1:-}" == "--remove" ]]; then
+    # Unbind by condition alone — Zitadel's PUT /executions with targets:[]
+    # doesn't need the target ID. Tolerate a partially-deleted (or
+    # never-created) target so cleanup still completes.
+    BIND_BODY="$(jq -n --argjson c "$COND" '{ condition: $c, targets: [] }')"
+  else
+    TARGET_ID="${TARGET_IDS[$TARGET_NAME]:-}"
+    if [[ -z "$TARGET_ID" ]]; then
+      echo "error: execution references unknown target=${TARGET_NAME}" >&2
+      exit 9
+    fi
+    BIND_BODY="$(jq -n --argjson c "$COND" --arg tid "$TARGET_ID" '{ condition: $c, targets: [$tid] }')"
+  fi
+  zitadel_api PUT /executions "$BIND_BODY" >/dev/null || exit 10
+done
+
+echo "Done." >&2
+echo "Targets: $(echo "${!TARGET_IDS[@]}" | tr ' ' ',')" >&2
+if [[ "${1:-}" != "--remove" ]] && [[ -f "${SCRIPT_DIR}/.action-env.fragment" ]]; then
+  echo "" >&2
+  echo "Apply captured signing keys to .env with:" >&2
+  echo "  cat zitadel/actions/.action-env.fragment >> .env" >&2
+  echo "Then restart the backend so it picks up the new env vars." >&2
+fi
