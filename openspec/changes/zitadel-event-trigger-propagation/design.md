@@ -14,7 +14,7 @@ Function triggers (claim injection) need `restCall` so Zitadel parses the respon
 
 ### D2. Reuse `withZitadelActionSignature`, retire the legacy verifier
 
-`backend/internal/handlers/zitadel_action_auth.go:withZitadelActionSignature(secretEnvVar string, next http.HandlerFunc) http.HandlerFunc` already takes the env-var name as a parameter (it was designed for reuse). Mounting it on `/api/webhooks/zitadel` with a different env var is a one-line router change. The legacy `verifyWebhookSignature` (header `X-Zitadel-Signature`, hash input `ts + "\n" + body`) does not match what Zitadel actually emits and has no producer; per CLAUDE.md ("If you are certain that something is unused, you can delete it completely"), it is removed.
+`backend/internal/handlers/zitadel_action_auth.go:withZitadelActionSignature(secretEnvVar string, next http.HandlerFunc) http.HandlerFunc` already takes the env-var name as a parameter (it was designed for reuse). Mounting it on `/api/webhooks/zitadel` with a different env var is a one-line router change. The legacy `verifyWebhookSignature` (header `X-Zitadel-Signature`, hash input `ts + "\n" + body`) does not match what Zitadel actually emits and has no producer; carrying it alongside the canonical Actions v2 verifier would be dead code with no upside, so it is removed.
 
 ### D3. Translator keyed off shape, not Content-Type
 
