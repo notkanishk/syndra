@@ -8,19 +8,19 @@
 - [x] 1.5 Remove `ZITADEL_WEBHOOK_SECRET` from `.env.example` and `docker-compose.yml`
 
 ## 2. Backend: payload translator
-- [ ] 2.1 Define `ZitadelEventPayload` lenient struct in `webhook_translate.go`
-- [ ] 2.2 Map `user.human.added` → `user_created`
-- [ ] 2.3 Map `user.human.deactivated` → `user_deactivated`
-- [ ] 2.4 Map `user.human.locked` → `user_locked`
-- [ ] 2.5 Map `user.grant.added` → `grant_added` with `role_keys[]`
-- [ ] 2.6 Map `user.grant.changed` → `grant_changed` with `role_keys[]`
-- [ ] 2.7 Map `user.grant.removed` → `grant_removed` with `role_keys[]`
-- [ ] 2.8 Unknown-event passthrough (200 + log, no dispatch)
-- [ ] 2.9 Wire shape detection into `HandleZitadelWebhook`
+- [x] 2.1 Define `ZitadelEventPayload` lenient struct in `webhook_translate.go`
+- [x] 2.2 Map `user.human.added` → `user_created`
+- [x] 2.3 Map `user.human.deactivated` → `user_deactivated`
+- [x] 2.4 Map `user.human.locked` → `user_locked`
+- [x] 2.5 Map `user.grant.added` → `grant_added` with `role_keys[]`
+- [x] 2.6 Map `user.grant.changed` → `grant_changed` with `role_keys[]`
+- [x] 2.7 Map `user.grant.removed` → `grant_removed` with `role_keys[]`
+- [x] 2.8 Unknown-event passthrough (200 + log, no dispatch)
+- [x] 2.9 Wire shape detection into `HandleZitadelWebhook`
 
 ## 3. Backend: self-mutation loop guard
-- [ ] 3.1 Add `ZITADEL_M2M_USER_ID` env reader
-- [ ] 3.2 Drop events at translator when `editorUserId` matches; log + 200
+- [x] 3.1 Add `ZITADEL_M2M_USER_ID` env reader
+- [x] 3.2 Drop events at translator when `editorUserId` matches; log + 200
 
 ## 4. Deployment: multi-target manifest
 - [ ] 4.1 Reshape `targets.json` to `targets[]` + `executions[]` with named `target` reference

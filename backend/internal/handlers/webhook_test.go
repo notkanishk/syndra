@@ -529,3 +529,135 @@ func TestHandleZitadelWebhook_RoleKeysExplicitEmpty_RejectedDistinctFromOmitted(
 		})
 	}
 }
+
+func TestHandleZitadelWebhook_TranslatesZitadelShape(t *testing.T) {
+	t.Setenv("ZITADEL_M2M_USER_ID", "")
+	setupNoopWebhookDeps(t)
+
+	var seenRoles []string
+	prevEnforce := webhookEnforceMappingRules
+	t.Cleanup(func() { webhookEnforceMappingRules = prevEnforce })
+	webhookEnforceMappingRules = func(_ context.Context, _, _, role string) error {
+		seenRoles = append(seenRoles, role)
+		return nil
+	}
+
+	body := []byte(`{
+		"aggregate": {"id":"agg-1","type":"user","resourceOwner":"org-1"},
+		"event": "user.grant.added",
+		"editorUserId": "human-operator-1",
+		"payload": {"userId":"u1","projectId":"p1","roleKeys":["alpha","beta"]}
+	}`)
+	rr := postWebhook(t, body)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if !reflect.DeepEqual(seenRoles, []string{"alpha", "beta"}) {
+		t.Fatalf("expected [alpha beta], got %v", seenRoles)
+	}
+}
+
+func TestHandleZitadelWebhook_DropsSelfMutation(t *testing.T) {
+	t.Setenv("ZITADEL_M2M_USER_ID", "service-user-99")
+	setupNoopWebhookDeps(t)
+
+	called := false
+	prevEnforce := webhookEnforceMappingRules
+	t.Cleanup(func() { webhookEnforceMappingRules = prevEnforce })
+	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error {
+		called = true
+		return nil
+	}
+
+	body := []byte(`{"aggregate":{"id":"u1"},"event":"user.grant.added","editorUserId":"service-user-99","payload":{"userId":"u1","projectId":"p1","roleKeys":["x"]}}`)
+	rr := postWebhook(t, body)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 short-circuit, got %d", rr.Code)
+	}
+	if called {
+		t.Fatal("orchestrator MUST NOT be called on self-mutation event")
+	}
+}
+
+func TestHandleZitadelWebhook_LifecycleEvents_DispatchWithoutSourceProject(t *testing.T) {
+	// Native Zitadel user lifecycle triggers carry no project context. The
+	// translator returns EventType + UserID only; the handler must not reject
+	// such events with a 400 over a missing source_project.
+	cases := []struct {
+		name      string
+		event     string
+		expectInv bool // user_deactivated / user_locked → cacheInvalidateUser
+		expectOnb bool // user_created → onboarding trigger
+	}{
+		{"user.human.added → user_created", "user.human.added", false, true},
+		{"user.human.deactivated → user_deactivated", "user.human.deactivated", true, false},
+		{"user.human.locked → user_locked", "user.human.locked", true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("ZITADEL_M2M_USER_ID", "")
+			setupNoopWebhookDeps(t)
+
+			var invalidated bool
+			var onboarded bool
+			cacheInvalidateUser = func(_ context.Context, _ string) error {
+				invalidated = true
+				return nil
+			}
+			webhookTriggerOnboarding = func(_ context.Context, _, _, _ string) error {
+				onboarded = true
+				return nil
+			}
+
+			body := fmt.Appendf(nil,
+				`{"aggregate":{"id":"u-lifecycle-1","resourceOwner":"org-1"},"event":"%s","editorUserId":"human-1","payload":{}}`,
+				tc.event,
+			)
+			rr := postWebhook(t, body)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("expected 200 (lifecycle event has no source_project), got %d body=%s", rr.Code, rr.Body.String())
+			}
+			if invalidated != tc.expectInv {
+				t.Errorf("cache invalidate: want %v, got %v", tc.expectInv, invalidated)
+			}
+			if onboarded != tc.expectOnb {
+				t.Errorf("onboarding: want %v, got %v", tc.expectOnb, onboarded)
+			}
+		})
+	}
+}
+
+func TestHandleZitadelWebhook_GrantEvent_StillRequiresSourceProject(t *testing.T) {
+	// Regression guard for the relaxed-validation fix: grant events must
+	// still 400 when source_project is missing. Internal-shape (not Zitadel-
+	// shape) so it bypasses the translator and exercises the handler's
+	// validation block directly.
+	setupNoopWebhookDeps(t)
+	body := []byte(`{"event_type":"grant_added","user_id":"u1","role_keys":["alpha"]}`)
+	rr := postWebhook(t, body)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 (grant event still requires source_project), got %d", rr.Code)
+	}
+}
+
+func TestHandleZitadelWebhook_UnknownZitadelEvent_NoOp(t *testing.T) {
+	t.Setenv("ZITADEL_M2M_USER_ID", "")
+	setupNoopWebhookDeps(t)
+
+	called := false
+	prevEnforce := webhookEnforceMappingRules
+	t.Cleanup(func() { webhookEnforceMappingRules = prevEnforce })
+	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error {
+		called = true
+		return nil
+	}
+
+	body := []byte(`{"aggregate":{"id":"u1"},"event":"user.password.changed","editorUserId":"human-1","payload":{}}`)
+	rr := postWebhook(t, body)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 no-op, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if called {
+		t.Fatal("orchestrator MUST NOT be called on unknown event")
+	}
+}

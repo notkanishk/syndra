@@ -44,14 +44,32 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Structural validation
+	// Try Zitadel-shape translation first; fall back to internal strict decode.
 	var event WebhookPayload
-	if err := decodeJSONStrict(bytes.NewReader(body), &event); err != nil {
-		jsonValidationErrorResponse(w, "Invalid webhook payload", map[string]string{"body": err.Error()})
+	translated, isZitadel, terr := translateZitadelEvent(body)
+	if terr == errSelfMutation {
+		jsonResponse(w, http.StatusOK, map[string]string{"message": "self-mutation event dropped"})
 		return
 	}
+	if terr != nil {
+		jsonValidationErrorResponse(w, "Invalid Zitadel event payload", map[string]string{"body": terr.Error()})
+		return
+	}
+	if isZitadel {
+		if translated.EventType == "" {
+			// Unknown / unsupported Zitadel event — no-op success.
+			jsonResponse(w, http.StatusOK, map[string]string{"message": "event acknowledged, no dispatch"})
+			return
+		}
+		event = translated
+	} else {
+		if err := decodeJSONStrict(bytes.NewReader(body), &event); err != nil {
+			jsonValidationErrorResponse(w, "Invalid webhook payload", map[string]string{"body": err.Error()})
+			return
+		}
+	}
 
-	// Default event_type for backward compatibility
+	// Default event_type for backward compatibility (internal-shape callers only).
 	if event.EventType == "" {
 		event.EventType = "grant_added"
 	}
@@ -63,11 +81,18 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// role_key / role_keys required for grant events only
+	// user_id is required for every event; source_project is required only
+	// for grant events (lifecycle events — user_created/deactivated/locked —
+	// arrive without project context from native Zitadel triggers).
 	isGrantEvent := event.EventType == "grant_added" || event.EventType == "grant_removed" || event.EventType == "grant_changed"
-	if !trimmedNonEmpty(event.UserID) || !trimmedNonEmpty(event.SourceProject) {
-		jsonValidationErrorResponse(w, "user_id and source_project are required", map[string]string{
-			"user_id":        "required",
+	if !trimmedNonEmpty(event.UserID) {
+		jsonValidationErrorResponse(w, "user_id is required", map[string]string{
+			"user_id": "required",
+		})
+		return
+	}
+	if isGrantEvent && !trimmedNonEmpty(event.SourceProject) {
+		jsonValidationErrorResponse(w, "source_project is required for grant events", map[string]string{
 			"source_project": "required",
 		})
 		return
