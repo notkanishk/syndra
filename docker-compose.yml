@@ -44,11 +44,14 @@ services:
       # an empty value and InitClient short-circuits to local-policy-only mode.
       - ZITADEL_MACHINE_KEY_PATH=${ZITADEL_MACHINE_KEY_PATH:+/etc/mkauth/zitadel-sa-key.json}
       - ZITADEL_ADMIN_ROLE_KEY=${ZITADEL_ADMIN_ROLE_KEY:-admin}
-      - ZITADEL_WEBHOOK_SECRET=${ZITADEL_WEBHOOK_SECRET:-}
       # Set after running `make zitadel-actions-register` — captured once from the
       # Action target creation response. Unset = signature verification disabled
       # (dev mode pass-through with warning log).
+      # ZITADEL_ACTION_SIGNING_KEY signs the claim-injector target (function
+      # triggers); ZITADEL_EVENT_SIGNING_KEY signs the event-listener target
+      # (condition.event triggers) consumed by /api/webhooks/zitadel.
       - ZITADEL_ACTION_SIGNING_KEY=${ZITADEL_ACTION_SIGNING_KEY:-}
+      - ZITADEL_EVENT_SIGNING_KEY=${ZITADEL_EVENT_SIGNING_KEY:-}
       # Rotation-status observability. ROTATED_AT is an RFC3339 UTC timestamp
       # emitted by rotate.sh; THRESHOLD_DAYS is the age at which the /zitadel
       # UI panel flips from ok -> warn (default 90). Both feed

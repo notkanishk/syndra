@@ -127,7 +127,8 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/zitadel/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleRemoveZitadelGrant)))
 
 	// Data Plane routes — verified by their own mechanisms (HMAC / Redis)
-	mux.HandleFunc("POST /api/webhooks/zitadel", withCORS(HandleZitadelWebhook))
+	mux.HandleFunc("POST /api/webhooks/zitadel",
+		withCORS(withZitadelActionSignature("ZITADEL_EVENT_SIGNING_KEY", HandleZitadelWebhook)))
 	mux.HandleFunc("POST /api/action/inject",
 		withCORS(withZitadelActionSignature("ZITADEL_ACTION_SIGNING_KEY", HandleActionInject)))
 

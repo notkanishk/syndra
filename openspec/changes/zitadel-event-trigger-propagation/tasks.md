@@ -3,9 +3,9 @@
 ## 1. Backend: data model + auth
 - [ ] 1.1 Add `RoleKeys []string` to `WebhookPayload`; update validation
 - [ ] 1.2 Iterate `RoleKeys` in `processGrantAdded` / `processGrantRemoved`
-- [ ] 1.3 Switch `/api/webhooks/zitadel` route to `withZitadelActionSignature("ZITADEL_EVENT_SIGNING_KEY", ...)`
-- [ ] 1.4 Remove `verifyWebhookSignature`, `verifyWebhookFreshness`, inline calls in `HandleZitadelWebhook`
-- [ ] 1.5 Remove `ZITADEL_WEBHOOK_SECRET` from `.env.example` and `docker-compose.yml`
+- [x] 1.3 Switch `/api/webhooks/zitadel` route to `withZitadelActionSignature("ZITADEL_EVENT_SIGNING_KEY", ...)`
+- [x] 1.4 Remove `verifyWebhookSignature`, `verifyWebhookFreshness`, inline calls in `HandleZitadelWebhook`
+- [x] 1.5 Remove `ZITADEL_WEBHOOK_SECRET` from `.env.example` and `docker-compose.yml`
 
 ## 2. Backend: payload translator
 - [ ] 2.1 Define `ZitadelEventPayload` lenient struct in `webhook_translate.go`
