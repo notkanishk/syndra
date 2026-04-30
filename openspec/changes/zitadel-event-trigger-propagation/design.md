@@ -14,7 +14,7 @@ Function triggers (claim injection) need `restCall` so Zitadel parses the respon
 
 ### D2. Reuse `withZitadelActionSignature`, retire the legacy verifier
 
-`backend/internal/handlers/zitadel_action_auth.go:withZitadelActionSignature(secretEnvVar string, next http.HandlerFunc)` already takes the env-var name as a parameter (it was designed for reuse). Mounting it on `/api/webhooks/zitadel` with a different env var is a one-line router change. The legacy `verifyWebhookSignature` (header `X-Zitadel-Signature`, hash input `ts + "\n" + body`) does not match what Zitadel actually emits and has no producer; per CLAUDE.md ("delete completely if certain unused"), it is removed.
+`backend/internal/handlers/zitadel_action_auth.go:withZitadelActionSignature(secretEnvVar string, next http.HandlerFunc) http.HandlerFunc` already takes the env-var name as a parameter (it was designed for reuse). Mounting it on `/api/webhooks/zitadel` with a different env var is a one-line router change. The legacy `verifyWebhookSignature` (header `X-Zitadel-Signature`, hash input `ts + "\n" + body`) does not match what Zitadel actually emits and has no producer; per CLAUDE.md ("If you are certain that something is unused, you can delete it completely"), it is removed.
 
 ### D3. Translator keyed off shape, not Content-Type
 
@@ -24,7 +24,7 @@ Zitadel's event payload has top-level `aggregate` (with `id`, `type`, `resourceO
 
 A Zitadel `user.grant.added` event carries one or more role keys per delivery. Two ways to handle this:
 - Fan-out at translator time: one HTTP delivery → N internal events → N `webhook_events` rows. Breaks the "one delivery = one row" idempotency invariant; ops debugging becomes harder.
-- Plural at the payload layer: `WebhookPayload.RoleKeys []string` alongside the existing `RoleKey string`. Translator populates `RoleKeys`. Processors iterate. One delivery = one row. Idempotency key is still the Zitadel-Signature header.
+- Plural at the payload layer: add a new `WebhookPayload.RoleKeys []string` field alongside the existing `RoleKey string`. Translator populates `RoleKeys`. Processors iterate. One delivery = one row. Idempotency key is still the Zitadel-Signature header.
 
 Plural wins. Singular `RoleKey` is preserved for back-compat with operator curl callers and existing tests.
 
@@ -38,7 +38,7 @@ Editor check is the primary defense; idempotency is the backup. The env var is t
 
 ### D6. Welcome-bundle assignment requires no new code
 
-`processUserCreated` (webhook.go:210) already calls `webhookTriggerOnboarding` → `services.onboarding.TriggerOnboarding` (onboarding.go:19) which calls `GetWelcomeBundle` and `AssignBundleToUser`. Idempotency at both layers (`webhook_events` and `onboarding_triggers.idempotency_key`). Once Zitadel's `user.human.added` event reaches the endpoint with a valid signature, the existing pipeline runs unchanged.
+`processUserCreated` (`backend/internal/handlers/webhook.go:210`) already calls `webhookTriggerOnboarding` → `services.TriggerOnboarding` (`backend/internal/services/onboarding.go:19`) which calls `GetWelcomeBundle` and `AssignBundleToUser`. Idempotency at both layers (`webhook_events` and `onboarding_triggers.idempotency_key`). Once Zitadel's `user.human.added` event reaches the endpoint with a valid signature, the existing pipeline runs unchanged.
 
 ### D7. Single `make zitadel-actions-register` for both targets
 
