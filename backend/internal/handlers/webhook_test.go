@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -493,3 +494,186 @@ func TestWebhook_UserDeactivated_NoIntentEmitted(t *testing.T) {
 
 // Verify the unused import doesn't cause issues — db is used for type reference in deps.
 var _ = db.WebhookEvent{}
+
+func TestHandleZitadelWebhook_RoleKeysPlural_DispatchesEachRole(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	// Capture the roles passed to the orchestrator. Other deps stay at the
+	// no-op defaults installed by the helper above.
+	prevEnforce := webhookEnforceMappingRules
+	t.Cleanup(func() { webhookEnforceMappingRules = prevEnforce })
+
+	var seenRoles []string
+	webhookEnforceMappingRules = func(ctx context.Context, userID, project, role string) error {
+		seenRoles = append(seenRoles, role)
+		return nil
+	}
+
+	body := []byte(`{
+		"event_type": "grant_added",
+		"user_id": "u1",
+		"source_project": "p1",
+		"role_keys": ["alpha", "beta"],
+		"project_ids": ["p1"]
+	}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if !reflect.DeepEqual(seenRoles, []string{"alpha", "beta"}) {
+		t.Fatalf("expected roles [alpha beta], got %v", seenRoles)
+	}
+}
+
+func TestHandleZitadelWebhook_RoleKeysBlankEntries_RejectedOrFiltered(t *testing.T) {
+	cases := []struct {
+		name     string
+		body     string
+		wantCode int
+		wantSeen []string // nil = expect no orchestrator call
+	}{
+		{
+			name:     "all blank entries → 400",
+			body:     `{"event_type":"grant_added","user_id":"u1","source_project":"p1","role_keys":["",""]}`,
+			wantCode: http.StatusBadRequest,
+			wantSeen: nil,
+		},
+		{
+			name:     "whitespace-only entries → 400",
+			body:     `{"event_type":"grant_added","user_id":"u1","source_project":"p1","role_keys":["  "," \t"]}`,
+			wantCode: http.StatusBadRequest,
+			wantSeen: nil,
+		},
+		{
+			name:     "mixed valid+blank → only valid roles dispatch",
+			body:     `{"event_type":"grant_added","user_id":"u1","source_project":"p1","role_keys":["","alpha"," ","beta"],"project_ids":["p1"]}`,
+			wantCode: http.StatusOK,
+			wantSeen: []string{"alpha", "beta"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setupNoopWebhookDeps(t)
+
+			prevEnforce := webhookEnforceMappingRules
+			t.Cleanup(func() { webhookEnforceMappingRules = prevEnforce })
+
+			var seen []string
+			webhookEnforceMappingRules = func(ctx context.Context, userID, project, role string) error {
+				seen = append(seen, role)
+				return nil
+			}
+
+			rr := postWebhook(t, []byte(tc.body))
+
+			if rr.Code != tc.wantCode {
+				t.Fatalf("expected %d, got %d body=%s", tc.wantCode, rr.Code, rr.Body.String())
+			}
+			if !reflect.DeepEqual(seen, tc.wantSeen) {
+				t.Fatalf("expected seen=%v, got %v", tc.wantSeen, seen)
+			}
+		})
+	}
+}
+
+func TestHandleZitadelWebhook_RoleKeysOverridesSingular_ForAuditAndLog(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	// Capture both the dispatch role AND the role passed to dbInsertWebhookEvent
+	// (which becomes the webhook_events.role_key audit value).
+	var dispatchedRole string
+	var persistedRole string
+
+	prevEnforce := webhookEnforceMappingRules
+	prevInsert := dbInsertWebhookEvent
+	t.Cleanup(func() {
+		webhookEnforceMappingRules = prevEnforce
+		dbInsertWebhookEvent = prevInsert
+	})
+
+	webhookEnforceMappingRules = func(ctx context.Context, userID, project, role string) error {
+		dispatchedRole = role
+		return nil
+	}
+	dbInsertWebhookEvent = func(ctx context.Context, eventType, userID, sourceProject, roleKey, idempotencyKey string) (string, bool, error) {
+		persistedRole = roleKey
+		return "evt-test", true, nil
+	}
+
+	// Mismatched payload: singular says "alpha", plural says "beta". Plural must win for both.
+	body := []byte(`{
+		"event_type": "grant_added",
+		"user_id": "u1",
+		"source_project": "p1",
+		"role_key": "alpha",
+		"role_keys": ["beta"],
+		"project_ids": ["p1"]
+	}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if dispatchedRole != "beta" {
+		t.Errorf("dispatched role: expected beta, got %q", dispatchedRole)
+	}
+	if persistedRole != "beta" {
+		t.Errorf("persisted role (webhook_events.role_key): expected beta, got %q (audit must align with dispatch)", persistedRole)
+	}
+}
+
+func TestHandleZitadelWebhook_RoleKeysExplicitEmpty_RejectedDistinctFromOmitted(t *testing.T) {
+	cases := []struct {
+		name           string
+		body           string
+		wantCode       int
+		wantDispatched string // empty = expect no orchestrator call
+	}{
+		{
+			// Back-compat: omitted plural + valid singular dispatches singular.
+			name:           "omitted plural + singular alpha → 200, dispatches alpha",
+			body:           `{"event_type":"grant_added","user_id":"u1","source_project":"p1","role_key":"alpha","project_ids":["p1"]}`,
+			wantCode:       http.StatusOK,
+			wantDispatched: "alpha",
+		},
+		{
+			// JSON convention: null is equivalent to omitted.
+			name:           "null plural + singular alpha → 200, dispatches alpha",
+			body:           `{"event_type":"grant_added","user_id":"u1","source_project":"p1","role_key":"alpha","role_keys":null,"project_ids":["p1"]}`,
+			wantCode:       http.StatusOK,
+			wantDispatched: "alpha",
+		},
+		{
+			// Explicit empty plural contradicts singular under "plural wins". Reject.
+			name:           "explicit [] plural + singular alpha → 400 (no dispatch)",
+			body:           `{"event_type":"grant_added","user_id":"u1","source_project":"p1","role_key":"alpha","role_keys":[],"project_ids":["p1"]}`,
+			wantCode:       http.StatusBadRequest,
+			wantDispatched: "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setupNoopWebhookDeps(t)
+
+			prevEnforce := webhookEnforceMappingRules
+			t.Cleanup(func() { webhookEnforceMappingRules = prevEnforce })
+
+			var dispatched string
+			webhookEnforceMappingRules = func(ctx context.Context, userID, project, role string) error {
+				dispatched = role
+				return nil
+			}
+
+			rr := postWebhook(t, []byte(tc.body))
+			if rr.Code != tc.wantCode {
+				t.Fatalf("expected %d, got %d body=%s", tc.wantCode, rr.Code, rr.Body.String())
+			}
+			if dispatched != tc.wantDispatched {
+				t.Fatalf("dispatched: expected %q, got %q", tc.wantDispatched, dispatched)
+			}
+		})
+	}
+}
