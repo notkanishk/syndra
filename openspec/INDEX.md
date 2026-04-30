@@ -26,6 +26,7 @@ Each capability has one canonical spec. **Status** lets you skip specs that aren
 | Contract Quality | Integrated | [spec](changes/contract-hardening-and-test-foundation/specs/contract-quality/spec.md) | contract-hardening + backend-onboarding |
 | Backend API Testing | Integrated | [spec](changes/contract-hardening-and-test-foundation/specs/backend-api-testing/spec.md) | contract-hardening + backend-onboarding |
 | Production Security | Integrated | [spec](changes/backend-owned-onboarding-and-security-boundary/specs/production-security-boundary/spec.md) | backend-onboarding |
+| Lifecycle Event Propagation | Pending — see change | [spec](changes/zitadel-event-trigger-propagation/specs/lifecycle-event-propagation/spec.md) | zitadel-event-trigger-propagation |
 
 ## Architecture Reference (Living Documents)
 
@@ -54,6 +55,7 @@ Every change directory has: `proposal.md` (why), `design.md` (how), `tasks.md` (
 | [Sync Service](changes/sync-service/) | 4 | Complete | [proposal](changes/sync-service/proposal.md) / [design](changes/sync-service/design.md) / [impl](changes/sync-service/IMPLEMENTATION.md) |
 | [Zitadel Diagnostic UI](changes/zitadel-diagnostic-ui/) | 5 | Complete | [proposal](changes/zitadel-diagnostic-ui/proposal.md) / [design](changes/zitadel-diagnostic-ui/design.md) / [impl](changes/zitadel-diagnostic-ui/IMPLEMENTATION.md) |
 | [Zitadel Actions v2 Deployment](changes/zitadel-actions-v2-deployment/) | 5 | Complete | [proposal](changes/zitadel-actions-v2-deployment/proposal.md) / [design](changes/zitadel-actions-v2-deployment/design.md) / [impl](changes/zitadel-actions-v2-deployment/IMPLEMENTATION.md) / [deploy](changes/zitadel-actions-v2-deployment/DEPLOY.md) |
+| [Zitadel Event-Trigger Propagation](changes/zitadel-event-trigger-propagation/) | 5 | In Progress | [proposal](changes/zitadel-event-trigger-propagation/proposal.md) / [design](changes/zitadel-event-trigger-propagation/design.md) / [tasks](changes/zitadel-event-trigger-propagation/tasks.md) |
 | [Grant Expiration Scheduler](changes/grant-expiration-scheduler/) | 5 | Complete | [proposal](changes/grant-expiration-scheduler/proposal.md) / [design](changes/grant-expiration-scheduler/design.md) / [tasks](changes/grant-expiration-scheduler/tasks.md) |
 | [Live Zitadel Data Source](changes/live-zitadel-data-source/) | 5 | Complete | [proposal](changes/live-zitadel-data-source/proposal.md) / [design](changes/live-zitadel-data-source/design.md) / [tasks](changes/live-zitadel-data-source/tasks.md) |
 | [Live-Directory Identity Completeness](changes/live-directory-identity-completeness/) | 5 | Complete | [proposal](changes/live-directory-identity-completeness/proposal.md) / [design](changes/live-directory-identity-completeness/design.md) / [tasks](changes/live-directory-identity-completeness/tasks.md) |
@@ -68,5 +70,5 @@ Every change directory has: `proposal.md` (why), `design.md` (how), `tasks.md` (
 | 2: Contract Hardening | Complete | contract-hardening |
 | 3: Security Boundary | Complete | backend-onboarding, codebase-audit, zitadel-mgmt-client, webhook-listener, role-crud |
 | 4: Infrastructure Bridge | In Progress | provisioning-intents, shadow-vault, sync-service |
-| 5: Automation & Governance | In Progress | zitadel-actions-v2-deployment, grant-expiration-scheduler, live-zitadel-data-source, live-directory-identity-completeness, live-only-production-ui, dashboard-ux-elevation; [remaining items](changes/mkauth-core-architecture/ROADMAP.md) |
+| 5: Automation & Governance | In Progress | zitadel-actions-v2-deployment, grant-expiration-scheduler, live-zitadel-data-source, live-directory-identity-completeness, live-only-production-ui, dashboard-ux-elevation, zitadel-event-trigger-propagation; [remaining items](changes/mkauth-core-architecture/ROADMAP.md) |
 | 6: IdP Lifecycle | Not Started | [see Roadmap](changes/mkauth-core-architecture/ROADMAP.md) |
