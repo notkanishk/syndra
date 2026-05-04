@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"sync"
 )
 
 // zitadelEventPayload is a lenient struct mirroring the Zitadel Actions v2
@@ -65,14 +66,27 @@ func translateZitadelEvent(body []byte) (WebhookPayload, bool, error) {
 		return WebhookPayload{}, true, err
 	}
 
-	if m2mID := os.Getenv("ZITADEL_M2M_USER_ID"); m2mID != "" {
-		if editor := ev.editorID(); editor == m2mID {
-			log.Printf("[WEBHOOK] dropped self-mutation event=%s editor=%s", ev.Event, editor)
-			return WebhookPayload{}, true, errSelfMutation
-		}
+	m2mID := os.Getenv("ZITADEL_M2M_USER_ID")
+	if m2mID == "" {
+		warnSelfMutationGuardDisabled()
+	} else if editor := ev.editorID(); editor == m2mID {
+		log.Printf("[WEBHOOK] dropped self-mutation event=%s aggregate=%s editor=%s", ev.Event, ev.Aggregate.ID, editor)
+		return WebhookPayload{}, true, errSelfMutation
 	}
 
 	return translateEventName(ev), true, nil
+}
+
+// warnSelfMutationGuardDisabled emits a one-time process-lifetime warning
+// when ZITADEL_M2M_USER_ID is unset on the first Zitadel-shape event. Without
+// the guard, backend-initiated Zitadel mutations echo back through Actions v2
+// and re-trigger orchestration. Acceptable in local-dev; never in production.
+var selfMutationGuardWarnOnce sync.Once
+
+func warnSelfMutationGuardDisabled() {
+	selfMutationGuardWarnOnce.Do(func() {
+		log.Printf("[WEBHOOK] ZITADEL_M2M_USER_ID unset — self-mutation guard DISABLED (dev mode); backend-initiated mutations may loop")
+	})
 }
 
 var errSelfMutation = sentinelError("zitadel event triggered by MkAuth's own M2M user — dropped")

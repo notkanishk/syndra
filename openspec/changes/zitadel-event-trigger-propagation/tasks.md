@@ -1,8 +1,8 @@
 # Tasks
 
 ## 1. Backend: data model + auth
-- [ ] 1.1 Add `RoleKeys []string` to `WebhookPayload`; update validation
-- [ ] 1.2 Iterate `RoleKeys` in `processGrantAdded` / `processGrantRemoved`
+- [x] 1.1 Add `RoleKeys []string` to `WebhookPayload`; update validation
+- [x] 1.2 Iterate `RoleKeys` in `processGrantAdded` / `processGrantRemoved`
 - [x] 1.3 Switch `/api/webhooks/zitadel` route to `withZitadelActionSignature("ZITADEL_EVENT_SIGNING_KEY", ...)`
 - [x] 1.4 Remove `verifyWebhookSignature`, `verifyWebhookFreshness`, inline calls in `HandleZitadelWebhook`
 - [x] 1.5 Remove `ZITADEL_WEBHOOK_SECRET` from `.env.example` and `docker-compose.yml`
@@ -42,9 +42,9 @@
 - [x] 6.5 Add `scripts/smoke-test-event-listener.sh` + restore `make zitadel-actions-verify-events`
 
 ## 7. OpenSpec finalization
-- [ ] 7.1 MODIFIED delta on `application-claims/spec.md` (event-trigger subsection)
-- [ ] 7.2 New capability spec `lifecycle-event-propagation/spec.md`
-- [ ] 7.3 Update `feature-coverage.md` (`webhook-invalidation` row producer column)
-- [ ] 7.4 Update `INDEX.md` change log
-- [ ] 7.5 Write `IMPLEMENTATION.md`
-- [ ] 7.6 Refresh codebase-memory graph via `mcp__codebase-memory-mcp__detect_changes`
+- [x] 7.1 MODIFIED delta on `application-claims/spec.md` (event-trigger subsection)
+- [x] 7.2 New capability spec `lifecycle-event-propagation/spec.md`
+- [x] 7.3 Update `feature-coverage.md` (`webhook-invalidation` row producer column)
+- [x] 7.4 Update `INDEX.md` change log
+- [x] 7.5 Write `IMPLEMENTATION.md`
+- [x] 7.6 Refresh codebase-memory graph via `mcp__codebase-memory-mcp__detect_changes`
