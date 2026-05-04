@@ -1,4 +1,4 @@
-.PHONY: dev dev-backend dev-ui test test-backend test-ui lint lint-backend lint-ui zitadel-actions-register zitadel-actions-verify zitadel-actions-remove zitadel-actions-rotate-key
+.PHONY: dev dev-backend dev-ui test test-backend test-ui lint lint-backend lint-ui zitadel-actions-register zitadel-actions-verify zitadel-actions-verify-events zitadel-actions-remove zitadel-actions-rotate-key
 
 dev-backend:
 	cd backend && go run ./cmd/api
@@ -55,3 +55,13 @@ endif
 # BACKEND_URL=... to target a remote host; defaults to http://localhost:8080.
 zitadel-actions-verify:
 	@scripts/smoke-test-action-v2.sh $${BACKEND_URL:-http://localhost:8080}
+
+# Smoke-tests the /api/webhooks/zitadel event-listener endpoint by POSTing a
+# synthetic UNMAPPED event (user.password.changed) with a valid
+# ZITADEL-Signature (or unsigned in dev pass-through mode). The unmapped
+# event hits the translator's unknown-event passthrough (200 + log, no
+# dispatch), so the check exercises auth + shape detection without touching
+# onboarding/grant state — safe against staging and production. Pass
+# BACKEND_URL=... to target a remote host; defaults to http://localhost:8080.
+zitadel-actions-verify-events:
+	@scripts/smoke-test-event-listener.sh $${BACKEND_URL:-http://localhost:8080}

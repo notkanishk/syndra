@@ -1,9 +1,22 @@
 # Signing Key Handling
 
-Zitadel returns the Action target **signing key exactly once**, in the JSON
+Zitadel returns each Action target's **signing key exactly once**, in the JSON
 response body of the `CreateTarget` call (`POST /v2/actions/targets`). There
 is no read API to retrieve it again afterward. Lose it and you must either
 recreate the target or rotate the key in place (see below).
+
+## Two targets, two keys
+
+MkAuth's deployment registers two Actions v2 targets:
+
+| Target name | Type | Triggers | Backend env var |
+|---|---|---|---|
+| `mkauth-claim-injector` | `restCall` | `function.preaccesstoken`, `function.preuserinfo` | `ZITADEL_ACTION_SIGNING_KEY` |
+| `mkauth-event-listener` | `restAsync` | `condition.event` (user/grant lifecycle) | `ZITADEL_EVENT_SIGNING_KEY` |
+
+The two keys are independent — rotation, leak-response, and storage all
+happen per target. Both follow the same lifecycle described below; substitute
+the appropriate target name and env var.
 
 ## Zitadel does not expire the signing key
 
@@ -35,14 +48,18 @@ scheduled automation buys little and adds infrastructure.
 
 ## Lifecycle
 
-1. `zitadel/actions/register.sh` creates the target, extracts the `signingKey`
-   field from the response, and writes it to `zitadel/actions/.action-signing-key`
-   with mode `0600`.
-2. The operator copies that value into the backend environment as
-   `ZITADEL_ACTION_SIGNING_KEY` (via `.env`, systemd drop-in, or secret
-   manager) and restarts the backend.
+1. `zitadel/actions/register.sh` creates each target, extracts the `signingKey`
+   field from the response, and writes it to
+   `zitadel/actions/.action-signing-key.<target-name>` with mode `0600` — one
+   file per target (`mkauth-claim-injector`, `mkauth-event-listener`).
+2. The same run appends `ZITADEL_ACTION_SIGNING_KEY=...` and
+   `ZITADEL_EVENT_SIGNING_KEY=...` (plus the `_ROTATED_AT` companions) to
+   `zitadel/actions/.action-env.fragment`. The operator applies it to backend
+   env (via `.env`, systemd drop-in, or secret manager) in one shot and
+   restarts the backend.
 3. From that point on, every `POST /api/action/inject` request must carry a
-   valid `ZITADEL-Signature` header or receive a `401 INVALID_SIGNATURE`.
+   valid `ZITADEL-Signature` header or receive a `401 INVALID_SIGNATURE` —
+   and the same goes for `/api/webhooks/zitadel` against the event signing key.
 
 All three scripts (`register.sh`, `rotate.sh`,
 `scripts/smoke-test-action-v2.sh`) automatically load `.env` from the
@@ -56,25 +73,38 @@ win over `.env` — the loader only exports keys that aren't already set.
 Use the shipped command:
 
 ```bash
-make zitadel-actions-rotate-key
+make zitadel-actions-rotate-key                            # rotate every target
+make zitadel-actions-rotate-key TARGET=mkauth-event-listener  # rotate one
 ```
 
 Under the hood this runs `zitadel/actions/rotate.sh`, which:
 
 1. Resolves an M2M token (same `ZITADEL_M2M_TOKEN` / `ZITADEL_MACHINE_KEY_PATH`
    paths as `register.sh`).
-2. Looks up the target ID by name via `POST /v2/actions/targets/search`.
-3. Calls `POST /v2/actions/targets/{id}` with body `{"expirationSigningKey":"0s"}`.
-4. Backs up the current `.action-signing-key` to `.action-signing-key.previous`
-   (mode 0600) and overwrites `.action-signing-key` with the new key.
-5. Captures the rotation timestamp to `.action-signing-key.rotated_at` (RFC3339 UTC).
+2. Iterates `targets[]` from `targets.json` (or filters to the one named via
+   `--target`), looking up each target ID by name via
+   `POST /v2/actions/targets/search`.
+3. For every target: calls `POST /v2/actions/targets/{id}` with body
+   `{"expirationSigningKey":"0s"}`.
+4. Backs up the previous `.action-signing-key.<target>` to
+   `.action-signing-key.<target>.previous` (mode 0600) and overwrites
+   `.action-signing-key.<target>` with the new key.
+5. Captures the per-target rotation timestamp to
+   `.action-signing-key.<target>.rotated_at` (RFC3339 UTC).
 6. Writes a ready-to-append env fragment at `zitadel/actions/.action-env.fragment`
-   (mode 0600) containing both `ZITADEL_ACTION_SIGNING_KEY=…` and
-   `ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT=…` lines. The operator applies it
-   with a single redirect — no copy-paste from the terminal — which
-   eliminates any risk of line-wrap, unevaluated shell substitution, or
-   the outside chance of someone copying from the script source instead of
-   its output. The timestamp feeds the Rotation Status panel on `/zitadel`.
+   (mode 0600) containing the appropriate `<env>=…` and `<env>_ROTATED_AT=…`
+   lines for each rotated target (`ZITADEL_ACTION_SIGNING_KEY` for the claim
+   injector, `ZITADEL_EVENT_SIGNING_KEY` for the event listener). The operator
+   applies it with a single redirect — no copy-paste from the terminal — which
+   eliminates any risk of line-wrap, unevaluated shell substitution, or the
+   outside chance of someone copying from the script source instead of its
+   output. **Panel observability scope:** the `/zitadel` Rotation Status panel
+   currently only reflects `ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT` (the
+   claim-injector key). `ZITADEL_EVENT_SIGNING_KEY_ROTATED_AT` is captured to
+   the fragment and forwarded through `docker-compose.yml` for forward
+   compatibility, but no backend endpoint reads it yet. Track event-listener
+   key age out-of-band (e.g. via the per-target `.rotated_at` file) until the
+   panel is extended to report both targets.
 
 Apply the fragment with one of:
 
@@ -107,10 +137,11 @@ the token with stock claims (because `restCall.interruptOnError: false`).
 Users are never blocked; custom claims simply disappear for the gap. Keep it
 under a minute.
 
-`.action-signing-key.previous` is retained for audit / operator rollback but
-is **not read by the backend at runtime** — MkAuth trusts a single env var.
-If you need to roll back, copy the previous value into `ZITADEL_ACTION_SIGNING_KEY`
-and restart.
+`.action-signing-key.<target>.previous` is retained for audit / operator
+rollback but is **not read by the backend at runtime** — MkAuth trusts a
+single env var per target. If you need to roll back, copy the previous value
+into the matching env var (`ZITADEL_ACTION_SIGNING_KEY` or
+`ZITADEL_EVENT_SIGNING_KEY`) and restart.
 
 ## Rotation observability (the Status panel)
 
@@ -167,14 +198,15 @@ Configure via two env vars on the backend:
 
 ## Storage
 
-- **Never** commit `.action-signing-key` or `.action-signing-key.previous` to
-  git. `zitadel/actions/.gitignore` excludes `.action-signing-key`; the
-  previous-key file inherits that exclusion via pattern match in
-  deployed checkouts (confirm your `.gitignore` covers both).
-- Treat both as production credentials: bind-mount from host secret storage
-  (LXC-bound volume or sops-encrypted file) rather than baking into images.
+- **Never** commit `.action-signing-key.*` or `.action-env.fragment` to git.
+  `zitadel/actions/.gitignore` excludes the per-target key files (current
+  and previous) plus the env fragment.
+- Treat all signing-key files as production credentials: bind-mount from host
+  secret storage (LXC-bound volume or sops-encrypted file) rather than baking
+  into images.
 - For the PoC deployment on Proxmox LXC, storing on the host at
-  `/etc/mkauth/.action-signing-key` (mode 0600, root:mkauth) is sufficient.
+  `/etc/mkauth/.action-signing-key.<target>` (mode 0600, root:mkauth) is
+  sufficient.
 
 ## Full target deletion (DELETE endpoint)
 

@@ -58,6 +58,15 @@ services:
       # GET /api/v1/zitadel/action-rotation-status.
       - ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT=${ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT:-}
       - ZITADEL_ACTION_SIGNING_KEY_ROTATION_THRESHOLD_DAYS=${ZITADEL_ACTION_SIGNING_KEY_ROTATION_THRESHOLD_DAYS:-}
+      # Event-listener equivalents are written by rotate.sh for forward
+      # compatibility but no backend endpoint consumes them yet — the panel
+      # only reports the claim-injector key. Pass-through here so the .env
+      # value flows into the container if/when a reader is added.
+      - ZITADEL_EVENT_SIGNING_KEY_ROTATED_AT=${ZITADEL_EVENT_SIGNING_KEY_ROTATED_AT:-}
+      - ZITADEL_EVENT_SIGNING_KEY_ROTATION_THRESHOLD_DAYS=${ZITADEL_EVENT_SIGNING_KEY_ROTATION_THRESHOLD_DAYS:-}
+      # Self-mutation loop guard: drop events whose editorUserId matches the
+      # backend's own M2M service-user ID. Unset disables the guard (dev only).
+      - ZITADEL_M2M_USER_ID=${ZITADEL_M2M_USER_ID:-}
     volumes:
       # Bind the host-side key file to the fixed internal path. When
       # ZITADEL_MACHINE_KEY_PATH is unset, this resolves to a /dev/null no-op

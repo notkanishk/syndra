@@ -35,11 +35,11 @@
 - [x] 5.5 Update `.action-env.fragment` writer to emit both env-var lines
 
 ## 6. Ops + docs
-- [ ] 6.1 Add `zitadel/actions/EVENTS.md` (operator runbook)
-- [ ] 6.2 Update `.env.example` (add `ZITADEL_EVENT_SIGNING_KEY`, `ZITADEL_M2M_USER_ID`; remove `ZITADEL_WEBHOOK_SECRET`)
-- [ ] 6.3 Update `docker-compose.yml` (same env-var changes)
-- [ ] 6.4 Update `SIGNING_KEY.md` and `DEPLOY.md` for the dual-target flow
-- [ ] 6.5 Add `scripts/smoke-test-event-listener.sh`
+- [x] 6.1 Add `zitadel/actions/EVENTS.md` (operator runbook)
+- [x] 6.2 Update `.env.example` (add `ZITADEL_EVENT_SIGNING_KEY`, `ZITADEL_M2M_USER_ID`; remove `ZITADEL_WEBHOOK_SECRET`)
+- [x] 6.3 Update `docker-compose.yml` (same env-var changes)
+- [x] 6.4 Update `SIGNING_KEY.md` for the dual-target flow (no `DEPLOY.md` in repo)
+- [x] 6.5 Add `scripts/smoke-test-event-listener.sh` + restore `make zitadel-actions-verify-events`
 
 ## 7. OpenSpec finalization
 - [ ] 7.1 MODIFIED delta on `application-claims/spec.md` (event-trigger subsection)
