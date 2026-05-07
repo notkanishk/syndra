@@ -7,57 +7,58 @@ import (
 	"sync"
 )
 
-// zitadelEventPayload is a lenient struct mirroring the Zitadel Actions v2
-// event-trigger payload. Field paths verified empirically — capture a real
-// payload via dev-mode pass-through (ZITADEL_EVENT_SIGNING_KEY unset) before
-// flipping signature verification on. Unknown fields are ignored to immunize
-// the translator against future Zitadel additions.
+// zitadelEventPayload mirrors Zitadel's ContextInfoEvent wire format
+// (zitadel/zitadel:internal/repository/execution/queue.go). The JSON tags
+// are deliberately mixed-case — Zitadel emits snake_case for some fields
+// and camelCase-with-uppercase-ID for others. Match the source exactly.
 //
-// Editor identity may appear at three locations across Zitadel response
-// shapes: top-level editorUserId, aggregate.editorUserId, or editor.userId
-// (see design.md note 2). The self-mutation guard probes all three.
+// UserID at the top level is the EDITOR (the user who triggered the event),
+// NOT the subject. The subject of grant events lives in event_payload; the
+// subject of user.human.* / user.deactivated / user.locked events is the
+// aggregateID itself.
 type zitadelEventPayload struct {
-	Aggregate struct {
-		ID            string `json:"id"`
-		Type          string `json:"type"`
-		ResourceOwner string `json:"resourceOwner"`
-		EditorUserID  string `json:"editorUserId"`
-	} `json:"aggregate"`
-	Event        string          `json:"event"`
-	EditorUserID string          `json:"editorUserId"`
-	Editor       struct {
-		UserID string `json:"userId"`
-	} `json:"editor"`
-	Payload json.RawMessage `json:"payload"`
+	AggregateID   string          `json:"aggregateID"`
+	AggregateType string          `json:"aggregateType"`
+	ResourceOwner string          `json:"resourceOwner"`
+	InstanceID    string          `json:"instanceID"`
+	Version       string          `json:"version"`
+	Sequence      uint64          `json:"sequence"`
+	EventType     string          `json:"event_type"`
+	CreatedAt     string          `json:"created_at"`
+	UserID        string          `json:"userID"` // editor — see comment above
+	EventPayload  json.RawMessage `json:"event_payload"`
 }
 
-// editorID returns the first non-empty editor user ID across the documented
-// Zitadel payload shapes. Empty string means no editor was reported.
+// editorID returns the user ID Zitadel attributes the event to. Used by
+// the self-mutation guard. Empty string means no editor was reported.
 func (e zitadelEventPayload) editorID() string {
-	return firstNonEmpty(e.EditorUserID, firstNonEmpty(e.Aggregate.EditorUserID, e.Editor.UserID))
+	return e.UserID
 }
 
-// userGrantPayload covers user.grant.* events.
+// userGrantPayload covers user.grant.* event_payload bodies. ProjectID is
+// absent on grant.changed; RoleKeys is absent on grant.removed — the
+// enrichment pass fills those from the local index / Zitadel API.
 type userGrantPayload struct {
 	UserID    string   `json:"userId"`
 	ProjectID string   `json:"projectId"`
+	GrantID   string   `json:"grantId"`
 	RoleKeys  []string `json:"roleKeys"`
 }
 
 // translateZitadelEvent inspects a request body. If it has a top-level
-// "aggregate" object (the Zitadel-shape signal), it translates to a
-// WebhookPayload and returns ok=true. Otherwise returns ok=false to let the
-// caller fall back to internal-shape strict decoding.
+// "aggregateID" field (the Zitadel ContextInfoEvent shape signal), it
+// translates to a WebhookPayload and returns ok=true. Otherwise returns
+// ok=false to let the caller fall back to internal-shape strict decoding.
 //
 // Self-mutation loop guard: when ZITADEL_M2M_USER_ID is set and matches
-// payload.editorUserId, returns (zero, true, errSelfMutation) — caller MUST
-// short-circuit with 200 OK and no dispatch.
+// payload.userID (the editor), returns (zero, true, errSelfMutation) —
+// caller MUST short-circuit with 200 OK and no dispatch.
 func translateZitadelEvent(body []byte) (WebhookPayload, bool, error) {
 	var probe map[string]json.RawMessage
 	if err := json.Unmarshal(body, &probe); err != nil {
 		return WebhookPayload{}, false, nil
 	}
-	if _, hasAgg := probe["aggregate"]; !hasAgg {
+	if _, hasAgg := probe["aggregateID"]; !hasAgg {
 		return WebhookPayload{}, false, nil
 	}
 
@@ -70,7 +71,7 @@ func translateZitadelEvent(body []byte) (WebhookPayload, bool, error) {
 	if m2mID == "" {
 		warnSelfMutationGuardDisabled()
 	} else if editor := ev.editorID(); editor == m2mID {
-		log.Printf("[WEBHOOK] dropped self-mutation event=%s aggregate=%s editor=%s", ev.Event, ev.Aggregate.ID, editor)
+		log.Printf("[WEBHOOK] dropped self-mutation event=%s aggregate=%s editor=%s", ev.EventType, ev.AggregateID, editor)
 		return WebhookPayload{}, true, errSelfMutation
 	}
 
@@ -99,8 +100,8 @@ func (e sentinelError) Error() string { return string(e) }
 // zero-value WebhookPayload with EventType="" — the caller MUST treat this as
 // "200 OK no-op" (matches the unknown-event passthrough scenario).
 func translateEventName(ev zitadelEventPayload) WebhookPayload {
-	base := WebhookPayload{UserID: ev.Aggregate.ID}
-	switch ev.Event {
+	base := WebhookPayload{UserID: ev.AggregateID}
+	switch ev.EventType {
 	case "user.human.added", "user.human.selfregistered":
 		base.EventType = "user_created"
 	case "user.deactivated":
@@ -114,20 +115,25 @@ func translateEventName(ev zitadelEventPayload) WebhookPayload {
 	case "user.grant.removed", "user.user.grant.removed":
 		return mapGrantEvent("grant_removed", ev)
 	default:
-		log.Printf("[WEBHOOK] unknown event=%s aggregate=%s — ignoring", ev.Event, ev.Aggregate.ID)
+		log.Printf("[WEBHOOK] unknown event=%s aggregate=%s — ignoring", ev.EventType, ev.AggregateID)
 		return WebhookPayload{}
 	}
 	return base
 }
 
+// mapGrantEvent unpacks user.grant.* events. The grant aggregate ID is
+// always the top-level AggregateID; we surface it via WebhookPayload.GrantID
+// so the enrichment step can correlate index lookups for grant.changed
+// (no projectId in payload) and grant.removed (no roleKeys in payload).
 func mapGrantEvent(eventType string, ev zitadelEventPayload) WebhookPayload {
 	var grant userGrantPayload
-	_ = json.Unmarshal(ev.Payload, &grant)
+	_ = json.Unmarshal(ev.EventPayload, &grant)
 	out := WebhookPayload{
 		EventType:     eventType,
-		UserID:        firstNonEmpty(grant.UserID, ev.Aggregate.ID),
+		UserID:        firstNonEmpty(grant.UserID, ev.AggregateID),
 		SourceProject: grant.ProjectID,
 		RoleKeys:      grant.RoleKeys,
+		GrantID:       firstNonEmpty(grant.GrantID, ev.AggregateID),
 	}
 	if len(out.RoleKeys) > 0 {
 		out.RoleKey = out.RoleKeys[0]

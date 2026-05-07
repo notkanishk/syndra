@@ -34,13 +34,59 @@ function triggers) handles claim shaping; both are registered by a single
 
 Unknown events are acknowledged with `200 OK` and logged but not dispatched.
 
+## Wire format
+
+The listener decodes Zitadel's actual `ContextInfoEvent` shape from
+`zitadel/zitadel:internal/repository/execution/queue.go`. The on-the-wire
+field names are deliberately mixed-case — `aggregateID` (not `aggregateId`),
+`userID` is the **editor** (not the subject), and `event_type`,
+`event_payload`, `created_at` are snake_case while their siblings are
+camelCase. Any tooling constructing test bodies must mirror this exactly.
+
+```json
+{
+  "aggregateID": "<grant aggregate id>",
+  "aggregateType": "user_grant",
+  "resourceOwner": "<orgID>",
+  "instanceID": "<instanceID>",
+  "version": "v1",
+  "sequence": 42,
+  "event_type": "user.grant.added",
+  "created_at": "2026-05-07T17:35:46.464Z",
+  "userID": "<editorUserID>",
+  "event_payload": {
+    "userId": "<subjectUserID>",
+    "projectId": "<projectID>",
+    "grantId": "<grant aggregate id>",
+    "roleKeys": ["alpha", "beta"]
+  }
+}
+```
+
+Per-event payload caveats — Zitadel only sends fields that are part of the
+aggregate's state at that event boundary:
+
+| Event | Fields present in `event_payload` | Fields enriched by MkAuth |
+|---|---|---|
+| `user.grant.added` | `userId`, `projectId`, `grantId`, `roleKeys` | none |
+| `user.grant.changed` | `userId`, `roleKeys` | `projectId` |
+| `user.grant.removed` | `userId`, `projectId`, `grantId` | `roleKeys` |
+| `user.deactivated` / `user.locked` | `null` | `userId` (= aggregateID) |
+
+Enrichment is a two-step lookup: `zitadel_grants_index` (local cache,
+populated by `grant.added` and refreshed by `grant.changed`) → Zitadel
+Management `ListUserGrants` API. Both lookups are best-effort; a miss
+leaves the field empty and the event still 200's so Zitadel doesn't
+redeliver.
+
 ## Self-mutation guard
 
 When MkAuth's backend mutates Zitadel via the Management API (e.g.
 `RemoveUserGrant` from mapping-rule revocation), Zitadel emits the
 corresponding event back to the listener. Without filtering, you get an
-infinite loop. The translator drops events whose `editorUserId` matches
-`ZITADEL_M2M_USER_ID`.
+infinite loop. The translator drops events whose top-level `userID`
+(Zitadel's `ContextInfoEvent` carries the editor in this field, NOT the
+subject) matches `ZITADEL_M2M_USER_ID`.
 
 To find the M2M service-user ID, after the first successful Management API
 call check the Zitadel event log: any event with the resource you mutated

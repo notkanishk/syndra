@@ -745,6 +745,85 @@ func GetWebhookEvents(ctx context.Context, statusFilter string) ([]WebhookEvent,
 }
 
 // -------------------------------------------------------------
+// ZITADEL GRANTS INDEX
+// -------------------------------------------------------------
+
+// ErrGrantIndexNotFound signals that the requested grant aggregate has no
+// row in zitadel_grants_index — typically because no `user.grant.added`
+// event has been seen for it yet. Callers MUST treat this as a cache miss
+// (fall back to Zitadel API), NOT as a hard error.
+var ErrGrantIndexNotFound = errors.New("grant not found in local index")
+
+// ZitadelGrantIndex is the local cache of Zitadel user_grant aggregates,
+// keyed by grant aggregate ID. Populated from grant.added events; used to
+// enrich grant.changed (no projectId in payload) and grant.removed (no
+// roleKeys in payload) before handler validation runs.
+type ZitadelGrantIndex struct {
+	GrantID   string    `json:"grant_id"`
+	UserID    string    `json:"user_id"`
+	ProjectID string    `json:"project_id"`
+	RoleKeys  []string  `json:"role_keys"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// UpsertGrantIndex inserts or updates the cache row for a Zitadel user_grant
+// aggregate. Called from the grant.added (and grant.changed) processor; the
+// row lets later grant.changed/removed events fill projectId/roleKeys
+// fields Zitadel omits from those payloads.
+func UpsertGrantIndex(ctx context.Context, grantID, userID, projectID string, roleKeys []string) error {
+	if grantID == "" || userID == "" || projectID == "" {
+		return fmt.Errorf("UpsertGrantIndex: grant_id, user_id, project_id are required")
+	}
+	if roleKeys == nil {
+		roleKeys = []string{}
+	}
+	const query = `
+		INSERT INTO zitadel_grants_index (grant_id, user_id, project_id, role_keys)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (grant_id) DO UPDATE SET
+			user_id    = EXCLUDED.user_id,
+			project_id = EXCLUDED.project_id,
+			role_keys  = EXCLUDED.role_keys,
+			updated_at = NOW()`
+	if _, err := PG.Exec(ctx, query, grantID, userID, projectID, roleKeys); err != nil {
+		return fmt.Errorf("upsert grant index (%s): %w", grantID, err)
+	}
+	return nil
+}
+
+// GetGrantIndex fetches the cached row by grant aggregate ID. Returns
+// ErrGrantIndexNotFound when the grant has never been seen.
+func GetGrantIndex(ctx context.Context, grantID string) (ZitadelGrantIndex, error) {
+	const query = `
+		SELECT grant_id, user_id, project_id, role_keys, created_at, updated_at
+		FROM zitadel_grants_index
+		WHERE grant_id = $1`
+	var row ZitadelGrantIndex
+	err := PG.QueryRow(ctx, query, grantID).Scan(
+		&row.GrantID, &row.UserID, &row.ProjectID, &row.RoleKeys, &row.CreatedAt, &row.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ZitadelGrantIndex{}, ErrGrantIndexNotFound
+		}
+		return ZitadelGrantIndex{}, fmt.Errorf("get grant index (%s): %w", grantID, err)
+	}
+	return row, nil
+}
+
+// DeleteGrantIndex removes the cached row. Called from the grant.removed
+// processor after the downstream effects (revoke, cache invalidation) have
+// run; failure is non-fatal — the next reconciliation will clean it up.
+func DeleteGrantIndex(ctx context.Context, grantID string) error {
+	const query = `DELETE FROM zitadel_grants_index WHERE grant_id = $1`
+	if _, err := PG.Exec(ctx, query, grantID); err != nil {
+		return fmt.Errorf("delete grant index (%s): %w", grantID, err)
+	}
+	return nil
+}
+
+// -------------------------------------------------------------
 // ROLE MANAGEMENT
 // -------------------------------------------------------------
 

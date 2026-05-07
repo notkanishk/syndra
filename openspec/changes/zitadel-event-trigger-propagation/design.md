@@ -18,7 +18,7 @@ Function triggers (claim injection) need `restCall` so Zitadel parses the respon
 
 ### D3. Translator keyed off shape, not Content-Type
 
-Zitadel's event payload has top-level `aggregate` (with `id`, `type`, `resourceOwner`) and `event` fields. MkAuth's internal `WebhookPayload` has `event_type` at the top level. The two are unambiguously distinguishable. `HandleZitadelWebhook` peeks at the parsed JSON, picks the path, and produces a `WebhookPayload` in either case. No Content-Type sniffing.
+Zitadel's event payload follows the `ContextInfoEvent` wire format (`zitadel/zitadel:internal/repository/execution/queue.go`): flat top-level fields `aggregateID`, `aggregateType`, `event_type`, `event_payload`, `userID` (the editor — NOT the subject). MkAuth's internal `WebhookPayload` has top-level `event_type` + `user_id` and no `aggregateID`. The two are unambiguously distinguishable by probing for `aggregateID`. `HandleZitadelWebhook` peeks at the parsed JSON, picks the path, and produces a `WebhookPayload` in either case. No Content-Type sniffing.
 
 ### D4. `role_keys[]` plural in WebhookPayload, not fan-out in translator
 
@@ -31,7 +31,7 @@ Plural wins. Singular `RoleKey` is preserved for back-compat with operator curl 
 ### D5. Self-mutation loop guard at the translator boundary
 
 When the backend calls Zitadel's Management API (e.g. `RemoveUserGrant` from `RevokeMappingRules`), Zitadel emits the corresponding event, Actions v2 POSTs it back to `/api/webhooks/zitadel`, and the orchestrator would re-process the very mutation it just made. Two cheap defenses:
-- Editor check: drop events where `aggregate.editorUserId == ZITADEL_M2M_USER_ID`.
+- Editor check: drop events where the `ContextInfoEvent` top-level `userID` equals `ZITADEL_M2M_USER_ID`.
 - Idempotency safety net: existing `webhook_events.idempotency_key` dedup.
 
 Editor check is the primary defense; idempotency is the backup. The env var is the service-user ID Zitadel returns when MkAuth authenticates with the M2M JWT-profile flow — captured manually on first deploy. Unset env var disables the guard with a startup log warning (acceptable for local-dev).
@@ -58,7 +58,7 @@ Zitadel's exact event-type strings for grants (`user.user.grant.added` vs `user.
 ## Risks
 
 1. **Zitadel event-name drift.** Mitigated by D8 (empirical verification) and by lenient JSON decoding in the translator. Translator's event map is the only place to update on a Zitadel-side rename.
-2. **`editorUserId` field path.** Documented Zitadel response wraps it under `aggregate` in some versions and `editor` in others. Translator accepts either via dual-path lookup; a real captured payload pins the correct path.
+2. **Editor field path.** The editor's user ID lives at the top-level `userID` of the `ContextInfoEvent` wire format (`zitadel/zitadel:internal/repository/execution/queue.go`). The translator probes that single, documented field. Earlier guesses about a wrapped-in-`aggregate` or nested `editor.userId` location were artifacts of designing without a captured payload — see `IMPLEMENTATION.md` "Wire-format correction" for the post-merge fix.
 3. **At-least-once delivery.** Zitadel retries failed targets. Existing idempotency on the Zitadel-Signature header dedups; `webhook_events.idempotency_key` enforces.
 4. **Out-of-order events.** Don't block — process each independently; cache reconciles on next claim issuance. Same posture as today.
 5. **Long-running grant.changed processing.** With `restAsync`, Zitadel does not block on us, so latency is not user-visible. Backend timeouts on downstream calls cap blast radius.

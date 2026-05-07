@@ -28,15 +28,17 @@ The Zitadel Actions v2 target configuration and deployment assets MUST be mainta
 The `/api/webhooks/zitadel` endpoint MUST authenticate Zitadel-origin event POSTs using the canonical Actions v2 signature scheme and translate the Zitadel-native event payload into the internal `WebhookPayload` shape before dispatch.
 
 * **Single canonical signature scheme**: the endpoint MUST verify request signatures via the existing `withZitadelActionSignature` middleware keyed off `ZITADEL_EVENT_SIGNING_KEY`. The legacy `X-Zitadel-Signature` / `ZITADEL_WEBHOOK_SECRET` HMAC dialect MUST NOT coexist on this endpoint; both schemes for one boundary are explicitly disallowed.
-* **Shape detection**: the handler MUST distinguish between Zitadel-native event payloads (top-level `aggregate` field present) and internal-shape callers (top-level `event_type` field present) by inspecting the parsed JSON. The two shapes MUST remain unambiguously distinguishable; Content-Type sniffing MUST NOT be used.
+* **Shape detection**: the handler MUST distinguish between Zitadel-native event payloads (top-level `aggregateID` field present — Zitadel's `ContextInfoEvent` wire format) and internal-shape callers (no `aggregateID`; the internal shape uses top-level `event_type` + `user_id`) by inspecting the parsed JSON. The two shapes MUST remain unambiguously distinguishable; Content-Type sniffing MUST NOT be used.
 * **Internal-shape back-compat**: existing callers that POST the internal `WebhookPayload` schema (operator curl, contract tests, smoke tests) MUST continue to work without modification.
-* **Translator coverage**: the translator MUST map the following Zitadel events into internal `event_type` values, populating per-event fields (`user_id`, `source_project`, `role_keys[]`):
+* **Wire format**: the translator MUST decode against Zitadel's actual `ContextInfoEvent` wire format (`zitadel/zitadel:internal/repository/execution/queue.go`): top-level flat fields `aggregateID`, `aggregateType`, `event_type`, `event_payload`, `userID` (the editor — NOT the subject). The shape detector MUST probe for `aggregateID`; bodies without that key MUST fall through to the internal-shape strict decoder. Smoke-test fixtures and unit-test bodies MUST use the real shape — the prior translator was built against a fictional `{aggregate:{id,...}, event, payload}` shape that no Zitadel-originated event actually emits, and tests passed only because they used the same fictional shape.
+* **Translator coverage**: the translator MUST map the following Zitadel events into internal `event_type` values, populating per-event fields (`user_id`, `source_project`, `role_keys[]`, `grant_id`):
     * `user.human.added`, `user.human.selfregistered` → `user_created`
     * `user.deactivated` → `user_deactivated`
     * `user.locked` → `user_locked`
     * `user.grant.added` → `grant_added`
     * `user.grant.changed` → `grant_changed`
     * `user.grant.removed` → `grant_removed`
+* **Grant enrichment**: `user.grant.changed` does not carry `projectId` and `user.grant.removed` does not carry `roleKeys` (verified against `zitadel/zitadel:internal/repository/usergrant/user_grant.go`). The translator MUST enrich those events from a local `zitadel_grants_index` table (populated by `grant.added`, refreshed by `grant.changed`, deleted on `grant.removed`); on a local-index miss it MUST fall back to a synchronous Zitadel `ListUserGrants` call. Both lookups are best-effort: when both fail, the translator MUST return the unenriched payload and let the handler/processor degrade gracefully — it MUST NOT 4xx Zitadel, since that produces redelivery storms with no clean resolution. Index maintenance ops (upsert/delete) MUST be non-fatal: failures log but MUST NOT block dispatch.
 * **Multi-role grants**: the `WebhookPayload` schema MUST carry a `role_keys []string` field alongside the existing singular `role_key`. Grant events with multiple role keys MUST surface every role in the `role_keys` array; processors MUST iterate. One HTTP delivery MUST produce exactly one `webhook_events` row regardless of role count (idempotency key remains the `ZITADEL-Signature` header).
 * **Unknown-event passthrough**: unmapped event types MUST receive `200 OK` with a `[WEBHOOK] unknown event` log line and MUST NOT result in dispatch or a `webhook_events` row.
 
@@ -56,15 +58,21 @@ The `/api/webhooks/zitadel` endpoint MUST authenticate Zitadel-origin event POST
 - **AND** exactly one `webhook_events` row MUST be inserted for the delivery.
 
 #### Scenario: Unknown event acknowledged but not dispatched
-- **WHEN** Zitadel POSTs an event with an unmapped `event` field (e.g. `user.password.changed`)
+- **WHEN** Zitadel POSTs an event with an unmapped `event_type` field (e.g. `user.password.changed`)
 - **THEN** the handler MUST respond `200 OK` with no dispatch
 - **AND** MUST NOT insert a `webhook_events` row.
+
+#### Scenario: Grant event with unresolved enrichment acknowledged without dispatch
+- **GIVEN** Zitadel POSTs a `user.grant.changed` or `user.grant.removed` event whose payload omits `projectId` / `roleKeys`
+- **AND** neither the local `zitadel_grants_index` nor the Zitadel `ListUserGrants` fallback resolves the missing fields (e.g. the aggregate has been hard-deleted)
+- **THEN** the handler MUST respond `200 OK` with a structured log line and MUST NOT dispatch downstream processors or insert a `webhook_events` row
+- **AND** MUST NOT respond `400 Bad Request` (which would trigger Zitadel redelivery storms with no clean resolution).
 
 ### Requirement: Self-Mutation Loop Suppression
 
 When the MkAuth backend mutates Zitadel via the Management API (e.g. `RemoveUserGrant` from `RevokeMappingRules`), Zitadel emits the corresponding event back to the listener. The handler MUST detect and suppress these self-mutation echoes before dispatch.
 
-* **Editor-based detection**: events whose `editorUserId` matches the configured `ZITADEL_M2M_USER_ID` (the backend's own service-user ID) MUST be dropped before any downstream processor runs.
+* **Editor-based detection**: events whose top-level `userID` (Zitadel's `ContextInfoEvent` carries the editor in this field, NOT the subject) matches the configured `ZITADEL_M2M_USER_ID` (the backend's own service-user ID) MUST be dropped before any downstream processor runs.
 * **Observable suppression**: dropped events MUST emit a `[WEBHOOK] dropped self-mutation` log line carrying enough context (event type, aggregate ID, editor ID) for operator debugging.
 * **Idempotency safety net**: the `webhook_events.idempotency_key` deduplication MUST remain in place as a backup defense; the editor check is the primary defense, the idempotency table is the backup.
 * **Disabled guard for local-dev**: when `ZITADEL_M2M_USER_ID` is unset, the handler MUST log a one-time startup warning and accept all events (acceptable in local-dev; explicitly required in any environment that accepts real Zitadel traffic).
@@ -73,6 +81,6 @@ When the MkAuth backend mutates Zitadel via the Management API (e.g. `RemoveUser
 - **GIVEN** `ZITADEL_M2M_USER_ID` is set to the backend's M2M service-user ID
 - **WHEN** the backend calls Zitadel's `RemoveUserGrant`
 - **AND** Zitadel emits the resulting `user.grant.removed` event back to `/api/webhooks/zitadel`
-- **THEN** the translator MUST detect `editorUserId == ZITADEL_M2M_USER_ID` and respond `200 OK` without dispatch
+- **THEN** the translator MUST detect top-level `userID == ZITADEL_M2M_USER_ID` and respond `200 OK` without dispatch
 - **AND** no `webhook_events` row MUST be inserted
 - **AND** a `[WEBHOOK] dropped self-mutation` log line MUST be emitted.

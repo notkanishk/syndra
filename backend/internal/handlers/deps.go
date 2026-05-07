@@ -47,6 +47,12 @@ var (
 	dbFailWebhookEvent         = db.FailWebhookEvent
 	dbGetWebhookEvents         = db.GetWebhookEvents
 
+	// Zitadel grants index (event-listener enrichment cache).
+	dbUpsertGrantIndex   = db.UpsertGrantIndex
+	dbGetGrantIndex      = db.GetGrantIndex
+	dbDeleteGrantIndex   = db.DeleteGrantIndex
+	dbListUserGrantsLive = listUserGrantsViaZitadel
+
 	// Role management injectable vars.
 	svcCreateRole        = services.CreateRole
 	svcGlobalRoleCatalog = services.GlobalRoleCatalog

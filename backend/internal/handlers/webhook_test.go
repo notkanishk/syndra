@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"mkauth/internal/db"
+	"mkauth/internal/zitadel"
 )
 
 func TestWebhookRoute_RejectsInvalidActionsV2Signature(t *testing.T) {
@@ -48,6 +49,10 @@ func resetWebhookDeps(t *testing.T) {
 	origComplete := dbCompleteWebhookEvent
 	origFail := dbFailWebhookEvent
 	origEmitIntent := webhookEmitProvisioningIntent
+	origUpsertIdx := dbUpsertGrantIndex
+	origGetIdx := dbGetGrantIndex
+	origDeleteIdx := dbDeleteGrantIndex
+	origListLive := dbListUserGrantsLive
 	t.Cleanup(func() {
 		cacheRebuildUser = origRebuild
 		cacheInvalidateUser = origInvalidate
@@ -58,6 +63,10 @@ func resetWebhookDeps(t *testing.T) {
 		dbCompleteWebhookEvent = origComplete
 		dbFailWebhookEvent = origFail
 		webhookEmitProvisioningIntent = origEmitIntent
+		dbUpsertGrantIndex = origUpsertIdx
+		dbGetGrantIndex = origGetIdx
+		dbDeleteGrantIndex = origDeleteIdx
+		dbListUserGrantsLive = origListLive
 	})
 }
 
@@ -76,6 +85,14 @@ func setupNoopWebhookDeps(t *testing.T) {
 	dbCompleteWebhookEvent = func(_ context.Context, _ string) error { return nil }
 	dbFailWebhookEvent = func(_ context.Context, _, _ string) error { return nil }
 	webhookEmitProvisioningIntent = func(_ context.Context, _, _, _, _, _ string) error { return nil }
+	dbUpsertGrantIndex = func(_ context.Context, _, _, _ string, _ []string) error { return nil }
+	dbGetGrantIndex = func(_ context.Context, _ string) (db.ZitadelGrantIndex, error) {
+		return db.ZitadelGrantIndex{}, db.ErrGrantIndexNotFound
+	}
+	dbDeleteGrantIndex = func(_ context.Context, _ string) error { return nil }
+	dbListUserGrantsLive = func(_ context.Context, _, _ string) (zitadel.UserGrant, error) {
+		return zitadel.UserGrant{}, fmt.Errorf("test default: zitadel lookup not stubbed")
+	}
 }
 
 func postWebhook(t *testing.T, body []byte) *httptest.ResponseRecorder {
@@ -543,10 +560,9 @@ func TestHandleZitadelWebhook_TranslatesZitadelShape(t *testing.T) {
 	}
 
 	body := []byte(`{
-		"aggregate": {"id":"agg-1","type":"user","resourceOwner":"org-1"},
-		"event": "user.grant.added",
-		"editorUserId": "human-operator-1",
-		"payload": {"userId":"u1","projectId":"p1","roleKeys":["alpha","beta"]}
+		"aggregateID":"agg-1","aggregateType":"user_grant","resourceOwner":"org-1","instanceID":"inst","version":"v1","sequence":1,
+		"event_type":"user.grant.added","created_at":"2026-05-07T00:00:00Z","userID":"human-operator-1",
+		"event_payload":{"userId":"u1","projectId":"p1","grantId":"agg-1","roleKeys":["alpha","beta"]}
 	}`)
 	rr := postWebhook(t, body)
 	if rr.Code != http.StatusOK {
@@ -569,7 +585,7 @@ func TestHandleZitadelWebhook_DropsSelfMutation(t *testing.T) {
 		return nil
 	}
 
-	body := []byte(`{"aggregate":{"id":"u1"},"event":"user.grant.added","editorUserId":"service-user-99","payload":{"userId":"u1","projectId":"p1","roleKeys":["x"]}}`)
+	body := []byte(`{"aggregateID":"u1","aggregateType":"user_grant","resourceOwner":"org","instanceID":"inst","version":"v1","sequence":1,"event_type":"user.grant.added","created_at":"2026-05-07T00:00:00Z","userID":"service-user-99","event_payload":{"userId":"u1","projectId":"p1","roleKeys":["x"]}}`)
 	rr := postWebhook(t, body)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 short-circuit, got %d", rr.Code)
@@ -610,7 +626,7 @@ func TestHandleZitadelWebhook_LifecycleEvents_DispatchWithoutSourceProject(t *te
 			}
 
 			body := fmt.Appendf(nil,
-				`{"aggregate":{"id":"u-lifecycle-1","resourceOwner":"org-1"},"event":"%s","editorUserId":"human-1","payload":{}}`,
+				`{"aggregateID":"u-lifecycle-1","aggregateType":"user","resourceOwner":"org-1","instanceID":"inst","version":"v1","sequence":1,"event_type":%q,"created_at":"2026-05-07T00:00:00Z","userID":"human-1","event_payload":null}`,
 				tc.event,
 			)
 			rr := postWebhook(t, body)
@@ -640,6 +656,41 @@ func TestHandleZitadelWebhook_GrantEvent_StillRequiresSourceProject(t *testing.T
 	}
 }
 
+func TestHandleZitadelWebhook_ZitadelGrant_EnrichmentMiss_AcksWithoutDispatch(t *testing.T) {
+	// Regression guard for the redelivery-storm risk: when a Zitadel-origin
+	// grant event arrives whose enrichment cannot fill source_project /
+	// role_keys (e.g. grant.removed for a never-seen aggregate when Zitadel's
+	// API also can't find it), the handler MUST 200+log instead of 400.
+	// Internal-shape callers still 400 — see TestHandleZitadelWebhook_GrantEvent_StillRequiresSourceProject.
+	t.Setenv("ZITADEL_M2M_USER_ID", "")
+	setupNoopWebhookDeps(t)
+
+	enforceCalled := false
+	revokeCalled := false
+	prevEnforce := webhookEnforceMappingRules
+	prevRevoke := webhookRevokeMappingRules
+	t.Cleanup(func() {
+		webhookEnforceMappingRules = prevEnforce
+		webhookRevokeMappingRules = prevRevoke
+	})
+	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error { enforceCalled = true; return nil }
+	webhookRevokeMappingRules = func(_ context.Context, _, _, _ string) error { revokeCalled = true; return nil }
+
+	// Both enrichment paths fail: index miss + Zitadel API miss (the default
+	// installed by setupNoopWebhookDeps).
+	body := []byte(`{"aggregateID":"g-gone","aggregateType":"user_grant","resourceOwner":"org","instanceID":"inst","version":"v1","sequence":1,"event_type":"user.grant.removed","created_at":"2026-05-08T00:00:00Z","userID":"human-1","event_payload":{"userId":"u1","grantId":"g-gone"}}`)
+	rr := postWebhook(t, body)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 (enrichment miss must not 4xx Zitadel), got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if enforceCalled || revokeCalled {
+		t.Fatal("processors MUST NOT run on incomplete enrichment; dispatch must be skipped")
+	}
+	if !strings.Contains(rr.Body.String(), "enrichment incomplete") {
+		t.Errorf("response body should explain skip reason, got %s", rr.Body.String())
+	}
+}
+
 func TestHandleZitadelWebhook_UnknownZitadelEvent_NoOp(t *testing.T) {
 	t.Setenv("ZITADEL_M2M_USER_ID", "")
 	setupNoopWebhookDeps(t)
@@ -652,7 +703,7 @@ func TestHandleZitadelWebhook_UnknownZitadelEvent_NoOp(t *testing.T) {
 		return nil
 	}
 
-	body := []byte(`{"aggregate":{"id":"u1"},"event":"user.password.changed","editorUserId":"human-1","payload":{}}`)
+	body := []byte(`{"aggregateID":"u1","aggregateType":"user","resourceOwner":"org","instanceID":"inst","version":"v1","sequence":1,"event_type":"user.password.changed","created_at":"2026-05-07T00:00:00Z","userID":"human-1","event_payload":{}}`)
 	rr := postWebhook(t, body)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 no-op, got %d body=%s", rr.Code, rr.Body.String())

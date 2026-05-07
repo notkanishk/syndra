@@ -20,7 +20,7 @@
 
 ## 3. Backend: self-mutation loop guard
 - [x] 3.1 Add `ZITADEL_M2M_USER_ID` env reader
-- [x] 3.2 Drop events at translator when `editorUserId` matches; log + 200
+- [x] 3.2 Drop events at translator when top-level `userID` (the editor — Zitadel `ContextInfoEvent`) matches; log + 200
 
 ## 4. Deployment: multi-target manifest
 - [x] 4.1 Reshape `targets.json` to `targets[]` + `executions[]` with named `target` reference
@@ -48,3 +48,18 @@
 - [x] 7.4 Update `INDEX.md` change log
 - [x] 7.5 Write `IMPLEMENTATION.md`
 - [x] 7.6 Refresh codebase-memory graph via `mcp__codebase-memory-mcp__detect_changes`
+
+## 8. Post-merge: wire-format correction + grants index
+- [x] 8.1 Replace `zitadelEventPayload` struct with Zitadel's real `ContextInfoEvent` wire format
+- [x] 8.2 Update shape detection probe key (`aggregate` → `aggregateID`)
+- [x] 8.3 Collapse editor probe to top-level `userID`
+- [x] 8.4 Surface grant aggregate ID via new `WebhookPayload.GrantID`
+- [x] 8.5 Rewrite translator + handler unit tests against the real wire format
+- [x] 8.6 Update `scripts/smoke-test-event-listener.sh` synthetic body
+- [x] 8.7 Add `zitadel_grants_index` migration (000011) + repository CRUD (`UpsertGrantIndex` / `GetGrantIndex` / `DeleteGrantIndex`)
+- [x] 8.8 Add `enrichGrantPayload` (local index → Zitadel `ListUserGrants` fallback → log-and-continue)
+- [x] 8.9 Wire enrichment between translator and handler validation
+- [x] 8.10 Maintain index from grant.added/changed (upsert) and grant.removed (delete) dispatch
+- [x] 8.11 Update `EVENTS.md` payload reference + per-event field caveats
+- [x] 8.12 Update `application-claims/spec.md` and `lifecycle-event-propagation/spec.md` with wire-format + enrichment clauses
+- [ ] 8.13 Manual end-to-end verification against live Zitadel (operator gate; see plan Task 12)

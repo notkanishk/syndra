@@ -48,11 +48,14 @@ for bin in curl; do
   command -v "$bin" >/dev/null 2>&1 || { echo "error: $bin not installed" >&2; exit 1; }
 done
 
-# Synthetic Zitadel-shape event. The event type is deliberately UNMAPPED so
-# the translator's unknown-event branch fires (200 + log, no dispatch); this
-# keeps the smoke test side-effect-free on production/staging. editorUserId
-# is a smoke-test marker (would only match ZITADEL_M2M_USER_ID accidentally).
-PAYLOAD='{"aggregate":{"id":"smoke-user-1","type":"user","resourceOwner":"org-1"},"event":"user.password.changed","editorUserId":"smoke-operator","payload":{}}'
+# Synthetic Zitadel-shape event in the real ContextInfoEvent wire format
+# (zitadel/zitadel:internal/repository/execution/queue.go) — flat top-level
+# fields, snake_case for event_type/event_payload/created_at, userID is the
+# editor (a smoke-test marker; only matches ZITADEL_M2M_USER_ID by accident).
+# The event type is deliberately UNMAPPED so the translator's unknown-event
+# branch fires (200 + log, no dispatch); this keeps the smoke test
+# side-effect-free on production/staging.
+PAYLOAD='{"aggregateID":"smoke-user-1","aggregateType":"user","resourceOwner":"org-1","instanceID":"inst","version":"v1","sequence":1,"event_type":"user.password.changed","created_at":"2026-05-07T00:00:00Z","userID":"smoke-operator","event_payload":{}}'
 
 HEADERS=(-H 'Content-Type: application/json')
 if [[ -n "${ZITADEL_EVENT_SIGNING_KEY:-}" ]]; then

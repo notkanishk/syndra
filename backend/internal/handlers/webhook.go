@@ -14,9 +14,10 @@ type WebhookPayload struct {
 	EventType     string   `json:"event_type"` // grant_added, grant_removed, grant_changed, user_deactivated, user_locked, user_created
 	UserID        string   `json:"user_id"`
 	SourceProject string   `json:"source_project"`
-	RoleKey       string   `json:"role_key"`    // back-compat singular; prefer RoleKeys for new callers
-	RoleKeys      []string `json:"role_keys"`   // multi-role grants from Zitadel event-trigger payloads
-	ProjectIDs    []string `json:"project_ids"` // all projects the user touches
+	RoleKey       string   `json:"role_key"`             // back-compat singular; prefer RoleKeys for new callers
+	RoleKeys      []string `json:"role_keys"`            // multi-role grants from Zitadel event-trigger payloads
+	ProjectIDs    []string `json:"project_ids"`          // all projects the user touches
+	GrantID       string   `json:"grant_id,omitempty"`   // Zitadel user_grant aggregate ID; key for the grants index
 }
 
 var validEventTypes = map[string]bool{
@@ -61,7 +62,10 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 			jsonResponse(w, http.StatusOK, map[string]string{"message": "event acknowledged, no dispatch"})
 			return
 		}
-		event = translated
+		// Fill in the projectId/roleKeys that Zitadel omits from
+		// grant.changed and grant.removed payloads (local index +
+		// Zitadel API fallback). Best-effort; never errors out.
+		event = enrichGrantPayload(r.Context(), translated)
 	} else {
 		if err := decodeJSONStrict(bytes.NewReader(body), &event); err != nil {
 			jsonValidationErrorResponse(w, "Invalid webhook payload", map[string]string{"body": err.Error()})
@@ -89,6 +93,18 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "user_id is required", map[string]string{
 			"user_id": "required",
 		})
+		return
+	}
+	// Zitadel-origin grant events whose enrichment couldn't find the missing
+	// projectId/roleKeys MUST acknowledge with 200 — bouncing 4xx triggers
+	// Zitadel redelivery storms with no clean resolution (the most common
+	// case is a grant.removed for an already-gone aggregate, which neither
+	// the local index nor ListUserGrants can resolve). Internal-shape
+	// callers (operator curl, contract tests) still get strict 400s below.
+	if isZitadel && isGrantEvent && (!trimmedNonEmpty(event.SourceProject) || len(event.RoleKeys) == 0) {
+		log.Printf("[WEBHOOK] grant event acknowledged without dispatch (enrichment incomplete) event=%s user=%s grant=%s project=%q roles=%v",
+			event.EventType, event.UserID, event.GrantID, event.SourceProject, event.RoleKeys)
+		jsonResponse(w, http.StatusOK, map[string]string{"message": "grant event acknowledged, dispatch skipped (enrichment incomplete)"})
 		return
 	}
 	if isGrantEvent && !trimmedNonEmpty(event.SourceProject) {
@@ -161,13 +177,22 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Dispatch by event type
+	// Dispatch by event type. The grants-index ops (upsert/delete) are
+	// best-effort cache maintenance — log on failure, never block dispatch.
 	var processingErr error
 	switch event.EventType {
 	case "grant_added", "grant_changed":
 		processingErr = processGrantAdded(r.Context(), event, eventID)
+		if processingErr == nil {
+			maintainGrantIndex(r.Context(), event)
+		}
 	case "grant_removed":
 		processingErr = processGrantRemoved(r.Context(), event, eventID)
+		if processingErr == nil && event.GrantID != "" {
+			if derr := dbDeleteGrantIndex(r.Context(), event.GrantID); derr != nil {
+				log.Printf("[WEBHOOK] index delete failed grant=%s: %v (non-fatal)", event.GrantID, derr)
+			}
+		}
 	case "user_deactivated", "user_locked":
 		processingErr = processUserDeactivated(r.Context(), event)
 	case "user_created":
@@ -252,4 +277,18 @@ func processUserCreated(ctx context.Context, event WebhookPayload) error {
 		log.Printf("[WEBHOOK] Onboarding trigger failed for user=%s: %v", event.UserID, err)
 	}
 	return nil
+}
+
+// maintainGrantIndex refreshes the local zitadel_grants_index row from a
+// successfully-processed grant_added or grant_changed event so subsequent
+// grant.changed / grant.removed events can be enriched. Skips when the
+// payload lacks fields the schema requires (NOT NULL on grant/user/project)
+// — that case is handled upstream by validation, but defense-in-depth here.
+func maintainGrantIndex(ctx context.Context, event WebhookPayload) {
+	if event.GrantID == "" || event.UserID == "" || event.SourceProject == "" {
+		return
+	}
+	if err := dbUpsertGrantIndex(ctx, event.GrantID, event.UserID, event.SourceProject, event.RoleKeys); err != nil {
+		log.Printf("[WEBHOOK] index upsert failed grant=%s: %v (non-fatal)", event.GrantID, err)
+	}
 }
