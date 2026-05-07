@@ -1,4 +1,35 @@
-# MkAuth Codebase Audit — April 2026
+# MkAuth Codebase Audit
+
+> **🆕 Latest findings: [May 2026 Addendum](#addendum--may-2026-codebase-audit)** — read this first for current state. The sections below are an inventory snapshot from April 2026 (still useful as a reference map but predate Phase 5).
+
+## Quick Navigation
+
+**If you only have time for one thing → [TL;DR](#tldr)**
+
+### Latest audit (May 2026 — current)
+- [TL;DR](#tldr) — one-screen summary
+- [Aim Alignment](#aim-alignment) — does the code match the makerspace mission?
+- [Strengths Worth Preserving](#strengths-worth-preserving) — patterns to copy
+- [Overengineering & Bloat](#findings-overengineering--bloat) — what to trim
+- [Spec ↔ Implementation Drift](#findings-spec--implementation-drift) — where docs lie about code
+- [Bugs & Correctness](#findings-bugs--correctness-concerns) — what's actually broken
+- [Recommendations (Prioritized)](#recommendations-prioritized) — ordered action list
+- [Inventory Delta Since April](#inventory-delta-since-april) — what's new (routes, env vars, modules, schema)
+
+### Reference inventory (April 2026 — still valid as a map)
+- [Project Overview](#project-overview) · [Architecture Map](#architecture-map)
+- [API Endpoints (April inventory: 35 documented, header mislabeled "49"; today: 59)](#api-endpoints-49-routes) · [Database Schema](#database-schema-8-migrations)
+- [Authentication Architecture](#authentication-architecture) · [Security Posture](#security-posture)
+- [Test Coverage](#test-coverage) · [Dependency Inventory](#dependency-inventory)
+- [Key Design Decisions](#key-design-decisions) · [Environment Variables](#environment-variables)
+- [Local Development](#local-development-without-docker) · [Error Response Contract](#error-response-contract)
+- [Redis Key Schema](#redis-key-schema) · [Middleware Stack](#middleware-stack)
+
+> **Reading the inventory below:** route counts, test counts, env-var lists, and migration counts have grown since April — the May addendum has the deltas. Architectural shape, security model, and design decisions are unchanged.
+
+---
+
+# Inventory Snapshot — April 2026
 
 Full audit of the MkAuth IAM orchestration platform covering architecture, security, type safety, testing, and operational readiness.
 
@@ -438,3 +469,319 @@ Request → withMaxBody (1MB) → withSecurityHeaders → ServeMux routing
                                      │                 │                  │
                                   Handler           Handler           Handler
 ```
+
+---
+---
+
+# Addendum — May 2026 Codebase Audit
+
+> The sections above (Project Overview through Middleware Stack) are the April 2026 inventory snapshot. They remain accurate as a reference map but predate the Phase 5 changes (live Zitadel directory, grant expiration scheduler, dashboard UX elevation, event-trigger propagation, Obsidian Clarity redesign, vault/shadow-credential surface). This addendum re-baselines against the current repo and answers: **Is MkAuth elegant, or has it grown into something larger than its purpose?**
+>
+> **Aim** per `CLAUDE.md` and `mkauth-core-architecture/design.md`: ease role-based control of digital and physical resources for an *academic makerspace* — one operator, a few hundred members, deployed as Docker Compose inside a single Proxmox LXC. Zitadel is the source of truth, MkAuth is the policy/orchestration layer.
+
+## TL;DR
+
+**Healthy:** the architecture is right-sized for the aim. Three planes (control / data / bridge), idempotent intake, pre-compiled claims, isolated sync worker — none of these are oversized for a single-LXC IAM bridge. The contract hardening, JWT/HMAC discipline, and audit trail are genuinely production-grade for the few-hundred-user scale.
+
+**Drifting:** Phase 5 added six concurrent change-streams (`grant-expiration-scheduler`, `live-zitadel-data-source`, `live-directory-identity-completeness`, `dashboard-ux-elevation`, `obsidian-clarity-redesign`, `zitadel-event-trigger-propagation`). Each is fine on its own; together they have left:
+
+- Two coexisting CSS design systems in `ui/` (in-progress migration, but unfinished)
+- A 797-line `services/views.go` that re-derives the same user-role map four ways per request
+- A reconciliation/discovery surface (`/api/v1/zitadel/*`) sized for SaaS scale that re-introduces the divergent-source-of-truth problem MkAuth was designed to prevent
+- An undocumented sync-service env surface that breaks the "1-command install" promise
+- One destructive scratchpad (`backend/cmd/test/main.go`) and one in-flight UI redesign that hasn't finished
+
+**Bug-shaped concerns (must-fix before more features land):** dev-mode action signature bypass in production config, OIDC member dashboard rendering blank metadata, vault self-attribution in dev mode, missing-welcome-bundle silent fallback. None are CVE-class but each is an operator-trust failure.
+
+---
+
+## Aim Alignment
+
+| Aim line (design.md) | Reality |
+|---|---|
+| "Zitadel is the absolute source of truth" | Held in webhook + claim paths. **Violated** by `discovery.go:218-282` operator endpoints that mutate Zitadel grants directly, bypassing MkAuth's grant table. |
+| "MkAuth Backend is the single mutation authority" | True for control-plane bundle/grant/rule mutations. Live-Directory Identity Completeness adds direct read paths through Zitadel that are correct, but the parallel write paths in the `/zitadel/*` discovery routes contradict the doctrine. |
+| "Admin-console first, member portal second" | Holds. Member surface is small and well-bounded (`api/proxy/[...path]/route.ts:11-25` whitelists exact member paths). |
+| "Backend is intake-only for webhooks; mutations are orchestrated server-side" | Holds end-to-end since `zitadel-event-trigger-propagation` shipped. |
+| "Sync service is a private worker — no exposed ports" | Holds. Compose has no `ports:` block on sync; `Dockerfile` has no `EXPOSE`. |
+| "1-command install/update via `update.sh`" | **Broken.** `LLDAP_*`, `SYNC_*`, `MKAUTH_EXTERNAL_URL`, `ZITADEL_M2M_TOKEN` are all required at runtime but absent from `.env.example`. `scripts/smoke-test-lxc.sh` only works in dev mode. |
+| "Linear/Stripe aesthetic, dark/light modes, vibrant accent colors, ⌘K palette" | Theme toggle landed; ⌘K **not implemented**; dark mode is uniformly correct only on Material-token surfaces, broken on legacy-palette surfaces. |
+| "Few-hundred users, single LXC" | Most of the system. **Mismatch:** `reconciliationSafetyCap = 10_000`, paginated grant fetchers up to `limit=1000`, `useNameResolver` rAF-batched 409-line resolver, `EXPIRY_SCHEDULER_*` framing for "N>1 backend replicas" — all designed for scale that does not exist here. |
+
+Verdict: the *architecture* matches the aim. Several *implementations* of features quietly assume a SaaS-shaped audience.
+
+---
+
+## Strengths Worth Preserving
+
+These are the patterns to copy when adding the next feature:
+
+1. **Webhook intake pipeline** (`backend/internal/handlers/webhook.go` + `webhook_translate.go` + `webhook_translate_enrich.go`) — single responsibility per file, centralized self-mutation guard, distinguishes Zitadel-origin (200 on enrichment-miss) from internal-shape callers (strict 400). Cleanest pipeline in the repo.
+2. **DB-enforced idempotency** — `ON CONFLICT DO NOTHING … RETURNING id` returning `(id, inserted, err)` everywhere (`InsertOnboardingTrigger`, `InsertWebhookEvent`, `InsertProvisioningIntent`). Callers cannot accidentally double-process.
+3. **Expiry sweep `processUser`** (`services/expiry/sweep.go:62-122`) — re-validates `expires_at` inside the DELETE, drives every side-effect off `RETURNING`, audits before cascading. Comments document the race they solved. Model for any future scheduled job.
+4. **Per-project degraded modes** (`handlers/action.go:73-105`, `repositories.go:GetClaimFailureMode`) — explicit `fail_closed` / `minimal_safe` instead of implicit retry/fallback. Single-project flat keys, multi-project namespaced. Crisp.
+5. **Auth posture in the UI** (`lib/oidc.ts`, `auth/callback/route.ts`, `auth/zitadel/route.ts`) — PKCE S256 + state, PKCE cookie scoped to `/auth/callback` with 5-min TTL, OIDC session capped at 12h with 30s skew. Demo cookies actively rejected when `ZITADEL_DOMAIN` is set in *both* `lib/session.ts:217` and `middleware.ts`. No client bundle ever sees `accessToken`.
+6. **Sync service shape** (`sync/`) — ~230 LOC of worker logic plus thin LDAP wrapper. No business logic, no policy, no exposed ports. `UIDLocker` is small and correct: per-UID serialization with `O(active)` cleanup. Exactly what a Bridge-Plane executor should be.
+7. **`AdminDashboard.tsx`** (`ui/src/components/dashboard/AdminDashboard.tsx`) — tight scope (stat grid + recent activity + intents pulse), all UIDs go through `<UserName/>`, all states (skeleton, empty, populated) handled. Canonical pattern for new admin views.
+8. **Idempotent `register.sh`** (`zitadel/actions/register.sh`) — search-by-name → upsert → bind-by-condition; `--purge` correctly orders unbind-then-DELETE so Zitadel doesn't refuse target deletion.
+9. **`paginatedResponse` envelope** (`handlers/discovery.go:37-58`) — small, consistent across all Zitadel discovery handlers. Handler code reads identically whether listing users, projects, roles, or grants.
+
+---
+
+## Findings: Overengineering & Bloat
+
+Severity: HIGH = remove or fix soon; MED = costs reading time and onboarding; LOW = harmless rough edge.
+
+### Backend
+
+| # | Severity | Where | Finding |
+|---|---|---|---|
+| B1 | **HIGH** | `backend/cmd/test/main.go` | Destructive dev scratchpad. `db.PG.Exec(ctx, "DELETE FROM mapping_rules")` runs on every `go run ./cmd/test`. Not referenced from Makefile, Dockerfile, or any script. **Delete the file.** |
+| B2 | **HIGH** | `backend/internal/handlers/reconciliation.go:29` + `:113-138` | `reconciliationSafetyCap = 10_000` and the paginated `fetchAllZitadelGrants` loop are sized for a tenant that doesn't exist. A makerspace with ~200 members will plateau under 2k grants. The `OnlyInZitadel` bucket also lists every mapping-rule-derived grant ("expected") on every call, drowning the diff's signal. |
+| B3 | **HIGH** | `backend/internal/services/views.go` (797 lines) | `ListUsers` (42-85), `ListApplications` (163-199), `ListProjects` (253-342), and `Topology` (430-623) each call `collectUserRoles(ctx, user.ID)` inside per-user loops. Each call fans out to `directGrants + bundles + bundleRoles + activeRules`. For N users this is O(N × bundles × rules + N²) DB+directory hits per render. Compute one `(user→roles)` map once per request and feed it to all four. The 797-line file is a direct symptom; the refactor likely halves it. |
+| B4 | **MED** | `backend/internal/handlers/discovery.go:218-282` + `zitadel/client.go:336-373` | A complete CRUD for Zitadel grants and roles is exposed (POST/PUT/DELETE on `/api/v1/zitadel/users/{id}/grants[/{grantId}]`). Spec says "MkAuth Backend is the single mutation authority"; this endpoint family is the operator's escape hatch back to direct-Zitadel mutation, manufacturing the divergence reconciliation later detects. Either remove it, or amend the doctrine. |
+| B5 | **MED** | `backend/internal/db/repositories.go` (1303 lines) | God-file: bundles, mapping rules, audit, direct grants, access requests, claim profiles, onboarding, webhook events, grant index, role management, provisioning intents, shadow vault — all in one file. Splitting into `repositories/{bundles,grants,rules,webhooks,vault,intents,roles}.go` would let `git blame` and code review work per-domain. Functions themselves are good; the seam is wrong. |
+| B6 | **MED** | `webhook.go:77-79` + `webhook.go:104-109` | Two silent defaults: missing `event_type` becomes `grant_added`; Zitadel-shape with missing `source_project` returns 200 with "no dispatch." The combination can mask broken triggers (a malformed event passes both filters and disappears silently). |
+| B7 | **LOW** | `handlers/vault.go:145-147` | `isComplexityError` does string-prefix sniffing on `err.Error()[:20] == "password complexity:"`, guarded by `len > 20`. The guard prevents a panic, but the contract is still brittle: an error whose message is exactly the 20-byte literal `"password complexity:"` (with no trailing detail) silently fails the match. A typed sentinel is one line. |
+| B8 | **LOW** | `webhook.go` + `zitadel_grant_lookup.go` | `grantLookupMaxPages = 100` for a 200-user org is theatrical. Drop to 10. |
+
+### UI
+
+| # | Severity | Where | Finding |
+|---|---|---|---|
+| U1 | **HIGH** | `ui/src/lib/queries/useNameResolver.tsx` (409 lines) | Tick-batched UID→name resolver with rAF flushing, dual `resolved`/`attempted` state, React Query coalescing, tri-state `ResolveResult`, plus a footgun warning about an "infinite rAF/setState loop" if invariants slip. For ~few-hundred-user scale, fetch the catalog once at provider mount into a `Map` and resolve synchronously. The complex path is for thousands of unresolved UIDs across views — workload that doesn't exist. |
+| U2 | **HIGH** | Multiple `ui/src/**/*.tsx` | **Two coexisting CSS design systems.** Most pages use Material-style tokens (`bg-surface-container-low`, `text-on-surface-variant`, `border-outline-variant`) introduced by `obsidian-clarity-redesign` Stage 1. But `Sidebar.tsx`, `ThemeToggle.tsx`, `RequestAccessButton.tsx`, `ErrorBoundary.tsx`, parts of `app/zitadel/page.tsx` still use the older `bg-surface`/`text-foreground`/`text-muted`/`bg-primary` palette. Dark mode is half-broken because of this. *Note:* this is an in-progress migration (`obsidian-clarity-redesign` is not in `archive/`), not negligence — but it needs a finish date and a tasks-list cleanup. |
+| U3 | **MED** | `ui/src/components/SidebarNav.tsx:43` + `useGovernanceSummary` | Sidebar fetches `/governance/summary` directly with raw `fetch()` to populate badge counts; `AdminDashboard` fetches the same endpoint via React Query a second time. Same data, two cache stores, no dedup. |
+| U4 | **MED** | `ui/src/lib/api.ts` + `ui/src/lib/types.ts` | Mostly dead in OIDC mode. `fetchBundles`, `fetchMappingRules`, `fetchProjects`, `fetchAudit` are exported but only `fetchApplications` and `fetchSystemMode` are called from pages. All other surfaces moved to `lib/queries/*` via `api-client.ts`. Same for `lib/types.ts` — duplicated by per-resource shapes inside each `useX.ts`. Delete or consolidate. |
+| U5 | **MED** | `ui/src/app/zitadel/page.tsx` (947 lines) | Largest file in the UI. Three bespoke fetch helpers (`apiGet`/`apiSend`/`apiGetDiagnostic`) where the rest of the codebase uses `request<T>` from `api-client.ts`. The "diagnostic" variant (preserve non-2xx body) is legitimate but should be a flag on `request<T>`, not a one-off. Splits cleanly into 4 section components. |
+| U6 | **LOW** | `ui/src/lib/session.ts:206` | `nameToAvatar(payload.name)` when `name` is missing returns "ZI" or initials of a UUID. Use `userId`/`email` as a fallback before the avatar helper. |
+
+### Sync / Zitadel / Scripts
+
+| # | Severity | Where | Finding |
+|---|---|---|---|
+| S1 | **MED** | `register.sh:77-91`, `rotate.sh:63-77`, `smoke-test-action-v2.sh:28-43`, `smoke-test-event-listener.sh:28-43` | Identical 12-line `_ENV_FILE` loader duplicated four times. Extract to `scripts/lib/load-env.sh` and `source` it. |
+| S2 | **MED** | `register.sh:154-189` + `rotate.sh:131-163` | Identical `zitadel_api()` helper duplicated, including the 401/403 PERMISSIONS.md hint block. Same fix: shared lib. |
+| S3 | **LOW** | `zitadel/actions/{README,EVENTS,PERMISSIONS,SIGNING_KEY}.md` | 605 lines of documentation for one Action target group. `PERMISSIONS.md` and `SIGNING_KEY.md` content already echoes inline in the `zitadel_api()` 401 hint and the `rotate.sh` output. Fold into one `README.md`. |
+| S4 | **LOW** | `sync/internal/config/config.go:42-43` | `RetryAttempts: 3` and `RetryBackoff: 1s` are env-shaped fields without env wiring — operator can't tune. Either expose as `SYNC_RETRY_*` env or remove the fields and inline the constants. |
+
+---
+
+## Findings: Spec ↔ Implementation Drift
+
+Items where the spec, the design doc, or `feature-coverage.md` does not match what the code actually does.
+
+| # | Severity | Spec / claim | Reality |
+|---|---|---|---|
+| D1 | **HIGH** | `feature-coverage.md` "Welcome bundle — convention-based" | Spec implies a `LIKE '%welcome%'` lookup. Reality is **worse**: `repositories.go:607-628` falls back to "first bundle by `created_at ASC`" if no name matches. In a fresh deployment with one bundle, *any* bundle becomes the welcome bundle. Either error explicitly when no welcome bundle is configured, or document this fallback prominently in the spec. |
+| D2 | **HIGH** | UI design.md §5: "vibrant dark/light modes" + "command palette ⌘K" | Theme toggle landed (Material tokens only); ⌘K command palette **not implemented anywhere** (no `cmdk`, no `Cmd+K` listener, no `CommandPalette` component). Either ship it or remove the bullet. |
+| D3 | **MED** | "Backend is the single mutation authority" (`design.md` + `CLAUDE.md`) | Contradicted by `discovery.go:218-282` which exposes direct Zitadel grant CRUD as operator-only routes (`/api/v1/zitadel/users/{id}/grants` + PUT/DELETE on individual grant IDs). Either remove these (force all mutations through bundle/rule paths) or amend the doctrine. |
+| D4 | **MED** | `feature-coverage.md` "Versioned policies — Partial; version column exists, no rollback" | Confirmed accurate. `mapping_rules.version` is incremented by `UpdateMappingRule` (`repositories.go:145-156`); no history table, no snapshot, no rollback. The spec is honest, but flag this in the roadmap as either "ship rollback" or "drop the versioning conceit and rely on audit_logs for replay." |
+| D5 | **MED** | OIDC member portal | `lib/session.ts:202-204` hardcodes `title: ""`, `team: ""`, `location: ""` for OIDC sessions. Member dashboard at `app/page.tsx:55-56` renders `{session.title} • {session.team} • {session.location}` → in production this displays " •  • " (three spaces). User-management spec says these come from Zitadel metadata and are populated. **Visible regression for any non-admin user signing in via OIDC.** |
+| D6 | **MED** | "Live-Directory Identity Completeness" claim that `Title`/`Team`/`Location` overlay from Zitadel metadata | Title and Team are rendered on `users/page.tsx`. **Location is not rendered anywhere** despite being in `lib/types.ts:UserProfile`, the demo profile, and the spec. Drop it or render it. |
+| D7 | **MED** | "1-command install/update via `update.sh`" | Broken: `LLDAP_BIND_DN`, `LLDAP_BIND_PASSWORD`, all `SYNC_*`, `MKAUTH_EXTERNAL_URL`, `ZITADEL_M2M_TOKEN` are required at runtime but **absent from `.env.example`**. An operator running the documented flow hits cryptic errors with no template to reference. |
+| D8 | **LOW** | `feature-coverage.md` "Webhook listener: 6 event types" | Mostly accurate, but `webhook.go:77-79` defaults missing `event_type` to `grant_added` — convenience that contradicts the strict 6-type list. |
+| D9 | **LOW** | `.env.example:27-30` framing for `EXPIRY_SCHEDULER_*` | Warns operator to "set to false on extra replicas when running N > 1 backend instances." Single-LXC deployment doesn't have multi-replica; nothing in compose, `install.sh`, or the architecture supports horizontal scale. Misleading framing. |
+| D10 | **LOW** | `obsidian-clarity-redesign/tasks.md` checkmarks | All Stage-1 tasks marked `[x]` complete, but the migration of *legacy palette* surfaces (Sidebar, ThemeToggle, ErrorBoundary, RequestAccessButton, parts of `zitadel/page.tsx`) is incomplete. Either move those tasks to a Stage-2 list or stop marking the change "in progress" while leaving its visual contract half-met. |
+
+---
+
+## Findings: Bugs & Correctness Concerns
+
+Severity: HIGH = ship-blocking; MED = trust-eroding but contained; LOW = brittleness, not harm.
+
+| # | Severity | Where | Issue |
+|---|---|---|---|
+| C1 | **HIGH** | `backend/internal/handlers/zitadel_action_auth.go:50-57` | `withZitadelActionSignature(envVar, …)` falls through *unverified* when the named env var is empty. Justification: dev-mode parity with `withUserAuth`. **Risk in production:** with `ZITADEL_DOMAIN` set but `ZITADEL_EVENT_SIGNING_KEY` or `ZITADEL_ACTION_SIGNING_KEY` accidentally unset (config drift, secrets-mount typo, deploy script regression), `/api/webhooks/zitadel` and `/api/action/inject` accept anonymous POSTs with full effect. **Fix:** when `ZITADEL_DOMAIN` is set, require the matching signing key — refuse to start (or 503 the route) instead of silently disabling verification. |
+| C2 | **HIGH** | `ui/src/app/page.tsx:55-56` + `ui/src/lib/session.ts:202-204` | OIDC member dashboard renders blank metadata: " •  • ". Either fetch profile from `/api/v1/users/{self}` during the OIDC callback to populate the cookie, or drop the line for OIDC sessions. |
+| C3 | **MED** | `backend/internal/handlers/vault.go:13-30` (`enforceSelfOnly` dev mode) | In dev (API-key auth) the function uses the `{uid}` from the path as the actor. Anyone holding the API key can write a shadow credential for any user — the audit trail then "self-attributes" the action to the victim. Production (Zitadel JWT) is correct. Risk window: local-dev + leaked API key. The audit lie is the real damage. **Fix:** in dev mode, refuse to mutate or require an explicit `?actor=` query param logged separately. |
+| C4 | **MED** | `backend/internal/handlers/router.go:189-211` (`withOperatorAuth`) | The inner closure re-extracts the bearer token and calls `auth.HasProjectRole(rawToken, …)`, which decodes the payload **without re-verifying the signature**. This works only because `withUserAuth` runs first. Any future refactor that adds another wrapper between them, or that switches to claim-from-context, silently breaks role enforcement. **Fix:** lift parsed claims into request context in `withUserAuth`; have `withOperatorAuth` read from context. |
+| C5 | **MED** | `backend/internal/db/repositories.go:496-523` (`GetClaimFailureMode`) | A real DB error returns `("fail_closed", nil, err)`. `degradedResponse` (`action.go:182-186`) logs and returns empty `append_claims` without distinguishing "no profile configured" from "DB is on fire." A `minimal_safe`-mode project silently downgrades to fail-closed during a transient DB blip. **Fix:** cache last-known mode per project in Redis (already next to the claims) so transient DB failure rides on the cached value. |
+| C6 | **MED** | `backend/internal/directory/zitadel.go` (`Users()` overlay) | Cache is set only on success, but `applyUserMetadataOverlay` modifies `out` in place. If the metadata fan-out returns partial results, the cached entry is half-overlaid forever (until 30s TTL). **Fix:** skip cache when overlay had per-user errors, or make the overlay idempotent on retry. |
+| C7 | **MED** | `sync/internal/ldap/client.go:170` | `groupOfNames` placeholder uses `member: [""]`. Empty-string DN is technically invalid LDAP; some servers (OpenLDAP strict mode) reject it. LLDAP's Rust impl tolerates it today but this is fragile. Use the bind DN as the placeholder, or switch the schema to a model LLDAP supports natively. |
+| C8 | **MED** | `sync/internal/worker/worker.go:101` (LDAP context propagation) | Worker calls `lp.AddUserToGroup(ctx, …)` but `ldap/client.go:185` ignores the context (`_ context.Context`). On graceful shutdown the worker blocks until TCP timeout, instead of cancelling. Plumb context through `withConn` or attach a deadline. |
+| C9 | **MED** | `scripts/smoke-test-lxc.sh:11-13` | Hits `GET /api/v1/bundles` with `MKAUTH_API_KEY`. `router.go` wraps the route in `withUserAuth`, which falls through to API-key auth **only when `ZITADEL_DOMAIN` is unset**. On a real OIDC LXC the smoke test 401s. Probe `/healthz` (no auth) instead. |
+| C10 | **LOW** | `sync/internal/worker/worker.go:190-194` (shadow-password zeroing) | `defer zero(hashBytes)` after `SetUserPassword` is theatre — the original `hash` string returned by `bc.GetShadowCredentialHash` is GC-heap immutable; the only zeroable buffer is the `[]byte` copy. Either accept the limitation (drop the defer) or document it. |
+| C11 | **LOW** | `webhook.go:77-79` + `:104-109` | Two silent defaults can chain: malformed event with empty `event_type` and missing `source_project` returns 200 "no dispatch" instead of 400. Functionally fine; obscures observability of broken triggers. |
+
+---
+
+## Test Quality Spot-Check
+
+Sampled `webhook_test.go`, `reconciliation_test.go`, `action_test.go`:
+
+- `webhook_test.go` — solid behavioral coverage. Each event type asserts the right dispatch fired AND wrong ones didn't (e.g. `TestWebhook_UserDeactivated` explicitly verifies enforce/revoke NOT called). Real edges: signature 401, dedup short-circuit, role_keys plural-vs-singular precedence. Not coverage padding.
+- `reconciliation_test.go` — drives diff core through the handler with stub injection. Covers `only_in_mkauth`, `only_in_zitadel`, drift, error pass-through, pagination iteration. Correct shape.
+- `action_test.go` — exercises `fail_closed` / `minimal_safe` with malformed cache JSON. Good coverage. **Gap:** when `dbGetClaimFailureMode` itself returns a DB error (correctness #C5), there's no test.
+
+UI test surface is broader than the April audit captured: 16 spec files, ~73 `it()` cases spanning sessions (`lib/__tests__/session.test.ts`), formatting (`lib/__tests__/format.test.ts`), name resolver (`lib/queries/__tests__/useNameResolver.test.tsx`), modal/confirm-modal a11y, page views (`app/{audit,bundles,grants,operations,policies,requests,users,page}/__tests__/page.test.tsx`), and component flows (`components/bundles/__tests__/{AddRolesToBundlePicker,CreateBundleModal}.test.tsx`, `components/roles/__tests__/CreateRoleModal.test.tsx`). The residual gap is narrow but security-critical: **`middleware.ts` (admin redirect, stale demo cookie clearing) and `api/proxy/[...path]/route.ts` (member self-scoping, allowlist) have no dedicated tests** — these enforce the admin/user split and would benefit from explicit coverage.
+
+---
+
+## Recommendations (Prioritized)
+
+### Ship-blockers (act now)
+
+1. **C1** — Make production refuse missing signing keys. When `ZITADEL_DOMAIN != ""`, fail-fast (or 503) on routes that depend on `ZITADEL_EVENT_SIGNING_KEY` / `ZITADEL_ACTION_SIGNING_KEY` if either is empty. The current "log a warning and pass through" is a production timebomb.
+2. **C2** — Fix OIDC member dashboard metadata. Either fetch from `/api/v1/users/{self}` during callback into the cookie, or drop the title/team/location line for OIDC sessions.
+3. **D1** — Decide what `GetWelcomeBundle` does with no match. "First bundle by created_at" is silent action at a distance. Either error explicitly or document loudly.
+4. **C3** — Vault dev-mode self-attribution. Refuse self-only writes in dev-mode, or require an explicit actor.
+5. **B1** — Delete `backend/cmd/test/main.go`. Destructive scratchpad with no caller.
+
+### High-leverage cleanups
+
+6. **B3** — Refactor `services/views.go`. Compute `(user → roles)` once per request; hand the same map to `ListUsers`, `ListApplications`, `ListProjects`, `Topology`. Likely halves the file.
+7. **U2 + D10** — Finish the obsidian-clarity-redesign palette migration. Move the 5 outstanding surfaces (Sidebar, ThemeToggle, ErrorBoundary, RequestAccessButton, parts of `zitadel/page.tsx`) to Material tokens. Delete the legacy palette from globals.css after.
+8. **U1** — Trim `useNameResolver`. Replace the rAF-batched 409 LOC with a single full-catalog fetch on provider mount. Keep only if a benchmark justifies the complex path.
+9. **D7** — Document the sync-service env surface. Add an `--- Sync Service / LLDAP ---` block to `.env.example` with `LLDAP_*`, `SYNC_*`, `MKAUTH_EXTERNAL_URL`, `ZITADEL_M2M_TOKEN`.
+10. **B4 + D3** — Resolve the "single mutation authority" contradiction. Either remove the operator-side Zitadel grant CRUD (`discovery.go:218-282`) or amend the design doc.
+
+### Quality-of-life
+
+11. **B5** — Split `repositories.go` into `repositories/{bundles,grants,rules,webhooks,vault,intents,roles,onboarding}.go`. Functions are good; the seam is wrong.
+12. **U4** — Delete dead code in `lib/api.ts` and `lib/types.ts`. Single source of truth in `lib/queries/*`.
+13. **U5** — Split `app/zitadel/page.tsx` into `components/zitadel/{Health,Rotation,Projects,Users,AllGrants}.tsx`. Replace bespoke fetch helpers with `request<T>`.
+14. **S1 + S2** — Extract `scripts/lib/load-env.sh` + `scripts/lib/zitadel-api.sh`. Removes ~120 lines of duplicate bash across four scripts.
+15. **B2** — Drop reconciliation safety cap to ~2000. Surface mapping-rule-derived grants as a separate "expected" bucket so the diff actually highlights drift.
+16. **C9** — Fix `smoke-test-lxc.sh` to probe `/healthz`.
+17. **U7** — Test `middleware.ts` and `api/proxy/[...path]/route.ts`. These enforce the admin/user split; an untested admin redirect is a future regression waiting.
+18. **D2** — Decide on ⌘K. Either ship `cmdk` or strike the line from the spec.
+19. **C5** — Cache last-known `claim_failure_mode` per project in Redis so DB blips don't silently downgrade `minimal_safe` projects.
+20. **C4** — Lift parsed JWT claims into request context. Stop re-extracting the bearer token in `withOperatorAuth`.
+
+### Spec-side housekeeping
+
+21. **D8** — remove the `event_type` default in `webhook.go` or document it in the lifecycle spec.
+22. **D9** — drop the "N > 1 replicas" framing in `.env.example`.
+23. **S3** — fold `PERMISSIONS.md` and `SIGNING_KEY.md` into `zitadel/actions/README.md`. 4 docs → 2.
+24. **S4** — wire `SYNC_RETRY_*` env or inline the constants.
+
+---
+
+## What This Audit Does *Not* Find
+
+- **No SQL injection risk.** 100% parameterized queries via pgx (`$1`, `$2`).
+- **No major security regressions** since the April audit. PKCE, RS256 JWT validation, HMAC freshness, body-size limits, security headers, constant-time API key comparison — all still in place and enforced.
+- **No abandoned features.** Every page in `ui/src/app/` is reachable from the sidebar; every backend route has a caller.
+- **No serious test rot.** ~190 backend tests, real behavioral assertions, not coverage padding.
+- **No deployment-shape mismatch.** Docker Compose is genuinely minimal; sync service is correctly isolated; backend is single-replica by design.
+
+---
+
+## Inventory Delta Since April
+
+The April inventory above is mostly still correct. New since then:
+
+### Backend additions
+
+- `internal/directory/` — live-vs-demo source seam (files: `directory.go`, `demo.go`, `zitadel.go`)
+- `internal/services/expiry/` — grant expiration scheduler (`scheduler.go`, `sweep.go`, `deps.go`)
+- `internal/services/vault.go` + `internal/handlers/vault.go` — Shadow Password Vault
+- `internal/handlers/discovery.go`, `lookup.go`, `reconciliation.go`, `system.go`, `audit.go`, `bundles.go`, `profile.go`, `rotation_status.go`
+- `internal/handlers/webhook_translate.go`, `webhook_translate_enrich.go` (event-trigger propagation)
+- `internal/handlers/zitadel_action_auth.go`, `zitadel_grant_lookup.go`
+- `internal/zitadel/applications.go`, `user_metadata.go`
+- `cmd/mkauth-token/` — used by `register.sh` / `rotate.sh` to mint M2M tokens
+- `cmd/test/` — **destructive scratchpad, not used by anything; recommend deletion**
+- Migrations 9, 10, 11 (provisioning intents, shadow vault, Zitadel grants index)
+
+### New backend routes (since April inventory)
+
+> Math: the April **inventory table** above lists 35 distinct routes (29 control plane + 3 sync API + 2 data plane + 1 infrastructure). The April header label "49 routes" was a miscount in the original document — verified by re-counting that table. The current router (`backend/internal/handlers/router.go`) registers 59 `mux.HandleFunc` entries, so the **true delta is +24** routes added since the April inventory. The list below contains exactly those 24 routes; pre-existing routes (such as `GET /api/v1/bundles/{id}/impact`, already in the April control-plane table) are not duplicated here.
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET | `/api/v1/system/mode` | user | Live/Demo/Degraded indicator |
+| POST | `/api/v1/lookup` | user | Batch UID→name resolver |
+| POST | `/api/v1/rules/mapping/validate` | user | Cycle-check a proposed rule before save |
+| PUT | `/api/v1/users/{uid}/shadow-credential` | user | Set shadow credential (self) |
+| DELETE | `/api/v1/users/{uid}/shadow-credential` | user | Clear shadow credential (self) |
+| GET | `/api/v1/users/{uid}/shadow-credential/status` | user | Credential status |
+| GET | `/api/v1/users/{uid}/shadow-credential/audit` | user | Per-user credential audit |
+| GET | `/api/v1/shadow-credentials/{uid}/hash` | api-key | Sync-service hash retrieval |
+| GET | `/api/v1/users/{uid}/profile` | api-key | Sync-service profile fetch |
+| GET | `/api/v1/zitadel/health` | operator | M2M end-to-end smoke |
+| GET | `/api/v1/zitadel/action-rotation-status` | operator | Signing-key age vs threshold |
+| GET | `/api/v1/zitadel/users` | operator | List Zitadel users (paginated) |
+| GET | `/api/v1/zitadel/users/{id}` | operator | Single user detail |
+| GET | `/api/v1/zitadel/projects` | operator | List Zitadel projects |
+| GET | `/api/v1/zitadel/projects/{id}/roles` | operator | Project roles |
+| POST | `/api/v1/zitadel/projects/{id}/roles` | operator | Create project role |
+| PUT | `/api/v1/zitadel/projects/{id}/roles/{key}` | operator | Update project role |
+| DELETE | `/api/v1/zitadel/projects/{id}/roles/{key}` | operator | Delete project role |
+| GET | `/api/v1/zitadel/grants` | operator | All grants (paginated) |
+| GET | `/api/v1/zitadel/users/{id}/grants` | operator | User-scoped grants |
+| POST | `/api/v1/zitadel/users/{id}/grants` | operator | Direct Zitadel grant (**doctrine bypass — see B4/D3**) |
+| PUT | `/api/v1/zitadel/users/{id}/grants/{grantId}` | operator | Direct Zitadel grant update (**doctrine bypass**) |
+| DELETE | `/api/v1/zitadel/users/{id}/grants/{grantId}` | operator | Direct Zitadel grant remove (**doctrine bypass**) |
+| GET | `/api/v1/reconciliation/grants` | operator | MkAuth-vs-Zitadel grant diff (read-only) |
+
+Total live routes: **59** in `backend/internal/handlers/router.go` (counted from `mux.HandleFunc` registrations on May 2026).
+
+### Database schema additions
+
+| Migration | Tables | Purpose |
+|---|---|---|
+| 000009 | `provisioning_intents` | LLDAP sync intent queue (4-state) |
+| 000010 | `shadow_credentials`, `shadow_credential_audit` | Argon2id Samba/LLDAP credentials |
+| 000011 | `zitadel_grants_index` | Local cache of Zitadel grant aggregates (enriches grant.changed/removed events) |
+
+### New environment variables (delta from April)
+
+| Variable | Used By | Default | Purpose |
+|---|---|---|---|
+| `ZITADEL_MACHINE_KEY_PATH` | Backend | (unset = local-policy-only) | Path to service-account JSON key |
+| `ZITADEL_M2M_USER_ID` | Backend | — | User ID of the M2M account; webhook self-mutation guard |
+| `ZITADEL_EVENT_SIGNING_KEY` | Backend | — | HMAC key for `/api/webhooks/zitadel` |
+| `ZITADEL_ACTION_SIGNING_KEY` | Backend | — | HMAC key for `/api/action/inject` |
+| `ZITADEL_EVENT_SIGNING_KEY_ROTATED_AT` | Backend | — | RFC3339 timestamp; consumed by Rotation Status panel |
+| `ZITADEL_ADMIN_ROLE_KEY` | Backend | `admin` | Role key checked by `withOperatorAuth` |
+| `EXPIRY_SCHEDULER_ENABLED` | Backend | `true` | Toggle the expiry sweep goroutine |
+| `EXPIRY_SCHEDULER_INTERVAL` | Backend | `5m` | Sweep interval |
+| `EXPIRY_SCHEDULER_BATCH_SIZE` | Backend | `500` | Max grants per sweep |
+| `MKAUTH_EXTERNAL_URL` | Scripts | — | Public URL for Zitadel Action target registration (**missing from `.env.example`**) |
+| `ZITADEL_M2M_TOKEN` | Scripts | — | Pre-minted M2M token for register.sh (**missing from `.env.example`**) |
+| `LLDAP_URL` | Sync | — | LLDAP host:port (**missing from `.env.example`**) |
+| `LLDAP_BIND_DN` | Sync | — | LLDAP bind DN (**missing, required**) |
+| `LLDAP_BIND_PASSWORD` | Sync | — | LLDAP bind password (**missing, required**) |
+| `LLDAP_USER_BASE_DN` | Sync | — | User search base (**missing**) |
+| `LLDAP_GROUP_BASE_DN` | Sync | — | Group search base (**missing**) |
+| `SYNC_POLL_INTERVAL` | Sync | `15s` | Backend poll cadence (**missing**) |
+| `SYNC_BATCH_SIZE` | Sync | — | Intents claimed per poll (**missing**) |
+| `SYNC_BACKEND_URL` | Sync | — | Backend internal URL (**missing**) |
+
+### Module sizes (May)
+
+| Module | LOC | Was (April) | Delta |
+|---|---|---|---|
+| `backend/` (Go src, no caches) | 19,241 | ~12k | +7k |
+| `ui/` (TS/TSX, src only) | 14,042 | ~6k | +8k (Obsidian Clarity + dashboard UX) |
+| `sync/` (Go src) | 1,487 | ~1.2k | +0.3k |
+
+### OpenSpec changes (May 2026)
+
+Complete: 18 changes across phases 1–5. `archive/` is empty (changes still browseable in-tree).
+
+In progress: `obsidian-clarity-redesign` (UI palette migration, Stage 1 done, Stage 2+ outstanding).
+
+Not started: Phase 5 partial-failure rollback, reconciliation auto-correct, welcome-bundle config UI, service-to-bundle automation, rate limiting, observability beyond `[DATA PLANE]`/`[SCHEDULER]` logs, CI/CD. Phase 6 (Google Workspace account poller) untouched.
+
+### Test coverage (May)
+
+| Layer | Files | Approx tests |
+|---|---|---|
+| Backend (Go) | ~30 `_test.go` files | ~190 (was 170) |
+| Sync (Go) | ~5 `_test.go` files | ~32 |
+| UI (Vitest) | 16 spec files | ~73 `it()` cases (session + format + name resolver + Modal/ConfirmModal a11y + 8 page views + bundle/role component flows) |
+
+UI security gaps: `middleware.ts` and `api/proxy/[...path]/route.ts` have **no dedicated tests** despite enforcing the admin/user split.
+
+---
+
+## How to Use This Addendum
+
+1. **Operator (you):** Treat the "Ship-blockers" list as a sprint; the rest as Phase 5 cleanup interleavable with the open ROADMAP items.
+2. **Future Claude session:** Read `mkauth-core-architecture/specs/feature-coverage.md` first for ground truth, then this addendum for known drift. Findings are dated May 2026; re-validate with `git log` before acting on any specific line citation.
+3. **Spec authors:** When updating `feature-coverage.md`, cross-reference the **Spec Drift** table here. Three claims (D1 welcome bundle, D2 ⌘K, D7 1-command install) currently overstate reality.
+
+The architecture is right-sized. Most cleanup is finishing migrations, deleting one scratchpad, and refusing to silently fall through three production-shaped middlewares. Nothing in the findings is structural — they are all *resolvable without re-architecting*.
