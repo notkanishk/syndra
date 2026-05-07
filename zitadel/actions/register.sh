@@ -24,6 +24,13 @@
 # Usage:
 #   register.sh               # create/update target, bind executions
 #   register.sh --remove      # unbind executions (target + key retained)
+#   register.sh --purge       # unbind executions AND delete every manifest
+#                             # target via DELETE /v2/actions/targets/{id};
+#                             # also deletes local .action-signing-key.<name>
+#                             # files so a subsequent register.sh starts from
+#                             # a clean slate. Destructive: re-registering
+#                             # mints fresh signing keys, requiring a backend
+#                             # env-swap and restart.
 #
 # Required env:
 #   ZITADEL_DOMAIN            e.g. your-instance.zitadel.cloud
@@ -42,6 +49,20 @@ if (( BASH_VERSINFO[0] < 4 )); then
   echo "  macOS default is bash 3; install via 'brew install bash' and rerun." >&2
   exit 1
 fi
+
+# Three modes: apply (default), remove (unbind only), purge (unbind + delete
+# targets + delete local signing-key files). remove and purge share the
+# unbind path; purge then runs an extra target-delete + key-file-cleanup
+# pass after the loop.
+MODE="apply"
+case "${1:-}" in
+  "")        MODE="apply"  ;;
+  --remove)  MODE="remove" ;;
+  --purge)   MODE="purge"  ;;
+  *)         echo "error: unknown argument '${1}' (expected --remove or --purge)" >&2; exit 1 ;;
+esac
+DESTRUCTIVE_MODE=0
+[[ "$MODE" == "remove" || "$MODE" == "purge" ]] && DESTRUCTIVE_MODE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST="${SCRIPT_DIR}/targets.json"
@@ -123,6 +144,13 @@ API_BASE="https://${ZITADEL_DOMAIN}/v2/actions"
 # "curl: (22)". 401/403 get an inline pointer at the permissions doc so
 # operators don't over-grant; see zitadel/actions/PERMISSIONS.md for the
 # least-privilege matrix.
+#
+# Set ZITADEL_API_TOLERATE_404=1 in the caller's environment to swallow a
+# 404 silently (returns 0, prints nothing). Used by --remove paths that
+# want idempotent cleanup against partially-applied / never-applied state:
+# Zitadel returns HTTP 404 + COMMAND-74aaqj8fv9 ("Execution condition is
+# invalid") from PUT /executions when no execution row matches the
+# condition, which is exactly the post-state --remove targets.
 zitadel_api() {
   local method="$1" path="$2" body="${3:-}"
   local tmp status
@@ -136,6 +164,9 @@ zitadel_api() {
     args+=(-H 'Content-Type: application/json' -d "$body")
   fi
   status="$(curl "${args[@]}")"
+  if [[ "$status" == "404" && "${ZITADEL_API_TOLERATE_404:-}" == "1" ]]; then
+    return 0
+  fi
   if [[ "$status" -lt 200 || "$status" -ge 300 ]]; then
     {
       printf 'error: %s %s -> HTTP %s\n' "$method" "$path" "$status"
@@ -196,8 +227,9 @@ for ((i = 0; i < TARGET_COUNT; i++)); do
   LIST_RESP="$(zitadel_api POST /targets/search "$SEARCH_BODY")" || exit 5
   EXISTING_ID="$(echo "$LIST_RESP" | jq -r '.targets[0].id // .result[0].id // empty' 2>/dev/null || true)"
 
-  if [[ "${1:-}" == "--remove" ]]; then
-    # Remove path: just record IDs so the unbind loop below can reach them.
+  if (( DESTRUCTIVE_MODE )); then
+    # Remove/purge path: just record IDs so the unbind loop below (and the
+    # purge target-delete pass) can reach them.
     [[ -n "$EXISTING_ID" ]] && TARGET_IDS[$TARGET_NAME]="$EXISTING_ID"
     continue
   fi
@@ -251,11 +283,14 @@ for ((i = 0; i < EXEC_COUNT; i++)); do
   TARGET_NAME="$(echo "$EXEC" | jq -r '.target')"
   COND="$(echo "$EXEC" | jq -c '.condition')"
 
-  if [[ "${1:-}" == "--remove" ]]; then
+  if (( DESTRUCTIVE_MODE )); then
     # Unbind by condition alone — Zitadel's PUT /executions with targets:[]
     # doesn't need the target ID. Tolerate a partially-deleted (or
-    # never-created) target so cleanup still completes.
+    # never-created) target so cleanup still completes. Tolerate 404 too:
+    # Zitadel returns HTTP 404 (COMMAND-74aaqj8fv9) when no execution row
+    # matches the condition, which is the desired post-state for removal.
     BIND_BODY="$(jq -n --argjson c "$COND" '{ condition: $c, targets: [] }')"
+    ZITADEL_API_TOLERATE_404=1 zitadel_api PUT /executions "$BIND_BODY" >/dev/null || exit 10
   else
     TARGET_ID="${TARGET_IDS[$TARGET_NAME]:-}"
     if [[ -z "$TARGET_ID" ]]; then
@@ -263,15 +298,48 @@ for ((i = 0; i < EXEC_COUNT; i++)); do
       exit 9
     fi
     BIND_BODY="$(jq -n --argjson c "$COND" --arg tid "$TARGET_ID" '{ condition: $c, targets: [$tid] }')"
+    zitadel_api PUT /executions "$BIND_BODY" >/dev/null || exit 10
   fi
-  zitadel_api PUT /executions "$BIND_BODY" >/dev/null || exit 10
 done
+
+# --- Purge-only: delete every manifest target and its local signing-key file ---
+# Runs after the unbind loop so executions are gone before targets disappear
+# (Zitadel will refuse to delete a target still referenced by an execution).
+# Tolerates 404 on DELETE so re-running --purge against an already-clean
+# instance is idempotent. Local key-file deletion is best-effort: missing
+# files are fine, the .previous companion is also removed so the next
+# register.sh starts truly fresh.
+if [[ "$MODE" == "purge" ]]; then
+  echo "Deleting targets..." >&2
+  for ((i = 0; i < TARGET_COUNT; i++)); do
+    T="$(echo "$RENDERED_MANIFEST" | jq -c ".targets[$i]")"
+    TARGET_NAME="$(echo "$T" | jq -r '.name')"
+    TARGET_ID="${TARGET_IDS[$TARGET_NAME]:-}"
+    SIGNING_KEY_FILE="${SCRIPT_DIR}/.action-signing-key.${TARGET_NAME}"
+    if [[ -n "$TARGET_ID" ]]; then
+      echo "  → DELETE /targets/${TARGET_ID} (${TARGET_NAME})" >&2
+      ZITADEL_API_TOLERATE_404=1 zitadel_api DELETE "/targets/${TARGET_ID}" >/dev/null || exit 11
+    else
+      echo "  → ${TARGET_NAME}: no target id (already absent in Zitadel)" >&2
+    fi
+    rm -f -- "$SIGNING_KEY_FILE" "${SIGNING_KEY_FILE}.previous" "${SIGNING_KEY_FILE}.rotated_at"
+  done
+  rm -f -- "${SCRIPT_DIR}/.action-env.fragment"
+fi
 
 echo "Done." >&2
 echo "Targets: $(echo "${!TARGET_IDS[@]}" | tr ' ' ',')" >&2
-if [[ "${1:-}" != "--remove" ]] && [[ -f "${SCRIPT_DIR}/.action-env.fragment" ]]; then
+if [[ "$MODE" == "apply" ]] && [[ -f "${SCRIPT_DIR}/.action-env.fragment" ]]; then
   echo "" >&2
   echo "Apply captured signing keys to .env with:" >&2
   echo "  cat zitadel/actions/.action-env.fragment >> .env" >&2
   echo "Then restart the backend so it picks up the new env vars." >&2
+fi
+if [[ "$MODE" == "purge" ]]; then
+  echo "" >&2
+  echo "Targets deleted. Local signing-key files removed:" >&2
+  echo "  ${SCRIPT_DIR}/.action-signing-key.<name>{,.previous,.rotated_at}" >&2
+  echo "Remember to clear ZITADEL_ACTION_SIGNING_KEY / ZITADEL_EVENT_SIGNING_KEY" >&2
+  echo "from .env (and restart the backend) before re-registering — re-register.sh" >&2
+  echo "will mint fresh keys that won't match the old env values." >&2
 fi

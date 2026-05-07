@@ -1,4 +1,4 @@
-.PHONY: dev dev-backend dev-ui test test-backend test-ui lint lint-backend lint-ui zitadel-actions-register zitadel-actions-verify zitadel-actions-verify-events zitadel-actions-remove zitadel-actions-rotate-key
+.PHONY: dev dev-backend dev-ui test test-backend test-ui lint lint-backend lint-ui zitadel-actions-register zitadel-actions-verify zitadel-actions-verify-events zitadel-actions-remove zitadel-actions-purge zitadel-actions-rotate-key
 
 dev-backend:
 	cd backend && go run ./cmd/api
@@ -33,6 +33,15 @@ zitadel-actions-register:
 
 zitadel-actions-remove:
 	@zitadel/actions/register.sh --remove
+
+# Full teardown: unbinds executions AND deletes the targets themselves via
+# DELETE /v2/actions/targets/{id}, then removes the local
+# .action-signing-key.<name>{,.previous,.rotated_at} files. Destructive —
+# re-running `make zitadel-actions-register` mints fresh signing keys, so
+# you also need to clear ZITADEL_ACTION_SIGNING_KEY / ZITADEL_EVENT_SIGNING_KEY
+# from .env and restart the backend before re-registering.
+zitadel-actions-purge:
+	@zitadel/actions/register.sh --purge
 
 # Rotate the Actions v2 target signing key(s) via POST /v2/actions/targets/{id}
 # with expirationSigningKey:0s. Backs up the previous key per-target to
