@@ -10,8 +10,8 @@
 ## 2. Backend: payload translator
 - [x] 2.1 Define `ZitadelEventPayload` lenient struct in `webhook_translate.go`
 - [x] 2.2 Map `user.human.added` → `user_created`
-- [x] 2.3 Map `user.human.deactivated` → `user_deactivated`
-- [x] 2.4 Map `user.human.locked` → `user_locked`
+- [x] 2.3 Map `user.deactivated` → `user_deactivated` (user-aggregate, not human-aggregate)
+- [x] 2.4 Map `user.locked` → `user_locked` (user-aggregate, not human-aggregate)
 - [x] 2.5 Map `user.grant.added` → `grant_added` with `role_keys[]`
 - [x] 2.6 Map `user.grant.changed` → `grant_changed` with `role_keys[]`
 - [x] 2.7 Map `user.grant.removed` → `grant_removed` with `role_keys[]`

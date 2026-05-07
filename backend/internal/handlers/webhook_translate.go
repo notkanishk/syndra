@@ -103,9 +103,9 @@ func translateEventName(ev zitadelEventPayload) WebhookPayload {
 	switch ev.Event {
 	case "user.human.added", "user.human.selfregistered":
 		base.EventType = "user_created"
-	case "user.human.deactivated":
+	case "user.deactivated":
 		base.EventType = "user_deactivated"
-	case "user.human.locked":
+	case "user.locked":
 		base.EventType = "user_locked"
 	case "user.grant.added", "user.user.grant.added":
 		return mapGrantEvent("grant_added", ev)

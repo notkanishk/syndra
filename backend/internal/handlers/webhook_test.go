@@ -590,8 +590,8 @@ func TestHandleZitadelWebhook_LifecycleEvents_DispatchWithoutSourceProject(t *te
 		expectOnb bool // user_created → onboarding trigger
 	}{
 		{"user.human.added → user_created", "user.human.added", false, true},
-		{"user.human.deactivated → user_deactivated", "user.human.deactivated", true, false},
-		{"user.human.locked → user_locked", "user.human.locked", true, false},
+		{"user.deactivated → user_deactivated", "user.deactivated", true, false},
+		{"user.locked → user_locked", "user.locked", true, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

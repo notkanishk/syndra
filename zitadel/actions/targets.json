@@ -28,8 +28,8 @@
     { "target": "mkauth-claim-injector", "condition": { "function": { "name": "preuserinfo" } } },
     { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.human.added" } } },
     { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.human.selfregistered" } } },
-    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.human.deactivated" } } },
-    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.human.locked" } } },
+    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.deactivated" } } },
+    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.locked" } } },
     { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.grant.added" } } },
     { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.grant.changed" } } },
     { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.grant.removed" } } }

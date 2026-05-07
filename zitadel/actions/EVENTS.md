@@ -9,8 +9,11 @@ and POSTs them to MkAuth's `/api/webhooks/zitadel` endpoint, driving:
   `EnforceMappingRules`).
 - Mapping-rule revocation on grant removals (`user.grant.removed` →
   `RevokeMappingRules`).
-- Cache invalidation on user deactivation/lock (`user.human.deactivated`,
-  `user.human.locked`).
+- Cache invalidation on user deactivation/lock (`user.deactivated`,
+  `user.locked` — note: deactivation and locking are user-aggregate events,
+  not human-aggregate; Zitadel rejects `user.human.deactivated` /
+  `user.human.locked` with `COMMAND-74aaqj8fv9` "Execution condition is
+  invalid").
 
 The target is type `restAsync` (fire-and-forget) — Zitadel does not block on
 MkAuth latency. Companion target `mkauth-claim-injector` (type `restCall`,
@@ -23,8 +26,8 @@ function triggers) handles claim shaping; both are registered by a single
 |---|---|---|
 | `user.human.added` | `user_created` | Onboarding trigger → welcome bundle |
 | `user.human.selfregistered` | `user_created` | Same |
-| `user.human.deactivated` | `user_deactivated` | Cache invalidation |
-| `user.human.locked` | `user_locked` | Cache invalidation |
+| `user.deactivated` | `user_deactivated` | Cache invalidation |
+| `user.locked` | `user_locked` | Cache invalidation |
 | `user.grant.added` | `grant_added` (per role) | Cache rebuild + mapping rules + LLDAP intent |
 | `user.grant.changed` | `grant_changed` (per role) | Same |
 | `user.grant.removed` | `grant_removed` (per role) | Cache invalidation + revoke + LLDAP intent |

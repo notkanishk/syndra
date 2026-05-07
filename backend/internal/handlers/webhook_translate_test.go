@@ -51,8 +51,8 @@ func TestTranslateEventName_AllMappings(t *testing.T) {
 	}{
 		{"user added", "user.human.added", "u1", `{}`, "user_created", "u1", nil},
 		{"self registered", "user.human.selfregistered", "u2", `{}`, "user_created", "u2", nil},
-		{"deactivated", "user.human.deactivated", "u3", `{}`, "user_deactivated", "u3", nil},
-		{"locked", "user.human.locked", "u4", `{}`, "user_locked", "u4", nil},
+		{"deactivated", "user.deactivated", "u3", `{}`, "user_deactivated", "u3", nil},
+		{"locked", "user.locked", "u4", `{}`, "user_locked", "u4", nil},
 		{"grant added", "user.grant.added", "g1", `{"userId":"u5","projectId":"p1","roleKeys":["alpha","beta"]}`, "grant_added", "u5", []string{"alpha", "beta"}},
 		{"grant changed", "user.grant.changed", "g2", `{"userId":"u6","projectId":"p2","roleKeys":["gamma"]}`, "grant_changed", "u6", []string{"gamma"}},
 		{"grant removed", "user.grant.removed", "g3", `{"userId":"u7","projectId":"p3","roleKeys":["delta"]}`, "grant_removed", "u7", []string{"delta"}},
