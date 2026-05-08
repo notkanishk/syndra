@@ -28,6 +28,10 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/bundles/{id}/roles", withCORS(withUserAuth(handleGetBundleRoles)))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/impact", withCORS(withUserAuth(handleGetBundleImpact)))
 	mux.HandleFunc("POST /api/v1/bundles/{id}/roles", withCORS(withUserAuth(handleAddRoleToBundle)))
+	// Welcome bundle toggle changes global onboarding policy (every newly-created
+	// Zitadel user gets the flagged bundle), so it requires operator role —
+	// withUserAuth alone would let any authenticated Zitadel user flip it.
+	mux.HandleFunc("PUT /api/v1/bundles/{id}/welcome", withCORS(withOperatorAuth(handleSetWelcomeBundle)))
 
 	// Explorer Views
 	mux.HandleFunc("GET /api/v1/catalog", withCORS(withUserAuth(handleGetCatalog)))
@@ -87,6 +91,8 @@ func NewRouter() http.Handler {
 
 	// User Profile (sync service — internal, API-key auth)
 	mux.HandleFunc("GET /api/v1/users/{uid}/profile", withCORS(withAPIKeyAuth(handleGetUserProfile)))
+	// Self-profile (UI — populates OIDC session cookie with Title/Team/Location)
+	mux.HandleFunc("GET /api/v1/me/profile", withCORS(withUserAuth(handleGetMyProfile)))
 
 	// Operator: event and trigger logs
 	mux.HandleFunc("GET /api/v1/onboarding/triggers", withCORS(withUserAuth(handleGetOnboardingTriggers)))

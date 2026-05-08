@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type AddRoleToBundleRequest struct {
@@ -138,4 +141,31 @@ func handleAssignBundleToUser(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = dbInsertAuditLog(r.Context(), actor, userID, "bundle.assigned", req.BundleID)
 	jsonResponse(w, http.StatusOK, map[string]string{"message": "Bundle assigned to user"})
+}
+
+// handleSetWelcomeBundle marks a bundle as the welcome bundle. Clears any
+// previous welcome flag in the same transaction (see db.SetWelcomeBundle).
+// PUT /api/v1/bundles/{id}/welcome
+func handleSetWelcomeBundle(w http.ResponseWriter, r *http.Request) {
+	bundleID := r.PathValue("id")
+	if strings.TrimSpace(bundleID) == "" {
+		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
+		return
+	}
+
+	if err := dbSetWelcomeBundle(r.Context(), bundleID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "Bundle not found")
+			return
+		}
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+
+	actor := getAdminUserID(r.Context())
+	if actor == "" {
+		actor = "system"
+	}
+	_ = dbInsertAuditLog(r.Context(), actor, "-", "bundle.welcome_set", bundleID)
+	jsonResponse(w, http.StatusOK, map[string]string{"message": "Welcome bundle set"})
 }

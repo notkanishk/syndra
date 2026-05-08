@@ -35,11 +35,13 @@ func TriggerOnboarding(ctx context.Context, userID, source, idempotencyKey strin
 	// 2. Find the welcome bundle to assign
 	bundleID, err := svcGetWelcomeBundle(ctx)
 	if err != nil {
-		log.Printf("[ONBOARDING] No welcome bundle available for user=%s: %v", userID, err)
+		// db.ErrNoWelcomeBundleConfigured is the named cause; preserve via %w
+		// so callers can errors.Is against it for tests + alerting.
+		log.Printf("[ONBOARDING] No welcome bundle configured for user=%s: %v", userID, err)
 		if failErr := svcFailOnboardingTrigger(ctx, triggerID, err.Error()); failErr != nil {
 			log.Printf("[ONBOARDING] Failed to record failure for trigger=%s: %v", triggerID, failErr)
 		}
-		return fmt.Errorf("find welcome bundle: %w", err)
+		return fmt.Errorf("welcome bundle: %w", err)
 	}
 
 	// 3. Assign the welcome bundle (idempotent — uses ON CONFLICT DO NOTHING)

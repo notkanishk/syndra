@@ -41,7 +41,7 @@ func AddRoleToBundle(ctx context.Context, bundleID, zitadelProjectID, zitadelRol
 }
 
 func GetAllBundles(ctx context.Context) ([]models.Bundle, error) {
-	query := `SELECT id, name, description, created_at FROM bundles ORDER BY created_at DESC;`
+	query := `SELECT id, name, description, is_welcome, created_at FROM bundles ORDER BY created_at DESC;`
 	rows, err := PG.Query(ctx, query)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func GetAllBundles(ctx context.Context) ([]models.Bundle, error) {
 	var bundles []models.Bundle
 	for rows.Next() {
 		var b models.Bundle
-		if err := rows.Scan(&b.ID, &b.Name, &b.Description, &b.CreatedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.Name, &b.Description, &b.IsWelcome, &b.CreatedAt); err != nil {
 			return nil, err
 		}
 		bundles = append(bundles, b)
@@ -101,11 +101,11 @@ func RemoveBundleFromUser(ctx context.Context, userID, bundleID string) error {
 
 func GetBundlesForUser(ctx context.Context, userID string) ([]models.Bundle, error) {
 	query := `
-		SELECT b.id, b.name, b.description, b.created_at
+		SELECT b.id, b.name, b.description, b.is_welcome, b.created_at
 		FROM bundles b
 		JOIN user_bundle_assignments uba ON b.id = uba.bundle_id
 		WHERE uba.user_id = $1;`
-	
+
 	rows, err := PG.Query(ctx, query, userID)
 	if err != nil {
 		return nil, err
@@ -115,7 +115,7 @@ func GetBundlesForUser(ctx context.Context, userID string) ([]models.Bundle, err
 	var bundles []models.Bundle
 	for rows.Next() {
 		var b models.Bundle
-		if err := rows.Scan(&b.ID, &b.Name, &b.Description, &b.CreatedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.Name, &b.Description, &b.IsWelcome, &b.CreatedAt); err != nil {
 			return nil, err
 		}
 		bundles = append(bundles, b)
@@ -601,30 +601,54 @@ func GetOnboardingTriggers(ctx context.Context) ([]OnboardingTrigger, error) {
 	return triggers, nil
 }
 
-// GetWelcomeBundle returns the ID of the first bundle marked as a welcome bundle,
-// or the first bundle in the system if none is specifically designated.
-// Returns an error if no bundles exist.
+// ErrNoWelcomeBundleConfigured is returned by GetWelcomeBundle when no row in
+// the bundles table has is_welcome=TRUE. Onboarding propagates this verbatim
+// so operators see a named cause in the trigger UI instead of getting the
+// "first bundle by created_at" silent default that the May 2026 audit (D1)
+// flagged as a trust hazard.
+var ErrNoWelcomeBundleConfigured = errors.New("no welcome bundle configured")
+
+// GetWelcomeBundle returns the ID of the bundle marked is_welcome=TRUE, or
+// ErrNoWelcomeBundleConfigured if no bundle has been designated. The
+// at-most-one constraint is enforced at the schema layer
+// (idx_bundles_welcome_unique).
 func GetWelcomeBundle(ctx context.Context) (string, error) {
-	// Prefer a bundle explicitly named "Welcome" or "welcome" (convention-based)
-	query := `
-		SELECT id FROM bundles
-		WHERE LOWER(name) LIKE '%welcome%'
-		ORDER BY created_at ASC
-		LIMIT 1`
-
 	var id string
-	err := PG.QueryRow(ctx, query).Scan(&id)
-	if err == nil {
-		return id, nil
+	err := PG.QueryRow(ctx, `SELECT id FROM bundles WHERE is_welcome = TRUE`).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNoWelcomeBundleConfigured
 	}
-
-	// Fallback: first bundle in the system
-	query = `SELECT id FROM bundles ORDER BY created_at ASC LIMIT 1`
-	err = PG.QueryRow(ctx, query).Scan(&id)
 	if err != nil {
-		return "", fmt.Errorf("no bundles available for welcome assignment: %w", err)
+		return "", fmt.Errorf("query welcome bundle: %w", err)
 	}
 	return id, nil
+}
+
+// SetWelcomeBundle marks bundleID as the welcome bundle. Transactional
+// clear-then-set: any previously-flagged bundle is unset before the new one
+// is set, so the partial unique index never trips. Returns pgx.ErrNoRows if
+// bundleID does not exist.
+func SetWelcomeBundle(ctx context.Context, bundleID string) error {
+	tx, err := PG.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin set-welcome-bundle: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, `UPDATE bundles SET is_welcome = FALSE WHERE is_welcome = TRUE`); err != nil {
+		return fmt.Errorf("clear previous welcome bundle: %w", err)
+	}
+	tag, err := tx.Exec(ctx, `UPDATE bundles SET is_welcome = TRUE WHERE id = $1`, bundleID)
+	if err != nil {
+		return fmt.Errorf("mark welcome bundle: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit set-welcome-bundle: %w", err)
+	}
+	return nil
 }
 
 // OnboardingTrigger is the DB representation of an onboarding_triggers row.

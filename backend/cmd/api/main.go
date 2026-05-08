@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -19,7 +21,45 @@ import (
 	"mkauth/internal/zitadel"
 )
 
+// requireProductionSigningKeys aborts startup if ZITADEL_DOMAIN is set but
+// either signing-key env is empty. Production deployments without these keys
+// would silently accept unverified webhook/action payloads — an unacceptable
+// trust posture flagged by the May 2026 audit (C1).
+func requireProductionSigningKeys() {
+	if os.Getenv("ZITADEL_DOMAIN") == "" {
+		return // dev mode — the action-signature middleware allows passthrough
+	}
+	missing := []string{}
+	if os.Getenv("ZITADEL_EVENT_SIGNING_KEY") == "" {
+		missing = append(missing, "ZITADEL_EVENT_SIGNING_KEY")
+	}
+	if os.Getenv("ZITADEL_ACTION_SIGNING_KEY") == "" {
+		missing = append(missing, "ZITADEL_ACTION_SIGNING_KEY")
+	}
+	if len(missing) > 0 {
+		log.Fatalf("[STARTUP] Production refusing to start: ZITADEL_DOMAIN is set but %s is empty. Configure signing keys before deploying.", strings.Join(missing, ", "))
+	}
+}
+
+// warnIfWelcomeBundleMissing emits an operator-visible warning at startup when
+// no bundle has is_welcome=TRUE. Onboarding triggers that fire in this state
+// will fail with "no welcome bundle configured" until an operator sets one via
+// PUT /api/v1/bundles/{id}/welcome (May 2026 audit D1 — explicit-only contract,
+// no autopromote on migration).
+func warnIfWelcomeBundleMissing(ctx context.Context) {
+	_, err := db.GetWelcomeBundle(ctx)
+	if err == nil {
+		return
+	}
+	if errors.Is(err, db.ErrNoWelcomeBundleConfigured) {
+		log.Println("[STARTUP] WARNING: no welcome bundle configured — onboarding triggers will fail until an operator sets one (PUT /api/v1/bundles/{id}/welcome).")
+		return
+	}
+	log.Printf("[STARTUP] WARNING: welcome-bundle check failed (%v); onboarding may not work until resolved.", err)
+}
+
 func main() {
+	requireProductionSigningKeys()
 	fmt.Println("MkAuth Backend Starting...")
 
 	// Initialize connections safely (They read ENVs and connect)
@@ -39,6 +79,8 @@ func main() {
 	if err := seed.EnsureDemoData(context.Background()); err != nil {
 		log.Fatalf("Demo seed failed: %v", err)
 	}
+
+	warnIfWelcomeBundleMissing(context.Background())
 
 	mux := handlers.NewRouter()
 

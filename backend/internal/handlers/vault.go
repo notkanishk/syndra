@@ -2,29 +2,48 @@ package handlers
 
 import (
 	"errors"
+	"log"
 	"net/http"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
 
 // enforceSelfOnly verifies that the acting user matches the target {uid}.
-// In dev mode (API-key auth), the actor ID is empty — self-check is skipped.
-// Returns false and writes a 403 response if the check fails.
-func enforceSelfOnly(w http.ResponseWriter, r *http.Request) (uid, actorID string, ok bool) {
+//
+// Production mode (JWT actor present): the actor MUST equal {uid}; otherwise
+// 403. The actor is used for audit attribution.
+//
+// Dev mode (API-key auth, no JWT actor): if requireActor is true (mutations),
+// the caller MUST provide ?actor=<id> to attribute the action — without it,
+// the audit log would record the target user as the actor (May 2026 audit C3).
+// If requireActor is false (reads), the actor falls back to {uid} silently.
+//
+// Returns false and writes the appropriate JSON error response if the check
+// fails. The returned actorID is what should appear in audit_logs.
+func enforceSelfOnly(w http.ResponseWriter, r *http.Request, requireActor bool) (uid, actorID string, ok bool) {
 	uid = r.PathValue("uid")
 	if uid == "" {
 		jsonValidationErrorResponse(w, "Missing user ID", map[string]string{"uid": "required"})
 		return "", "", false
 	}
 	actorID = getAdminUserID(r.Context())
-	// In dev mode (API-key auth), actor is empty — skip self-check.
 	if actorID != "" && actorID != uid {
 		jsonErrorResponse(w, http.StatusForbidden, "FORBIDDEN", "You can only manage your own shadow credential")
 		return "", "", false
 	}
-	// If actorID is empty (dev mode), use uid as the actor for audit.
 	if actorID == "" {
-		actorID = uid
+		// Dev mode: no JWT actor.
+		if requireActor {
+			actorID = strings.TrimSpace(r.URL.Query().Get("actor"))
+			if actorID == "" {
+				jsonErrorResponse(w, http.StatusBadRequest, "MISSING_ACTOR", "Dev-mode mutations require ?actor=<id> for audit attribution")
+				return "", "", false
+			}
+			log.Printf("[VAULT] dev-mode actor=%s for %s %s", actorID, r.Method, r.URL.Path)
+		} else {
+			actorID = uid
+		}
 	}
 	return uid, actorID, true
 }
@@ -32,7 +51,7 @@ func enforceSelfOnly(w http.ResponseWriter, r *http.Request) (uid, actorID strin
 // handleSetShadowCredential sets or rotates a user's shadow password.
 // PUT /api/v1/users/{uid}/shadow-credential
 func handleSetShadowCredential(w http.ResponseWriter, r *http.Request) {
-	uid, actorID, ok := enforceSelfOnly(w, r)
+	uid, actorID, ok := enforceSelfOnly(w, r, true)
 	if !ok {
 		return
 	}
@@ -64,7 +83,7 @@ func handleSetShadowCredential(w http.ResponseWriter, r *http.Request) {
 // handleClearShadowCredential removes a user's shadow password.
 // DELETE /api/v1/users/{uid}/shadow-credential
 func handleClearShadowCredential(w http.ResponseWriter, r *http.Request) {
-	uid, actorID, ok := enforceSelfOnly(w, r)
+	uid, actorID, ok := enforceSelfOnly(w, r, true)
 	if !ok {
 		return
 	}
@@ -83,7 +102,7 @@ func handleClearShadowCredential(w http.ResponseWriter, r *http.Request) {
 // handleGetShadowCredentialStatus checks if a user has a shadow credential.
 // GET /api/v1/users/{uid}/shadow-credential/status
 func handleGetShadowCredentialStatus(w http.ResponseWriter, r *http.Request) {
-	uid, _, ok := enforceSelfOnly(w, r)
+	uid, _, ok := enforceSelfOnly(w, r, false)
 	if !ok {
 		return
 	}
@@ -99,7 +118,7 @@ func handleGetShadowCredentialStatus(w http.ResponseWriter, r *http.Request) {
 // handleGetShadowCredentialAudit returns the audit trail for a user's shadow credential.
 // GET /api/v1/users/{uid}/shadow-credential/audit
 func handleGetShadowCredentialAudit(w http.ResponseWriter, r *http.Request) {
-	uid, _, ok := enforceSelfOnly(w, r)
+	uid, _, ok := enforceSelfOnly(w, r, false)
 	if !ok {
 		return
 	}

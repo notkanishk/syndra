@@ -35,6 +35,10 @@ export interface OidcSessionCookie {
   role: SessionRole;
   name: string;
   email: string;
+  title: string;
+  team: string;
+  location: string;
+  status: string;
   expiresAt: number; // Unix seconds
 }
 
@@ -147,7 +151,21 @@ function decodeSessionPayload(value: string): SessionCookiePayload | null {
       ) {
         return null;
       }
-      return parsed as OidcSessionCookie;
+      // Older cookies issued before the C2/D5 fix may lack title/team/location/
+      // status — fall back to safe defaults rather than failing validation.
+      return {
+        type: "oidc",
+        accessToken: parsed.accessToken,
+        userId: parsed.userId,
+        role: parsed.role,
+        name: parsed.name,
+        email: parsed.email,
+        title: typeof parsed.title === "string" ? parsed.title : "",
+        team: typeof parsed.team === "string" ? parsed.team : "",
+        location: typeof parsed.location === "string" ? parsed.location : "",
+        status: typeof parsed.status === "string" ? parsed.status : "active",
+        expiresAt: parsed.expiresAt,
+      };
     }
 
     // type === "demo" or legacy (no type field)
@@ -199,10 +217,10 @@ export async function getSession(): Promise<SessionUser | null> {
       id: payload.userId,
       name: payload.name,
       email: payload.email,
-      title: "",
-      team: "",
-      status: "active",
-      location: "",
+      title: payload.title,
+      team: payload.team,
+      status: payload.status,
+      location: payload.location,
       avatar: nameToAvatar(payload.name),
       role: payload.role,
       accessToken: payload.accessToken,

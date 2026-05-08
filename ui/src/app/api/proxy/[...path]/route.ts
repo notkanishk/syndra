@@ -54,13 +54,26 @@ async function proxy(request: NextRequest, method: "GET" | "POST" | "PUT" | "DEL
   };
 
   if (method === "POST" || method === "PUT") {
-    const body = await request.json();
-    let payload = body;
+    // Bodyless PUT/POST is legal (e.g. PUT /bundles/{id}/welcome — an
+    // idempotent toggle with all state encoded in the path). Read the raw
+    // text and only parse if non-empty; treat empty/malformed as "no body".
+    const raw = await request.text();
+    let body: Record<string, unknown> | null = null;
+    if (raw.length > 0) {
+      try {
+        const parsed = JSON.parse(raw);
+        body = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+      } catch {
+        body = null;
+      }
+    }
+
+    let payload: Record<string, unknown> | null = body;
 
     if (session.role !== "admin") {
       // Members can only create requests for themselves. Backend checks this
       // independently; the proxy enforces it here as defense-in-depth.
-      payload = { ...body, requester_id: session.id };
+      payload = { ...(body ?? {}), requester_id: session.id };
     } else if (session.sessionType === "demo") {
       // Demo-mode admins authenticate via the shared API key, so the backend
       // can't derive an authenticated principal from the request. Inject the
@@ -69,15 +82,18 @@ async function proxy(request: NextRequest, method: "GET" | "POST" | "PUT" | "DEL
       // resolves the actor from the JWT subject and ignores these fields.
       const isGrantWrite = method === "POST" && path[0] === "users" && path[2] === "grants";
       const isDecisionWrite = method === "POST" && path[0] === "requests" && path.length === 3 && path[2] === "decision";
-      if (isGrantWrite) payload = { ...body, granted_by: session.id };
-      else if (isDecisionWrite) payload = { ...body, reviewer_id: session.id };
+      if (isGrantWrite) payload = { ...(body ?? {}), granted_by: session.id };
+      else if (isDecisionWrite) payload = { ...(body ?? {}), reviewer_id: session.id };
     }
 
-    init.headers = {
-      ...init.headers,
-      "Content-Type": "application/json",
-    };
-    init.body = JSON.stringify(payload);
+    if (payload !== null) {
+      init.headers = {
+        ...init.headers,
+        "Content-Type": "application/json",
+      };
+      init.body = JSON.stringify(payload);
+    }
+    // payload === null → bodyless forward (no Content-Type, no body).
   }
 
   try {

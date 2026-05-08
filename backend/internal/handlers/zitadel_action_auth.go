@@ -39,10 +39,13 @@ const (
 // signature on the request body before invoking `next`.
 //
 // When the env var named by secretEnvVar is unset, the middleware logs a
-// warning and passes through without verification — matching the dev-mode
-// fall-through already established by withUserAuth (no ZITADEL_DOMAIN set).
-// Once the operator ships the Action target registration and captures the
-// signing key, setting the env var enforces verification in production.
+// warning and passes through without verification — fall-through allowed only
+// when ZITADEL_DOMAIN is also unset (dev mode). If ZITADEL_DOMAIN is set but
+// the signing key is empty, the request is refused with 503 MISCONFIGURED so a
+// production deployment never accepts unverified webhook/action payloads (May
+// 2026 audit C1). Once the operator ships the Action target registration and
+// captures the signing key, setting the env var enforces verification in
+// production.
 //
 // The body is read once and rewound so the downstream handler's decoder still
 // works. Requests with a missing, malformed, stale, or mismatched signature
@@ -51,8 +54,16 @@ func withZitadelActionSignature(secretEnvVar string, next http.HandlerFunc) http
 	return func(w http.ResponseWriter, r *http.Request) {
 		secret := os.Getenv(secretEnvVar)
 		if secret == "" {
-			log.Printf("[ACTION] %s unset — signature verification disabled (dev mode)", secretEnvVar)
-			next(w, r)
+			if os.Getenv("ZITADEL_DOMAIN") == "" {
+				// Dev mode: no Zitadel deployment, no signing key.
+				log.Printf("[ACTION] %s unset and ZITADEL_DOMAIN unset — signature verification disabled (dev mode)", secretEnvVar)
+				next(w, r)
+				return
+			}
+			// Production with empty signing key: startup gate should have caught
+			// this. Refuse the request rather than fall through silently.
+			log.Printf("[ACTION] %s unset while ZITADEL_DOMAIN set — refusing request (misconfiguration)", secretEnvVar)
+			jsonErrorResponse(w, http.StatusServiceUnavailable, "MISCONFIGURED", "Signing key not configured for this endpoint")
 			return
 		}
 

@@ -8,6 +8,7 @@ export interface BundleRow {
   id: string;
   name: string;
   description?: string;
+  is_welcome?: boolean;
   roles?: string[];
   created_at?: string;
 }
@@ -125,6 +126,19 @@ export function useAddBundleRole(bundleId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.rolesFor(bundleId) });
       qc.invalidateQueries({ queryKey: KEYS.impactFor(bundleId) });
+    },
+  });
+}
+
+/** Set a bundle as the system's welcome bundle (transactional clear-then-set). */
+export function useSetWelcomeBundle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (bundleId: string) => {
+      return await request(`/bundles/${bundleId}/welcome`, { method: "PUT" });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.list });
     },
   });
 }

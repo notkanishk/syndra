@@ -70,6 +70,10 @@ describe("createOidcSessionValue", () => {
       role: "admin" as const,
       name: "Test User",
       email: "test@example.com",
+      title: "",
+      team: "",
+      location: "",
+      status: "active",
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
     };
 
@@ -119,6 +123,10 @@ describe("getSession", () => {
       role: "admin",
       name: "Real User",
       email: "real@example.com",
+      title: "",
+      team: "",
+      location: "",
+      status: "active",
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
     });
     const session = await getSession();
@@ -130,5 +138,47 @@ describe("getSession", () => {
     mockCookieValue = undefined;
     const session = await getSession();
     expect(session).toBeNull();
+  });
+
+  it("encodes title/team/location/status into the OIDC cookie payload", () => {
+    const value = createOidcSessionValue({
+      type: "oidc",
+      accessToken: "tok",
+      userId: "u1",
+      role: "user",
+      name: "Alice",
+      email: "alice@x.test",
+      title: "Director",
+      team: "Ops",
+      location: "HQ",
+      status: "active",
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    });
+    const decoded = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+    expect(decoded.title).toBe("Director");
+    expect(decoded.team).toBe("Ops");
+    expect(decoded.location).toBe("HQ");
+    expect(decoded.status).toBe("active");
+  });
+
+  it("getSession surfaces title/team/location on OidcSessionUser", async () => {
+    process.env.ZITADEL_DOMAIN = "https://zitadel.example";
+    mockCookieValue = createOidcSessionValue({
+      type: "oidc",
+      accessToken: "tok",
+      userId: "u1",
+      role: "user",
+      name: "Alice",
+      email: "alice@x.test",
+      title: "Director",
+      team: "Ops",
+      location: "HQ",
+      status: "active",
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    });
+    const session = await getSession();
+    expect(session?.title).toBe("Director");
+    expect(session?.team).toBe("Ops");
+    expect(session?.location).toBe("HQ");
   });
 });

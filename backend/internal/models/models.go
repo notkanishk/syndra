@@ -14,6 +14,7 @@ type Bundle struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
+	IsWelcome   bool      `json:"is_welcome"`
 	Roles       []string  `json:"roles"` // The underlying raw roles it applies
 	CreatedAt   time.Time `json:"created_at"`
 }

@@ -130,16 +130,37 @@ func TestWithZitadelActionSignature_StaleTimestampRejected(t *testing.T) {
 }
 
 func TestWithZitadelActionSignature_DevModePassthrough(t *testing.T) {
+	// Dev mode = both ZITADEL_DOMAIN and the signing-key env are empty.
 	t.Setenv(testSecretEnv, "")
+	t.Setenv("ZITADEL_DOMAIN", "")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject", strings.NewReader(`{}`))
-	// No ZITADEL-Signature header — would normally 401, but dev mode passes.
 	rr := httptest.NewRecorder()
 
 	withZitadelActionSignature(testSecretEnv, pokeHandler)(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Fatalf("dev mode (unset secret) should pass through, got %d", rr.Code)
+		t.Fatalf("dev mode (both unset) should pass through, got %d", rr.Code)
+	}
+}
+
+func TestWithZitadelActionSignature_ProductionRefusesEmptySecret(t *testing.T) {
+	// Production: ZITADEL_DOMAIN set, signing-key env empty. Even though the
+	// startup gate should have refused this configuration, the middleware MUST
+	// refuse the request rather than fall through silently.
+	t.Setenv(testSecretEnv, "")
+	t.Setenv("ZITADEL_DOMAIN", "zitadel.example.test")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/action/inject", strings.NewReader(`{}`))
+	rr := httptest.NewRecorder()
+
+	withZitadelActionSignature(testSecretEnv, pokeHandler)(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("production with empty secret must return 503, got %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "MISCONFIGURED") {
+		t.Fatalf("expected MISCONFIGURED error code in body, got %s", rr.Body.String())
 	}
 }
 

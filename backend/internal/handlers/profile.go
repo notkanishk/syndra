@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"mkauth/internal/demo"
+	"mkauth/internal/directory"
 	"mkauth/internal/zitadel"
 )
 
@@ -47,4 +48,29 @@ func handleGetUserProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "User not found")
+}
+
+// handleGetMyProfile returns the requester's full UserProfile — the same
+// shape directory.Default.FindUser produces, with title/team/location
+// overlaid from Zitadel metadata. Used by the Next.js OIDC callback to
+// populate the session cookie so OIDC and demo sessions render identically
+// (May 2026 audit C2/D5).
+// GET /api/v1/me/profile  (auth: withUserAuth)
+func handleGetMyProfile(w http.ResponseWriter, r *http.Request) {
+	uid := getAdminUserID(r.Context())
+	if uid == "" {
+		jsonErrorResponse(w, http.StatusUnauthorized, "UNAUTHORIZED", "No actor in request context")
+		return
+	}
+
+	profile, found, err := directory.Default.FindUser(r.Context(), uid)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusBadGateway, "UPSTREAM_ERROR", "Failed to resolve profile: "+err.Error())
+		return
+	}
+	if !found {
+		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "Profile not found for current actor")
+		return
+	}
+	jsonResponse(w, http.StatusOK, profile)
 }

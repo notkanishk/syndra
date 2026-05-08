@@ -6,6 +6,7 @@ import {
   decodePkce,
   exchangeCodeForToken,
   extractSessionFields,
+  fetchProfileMetadata,
   nameToAvatar,
   parseJwtClaims,
   PKCE_COOKIE_NAME,
@@ -123,6 +124,9 @@ export async function GET(request: Request): Promise<Response> {
     return redirectToLogin(request, "invalid_claims");
   }
 
+  const backendUrl = process.env.BACKEND_URL || "http://backend:8080";
+  const profile = await fetchProfileMetadata(tokenResponse.access_token, backendUrl);
+
   const payload: OidcSessionCookie = {
     type: "oidc",
     accessToken: tokenResponse.access_token,
@@ -130,6 +134,10 @@ export async function GET(request: Request): Promise<Response> {
     role: fields.role,
     name: fields.name || nameToAvatar(fields.userId), // fallback to derived string
     email: fields.email,
+    title: profile.title,
+    team: profile.team,
+    location: profile.location,
+    status: profile.status,
     expiresAt: fields.expiresAt,
   };
 

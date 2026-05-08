@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"mkauth/internal/db"
 )
 
 // resetOnboardingDeps restores all onboarding injectable vars after a test.
@@ -103,15 +105,16 @@ func TestTriggerOnboarding_DBFaultOnInsert_Propagates(t *testing.T) {
 }
 
 func TestTriggerOnboarding_NoBundleAvailable_MarksFailedAndReturnsError(t *testing.T) {
-	// When no welcome bundle exists, the trigger record is marked failed (operator
-	// visibility) and an error is returned (caller can log/alert).
+	// When no welcome bundle is configured, the trigger record is marked failed
+	// (operator visibility) and the named sentinel propagates so callers can
+	// errors.Is against it for alerting.
 	resetOnboardingDeps(t)
 
 	svcInsertOnboardingTrigger = func(_ context.Context, _, _, _ string) (string, bool, error) {
 		return "trigger-id-2", true, nil
 	}
 	svcGetWelcomeBundle = func(_ context.Context) (string, error) {
-		return "", errors.New("no bundles available")
+		return "", db.ErrNoWelcomeBundleConfigured
 	}
 	failedID := ""
 	svcFailOnboardingTrigger = func(_ context.Context, triggerID, _ string) error {
@@ -126,6 +129,9 @@ func TestTriggerOnboarding_NoBundleAvailable_MarksFailedAndReturnsError(t *testi
 	err := TriggerOnboarding(context.Background(), "u1", "webhook", "key-nobundle")
 	if err == nil {
 		t.Fatal("expected error when no bundle available")
+	}
+	if !errors.Is(err, db.ErrNoWelcomeBundleConfigured) {
+		t.Fatalf("expected ErrNoWelcomeBundleConfigured, got %v", err)
 	}
 	if failedID != "trigger-id-2" {
 		t.Fatalf("expected FailOnboardingTrigger called with trigger-id-2, got %q", failedID)

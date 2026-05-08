@@ -125,3 +125,36 @@ describe("BundlesView (Stage 3)", () => {
     expect(UUID_REGEX.test(text)).toBe(false);
   });
 });
+
+describe("BundlesView welcome-bundle toggle", () => {
+  // Override the bundles list registered by the top-level beforeEach with one
+  // that flags Mentor Pack as the welcome bundle. Use a fresh proxy so the
+  // first-match-wins ordering inside makeProxyFetch is irrelevant.
+  beforeEach(() => {
+    proxy = makeProxyFetch();
+    global.fetch = proxy.fetchImpl;
+    proxy.register("GET", /\/api\/proxy\/bundles(\?|$)/, () => [
+      {
+        id: "b1",
+        name: "Mentor Pack",
+        description: "Hands-on training",
+        is_welcome: true,
+        created_at: new Date().toISOString(),
+      },
+    ]);
+    proxy.register("PUT", /\/api\/proxy\/bundles\/[^/]+\/welcome/, () => ({ message: "Welcome bundle set" }));
+  });
+
+  it("renders the Welcome badge for the flagged bundle", async () => {
+    renderBundles();
+    expect(await screen.findByText("Welcome")).toBeInTheDocument();
+  });
+
+  it("disables the Set as welcome bundle button when already flagged", async () => {
+    renderBundles();
+    const header = await screen.findByRole("button", { name: /Mentor Pack/ });
+    fireEvent.click(header);
+    const btn = await screen.findByRole("button", { name: /Already welcome bundle/i });
+    expect(btn).toBeDisabled();
+  });
+});

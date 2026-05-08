@@ -13,7 +13,7 @@ import { Card, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SkeletonCardList } from "@/components/ui/Skeleton";
-import { useBundleRoles, useBundles, type BundleRow } from "@/lib/queries/useBundles";
+import { useBundleRoles, useBundles, useSetWelcomeBundle, type BundleRow } from "@/lib/queries/useBundles";
 
 export default function BundlesView() {
   const bundlesQuery = useBundles();
@@ -125,6 +125,11 @@ function BundleRowCard({ bundle, expanded, onToggle, onOpenPicker }: BundleRowCa
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {bundle.is_welcome && (
+            <Badge variant="secondary" className="bg-tertiary-container text-on-tertiary-container">
+              Welcome
+            </Badge>
+          )}
           {bundle.created_at ? (
             <Badge variant="outline">
               {new Date(bundle.created_at).toLocaleDateString()}
@@ -188,10 +193,44 @@ function BundleRowCard({ bundle, expanded, onToggle, onOpenPicker }: BundleRowCa
             )}
           </div>
 
+          <div className="flex items-center justify-between gap-3 flex-wrap pt-3 border-t border-outline-variant">
+            <div>
+              <Eyebrow>Welcome bundle</Eyebrow>
+              <p className="mt-1 text-sm text-on-surface-variant">
+                {bundle.is_welcome
+                  ? "Assigned to every newly-created Zitadel user via the onboarding trigger."
+                  : "Mark this bundle as the welcome bundle to assign it on user creation."}
+              </p>
+            </div>
+            <SetWelcomeButton bundle={bundle} />
+          </div>
+
           <BundleImpactAccordion bundleId={bundle.id} />
         </div>
       )}
     </div>
+  );
+}
+
+function SetWelcomeButton({ bundle }: { bundle: BundleRow }) {
+  const setWelcome = useSetWelcomeBundle();
+  if (bundle.is_welcome) {
+    return (
+      <Button variant="secondary" size="sm" disabled aria-label="Already welcome bundle">
+        Welcome bundle
+      </Button>
+    );
+  }
+  return (
+    <Button
+      variant="primary"
+      size="sm"
+      onClick={() => setWelcome.mutate(bundle.id)}
+      disabled={setWelcome.isPending}
+      aria-label={`Set ${bundle.name} as welcome bundle`}
+    >
+      {setWelcome.isPending ? "Setting…" : "Set as welcome bundle"}
+    </Button>
   );
 }
 

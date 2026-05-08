@@ -61,6 +61,7 @@ Every change directory has: `proposal.md` (why), `design.md` (how), `tasks.md` (
 | [Live-Directory Identity Completeness](changes/live-directory-identity-completeness/) | 5 | Complete | [proposal](changes/live-directory-identity-completeness/proposal.md) / [design](changes/live-directory-identity-completeness/design.md) / [tasks](changes/live-directory-identity-completeness/tasks.md) |
 | [Live-Only Production UI](changes/live-only-production-ui/) | 5 | Complete | [proposal](changes/live-only-production-ui/proposal.md) / [design](changes/live-only-production-ui/design.md) / [tasks](changes/live-only-production-ui/tasks.md) |
 | [Dashboard UX Elevation](changes/dashboard-ux-elevation/) | 5 | Complete | [proposal](changes/dashboard-ux-elevation/proposal.md) / [design](changes/dashboard-ux-elevation/design.md) / [tasks](changes/dashboard-ux-elevation/tasks.md) |
+| [Wave 1 — Production Trust Hardening](changes/wave-1-production-trust-hardening/) | 5.5 | In progress | [proposal](changes/wave-1-production-trust-hardening/proposal.md) / [design](changes/wave-1-production-trust-hardening/design.md) / [tasks](changes/wave-1-production-trust-hardening/tasks.md) |
 
 ## Roadmap Phase -> Change Mapping
 

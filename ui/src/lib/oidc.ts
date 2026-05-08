@@ -216,3 +216,44 @@ export function nameToAvatar(name: string): string {
   }
   return name.slice(0, 2).toUpperCase();
 }
+
+// ---------------------------------------------------------------------------
+// Profile metadata fetch — populates Title/Team/Location for OIDC sessions
+// ---------------------------------------------------------------------------
+
+export interface ProfileMetadata {
+  title: string;
+  team: string;
+  location: string;
+  status: string;
+}
+
+/**
+ * Fetches the authenticated user's profile from /api/v1/me/profile using the
+ * freshly-issued access token. Returns empty metadata on any failure — the
+ * OIDC callback must continue (the cookie is still valid, dashboard fields
+ * just render blank). Backend is the canonical source; we never derive these
+ * from token claims.
+ */
+export async function fetchProfileMetadata(
+  accessToken: string,
+  backendUrl: string,
+): Promise<ProfileMetadata> {
+  const empty: ProfileMetadata = { title: "", team: "", location: "", status: "active" };
+  try {
+    const res = await fetch(`${backendUrl}/api/v1/me/profile`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    if (!res.ok) return empty;
+    const body = (await res.json()) as Partial<ProfileMetadata>;
+    return {
+      title: typeof body.title === "string" ? body.title : "",
+      team: typeof body.team === "string" ? body.team : "",
+      location: typeof body.location === "string" ? body.location : "",
+      status: typeof body.status === "string" ? body.status : "active",
+    };
+  } catch {
+    return empty;
+  }
+}

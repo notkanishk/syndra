@@ -59,9 +59,9 @@ func TestHandleSetShadowCredential_Success(t *testing.T) {
 	setupNoopVaultDeps(t)
 
 	body := `{"password":"Str0ng!Pass99"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/u1/shadow-credential", strings.NewReader(body))
+	// Dev mode (no JWT actor) — explicit ?actor= supplies audit attribution.
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/u1/shadow-credential?actor=u1", strings.NewReader(body))
 	req.SetPathValue("uid", "u1")
-	// Simulate dev mode (no JWT actor) — self-check skipped.
 	rr := httptest.NewRecorder()
 	handleSetShadowCredential(rr, req)
 
@@ -96,7 +96,7 @@ func TestHandleSetShadowCredential_ValidationError(t *testing.T) {
 	}
 
 	body := `{"password":"weak"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/u1/shadow-credential", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/u1/shadow-credential?actor=u1", strings.NewReader(body))
 	req.SetPathValue("uid", "u1")
 	rr := httptest.NewRecorder()
 	handleSetShadowCredential(rr, req)
@@ -110,7 +110,7 @@ func TestHandleSetShadowCredential_MissingPassword(t *testing.T) {
 	setupNoopVaultDeps(t)
 
 	body := `{"password":""}`
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/u1/shadow-credential", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/u1/shadow-credential?actor=u1", strings.NewReader(body))
 	req.SetPathValue("uid", "u1")
 	rr := httptest.NewRecorder()
 	handleSetShadowCredential(rr, req)
@@ -127,7 +127,7 @@ func TestHandleSetShadowCredential_MissingPassword(t *testing.T) {
 func TestHandleClearShadowCredential_Success(t *testing.T) {
 	setupNoopVaultDeps(t)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/u1/shadow-credential", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/u1/shadow-credential?actor=u1", nil)
 	req.SetPathValue("uid", "u1")
 	rr := httptest.NewRecorder()
 	handleClearShadowCredential(rr, req)
@@ -264,7 +264,7 @@ func TestHandleClearShadowCredential_DBError(t *testing.T) {
 		return fmt.Errorf("connection refused")
 	}
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/u1/shadow-credential", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/u1/shadow-credential?actor=u1", nil)
 	req.SetPathValue("uid", "u1")
 	rr := httptest.NewRecorder()
 	handleClearShadowCredential(rr, req)
@@ -301,5 +301,71 @@ func TestHandleGetShadowCredentialAudit_Success(t *testing.T) {
 	}
 	if len(entries) != 1 {
 		t.Errorf("expected 1 entry, got %d", len(entries))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Dev-mode actor requirement (audit C3)
+// ---------------------------------------------------------------------------
+
+func TestHandleSetShadowCredential_DevModeRequiresActor(t *testing.T) {
+	setupNoopVaultDeps(t)
+
+	body := `{"password":"Str0ng!Pass99"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/u1/shadow-credential", strings.NewReader(body))
+	req.SetPathValue("uid", "u1")
+	// No actor in JWT context (dev mode), no ?actor= query param.
+	rr := httptest.NewRecorder()
+
+	handleSetShadowCredential(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("dev-mode mutation without ?actor= must return 400, got %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "MISSING_ACTOR") {
+		t.Fatalf("expected MISSING_ACTOR in body, got %s", rr.Body.String())
+	}
+}
+
+func TestHandleSetShadowCredential_DevModeWithExplicitActor(t *testing.T) {
+	setupNoopVaultDeps(t)
+
+	receivedActor := ""
+	svcSetShadowPassword = func(_ context.Context, uid, actorID, _, _ string) error {
+		if uid != "u1" {
+			t.Fatalf("expected uid u1, got %q", uid)
+		}
+		receivedActor = actorID
+		return nil
+	}
+
+	body := `{"password":"Str0ng!Pass99"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/u1/shadow-credential?actor=alice@cli", strings.NewReader(body))
+	req.SetPathValue("uid", "u1")
+	rr := httptest.NewRecorder()
+
+	handleSetShadowCredential(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 with explicit actor, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if receivedActor != "alice@cli" {
+		t.Fatalf("expected actor=alice@cli, got %q", receivedActor)
+	}
+}
+
+func TestHandleGetShadowCredentialStatus_DevModeNoActorRequired(t *testing.T) {
+	// Reads are NOT affected by the new requirement — operators inspecting
+	// status in dev mode would otherwise need a meaningless ?actor=.
+	setupNoopVaultDeps(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/users/u1/shadow-credential/status", nil)
+	req.SetPathValue("uid", "u1")
+	rr := httptest.NewRecorder()
+
+	handleGetShadowCredentialStatus(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("dev-mode read must not require ?actor=, got %d: %s", rr.Code, rr.Body.String())
 	}
 }

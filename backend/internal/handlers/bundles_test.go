@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+
 	"mkauth/internal/models"
 )
 
@@ -21,6 +23,7 @@ func resetBundleDeps(t *testing.T) {
 	origAddRole := dbAddRoleToBundle
 	origGetUserBundles := dbGetBundlesForUser
 	origAssign := dbAssignBundleToUser
+	origSetWelcome := dbSetWelcomeBundle
 	origAudit := dbInsertAuditLog
 	t.Cleanup(func() {
 		dbCreateBundle = origCreate
@@ -29,6 +32,7 @@ func resetBundleDeps(t *testing.T) {
 		dbAddRoleToBundle = origAddRole
 		dbGetBundlesForUser = origGetUserBundles
 		dbAssignBundleToUser = origAssign
+		dbSetWelcomeBundle = origSetWelcome
 		dbInsertAuditLog = origAudit
 	})
 }
@@ -321,6 +325,49 @@ func TestHandleAssignBundleToUser_AuditLogged(t *testing.T) {
 	}
 	if auditTarget != "u1" {
 		t.Fatalf("expected audit target u1, got %s", auditTarget)
+	}
+}
+
+// --- handleSetWelcomeBundle ---
+
+func TestHandleSetWelcomeBundle_Success(t *testing.T) {
+	resetBundleDeps(t)
+
+	called := ""
+	dbSetWelcomeBundle = func(_ context.Context, id string) error {
+		called = id
+		return nil
+	}
+	dbInsertAuditLog = func(_ context.Context, _, _, _, _ string) error { return nil }
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/bundles/b-123/welcome", nil)
+	req.SetPathValue("id", "b-123")
+	rr := httptest.NewRecorder()
+
+	handleSetWelcomeBundle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if called != "b-123" {
+		t.Fatalf("expected SetWelcomeBundle called with b-123, got %q", called)
+	}
+}
+
+func TestHandleSetWelcomeBundle_NotFound(t *testing.T) {
+	resetBundleDeps(t)
+	dbSetWelcomeBundle = func(_ context.Context, _ string) error {
+		return pgx.ErrNoRows
+	}
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/bundles/missing/welcome", nil)
+	req.SetPathValue("id", "missing")
+	rr := httptest.NewRecorder()
+
+	handleSetWelcomeBundle(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rr.Code)
 	}
 }
 

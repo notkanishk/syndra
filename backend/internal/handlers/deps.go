@@ -25,6 +25,7 @@ var (
 	dbAddRoleToBundle    = db.AddRoleToBundle
 	dbGetBundlesForUser  = db.GetBundlesForUser
 	dbAssignBundleToUser = db.AssignBundleToUser
+	dbSetWelcomeBundle   = db.SetWelcomeBundle
 
 	// Lookup handler injectable var (single-role accessor, used for UID→name resolution).
 	dbGetRole = db.GetRole
