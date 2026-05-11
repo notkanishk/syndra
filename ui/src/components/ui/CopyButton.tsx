@@ -30,7 +30,7 @@ export function CopyButton({ text, label = "Copy", className = "" }: CopyButtonP
       type="button"
       onClick={copy}
       aria-label={`${label} to clipboard`}
-      className={`inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted transition-colors hover:text-foreground hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-md border border-outline-variant px-2 py-1 text-xs text-on-surface-variant transition-colors hover:text-on-surface hover:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${className}`}
     >
       <svg
         viewBox="0 0 24 24"

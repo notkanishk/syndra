@@ -35,17 +35,17 @@ export class ErrorBoundary extends React.Component<
       return (
         <div
           role="alert"
-          className="rounded-xl border border-dashed border-red-500/40 bg-red-500/5 p-8 text-center"
+          className="rounded-xl border border-dashed border-error/40 bg-error-container/40 p-8 text-center"
         >
-          <p className="text-sm font-semibold text-foreground">Something went wrong</p>
-          <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+          <p className="text-sm font-semibold text-on-error-container">Something went wrong</p>
+          <p className="mx-auto mt-2 max-w-md text-sm text-on-surface-variant">
             The page hit an unexpected error while rendering. Try again, or refresh if it
             keeps happening.
           </p>
           <button
             onClick={this.reset}
             type="button"
-            className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-white"
+            className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-on-primary"
           >
             Try again
           </button>

@@ -97,7 +97,7 @@ export default function SidebarNav({ isAdmin }: { isAdmin: boolean }) {
     <nav className="flex-1 px-4 space-y-1">
       {sections.map((section, sIdx) => (
         <div key={section.title} className={sIdx > 0 ? "pt-3" : undefined}>
-          <p className="px-3 py-1 text-xs font-semibold text-muted uppercase tracking-wider">
+          <p className="px-3 py-1 text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
             {section.title}
           </p>
           {section.items.map((item) => {
@@ -109,8 +109,8 @@ export default function SidebarNav({ isAdmin }: { isAdmin: boolean }) {
                 aria-current={active ? "page" : undefined}
                 className={`group flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors ${
                   active
-                    ? "bg-primary/10 text-primary border-l-2 border-primary"
-                    : "text-muted hover:text-foreground hover:bg-surfaceHover border-l-2 border-transparent"
+                    ? "bg-primary-container text-on-primary-container border-l-2 border-primary"
+                    : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high border-l-2 border-transparent"
                 }`}
               >
                 <span>{item.label}</span>

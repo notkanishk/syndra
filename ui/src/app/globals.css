@@ -51,22 +51,20 @@
   --color-error-container: var(--error-container);
   --color-on-error-container: var(--on-error-container);
 
-  /* Legacy compatibility tokens — kept so existing utilities like
-     bg-surface, border-border, text-foreground continue to resolve while
-     pages migrate to the new ladder. Each maps to a Clarity equivalent. */
-  --color-foreground: var(--on-surface);
-  --color-surface-hover: var(--surface-container-high);
-  --color-border: var(--outline-variant);
-  --color-primary-hover: var(--primary-container);
-  --color-muted: var(--on-surface-variant);
+  /* Semantic status tokens — no MD3 baseline equivalent; kept for
+     <Pulse>, <Badge>, SubmitButton variants, Button success/warning
+     variants, and graph/page.tsx + JsonView tones. The on-* foreground
+     pair (added in Task 1) survives this deletion because it is a
+     semantic status mapping, not a legacy alias. */
   --color-success: var(--success);
   --color-success-hover: var(--success-hover);
   --color-warning: var(--warning);
   --color-warning-hover: var(--warning-hover);
-  --color-danger: var(--error);
-  --color-danger-hover: var(--error-container);
   --color-info: var(--info);
   --color-info-hover: var(--info-hover);
+  --color-on-success: var(--on-success);
+  --color-on-warning: var(--on-warning);
+  --color-on-info: var(--on-info);
 
   /* Typography — wired to next/font CSS variables exposed in layout.tsx. */
   --font-sans: var(--font-inter);
@@ -149,6 +147,9 @@
     --warning-hover: #92400e;
     --info: #0369a1;
     --info-hover: #075985;
+    --on-success: #ffffff;
+    --on-warning: #ffffff;
+    --on-info: #ffffff;
   }
 
   /* ── Dark theme — Obsidian Clarity (default aesthetic) ───────────────── */
@@ -195,6 +196,9 @@
     --warning-hover: #fcd34d;
     --info: #60a5fa;
     --info-hover: #93c5fd;
+    --on-success: #003822;  /* deep forest green; AA against #34d399 success */
+    --on-warning: #2a1800;  /* deep amber-brown; AA against #fbbf24 warning */
+    --on-info: #001a4a;     /* deep navy; AA against #60a5fa info */
   }
 
   /* Visible focus rings for keyboard users. Pair with `focus-visible:` utilities

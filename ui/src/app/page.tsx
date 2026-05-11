@@ -41,8 +41,8 @@ export default async function Home() {
       <div className="space-y-8 animate-fade-in-up">
         <header>
           <p className="text-sm font-semibold uppercase tracking-[0.28em] text-primary">Member Portal</p>
-          <h1 className="mt-3 text-3xl font-bold text-foreground tracking-tight">Welcome back, {session.name}</h1>
-          <p className="mt-2 text-muted">
+          <h1 className="mt-3 text-3xl font-bold text-on-surface tracking-tight">Welcome back, {session.name}</h1>
+          <p className="mt-2 text-on-surface-variant">
             Browse your available services, check what is already active, and request new access without diving into raw Zitadel roles.
           </p>
         </header>
@@ -53,21 +53,21 @@ export default async function Home() {
               <CardTitle>Identity</CardTitle>
             </CardHeader>
             <p className="text-2xl font-semibold">{session.title}</p>
-            <p className="mt-2 text-sm text-muted">{session.team} • {session.location}</p>
+            <p className="mt-2 text-sm text-on-surface-variant">{session.team} • {session.location}</p>
           </Card>
           <Card>
             <CardHeader>
               <CardTitle>Active Services</CardTitle>
             </CardHeader>
             <p className="text-4xl font-bold text-primary">{activeProjects.size}</p>
-            <p className="mt-2 text-sm text-muted">Applications currently available to your session.</p>
+            <p className="mt-2 text-sm text-on-surface-variant">Applications currently available to your session.</p>
           </Card>
           <Card>
             <CardHeader>
               <CardTitle>Pending Reviews</CardTitle>
             </CardHeader>
             <p className="text-4xl font-bold text-primary">{pendingProjects.size}</p>
-            <p className="mt-2 text-sm text-muted">Requests still waiting in the governance queue.</p>
+            <p className="mt-2 text-sm text-on-surface-variant">Requests still waiting in the governance queue.</p>
           </Card>
         </div>
 
@@ -90,15 +90,15 @@ export default async function Home() {
                   : "No Access";
 
               return (
-                <div key={entry.application.id} className="rounded-2xl border border-border bg-surfaceHover p-5">
+                <div key={entry.application.id} className="rounded-2xl border border-outline-variant bg-surface-container-high p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-lg font-semibold text-foreground">{entry.application.name}</p>
-                      <p className="mt-1 text-sm text-muted">{entry.application.description}</p>
+                      <p className="text-lg font-semibold text-on-surface">{entry.application.name}</p>
+                      <p className="mt-1 text-sm text-on-surface-variant">{entry.application.description}</p>
                     </div>
                     <Badge variant={status === "Active" ? "secondary" : "outline"}>{status}</Badge>
                   </div>
-                  <p className="mt-4 text-xs uppercase tracking-[0.22em] text-muted">{entry.application.consumer}</p>
+                  <p className="mt-4 text-xs uppercase tracking-[0.22em] text-on-surface-variant">{entry.application.consumer}</p>
                   <RequestAccessButton
                     projectId={entry.application.project_id}
                     serviceName={entry.application.name}

@@ -30,10 +30,10 @@ export function SubmitButton({
 }: SubmitButtonProps) {
   const variantClasses =
     variant === "danger"
-      ? "bg-red-500 hover:bg-red-600 text-white"
+      ? "bg-error text-on-error hover:bg-error/90"
       : variant === "success"
-        ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-        : "bg-primary hover:bg-primaryHover text-white";
+        ? "bg-success text-on-success hover:bg-success-hover"
+        : "bg-primary text-on-primary hover:bg-primary-container hover:text-on-primary-container";
 
   const isDisabled = disabled || isPending;
 
@@ -48,7 +48,7 @@ export function SubmitButton({
       {isPending && (
         <span
           aria-hidden="true"
-          className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+          className="h-4 w-4 animate-spin rounded-full border-2 border-current/40 border-t-current"
         />
       )}
       <span>{isPending ? pendingLabel : (label ?? children)}</span>

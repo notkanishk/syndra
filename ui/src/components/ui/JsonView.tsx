@@ -43,7 +43,7 @@ function walk(
 ) {
   const indent = "  ".repeat(depth);
   if (value === null) {
-    out.push(<span>{indent}<span className="text-amber-500">null</span>{pathSuffix}</span>);
+    out.push(<span>{indent}<span className="text-warning">null</span>{pathSuffix}</span>);
     return;
   }
   if (typeof value === "string") {
@@ -51,7 +51,7 @@ function walk(
     out.push(
       <span>
         {indent}
-        <span className={differs ? "text-amber-500 underline decoration-dashed" : "text-emerald-500"}>
+        <span className={differs ? "text-warning underline decoration-dashed" : "text-success"}>
           {JSON.stringify(value)}
         </span>
         {pathSuffix}
@@ -64,7 +64,7 @@ function walk(
     out.push(
       <span>
         {indent}
-        <span className={differs ? "text-amber-500 underline decoration-dashed" : "text-sky-500"}>
+        <span className={differs ? "text-warning underline decoration-dashed" : "text-info"}>
           {String(value)}
         </span>
         {pathSuffix}
@@ -110,15 +110,15 @@ function walk(
         const differs = compareValue !== undefined && compareValue !== subValue;
         const formatted =
           subValue === null
-            ? <span className="text-amber-500">null</span>
+            ? <span className="text-warning">null</span>
             : typeof subValue === "string"
-              ? <span className={differs ? "text-amber-500 underline decoration-dashed" : "text-emerald-500"}>{JSON.stringify(subValue)}</span>
-              : <span className={differs ? "text-amber-500 underline decoration-dashed" : "text-sky-500"}>{String(subValue)}</span>;
+              ? <span className={differs ? "text-warning underline decoration-dashed" : "text-success"}>{JSON.stringify(subValue)}</span>
+              : <span className={differs ? "text-warning underline decoration-dashed" : "text-info"}>{String(subValue)}</span>;
         out.push(
           <span>
             {subIndent}
             <span className="text-primary">{JSON.stringify(key)}</span>
-            <span className="text-muted">: </span>
+            <span className="text-on-surface-variant">: </span>
             {formatted}
             {trailing}
           </span>,
@@ -128,7 +128,7 @@ function walk(
           <span>
             {subIndent}
             <span className="text-primary">{JSON.stringify(key)}</span>
-            <span className="text-muted">: </span>
+            <span className="text-on-surface-variant">: </span>
           </span>,
         );
         walk(subValue, compareValue, trailing, depth + 1, out);

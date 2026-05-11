@@ -62,6 +62,7 @@ Every change directory has: `proposal.md` (why), `design.md` (how), `tasks.md` (
 | [Live-Only Production UI](changes/live-only-production-ui/) | 5 | Complete | [proposal](changes/live-only-production-ui/proposal.md) / [design](changes/live-only-production-ui/design.md) / [tasks](changes/live-only-production-ui/tasks.md) |
 | [Dashboard UX Elevation](changes/dashboard-ux-elevation/) | 5 | Complete | [proposal](changes/dashboard-ux-elevation/proposal.md) / [design](changes/dashboard-ux-elevation/design.md) / [tasks](changes/dashboard-ux-elevation/tasks.md) |
 | [Wave 1 — Production Trust Hardening](changes/wave-1-production-trust-hardening/) | 5.5 | In progress | [proposal](changes/wave-1-production-trust-hardening/proposal.md) / [design](changes/wave-1-production-trust-hardening/design.md) / [tasks](changes/wave-1-production-trust-hardening/tasks.md) |
+| [Wave 2 · Part 1 — Frontend Palette Finalization](changes/wave-2-part-1-frontend-palette-finalization/) | 5.5 | In progress | [proposal](changes/wave-2-part-1-frontend-palette-finalization/proposal.md) / [design](changes/wave-2-part-1-frontend-palette-finalization/design.md) / [tasks](changes/wave-2-part-1-frontend-palette-finalization/tasks.md) |
 
 ## Roadmap Phase -> Change Mapping
 
@@ -72,4 +73,5 @@ Every change directory has: `proposal.md` (why), `design.md` (how), `tasks.md` (
 | 3: Security Boundary | Complete | backend-onboarding, codebase-audit, zitadel-mgmt-client, webhook-listener, role-crud |
 | 4: Infrastructure Bridge | In Progress | provisioning-intents, shadow-vault, sync-service |
 | 5: Automation & Governance | In Progress | zitadel-actions-v2-deployment, grant-expiration-scheduler, live-zitadel-data-source, live-directory-identity-completeness, live-only-production-ui, dashboard-ux-elevation, zitadel-event-trigger-propagation; [remaining items](changes/mkauth-core-architecture/ROADMAP.md) |
+| 5.5: Audit-Resolution Waves | In Progress | wave-1-production-trust-hardening, wave-2-part-1-frontend-palette-finalization |
 | 6: IdP Lifecycle | Not Started | [see Roadmap](changes/mkauth-core-architecture/ROADMAP.md) |

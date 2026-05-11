@@ -69,8 +69,8 @@ export function Button({
     // `danger` is the historical name for destructive — alias for back-compat.
     danger:
       "bg-error-container text-on-error-container hover:opacity-90 shadow-[0_8px_24px_-8px_var(--error-container)]",
-    success: "bg-[var(--success)] text-white hover:bg-[var(--success-hover)] shadow-sm",
-    warning: "bg-[var(--warning)] text-white hover:bg-[var(--warning-hover)] shadow-sm",
+    success: "bg-success text-on-success hover:bg-success-hover shadow-sm",
+    warning: "bg-warning text-on-warning hover:bg-warning-hover shadow-sm",
     link: "text-primary-container hover:underline underline-offset-4 px-1 py-0 shadow-none",
   };
 

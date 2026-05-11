@@ -281,36 +281,36 @@ function RotationStatusSection() {
         <button
           onClick={load}
           disabled={loading}
-          className="rounded-lg bg-surfaceHover px-3 py-1.5 text-xs font-medium text-foreground disabled:opacity-50"
+          className="rounded-lg bg-surface-container-high px-3 py-1.5 text-xs font-medium text-on-surface disabled:opacity-50"
         >
           {loading ? "Checking..." : "Refresh"}
         </button>
         {badge}
         {result?.last_rotated_at && (
-          <span className="text-xs text-muted">
+          <span className="text-xs text-on-surface-variant">
             last rotated: {new Date(result.last_rotated_at).toISOString().replace("T", " ").slice(0, 19)} UTC
           </span>
         )}
         {result?.age_days !== undefined && (
-          <span className="text-xs text-muted">· age {result.age_days}d</span>
+          <span className="text-xs text-on-surface-variant">· age {result.age_days}d</span>
         )}
-        {result && <span className="text-xs text-muted">· threshold {result.threshold_days}d</span>}
+        {result && <span className="text-xs text-on-surface-variant">· threshold {result.threshold_days}d</span>}
       </div>
-      {subtext && <p className="mt-3 text-sm text-muted max-w-3xl">{subtext}</p>}
-      {err && <p className="mt-3 text-sm text-red-400">{err}</p>}
+      {subtext && <p className="mt-3 text-sm text-on-surface-variant max-w-3xl">{subtext}</p>}
+      {err && <p className="mt-3 text-sm text-error">{err}</p>}
       {result && (
         <div className="mt-4 flex items-center gap-2 flex-wrap">
-          <code className="rounded-lg bg-surfaceHover px-3 py-2 text-xs text-foreground">
+          <code className="rounded-lg bg-surface-container-high px-3 py-2 text-xs text-on-surface">
             {result.rotate_command}
           </code>
           <button
             onClick={onCopy}
-            className="rounded-lg bg-surfaceHover px-3 py-2 text-xs font-medium text-foreground"
+            className="rounded-lg bg-surface-container-high px-3 py-2 text-xs font-medium text-on-surface"
             aria-label="Copy rotate command"
           >
             {copied ? "Copied" : "Copy"}
           </button>
-          <span className="text-xs text-muted">
+          <span className="text-xs text-on-surface-variant">
             Paste into your terminal — this panel intentionally does not trigger rotation.
           </span>
         </div>
@@ -362,23 +362,23 @@ function HealthSection() {
         <button
           onClick={run}
           disabled={loading}
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary disabled:opacity-50"
         >
           {loading ? "Checking..." : "Check connection"}
         </button>
         {badge}
-        {result?.domain && <span className="text-xs text-muted">domain: {result.domain}</span>}
-        {result?.latency_ms !== undefined && <span className="text-xs text-muted">· {result.latency_ms}ms</span>}
+        {result?.domain && <span className="text-xs text-on-surface-variant">domain: {result.domain}</span>}
+        {result?.latency_ms !== undefined && <span className="text-xs text-on-surface-variant">· {result.latency_ms}ms</span>}
         {result?.projects_total !== undefined && (
-          <span className="text-xs text-muted">· {result.projects_total} projects</span>
+          <span className="text-xs text-on-surface-variant">· {result.projects_total} projects</span>
         )}
       </div>
-      {result?.error && <p className="mt-3 text-sm text-red-400">{result.error}</p>}
-      {networkError && <p className="mt-3 text-sm text-red-400">{networkError}</p>}
+      {result?.error && <p className="mt-3 text-sm text-error">{result.error}</p>}
+      {networkError && <p className="mt-3 text-sm text-error">{networkError}</p>}
       {result && (
         <details className="mt-3">
-          <summary className="cursor-pointer text-xs text-muted">raw response</summary>
-          <pre className="mt-2 overflow-x-auto rounded-lg bg-surfaceHover p-3 text-xs text-foreground">
+          <summary className="cursor-pointer text-xs text-on-surface-variant">raw response</summary>
+          <pre className="mt-2 overflow-x-auto rounded-lg bg-surface-container-high p-3 text-xs text-on-surface">
             {JSON.stringify(result, null, 2)}
           </pre>
         </details>
@@ -485,21 +485,21 @@ function ProjectsSection() {
         <CardTitle>Projects &amp; Roles</CardTitle>
       </CardHeader>
       <div className="flex items-center gap-3 flex-wrap">
-        <label className="text-xs uppercase tracking-[0.22em] text-muted">Project</label>
+        <label className="text-xs uppercase tracking-[0.22em] text-on-surface-variant">Project</label>
         <select
           value={selectedId}
           onChange={(e) => setSelectedId(e.target.value)}
-          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground min-w-[18rem]"
+          className="rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface min-w-[18rem]"
         >
           <option value="">— select a project —</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>{p.name} ({p.id})</option>
           ))}
         </select>
-        <span className="text-xs text-muted">{total} total</span>
+        <span className="text-xs text-on-surface-variant">{total} total</span>
         <button
           onClick={() => void loadProjects()}
-          className="rounded-lg border border-border px-3 py-2 text-xs text-muted hover:text-foreground"
+          className="rounded-lg border border-outline-variant px-3 py-2 text-xs text-on-surface-variant hover:text-on-surface"
         >
           Refresh
         </button>
@@ -508,50 +508,50 @@ function ProjectsSection() {
       {selectedId && (
         <div className="mt-4 space-y-3">
           <div className="flex items-center gap-2">
-            <p className="text-xs uppercase tracking-[0.22em] text-muted">Roles</p>
-            <span className="text-xs text-muted">{rolesTotal} total</span>
+            <p className="text-xs uppercase tracking-[0.22em] text-on-surface-variant">Roles</p>
+            <span className="text-xs text-on-surface-variant">{rolesTotal} total</span>
           </div>
 
           {loadingRoles ? (
-            <p className="text-sm text-muted">Loading roles...</p>
+            <p className="text-sm text-on-surface-variant">Loading roles...</p>
           ) : roles.length === 0 ? (
-            <p className="text-sm text-muted">No roles defined in this project.</p>
+            <p className="text-sm text-on-surface-variant">No roles defined in this project.</p>
           ) : (
             <div className="space-y-2">
               {roles.map((r) => (
-                <div key={r.key} className="rounded-lg border border-border bg-surfaceHover px-3 py-2 text-sm flex items-center gap-3 flex-wrap">
-                  <code className="text-foreground font-mono">{r.key}</code>
+                <div key={r.key} className="rounded-lg border border-outline-variant bg-surface-container-high px-3 py-2 text-sm flex items-center gap-3 flex-wrap">
+                  <code className="text-on-surface font-mono">{r.key}</code>
                   {editing === r.key ? (
                     <>
                       <input
                         value={editDraft.displayName}
                         onChange={(e) => setEditDraft({ ...editDraft, displayName: e.target.value })}
                         placeholder="display name"
-                        className="flex-1 min-w-[10rem] rounded-lg border border-border bg-surface px-2 py-1 text-sm"
+                        className="flex-1 min-w-[10rem] rounded-lg border border-outline-variant bg-surface px-2 py-1 text-sm"
                       />
                       <input
                         value={editDraft.group}
                         onChange={(e) => setEditDraft({ ...editDraft, group: e.target.value })}
                         placeholder="group"
-                        className="w-32 rounded-lg border border-border bg-surface px-2 py-1 text-sm"
+                        className="w-32 rounded-lg border border-outline-variant bg-surface px-2 py-1 text-sm"
                       />
-                      <button onClick={() => onUpdate(r.key)} className="rounded-lg bg-primary px-3 py-1 text-xs text-white">Save</button>
-                      <button onClick={() => setEditing("")} className="rounded-lg border border-border px-3 py-1 text-xs text-muted">Cancel</button>
+                      <button onClick={() => onUpdate(r.key)} className="rounded-lg bg-primary px-3 py-1 text-xs text-on-primary">Save</button>
+                      <button onClick={() => setEditing("")} className="rounded-lg border border-outline-variant px-3 py-1 text-xs text-on-surface-variant">Cancel</button>
                     </>
                   ) : (
                     <>
-                      <span className="text-muted">{r.displayName || "—"}</span>
+                      <span className="text-on-surface-variant">{r.displayName || "—"}</span>
                       {r.group && <Badge variant="outline">{r.group}</Badge>}
                       <span className="flex-1" />
                       <button
                         onClick={() => { setEditing(r.key); setEditDraft({ displayName: r.displayName, group: r.group }); }}
-                        className="rounded-lg border border-border px-3 py-1 text-xs text-muted hover:text-foreground"
+                        className="rounded-lg border border-outline-variant px-3 py-1 text-xs text-on-surface-variant hover:text-on-surface"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => onDelete(r.key)}
-                        className="rounded-lg border border-red-500/40 px-3 py-1 text-xs text-red-400 hover:bg-red-500/10"
+                        className="rounded-lg border border-error/40 px-3 py-1 text-xs text-error hover:bg-error-container/40"
                       >
                         Delete
                       </button>
@@ -562,30 +562,30 @@ function ProjectsSection() {
             </div>
           )}
 
-          <div className="rounded-lg border border-dashed border-border px-3 py-2 text-sm flex items-center gap-2 flex-wrap">
-            <span className="text-xs uppercase tracking-[0.22em] text-muted">Add role</span>
+          <div className="rounded-lg border border-dashed border-outline-variant px-3 py-2 text-sm flex items-center gap-2 flex-wrap">
+            <span className="text-xs uppercase tracking-[0.22em] text-on-surface-variant">Add role</span>
             <input
               value={newRole.key}
               onChange={(e) => setNewRole({ ...newRole, key: e.target.value })}
               placeholder="role key (required)"
-              className="w-40 rounded-lg border border-border bg-surface px-2 py-1 text-sm"
+              className="w-40 rounded-lg border border-outline-variant bg-surface px-2 py-1 text-sm"
             />
             <input
               value={newRole.displayName}
               onChange={(e) => setNewRole({ ...newRole, displayName: e.target.value })}
               placeholder="display name"
-              className="w-40 rounded-lg border border-border bg-surface px-2 py-1 text-sm"
+              className="w-40 rounded-lg border border-outline-variant bg-surface px-2 py-1 text-sm"
             />
             <input
               value={newRole.group}
               onChange={(e) => setNewRole({ ...newRole, group: e.target.value })}
               placeholder="group"
-              className="w-32 rounded-lg border border-border bg-surface px-2 py-1 text-sm"
+              className="w-32 rounded-lg border border-outline-variant bg-surface px-2 py-1 text-sm"
             />
             <button
               onClick={onCreate}
               disabled={!newRole.key.trim()}
-              className="rounded-lg bg-primary px-3 py-1 text-xs text-white disabled:opacity-50"
+              className="rounded-lg bg-primary px-3 py-1 text-xs text-on-primary disabled:opacity-50"
             >
               Create
             </button>
@@ -594,7 +594,7 @@ function ProjectsSection() {
       )}
 
       {flash && (
-        <p className={`mt-3 text-sm ${flash.kind === "ok" ? "text-emerald-400" : "text-red-400"}`}>
+        <p className={`mt-3 text-sm ${flash.kind === "ok" ? "text-success" : "text-error"}`}>
           {flash.msg}
         </p>
       )}
@@ -740,17 +740,17 @@ function UsersSection() {
         <CardTitle>Users &amp; Grants</CardTitle>
       </CardHeader>
       <div className="flex items-center gap-3 flex-wrap">
-        <label className="text-xs uppercase tracking-[0.22em] text-muted">User</label>
+        <label className="text-xs uppercase tracking-[0.22em] text-on-surface-variant">User</label>
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder="filter by email, name, id"
-          className="w-56 rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+          className="w-56 rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm"
         />
         <select
           value={selectedId}
           onChange={(e) => setSelectedId(e.target.value)}
-          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground min-w-[20rem]"
+          className="rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface min-w-[20rem]"
         >
           <option value="">— select a user —</option>
           {filteredUsers.map((u) => (
@@ -759,10 +759,10 @@ function UsersSection() {
             </option>
           ))}
         </select>
-        <span className="text-xs text-muted">{total} total{filter ? ` · ${filteredUsers.length} match` : ""}</span>
+        <span className="text-xs text-on-surface-variant">{total} total{filter ? ` · ${filteredUsers.length} match` : ""}</span>
         <button
           onClick={() => void loadDirectory()}
-          className="rounded-lg border border-border px-3 py-2 text-xs text-muted hover:text-foreground"
+          className="rounded-lg border border-outline-variant px-3 py-2 text-xs text-on-surface-variant hover:text-on-surface"
         >
           Refresh
         </button>
@@ -771,29 +771,29 @@ function UsersSection() {
       {selectedId && (
         <div className="mt-4 space-y-3">
           <div className="flex items-center gap-2">
-            <p className="text-xs uppercase tracking-[0.22em] text-muted">Grants</p>
-            <span className="text-xs text-muted">{grantsTotal} total</span>
+            <p className="text-xs uppercase tracking-[0.22em] text-on-surface-variant">Grants</p>
+            <span className="text-xs text-on-surface-variant">{grantsTotal} total</span>
           </div>
 
           {loadingGrants ? (
-            <p className="text-sm text-muted">Loading grants...</p>
+            <p className="text-sm text-on-surface-variant">Loading grants...</p>
           ) : grants.length === 0 ? (
-            <p className="text-sm text-muted">No grants for this user.</p>
+            <p className="text-sm text-on-surface-variant">No grants for this user.</p>
           ) : (
             <div className="space-y-2">
               {grants.map((g) => (
-                <div key={g.id} className="rounded-lg border border-border bg-surfaceHover px-3 py-2 text-sm flex items-center gap-3 flex-wrap">
-                  <code className="text-foreground font-mono">{projectName(g.projectId)}</code>
+                <div key={g.id} className="rounded-lg border border-outline-variant bg-surface-container-high px-3 py-2 text-sm flex items-center gap-3 flex-wrap">
+                  <code className="text-on-surface font-mono">{projectName(g.projectId)}</code>
                   {editing === g.id ? (
                     <>
                       <input
                         value={editDraft}
                         onChange={(e) => setEditDraft(e.target.value)}
                         placeholder="comma-separated role keys"
-                        className="flex-1 min-w-[16rem] rounded-lg border border-border bg-surface px-2 py-1 text-sm"
+                        className="flex-1 min-w-[16rem] rounded-lg border border-outline-variant bg-surface px-2 py-1 text-sm"
                       />
-                      <button onClick={() => onUpdate(g.id)} className="rounded-lg bg-primary px-3 py-1 text-xs text-white">Save</button>
-                      <button onClick={() => setEditing("")} className="rounded-lg border border-border px-3 py-1 text-xs text-muted">Cancel</button>
+                      <button onClick={() => onUpdate(g.id)} className="rounded-lg bg-primary px-3 py-1 text-xs text-on-primary">Save</button>
+                      <button onClick={() => setEditing("")} className="rounded-lg border border-outline-variant px-3 py-1 text-xs text-on-surface-variant">Cancel</button>
                     </>
                   ) : (
                     <>
@@ -805,13 +805,13 @@ function UsersSection() {
                       <span className="flex-1" />
                       <button
                         onClick={() => { setEditing(g.id); setEditDraft(g.roleKeys.join(", ")); }}
-                        className="rounded-lg border border-border px-3 py-1 text-xs text-muted hover:text-foreground"
+                        className="rounded-lg border border-outline-variant px-3 py-1 text-xs text-on-surface-variant hover:text-on-surface"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => onRevoke(g.id, `${projectName(g.projectId)} / ${g.roleKeys.join(", ")}`)}
-                        className="rounded-lg border border-red-500/40 px-3 py-1 text-xs text-red-400 hover:bg-red-500/10"
+                        className="rounded-lg border border-error/40 px-3 py-1 text-xs text-error hover:bg-error-container/40"
                       >
                         Revoke
                       </button>
@@ -822,12 +822,12 @@ function UsersSection() {
             </div>
           )}
 
-          <div className="rounded-lg border border-dashed border-border px-3 py-2 text-sm flex items-center gap-2 flex-wrap">
-            <span className="text-xs uppercase tracking-[0.22em] text-muted">Assign grant</span>
+          <div className="rounded-lg border border-dashed border-outline-variant px-3 py-2 text-sm flex items-center gap-2 flex-wrap">
+            <span className="text-xs uppercase tracking-[0.22em] text-on-surface-variant">Assign grant</span>
             <select
               value={newGrant.projectId}
               onChange={(e) => setNewGrant({ ...newGrant, projectId: e.target.value })}
-              className="rounded-lg border border-border bg-surface px-2 py-1 text-sm min-w-[14rem]"
+              className="rounded-lg border border-outline-variant bg-surface px-2 py-1 text-sm min-w-[14rem]"
             >
               <option value="">— project —</option>
               {projects.map((p) => (
@@ -838,12 +838,12 @@ function UsersSection() {
               value={newGrant.roleKeys}
               onChange={(e) => setNewGrant({ ...newGrant, roleKeys: e.target.value })}
               placeholder="role1, role2"
-              className="flex-1 min-w-[14rem] rounded-lg border border-border bg-surface px-2 py-1 text-sm"
+              className="flex-1 min-w-[14rem] rounded-lg border border-outline-variant bg-surface px-2 py-1 text-sm"
             />
             <button
               onClick={onAssign}
               disabled={!newGrant.projectId || !newGrant.roleKeys.trim()}
-              className="rounded-lg bg-primary px-3 py-1 text-xs text-white disabled:opacity-50"
+              className="rounded-lg bg-primary px-3 py-1 text-xs text-on-primary disabled:opacity-50"
             >
               Assign
             </button>
@@ -852,7 +852,7 @@ function UsersSection() {
       )}
 
       {flash && (
-        <p className={`mt-3 text-sm ${flash.kind === "ok" ? "text-emerald-400" : "text-red-400"}`}>
+        <p className={`mt-3 text-sm ${flash.kind === "ok" ? "text-success" : "text-error"}`}>
           {flash.msg}
         </p>
       )}
@@ -902,20 +902,20 @@ function AllGrantsSection() {
         <button
           onClick={run}
           disabled={loading}
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary disabled:opacity-50"
         >
           {loading ? "Loading..." : "Load all grants"}
         </button>
-        {total > 0 && <span className="text-xs text-muted">{total} total · showing {grants.length}</span>}
+        {total > 0 && <span className="text-xs text-on-surface-variant">{total} total · showing {grants.length}</span>}
       </div>
 
-      {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+      {error && <p className="mt-3 text-sm text-error">{error}</p>}
 
       {grants.length > 0 && (
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase tracking-[0.22em] text-muted">
+              <tr className="text-left text-xs uppercase tracking-[0.22em] text-on-surface-variant">
                 <th className="py-2 pr-4">User ID</th>
                 <th className="py-2 pr-4">Project ID</th>
                 <th className="py-2 pr-4">Roles</th>
@@ -924,7 +924,7 @@ function AllGrantsSection() {
             </thead>
             <tbody>
               {grants.map((g) => (
-                <tr key={g.id} className="border-t border-border">
+                <tr key={g.id} className="border-t border-outline-variant">
                   <td className="py-2 pr-4 font-mono text-xs">{g.userId}</td>
                   <td className="py-2 pr-4 font-mono text-xs">{g.projectId}</td>
                   <td className="py-2 pr-4">
@@ -934,7 +934,7 @@ function AllGrantsSection() {
                       ))}
                     </div>
                   </td>
-                  <td className="py-2 pr-4 font-mono text-xs text-muted">{g.id}</td>
+                  <td className="py-2 pr-4 font-mono text-xs text-on-surface-variant">{g.id}</td>
                 </tr>
               ))}
             </tbody>
