@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -170,6 +172,66 @@ func claimsToEnvelope(claims map[string]interface{}, projectID string, namespace
 	return out
 }
 
+// claimFailureModeCacheTTL returns the Redis TTL for the read-through cache
+// of the per-project claim_failure_mode. Default 5 minutes; overridable via
+// CLAIM_MODE_CACHE_TTL_SECONDS for environments that pin Redis to short
+// retention.
+func claimFailureModeCacheTTL() int {
+	if v := os.Getenv("CLAIM_MODE_CACHE_TTL_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 300
+}
+
+// claimFailureModeRead resolves the per-project failure mode + minimal-safe
+// claims via a Redis read-through cache.
+//
+//  1. Read claim_mode:<projectID> from Redis (bounded by redisTimeout). Hit → return.
+//  2. Miss → call dbGetClaimFailureMode. Success → cache + return.
+//  3. DB error after cache miss → log + return ("fail_closed", nil, nil).
+//
+// The cache exists so a transient DB outage cannot collapse degraded-mode
+// behaviour into fail_closed for projects whose operator configured
+// minimal_safe (audit ref C5). Errors are suppressed by design: the data
+// plane MUST always have a fallback mode to return.
+func claimFailureModeRead(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
+	readCtx, cancel := context.WithTimeout(ctx, redisTimeout)
+	raw, rerr := redisGetClaimMode(readCtx, projectID)
+	cancel()
+	if rerr == nil && raw != "" {
+		var payload struct {
+			Mode              string                 `json:"mode"`
+			MinimalSafeClaims map[string]interface{} `json:"minimal_safe_claims"`
+		}
+		if jerr := json.Unmarshal([]byte(raw), &payload); jerr == nil {
+			return payload.Mode, payload.MinimalSafeClaims, nil
+		}
+		log.Printf("[CLAIM-MODE-CACHE] malformed cached value for project=%s; refreshing from DB", projectID)
+	}
+
+	mode, claims, err := dbGetClaimFailureMode(ctx, projectID)
+	if err != nil {
+		log.Printf("[CLAIM-MODE-CACHE] DB read failed for project=%s; defaulting to fail_closed: %v", projectID, err)
+		return "fail_closed", nil, nil
+	}
+
+	encoded, jerr := json.Marshal(struct {
+		Mode              string                 `json:"mode"`
+		MinimalSafeClaims map[string]interface{} `json:"minimal_safe_claims"`
+	}{Mode: mode, MinimalSafeClaims: claims})
+	if jerr == nil {
+		writeCtx, wcancel := context.WithTimeout(ctx, redisTimeout)
+		serr := redisSetClaimMode(writeCtx, projectID, string(encoded), claimFailureModeCacheTTL())
+		wcancel()
+		if serr != nil {
+			log.Printf("[CLAIM-MODE-CACHE] cache write failed for project=%s: %v (non-fatal)", projectID, serr)
+		}
+	}
+	return mode, claims, nil
+}
+
 // degradedResponse returns the per-project fallback envelope when the Redis
 // fetch or cache body for that project is unusable.
 //
@@ -177,13 +239,10 @@ func claimsToEnvelope(claims map[string]interface{}, projectID string, namespace
 // absent custom claims.
 // minimal_safe: the configured minimal claim map from the DB, wrapped in the
 // v2 envelope (namespacing preserved when namespace=true).
-// DB lookup failure: defaulted to fail_closed and logged.
+// DB lookup failure: defaulted to fail_closed and logged (handled inside
+// claimFailureModeRead).
 func degradedResponse(ctx context.Context, projectID string, namespace bool) ActionV2Response {
-	mode, minimalClaims, err := dbGetClaimFailureMode(ctx, projectID)
-	if err != nil {
-		log.Printf("[DATA PLANE] Could not load failure mode for project=%s (defaulting to fail_closed): %v", projectID, err)
-		return ActionV2Response{AppendClaims: []ActionV2Claim{}}
-	}
+	mode, minimalClaims, _ := claimFailureModeRead(ctx, projectID)
 
 	switch mode {
 	case "minimal_safe":

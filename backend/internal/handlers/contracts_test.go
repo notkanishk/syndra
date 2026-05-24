@@ -115,7 +115,7 @@ func TestHandleActionInjectRejectsMissingFields(t *testing.T) {
 }
 
 func TestHandleZitadelWebhookRejectsMissingRequiredFields(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/api/webhooks/zitadel", strings.NewReader(`{"user_id":"u1","source_project":"p1"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/webhooks/zitadel", strings.NewReader(`{"event_type":"grant_added","user_id":"u1","source_project":"p1"}`))
 	rr := httptest.NewRecorder()
 
 	HandleZitadelWebhook(rr, req)

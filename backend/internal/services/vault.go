@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -20,6 +21,12 @@ const (
 	argon2KeyLen  = 32
 	argon2SaltLen = 16
 )
+
+// ErrComplexity is the sentinel returned by ValidatePasswordComplexity when a
+// password fails one or more strength rules. Handlers MUST classify the
+// failure via errors.Is(err, ErrComplexity) — the wrapped detail message
+// composes the failing requirements and is not stable.
+var ErrComplexity = errors.New("password complexity")
 
 // ValidatePasswordComplexity enforces shadow password requirements:
 // 12+ characters, at least one uppercase, lowercase, digit, and symbol.
@@ -58,7 +65,7 @@ func ValidatePasswordComplexity(password string) error {
 	}
 
 	if len(failures) > 0 {
-		return fmt.Errorf("password complexity: %s", strings.Join(failures, "; "))
+		return fmt.Errorf("%w: %s", ErrComplexity, strings.Join(failures, "; "))
 	}
 	return nil
 }

@@ -3,7 +3,9 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"mkauth/internal/auth"
 	"mkauth/internal/cache"
 	"mkauth/internal/db"
 	"mkauth/internal/services"
@@ -11,6 +13,12 @@ import (
 )
 
 var (
+	// jwtValidate is the test-injectable parse-and-validate entrypoint used by
+	// withUserAuth. Tests substitute a counting wrapper to assert the C4
+	// contract (parsed exactly once per request — no re-parse in
+	// withOperatorAuth).
+	jwtValidate = auth.Validate
+
 	dbUpsertDirectGrant    = db.UpsertDirectGrant
 	dbGetAccessRequests    = db.GetAccessRequests
 	dbCreateAccessRequest  = db.CreateAccessRequest
@@ -40,13 +48,14 @@ var (
 	cacheInvalidateUser = cache.InvalidateUser
 
 	// Webhook handler injectable vars.
-	webhookEnforceMappingRules = zitadel.EnforceMappingRules
-	webhookRevokeMappingRules  = zitadel.RevokeMappingRules
-	webhookTriggerOnboarding   = services.TriggerOnboarding
-	dbInsertWebhookEvent       = db.InsertWebhookEvent
-	dbCompleteWebhookEvent     = db.CompleteWebhookEvent
-	dbFailWebhookEvent         = db.FailWebhookEvent
-	dbGetWebhookEvents         = db.GetWebhookEvents
+	webhookEnforceMappingRules             = zitadel.EnforceMappingRules
+	webhookRevokeMappingRules              = zitadel.RevokeMappingRules
+	webhookTriggerOnboarding               = services.TriggerOnboarding
+	dbInsertWebhookEvent                   = db.InsertWebhookEvent
+	dbCompleteWebhookEvent                 = db.CompleteWebhookEvent
+	dbFailWebhookEvent                     = db.FailWebhookEvent
+	dbGetWebhookEvents                     = db.GetWebhookEvents
+	dbDropWebhookEventEnrichmentIncomplete = db.DropWebhookEventEnrichmentIncomplete
 
 	// Zitadel grants index (event-listener enrichment cache).
 	dbUpsertGrantIndex   = db.UpsertGrantIndex
@@ -83,59 +92,94 @@ var (
 	errNoClient = fmt.Errorf("zitadel client not initialized")
 
 	zitadelListUsers = func(ctx context.Context, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
-		if zitadel.MgmtClient == nil { return nil, errNoClient }
+		if zitadel.MgmtClient == nil {
+			return nil, errNoClient
+		}
 		return zitadel.MgmtClient.ListUsers(ctx, p)
 	}
 	zitadelGetUser = func(ctx context.Context, userID string) (*zitadel.ZitadelUser, error) {
-		if zitadel.MgmtClient == nil { return nil, errNoClient }
+		if zitadel.MgmtClient == nil {
+			return nil, errNoClient
+		}
 		return zitadel.MgmtClient.GetUser(ctx, userID)
 	}
 	zitadelListProjects = func(ctx context.Context, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelProject], error) {
-		if zitadel.MgmtClient == nil { return nil, errNoClient }
+		if zitadel.MgmtClient == nil {
+			return nil, errNoClient
+		}
 		return zitadel.MgmtClient.ListProjects(ctx, p)
 	}
 	zitadelListProjectRoles = func(ctx context.Context, projectID string, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ProjectRoleResult], error) {
-		if zitadel.MgmtClient == nil { return nil, errNoClient }
+		if zitadel.MgmtClient == nil {
+			return nil, errNoClient
+		}
 		return zitadel.MgmtClient.ListProjectRoles(ctx, projectID, p)
 	}
 	zitadelAddProjectRole = func(ctx context.Context, projectID, roleKey, displayName, group string) error {
-		if zitadel.MgmtClient == nil { return errNoClient }
+		if zitadel.MgmtClient == nil {
+			return errNoClient
+		}
 		return zitadel.MgmtClient.AddProjectRole(ctx, projectID, roleKey, displayName, group)
 	}
 	zitadelUpdateProjectRole = func(ctx context.Context, projectID, roleKey, displayName, group string) error {
-		if zitadel.MgmtClient == nil { return errNoClient }
+		if zitadel.MgmtClient == nil {
+			return errNoClient
+		}
 		return zitadel.MgmtClient.UpdateProjectRole(ctx, projectID, roleKey, displayName, group)
 	}
 	zitadelDeleteProjectRole = func(ctx context.Context, projectID, roleKey string) error {
-		if zitadel.MgmtClient == nil { return errNoClient }
+		if zitadel.MgmtClient == nil {
+			return errNoClient
+		}
 		return zitadel.MgmtClient.DeleteProjectRole(ctx, projectID, roleKey)
 	}
 	zitadelListAllGrants = func(ctx context.Context, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		if zitadel.MgmtClient == nil { return nil, errNoClient }
+		if zitadel.MgmtClient == nil {
+			return nil, errNoClient
+		}
 		return zitadel.MgmtClient.ListAllGrants(ctx, p)
 	}
 	zitadelListUserGrants = func(ctx context.Context, userID string, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		if zitadel.MgmtClient == nil { return nil, errNoClient }
+		if zitadel.MgmtClient == nil {
+			return nil, errNoClient
+		}
 		return zitadel.MgmtClient.ListUserGrants(ctx, userID, p)
 	}
 	zitadelAddUserGrant = func(ctx context.Context, userID, projectID string, roleKeys []string) error {
-		if zitadel.MgmtClient == nil { return errNoClient }
+		if zitadel.MgmtClient == nil {
+			return errNoClient
+		}
 		return zitadel.MgmtClient.AddUserGrant(ctx, userID, projectID, roleKeys)
 	}
 	zitadelUpdateUserGrant = func(ctx context.Context, userID, grantID string, roleKeys []string) error {
-		if zitadel.MgmtClient == nil { return errNoClient }
+		if zitadel.MgmtClient == nil {
+			return errNoClient
+		}
 		return zitadel.MgmtClient.UpdateUserGrant(ctx, userID, grantID, roleKeys)
 	}
 	zitadelRemoveUserGrant = func(ctx context.Context, userID, grantID string) error {
-		if zitadel.MgmtClient == nil { return errNoClient }
+		if zitadel.MgmtClient == nil {
+			return errNoClient
+		}
 		return zitadel.MgmtClient.RemoveUserGrant(ctx, userID, grantID)
 	}
 
 	// Data-plane injectable vars — used by HandleActionInject and degradedResponse.
 	// Separate from the control-plane vars above so tests can exercise the degraded
 	// paths without a live Redis instance or database connection.
-	redisGetClaims       = func(ctx context.Context, key string) (string, error) {
+	redisGetClaims = func(ctx context.Context, key string) (string, error) {
 		return db.Redis.Get(ctx, key).Result()
 	}
 	dbGetClaimFailureMode = db.GetClaimFailureMode
+
+	// Read-through cache for the per-project claim_failure_mode (audit ref C5).
+	// Layered in front of dbGetClaimFailureMode so a transient DB outage cannot
+	// collapse degraded-mode behaviour into fail_closed for projects whose
+	// operator configured minimal_safe.
+	redisGetClaimMode = func(ctx context.Context, projectID string) (string, error) {
+		return db.Redis.Get(ctx, "claim_mode:"+projectID).Result()
+	}
+	redisSetClaimMode = func(ctx context.Context, projectID, value string, ttlSeconds int) error {
+		return db.Redis.SetEx(ctx, "claim_mode:"+projectID, value, time.Duration(ttlSeconds)*time.Second).Err()
+	}
 )

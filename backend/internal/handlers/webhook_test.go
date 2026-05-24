@@ -3,12 +3,14 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"mkauth/internal/db"
 	"mkauth/internal/zitadel"
@@ -53,6 +55,7 @@ func resetWebhookDeps(t *testing.T) {
 	origGetIdx := dbGetGrantIndex
 	origDeleteIdx := dbDeleteGrantIndex
 	origListLive := dbListUserGrantsLive
+	origDrop := dbDropWebhookEventEnrichmentIncomplete
 	t.Cleanup(func() {
 		cacheRebuildUser = origRebuild
 		cacheInvalidateUser = origInvalidate
@@ -67,6 +70,7 @@ func resetWebhookDeps(t *testing.T) {
 		dbGetGrantIndex = origGetIdx
 		dbDeleteGrantIndex = origDeleteIdx
 		dbListUserGrantsLive = origListLive
+		dbDropWebhookEventEnrichmentIncomplete = origDrop
 	})
 }
 
@@ -93,6 +97,7 @@ func setupNoopWebhookDeps(t *testing.T) {
 	dbListUserGrantsLive = func(_ context.Context, _, _ string) (zitadel.UserGrant, error) {
 		return zitadel.UserGrant{}, fmt.Errorf("test default: zitadel lookup not stubbed")
 	}
+	dbDropWebhookEventEnrichmentIncomplete = func(_ context.Context, _, _, _, _ string) error { return nil }
 }
 
 func postWebhook(t *testing.T, body []byte) *httptest.ResponseRecorder {
@@ -105,24 +110,22 @@ func postWebhook(t *testing.T, body []byte) *httptest.ResponseRecorder {
 	return rr
 }
 
-func TestWebhook_EventTypeDefault(t *testing.T) {
+func TestHandleZitadelWebhook_InternalMissingEventType_Returns400(t *testing.T) {
 	setupNoopWebhookDeps(t)
 
-	var enforceCalled bool
 	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error {
-		enforceCalled = true
+		t.Error("EnforceMappingRules must not be called when event_type is missing")
 		return nil
 	}
 
-	// No event_type field → should default to grant_added
-	body := []byte(`{"user_id":"u1","source_project":"p1","role_key":"editor"}`)
+	body := []byte(`{"user_id":"u1","source_project":"p1","role_keys":["editor"]}`)
 	rr := postWebhook(t, body)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing event_type; got %d: %s", rr.Code, rr.Body.String())
 	}
-	if !enforceCalled {
-		t.Error("expected EnforceMappingRules to be called for default grant_added")
+	if !strings.Contains(rr.Body.String(), `"event_type":"required"`) {
+		t.Fatalf("expected event_type=required in response details; got %s", rr.Body.String())
 	}
 }
 
@@ -240,7 +243,7 @@ func TestWebhook_DeduplicationSkips(t *testing.T) {
 		return nil
 	}
 
-	body := []byte(`{"user_id":"u1","source_project":"p1","role_key":"editor"}`)
+	body := []byte(`{"event_type":"grant_added","user_id":"u1","source_project":"p1","role_key":"editor"}`)
 	rr := postWebhook(t, body)
 
 	if rr.Code != http.StatusOK {
@@ -710,5 +713,74 @@ func TestHandleZitadelWebhook_UnknownZitadelEvent_NoOp(t *testing.T) {
 	}
 	if called {
 		t.Fatal("orchestrator MUST NOT be called on unknown event")
+	}
+}
+
+// zitadelGrantRemovedFixtureUnresolvable builds a Zitadel ContextInfoEvent
+// payload (matches zitadelEventPayload in webhook_translate.go) for
+// user.grant.removed. projectId/roleKeys are intentionally omitted so the
+// enrichment pass — combined with the no-op dbGetGrantIndex /
+// dbListUserGrantsLive defaults from setupNoopWebhookDeps — leaves the
+// event unresolvable, exercising the storm-prevention drop path.
+func zitadelGrantRemovedFixtureUnresolvable(t *testing.T, userID, grantID string) []byte {
+	t.Helper()
+	innerRaw, err := json.Marshal(map[string]any{
+		"userId":  userID,
+		"grantId": grantID,
+	})
+	if err != nil {
+		t.Fatalf("marshal inner event_payload: %v", err)
+	}
+	payload := map[string]any{
+		"aggregateID":   grantID,
+		"aggregateType": "user_grant",
+		"resourceOwner": "fixture-org",
+		"instanceID":    "fixture-instance",
+		"version":       "v1",
+		"sequence":      1,
+		"event_type":    "user.grant.removed",
+		"created_at":    time.Now().UTC().Format(time.RFC3339Nano),
+		"userID":        "editor-fixture",
+		"event_payload": json.RawMessage(innerRaw),
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal fixture: %v", err)
+	}
+	return raw
+}
+
+func TestHandleZitadelWebhook_ZitadelGrant_EnrichmentIncomplete_PersistedAsDropped(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	var droppedCalls int
+	dbDropWebhookEventEnrichmentIncomplete = func(_ context.Context, eventType, userID, grantID, idempotencyKey string) error {
+		droppedCalls++
+		if eventType != "grant_removed" {
+			t.Errorf("expected event_type=grant_removed in dropped record; got %q", eventType)
+		}
+		if userID != "u-zit-1" {
+			t.Errorf("expected user_id=u-zit-1 in dropped record; got %q", userID)
+		}
+		if grantID != "grant-gone" {
+			t.Errorf("expected grant_id=grant-gone in dropped record; got %q", grantID)
+		}
+		if idempotencyKey == "" {
+			t.Error("expected non-empty idempotency_key")
+		}
+		return nil
+	}
+
+	body := zitadelGrantRemovedFixtureUnresolvable(t, "u-zit-1", "grant-gone")
+	req := httptest.NewRequest(http.MethodPost, "/api/webhooks/zitadel", bytes.NewReader(body))
+	req.Header.Set("ZITADEL-Signature", "v1=fixture,t=1")
+	rr := httptest.NewRecorder()
+	HandleZitadelWebhook(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 storm-prevention ack; got %d: %s", rr.Code, rr.Body.String())
+	}
+	if droppedCalls != 1 {
+		t.Fatalf("expected exactly 1 call to dbDropWebhookEventEnrichmentIncomplete; got %d", droppedCalls)
 	}
 }

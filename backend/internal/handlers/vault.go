@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+
+	"mkauth/internal/services"
 )
 
 // enforceSelfOnly verifies that the acting user matches the target {uid}.
@@ -69,8 +71,7 @@ func handleSetShadowCredential(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := svcSetShadowPassword(r.Context(), uid, actorID, body.Password, r.RemoteAddr); err != nil {
-		// Check if it's a complexity validation error.
-		if isComplexityError(err) {
+		if errors.Is(err, services.ErrComplexity) {
 			jsonValidationErrorResponse(w, err.Error(), map[string]string{"password": "complexity"})
 			return
 		}
@@ -158,9 +159,4 @@ func handleGetShadowCredentialHash(w http.ResponseWriter, r *http.Request) {
 		"credential_hash": cred.CredentialHash,
 		"algorithm":       cred.Algorithm,
 	})
-}
-
-// isComplexityError checks if an error is from password complexity validation.
-func isComplexityError(err error) bool {
-	return err != nil && len(err.Error()) > 20 && err.Error()[:20] == "password complexity:"
 }

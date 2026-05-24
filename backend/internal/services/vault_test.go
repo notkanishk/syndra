@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -99,6 +100,16 @@ func TestValidatePasswordComplexity_NoSymbol(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "symbol") {
 		t.Errorf("expected symbol error, got: %v", err)
+	}
+}
+
+func TestValidatePasswordComplexity_WrapsSentinel(t *testing.T) {
+	err := ValidatePasswordComplexity("short")
+	if err == nil {
+		t.Fatalf("expected complexity error for %q, got nil", "short")
+	}
+	if !errors.Is(err, ErrComplexity) {
+		t.Fatalf("expected errors.Is(err, ErrComplexity)=true; got err=%v", err)
 	}
 }
 

@@ -12,7 +12,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"mkauth/internal/auth"
 	"mkauth/internal/models"
+	"mkauth/internal/services"
 )
 
 // ---------------------------------------------------------------------------
@@ -77,7 +79,7 @@ func TestHandleSetShadowCredential_SelfOnly_Forbidden(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/u1/shadow-credential", strings.NewReader(body))
 	req.SetPathValue("uid", "u1")
 	// Set a different actor in context.
-	ctx := withAdminUserID(req.Context(), "other-user")
+	ctx := withPrincipal(req.Context(), &auth.Principal{Subject: "other-user"})
 	req = req.WithContext(ctx)
 
 	rr := httptest.NewRecorder()
@@ -92,7 +94,7 @@ func TestHandleSetShadowCredential_ValidationError(t *testing.T) {
 	setupNoopVaultDeps(t)
 
 	svcSetShadowPassword = func(_ context.Context, _, _, _, _ string) error {
-		return fmt.Errorf("password complexity: must be at least 12 characters")
+		return fmt.Errorf("%w: must be at least 12 characters", services.ErrComplexity)
 	}
 
 	body := `{"password":"weak"}`

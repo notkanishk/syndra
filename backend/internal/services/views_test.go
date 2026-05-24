@@ -3,11 +3,13 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"mkauth/internal/directory"
 	"mkauth/internal/models"
 )
 
@@ -397,5 +399,162 @@ func TestUpsertRoleDeduplicatesReason(t *testing.T) {
 	}
 	if !current.IsSource {
 		t.Fatalf("expected source flag to remain true")
+	}
+}
+
+// --- accessSnapshot tests (B3) -------------------------------------------
+//
+// snapshotFixtureDirectory is a Source implementation that returns a fixed
+// number of users, applications, and projects (and minimal role/app metadata)
+// so call-count assertions on collectUserRoles are deterministic regardless
+// of the live or demo seed catalog.
+type snapshotFixtureDirectory struct {
+	users []models.UserProfile
+	apps  []models.ApplicationCatalog
+	projs []models.ProjectCatalog
+}
+
+func (d *snapshotFixtureDirectory) Users(context.Context) ([]models.UserProfile, error) {
+	return d.users, nil
+}
+func (d *snapshotFixtureDirectory) FindUser(_ context.Context, id string) (models.UserProfile, bool, error) {
+	for _, u := range d.users {
+		if u.ID == id {
+			return u, true, nil
+		}
+	}
+	return models.UserProfile{}, false, nil
+}
+func (d *snapshotFixtureDirectory) Projects(context.Context) ([]models.ProjectCatalog, error) {
+	return d.projs, nil
+}
+func (d *snapshotFixtureDirectory) FindProject(_ context.Context, id string) (models.ProjectCatalog, bool, error) {
+	for _, p := range d.projs {
+		if p.ID == id {
+			return p, true, nil
+		}
+	}
+	return models.ProjectCatalog{}, false, nil
+}
+func (d *snapshotFixtureDirectory) Applications(context.Context) ([]models.ApplicationCatalog, error) {
+	return d.apps, nil
+}
+func (d *snapshotFixtureDirectory) FindApplication(_ context.Context, id string) (models.ApplicationCatalog, bool, error) {
+	for _, a := range d.apps {
+		if a.ID == id {
+			return a, true, nil
+		}
+	}
+	return models.ApplicationCatalog{}, false, nil
+}
+func (d *snapshotFixtureDirectory) RoleKeysForProject(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+func (d *snapshotFixtureDirectory) ProjectName(_ context.Context, id string) (string, error) {
+	return id, nil
+}
+func (d *snapshotFixtureDirectory) Tag() string              { return "snapshot-fixture" }
+func (d *snapshotFixtureDirectory) InvalidateAll()           {}
+func (d *snapshotFixtureDirectory) InvalidateProject(string) {}
+func (d *snapshotFixtureDirectory) InvalidateUsers()         {}
+
+// setupSnapshotTestFixtures swaps directory.Default for a fixture source
+// seeded with the requested number of users, apps, and projects; neutralises
+// every service-layer DB injectable that views.go consults; and restores
+// originals via t.Cleanup. Returns nothing — tests configure collectUserRolesHook
+// themselves after calling this helper.
+func setupSnapshotTestFixtures(t *testing.T, numUsers, numApps, numProjects int) {
+	t.Helper()
+	resetGovernanceDeps(t)
+
+	users := make([]models.UserProfile, 0, numUsers)
+	for i := 0; i < numUsers; i++ {
+		users = append(users, models.UserProfile{ID: fmt.Sprintf("u%d", i), Name: fmt.Sprintf("User %d", i)})
+	}
+	projs := make([]models.ProjectCatalog, 0, numProjects)
+	for i := 0; i < numProjects; i++ {
+		projs = append(projs, models.ProjectCatalog{ID: fmt.Sprintf("p%d", i), Name: fmt.Sprintf("Project %d", i)})
+	}
+	apps := make([]models.ApplicationCatalog, 0, numApps)
+	for i := 0; i < numApps; i++ {
+		apps = append(apps, models.ApplicationCatalog{
+			ID:        fmt.Sprintf("a%d", i),
+			Name:      fmt.Sprintf("App %d", i),
+			ProjectID: fmt.Sprintf("p%d", i%max1(numProjects)),
+		})
+	}
+
+	origDir := directory.Default
+	directory.Default = &snapshotFixtureDirectory{users: users, apps: apps, projs: projs}
+	t.Cleanup(func() { directory.Default = origDir })
+
+	svcGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) {
+		return nil, nil
+	}
+	svcGetBundlesForUser = func(context.Context, string) ([]models.Bundle, error) {
+		return nil, nil
+	}
+	svcGetRolesForBundle = func(context.Context, string) ([]models.BundleRole, error) {
+		return nil, nil
+	}
+	svcGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) {
+		return nil, nil
+	}
+	svcGetAllBundles = func(context.Context) ([]models.Bundle, error) {
+		return nil, nil
+	}
+	svcGetAllDirectGrants = func(context.Context, bool) ([]models.DirectGrant, error) {
+		return nil, nil
+	}
+	svcGetAccessRequests = func(context.Context, string) ([]models.AccessRequest, error) {
+		return nil, nil
+	}
+	svcGetExpiringDirectGrants = func(context.Context, time.Duration) ([]models.DirectGrant, error) {
+		return nil, nil
+	}
+}
+
+func max1(n int) int {
+	if n < 1 {
+		return 1
+	}
+	return n
+}
+
+func TestListApplications_CollectsUserRolesExactlyOncePerUser(t *testing.T) {
+	setupSnapshotTestFixtures(t, 3, 5, 1)
+
+	var calls int
+	origCollect := collectUserRolesHook
+	collectUserRolesHook = func(ctx context.Context, userID string) (map[roleKey]*models.EffectiveRole, []models.Bundle, error) {
+		calls++
+		return origCollect(ctx, userID)
+	}
+	t.Cleanup(func() { collectUserRolesHook = origCollect })
+
+	if _, err := ListApplications(context.Background()); err != nil {
+		t.Fatalf("ListApplications: %v", err)
+	}
+	if calls != 3 {
+		t.Fatalf("expected collectUserRoles called exactly 3 times (once per user); got %d", calls)
+	}
+}
+
+func TestListProjects_CollectsUserRolesExactlyOncePerUser(t *testing.T) {
+	setupSnapshotTestFixtures(t, 3, 5, 4)
+
+	var calls int
+	origCollect := collectUserRolesHook
+	collectUserRolesHook = func(ctx context.Context, userID string) (map[roleKey]*models.EffectiveRole, []models.Bundle, error) {
+		calls++
+		return origCollect(ctx, userID)
+	}
+	t.Cleanup(func() { collectUserRolesHook = origCollect })
+
+	if _, err := ListProjects(context.Background()); err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	if calls != 3 {
+		t.Fatalf("expected 3 calls (once per user); got %d", calls)
 	}
 }

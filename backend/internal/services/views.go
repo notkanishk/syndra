@@ -19,6 +19,67 @@ type roleKey struct {
 	roleKey   string
 }
 
+type userRoles struct {
+	roleMap map[roleKey]*models.EffectiveRole
+	bundles []models.Bundle
+}
+
+// collectUserRolesHook is the indirection accessSnapshot calls. Production
+// code points it at collectUserRoles; tests override it to count
+// invocations. Single-process global — fine because tests run sequentially
+// in this package and t.Cleanup restores the original.
+var collectUserRolesHook = collectUserRoles
+
+// accessSnapshot is a request-scoped lazy cache for (user → effective roles).
+//
+// The role-resolution helper collectUserRoles is fast but repeatedly called
+// from views that iterate users — ListApplications walks N×M (per user × per
+// app), ListProjects walks N×P. The snapshot computes-and-memoises each
+// user once per request so cross-view aggregate fan-out collapses to O(N).
+//
+// The snapshot is NOT process-wide: no mutex, no invalidation, no expiry.
+// It lives for the lifetime of one HTTP handler call and is GC'd when the
+// request returns.
+type accessSnapshot struct {
+	ctx   context.Context
+	users []models.UserProfile
+	roles map[string]userRoles
+}
+
+// newAccessSnapshot primes the user list (single directory call) but defers
+// role resolution to lazy For() calls.
+func newAccessSnapshot(ctx context.Context) (*accessSnapshot, error) {
+	users, err := directory.Default.Users(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &accessSnapshot{
+		ctx:   ctx,
+		users: users,
+		roles: make(map[string]userRoles, len(users)),
+	}, nil
+}
+
+// For returns the cached (roleMap, bundles) for userID, computing-and-
+// caching on first access.
+func (s *accessSnapshot) For(userID string) (map[roleKey]*models.EffectiveRole, []models.Bundle, error) {
+	if r, ok := s.roles[userID]; ok {
+		return r.roleMap, r.bundles, nil
+	}
+	roleMap, bundles, err := collectUserRolesHook(s.ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	s.roles[userID] = userRoles{roleMap: roleMap, bundles: bundles}
+	return roleMap, bundles, nil
+}
+
+// Users returns the list primed at construction. Cheap accessor so view
+// functions don't re-fetch the directory.
+func (s *accessSnapshot) Users() []models.UserProfile {
+	return s.users
+}
+
 func Catalog(ctx context.Context) (models.CatalogResponse, error) {
 	users, err := directory.Default.Users(ctx)
 	if err != nil {
@@ -40,20 +101,23 @@ func Catalog(ctx context.Context) (models.CatalogResponse, error) {
 }
 
 func ListUsers(ctx context.Context, query string) ([]models.UserListItem, error) {
-	var items []models.UserListItem
-	query = strings.ToLower(strings.TrimSpace(query))
-
-	users, err := directory.Default.Users(ctx)
+	snap, err := newAccessSnapshot(ctx)
 	if err != nil {
 		return nil, err
 	}
+	return listUsersFromSnapshot(snap, query)
+}
 
-	for _, user := range users {
+func listUsersFromSnapshot(snap *accessSnapshot, query string) ([]models.UserListItem, error) {
+	query = strings.ToLower(strings.TrimSpace(query))
+	items := make([]models.UserListItem, 0, len(snap.Users()))
+
+	for _, user := range snap.Users() {
 		if query != "" && !matchesUser(user, query) {
 			continue
 		}
 
-		roleMap, bundles, err := collectUserRoles(ctx, user.ID)
+		roleMap, bundles, err := snap.For(user.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -103,10 +167,10 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 		bucket := projectBuckets[role.ProjectID]
 		if bucket == nil {
 			bucket = &models.ProjectAccessView{
-				ProjectID:   role.ProjectID,
-				ProjectName: role.ProjectName,
-				SourceRoles: []models.EffectiveRole{},
-				DerivedRoles: []models.EffectiveRole{},
+				ProjectID:         role.ProjectID,
+				ProjectName:       role.ProjectName,
+				SourceRoles:       []models.EffectiveRole{},
+				DerivedRoles:      []models.EffectiveRole{},
 				EffectiveRoleKeys: []string{},
 			}
 			projectBuckets[role.ProjectID] = bucket
@@ -161,11 +225,15 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 }
 
 func ListApplications(ctx context.Context) ([]models.ApplicationView, error) {
-	users, err := directory.Default.Users(ctx)
+	snap, err := newAccessSnapshot(ctx)
 	if err != nil {
 		return nil, err
 	}
-	apps, err := directory.Default.Applications(ctx)
+	return listApplicationsFromSnapshot(snap)
+}
+
+func listApplicationsFromSnapshot(snap *accessSnapshot) ([]models.ApplicationView, error) {
+	apps, err := directory.Default.Applications(snap.ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -173,8 +241,8 @@ func ListApplications(ctx context.Context) ([]models.ApplicationView, error) {
 
 	for _, app := range apps {
 		assignedCount := 0
-		for _, user := range users {
-			roleMap, _, err := collectUserRoles(ctx, user.ID)
+		for _, user := range snap.Users() {
+			roleMap, _, err := snap.For(user.ID)
 			if err != nil {
 				return nil, err
 			}
@@ -183,7 +251,7 @@ func ListApplications(ctx context.Context) ([]models.ApplicationView, error) {
 			}
 		}
 
-		consumedRoles, err := directory.Default.RoleKeysForProject(ctx, app.ProjectID)
+		consumedRoles, err := directory.Default.RoleKeysForProject(snap.ctx, app.ProjectID)
 		if err != nil {
 			return nil, err
 		}
@@ -251,30 +319,34 @@ func SimulateApplication(ctx context.Context, appID, userID string) (models.Appl
 }
 
 func ListProjects(ctx context.Context) ([]models.ProjectSummary, error) {
-	projects, err := directory.Default.Projects(ctx)
+	snap, err := newAccessSnapshot(ctx)
 	if err != nil {
 		return nil, err
 	}
-	allUsers, err := directory.Default.Users(ctx)
+	return listProjectsFromSnapshot(snap)
+}
+
+func listProjectsFromSnapshot(snap *accessSnapshot) ([]models.ProjectSummary, error) {
+	projects, err := directory.Default.Projects(snap.ctx)
 	if err != nil {
 		return nil, err
 	}
-	projectSummaries := make([]models.ProjectSummary, 0, len(projects))
-	rules, err := db.GetActiveMappingRules(ctx)
+	rules, err := svcGetActiveMappingRules(snap.ctx)
 	if err != nil {
 		return nil, err
 	}
-	bundles, err := db.GetAllBundles(ctx)
+	bundles, err := svcGetAllBundles(snap.ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	projectSummaries := make([]models.ProjectSummary, 0, len(projects))
 	for _, project := range projects {
 		memberCount := 0
 		sampleMembers := []string{}
 		activeRoleSet := make(map[string]bool)
-		for _, user := range allUsers {
-			roleMap, _, err := collectUserRoles(ctx, user.ID)
+		for _, user := range snap.Users() {
+			roleMap, _, err := snap.For(user.ID)
 			if err != nil {
 				return nil, err
 			}
@@ -294,7 +366,7 @@ func ListProjects(ctx context.Context) ([]models.ProjectSummary, error) {
 
 		bundleCount := 0
 		for _, bundle := range bundles {
-			roles, err := db.GetRolesForBundle(ctx, bundle.ID)
+			roles, err := svcGetRolesForBundle(snap.ctx, bundle.ID)
 			if err != nil {
 				return nil, err
 			}
@@ -342,18 +414,22 @@ func ListProjects(ctx context.Context) ([]models.ProjectSummary, error) {
 }
 
 func BundleImpact(ctx context.Context, bundleID string) (models.BundleImpact, error) {
-	roles, err := svcGetRolesForBundle(ctx, bundleID)
+	snap, err := newAccessSnapshot(ctx)
+	if err != nil {
+		return models.BundleImpact{}, err
+	}
+	return bundleImpactFromSnapshot(snap, bundleID)
+}
+
+func bundleImpactFromSnapshot(snap *accessSnapshot, bundleID string) (models.BundleImpact, error) {
+	roles, err := svcGetRolesForBundle(snap.ctx, bundleID)
 	if err != nil {
 		return models.BundleImpact{}, err
 	}
 
 	impactedUsers := []models.UserProfile{}
-	users, err := directory.Default.Users(ctx)
-	if err != nil {
-		return models.BundleImpact{}, err
-	}
-	for _, user := range users {
-		bundles, err := svcGetBundlesForUser(ctx, user.ID)
+	for _, user := range snap.Users() {
+		bundles, err := svcGetBundlesForUser(snap.ctx, user.ID)
 		if err != nil {
 			return models.BundleImpact{}, err
 		}
@@ -385,23 +461,31 @@ func AllDirectGrants(ctx context.Context) ([]models.DirectGrant, error) {
 }
 
 func Governance(ctx context.Context) (models.GovernanceSummary, error) {
-	requests, err := svcGetAccessRequests(ctx, "pending")
+	snap, err := newAccessSnapshot(ctx)
+	if err != nil {
+		return models.GovernanceSummary{}, err
+	}
+	return governanceFromSnapshot(snap)
+}
+
+func governanceFromSnapshot(snap *accessSnapshot) (models.GovernanceSummary, error) {
+	requests, err := svcGetAccessRequests(snap.ctx, "pending")
 	if err != nil {
 		return models.GovernanceSummary{}, err
 	}
 
-	expiring, err := svcGetExpiringDirectGrants(ctx, 14*24*time.Hour)
+	expiring, err := svcGetExpiringDirectGrants(snap.ctx, 14*24*time.Hour)
 	if err != nil {
 		return models.GovernanceSummary{}, err
 	}
 
 	cleanupHints := []string{}
-	bundles, err := svcGetAllBundles(ctx)
+	bundles, err := svcGetAllBundles(snap.ctx)
 	if err != nil {
 		return models.GovernanceSummary{}, err
 	}
 	for _, bundle := range bundles {
-		impact, err := BundleImpact(ctx, bundle.ID)
+		impact, err := bundleImpactFromSnapshot(snap, bundle.ID)
 		if err != nil {
 			return models.GovernanceSummary{}, err
 		}
@@ -428,6 +512,18 @@ func Governance(ctx context.Context) (models.GovernanceSummary, error) {
 }
 
 func Topology(ctx context.Context) (models.TopologyGraph, error) {
+	snap, err := newAccessSnapshot(ctx)
+	if err != nil {
+		return models.TopologyGraph{
+			Nodes: []models.TopologyNode{},
+			Edges: []models.TopologyEdge{},
+		}, err
+	}
+	return topologyFromSnapshot(snap)
+}
+
+func topologyFromSnapshot(snap *accessSnapshot) (models.TopologyGraph, error) {
+	ctx := snap.ctx
 	graph := models.TopologyGraph{
 		Nodes: []models.TopologyNode{},
 		Edges: []models.TopologyEdge{},
@@ -530,7 +626,7 @@ func Topology(ctx context.Context) (models.TopologyGraph, error) {
 		}
 	}
 
-	appViews, err := ListApplications(ctx)
+	appViews, err := listApplicationsFromSnapshot(snap)
 	if err != nil {
 		return graph, err
 	}
@@ -558,7 +654,7 @@ func Topology(ctx context.Context) (models.TopologyGraph, error) {
 		})
 	}
 
-	bundles, err := db.GetAllBundles(ctx)
+	bundles, err := svcGetAllBundles(ctx)
 	if err != nil {
 		return graph, err
 	}
@@ -571,7 +667,7 @@ func Topology(ctx context.Context) (models.TopologyGraph, error) {
 			Description: bundle.Description,
 		})
 
-		roles, err := db.GetRolesForBundle(ctx, bundle.ID)
+		roles, err := svcGetRolesForBundle(ctx, bundle.ID)
 		if err != nil {
 			return graph, err
 		}
@@ -587,7 +683,7 @@ func Topology(ctx context.Context) (models.TopologyGraph, error) {
 		}
 	}
 
-	rules, err := db.GetActiveMappingRules(ctx)
+	rules, err := svcGetActiveMappingRules(ctx)
 	if err != nil {
 		return graph, err
 	}

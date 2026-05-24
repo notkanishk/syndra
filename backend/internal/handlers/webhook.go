@@ -14,10 +14,10 @@ type WebhookPayload struct {
 	EventType     string   `json:"event_type"` // grant_added, grant_removed, grant_changed, user_deactivated, user_locked, user_created
 	UserID        string   `json:"user_id"`
 	SourceProject string   `json:"source_project"`
-	RoleKey       string   `json:"role_key"`             // back-compat singular; prefer RoleKeys for new callers
-	RoleKeys      []string `json:"role_keys"`            // multi-role grants from Zitadel event-trigger payloads
-	ProjectIDs    []string `json:"project_ids"`          // all projects the user touches
-	GrantID       string   `json:"grant_id,omitempty"`   // Zitadel user_grant aggregate ID; key for the grants index
+	RoleKey       string   `json:"role_key"`           // back-compat singular; prefer RoleKeys for new callers
+	RoleKeys      []string `json:"role_keys"`          // multi-role grants from Zitadel event-trigger payloads
+	ProjectIDs    []string `json:"project_ids"`        // all projects the user touches
+	GrantID       string   `json:"grant_id,omitempty"` // Zitadel user_grant aggregate ID; key for the grants index
 }
 
 var validEventTypes = map[string]bool{
@@ -73,11 +73,12 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Default event_type for backward compatibility (internal-shape callers only).
-	if event.EventType == "" {
-		event.EventType = "grant_added"
+	if !trimmedNonEmpty(event.EventType) {
+		jsonValidationErrorResponse(w, "event_type is required", map[string]string{
+			"event_type": "required",
+		})
+		return
 	}
-
 	if !validEventTypes[event.EventType] {
 		jsonValidationErrorResponse(w, "Invalid event_type", map[string]string{
 			"event_type": "must be one of: grant_added, grant_removed, grant_changed, user_deactivated, user_locked, user_created",
@@ -104,6 +105,13 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 	if isZitadel && isGrantEvent && (!trimmedNonEmpty(event.SourceProject) || len(event.RoleKeys) == 0) {
 		log.Printf("[WEBHOOK] grant event acknowledged without dispatch (enrichment incomplete) event=%s user=%s grant=%s project=%q roles=%v",
 			event.EventType, event.UserID, event.GrantID, event.SourceProject, event.RoleKeys)
+		idempotencyKey := r.Header.Get("ZITADEL-Signature")
+		if idempotencyKey == "" {
+			idempotencyKey = fmt.Sprintf("dropped:%s:%s:%s", event.EventType, event.UserID, event.GrantID)
+		}
+		if err := dbDropWebhookEventEnrichmentIncomplete(r.Context(), event.EventType, event.UserID, event.GrantID, idempotencyKey); err != nil {
+			log.Printf("[WEBHOOK] failed to persist dropped event: %v (non-fatal)", err)
+		}
 		jsonResponse(w, http.StatusOK, map[string]string{"message": "grant event acknowledged, dispatch skipped (enrichment incomplete)"})
 		return
 	}

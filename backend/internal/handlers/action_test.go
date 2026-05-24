@@ -3,20 +3,30 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // resetActionDeps restores the injectable vars used by HandleActionInject and
-// degradedResponse. Called via t.Cleanup in each test.
+// degradedResponse. Stubs the claim_mode read-through cache vars to bypass
+// Redis (always miss → DB) so legacy tests that only configure
+// dbGetClaimFailureMode keep flowing through to the DB stub.
 func resetActionDeps(t *testing.T, origRedis func(context.Context, string) (string, error), origMode func(context.Context, string) (string, map[string]interface{}, error)) {
 	t.Helper()
+	origGetMode, origSetMode := redisGetClaimMode, redisSetClaimMode
+	redisGetClaimMode = func(context.Context, string) (string, error) { return "", redis.Nil }
+	redisSetClaimMode = func(context.Context, string, string, int) error { return nil }
 	t.Cleanup(func() {
 		redisGetClaims = origRedis
 		dbGetClaimFailureMode = origMode
+		redisGetClaimMode = origGetMode
+		redisSetClaimMode = origSetMode
 	})
 }
 
@@ -381,3 +391,114 @@ func TestHandleActionInject_UnknownFields_Accepted(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// claimFailureModeRead (C5) — Redis read-through cache for the per-project
+// failure mode. Tests focus on the helper's three branches: cache hit
+// (Redis returns a value), cache miss + DB success (refresh + cache), and
+// cache miss + DB error (defaults to fail_closed).
+// ---------------------------------------------------------------------------
+
+func resetClaimModeCacheDeps(t *testing.T) {
+	t.Helper()
+	origGet, origSet, origMode := redisGetClaimMode, redisSetClaimMode, dbGetClaimFailureMode
+	t.Cleanup(func() {
+		redisGetClaimMode = origGet
+		redisSetClaimMode = origSet
+		dbGetClaimFailureMode = origMode
+	})
+}
+
+func TestClaimFailureModeRead_DBError_FallsBackToCachedValue(t *testing.T) {
+	resetClaimModeCacheDeps(t)
+
+	redisGetClaimMode = func(ctx context.Context, projectID string) (string, error) {
+		if projectID != "proj-1" {
+			t.Errorf("unexpected projectID %q", projectID)
+		}
+		if _, ok := ctx.Deadline(); !ok {
+			t.Error("expected redisGetClaimMode to receive a deadline-bounded context (redisTimeout wrap missing)")
+		}
+		return `{"mode":"minimal_safe","minimal_safe_claims":{"reason":"degraded"}}`, nil
+	}
+	redisSetClaimMode = func(ctx context.Context, projectID, value string, ttlSeconds int) error {
+		t.Errorf("redisSetClaimMode must not be called on cache hit; got projectID=%s", projectID)
+		return nil
+	}
+	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
+		t.Errorf("dbGetClaimFailureMode must not be called on cache hit; got projectID=%s", projectID)
+		return "fail_closed", nil, nil
+	}
+
+	mode, claims, err := claimFailureModeRead(context.Background(), "proj-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mode != "minimal_safe" {
+		t.Errorf("expected mode=minimal_safe; got %q", mode)
+	}
+	if got := claims["reason"]; got != "degraded" {
+		t.Errorf("expected claims.reason=degraded; got %v", got)
+	}
+}
+
+func TestClaimFailureModeRead_CacheMiss_DBSuccess_Caches(t *testing.T) {
+	resetClaimModeCacheDeps(t)
+
+	redisGetClaimMode = func(ctx context.Context, projectID string) (string, error) {
+		return "", redis.Nil
+	}
+	var setCalls int
+	redisSetClaimMode = func(ctx context.Context, projectID, value string, ttlSeconds int) error {
+		setCalls++
+		if projectID != "proj-2" {
+			t.Errorf("expected projectID=proj-2; got %q", projectID)
+		}
+		if !strings.Contains(value, `"mode":"fail_closed"`) {
+			t.Errorf("expected fail_closed in cached value; got %q", value)
+		}
+		if ttlSeconds <= 0 {
+			t.Errorf("expected positive TTL; got %d", ttlSeconds)
+		}
+		return nil
+	}
+	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
+		return "fail_closed", nil, nil
+	}
+
+	mode, _, err := claimFailureModeRead(context.Background(), "proj-2")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mode != "fail_closed" {
+		t.Errorf("expected mode=fail_closed; got %q", mode)
+	}
+	if setCalls != 1 {
+		t.Errorf("expected exactly 1 SET; got %d", setCalls)
+	}
+}
+
+func TestClaimFailureModeRead_CacheMissAndDBError_DefaultsFailClosed(t *testing.T) {
+	resetClaimModeCacheDeps(t)
+
+	redisGetClaimMode = func(ctx context.Context, projectID string) (string, error) {
+		return "", redis.Nil
+	}
+	redisSetClaimMode = func(ctx context.Context, projectID, value string, ttlSeconds int) error {
+		t.Errorf("must not cache on DB error")
+		return nil
+	}
+	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
+		return "fail_closed", nil, errors.New("simulated db outage")
+	}
+
+	mode, claims, err := claimFailureModeRead(context.Background(), "proj-3")
+	if err != nil {
+		t.Fatalf("expected nil error (helper swallows for safety); got %v", err)
+	}
+	if mode != "fail_closed" {
+		t.Errorf("expected fail_closed default; got %q", mode)
+	}
+	if claims != nil {
+		t.Errorf("expected nil claims; got %v", claims)
+	}
+}

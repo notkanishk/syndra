@@ -10,7 +10,6 @@ import (
 	"io"
 	"math/big"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -143,13 +142,41 @@ func (s *keyStore) keyFunc(ctx context.Context, domain string) jwt.Keyfunc {
 	}
 }
 
-// ValidateToken validates a Zitadel-issued RS256 JWT.
-// Returns the subject (Zitadel user ID) on success.
-// Delegates signature verification, expiry, issuer, and audience checks to
+// Principal is the authenticated identity extracted from a validated Zitadel
+// JWT. Subject is the Zitadel user ID; ProjectRoles is the set of role keys
+// the principal carries in the urn:zitadel:iam:org:project:roles claim. The
+// {orgId: orgName} value side of the Zitadel claim is intentionally discarded
+// — handlers only need set-membership against role keys.
+type Principal struct {
+	Subject      string
+	ProjectRoles map[string]struct{}
+}
+
+// HasProjectRole reports whether the principal carries the given role key.
+// Safe on a nil receiver so callers can use it without first nil-checking
+// the result of principalFromContext.
+func (p *Principal) HasProjectRole(roleKey string) bool {
+	if p == nil {
+		return false
+	}
+	_, ok := p.ProjectRoles[roleKey]
+	return ok
+}
+
+// Validate parses a Zitadel-issued RS256 JWT and returns the principal.
+// Delegates signature, expiry, issuer, and audience verification to
 // golang-jwt/jwt/v5; key material is fetched from the Zitadel JWKS endpoint
 // and cached for one hour.
-func ValidateToken(ctx context.Context, tokenStr, domain, audience string) (string, error) {
-	claims := &jwt.RegisteredClaims{}
+//
+// The token is parsed exactly once — callers MUST stash the returned
+// principal in request context for downstream readers rather than re-parsing
+// the raw bearer token (audit ref C4).
+func Validate(ctx context.Context, tokenStr, domain, audience string) (*Principal, error) {
+	type zitadelClaims struct {
+		jwt.RegisteredClaims
+		ProjectRoles map[string]map[string]string `json:"urn:zitadel:iam:org:project:roles,omitempty"`
+	}
+	claims := &zitadelClaims{}
 	_, err := jwt.ParseWithClaims(tokenStr, claims, store.keyFunc(ctx, domain),
 		jwt.WithIssuer(fmt.Sprintf("https://%s", domain)),
 		jwt.WithAudience(audience),
@@ -157,42 +184,17 @@ func ValidateToken(ctx context.Context, tokenStr, domain, audience string) (stri
 		jwt.WithValidMethods([]string{"RS256"}),
 	)
 	if err != nil {
-		return "", fmt.Errorf("invalid token: %w", err)
+		return nil, fmt.Errorf("invalid token: %w", err)
 	}
 
 	subject, err := claims.GetSubject()
 	if err != nil || subject == "" {
-		return "", fmt.Errorf("token missing subject claim")
+		return nil, fmt.Errorf("token missing subject claim")
 	}
 
-	return subject, nil
-}
-
-// HasProjectRole checks whether an already-validated JWT contains a specific
-// role key in the Zitadel project roles claim (urn:zitadel:iam:org:project:roles).
-// The claim is a map of roleKey → { orgId: orgName }. This function only checks
-// for key presence. The token MUST have been validated before calling this.
-func HasProjectRole(tokenStr, roleKey string) bool {
-	parts := strings.Split(tokenStr, ".")
-	if len(parts) != 3 {
-		return false
+	roles := make(map[string]struct{}, len(claims.ProjectRoles))
+	for k := range claims.ProjectRoles {
+		roles[k] = struct{}{}
 	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return false
-	}
-	var claims map[string]json.RawMessage
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return false
-	}
-	raw, ok := claims["urn:zitadel:iam:org:project:roles"]
-	if !ok {
-		return false
-	}
-	var roles map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &roles); err != nil {
-		return false
-	}
-	_, exists := roles[roleKey]
-	return exists
+	return &Principal{Subject: subject, ProjectRoles: roles}, nil
 }

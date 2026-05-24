@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-
-	"mkauth/internal/auth"
 )
 
 // NewRouter constructs the global multiplexer for API requests
@@ -175,23 +173,26 @@ func withUserAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		adminUserID, err := auth.ValidateToken(r.Context(), rawToken, domain, audience)
+		principal, err := jwtValidate(r.Context(), rawToken, domain, audience)
 		if err != nil {
 			log.Printf("[AUTH] Token validation failed for %s %s: %v", r.Method, r.URL.Path, err)
 			jsonErrorResponse(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid or expired token")
 			return
 		}
 
-		log.Printf("[AUTH] Authorized admin=%s for %s %s", adminUserID, r.Method, r.URL.Path)
-		ctx := withAdminUserID(r.Context(), adminUserID)
-		next(w, r.WithContext(ctx))
+		log.Printf("[AUTH] Authorized admin=%s for %s %s", principal.Subject, r.Method, r.URL.Path)
+		next(w, r.WithContext(withPrincipal(r.Context(), principal)))
 	}
 }
 
 // withOperatorAuth gates endpoints that require operator-level (admin) access.
-// Wraps withUserAuth then checks the Zitadel project roles claim for the admin
-// role key (ZITADEL_ADMIN_ROLE_KEY, default "admin"). In dev mode (no ZITADEL_DOMAIN),
-// the role check is skipped since auth falls back to shared API key.
+// Wraps withUserAuth, then reads the principal stashed in r.Context() to check
+// project-role membership for the admin role key (ZITADEL_ADMIN_ROLE_KEY,
+// default "admin"). In dev mode (no ZITADEL_DOMAIN), the role check is
+// skipped since auth falls through to the shared API key.
+//
+// Does NOT re-extract or re-parse the bearer token — the JWT is parsed once
+// in withUserAuth (audit ref C4).
 func withOperatorAuth(next http.HandlerFunc) http.HandlerFunc {
 	return withUserAuth(func(w http.ResponseWriter, r *http.Request) {
 		// In dev mode, withUserAuth already fell through to API key auth — skip role check.
@@ -200,13 +201,13 @@ func withOperatorAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		rawToken := extractBearerToken(r)
+		principal := principalFromContext(r.Context())
 		adminRoleKey := os.Getenv("ZITADEL_ADMIN_ROLE_KEY")
 		if adminRoleKey == "" {
 			adminRoleKey = "admin"
 		}
 
-		if !auth.HasProjectRole(rawToken, adminRoleKey) {
+		if !principal.HasProjectRole(adminRoleKey) {
 			log.Printf("[AUTH] Operator access denied for user=%s on %s %s (missing role %q)",
 				getAdminUserID(r.Context()), r.Method, r.URL.Path, adminRoleKey)
 			jsonErrorResponse(w, http.StatusForbidden, "FORBIDDEN", "Operator-level access required")

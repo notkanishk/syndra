@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"mkauth/internal/auth"
 	"mkauth/internal/directory"
 	"mkauth/internal/models"
 )
@@ -47,7 +48,7 @@ func TestHandleGetMyProfile_Success(t *testing.T) {
 	t.Cleanup(func() { directory.Default = orig })
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/me/profile", nil)
-	req = req.WithContext(withAdminUserID(req.Context(), "u1"))
+	req = req.WithContext(withPrincipal(req.Context(), &auth.Principal{Subject: "u1"}))
 	rr := httptest.NewRecorder()
 
 	handleGetMyProfile(rr, req)
@@ -81,7 +82,7 @@ func TestHandleGetMyProfile_NotFound(t *testing.T) {
 	t.Cleanup(func() { directory.Default = orig })
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/me/profile", nil)
-	req = req.WithContext(withAdminUserID(req.Context(), "ghost"))
+	req = req.WithContext(withPrincipal(req.Context(), &auth.Principal{Subject: "ghost"}))
 	rr := httptest.NewRecorder()
 
 	handleGetMyProfile(rr, req)
