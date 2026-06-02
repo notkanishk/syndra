@@ -56,7 +56,6 @@ export interface MappingRule {
   source_role: string;
   target_project: string;
   target_role: string;
-  version: number;
   created_at: string;
 }
 

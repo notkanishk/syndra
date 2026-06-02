@@ -696,9 +696,6 @@ func topologyFromSnapshot(snap *accessSnapshot) (models.TopologyGraph, error) {
 			Target: roleNodeID(rule.TargetProject, rule.TargetRole),
 			Kind:   "rule",
 			Label:  "maps",
-			Meta: map[string]string{
-				"version": fmt.Sprintf("%d", rule.Version),
-			},
 		})
 	}
 

@@ -186,16 +186,13 @@ func syncShadowPassword(
 		return // No shadow credential set.
 	}
 
-	// Zero hash bytes after use.
-	hashBytes := []byte(hash)
-	defer func() {
-		for i := range hashBytes {
-			hashBytes[i] = 0
-		}
-	}()
-
+	// The shadow-credential hash is a Go string (immutable; the GC retains
+	// the original allocation until collection). A defer-loop that zeros a
+	// []byte(hash) copy is theatre: it cannot reach the source string. The
+	// real mitigation is keeping the lifetime short — pass directly to
+	// SetUserPassword and let the function return GC the value.
 	err = retryTransient(ctx, cfg, func() error {
-		return lp.SetUserPassword(ctx, uid, string(hashBytes))
+		return lp.SetUserPassword(ctx, uid, hash)
 	})
 	if err != nil {
 		log.Printf("[SYNC] Shadow password sync failed for %s: %v", uid, err)

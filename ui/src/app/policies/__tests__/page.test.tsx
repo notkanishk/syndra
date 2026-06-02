@@ -29,7 +29,6 @@ beforeEach(() => {
       source_role: "mentor",
       target_project: TARGET_PROJECT,
       target_role: "trainee",
-      version: 2,
       created_at: new Date().toISOString(),
     },
   ]);

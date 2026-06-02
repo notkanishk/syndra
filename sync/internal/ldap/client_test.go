@@ -1,6 +1,8 @@
 package ldap
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net"
 	"testing"
@@ -88,5 +90,84 @@ func TestIsConnectionError(t *testing.T) {
 				t.Errorf("IsConnectionError(%v) = %v, want %v", tt.err, got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestNewGroupAddRequest_UsesBindDNAsPlaceholderMember(t *testing.T) {
+	p := &Pool{cfg: Config{
+		BaseDN: "dc=example,dc=com",
+		BindDN: "uid=admin,ou=people,dc=example,dc=com",
+	}}
+	req := p.newGroupAddRequest("samba_share_admin")
+
+	var memberVals []string
+	var objectClassVals []string
+	for _, attr := range req.Attributes {
+		switch attr.Type {
+		case "member":
+			memberVals = attr.Vals
+		case "objectClass":
+			objectClassVals = attr.Vals
+		}
+	}
+
+	if len(memberVals) != 1 {
+		t.Fatalf("expected exactly one member value, got %d: %v", len(memberVals), memberVals)
+	}
+	if memberVals[0] != "uid=admin,ou=people,dc=example,dc=com" {
+		t.Errorf("expected member=[bindDN], got %q", memberVals[0])
+	}
+	if memberVals[0] == "" {
+		t.Error("placeholder must not be an empty DN — strict OpenLDAP rejects it")
+	}
+	if len(objectClassVals) != 1 || objectClassVals[0] != "groupOfNames" {
+		t.Errorf("expected objectClass=[groupOfNames], got %v", objectClassVals)
+	}
+}
+
+func TestNewRemoveMemberRequest_DeletesBindDNPlaceholder(t *testing.T) {
+	p := &Pool{cfg: Config{
+		BaseDN: "dc=example,dc=com",
+		BindDN: "uid=admin,ou=people,dc=example,dc=com",
+	}}
+	req := p.newRemoveMemberRequest("samba_share_admin", p.cfg.BindDN)
+
+	if req.DN != "cn=samba_share_admin,ou=groups,dc=example,dc=com" {
+		t.Errorf("unexpected group DN: %q", req.DN)
+	}
+
+	var found bool
+	for _, change := range req.Changes {
+		if change.Operation != ldapv3.DeleteAttribute {
+			t.Errorf("expected a delete operation, got %d", change.Operation)
+		}
+		if change.Modification.Type == "member" {
+			found = true
+			if len(change.Modification.Vals) != 1 || change.Modification.Vals[0] != p.cfg.BindDN {
+				t.Errorf("expected member delete=[bindDN], got %v", change.Modification.Vals)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected a delete on the member attribute")
+	}
+}
+
+func TestWithConn_CancelledCtxFailsFast(t *testing.T) {
+	p := &Pool{} // conn is nil; fn must not be invoked
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel before calling withConn
+
+	fnInvoked := false
+	err := p.withConn(ctx, func(c *ldapv3.Conn) error {
+		fnInvoked = true
+		return nil
+	})
+
+	if fnInvoked {
+		t.Error("fn must not be invoked when ctx is already cancelled")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got %v", err)
 	}
 }

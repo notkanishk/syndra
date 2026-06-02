@@ -57,7 +57,6 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/rules/mapping", withCORS(withUserAuth(handleGetMappingRules)))
 	mux.HandleFunc("POST /api/v1/rules/mapping", withCORS(withUserAuth(handleCreateMappingRule)))
 	mux.HandleFunc("POST /api/v1/rules/mapping/validate", withCORS(withUserAuth(handleValidateMappingRule)))
-	mux.HandleFunc("PUT /api/v1/rules/mapping/{id}", withCORS(withUserAuth(handleUpdateMappingRule)))
 
 	// Audit Logs
 	mux.HandleFunc("GET /api/v1/audit", withCORS(withUserAuth(handleGetAuditLogs)))

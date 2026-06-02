@@ -26,22 +26,9 @@ func CreateMappingRule(ctx context.Context, sourceProject, sourceRole, targetPro
 	return id, nil
 }
 
-func UpdateMappingRule(ctx context.Context, id string) error {
-	// Increment version only, indicating this rule's logic or downstream effects were reviewed/refreshed
-	query := `UPDATE mapping_rules SET version = version + 1 WHERE id = $1;`
-	tag, err := PG.Exec(ctx, query, id)
-	if err != nil {
-		return fmt.Errorf("failed to update mapping rule version: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("mapping rule not found")
-	}
-	return nil
-}
-
 func GetActiveMappingRules(ctx context.Context) ([]models.MappingRule, error) {
 	query := `
-		SELECT id, source_zitadel_project_id, source_zitadel_role_key, target_zitadel_project_id, target_zitadel_role_key, version, created_at 
+		SELECT id, source_zitadel_project_id, source_zitadel_role_key, target_zitadel_project_id, target_zitadel_role_key, created_at
 		FROM mapping_rules;`
 
 	rows, err := PG.Query(ctx, query)
@@ -53,7 +40,7 @@ func GetActiveMappingRules(ctx context.Context) ([]models.MappingRule, error) {
 	var rules []models.MappingRule
 	for rows.Next() {
 		var r models.MappingRule
-		if err := rows.Scan(&r.ID, &r.SourceProject, &r.SourceRole, &r.TargetProject, &r.TargetRole, &r.Version, &r.CreatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.SourceProject, &r.SourceRole, &r.TargetProject, &r.TargetRole, &r.CreatedAt); err != nil {
 			return nil, err
 		}
 		rules = append(rules, r)

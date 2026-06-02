@@ -15,13 +15,11 @@ func resetRulesDeps(t *testing.T) {
 	t.Helper()
 	origGetActive := dbGetActiveMappingRules
 	origCreate := dbCreateMappingRule
-	origUpdate := dbUpdateMappingRule
 	origDetect := dbDetectCycleOnInsert
 	origAudit := dbInsertAuditLog
 	t.Cleanup(func() {
 		dbGetActiveMappingRules = origGetActive
 		dbCreateMappingRule = origCreate
-		dbUpdateMappingRule = origUpdate
 		dbDetectCycleOnInsert = origDetect
 		dbInsertAuditLog = origAudit
 	})
@@ -145,83 +143,5 @@ func TestHandleCreateMappingRule_HappyPath(t *testing.T) {
 	}
 	if auditResource != "rule-1" {
 		t.Fatalf("expected audit resource rule-1, got %s", auditResource)
-	}
-}
-
-// --- handleUpdateMappingRule ---
-
-func TestHandleUpdateMappingRule_NotFound(t *testing.T) {
-	resetRulesDeps(t)
-
-	dbUpdateMappingRule = func(ctx context.Context, id string) error {
-		return errors.New("mapping rule not found")
-	}
-
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/rules/mapping/rule-99", nil)
-	req.SetPathValue("id", "rule-99")
-	rr := httptest.NewRecorder()
-	handleUpdateMappingRule(rr, req)
-
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
-	}
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if resp["error"] != "UPDATE_FAILED" {
-		t.Fatalf("expected UPDATE_FAILED, got %v", resp["error"])
-	}
-}
-
-func TestHandleUpdateMappingRule_HappyPath(t *testing.T) {
-	resetRulesDeps(t)
-
-	dbUpdateMappingRule = func(ctx context.Context, id string) error {
-		return nil
-	}
-	auditAction := ""
-	dbInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error {
-		auditAction = action
-		return nil
-	}
-
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/rules/mapping/rule-1", nil)
-	req.SetPathValue("id", "rule-1")
-	rr := httptest.NewRecorder()
-	handleUpdateMappingRule(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	var resp map[string]string
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if resp["message"] != "Version incremented successfully" {
-		t.Fatalf("unexpected message: %s", resp["message"])
-	}
-	if auditAction != "mapping_rule.version_bumped" {
-		t.Fatalf("expected audit action mapping_rule.version_bumped, got %s", auditAction)
-	}
-}
-
-func TestHandleUpdateMappingRule_MissingID(t *testing.T) {
-	resetRulesDeps(t)
-
-	// PathValue returns "" when not set.
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/rules/mapping/", nil)
-	rr := httptest.NewRecorder()
-	handleUpdateMappingRule(rr, req)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
-	}
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if resp["error"] != "BAD_REQUEST" {
-		t.Fatalf("expected BAD_REQUEST, got %v", resp["error"])
 	}
 }

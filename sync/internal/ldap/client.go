@@ -70,14 +70,27 @@ func (p *Pool) Close() {
 	}
 }
 
-// withConn executes fn with the current connection. If fn returns a connection
-// error, reconnect is attempted once and fn is retried.
-func (p *Pool) withConn(fn func(*ldapv3.Conn) error) error {
+// withConn executes fn with the current connection. Context cancellation
+// is honored at LDAP-operation boundaries: ctx.Err() is checked before
+// acquiring the pool mutex, after acquiring it, and before any reconnect
+// retry. Once fn is running, it owns the LDAP call to completion (or the
+// underlying conn's timeout). If fn returns a connection error, reconnect
+// is attempted once and fn is retried.
+func (p *Pool) withConn(ctx context.Context, fn func(*ldapv3.Conn) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	err := fn(p.conn)
 	if err != nil && IsConnectionError(err) {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		if reconnErr := p.reconnect(); reconnErr != nil {
 			return fmt.Errorf("reconnect failed: %w (original: %v)", reconnErr, err)
 		}
@@ -98,8 +111,8 @@ func (p *Pool) GroupDN(group string) string {
 
 // EnsureUser searches for a user by uid. If absent, creates with displayName and mail.
 // If present, updates displayName and mail if they differ.
-func (p *Pool) EnsureUser(_ context.Context, uid, displayName, email string) error {
-	return p.withConn(func(conn *ldapv3.Conn) error {
+func (p *Pool) EnsureUser(ctx context.Context, uid, displayName, email string) error {
+	return p.withConn(ctx, func(conn *ldapv3.Conn) error {
 		userDN := p.UserDN(uid)
 
 		// Search for existing user.
@@ -152,9 +165,34 @@ func (p *Pool) EnsureUser(_ context.Context, uid, displayName, email string) err
 	})
 }
 
+// newGroupAddRequest builds the AddRequest used by EnsureGroup. Extracted
+// so the request shape is unit-testable without a fake LDAP connection.
+// `groupOfNames` requires at least one member; we use the bind DN (a real
+// principal in the directory) as the placeholder so strict OpenLDAP
+// accepts it. AddUserToGroup prunes this placeholder once a real member
+// exists (see newRemoveMemberRequest) so the service account does not
+// linger as a member of every group.
+func (p *Pool) newGroupAddRequest(group string) *ldapv3.AddRequest {
+	addReq := ldapv3.NewAddRequest(p.GroupDN(group), nil)
+	addReq.Attribute("objectClass", []string{"groupOfNames"})
+	addReq.Attribute("cn", []string{group})
+	addReq.Attribute("member", []string{p.cfg.BindDN})
+	return addReq
+}
+
+// newRemoveMemberRequest builds the ModifyRequest that deletes a single member
+// DN from a group. Extracted so the request shape is unit-testable without a
+// fake LDAP connection. Used to prune the bind-DN placeholder seeded by
+// newGroupAddRequest.
+func (p *Pool) newRemoveMemberRequest(group, memberDN string) *ldapv3.ModifyRequest {
+	modReq := ldapv3.NewModifyRequest(p.GroupDN(group), nil)
+	modReq.Delete("member", []string{memberDN})
+	return modReq
+}
+
 // EnsureGroup searches for a group by cn. If absent, creates it.
-func (p *Pool) EnsureGroup(_ context.Context, group string) error {
-	return p.withConn(func(conn *ldapv3.Conn) error {
+func (p *Pool) EnsureGroup(ctx context.Context, group string) error {
+	return p.withConn(ctx, func(conn *ldapv3.Conn) error {
 		groupDN := p.GroupDN(group)
 
 		_, err := conn.Search(ldapv3.NewSearchRequest(
@@ -163,12 +201,7 @@ func (p *Pool) EnsureGroup(_ context.Context, group string) error {
 		))
 		if err != nil {
 			if ldapv3.IsErrorWithCode(err, ldapv3.LDAPResultNoSuchObject) {
-				addReq := ldapv3.NewAddRequest(groupDN, nil)
-				addReq.Attribute("objectClass", []string{"groupOfNames"})
-				addReq.Attribute("cn", []string{group})
-				// groupOfNames requires at least one member — use a placeholder.
-				addReq.Attribute("member", []string{""})
-				if err := conn.Add(addReq); err != nil {
+				if err := conn.Add(p.newGroupAddRequest(group)); err != nil {
 					return fmt.Errorf("create LLDAP group %s: %w", group, err)
 				}
 				log.Printf("[LDAP] Created group: cn=%s", group)
@@ -181,19 +214,36 @@ func (p *Pool) EnsureGroup(_ context.Context, group string) error {
 }
 
 // AddUserToGroup adds a user's DN to the group's member attribute.
-// Idempotent: ignores AttributeOrValueExists (code 20).
-func (p *Pool) AddUserToGroup(_ context.Context, targetUID, lldapGroup string) error {
-	return p.withConn(func(conn *ldapv3.Conn) error {
+// Idempotent: ignores AttributeOrValueExists (code 20). Once a real member is
+// present, it prunes the bind-DN placeholder that EnsureGroup seeds to satisfy
+// groupOfNames' "at least one member" rule — otherwise the service account
+// would linger as a member of every group it creates.
+func (p *Pool) AddUserToGroup(ctx context.Context, targetUID, lldapGroup string) error {
+	return p.withConn(ctx, func(conn *ldapv3.Conn) error {
 		groupDN := p.GroupDN(lldapGroup)
 		userDN := p.UserDN(targetUID)
 
 		modReq := ldapv3.NewModifyRequest(groupDN, nil)
 		modReq.Add("member", []string{userDN})
-		if err := conn.Modify(modReq); err != nil {
-			if ldapv3.IsErrorWithCode(err, ldapv3.LDAPResultAttributeOrValueExists) {
-				return nil // Already a member — idempotent success.
-			}
+		if err := conn.Modify(modReq); err != nil &&
+			!ldapv3.IsErrorWithCode(err, ldapv3.LDAPResultAttributeOrValueExists) {
+			// AttributeOrValueExists means already a member — fall through to
+			// placeholder pruning, which may still be needed.
 			return fmt.Errorf("add %s to group %s: %w", targetUID, lldapGroup, err)
+		}
+
+		// Prune the bind-DN placeholder now that a real member exists. The user
+		// we just added keeps the group non-empty, so removing the bind DN is
+		// safe. Best-effort and idempotent: NoSuchAttribute means it was already
+		// pruned (or the group predates this logic). A real user DN never equals
+		// the bind DN; the guard prevents removing the last member regardless.
+		if userDN != p.cfg.BindDN {
+			if err := conn.Modify(p.newRemoveMemberRequest(lldapGroup, p.cfg.BindDN)); err != nil &&
+				!ldapv3.IsErrorWithCode(err, ldapv3.LDAPResultNoSuchAttribute) {
+				// The real member was added; a lingering placeholder is cosmetic.
+				// Log and continue rather than failing the whole sync op.
+				log.Printf("[LDAP] Warning: could not prune placeholder member from group %s: %v", lldapGroup, err)
+			}
 		}
 		return nil
 	})
@@ -201,8 +251,8 @@ func (p *Pool) AddUserToGroup(_ context.Context, targetUID, lldapGroup string) e
 
 // RemoveUserFromGroup removes a user's DN from the group's member attribute.
 // Idempotent: ignores NoSuchAttribute (code 16).
-func (p *Pool) RemoveUserFromGroup(_ context.Context, targetUID, lldapGroup string) error {
-	return p.withConn(func(conn *ldapv3.Conn) error {
+func (p *Pool) RemoveUserFromGroup(ctx context.Context, targetUID, lldapGroup string) error {
+	return p.withConn(ctx, func(conn *ldapv3.Conn) error {
 		groupDN := p.GroupDN(lldapGroup)
 		userDN := p.UserDN(targetUID)
 
@@ -219,8 +269,8 @@ func (p *Pool) RemoveUserFromGroup(_ context.Context, targetUID, lldapGroup stri
 }
 
 // SetUserPassword sets the userPassword attribute to a pre-hashed value.
-func (p *Pool) SetUserPassword(_ context.Context, targetUID, passwordHash string) error {
-	return p.withConn(func(conn *ldapv3.Conn) error {
+func (p *Pool) SetUserPassword(ctx context.Context, targetUID, passwordHash string) error {
+	return p.withConn(ctx, func(conn *ldapv3.Conn) error {
 		userDN := p.UserDN(targetUID)
 		modReq := ldapv3.NewModifyRequest(userDN, nil)
 		modReq.Replace("userPassword", []string{passwordHash})

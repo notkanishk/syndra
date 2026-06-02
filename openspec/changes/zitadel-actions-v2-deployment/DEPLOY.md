@@ -36,7 +36,8 @@ ORG_PROJECT_PERMISSION_EDITOR`) do NOT cover it — a fresh
 `make zitadel-actions-register` on an org-only service user fails with
 `HTTP 403`.
 
-**Canonical reference:** [`zitadel/actions/PERMISSIONS.md`](../../../zitadel/actions/PERMISSIONS.md)
+**Canonical reference:** the "Service-Account Permissions" section of
+[`zitadel/actions/README.md`](../../../zitadel/actions/README.md#service-account-permissions)
 — lives under the durable operator tree, survives the OpenSpec archive
 workflow. Covers the per-call permission table, three
 narrowest-first assignment paths (custom instance role → prebuilt
@@ -184,11 +185,12 @@ part of the delete.
   `zitadel/actions/rotate.sh`). The script calls
   `POST /v2/actions/targets/{id}` with `{"expirationSigningKey":"0s"}`,
   backs up the previous key to `.action-signing-key.previous`, and writes
-  the new key to `.action-signing-key`. The raw curl is available in
-  `SIGNING_KEY.md` as a deep-dive fallback.
+  the new key to `.action-signing-key`. The raw curl is available in the
+  README's "Signing Key Handling" section as a deep-dive fallback.
 * **Do not** put `make zitadel-actions-rotate-key` on a schedule unless your
   compliance framework requires it. Zitadel does not expire the signing
-  key (see `SIGNING_KEY.md §Zitadel does not expire the signing key`); the
+  key (see the README's "Signing Key Handling" section, *Zitadel does not
+  expire the signing key*); the
   first key works indefinitely. Rotate on-incident, on policy cadence, or
   on operator handoff — not on a cron tick.
 
@@ -196,7 +198,7 @@ part of the delete.
 
 | Symptom | Probable cause | Fix |
 |---|---|---|
-| `register.sh`/`rotate.sh` exits with `HTTP 403` during `POST /v2/actions/targets*` | Service user lacks instance-scoped Actions permissions (most common when it was set up with only `ORG_OWNER`) | Grant `action.target.read`, `action.target.write`, `action.execution.write` (and optionally `action.target.delete`) at **Default Settings → Administrators**. Full matrix + narrowest-first assignment options in [`zitadel/actions/PERMISSIONS.md`](../../../zitadel/actions/PERMISSIONS.md). |
+| `register.sh`/`rotate.sh` exits with `HTTP 403` during `POST /v2/actions/targets*` | Service user lacks instance-scoped Actions permissions (most common when it was set up with only `ORG_OWNER`) | Grant `action.target.read`, `action.target.write`, `action.execution.write` (and optionally `action.target.delete`) at **Default Settings → Administrators**. Full matrix + narrowest-first assignment options in the "Service-Account Permissions" section of [`zitadel/actions/README.md`](../../../zitadel/actions/README.md#service-account-permissions). |
 | `401 INVALID_SIGNATURE` on every Zitadel call | `ZITADEL_ACTION_SIGNING_KEY` not set on backend, or set to the wrong value | Set `ZITADEL_ACTION_SIGNING_KEY` to the contents of `zitadel/actions/.action-signing-key` in the backend env, restart. |
 | `signature verification disabled (dev mode)` log in prod | `ZITADEL_ACTION_SIGNING_KEY` empty in container env | Same as above. |
 | `/zitadel` Rotation Status panel shows `disabled` | `ZITADEL_ACTION_SIGNING_KEY` is unset on the backend (signature verification off) | Same root cause as the two rows above — fix the env var and restart before trusting any rotation age. |

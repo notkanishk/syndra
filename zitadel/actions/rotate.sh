@@ -50,30 +50,17 @@ case "${1:-}" in
 esac
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 MANIFEST="${SCRIPT_DIR}/targets.json"
 FRAGMENT_FILE="${SCRIPT_DIR}/.action-env.fragment"
 
 # ---- Auto-load .env from the repo root (if present) ----
 # Explicit environment wins: an already-set VAR is never overwritten by
-# .env. Silent when .env is absent (CI, bare clone, container build).
-# Parsing is deliberately narrow: KEY=VALUE lines with optional leading
-# whitespace, optional `"…"`/`'…'` quotes stripped, `#` comments and
-# blank lines ignored. `${VAR}` inside a value is kept literal — we don't
-# re-implement shell expansion here.
-_ENV_FILE="$(cd "${SCRIPT_DIR}/../.." && pwd)/.env"
-if [[ -f "$_ENV_FILE" ]]; then
-  while IFS= read -r _raw || [[ -n "$_raw" ]]; do
-    [[ "$_raw" =~ ^[[:space:]]*($|#) ]] && continue
-    [[ "$_raw" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
-    _k="${BASH_REMATCH[1]}"
-    _v="${BASH_REMATCH[2]}"
-    if [[ "$_v" =~ ^\"(.*)\"$ ]] || [[ "$_v" =~ ^\'(.*)\'$ ]]; then
-      _v="${BASH_REMATCH[1]}"
-    fi
-    [[ -z "${!_k+x}" ]] && export "$_k=$_v"
-  done < "$_ENV_FILE"
-  unset _raw _k _v
-fi
+# .env. Silent when .env is absent (CI, bare clone, container build). The
+# loader logic lives in scripts/lib/load-env.sh (shared with register.sh).
+_ENV_FILE="${REPO_ROOT}/.env"
+# shellcheck source=../../scripts/lib/load-env.sh
+source "${REPO_ROOT}/scripts/lib/load-env.sh"
 unset _ENV_FILE
 
 : "${ZITADEL_DOMAIN:?ZITADEL_DOMAIN is required (set in .env or export)}"
@@ -95,7 +82,6 @@ fi
 if [[ -n "${ZITADEL_M2M_TOKEN:-}" ]]; then
   TOKEN="$ZITADEL_M2M_TOKEN"
 elif [[ -n "${ZITADEL_MACHINE_KEY_PATH:-}" ]]; then
-  REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
   case "$ZITADEL_MACHINE_KEY_PATH" in
     /*)    _abs_key="$ZITADEL_MACHINE_KEY_PATH" ;;
     '~/'*) _abs_key="$HOME/${ZITADEL_MACHINE_KEY_PATH#\~/}" ;;
@@ -124,8 +110,9 @@ API_BASE="https://${ZITADEL_DOMAIN}/v2/actions"
 # zitadel_api METHOD PATH [JSON_BODY]
 # Same helper shape as register.sh. On HTTP error prints Zitadel's response
 # body verbatim so 401/403 permission failures surface the actual message
-# instead of a bare "curl: (22)". 401/403 hint points at PERMISSIONS.md so
-# operators don't over-grant — the narrowest assignment path is a custom
+# instead of a bare "curl: (22)". 401/403 hint points at the README's
+# "Service-Account Permissions" section so operators don't over-grant — the
+# narrowest assignment path is a custom
 # instance role carrying just action.target.read + action.target.write +
 # action.execution.write (action.target.delete optional).
 zitadel_api() {
@@ -150,8 +137,8 @@ zitadel_api() {
         printf '       Minimum permissions: action.target.read, action.target.write,\n'
         printf '       action.execution.write (plus action.target.delete for full removal).\n'
         printf '       Assign via a narrow custom role, a prebuilt action-scoped role, or\n'
-        printf '       IAM_OWNER as a fallback. See zitadel/actions/PERMISSIONS.md for the\n'
-        printf '       least-privilege matrix and assignment paths.\n'
+        printf '       IAM_OWNER as a fallback. See the "Service-Account Permissions"\n'
+        printf '       section of zitadel/actions/README.md for the full matrix.\n'
       fi
       printf 'response body:\n'
       cat "$tmp"

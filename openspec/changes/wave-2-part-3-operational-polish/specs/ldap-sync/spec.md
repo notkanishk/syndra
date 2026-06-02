@@ -51,7 +51,7 @@ This requirement deliberately does NOT cover mid-LDAP-call cancellation. The act
 
 ### Requirement: Sync-service retry attempts and backoff MUST be configurable via environment variables
 
-`sync/internal/config/config.go` defines `RetryAttempts` (default `3`) and `RetryBackoff` (default `1s`), both consumed by `worker.go:retryTransient`. The values are currently hardcoded constants in the config struct initialiser — they cannot be tuned without recompiling. The sync service MUST read `SYNC_RETRY_ATTEMPTS` as a positive integer and `SYNC_RETRY_BACKOFF` as a Go duration from the environment, falling back to the documented defaults (`3` and `1s` respectively) when either is unset or empty. Malformed values MUST surface as a `Load()` error rather than being silently coerced.
+`sync/internal/config/config.go` defines `RetryAttempts` (default `3`) and `RetryBackoff` (default `1s`), both consumed by `worker.go:retryTransient`. The values are currently hardcoded constants in the config struct initialiser — they cannot be tuned without recompiling. The sync service MUST read `SYNC_RETRY_ATTEMPTS` as a positive integer and `SYNC_RETRY_BACKOFF` as a positive Go duration from the environment, falling back to the documented defaults (`3` and `1s` respectively) when either is unset or empty. Malformed values — including non-positive ones — MUST surface as a `Load()` error rather than being silently coerced. (`retryTransient` runs `RetryAttempts + 1` attempts: a negative `RetryAttempts` skips its loop so `fn` is never called, and `0` means no retries at all — both violate the positive-integer contract. A non-positive `RetryBackoff` would make the exponential backoff fire immediately.)
 
 #### Scenario: SYNC_RETRY_ATTEMPTS overrides the default
 
@@ -71,5 +71,11 @@ This requirement deliberately does NOT cover mid-LDAP-call cancellation. The act
 - **WHEN** `LoadConfig()` returns a `Config`
 - **THEN** the returned config MUST have `RetryAttempts == 3`
 - **AND** `RetryBackoff == 1 * time.Second`
+
+#### Scenario: Non-positive retry values are rejected
+
+- **GIVEN** the environment has `SYNC_RETRY_ATTEMPTS=0` (or a negative integer) or `SYNC_RETRY_BACKOFF=0s` (or a negative duration)
+- **WHEN** `LoadConfig()` runs
+- **THEN** `Load()` MUST return an error rather than a `Config` with the coerced value
 
 (Audit refs: C7, C8, S4)

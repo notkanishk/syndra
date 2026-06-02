@@ -29,7 +29,7 @@ Touch surface (14 spots):
 | File | Line | Change |
 |---|---|---|
 | `backend/db/migrations/000014_drop_mapping_rules_version.up.sql` | new | `ALTER TABLE mapping_rules DROP COLUMN version;` |
-| `backend/db/migrations/000014_drop_mapping_rules_version.down.sql` | new | `ALTER TABLE mapping_rules ADD COLUMN version INT NOT NULL DEFAULT 1;` |
+| `backend/db/migrations/000014_drop_mapping_rules_version.down.sql` | new | `ALTER TABLE mapping_rules ADD COLUMN version INT NOT NULL DEFAULT 1;` plus re-adding the `ck_mapping_rules_version_positive` CHECK constraint (from 000004) so rollback restores migration 13's exact schema contract |
 | `backend/internal/db/rules.go` | 29-39 | delete `UpdateMappingRule` entirely |
 | `backend/internal/db/rules.go` | 44-46, 56 | drop `version` from `SELECT` and `Scan` in `GetActiveMappingRules` |
 | `backend/internal/handlers/rules.go` | 128-144 | delete `handleUpdateMappingRule` entirely (with its `mapping_rule.version_bumped` audit log) |
@@ -43,7 +43,7 @@ Touch surface (14 spots):
 | `ui/src/lib/types.ts` | 59 | delete `version: number;` from the (currently unimported) `MappingRule` type — keep consistent with the live type |
 | `ui/src/app/policies/page.tsx` | 16, 38, 45-49, 96, 135-145 | drop `useBumpMappingRule` import, `bumpRule` binding, `handleBump` function, version badge, and the entire "Bump version →" button row (including the now-empty wrapper `<div>`) |
 
-The down migration restores the column with default `1` so a rollback returns to a parseable state. There is no migration of historical version values — they were never read. (If a rollback ever needs the historical bump count, `audit_logs` retains every `mapping_rule.version_bumped` event up to the cutover with timestamps and actor IDs.)
+The down migration restores the column with default `1` **and** re-adds the `ck_mapping_rules_version_positive` CHECK constraint that 000004 introduced, so a rollback from 14 to 13 returns the schema to exactly the contract migration 13 expects (the `DROP COLUMN` in the up migration auto-removes that single-column constraint, so the down must put it back). There is no migration of historical version values — they were never read; every restored row gets `DEFAULT 1`, which satisfies the `> 0` constraint. (If a rollback ever needs the historical bump count, `audit_logs` retains every `mapping_rule.version_bumped` event up to the cutover with timestamps and actor IDs.)
 
 The earlier read of "zero callers" was wrong — it was based on a `grep "UpdateMappingRule\b"` against `db/...` only, which missed the handler indirection through the `dbUpdateMappingRule` injectable. The corrected sweep (`grep -rn "UpdateMappingRule\|useBumpMappingRule\|Bump version"`) found the 14 touchpoints above.
 

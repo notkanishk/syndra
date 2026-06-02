@@ -64,6 +64,7 @@ Every change directory has: `proposal.md` (why), `design.md` (how), `tasks.md` (
 | [Wave 1 — Production Trust Hardening](changes/wave-1-production-trust-hardening/) | 5.5 | In progress | [proposal](changes/wave-1-production-trust-hardening/proposal.md) / [design](changes/wave-1-production-trust-hardening/design.md) / [tasks](changes/wave-1-production-trust-hardening/tasks.md) |
 | [Wave 2 · Part 1 — Frontend Palette Finalization](changes/wave-2-part-1-frontend-palette-finalization/) | 5.5 | In progress | [proposal](changes/wave-2-part-1-frontend-palette-finalization/proposal.md) / [design](changes/wave-2-part-1-frontend-palette-finalization/design.md) / [tasks](changes/wave-2-part-1-frontend-palette-finalization/tasks.md) |
 | [Wave 2 · Part 2 — Backend Coherence](changes/wave-2-part-2-backend-coherence/) | 5.5 | In progress | [proposal](changes/wave-2-part-2-backend-coherence/proposal.md) / [design](changes/wave-2-part-2-backend-coherence/design.md) / [tasks](changes/wave-2-part-2-backend-coherence/tasks.md) |
+| [Wave 2 · Part 3 — Operational Polish](changes/wave-2-part-3-operational-polish/) | 5.5 | In progress | [proposal](changes/wave-2-part-3-operational-polish/proposal.md) / [design](changes/wave-2-part-3-operational-polish/design.md) / [tasks](changes/wave-2-part-3-operational-polish/tasks.md) |
 
 ## Roadmap Phase -> Change Mapping
 

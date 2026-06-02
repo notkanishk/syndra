@@ -121,7 +121,8 @@ Rotation:
 make zitadel-actions-rotate-key TARGET=mkauth-event-listener
 ```
 
-Same rotation flow as the claim injector — see `SIGNING_KEY.md`.
+Same rotation flow as the claim injector — see the "Signing Key Handling"
+section of [`README.md`](README.md#signing-key-handling).
 
 ## Smoke test
 

@@ -39,24 +39,38 @@ func Load() (Config, error) {
 		LDAPBindPassword:       os.Getenv("LLDAP_BIND_PASSWORD"),
 		LDAPBaseDN:             envOrDefault("LLDAP_BASE_DN", "dc=example,dc=com"),
 		LDAPInsecureSkipVerify: envOrDefault("LLDAP_INSECURE_SKIP_VERIFY", "false") == "true",
-		RetryAttempts:          3,
-		RetryBackoff:           1 * time.Second,
 	}
 
 	var err error
-	cfg.PollInterval, err = time.ParseDuration(envOrDefault("SYNC_POLL_INTERVAL", "10s"))
-	if err != nil {
-		return cfg, fmt.Errorf("invalid SYNC_POLL_INTERVAL: %w", err)
+	if cfg.PollInterval, err = getEnvDuration("SYNC_POLL_INTERVAL", "10s"); err != nil {
+		return cfg, err
+	}
+	if cfg.WorkerCount, err = getEnvInt("SYNC_WORKER_COUNT", "5"); err != nil {
+		return cfg, err
+	}
+	if cfg.IntentLimit, err = getEnvInt("SYNC_INTENT_LIMIT", "50"); err != nil {
+		return cfg, err
 	}
 
-	cfg.WorkerCount, err = strconv.Atoi(envOrDefault("SYNC_WORKER_COUNT", "5"))
-	if err != nil {
-		return cfg, fmt.Errorf("invalid SYNC_WORKER_COUNT: %w", err)
+	if cfg.RetryAttempts, err = getEnvInt("SYNC_RETRY_ATTEMPTS", "3"); err != nil {
+		return cfg, err
+	}
+	if cfg.RetryAttempts < 1 {
+		// The spec requires a positive integer. retryTransient runs
+		// RetryAttempts+1 total attempts (it iterates `attempt <= RetryAttempts`
+		// from 0): a negative value skips the loop so fn is never called and the
+		// caller gets a spurious "exhausted 0 retries"; 0 means no retries at
+		// all. Both are disallowed by the positive-integer contract.
+		return cfg, fmt.Errorf("invalid SYNC_RETRY_ATTEMPTS: must be a positive integer, got %d", cfg.RetryAttempts)
 	}
 
-	cfg.IntentLimit, err = strconv.Atoi(envOrDefault("SYNC_INTENT_LIMIT", "50"))
-	if err != nil {
-		return cfg, fmt.Errorf("invalid SYNC_INTENT_LIMIT: %w", err)
+	if cfg.RetryBackoff, err = getEnvDuration("SYNC_RETRY_BACKOFF", "1s"); err != nil {
+		return cfg, err
+	}
+	if cfg.RetryBackoff <= 0 {
+		// A non-positive backoff makes exponential backoff a no-op — retries
+		// would fire immediately, hammering a struggling LLDAP.
+		return cfg, fmt.Errorf("invalid SYNC_RETRY_BACKOFF: must be a positive duration, got %s", cfg.RetryBackoff)
 	}
 
 	// Validate required fields.
@@ -78,4 +92,24 @@ func envOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// getEnvInt reads key as an integer, falling back to fallback when unset/empty.
+// A parse error is wrapped with the key name so the caller can return it as-is.
+func getEnvInt(key, fallback string) (int, error) {
+	v, err := strconv.Atoi(envOrDefault(key, fallback))
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: %w", key, err)
+	}
+	return v, nil
+}
+
+// getEnvDuration reads key as a Go duration, falling back to fallback when
+// unset/empty. A parse error is wrapped with the key name.
+func getEnvDuration(key, fallback string) (time.Duration, error) {
+	v, err := time.ParseDuration(envOrDefault(key, fallback))
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: %w", key, err)
+	}
+	return v, nil
 }

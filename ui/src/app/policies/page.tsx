@@ -13,8 +13,7 @@ import { Pulse } from "@/components/ui/Pulse";
 import { SkeletonCardList } from "@/components/ui/Skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { request } from "@/lib/api-client";
-import { useBumpMappingRule, useMappingRules } from "@/lib/queries/useMappingRules";
-import { toastError, toastSuccess } from "@/lib/toast";
+import { useMappingRules } from "@/lib/queries/useMappingRules";
 
 interface ProjectCatalog {
   id: string;
@@ -35,21 +34,11 @@ function useCatalogProjects() {
 export default function PoliciesView() {
   const rulesQuery = useMappingRules();
   const projectsQuery = useCatalogProjects();
-  const bumpRule = useBumpMappingRule();
   const rules = useMemo(() => rulesQuery.data ?? [], [rulesQuery.data]);
   const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data]);
   const loading = rulesQuery.isLoading || projectsQuery.isLoading;
 
   const [createOpen, setCreateOpen] = useState(false);
-
-  async function handleBump(id: string) {
-    try {
-      await bumpRule.mutateAsync(id);
-      toastSuccess("Mapping rule version bumped");
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : "Failed to bump rule");
-    }
-  }
 
   return (
     <div className="space-y-6 animate-fade-in-up relative z-10">
@@ -88,12 +77,9 @@ export default function PoliciesView() {
                 key={rule.id}
                 className="rounded-card border border-outline-variant bg-surface-container-low p-4 transition-colors hover:border-primary-container/50"
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <Pulse variant="info" />
-                    <Eyebrow tone="primary">Mapping rule</Eyebrow>
-                  </div>
-                  <Badge variant="outline">v{rule.version || 1}</Badge>
+                <div className="flex items-center gap-2">
+                  <Pulse variant="info" />
+                  <Eyebrow tone="primary">Mapping rule</Eyebrow>
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
@@ -132,18 +118,6 @@ export default function PoliciesView() {
                   <RoleName projectId={rule.target_project} roleKey={rule.target_role} /> after
                   the fixed-point pass completes.
                 </p>
-
-                <div className="flex items-center justify-end mt-3 pt-3 border-t border-outline-variant/50">
-                  <Button
-                    type="button"
-                    variant="link"
-                    size="sm"
-                    onClick={() => handleBump(rule.id)}
-                    isPending={bumpRule.isPending && bumpRule.variables === rule.id}
-                  >
-                    Bump version →
-                  </Button>
-                </div>
               </article>
             ))}
           </div>

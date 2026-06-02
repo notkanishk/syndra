@@ -124,21 +124,3 @@ func handleValidateMappingRule(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonResponse(w, http.StatusOK, response{})
 }
-
-func handleUpdateMappingRule(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		jsonErrorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "Missing rule ID")
-		return
-	}
-
-	if err := dbUpdateMappingRule(r.Context(), id); err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "UPDATE_FAILED", err.Error())
-		return
-	}
-
-	// Audit log
-	_ = dbInsertAuditLog(r.Context(), "system", "-", "mapping_rule.version_bumped", id)
-
-	jsonResponse(w, http.StatusOK, map[string]string{"message": "Version incremented successfully"})
-}

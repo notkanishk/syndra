@@ -34,7 +34,6 @@ type MappingRule struct {
 	SourceRole    string    `json:"source_role"`
 	TargetProject string    `json:"target_project"`
 	TargetRole    string    `json:"target_role"`
-	Version       int       `json:"version"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 

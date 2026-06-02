@@ -41,7 +41,6 @@ var (
 	// Rules handler injectable vars.
 	dbGetActiveMappingRules = db.GetActiveMappingRules
 	dbCreateMappingRule     = db.CreateMappingRule
-	dbUpdateMappingRule     = db.UpdateMappingRule
 	dbDetectCycleOnInsert   = db.DetectCycleOnInsert
 
 	cacheRebuildUser    = cache.RebuildUserCache

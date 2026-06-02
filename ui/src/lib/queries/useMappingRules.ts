@@ -10,7 +10,6 @@ export interface MappingRuleRow {
   source_role: string;
   target_project: string;
   target_role: string;
-  version: number;
   created_at: string;
 }
 
@@ -69,19 +68,6 @@ export function useValidateMappingRule() {
         method: "POST",
         body: input,
       });
-    },
-  });
-}
-
-/** Bump a rule's version (re-evaluates downstream propagation). */
-export function useBumpMappingRule() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      return await request(`/rules/mapping/${id}`, { method: "PUT", body: {} });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.list });
     },
   });
 }

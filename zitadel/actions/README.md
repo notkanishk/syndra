@@ -32,9 +32,13 @@ So the "script" for MkAuth's v2 Action is a combination of:
 | `targets.json` | Declarative target + execution config. Edit this to change endpoint, timeout, or trigger bindings. |
 | `register.sh` | Apply `targets.json` against the configured Zitadel instance. Captures the target signing key on first run. |
 | `rotate.sh` | One-shot in-place rotation of the target signing key; writes a ready-to-append env fragment. |
-| `SIGNING_KEY.md` | How to handle the one-time signing key Zitadel returns. |
 | `EVENTS.md` | Event-listener target reference: subscribed events, self-mutation guard, troubleshooting. |
-| `PERMISSIONS.md` | Canonical reference for the instance-scoped Zitadel permissions the scripts require (answers "why does `HTTP 403` happen with ORG_OWNER?"). |
+
+The one-time signing-key lifecycle and the instance-scoped service-account
+permissions the scripts require are documented in the
+[Service-Account Permissions](#service-account-permissions) and
+[Signing Key Handling](#signing-key-handling) sections below (answers, among
+other things, "why does `HTTP 403` happen with `ORG_OWNER`?").
 
 ## Quick start
 
@@ -150,3 +154,312 @@ When `ZITADEL_ACTION_SIGNING_KEY` is unset, the middleware logs a warning and
 passes requests through without verification. This matches the dev-mode
 fall-through in `withUserAuth` (no `ZITADEL_DOMAIN` set). Never rely on this
 in any environment that accepts traffic from a real Zitadel instance.
+
+---
+
+## Service-Account Permissions
+
+Canonical operator reference for the Zitadel permissions the Actions v2
+scripts (`zitadel/actions/register.sh`, `zitadel/actions/rotate.sh`)
+require.
+
+### Why org-level roles don't work
+
+Actions v2 target management lives at the **instance scope** in Zitadel.
+The org-level roles recommended for the backend's normal user/grant CRUD
+(`ORG_OWNER` or `ORG_USER_MANAGER` + `ORG_PROJECT_PERMISSION_EDITOR`,
+per `.env.example`) do NOT cover it — a fresh
+`make zitadel-actions-register` run on an org-only service user fails
+with `HTTP 403`.
+
+### Minimum permissions the scripts require
+
+| Script call | Zitadel permission |
+|---|---|
+| `POST /v2/actions/targets/search` (register + rotate lookup) | `action.target.read` |
+| `POST /v2/actions/targets` (first register) | `action.target.write` |
+| `POST /v2/actions/targets/{id}` (re-register, key rotate) | `action.target.write` |
+| `PUT /v2/actions/executions` (bind / unbind) | `action.execution.write` |
+| `DELETE /v2/actions/targets/{id}` (full removal, rare) | `action.target.delete` |
+
+Drop `action.target.delete` if you won't use the full-removal path —
+`register.sh --remove` only unbinds executions, it does not delete the
+target.
+
+### Assignment — narrowest first
+
+1. **Custom instance role** (recommended if your Zitadel version supports
+   custom roles at **Default Settings → Roles**) — create a role with
+   exactly the four permissions above and assign it to the service user
+   at **Default Settings → Administrators**. Smallest blast radius.
+2. **Prebuilt narrow role** — recent Zitadel versions ship action-scoped
+   admin roles (names vary by version; look for `IAM_ACTION_ADMIN` or
+   similar in your role catalog). If available, use it.
+3. **`IAM_OWNER`** — the fallback. Works on every Zitadel version but
+   grants control over everything instance-wide; only use when the
+   narrower options aren't available on your version.
+
+### Duration
+
+The service user only needs these permissions during:
+
+- `make zitadel-actions-register` — one time on install, plus re-runs if
+  the endpoint or timeout changes.
+- `make zitadel-actions-rotate-key` — on your rotation cadence (incident
+  response or compliance policy; Zitadel does not expire the key on its
+  own — see [Signing Key Handling → Zitadel does not expire the signing
+  key](#zitadel-does-not-expire-the-signing-key)).
+
+In steady state — Zitadel calling MkAuth's `/api/action/inject` — no
+outbound Actions admin call is made, so the role can be:
+
+- **Kept permanently assigned** (pragmatic, least operator toil).
+- **Assigned and revoked per run** (defensive; rotate happens rarely
+  enough for this to be tractable).
+- **Scoped to a separate M2M key** distinct from the backend's runtime
+  key (strictest; isolates blast radius if the backend's everyday key
+  leaks).
+
+### The backend's own M2M key
+
+The backend container reads `ZITADEL_MACHINE_KEY_PATH` to mint tokens
+for runtime user/grant/role CRUD through `backend/internal/zitadel/client.go`.
+That key does **not** need any action permissions — its org-level
+assignment per `.env.example` stays correct. If you want strict
+separation, use two machine users: one for the backend container, one
+for the operator-run scripts (both read `ZITADEL_MACHINE_KEY_PATH`, but
+from different paths depending on which context is running).
+
+### If you still get HTTP 403
+
+The `zitadel_api` helper in `register.sh` / `rotate.sh` now surfaces
+Zitadel's own error body on every non-2xx response. Re-run the failing
+command and read the JSON — the `message` field will name the exact
+missing permission (e.g. `permission denied: action.target.write`), so
+you can confirm which specific grant to add without guessing.
+
+---
+
+## Signing Key Handling
+
+Zitadel returns each Action target's **signing key exactly once**, in the JSON
+response body of the `CreateTarget` call (`POST /v2/actions/targets`). There
+is no read API to retrieve it again afterward. Lose it and you must either
+recreate the target or rotate the key in place (see below).
+
+### Two targets, two keys
+
+MkAuth's deployment registers two Actions v2 targets:
+
+| Target name | Type | Triggers | Backend env var |
+|---|---|---|---|
+| `mkauth-claim-injector` | `restCall` | `function.preaccesstoken`, `function.preuserinfo` | `ZITADEL_ACTION_SIGNING_KEY` |
+| `mkauth-event-listener` | `restAsync` | `condition.event` (user/grant lifecycle) | `ZITADEL_EVENT_SIGNING_KEY` |
+
+The two keys are independent — rotation, leak-response, and storage all
+happen per target. Both follow the same lifecycle described below; substitute
+the appropriate target name and env var.
+
+### Zitadel does not expire the signing key
+
+Verified against `proto/zitadel/action/v2/target.proto`: `CreateTargetRequest`
+has no expiration field, and `UpdateTargetRequest.expiration_signing_key` is a
+rotation *trigger*, not a time-to-live. The current Zitadel implementation
+only accepts `"0s"` (immediate hard swap); longer graceful-signing periods
+are a stated roadmap item but not yet live.
+
+**Practical consequence:** the first signing key is valid forever unless you
+explicitly rotate it. Zitadel will never prompt you to rotate, never issue a
+"key expires in N days" warning, and never auto-rotate on its own.
+
+**So why rotate at all?** Because it's a MkAuth policy choice, not a Zitadel
+requirement:
+
+- **Incident response** — credential suspected leaked, staff off-boarding,
+  host compromise, or a strict "rotate after any touch" policy.
+- **Compliance** — frameworks like SOC 2 / ISO 27001 often mandate rotating
+  shared credentials on a cadence (commonly 90 days).
+- **Defense in depth** — cap the blast radius of an undetected leak.
+
+None of these apply to Zitadel; they're operator policy. MkAuth ships the
+rotate command below but deliberately does **not** run it on a schedule —
+rotation frequency is a deployment-level decision, not a runtime one. If/when
+Zitadel enables longer graceful periods on `expiration_signing_key`, a
+backend dual-key acceptance path becomes worth building; until then,
+scheduled automation buys little and adds infrastructure.
+
+### Lifecycle
+
+1. `zitadel/actions/register.sh` creates each target, extracts the `signingKey`
+   field from the response, and writes it to
+   `zitadel/actions/.action-signing-key.<target-name>` with mode `0600` — one
+   file per target (`mkauth-claim-injector`, `mkauth-event-listener`).
+2. The same run appends `ZITADEL_ACTION_SIGNING_KEY=...` and
+   `ZITADEL_EVENT_SIGNING_KEY=...` (plus the `_ROTATED_AT` companions) to
+   `zitadel/actions/.action-env.fragment`. The operator applies it to backend
+   env (via `.env`, systemd drop-in, or secret manager) in one shot and
+   restarts the backend.
+3. From that point on, every `POST /api/action/inject` request must carry a
+   valid `ZITADEL-Signature` header or receive a `401 INVALID_SIGNATURE` —
+   and the same goes for `/api/webhooks/zitadel` against the event signing key.
+
+All three scripts (`register.sh`, `rotate.sh`,
+`scripts/smoke-test-action-v2.sh`) automatically load `.env` from the
+repo root when present, so values filled into `.env` are available to the
+scripts and `make` targets without a prior `source`/`set -a` step. Vars
+explicitly set in the shell (`ZITADEL_DOMAIN=other.com make …`) always
+win over `.env` — the loader only exports keys that aren't already set.
+
+### Rotation (in place, no target recreate)
+
+Use the shipped command:
+
+```bash
+make zitadel-actions-rotate-key                            # rotate every target
+make zitadel-actions-rotate-key TARGET=mkauth-event-listener  # rotate one
+```
+
+Under the hood this runs `zitadel/actions/rotate.sh`, which:
+
+1. Resolves an M2M token (same `ZITADEL_M2M_TOKEN` / `ZITADEL_MACHINE_KEY_PATH`
+   paths as `register.sh`).
+2. Iterates `targets[]` from `targets.json` (or filters to the one named via
+   `--target`), looking up each target ID by name via
+   `POST /v2/actions/targets/search`.
+3. For every target: calls `POST /v2/actions/targets/{id}` with body
+   `{"expirationSigningKey":"0s"}`.
+4. Backs up the previous `.action-signing-key.<target>` to
+   `.action-signing-key.<target>.previous` (mode 0600) and overwrites
+   `.action-signing-key.<target>` with the new key.
+5. Captures the per-target rotation timestamp to
+   `.action-signing-key.<target>.rotated_at` (RFC3339 UTC).
+6. Writes a ready-to-append env fragment at `zitadel/actions/.action-env.fragment`
+   (mode 0600) containing the appropriate `<env>=…` and `<env>_ROTATED_AT=…`
+   lines for each rotated target (`ZITADEL_ACTION_SIGNING_KEY` for the claim
+   injector, `ZITADEL_EVENT_SIGNING_KEY` for the event listener). The operator
+   applies it with a single redirect — no copy-paste from the terminal — which
+   eliminates any risk of line-wrap, unevaluated shell substitution, or the
+   outside chance of someone copying from the script source instead of its
+   output. **Panel observability scope:** the `/zitadel` Rotation Status panel
+   currently only reflects `ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT` (the
+   claim-injector key). `ZITADEL_EVENT_SIGNING_KEY_ROTATED_AT` is captured to
+   the fragment and forwarded through `docker-compose.yml` for forward
+   compatibility, but no backend endpoint reads it yet. Track event-listener
+   key age out-of-band (e.g. via the per-target `.rotated_at` file) until the
+   panel is extended to report both targets.
+
+Apply the fragment with one of:
+
+```bash
+cat zitadel/actions/.action-env.fragment >> .env
+# OR, for systemd EnvironmentFile deploys:
+sudo install -m 0600 zitadel/actions/.action-env.fragment /etc/mkauth/action-env
+```
+
+Then restart the backend and delete the fragment (`rm zitadel/actions/.action-env.fragment`).
+
+Raw `curl` equivalent (fallback for deep-dive debugging only):
+
+```bash
+curl -fsS -X POST "https://${ZITADEL_DOMAIN}/v2/actions/targets/${TARGET_ID}" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{"expirationSigningKey":"0s"}'
+```
+
+The response returns the new `signingKey`. Capture it immediately — it will
+not be returned again.
+
+Because MkAuth only accepts signatures that match the currently configured
+`ZITADEL_ACTION_SIGNING_KEY`, there is a brief window between Zitadel
+accepting the new key on outbound Action calls and MkAuth being restarted
+with the new value. During that window, incoming Action requests fail
+signature verification, MkAuth returns `401`, and Zitadel proceeds to issue
+the token with stock claims (because `restCall.interruptOnError: false`).
+Users are never blocked; custom claims simply disappear for the gap. Keep it
+under a minute.
+
+`.action-signing-key.<target>.previous` is retained for audit / operator
+rollback but is **not read by the backend at runtime** — MkAuth trusts a
+single env var per target. If you need to roll back, copy the previous value
+into the matching env var (`ZITADEL_ACTION_SIGNING_KEY` or
+`ZITADEL_EVENT_SIGNING_KEY`) and restart.
+
+### Rotation observability (the Status panel)
+
+The backend exposes `GET /api/v1/zitadel/action-rotation-status`
+(gated by `withOperatorAuth`) which reports:
+
+```json
+{
+  "last_rotated_at": "2026-04-24T12:34:56Z",
+  "age_days": 12,
+  "threshold_days": 90,
+  "status": "ok",
+  "rotate_command": "make zitadel-actions-rotate-key"
+}
+```
+
+Status values (highest precedence first):
+
+- `disabled` — `ZITADEL_ACTION_SIGNING_KEY` is unset. Signature verification
+  is off; every inbound Action request is passing unchecked. Rotation age is
+  meaningless in this state and the response reports `disabled` regardless
+  of `ROTATED_AT`. **This is a production misconfiguration, not a missing
+  metric** — fix it before trusting anything the panel says.
+- `unknown` — key is installed, but `ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT`
+  is unset, malformed, or in the future (clock skew / typo). Future
+  timestamps are explicitly not clamped to `ok` age-0 — that would suppress
+  warn/stale indefinitely.
+- `ok` — age < threshold.
+- `warn` — threshold ≤ age < 2× threshold. Schedule a rotation.
+- `stale` — age ≥ 2× threshold. Rotate soon.
+
+The response also includes `key_installed: bool` so callers can distinguish
+`disabled` from `unknown` programmatically.
+
+The `/zitadel` admin page renders this as a **Rotation Status** card showing
+the badge, last-rotated timestamp, age, threshold, and a read-only copyable
+`make zitadel-actions-rotate-key` snippet. The panel does **not** have a
+"rotate now" button — rotation is a cryptographic mutation whose failure
+modes (Zitadel accepts the new key but the backend still serves the old
+one) are easier to reason about when the operator runs the command from
+their own terminal with full context.
+
+Configure via two env vars on the backend:
+
+- `ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT` — RFC3339 UTC. After each rotation
+  `rotate.sh` writes this (alongside the new signing key) to
+  `zitadel/actions/.action-env.fragment`; apply it with
+  `cat zitadel/actions/.action-env.fragment >> .env` and restart the backend.
+  On a fresh install, seed it manually to `date -u +%Y-%m-%dT%H:%M:%SZ`.
+  Unset or unparseable → status `unknown`.
+- `ZITADEL_ACTION_SIGNING_KEY_ROTATION_THRESHOLD_DAYS` — warn threshold in
+  days. Default `90` (common compliance cadence). Non-positive or
+  non-numeric values fall back to the default.
+
+### Storage
+
+- **Never** commit `.action-signing-key.*` or `.action-env.fragment` to git.
+  `zitadel/actions/.gitignore` excludes the per-target key files (current
+  and previous) plus the env fragment.
+- Treat all signing-key files as production credentials: bind-mount from host
+  secret storage (LXC-bound volume or sops-encrypted file) rather than baking
+  into images.
+- For the PoC deployment on Proxmox LXC, storing on the host at
+  `/etc/mkauth/.action-signing-key.<target>` (mode 0600, root:mkauth) is
+  sufficient.
+
+### Full target deletion (DELETE endpoint)
+
+If you need to retire the target entirely (not just unbind executions):
+
+```bash
+curl -fsS -X DELETE "https://${ZITADEL_DOMAIN}/v2/actions/targets/${TARGET_ID}" \
+  -H "Authorization: Bearer ${TOKEN}"
+```
+
+Zitadel auto-removes the target from every execution binding as part of the
+delete. To retain the target and only unbind, use `register.sh --remove`,
+which issues `PUT /v2/actions/executions` with an empty `targets` array per
+bound condition.
