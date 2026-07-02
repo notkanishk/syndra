@@ -23,6 +23,8 @@ func resetGovernanceDeps(t *testing.T) {
 	origGetRolesForBundle := svcGetRolesForBundle
 	origGetDirectGrants := svcGetDirectGrantsForUser
 	origGetRules := svcGetActiveMappingRules
+	origCount := svcCountPendingPropagations
+	origReachable := svcZitadelReachable
 	t.Cleanup(func() {
 		svcGetAccessRequests = origGetRequests
 		svcGetExpiringDirectGrants = origGetExpiring
@@ -31,7 +33,13 @@ func resetGovernanceDeps(t *testing.T) {
 		svcGetRolesForBundle = origGetRolesForBundle
 		svcGetDirectGrantsForUser = origGetDirectGrants
 		svcGetActiveMappingRules = origGetRules
+		svcCountPendingPropagations = origCount
+		svcZitadelReachable = origReachable
 	})
+	// Safe baseline so Governance() tests don't hit the nil PG pool / MgmtClient
+	// via the pending-propagation summary block. Tests override as needed.
+	svcCountPendingPropagations = func(context.Context) (int, error) { return 0, nil }
+	svcZitadelReachable = func(context.Context) bool { return false }
 }
 
 func TestFormatRolesContract(t *testing.T) {
@@ -130,6 +138,42 @@ func TestGovernance_PendingCountMatchesSliceLength(t *testing.T) {
 	}
 	if len(summary.PendingRequests) != 3 {
 		t.Fatalf("expected 3 pending requests, got %d", len(summary.PendingRequests))
+	}
+}
+
+func TestGovernance_PendingPropagationBlock(t *testing.T) {
+	resetGovernanceDeps(t)
+
+	svcGetAccessRequests = func(context.Context, string) ([]models.AccessRequest, error) { return nil, nil }
+	svcGetExpiringDirectGrants = func(context.Context, time.Duration) ([]models.DirectGrant, error) { return nil, nil }
+	svcGetAllBundles = func(context.Context) ([]models.Bundle, error) { return []models.Bundle{}, nil }
+	svcCountPendingPropagations = func(context.Context) (int, error) { return 4, nil }
+	svcZitadelReachable = func(context.Context) bool { return true }
+
+	summary, err := Governance(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if summary.PendingPropagation.Count != 4 || !summary.PendingPropagation.ZitadelReachable {
+		t.Fatalf("unexpected pending_propagation block: %+v", summary.PendingPropagation)
+	}
+}
+
+func TestGovernance_PendingPropagationCountErrorDegradesToZero(t *testing.T) {
+	resetGovernanceDeps(t)
+
+	svcGetAccessRequests = func(context.Context, string) ([]models.AccessRequest, error) { return nil, nil }
+	svcGetExpiringDirectGrants = func(context.Context, time.Duration) ([]models.DirectGrant, error) { return nil, nil }
+	svcGetAllBundles = func(context.Context) ([]models.Bundle, error) { return []models.Bundle{}, nil }
+	svcCountPendingPropagations = func(context.Context) (int, error) { return 0, context.DeadlineExceeded }
+	svcZitadelReachable = func(context.Context) bool { return false }
+
+	summary, err := Governance(context.Background())
+	if err != nil {
+		t.Fatalf("a count error must NOT fail the whole summary: %v", err)
+	}
+	if summary.PendingPropagation.Count != 0 {
+		t.Fatalf("count error must degrade to 0, got %d", summary.PendingPropagation.Count)
 	}
 }
 

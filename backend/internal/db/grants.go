@@ -35,7 +35,7 @@ func UpsertDirectGrant(ctx context.Context, userID, projectID, roleKey, grantedB
 
 func GetDirectGrantsForUser(ctx context.Context, userID string, includeExpired bool) ([]models.DirectGrant, error) {
 	query := `
-		SELECT id, user_id, zitadel_project_id, zitadel_role_key, granted_by, COALESCE(reason, ''), expires_at, created_at, updated_at
+		SELECT id, user_id, zitadel_project_id, zitadel_role_key, granted_by, COALESCE(reason, ''), expires_at, created_at, updated_at, COALESCE(source, 'direct'), COALESCE(source_ref, '')
 		FROM direct_role_grants
 		WHERE user_id = $1`
 	if !includeExpired {
@@ -52,7 +52,7 @@ func GetDirectGrantsForUser(ctx context.Context, userID string, includeExpired b
 	var grants []models.DirectGrant
 	for rows.Next() {
 		var grant models.DirectGrant
-		if err := rows.Scan(&grant.ID, &grant.UserID, &grant.ProjectID, &grant.RoleKey, &grant.GrantedBy, &grant.Reason, &grant.ExpiresAt, &grant.CreatedAt, &grant.UpdatedAt); err != nil {
+		if err := rows.Scan(&grant.ID, &grant.UserID, &grant.ProjectID, &grant.RoleKey, &grant.GrantedBy, &grant.Reason, &grant.ExpiresAt, &grant.CreatedAt, &grant.UpdatedAt, &grant.Source, &grant.SourceRef); err != nil {
 			return nil, err
 		}
 		grants = append(grants, grant)
@@ -66,7 +66,7 @@ func GetDirectGrantsForUser(ctx context.Context, userID string, includeExpired b
 // deterministic pairing during reconciliation.
 func GetAllDirectGrants(ctx context.Context, includeExpired bool) ([]models.DirectGrant, error) {
 	query := `
-		SELECT id, user_id, zitadel_project_id, zitadel_role_key, granted_by, COALESCE(reason, ''), expires_at, created_at, updated_at
+		SELECT id, user_id, zitadel_project_id, zitadel_role_key, granted_by, COALESCE(reason, ''), expires_at, created_at, updated_at, COALESCE(source, 'direct'), COALESCE(source_ref, '')
 		FROM direct_role_grants`
 	if !includeExpired {
 		query += ` WHERE (expires_at IS NULL OR expires_at > NOW())`
@@ -82,7 +82,7 @@ func GetAllDirectGrants(ctx context.Context, includeExpired bool) ([]models.Dire
 	var grants []models.DirectGrant
 	for rows.Next() {
 		var grant models.DirectGrant
-		if err := rows.Scan(&grant.ID, &grant.UserID, &grant.ProjectID, &grant.RoleKey, &grant.GrantedBy, &grant.Reason, &grant.ExpiresAt, &grant.CreatedAt, &grant.UpdatedAt); err != nil {
+		if err := rows.Scan(&grant.ID, &grant.UserID, &grant.ProjectID, &grant.RoleKey, &grant.GrantedBy, &grant.Reason, &grant.ExpiresAt, &grant.CreatedAt, &grant.UpdatedAt, &grant.Source, &grant.SourceRef); err != nil {
 			return nil, err
 		}
 		grants = append(grants, grant)

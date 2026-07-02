@@ -124,6 +124,12 @@ func NewRouter() http.Handler {
 	// obsidian-clarity-redesign. Operator-gated because drift data exposes
 	// the full grant inventory.
 	mux.HandleFunc("GET /api/v1/reconciliation/grants", withCORS(withOperatorAuth(handleGetReconciliationDiff)))
+
+	// Zitadel propagation outbox: operator drains the buffered MkAuth-mediated
+	// grant mutations explicitly (B4/D3). Operator-gated — draining issues real
+	// Zitadel mutations and the pending list exposes the grant inventory.
+	mux.HandleFunc("POST /api/v1/propagations/drain", withCORS(withOperatorAuth(handleDrainPropagations)))
+	mux.HandleFunc("GET /api/v1/propagations", withCORS(withOperatorAuth(handleListPendingPropagations)))
 	mux.HandleFunc("GET /api/v1/zitadel/users/{id}/grants", withCORS(withOperatorAuth(handleListZitadelUserGrants)))
 	mux.HandleFunc("POST /api/v1/zitadel/users/{id}/grants", withCORS(withOperatorAuth(handleAssignZitadelGrant)))
 	mux.HandleFunc("PUT /api/v1/zitadel/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleUpdateZitadelGrant)))

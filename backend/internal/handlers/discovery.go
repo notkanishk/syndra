@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
 
+	"mkauth/internal/db"
 	"mkauth/internal/directory"
 	"mkauth/internal/zitadel"
 )
@@ -235,11 +238,39 @@ func handleAssignZitadelGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := zitadelAddUserGrant(r.Context(), userID, req.ProjectID, req.RoleKeys); err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+	// B4/D3: enqueue through the durable ledger+outbox instead of mutating
+	// Zitadel directly. The operator drains it explicitly; the legacy URL still
+	// resolves, only the response shape (202 + outbox handle) changed.
+	payload, _ := json.Marshal(req)
+	res, err := dbEnqueueDirectGrantPropagation(r.Context(), db.EnqueueParams{
+		UserID:      userID,
+		ProjectID:   req.ProjectID,
+		RoleKeys:    req.RoleKeys,
+		GrantedBy:   resolveActor(r, ""),
+		Source:      "direct",
+		OpType:      "add",
+		PayloadJSON: string(payload),
+	})
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusCreated, map[string]string{"status": "granted"})
+	jsonResponse(w, http.StatusAccepted, res)
+}
+
+// resolveGrantTarget recovers (projectID, roleKeys) for a Zitadel grant
+// aggregate ID — needed to record a replace/revoke intent in the outbox. The
+// webhook-maintained index is the fast path; on a miss it falls back to a live
+// Zitadel listing (zitadel_grant_lookup.go).
+func resolveGrantTarget(ctx context.Context, userID, grantID string) (string, []string, error) {
+	if idx, err := dbGetGrantIndex(ctx, grantID); err == nil {
+		return idx.ProjectID, idx.RoleKeys, nil
+	}
+	g, err := dbListUserGrantsLive(ctx, userID, grantID)
+	if err != nil {
+		return "", nil, err
+	}
+	return g.ProjectID, g.RoleKeys, nil
 }
 
 func handleUpdateZitadelGrant(w http.ResponseWriter, r *http.Request) {
@@ -260,11 +291,27 @@ func handleUpdateZitadelGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := zitadelUpdateUserGrant(r.Context(), userID, grantID, req.RoleKeys); err != nil {
+	projectID, _, err := resolveGrantTarget(r.Context(), userID, grantID)
+	if err != nil {
 		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusOK, map[string]string{"status": "updated"})
+	payload, _ := json.Marshal(req)
+	res, err := dbEnqueueDirectGrantPropagation(r.Context(), db.EnqueueParams{
+		UserID:         userID,
+		ProjectID:      projectID,
+		RoleKeys:       req.RoleKeys,
+		GrantedBy:      resolveActor(r, ""),
+		Source:         "direct",
+		OpType:         "replace",
+		ZitadelGrantID: grantID,
+		PayloadJSON:    string(payload),
+	})
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, res)
 }
 
 func handleRemoveZitadelGrant(w http.ResponseWriter, r *http.Request) {
@@ -275,11 +322,26 @@ func handleRemoveZitadelGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := zitadelRemoveUserGrant(r.Context(), userID, grantID); err != nil {
+	projectID, roleKeys, err := resolveGrantTarget(r.Context(), userID, grantID)
+	if err != nil {
 		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusOK, map[string]string{"status": "removed"})
+	res, err := dbEnqueueDirectGrantPropagation(r.Context(), db.EnqueueParams{
+		UserID:         userID,
+		ProjectID:      projectID,
+		RoleKeys:       roleKeys,
+		GrantedBy:      resolveActor(r, ""),
+		Source:         "direct",
+		OpType:         "revoke",
+		ZitadelGrantID: grantID,
+		PayloadJSON:    "{}",
+	})
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, res)
 }
 
 // --- Health ---

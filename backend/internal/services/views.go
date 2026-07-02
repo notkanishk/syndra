@@ -504,10 +504,22 @@ func governanceFromSnapshot(snap *accessSnapshot) (models.GovernanceSummary, err
 		expiring = []models.DirectGrant{}
 	}
 
+	// Outbox depth + reachability so the UI can render the amber "N changes
+	// awaiting Zitadel" callout and gate "Resume now". A count error is
+	// non-fatal — the rest of the summary is still useful, so degrade to 0.
+	pendingCount, err := svcCountPendingPropagations(snap.ctx)
+	if err != nil {
+		pendingCount = 0
+	}
+
 	return models.GovernanceSummary{
 		PendingRequests: requests,
 		ExpiringGrants:  expiring,
 		CleanupHints:    cleanupHints,
+		PendingPropagation: models.PendingPropagationSummary{
+			Count:            pendingCount,
+			ZitadelReachable: svcZitadelReachable(snap.ctx),
+		},
 	}, nil
 }
 

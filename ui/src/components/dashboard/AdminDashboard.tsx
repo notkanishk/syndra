@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
 import { UserName } from "@/components/names/UserName";
+import { PendingCallout } from "@/components/propagation/PendingCallout";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -11,6 +13,7 @@ import { Pulse } from "@/components/ui/Pulse";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useDashboardSummary } from "@/lib/queries/useDashboard";
 import { useIntents } from "@/lib/queries/useIntents";
+import { useDrainPropagations } from "@/lib/queries/usePropagation";
 
 interface StatCardProps {
   eyebrow: string;
@@ -73,9 +76,12 @@ interface AdminDashboardProps {
 export function AdminDashboard({ adminName }: AdminDashboardProps) {
   const summary = useDashboardSummary();
   const intents = useIntents({ status: "in_flight", limit: 3 });
+  const drain = useDrainPropagations();
+  const [propDismissed, setPropDismissed] = useState(false);
 
   const pendingCount = summary.governance.data?.pending_requests.length ?? 0;
   const expiringCount = summary.governance.data?.expiring_grants.length ?? 0;
+  const propagation = summary.governance.data?.pending_propagation ?? { count: 0, zitadel_reachable: true };
   const projectCount = summary.projects.data?.length ?? 0;
   const bundleCount = summary.bundles.data?.length ?? 0;
   const recent = (summary.audit.data ?? []).slice(0, 8);
@@ -91,6 +97,15 @@ export function AdminDashboard({ adminName }: AdminDashboardProps) {
           Identity orchestrator across control-plane workflows, access lineage, and token simulation.
         </p>
       </header>
+
+      <PendingCallout
+        count={propagation.count}
+        reachable={propagation.zitadel_reachable}
+        dismissed={propDismissed}
+        isResuming={drain.isPending}
+        onResume={() => drain.mutate()}
+        onDismiss={() => setPropDismissed(true)}
+      />
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         <StatCard

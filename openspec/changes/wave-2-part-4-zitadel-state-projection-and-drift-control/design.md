@@ -134,19 +134,37 @@ The drain is a separate, operator-triggered step (`services/propagation/drain.go
 
 ```
 Drain(ctx):
+  release, ok = TryAcquireDrainLock(ctx)                # session-level pg_advisory lock — serialize drains
+  if !ok:  return DrainResult{Halted:true, Reason:"drain_in_progress"}   # another drain running; skip
+  defer release()
   if !zitadelHealth(ctx).Reachable:  return DrainResult{Halted:true, Reason:"zitadel_offline"}
-  rows = ClaimPendingPropagations(ctx, limit)          # FOR UPDATE SKIP LOCKED, status in (pending,in_flight)→in_flight
+  rows = ClaimPendingPropagations(ctx, limit)          # FOR UPDATE SKIP LOCKED, status IN (pending,in_flight)→in_flight
   for row in rows (created_at order):
-      if grantIndexHasOrLiveHas(ctx, row):             # already-exists check (index, then live ListUserGrants)
-          MarkApplied(ctx, row.id); continue           # idempotent: covers crash-recovery + drift overlap
-      err = dispatch(ctx, row)                          # add→AddUserGrant / revoke→RemoveUserGrant / replace→UpdateUserGrant
-      switch classify(err):
-        nil | AlreadyExists/409:  MarkApplied(ctx, row.id)   # Zitadel is the authority on existence — 409 is idempotent success
+      if alreadyInDesiredState(ctx, row):              # add: desired ⊆ live (index, then live ListUserGrants)
+          applyRow(ctx, row); continue                 #   replace: live == desired EXACTLY (extras must be removed)
+      err = dispatch(ctx, row)                          #   revoke: none of the roles remain
+      switch classify(err):                             # add→AddUserGrant / revoke→RemoveUserGrant / replace→UpdateUserGrant
+        nil | AlreadyExists/409:  applyRow(ctx, row)          # Zitadel is the authority on existence — 409 is idempotent success
         4xx (except 429, 408):    MarkFailed(ctx, row.id, err)  # bad request — operator must inspect; do NOT halt others
         5xx | timeout | 429 | 408: Requeue(ctx, row.id, err)   # transient; attempts++; halt if attempts>OUTBOX_MAX_RETRIES
+      # a state-write failure (mark/requeue/reconcile) → count `errored`, leave row in_flight, continue (next drain reclaims)
   PruneTerminalPropagations(ctx, OUTBOX_RETENTION_DAYS)  # opportunistic cleanup; see §4.1
-  return DrainResult{Applied:n, Failed:m, ...}
+  return DrainResult{Applied:n, Failed:m, Requeued:r, Errored:e, ...}
+
+# applyRow reconciles the ledger BEFORE the terminal mark, so a failed reconcile
+# leaves the row reclaimable rather than stranding a terminal row beside a stale ledger.
+applyRow(ctx, row):
+  if row.op_type in (revoke, replace):
+      ReconcileLedgerOnApplied(ctx, row)   # revoke: delete named (user,project,role) rows;
+                                           # replace: delete source='direct' rows on (user,project) not in the new set
+  MarkApplied(ctx, row.id)
 ```
+
+**Ledger reconciliation on applied revoke/replace (review-hardened).** The transactional enqueue writes/keeps `direct_role_grants` rows for `add`/`replace` but cannot know, at enqueue time, which *old* rows a `revoke` or a narrowing `replace` supersedes — that is only settled once the Zitadel mutation applies. Without a cleanup path a `revoke` would leave the revoked role in the ledger (still counted as an expected grant by the access-decision compiler, and later re-added as `mkauth_only` drift by sub-phase 2), and a `replace` would leave superseded roles behind. `applyRow` closes this: on an applied `revoke`/`replace` — including the already-exists short-circuit — it prunes `direct_role_grants` to match the desired state. The reconcile runs before the terminal `MarkApplied`, so a persistence failure leaves the row `in_flight` and the next drain retries it.
+
+**Crash recovery via in_flight reclaim, made safe by serialized drains.** `ClaimPendingPropagations` claims `status IN ('pending','in_flight')` — the same set the pending worklist/count report. A drain that dies after claiming but before recording a terminal state leaves `in_flight` rows; the next drain re-claims them and the idempotent already-exists check (409→applied) resolves any operation that actually reached Zitadel. Because a row leaves `in_flight` only by a *persisted* terminal/requeue transition, a state-write failure is counted as `errored` (never `applied`/`failed`) and the row stays reclaimable.
+
+Reclaiming `in_flight` rows is only safe because drains are **serialized by a session-level Postgres advisory lock** (`TryAcquireDrainLock`, `pg_try_advisory_lock`). Without it, two concurrent drains (a double-clicked "Resume now", or an inline `?apply=true` overlapping a manual drain) could each claim the *same* freshly-`in_flight` row and issue the same Zitadel mutation — for a `revoke`, one worker succeeds while the other gets a `404` and marks the row `failed`. The lock is held on a dedicated pooled connection for the drain's whole run and released (unlock + connection return) on exit, so the only `in_flight` rows a claiming drain ever sees are those orphaned by a crashed drain whose session (and lock) is gone. A drain that cannot take the lock returns `Halted{Reason:"drain_in_progress"}`. For a single-instance LXC deployment an in-process mutex would suffice, but the advisory lock is topology-independent (safe if the backend is ever scaled out) at negligible extra cost.
 
 `dispatch` reuses the existing `zitadelAddUserGrant`/`zitadelUpdateUserGrant`/`zitadelRemoveUserGrant` injectables unchanged. `revoke`/`replace` read `zitadel_grant_id` from the outbox row (resolved at enqueue from the grant index).
 
@@ -186,6 +204,10 @@ Each is half of the contract. This wave merges them: both call `EnqueueDirectGra
 | `DELETE /api/v1/zitadel/users/{id}/grants/{grantId}` | Zitadel only | enqueue `op_type='revoke'` (grantId resolved via grant index) |
 
 The `/zitadel/*` URLs are kept as **backward-compatible aliases** (operator bookmarks, the diagnostics page). One mutation pathway in code, two URL-space entry points. The `update`/`remove` handlers resolve `grantId → (user_id, project_id, role_keys)` through `db.GetGrantIndex` (falling back to a live `ListUserGrants` on index miss) so the canonical `(user, project, role)`-shaped path can enqueue. The frontend caller (`app/zitadel/page.tsx`) is updated for the new response shape — folded in here since it changes anyway in Theme 4's U5 split.
+
+**Access-request approval is the third entry point (review-hardened).** `access.go:handleResolveAccessRequest` (`status=approved`) also creates a direct grant, and originally took the bare `UpsertDirectGrant` shortcut — writing the ledger row but no outbox row. That left the approved grant invisible to the Pending UI, unprojected to Zitadel, and destined to re-surface as `mkauth_only` drift in sub-phase 2 (the ledger says "expected", Zitadel says "absent"). It now flows through the outbox exactly like the operator endpoint (`op_type='add'`, `source='direct'`, `source_ref=<request id>`), then applies inline (the approval *is* the operator's confirmation).
+
+Two follow-on hardenings: (1) **Resolution and enqueue are one conditional transaction** (`db.ApproveRequestAndEnqueue` → `UPDATE access_requests … WHERE id=$1 AND status='pending'` then `enqueueWrites` on the same `pgx.Tx`). Previously the handler resolved the request in one call and enqueued in a separate transaction, so a failed enqueue stranded an approved-but-ungranted request and a retry hit `ALREADY_RESOLVED`; the `WHERE status='pending'` guard (also added to the reject path's `ResolveAccessRequest`) closes the concurrent approve/reject race, returning `ErrRequestNotPending` → `409`. (2) The inline apply drains **only this row** (`DrainOne`), not the global batch — see the inline-apply decision below. The inline drain is best-effort/non-fatal: access is already effective the moment the ledger row commits (the claim compiler reads `direct_role_grants`), so a drain failure just leaves the row pending in the worklist. The request-resolution audit (`access_request.approved`) and the grant audit (`direct_grant.upserted`, written inside the same tx) are both recorded.
 
 ### Decision 5 — Drift detection reuses `computeReconciliationDiff`; the sweep gets scheduled and wired to tables (sub-phase 2)
 
@@ -299,7 +321,7 @@ Plus codebase-memory refresh (`detect_changes` + reindex affected scope) after e
 
 The parent design left nine writing-plans-phase questions. Resolutions adopted here:
 
-1. **Inline "Apply now" vs queue+click.** Single mutations from inline forms may drain inline: the handler enqueues then triggers `Drain` for that one row when `?apply=true`. Cascades always queue (no inline apply). 
+1. **Inline "Apply now" vs queue+click.** Single mutations from inline forms may drain inline: the handler enqueues then triggers a drain when `?apply=true` (and unconditionally for approvals). The inline drain is **targeted** (`DrainOne(outbox_id)`), not the global batch `Drain` — applying one grant must not prematurely project unrelated mutations an operator deliberately left queued (e.g. for a maintenance window). `DrainOne` shares `Drain`'s advisory-lock serialization, reachability pre-flight, and per-row processing (`processRow`), differing only in claiming one row by id instead of the oldest batch. The handler then reports the requesting row's own post-drain status via `GetPropagationStatus(outbox_id)`. **Ordering & lifecycle:** the compiled cache is rebuilt from the committed ledger row *before* the inline drain (so a slow/canceled Zitadel call can't starve it) and on a context *detached* from the request (`context.WithTimeout(context.WithoutCancel(r.Context()), 10s)`, via `rebuildUserCacheDetached`), so a client disconnect after commit also can't leave access ineffective. The grant is durable once the enqueue tx commits, so "effective immediately" means "after commit, regardless of client lifecycle or projection outcome." Cascades always queue (no inline apply). 
 2. **Manual reconcile trigger.** Yes — `[Reconcile now]` button on `/governance/drift` calls the sweep on demand.
 3. **Outbox per-row detail.** `Resume now` opens a confirmation modal listing each pending row before draining.
 4. **Bundle-removal other-source check.** Real-time at enqueue; the small race is reconciliation-resolved.

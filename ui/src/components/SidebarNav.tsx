@@ -34,6 +34,7 @@ export default function SidebarNav({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [expiringCount, setExpiringCount] = useState<number>(0);
+  const [propCount, setPropCount] = useState<number>(0);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -46,6 +47,7 @@ export default function SidebarNav({ isAdmin }: { isAdmin: boolean }) {
         if (cancelled) return;
         setPendingCount(Array.isArray(data?.pending_requests) ? data.pending_requests.length : 0);
         setExpiringCount(Array.isArray(data?.expiring_grants) ? data.expiring_grants.length : 0);
+        setPropCount(typeof data?.pending_propagation?.count === "number" ? data.pending_propagation.count : 0);
       } catch {
         // Swallow; sidebar must never break the layout.
       }
@@ -80,7 +82,10 @@ export default function SidebarNav({ isAdmin }: { isAdmin: boolean }) {
     },
     {
       title: "Operations",
-      items: [{ href: "/zitadel", label: "Zitadel Diagnostics" }],
+      items: [
+        { href: "/zitadel", label: "Zitadel Diagnostics" },
+        { href: "/governance/pending", label: "Pending", badge: propCount > 0 ? propCount : undefined },
+      ],
     },
     {
       title: "Admin",

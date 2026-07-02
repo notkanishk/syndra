@@ -2,12 +2,15 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"mkauth/internal/db"
 	"mkauth/internal/directory"
 	"mkauth/internal/services"
 )
@@ -95,15 +98,48 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 		expiresAt = &expiry
 	}
 
-	id, err := dbUpsertDirectGrant(r.Context(), userID, req.ProjectID, req.RoleKey, grantedBy, req.Reason, expiresAt)
+	// The grant is recorded in the durable ledger + outbox in one transaction
+	// (audit included); the Zitadel mutation happens later during the
+	// operator-triggered drain. This is the B4/D3 single-mutation-authority
+	// path — no direct Zitadel call from the handler.
+	payload, _ := json.Marshal(req)
+	res, err := dbEnqueueDirectGrantPropagation(r.Context(), db.EnqueueParams{
+		UserID:      userID,
+		ProjectID:   req.ProjectID,
+		RoleKeys:    []string{req.RoleKey},
+		GrantedBy:   grantedBy,
+		Reason:      req.Reason,
+		ExpiresAt:   expiresAt,
+		Source:      "direct",
+		OpType:      "add",
+		PayloadJSON: string(payload),
+	})
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	rebuildUserCacheOrSkip(r.Context(), userID)
-	_ = dbInsertAuditLog(r.Context(), grantedBy, userID, "direct_grant.upserted", id)
-	jsonResponse(w, http.StatusOK, map[string]string{"id": id, "message": "Direct grant saved"})
+	// Rebuild the compiled cache from the just-committed ledger row FIRST, so
+	// access is effective immediately — before (and independent of) the
+	// best-effort inline drain, and on a context detached from the request so a
+	// client disconnect after commit cannot leave access ineffective.
+	rebuildUserCacheDetached(r.Context(), userID)
+
+	// Inline "apply now" for single mutations from inline forms (design §7 Q1):
+	// the operator opts in via ?apply=true to drain immediately rather than
+	// resuming from the dashboard. Targeted to THIS row only — applying one grant
+	// must not project unrelated mutations an operator left queued. A drain
+	// failure is non-fatal — the row stays pending and the operator can resume
+	// later. We then report this row's own post-drain status.
+	if r.URL.Query().Get("apply") == "true" {
+		if _, derr := svcDrainPropagationRow(r.Context(), res.OutboxID); derr == nil {
+			if st, serr := dbGetPropagationStatus(r.Context(), res.OutboxID); serr == nil && st != "" {
+				res.Status = st
+			}
+		}
+	}
+
+	jsonResponse(w, http.StatusAccepted, res)
 }
 
 func handleGetAccessRequests(w http.ResponseWriter, r *http.Request) {
@@ -195,22 +231,68 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := dbResolveAccessRequest(r.Context(), requestID, status, reviewer, req.ReviewNote); err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-
 	if status == "approved" {
 		var expiresAt *time.Time
 		if request.DurationDays != nil && *request.DurationDays > 0 {
 			expiry := time.Now().UTC().Add(time.Duration(*request.DurationDays) * 24 * time.Hour)
 			expiresAt = &expiry
 		}
-		if _, err := dbUpsertDirectGrant(r.Context(), request.RequesterID, request.ProjectID, request.RoleKey, reviewer, "Approved from access request", expiresAt); err != nil {
+		// An approval creates the same kind of direct grant as the operator grant
+		// endpoint, so it flows through the durable ledger+outbox (B4/D3 single
+		// mutation authority) rather than the bare upsert — otherwise the grant is
+		// invisible to the Pending UI, never projected to Zitadel, and later
+		// re-surfaces as mkauth_only drift. source_ref ties the grant to the
+		// originating request. Resolution + enqueue are ONE conditional
+		// transaction: either the request flips to approved AND the grant is
+		// enqueued, or neither happens (no approved-but-ungranted state), and the
+		// status='pending' guard closes the concurrent approve/reject race.
+		payload, _ := json.Marshal(map[string]string{
+			"user_id":      request.RequesterID,
+			"project_id":   request.ProjectID,
+			"role_key":     request.RoleKey,
+			"from_request": requestID,
+		})
+		res, err := dbApproveRequestAndEnqueue(r.Context(), requestID, reviewer, req.ReviewNote, db.EnqueueParams{
+			UserID:      request.RequesterID,
+			ProjectID:   request.ProjectID,
+			RoleKeys:    []string{request.RoleKey},
+			GrantedBy:   reviewer,
+			Reason:      "Approved from access request",
+			ExpiresAt:   expiresAt,
+			Source:      "direct",
+			SourceRef:   requestID,
+			OpType:      "add",
+			PayloadJSON: string(payload),
+		})
+		if err != nil {
+			if errors.Is(err, db.ErrRequestNotPending) {
+				jsonErrorResponse(w, http.StatusConflict, "ALREADY_RESOLVED", "access request is already resolved")
+				return
+			}
 			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 			return
 		}
-		rebuildUserCacheOrSkip(r.Context(), request.RequesterID)
+		// Rebuild the compiled cache from the just-committed ledger row FIRST, so
+		// access is effective immediately — independent of the best-effort inline
+		// drain below, and on a context detached from the request so a client
+		// disconnect after commit cannot leave access ineffective.
+		rebuildUserCacheDetached(r.Context(), request.RequesterID)
+
+		// Apply inline: the approval is the operator's confirmation, so project the
+		// grant to Zitadel now rather than waiting for a separate resume. Targeted
+		// to THIS row only (never the global batch), and non-fatal — a drain
+		// failure (e.g. Zitadel offline) leaves the row pending in the worklist for
+		// a later resume; access already works via the ledger.
+		_, _ = svcDrainPropagationRow(r.Context(), res.OutboxID)
+	} else { // rejected — no grant, just the conditional resolution
+		if err := dbResolveAccessRequest(r.Context(), requestID, status, reviewer, req.ReviewNote); err != nil {
+			if errors.Is(err, db.ErrRequestNotPending) {
+				jsonErrorResponse(w, http.StatusConflict, "ALREADY_RESOLVED", "access request is already resolved")
+				return
+			}
+			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+			return
+		}
 	}
 
 	_ = dbInsertAuditLog(r.Context(), reviewer, request.RequesterID, "access_request."+status, requestID)
@@ -224,6 +306,24 @@ func handleGetGovernanceSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, summary)
+}
+
+// cacheRebuildDetachTimeout bounds the detached compiled-cache rebuild so a
+// wedged directory/cache call can't leak a goroutine-blocking request.
+const cacheRebuildDetachTimeout = 10 * time.Second
+
+// rebuildUserCacheDetached rebuilds the user's compiled claims on a context
+// DETACHED from the request lifecycle (client cancellation), bounded by
+// cacheRebuildDetachTimeout. Once a grant's ledger row is committed, the rebuild
+// that makes access effective must complete regardless of whether the client is
+// still connected — otherwise "effective immediately after commit" would hold
+// only for clients that wait for the response. It stays synchronous so the
+// handler still completes the rebuild before responding; it just no longer
+// inherits the request's cancellation.
+func rebuildUserCacheDetached(ctx context.Context, userID string) {
+	detached, cancel := context.WithTimeout(context.WithoutCancel(ctx), cacheRebuildDetachTimeout)
+	defer cancel()
+	rebuildUserCacheOrSkip(detached, userID)
 }
 
 // rebuildUserCacheOrSkip pulls the project scope from the directory and

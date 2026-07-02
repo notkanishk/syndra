@@ -212,6 +212,23 @@ func GetGrantIndex(ctx context.Context, grantID string) (ZitadelGrantIndex, erro
 	return row, nil
 }
 
+// GrantIndexHasRole reports whether the webhook-maintained grant index already
+// records the given (user, project, role) tuple. Used by the propagation drain
+// as a zero-API-call already-exists pre-flight; a false negative is harmless
+// because Zitadel's 409 AlreadyExists is the real idempotency net.
+func GrantIndexHasRole(ctx context.Context, userID, projectID, role string) (bool, error) {
+	const query = `
+		SELECT EXISTS(
+			SELECT 1 FROM zitadel_grants_index
+			WHERE user_id = $1 AND project_id = $2 AND $3 = ANY(role_keys)
+		)`
+	var exists bool
+	if err := PG.QueryRow(ctx, query, userID, projectID, role).Scan(&exists); err != nil {
+		return false, fmt.Errorf("grant index has role (%s/%s/%s): %w", userID, projectID, role, err)
+	}
+	return exists, nil
+}
+
 // DeleteGrantIndex removes the cached row. Called from the grant.removed
 // processor after the downstream effects (revoke, cache invalidation) have
 // run; failure is non-fatal — the next reconciliation will clean it up.

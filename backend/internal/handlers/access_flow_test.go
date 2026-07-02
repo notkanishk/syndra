@@ -9,62 +9,59 @@ import (
 	"testing"
 	"time"
 
+	"mkauth/internal/db"
 	"mkauth/internal/models"
+	"mkauth/internal/services/propagation"
 )
 
-func TestHandleResolveAccessRequestApprovedCreatesGrantAndRebuildsCache(t *testing.T) {
-	originalGetByID := dbGetAccessRequestByID
-	originalResolve := dbResolveAccessRequest
-	originalUpsertGrant := dbUpsertDirectGrant
-	originalAudit := dbInsertAuditLog
-	originalRebuild := cacheRebuildUser
-	defer func() {
-		dbGetAccessRequestByID = originalGetByID
-		dbResolveAccessRequest = originalResolve
-		dbUpsertDirectGrant = originalUpsertGrant
-		dbInsertAuditLog = originalAudit
-		cacheRebuildUser = originalRebuild
-	}()
+// Approving a request creates the same kind of direct grant the operator grant
+// endpoint does, so it MUST flow through the outbox (enqueue), not the bare
+// ledger upsert — otherwise the grant is invisible to the Pending UI, never
+// projected to Zitadel, and later re-surfaces as mkauth_only drift. The chosen
+// semantics are enqueue + apply inline (the approval is the operator's confirm).
+func TestHandleResolveAccessRequestApprovedEnqueuesGrantAndRebuildsCache(t *testing.T) {
+	resetAccessDeps(t)
 
 	duration := 5
 	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
 		return models.AccessRequest{
-			ID:          id,
-			RequesterID: "u1",
-			ProjectID:   "p1",
-			RoleKey:     "admin",
+			ID:           id,
+			RequesterID:  "u1",
+			ProjectID:    "p1",
+			RoleKey:      "admin",
+			Status:       "pending",
 			DurationDays: &duration,
 		}, nil
 	}
 
-	resolved := false
-	dbResolveAccessRequest = func(ctx context.Context, id, status, reviewerID, reviewNote string) error {
-		resolved = true
-		if status != "approved" {
-			t.Fatalf("expected approved status, got %s", status)
-		}
-		if reviewerID != "reviewer-1" {
-			t.Fatalf("unexpected reviewer: %s", reviewerID)
-		}
+	upsertCalled := false
+	dbUpsertDirectGrant = func(context.Context, string, string, string, string, string, *time.Time) (string, error) {
+		upsertCalled = true
+		return "", nil
+	}
+	plainResolveCalled := false
+	dbResolveAccessRequest = func(context.Context, string, string, string, string) error {
+		plainResolveCalled = true
 		return nil
 	}
 
-	grantCreated := false
-	dbUpsertDirectGrant = func(ctx context.Context, userID, projectID, roleKey, grantedBy, reason string, expiresAt *time.Time) (string, error) {
-		grantCreated = true
-		if userID != "u1" || projectID != "p1" || roleKey != "admin" {
-			t.Fatalf("unexpected grant args: %s %s %s", userID, projectID, roleKey)
-		}
-		if grantedBy != "reviewer-1" {
-			t.Fatalf("unexpected grantedBy: %s", grantedBy)
-		}
-		if reason != "Approved from access request" {
-			t.Fatalf("unexpected reason: %s", reason)
-		}
-		if expiresAt == nil {
-			t.Fatalf("expected expiry for duration-backed request")
-		}
-		return "g1", nil
+	// Resolution + enqueue are ONE conditional transaction: the handler must use
+	// the combined path, not resolve-then-enqueue across two transactions.
+	var gotID, gotReviewer, gotNote string
+	var gotParams db.EnqueueParams
+	dbApproveRequestAndEnqueue = func(_ context.Context, id, reviewer, note string, p db.EnqueueParams) (db.EnqueueResult, error) {
+		gotID, gotReviewer, gotNote, gotParams = id, reviewer, note, p
+		return db.EnqueueResult{OutboxID: "ob-appr", Status: "pending"}, nil
+	}
+
+	var drainedRow string
+	svcDrainPropagationRow = func(_ context.Context, outboxID string) (propagation.DrainResult, error) {
+		drainedRow = outboxID
+		return propagation.DrainResult{Applied: 1}, nil
+	}
+	svcDrainPropagations = func(context.Context) (propagation.DrainResult, error) {
+		t.Fatal("approval must drain ONLY its own row, not the global batch")
+		return propagation.DrainResult{}, nil
 	}
 
 	rebuiltFor := ""
@@ -86,17 +83,171 @@ func TestHandleResolveAccessRequestApprovedCreatesGrantAndRebuildsCache(t *testi
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	if !resolved {
-		t.Fatalf("expected request to be resolved")
+	if upsertCalled {
+		t.Fatal("approval must enqueue through the outbox, not the bare ledger upsert")
 	}
-	if !grantCreated {
-		t.Fatalf("expected direct grant upsert on approval")
+	if plainResolveCalled {
+		t.Fatal("approval must resolve+enqueue in one transaction, not via the standalone resolve")
+	}
+	if drainedRow != "ob-appr" {
+		t.Fatalf("approval must apply inline by draining ONLY its own outbox row, got %q", drainedRow)
 	}
 	if rebuiltFor != "u1" {
 		t.Fatalf("expected cache rebuild for u1, got %s", rebuiltFor)
 	}
 	if auditAction != "access_request.approved" {
 		t.Fatalf("unexpected audit action %s", auditAction)
+	}
+	if gotID != "req-1" || gotReviewer != "reviewer-1" || gotNote != "ok" {
+		t.Fatalf("combined approve must pass request id/reviewer/note, got id=%q reviewer=%q note=%q", gotID, gotReviewer, gotNote)
+	}
+	// The enqueue must carry the request's grant, attributed to the reviewer, and
+	// linked back to the originating request via source_ref.
+	if gotParams.OpType != "add" || gotParams.Source != "direct" || gotParams.SourceRef != "req-1" {
+		t.Fatalf("enqueue must be add/direct with source_ref=request id, got %+v", gotParams)
+	}
+	if gotParams.UserID != "u1" || gotParams.ProjectID != "p1" ||
+		len(gotParams.RoleKeys) != 1 || gotParams.RoleKeys[0] != "admin" {
+		t.Fatalf("enqueue must target the requested user/project/role, got %+v", gotParams)
+	}
+	if gotParams.GrantedBy != "reviewer-1" || gotParams.Reason != "Approved from access request" {
+		t.Fatalf("enqueue attribution wrong, got grantedBy=%q reason=%q", gotParams.GrantedBy, gotParams.Reason)
+	}
+	if gotParams.PayloadJSON == "" {
+		t.Fatal("payload_json must be non-empty (JSONB NOT NULL)")
+	}
+	if gotParams.ExpiresAt == nil {
+		t.Fatalf("expected expiry for duration-backed request")
+	}
+	expected := time.Now().UTC().Add(5 * 24 * time.Hour)
+	if diff := gotParams.ExpiresAt.Sub(expected); diff < -time.Minute || diff > time.Minute {
+		t.Fatalf("expiresAt %v not within 1 minute of expected %v", gotParams.ExpiresAt, expected)
+	}
+}
+
+// A lost approve/reject race (request resolved between the read and the
+// conditional resolve) surfaces as ErrRequestNotPending, which the handler must
+// map to 409 rather than a 500 or a silent success.
+func TestHandleResolveAccessRequest_ApproveRace_Returns409(t *testing.T) {
+	resetAccessDeps(t)
+
+	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
+		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
+	}
+	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams) (db.EnqueueResult, error) {
+		return db.EnqueueResult{}, db.ErrRequestNotPending
+	}
+	drainCalled := false
+	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
+		drainCalled = true
+		return propagation.DrainResult{}, nil
+	}
+	cacheRebuildUser = func(context.Context, string, []string) {}
+	dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-9/decision",
+		strings.NewReader(`{"status":"approved","reviewer_id":"reviewer-1"}`))
+	req.SetPathValue("id", "req-9")
+	rr := httptest.NewRecorder()
+	handleResolveAccessRequest(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("a lost approve race must return 409, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if drainCalled {
+		t.Fatal("must not drain when the conditional resolve found nothing to approve")
+	}
+}
+
+// The compiled cache (which the claim path reads) must be rebuilt from the
+// committed ledger row BEFORE the best-effort inline drain, so a slow or canceled
+// Zitadel call cannot starve the rebuild via the shared request context — access
+// must be effective regardless of the projection outcome.
+func TestHandleResolveAccessRequest_RebuildsCacheBeforeInlineDrain(t *testing.T) {
+	resetAccessDeps(t)
+
+	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
+		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
+	}
+	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams) (db.EnqueueResult, error) {
+		return db.EnqueueResult{OutboxID: "ob-appr", Status: "pending"}, nil
+	}
+	var order []string
+	cacheRebuildUser = func(context.Context, string, []string) { order = append(order, "rebuild") }
+	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
+		order = append(order, "drain")
+		return propagation.DrainResult{Applied: 1}, nil
+	}
+	dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-1/decision",
+		strings.NewReader(`{"status":"approved","reviewer_id":"reviewer-1"}`))
+	req.SetPathValue("id", "req-1")
+	handleResolveAccessRequest(httptest.NewRecorder(), req)
+
+	if len(order) != 2 || order[0] != "rebuild" || order[1] != "drain" {
+		t.Fatalf("cache rebuild must run BEFORE the inline drain, got %v", order)
+	}
+}
+
+// The grant is durable once the enqueue tx commits, so the compiled-cache
+// rebuild that makes access effective MUST run even if the client disconnects
+// before it — it runs on a context detached from the request lifecycle.
+func TestHandleResolveAccessRequest_RebuildDetachedFromClientCancel(t *testing.T) {
+	resetAccessDeps(t)
+
+	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
+		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
+	}
+	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams) (db.EnqueueResult, error) {
+		return db.EnqueueResult{OutboxID: "ob-appr", Status: "pending"}, nil
+	}
+	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
+		return propagation.DrainResult{}, nil
+	}
+	dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
+
+	var rebuilt bool
+	var rebuildCtxErr error
+	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {
+		rebuilt = true
+		rebuildCtxErr = ctx.Err()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // client already disconnected
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-1/decision",
+		strings.NewReader(`{"status":"approved","reviewer_id":"reviewer-1"}`)).WithContext(ctx)
+	req.SetPathValue("id", "req-1")
+	handleResolveAccessRequest(httptest.NewRecorder(), req)
+
+	if !rebuilt {
+		t.Fatal("cache rebuild must run even after the client disconnected (the grant is already durable)")
+	}
+	if rebuildCtxErr != nil {
+		t.Fatalf("cache rebuild must run on a context detached from client cancellation, got %v", rebuildCtxErr)
+	}
+}
+
+func TestHandleResolveAccessRequest_RejectRace_Returns409(t *testing.T) {
+	resetAccessDeps(t)
+
+	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
+		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
+	}
+	dbResolveAccessRequest = func(context.Context, string, string, string, string) error {
+		return db.ErrRequestNotPending
+	}
+	dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-9/decision",
+		strings.NewReader(`{"status":"rejected","reviewer_id":"reviewer-2"}`))
+	req.SetPathValue("id", "req-9")
+	rr := httptest.NewRecorder()
+	handleResolveAccessRequest(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("a lost reject race must return 409, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -109,6 +260,11 @@ func resetAccessDeps(t *testing.T) {
 	origCreate := dbCreateAccessRequest
 	origAudit := dbInsertAuditLog
 	origRebuild := cacheRebuildUser
+	origEnqueue := dbEnqueueDirectGrantPropagation
+	origApprove := dbApproveRequestAndEnqueue
+	origDrain := svcDrainPropagations
+	origDrainRow := svcDrainPropagationRow
+	origStatus := dbGetPropagationStatus
 	t.Cleanup(func() {
 		dbGetAccessRequestByID = origGetByID
 		dbResolveAccessRequest = origResolve
@@ -116,20 +272,63 @@ func resetAccessDeps(t *testing.T) {
 		dbCreateAccessRequest = origCreate
 		dbInsertAuditLog = origAudit
 		cacheRebuildUser = origRebuild
+		dbEnqueueDirectGrantPropagation = origEnqueue
+		dbApproveRequestAndEnqueue = origApprove
+		svcDrainPropagations = origDrain
+		svcDrainPropagationRow = origDrainRow
+		dbGetPropagationStatus = origStatus
 	})
 }
 
 // --- handleUpsertUserDirectGrant ---
+//
+// Contract change (Wave 2 · Part 4, B4/D3): this endpoint no longer writes the
+// grant + calls Zitadel synchronously. It now enqueues a propagation through the
+// durable ledger+outbox and returns 202 Accepted with {outbox_id, status}. The
+// Zitadel mutation happens later during the operator-triggered drain.
+
+func TestHandleUpsertUserDirectGrant_EnqueuesAndReturns202(t *testing.T) {
+	resetAccessDeps(t)
+
+	var gotParams db.EnqueueParams
+	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
+		gotParams = p
+		return db.EnqueueResult{OutboxID: "ob1", IdempotencyKey: "key1", Status: "pending"}, nil
+	}
+	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants",
+		strings.NewReader(`{"project_id":"p1","role_key":"r1","reason":"lab access","duration_days":30}`))
+	req.SetPathValue("id", "u1")
+	rr := httptest.NewRecorder()
+	handleUpsertUserDirectGrant(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("want 202, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if gotParams.OpType != "add" || len(gotParams.RoleKeys) != 1 || gotParams.RoleKeys[0] != "r1" || gotParams.Source != "direct" {
+		t.Fatalf("unexpected enqueue params: %+v", gotParams)
+	}
+	if gotParams.UserID != "u1" || gotParams.ProjectID != "p1" || gotParams.Reason != "lab access" {
+		t.Fatalf("unexpected enqueue identity/reason: %+v", gotParams)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body["outbox_id"] != "ob1" || body["status"] != "pending" {
+		t.Fatalf("unexpected body: %v", body)
+	}
+}
 
 func TestHandleUpsertUserDirectGrant_ExpiryCalculation(t *testing.T) {
 	resetAccessDeps(t)
 
 	var capturedExpiry *time.Time
-	dbUpsertDirectGrant = func(ctx context.Context, userID, projectID, roleKey, grantedBy, reason string, expiresAt *time.Time) (string, error) {
-		capturedExpiry = expiresAt
-		return "grant-1", nil
+	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
+		capturedExpiry = p.ExpiresAt
+		return db.EnqueueResult{OutboxID: "ob1", Status: "pending"}, nil
 	}
-	dbInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error { return nil }
 	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants",
@@ -138,8 +337,8 @@ func TestHandleUpsertUserDirectGrant_ExpiryCalculation(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handleUpsertUserDirectGrant(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
 	}
 	if capturedExpiry == nil {
 		t.Fatalf("expected non-nil expiresAt for DurationDays=7")
@@ -155,11 +354,10 @@ func TestHandleUpsertUserDirectGrant_ZeroDuration_NoExpiry(t *testing.T) {
 	resetAccessDeps(t)
 
 	var capturedExpiry *time.Time
-	dbUpsertDirectGrant = func(ctx context.Context, userID, projectID, roleKey, grantedBy, reason string, expiresAt *time.Time) (string, error) {
-		capturedExpiry = expiresAt
-		return "grant-2", nil
+	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
+		capturedExpiry = p.ExpiresAt
+		return db.EnqueueResult{OutboxID: "ob2", Status: "pending"}, nil
 	}
-	dbInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error { return nil }
 	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants",
@@ -168,8 +366,8 @@ func TestHandleUpsertUserDirectGrant_ZeroDuration_NoExpiry(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handleUpsertUserDirectGrant(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
 	}
 	if capturedExpiry != nil {
 		t.Fatalf("expected nil expiresAt for DurationDays=0, got %v", capturedExpiry)
@@ -179,10 +377,9 @@ func TestHandleUpsertUserDirectGrant_ZeroDuration_NoExpiry(t *testing.T) {
 func TestHandleUpsertUserDirectGrant_CacheRebuilt(t *testing.T) {
 	resetAccessDeps(t)
 
-	dbUpsertDirectGrant = func(ctx context.Context, userID, projectID, roleKey, grantedBy, reason string, expiresAt *time.Time) (string, error) {
-		return "grant-3", nil
+	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
+		return db.EnqueueResult{OutboxID: "ob3", Status: "pending"}, nil
 	}
-	dbInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error { return nil }
 
 	rebuiltUserID := ""
 	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {
@@ -195,11 +392,140 @@ func TestHandleUpsertUserDirectGrant_CacheRebuilt(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handleUpsertUserDirectGrant(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
 	}
 	if rebuiltUserID != "u42" {
 		t.Fatalf("expected cache rebuild for u42, got %s", rebuiltUserID)
+	}
+}
+
+func TestHandleUpsertUserDirectGrant_ApplyNowDrains(t *testing.T) {
+	resetAccessDeps(t)
+
+	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
+		return db.EnqueueResult{OutboxID: "ob4", Status: "pending"}, nil
+	}
+	var drainedRow string
+	svcDrainPropagationRow = func(_ context.Context, outboxID string) (propagation.DrainResult, error) {
+		drainedRow = outboxID
+		return propagation.DrainResult{Applied: 1}, nil
+	}
+	svcDrainPropagations = func(context.Context) (propagation.DrainResult, error) {
+		t.Fatal("apply=true must drain ONLY this row, not the global batch")
+		return propagation.DrainResult{}, nil
+	}
+	// This request's row (ob4) actually applied.
+	dbGetPropagationStatus = func(_ context.Context, id string) (string, error) {
+		if id != "ob4" {
+			t.Fatalf("inline apply must read THIS request's outbox row, got %q", id)
+		}
+		return "applied", nil
+	}
+	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants?apply=true",
+		strings.NewReader(`{"project_id":"p1","role_key":"r1"}`))
+	req.SetPathValue("id", "u1")
+	rr := httptest.NewRecorder()
+	handleUpsertUserDirectGrant(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if drainedRow != "ob4" {
+		t.Fatalf("apply=true must drain THIS row (ob4), got %q", drainedRow)
+	}
+	var body map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &body)
+	if body["status"] != "applied" {
+		t.Fatalf("apply=true must report THIS row's status=applied, got %v", body["status"])
+	}
+}
+
+func TestHandleUpsertUserDirectGrant_RebuildsCacheBeforeInlineDrain(t *testing.T) {
+	resetAccessDeps(t)
+
+	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
+		return db.EnqueueResult{OutboxID: "ob6", Status: "pending"}, nil
+	}
+	var order []string
+	cacheRebuildUser = func(context.Context, string, []string) { order = append(order, "rebuild") }
+	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
+		order = append(order, "drain")
+		return propagation.DrainResult{Applied: 1}, nil
+	}
+	dbGetPropagationStatus = func(context.Context, string) (string, error) { return "applied", nil }
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants?apply=true",
+		strings.NewReader(`{"project_id":"p1","role_key":"r1"}`))
+	req.SetPathValue("id", "u1")
+	handleUpsertUserDirectGrant(httptest.NewRecorder(), req)
+
+	if len(order) != 2 || order[0] != "rebuild" || order[1] != "drain" {
+		t.Fatalf("cache rebuild must run BEFORE the inline drain so access is effective regardless of the drain outcome, got %v", order)
+	}
+}
+
+func TestHandleUpsertUserDirectGrant_RebuildDetachedFromClientCancel(t *testing.T) {
+	resetAccessDeps(t)
+
+	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams) (db.EnqueueResult, error) {
+		return db.EnqueueResult{OutboxID: "ob7", Status: "pending"}, nil
+	}
+	var rebuilt bool
+	var rebuildCtxErr error
+	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {
+		rebuilt = true
+		rebuildCtxErr = ctx.Err()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // client already disconnected (no ?apply, so no drain is involved)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants",
+		strings.NewReader(`{"project_id":"p1","role_key":"r1"}`)).WithContext(ctx)
+	req.SetPathValue("id", "u1")
+	handleUpsertUserDirectGrant(httptest.NewRecorder(), req)
+
+	if !rebuilt {
+		t.Fatal("cache rebuild must run even after the client disconnected (the grant is already durable)")
+	}
+	if rebuildCtxErr != nil {
+		t.Fatalf("cache rebuild must run on a context detached from client cancellation, got %v", rebuildCtxErr)
+	}
+}
+
+// The batch drain reports the aggregate outcome of the OLDEST rows; this
+// request's freshly-enqueued row may not be in that batch (or may requeue). The
+// response must reflect THIS row's actual status, not the batch's Applied count.
+func TestHandleUpsertUserDirectGrant_ApplyReportsThisRowNotBatch(t *testing.T) {
+	resetAccessDeps(t)
+
+	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
+		return db.EnqueueResult{OutboxID: "ob5", Status: "pending"}, nil
+	}
+	// The targeted drain ran, but ob5 itself requeued (transient Zitadel error).
+	svcDrainPropagationRow = func(_ context.Context, outboxID string) (propagation.DrainResult, error) {
+		return propagation.DrainResult{Requeued: 1}, nil
+	}
+	dbGetPropagationStatus = func(_ context.Context, id string) (string, error) {
+		if id != "ob5" {
+			t.Fatalf("must query THIS request's outbox row, got %q", id)
+		}
+		return "pending", nil
+	}
+	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants?apply=true",
+		strings.NewReader(`{"project_id":"p1","role_key":"r1"}`))
+	req.SetPathValue("id", "u1")
+	rr := httptest.NewRecorder()
+	handleUpsertUserDirectGrant(rr, req)
+
+	var body map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &body)
+	if body["status"] != "pending" {
+		t.Fatalf("must report THIS row's status (pending), not the batch aggregate, got %v", body["status"])
 	}
 }
 
@@ -324,64 +650,8 @@ func TestHandleResolveAccessRequest_AlreadyRejected_Returns409(t *testing.T) {
 	}
 }
 
-func TestHandleResolveAccessRequest_Approved_ExpiryFromDuration(t *testing.T) {
-	resetAccessDeps(t)
-
-	duration := 3
-	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
-		return models.AccessRequest{
-			ID:           id,
-			RequesterID:  "u1",
-			ProjectID:    "p1",
-			RoleKey:      "admin",
-			Status:       "pending",
-			DurationDays: &duration,
-		}, nil
-	}
-	dbResolveAccessRequest = func(ctx context.Context, id, status, reviewerID, reviewNote string) error {
-		return nil
-	}
-
-	var capturedExpiry *time.Time
-	dbUpsertDirectGrant = func(ctx context.Context, userID, projectID, roleKey, grantedBy, reason string, expiresAt *time.Time) (string, error) {
-		capturedExpiry = expiresAt
-		return "g1", nil
-	}
-	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {}
-	dbInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error { return nil }
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-3/decision",
-		strings.NewReader(`{"status":"approved","reviewer_id":"reviewer-1"}`))
-	req.SetPathValue("id", "req-3")
-	rr := httptest.NewRecorder()
-	handleResolveAccessRequest(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if capturedExpiry == nil {
-		t.Fatalf("expected non-nil expiry for 3-day request")
-	}
-	expected := time.Now().UTC().Add(3 * 24 * time.Hour)
-	diff := capturedExpiry.Sub(expected)
-	if diff < -time.Minute || diff > time.Minute {
-		t.Fatalf("expiresAt %v not within 1 minute of expected %v", capturedExpiry, expected)
-	}
-}
-
 func TestHandleResolveAccessRequestRejectedDoesNotCreateGrant(t *testing.T) {
-	originalGetByID := dbGetAccessRequestByID
-	originalResolve := dbResolveAccessRequest
-	originalUpsertGrant := dbUpsertDirectGrant
-	originalAudit := dbInsertAuditLog
-	originalRebuild := cacheRebuildUser
-	defer func() {
-		dbGetAccessRequestByID = originalGetByID
-		dbResolveAccessRequest = originalResolve
-		dbUpsertDirectGrant = originalUpsertGrant
-		dbInsertAuditLog = originalAudit
-		cacheRebuildUser = originalRebuild
-	}()
+	resetAccessDeps(t)
 
 	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
 		return models.AccessRequest{
@@ -400,6 +670,16 @@ func TestHandleResolveAccessRequestRejectedDoesNotCreateGrant(t *testing.T) {
 		grantCreated = true
 		return "", nil
 	}
+	enqueued := false
+	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams) (db.EnqueueResult, error) {
+		enqueued = true
+		return db.EnqueueResult{}, nil
+	}
+	defer func() {
+		if enqueued {
+			t.Fatal("rejection must not enqueue a grant propagation")
+		}
+	}()
 
 	rebuilt := false
 	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {

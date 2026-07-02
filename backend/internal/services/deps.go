@@ -6,6 +6,7 @@ import (
 
 	"mkauth/internal/db"
 	"mkauth/internal/models"
+	"mkauth/internal/zitadel"
 )
 
 // Onboarding DB injectable vars — allows tests to exercise TriggerOnboarding
@@ -41,6 +42,18 @@ var (
 	}
 	svcGetAllBundles = func(ctx context.Context) ([]models.Bundle, error) {
 		return db.GetAllBundles(ctx)
+	}
+
+	// Pending-propagation summary injectables. Reachability is intentionally the
+	// cheap "client configured" signal (MgmtClient != nil) rather than a live
+	// ping — the governance summary is fetched on every dashboard load, so a
+	// per-load round-trip to Zitadel would be wasteful. In local-policy-only mode
+	// the client is nil → reachable=false, which correctly disables "Resume now".
+	svcCountPendingPropagations = func(ctx context.Context) (int, error) {
+		return db.CountPendingPropagations(ctx)
+	}
+	svcZitadelReachable = func(ctx context.Context) bool {
+		return zitadel.MgmtClient != nil
 	}
 	svcGetBundlesForUser = func(ctx context.Context, userID string) ([]models.Bundle, error) {
 		return db.GetBundlesForUser(ctx, userID)

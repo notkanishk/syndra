@@ -12,10 +12,17 @@ export interface ExpiringGrant {
   expires_at?: string | null;
 }
 
+export interface PendingPropagationSummary {
+  count: number;
+  zitadel_reachable: boolean;
+  last_queued_at?: string | null;
+}
+
 export interface GovernanceSummary {
   pending_requests: Array<{ id: string }>;
   expiring_grants: ExpiringGrant[];
   cleanup_hints: string[];
+  pending_propagation: PendingPropagationSummary;
 }
 
 const KEYS = {
@@ -37,6 +44,7 @@ export function useGovernanceSummary() {
         pending_requests: Array.isArray(data?.pending_requests) ? data.pending_requests : [],
         expiring_grants: Array.isArray(data?.expiring_grants) ? data.expiring_grants : [],
         cleanup_hints: Array.isArray(data?.cleanup_hints) ? data.cleanup_hints : [],
+        pending_propagation: data?.pending_propagation ?? { count: 0, zitadel_reachable: true },
       };
     },
   });

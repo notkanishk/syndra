@@ -104,6 +104,15 @@ async function apiSend<T>(method: "POST" | "PUT" | "DELETE", path: string, body?
   return payload as T;
 }
 
+// grantFlash maps the outbox enqueue response status to operator copy. Grant
+// mutations now flow through the durable outbox (B4/D3): "applied" means the
+// inline drain reached Zitadel, otherwise it's queued for an explicit resume.
+function grantFlash(status?: string): string {
+  return status === "applied"
+    ? "Grant applied"
+    : "Queued — resume from the dashboard to send to Zitadel";
+}
+
 // --- Page ---
 
 export default function ZitadelDiagnostics() {
@@ -689,12 +698,12 @@ function UsersSection() {
     const roleKeys = parseRoleKeys(newGrant.roleKeys);
     if (!selectedId || !newGrant.projectId || roleKeys.length === 0) return;
     try {
-      await apiSend("POST", `zitadel/users/${selectedId}/grants`, {
+      const res = await apiSend<{ status?: string }>("POST", `zitadel/users/${selectedId}/grants`, {
         projectId: newGrant.projectId,
         roleKeys,
       });
       setNewGrant({ projectId: "", roleKeys: "" });
-      setFlash({ kind: "ok", msg: "Grant assigned" });
+      setFlash({ kind: "ok", msg: grantFlash(res?.status) });
       await loadGrants(selectedId);
     } catch (err) {
       setFlash({ kind: "err", msg: err instanceof Error ? err.message : String(err) });
@@ -705,9 +714,9 @@ function UsersSection() {
     const roleKeys = parseRoleKeys(editDraft);
     if (roleKeys.length === 0) return;
     try {
-      await apiSend("PUT", `zitadel/users/${selectedId}/grants/${grantId}`, { roleKeys });
+      const res = await apiSend<{ status?: string }>("PUT", `zitadel/users/${selectedId}/grants/${grantId}`, { roleKeys });
       setEditing("");
-      setFlash({ kind: "ok", msg: "Grant updated" });
+      setFlash({ kind: "ok", msg: grantFlash(res?.status) });
       await loadGrants(selectedId);
     } catch (err) {
       setFlash({ kind: "err", msg: err instanceof Error ? err.message : String(err) });
@@ -723,8 +732,8 @@ function UsersSection() {
     const { id } = pendingRevoke;
     setRevoking(true);
     try {
-      await apiSend("DELETE", `zitadel/users/${selectedId}/grants/${id}`);
-      setFlash({ kind: "ok", msg: "Grant revoked" });
+      const res = await apiSend<{ status?: string }>("DELETE", `zitadel/users/${selectedId}/grants/${id}`);
+      setFlash({ kind: "ok", msg: grantFlash(res?.status) });
       setPendingRevoke(null);
       await loadGrants(selectedId);
     } catch (err) {

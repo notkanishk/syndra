@@ -97,12 +97,12 @@ type RoleGrant struct {
 }
 
 type RoleReason struct {
-	Kind          string `json:"kind"`
-	Description   string `json:"description"`
-	BundleID      string `json:"bundle_id,omitempty"`
-	BundleName    string `json:"bundle_name,omitempty"`
+	Kind           string `json:"kind"`
+	Description    string `json:"description"`
+	BundleID       string `json:"bundle_id,omitempty"`
+	BundleName     string `json:"bundle_name,omitempty"`
 	TriggerProject string `json:"trigger_project,omitempty"`
-	TriggerRole   string `json:"trigger_role,omitempty"`
+	TriggerRole    string `json:"trigger_role,omitempty"`
 }
 
 type EffectiveRole struct {
@@ -122,10 +122,10 @@ type ProjectAccessView struct {
 }
 
 type UserAccessView struct {
-	User         UserProfile        `json:"user"`
-	Bundles      []Bundle          `json:"bundles"`
+	User         UserProfile         `json:"user"`
+	Bundles      []Bundle            `json:"bundles"`
 	Projects     []ProjectAccessView `json:"projects"`
-	CleanupHints []string          `json:"cleanup_hints"`
+	CleanupHints []string            `json:"cleanup_hints"`
 }
 
 type UserListItem struct {
@@ -142,20 +142,20 @@ type ApplicationView struct {
 }
 
 type ApplicationSimulation struct {
-	Application  ApplicationCatalog      `json:"application"`
-	User         UserProfile             `json:"user"`
-	RawRoles     []string                `json:"raw_roles"`
-	CustomClaims map[string]interface{}  `json:"custom_claims"`
+	Application  ApplicationCatalog     `json:"application"`
+	User         UserProfile            `json:"user"`
+	RawRoles     []string               `json:"raw_roles"`
+	CustomClaims map[string]interface{} `json:"custom_claims"`
 }
 
 type ProjectSummary struct {
-	Project         ProjectCatalog `json:"project"`
-	MemberCount     int            `json:"member_count"`
-	BundleCount     int            `json:"bundle_count"`
-	RuleInCount     int            `json:"rule_in_count"`
-	RuleOutCount    int            `json:"rule_out_count"`
-	ActiveRoleKeys  []string       `json:"active_role_keys"`
-	SampleMembers   []string       `json:"sample_members"`
+	Project        ProjectCatalog `json:"project"`
+	MemberCount    int            `json:"member_count"`
+	BundleCount    int            `json:"bundle_count"`
+	RuleInCount    int            `json:"rule_in_count"`
+	RuleOutCount   int            `json:"rule_out_count"`
+	ActiveRoleKeys []string       `json:"active_role_keys"`
+	SampleMembers  []string       `json:"sample_members"`
 }
 
 type CatalogResponse struct {
@@ -165,41 +165,72 @@ type CatalogResponse struct {
 }
 
 type BundleImpact struct {
-	BundleID   string        `json:"bundle_id"`
-	RoleCount  int           `json:"role_count"`
-	Users      []UserProfile `json:"users"`
+	BundleID  string        `json:"bundle_id"`
+	RoleCount int           `json:"role_count"`
+	Users     []UserProfile `json:"users"`
 }
 
 type DirectGrant struct {
-	ID         string     `json:"id"`
-	UserID     string     `json:"user_id"`
-	ProjectID  string     `json:"project_id"`
-	RoleKey    string     `json:"role_key"`
-	GrantedBy  string     `json:"granted_by"`
-	Reason     string     `json:"reason"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	CreatedAt  time.Time  `json:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
+	ID        string     `json:"id"`
+	UserID    string     `json:"user_id"`
+	ProjectID string     `json:"project_id"`
+	RoleKey   string     `json:"role_key"`
+	GrantedBy string     `json:"granted_by"`
+	Reason    string     `json:"reason"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	Source    string     `json:"source"`               // direct | bundle | rule | external_backfill | lifecycle_cascade
+	SourceRef string     `json:"source_ref,omitempty"` // bundle_id / rule_id when source ∈ {bundle, rule}
+}
+
+// PendingPropagation is one buffered MkAuth-mediated Zitadel grant mutation.
+// `applied` is terminal success (synchronous 2xx); there is no `confirmed` state
+// (design Decision 1: the self-mutation guard drops MkAuth's own grant events,
+// so no webhook round-trip can confirm a propagation).
+type PendingPropagation struct {
+	ID             string     `json:"id"`
+	OpType         string     `json:"op_type"` // add | revoke | replace
+	UserID         string     `json:"user_id"`
+	ProjectID      string     `json:"project_id"`
+	RoleKeys       []string   `json:"role_keys"`
+	ZitadelGrantID string     `json:"zitadel_grant_id,omitempty"`
+	Status         string     `json:"status"` // pending | in_flight | applied | failed
+	Attempts       int        `json:"attempts"`
+	LastError      string     `json:"last_error,omitempty"`
+	InitiatedBy    string     `json:"initiated_by"`
+	CreatedAt      time.Time  `json:"created_at"`
+	StartedAt      *time.Time `json:"started_at,omitempty"`
+	CompletedAt    *time.Time `json:"completed_at,omitempty"`
 }
 
 type AccessRequest struct {
-	ID           string     `json:"id"`
-	RequesterID  string     `json:"requester_id"`
-	ProjectID    string     `json:"project_id"`
-	RoleKey      string     `json:"role_key"`
-	Justification string    `json:"justification"`
-	DurationDays *int       `json:"duration_days,omitempty"`
-	Status       string     `json:"status"`
-	ReviewerID   string     `json:"reviewer_id,omitempty"`
-	ReviewNote   string     `json:"review_note,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	ResolvedAt   *time.Time `json:"resolved_at,omitempty"`
+	ID            string     `json:"id"`
+	RequesterID   string     `json:"requester_id"`
+	ProjectID     string     `json:"project_id"`
+	RoleKey       string     `json:"role_key"`
+	Justification string     `json:"justification"`
+	DurationDays  *int       `json:"duration_days,omitempty"`
+	Status        string     `json:"status"`
+	ReviewerID    string     `json:"reviewer_id,omitempty"`
+	ReviewNote    string     `json:"review_note,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	ResolvedAt    *time.Time `json:"resolved_at,omitempty"`
 }
 
 type GovernanceSummary struct {
-	PendingRequests []AccessRequest `json:"pending_requests"`
-	ExpiringGrants  []DirectGrant   `json:"expiring_grants"`
-	CleanupHints    []string        `json:"cleanup_hints"`
+	PendingRequests    []AccessRequest           `json:"pending_requests"`
+	ExpiringGrants     []DirectGrant             `json:"expiring_grants"`
+	CleanupHints       []string                  `json:"cleanup_hints"`
+	PendingPropagation PendingPropagationSummary `json:"pending_propagation"`
+}
+
+// PendingPropagationSummary surfaces the outbox depth + reachability so the UI
+// can render the amber "N changes awaiting Zitadel" callout and gate the
+// operator's "Resume now" action on whether Zitadel is reachable at all.
+type PendingPropagationSummary struct {
+	Count            int  `json:"count"`
+	ZitadelReachable bool `json:"zitadel_reachable"`
 }
 
 type TopologyNode struct {
@@ -212,12 +243,12 @@ type TopologyNode struct {
 }
 
 type TopologyEdge struct {
-	ID      string            `json:"id"`
-	Source  string            `json:"source"`
-	Target  string            `json:"target"`
-	Kind    string            `json:"kind"`
-	Label   string            `json:"label"`
-	Meta    map[string]string `json:"meta,omitempty"`
+	ID     string            `json:"id"`
+	Source string            `json:"source"`
+	Target string            `json:"target"`
+	Kind   string            `json:"kind"`
+	Label  string            `json:"label"`
+	Meta   map[string]string `json:"meta,omitempty"`
 }
 
 type TopologyGraph struct {

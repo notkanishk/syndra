@@ -25,7 +25,9 @@ type managementClient struct {
 	http   *http.Client
 }
 
-// apiError captures a Zitadel API error response.
+// apiError captures a Zitadel API error response body. Note: Code here is the
+// JSON body code (a gRPC status code), NOT the HTTP status — see StatusError for
+// the HTTP-status-carrying error that callers classify on.
 type apiError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
@@ -33,6 +35,24 @@ type apiError struct {
 
 func (e *apiError) Error() string {
 	return fmt.Sprintf("zitadel api %d: %s", e.Code, e.Message)
+}
+
+// StatusError is the typed transport error returned by doRequest. Code is the
+// HTTP status code observed on the final (non-retried) response, so callers can
+// classify deterministically by status — e.g. the propagation drain treating
+// 409 AlreadyExists as idempotent success and 429/408 as transient — without
+// string-sniffing error text. Message carries the server-provided detail when
+// available.
+type StatusError struct {
+	Code    int
+	Message string
+}
+
+func (e *StatusError) Error() string {
+	if e.Message != "" {
+		return fmt.Sprintf("zitadel api %d: %s", e.Code, e.Message)
+	}
+	return fmt.Sprintf("zitadel api %d", e.Code)
 }
 
 // InitClient establishes the Service Account connection to Zitadel's Management API.
@@ -110,7 +130,7 @@ func (c *managementClient) ListUserGrants(ctx context.Context, userID string, p 
 	// Zitadel v1: POST /management/v1/users/grants/_search with user ID as a query filter.
 	path := "/management/v1/users/grants/_search"
 	body := map[string]any{
-		"query":   searchQuery(p),
+		"query": searchQuery(p),
 		"queries": []map[string]any{
 			{
 				"userIdQuery": map[string]string{
@@ -417,6 +437,7 @@ func (c *managementClient) doRequest(ctx context.Context, method, path string, b
 	}
 
 	var lastErr error
+	lastStatus := 0
 	backoff := 100 * time.Millisecond
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
@@ -457,10 +478,13 @@ func (c *managementClient) doRequest(ctx context.Context, method, path string, b
 				c.tokens.ForceRefresh()
 				continue
 			}
-			return nil, fmt.Errorf("unauthorized after token refresh (401)")
+			// Terminal: surface as a 401 StatusError so callers classify it as a
+			// non-retryable failure rather than an opaque transient error.
+			return nil, &StatusError{Code: http.StatusUnauthorized, Message: "unauthorized after token refresh"}
 
 		case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable:
 			resp.Body.Close()
+			lastStatus = resp.StatusCode
 			lastErr = fmt.Errorf("retryable status %d on %s %s", resp.StatusCode, method, path)
 			select {
 			case <-ctx.Done():
@@ -471,17 +495,24 @@ func (c *managementClient) doRequest(ctx context.Context, method, path string, b
 			}
 
 		default:
-			// Non-retryable error — read body for diagnostics and return.
+			// Non-retryable error — read body for diagnostics and return a
+			// StatusError carrying the HTTP status so callers classify by code.
 			defer resp.Body.Close()
 			errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 			var ae apiError
 			if json.Unmarshal(errBody, &ae) == nil && ae.Message != "" {
-				return nil, &ae
+				return nil, &StatusError{Code: resp.StatusCode, Message: ae.Message}
 			}
-			return nil, fmt.Errorf("zitadel api %d: %s", resp.StatusCode, errBody)
+			return nil, &StatusError{Code: resp.StatusCode, Message: string(errBody)}
 		}
 	}
 
+	// Retries exhausted on 429/503 — preserve the last HTTP status so the caller
+	// can still treat it as transient (load-bearing for the propagation drain's
+	// 429 handling) rather than collapsing it to an unclassifiable error.
+	if lastStatus != 0 {
+		return nil, &StatusError{Code: lastStatus, Message: fmt.Sprintf("max retries exceeded on %s %s", method, path)}
+	}
 	if lastErr != nil {
 		return nil, fmt.Errorf("max retries exceeded: %w", lastErr)
 	}

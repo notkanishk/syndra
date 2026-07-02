@@ -2,10 +2,17 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"mkauth/internal/models"
 )
+
+// ErrRequestNotPending is returned when a resolve targets an access request that
+// is no longer pending — already approved/rejected, or a lost concurrent
+// approve/reject race. Handlers map it to 409 Conflict, distinct from a genuine
+// DB error (500).
+var ErrRequestNotPending = errors.New("access request is not pending")
 
 // -------------------------------------------------------------
 // ACCESS REQUESTS
@@ -67,21 +74,67 @@ func GetAccessRequestByID(ctx context.Context, id string) (models.AccessRequest,
 	return req, nil
 }
 
+// ResolveAccessRequest transitions a request to approved/rejected, conditional on
+// it still being pending. The `status='pending'` guard closes the concurrent
+// approve/reject race (two decisions landing on the same request): the second
+// affects 0 rows and gets ErrRequestNotPending. Used for the reject path;
+// approvals go through ApproveRequestAndEnqueue so the grant is atomic with the
+// resolution.
 func ResolveAccessRequest(ctx context.Context, id, status, reviewerID, reviewNote string) error {
-	query := `
+	const query = `
 		UPDATE access_requests
 		SET status = $2,
 			reviewer_user_id = $3,
 			review_note = $4,
 			resolved_at = CURRENT_TIMESTAMP
-		WHERE id = $1`
+		WHERE id = $1 AND status = 'pending'`
 
 	tag, err := PG.Exec(ctx, query, id, status, reviewerID, reviewNote)
 	if err != nil {
 		return fmt.Errorf("failed to resolve access request: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("access request not found")
+		return ErrRequestNotPending
 	}
 	return nil
+}
+
+// ApproveRequestAndEnqueue resolves an access request to 'approved' AND enqueues
+// its direct grant (ledger + audit + outbox) in ONE transaction, conditional on
+// the request still being pending. Either both happen or neither: a failed
+// enqueue can no longer strand an approved-but-ungranted request, and the
+// `status='pending'` guard closes the concurrent approve/reject race. Returns
+// ErrRequestNotPending if the request was already resolved.
+func ApproveRequestAndEnqueue(ctx context.Context, requestID, reviewer, reviewNote string, p EnqueueParams) (EnqueueResult, error) {
+	key, err := newOutboxIdempotencyKey()
+	if err != nil {
+		return EnqueueResult{}, err
+	}
+	tx, err := PG.Begin(ctx)
+	if err != nil {
+		return EnqueueResult{}, fmt.Errorf("begin approve tx: %w", err)
+	}
+	defer tx.Rollback(ctx) // no-op after a successful Commit
+
+	const resolveQ = `
+		UPDATE access_requests
+		SET status = 'approved', reviewer_user_id = $2, review_note = $3, resolved_at = CURRENT_TIMESTAMP
+		WHERE id = $1 AND status = 'pending'`
+	tag, err := tx.Exec(ctx, resolveQ, requestID, reviewer, reviewNote)
+	if err != nil {
+		return EnqueueResult{}, fmt.Errorf("resolve access request: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return EnqueueResult{}, ErrRequestNotPending
+	}
+
+	outboxID, err := enqueueWrites(ctx, tx, p, key)
+	if err != nil {
+		return EnqueueResult{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return EnqueueResult{}, fmt.Errorf("commit approve tx: %w", err)
+	}
+	return EnqueueResult{OutboxID: outboxID, IdempotencyKey: key, Status: "pending"}, nil
 }

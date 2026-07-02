@@ -9,6 +9,7 @@ import (
 	"mkauth/internal/cache"
 	"mkauth/internal/db"
 	"mkauth/internal/services"
+	"mkauth/internal/services/propagation"
 	"mkauth/internal/zitadel"
 )
 
@@ -19,8 +20,19 @@ var (
 	// withOperatorAuth).
 	jwtValidate = auth.Validate
 
-	dbUpsertDirectGrant    = db.UpsertDirectGrant
-	dbGetAccessRequests    = db.GetAccessRequests
+	dbUpsertDirectGrant = db.UpsertDirectGrant
+	dbGetAccessRequests = db.GetAccessRequests
+
+	// Outbox: every MkAuth-mediated Zitadel grant mutation flows through the
+	// transactional enqueue (ledger+audit+outbox), drained explicitly by the
+	// operator. The handlers no longer call Zitadel grant APIs directly (B4/D3).
+	dbEnqueueDirectGrantPropagation = db.EnqueueDirectGrantPropagation
+	dbApproveRequestAndEnqueue      = db.ApproveRequestAndEnqueue
+	dbGetPendingPropagations        = db.GetPendingPropagations
+	dbGetPropagationStatus          = db.GetPropagationStatus
+	svcDrainPropagations            = propagation.Drain
+	svcDrainPropagationRow          = propagation.DrainOne
+
 	dbCreateAccessRequest  = db.CreateAccessRequest
 	dbGetAccessRequestByID = db.GetAccessRequestByID
 	dbResolveAccessRequest = db.ResolveAccessRequest
@@ -144,24 +156,11 @@ var (
 		}
 		return zitadel.MgmtClient.ListUserGrants(ctx, userID, p)
 	}
-	zitadelAddUserGrant = func(ctx context.Context, userID, projectID string, roleKeys []string) error {
-		if zitadel.MgmtClient == nil {
-			return errNoClient
-		}
-		return zitadel.MgmtClient.AddUserGrant(ctx, userID, projectID, roleKeys)
-	}
-	zitadelUpdateUserGrant = func(ctx context.Context, userID, grantID string, roleKeys []string) error {
-		if zitadel.MgmtClient == nil {
-			return errNoClient
-		}
-		return zitadel.MgmtClient.UpdateUserGrant(ctx, userID, grantID, roleKeys)
-	}
-	zitadelRemoveUserGrant = func(ctx context.Context, userID, grantID string) error {
-		if zitadel.MgmtClient == nil {
-			return errNoClient
-		}
-		return zitadel.MgmtClient.RemoveUserGrant(ctx, userID, grantID)
-	}
+	// Grant CRUD no longer calls Zitadel directly from the handler layer — all
+	// add/replace/revoke mutations flow through dbEnqueueDirectGrantPropagation
+	// and the operator-triggered drain (services/propagation), which owns the
+	// Zitadel grant-API closures. Removing the handler-side closures makes the
+	// B4/D3 single-mutation-authority boundary structural, not just conventional.
 
 	// Data-plane injectable vars — used by HandleActionInject and degradedResponse.
 	// Separate from the control-plane vars above so tests can exercise the degraded
