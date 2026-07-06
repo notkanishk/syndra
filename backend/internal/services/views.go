@@ -512,6 +512,21 @@ func governanceFromSnapshot(snap *accessSnapshot) (models.GovernanceSummary, err
 		pendingCount = 0
 	}
 
+	// Drift pending-triage count + top-N preview for the dashboard callout. A
+	// count/lookup error is non-fatal — the rest of the summary is still useful,
+	// so degrade to 0/empty (mirrors the pending-propagation degrade above).
+	driftCount, err := svcCountPendingDrift(snap.ctx)
+	if err != nil {
+		driftCount = 0
+	}
+	topDrift, err := svcGetTopDrift(snap.ctx, 3)
+	if err != nil {
+		topDrift = nil
+	}
+	if topDrift == nil {
+		topDrift = []models.DriftItem{}
+	}
+
 	return models.GovernanceSummary{
 		PendingRequests: requests,
 		ExpiringGrants:  expiring,
@@ -520,6 +535,7 @@ func governanceFromSnapshot(snap *accessSnapshot) (models.GovernanceSummary, err
 			Count:            pendingCount,
 			ZitadelReachable: svcZitadelReachable(snap.ctx),
 		},
+		Drift: models.DriftSummary{Count: driftCount, Top: topDrift},
 	}, nil
 }
 

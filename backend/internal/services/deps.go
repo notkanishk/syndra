@@ -55,6 +55,22 @@ var (
 	svcZitadelReachable = func(ctx context.Context) bool {
 		return zitadel.MgmtClient != nil
 	}
+
+	// Drift summary injectables (B2): pending-triage count + a top-N preview for
+	// the dashboard callout. svcGetTopDrift reuses GetDriftItems' default
+	// pending_triage filter rather than a dedicated top-N query — the operator's
+	// drift queue is expected to stay small enough that fetching-then-slicing is
+	// cheap; revisit if the pending queue routinely grows large.
+	svcCountPendingDrift = func(ctx context.Context) (int, error) {
+		return db.CountPendingDrift(ctx)
+	}
+	svcGetTopDrift = func(ctx context.Context, n int) ([]models.DriftItem, error) {
+		items, err := db.GetDriftItems(ctx, db.DriftFilter{})
+		if err != nil || len(items) <= n {
+			return items, err
+		}
+		return items[:n], nil
+	}
 	svcGetBundlesForUser = func(ctx context.Context, userID string) ([]models.Bundle, error) {
 		return db.GetBundlesForUser(ctx, userID)
 	}

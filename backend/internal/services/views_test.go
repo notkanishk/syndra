@@ -25,6 +25,8 @@ func resetGovernanceDeps(t *testing.T) {
 	origGetRules := svcGetActiveMappingRules
 	origCount := svcCountPendingPropagations
 	origReachable := svcZitadelReachable
+	origCountDrift := svcCountPendingDrift
+	origTopDrift := svcGetTopDrift
 	t.Cleanup(func() {
 		svcGetAccessRequests = origGetRequests
 		svcGetExpiringDirectGrants = origGetExpiring
@@ -35,11 +37,15 @@ func resetGovernanceDeps(t *testing.T) {
 		svcGetActiveMappingRules = origGetRules
 		svcCountPendingPropagations = origCount
 		svcZitadelReachable = origReachable
+		svcCountPendingDrift = origCountDrift
+		svcGetTopDrift = origTopDrift
 	})
 	// Safe baseline so Governance() tests don't hit the nil PG pool / MgmtClient
-	// via the pending-propagation summary block. Tests override as needed.
+	// via the pending-propagation/drift summary blocks. Tests override as needed.
 	svcCountPendingPropagations = func(context.Context) (int, error) { return 0, nil }
 	svcZitadelReachable = func(context.Context) bool { return false }
+	svcCountPendingDrift = func(context.Context) (int, error) { return 0, nil }
+	svcGetTopDrift = func(context.Context, int) ([]models.DriftItem, error) { return nil, nil }
 }
 
 func TestFormatRolesContract(t *testing.T) {
