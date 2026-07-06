@@ -250,9 +250,12 @@ CREATE TABLE IF NOT EXISTS drift_items (
     resolution_payload_json JSONB
 );
 CREATE INDEX idx_drift_items_status ON drift_items(status, detected_at);
--- Dedupe identical pending detections so a noisy sweep does not pile rows:
+-- Dedupe identical pending detections so a noisy sweep does not pile rows.
+-- Keyed at ROLE granularity (role_keys included) because the sweep + webhook
+-- emit one single-role row per drifting role; dropping role_keys from the key
+-- would silently discard the 2nd+ role on a (user, project) pair:
 CREATE UNIQUE INDEX idx_drift_items_pending_unique
-    ON drift_items(user_id, project_id, drift_type)
+    ON drift_items(user_id, project_id, drift_type, role_keys)
     WHERE status = 'pending_triage';
 
 CREATE TABLE IF NOT EXISTS external_grant_exclusions (
