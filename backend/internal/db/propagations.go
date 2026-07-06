@@ -84,6 +84,10 @@ func newOutboxIdempotencyKey() (string, error) {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
 }
 
+// NewOutboxIdempotencyKey is the exported entrypoint to the crypto/rand v4 minter
+// for cross-package callers (services/drift). The repo has no uuid module.
+func NewOutboxIdempotencyKey() (string, error) { return newOutboxIdempotencyKey() }
+
 // InsertPendingPropagation inserts one outbox row and returns its id. Used by
 // the drift re-enqueue path (sub-phase 2); the transactional enqueue uses its
 // own tx-scoped insert (propagation_enqueue.go). idempotencyKey must be a fresh
@@ -101,6 +105,21 @@ func InsertPendingPropagation(ctx context.Context, opType, userID, projectID str
 		return "", fmt.Errorf("insert propagation: %w", err)
 	}
 	return id, nil
+}
+
+// PendingOutboxAddExists reports whether an undrained add is already queued for
+// the (user, project, role) triple, so the drift sweep's mkauth_only replay does
+// not pile a fresh duplicate every tick for a grant that stays missing in Zitadel.
+func PendingOutboxAddExists(ctx context.Context, userID, projectID, roleKey string) (bool, error) {
+	const q = `SELECT EXISTS(
+		SELECT 1 FROM pending_zitadel_propagations
+		WHERE op_type='add' AND user_id=$1 AND project_id=$2
+		  AND $3 = ANY(role_keys) AND status IN ('pending','in_flight'))`
+	var exists bool
+	if err := PG.QueryRow(ctx, q, userID, projectID, roleKey).Scan(&exists); err != nil {
+		return false, fmt.Errorf("pending outbox add exists (%s/%s/%s): %w", userID, projectID, roleKey, err)
+	}
+	return exists, nil
 }
 
 // ClaimPendingPropagations atomically transitions up to `limit` claimable rows

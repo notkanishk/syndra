@@ -204,6 +204,42 @@ type PendingPropagation struct {
 	CompletedAt    *time.Time `json:"completed_at,omitempty"`
 }
 
+// DriftItem is one out-of-band grant discrepancy awaiting operator triage.
+// zitadel_only: exists in Zitadel, no MkAuth intent. mkauth_only: MkAuth
+// expects it (direct grant), Zitadel lacks it. No item resolves automatically.
+type DriftItem struct {
+	ID                string     `json:"id"`
+	UserID            string     `json:"user_id"`
+	ProjectID         string     `json:"project_id"`
+	RoleKeys          []string   `json:"role_keys"`
+	ZitadelGrantID    string     `json:"zitadel_grant_id,omitempty"`
+	DetectedAt        time.Time  `json:"detected_at"`
+	DetectionSource   string     `json:"detection_source"` // webhook | reconciliation_sweep
+	DriftType         string     `json:"drift_type"`       // zitadel_only | mkauth_only
+	Status            string     `json:"status"`           // pending_triage | attributed | revoked | marked_external
+	ResolvedAt        *time.Time `json:"resolved_at,omitempty"`
+	ResolvedBy        string     `json:"resolved_by,omitempty"`
+	ResolutionPayload string     `json:"resolution_payload_json,omitempty"`
+}
+
+// DriftSummary feeds the red dashboard callout + sidebar dot: pending count
+// plus a top-N preview for the "top-3 + Triage all →" callout.
+type DriftSummary struct {
+	Count int         `json:"count"`
+	Top   []DriftItem `json:"top,omitempty"`
+}
+
+// ExternalGrantExclusion is an operator "this is legitimately external" marker
+// keyed by (user, project, role) — future detections for the triple are filtered.
+type ExternalGrantExclusion struct {
+	UserID    string    `json:"user_id"`
+	ProjectID string    `json:"project_id"`
+	RoleKey   string    `json:"role_key"`
+	MarkedBy  string    `json:"marked_by"`
+	MarkedAt  time.Time `json:"marked_at"`
+	Reason    string    `json:"reason,omitempty"`
+}
+
 type AccessRequest struct {
 	ID            string     `json:"id"`
 	RequesterID   string     `json:"requester_id"`
@@ -223,6 +259,7 @@ type GovernanceSummary struct {
 	ExpiringGrants     []DirectGrant             `json:"expiring_grants"`
 	CleanupHints       []string                  `json:"cleanup_hints"`
 	PendingPropagation PendingPropagationSummary `json:"pending_propagation"`
+	Drift              DriftSummary              `json:"drift"`
 }
 
 // PendingPropagationSummary surfaces the outbox depth + reachability so the UI
