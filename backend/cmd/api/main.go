@@ -17,6 +17,7 @@ import (
 	"mkauth/internal/directory"
 	"mkauth/internal/handlers"
 	"mkauth/internal/seed"
+	"mkauth/internal/services/drift"
 	"mkauth/internal/services/expiry"
 	"mkauth/internal/zitadel"
 )
@@ -107,6 +108,15 @@ func main() {
 		log.Println("[SCHEDULER] Disabled via EXPIRY_SCHEDULER_ENABLED=false")
 	}
 
+	// Drift reconciliation scheduler: periodic Zitadel↔MkAuth sweep (B2/C6).
+	var driftSched *drift.Scheduler
+	if driftSchedulerEnabled() {
+		driftSched = drift.NewScheduler(driftInterval())
+		go driftSched.Start(ctx)
+	} else {
+		log.Println("[DRIFT] Disabled via DRIFT_SCHEDULER_ENABLED=false")
+	}
+
 	// Start server in background
 	go func() {
 		fmt.Println("Control Plane Backend Listening on :8080")
@@ -135,6 +145,14 @@ func main() {
 		case <-sched.Done():
 		case <-shutdownCtx.Done():
 			log.Println("[SCHEDULER] Shutdown deadline exceeded waiting for scheduler; closing anyway")
+		}
+	}
+
+	if driftSched != nil {
+		select {
+		case <-driftSched.Done():
+		case <-shutdownCtx.Done():
+			log.Println("[DRIFT] Shutdown deadline exceeded waiting for scheduler; closing anyway")
 		}
 	}
 
@@ -183,4 +201,30 @@ func schedulerBatchSize() int {
 		return 500
 	}
 	return n
+}
+
+func driftSchedulerEnabled() bool {
+	v := os.Getenv("DRIFT_SCHEDULER_ENABLED")
+	if v == "" {
+		return true
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		log.Printf("[DRIFT] Invalid DRIFT_SCHEDULER_ENABLED=%q, defaulting to enabled", v)
+		return true
+	}
+	return b
+}
+
+func driftInterval() time.Duration {
+	v := os.Getenv("DRIFT_RECONCILIATION_INTERVAL_HOURS")
+	if v == "" {
+		return 6 * time.Hour
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		log.Printf("[DRIFT] Invalid DRIFT_RECONCILIATION_INTERVAL_HOURS=%q, defaulting to 6", v)
+		return 6 * time.Hour
+	}
+	return time.Duration(n) * time.Hour
 }
