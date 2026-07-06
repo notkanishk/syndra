@@ -35,6 +35,7 @@ export default function SidebarNav({ isAdmin }: { isAdmin: boolean }) {
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [expiringCount, setExpiringCount] = useState<number>(0);
   const [propCount, setPropCount] = useState<number>(0);
+  const [driftCount, setDriftCount] = useState<number>(0);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -48,6 +49,7 @@ export default function SidebarNav({ isAdmin }: { isAdmin: boolean }) {
         setPendingCount(Array.isArray(data?.pending_requests) ? data.pending_requests.length : 0);
         setExpiringCount(Array.isArray(data?.expiring_grants) ? data.expiring_grants.length : 0);
         setPropCount(typeof data?.pending_propagation?.count === "number" ? data.pending_propagation.count : 0);
+        setDriftCount(typeof data?.drift?.count === "number" ? data.drift.count : 0);
       } catch {
         // Swallow; sidebar must never break the layout.
       }
@@ -56,6 +58,12 @@ export default function SidebarNav({ isAdmin }: { isAdmin: boolean }) {
   }, [isAdmin]);
 
   const adminSections: NavSection[] = [
+    ...(driftCount > 0
+      ? [{
+          title: "",
+          items: [{ href: "/governance/drift", label: "⚠ Drift", badge: driftCount }],
+        }]
+      : []),
     { title: "Dashboard", items: [{ href: "/", label: "Overview" }] },
     {
       title: "Identity",
@@ -107,6 +115,7 @@ export default function SidebarNav({ isAdmin }: { isAdmin: boolean }) {
           </p>
           {section.items.map((item) => {
             const active = pathname === item.href;
+            const isDrift = item.href === "/governance/drift";
             return (
               <Link
                 key={item.href}
@@ -115,12 +124,20 @@ export default function SidebarNav({ isAdmin }: { isAdmin: boolean }) {
                 className={`group flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors ${
                   active
                     ? "bg-primary-container text-on-primary-container border-l-2 border-primary"
-                    : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high border-l-2 border-transparent"
+                    : isDrift
+                      ? "text-error hover:bg-error/10 border-l-2 border-transparent"
+                      : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high border-l-2 border-transparent"
                 }`}
               >
-                <span>{item.label}</span>
+                <span className="flex items-center gap-2">
+                  {item.label}
+                  {isDrift && <span aria-hidden className="h-2 w-2 rounded-full bg-error" />}
+                </span>
                 {item.badge !== undefined && (
-                  <Badge variant={active ? "default" : "secondary"} className="text-[10px]">
+                  <Badge
+                    variant={active ? "default" : "secondary"}
+                    className={`text-[10px] ${isDrift ? "!border-transparent !bg-error !text-on-error" : ""}`}
+                  >
                     {item.badge}
                   </Badge>
                 )}

@@ -1,3 +1,4 @@
+import ChimeToggle from './ChimeToggle';
 import { Card } from './ui/Card';
 import { Pulse } from './ui/Pulse';
 import SidebarNav from './SidebarNav';
@@ -29,7 +30,10 @@ export default function Sidebar({ session }: { session: SessionUser }) {
                 <p className="text-xs text-on-surface-variant">{session.role === "admin" ? "Admin session" : "Member session"}</p>
               </div>
             </div>
-            <ThemeToggle />
+            <div className="flex items-center gap-1">
+              <ChimeToggle />
+              <ThemeToggle />
+            </div>
           </div>
           <form action="/auth/logout" method="post" className="mt-4">
             <button type="submit" className="w-full rounded-lg border border-outline-variant px-3 py-2 text-sm text-on-surface-variant transition-colors hover:border-primary hover:text-on-surface">

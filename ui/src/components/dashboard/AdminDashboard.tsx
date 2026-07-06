@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { UserName } from "@/components/names/UserName";
+import { DriftCallout } from "@/components/drift/DriftCallout";
 import { PendingCallout } from "@/components/propagation/PendingCallout";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -82,6 +83,7 @@ export function AdminDashboard({ adminName }: AdminDashboardProps) {
   const pendingCount = summary.governance.data?.pending_requests.length ?? 0;
   const expiringCount = summary.governance.data?.expiring_grants.length ?? 0;
   const propagation = summary.governance.data?.pending_propagation ?? { count: 0, zitadel_reachable: true };
+  const drift = summary.governance.data?.drift ?? { count: 0, top: [] };
   const projectCount = summary.projects.data?.length ?? 0;
   const bundleCount = summary.bundles.data?.length ?? 0;
   const recent = (summary.audit.data ?? []).slice(0, 8);
@@ -97,6 +99,8 @@ export function AdminDashboard({ adminName }: AdminDashboardProps) {
           Identity orchestrator across control-plane workflows, access lineage, and token simulation.
         </p>
       </header>
+
+      <DriftCallout count={drift.count} top={drift.top ?? []} />
 
       <PendingCallout
         count={propagation.count}

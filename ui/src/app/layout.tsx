@@ -2,6 +2,7 @@ import { Fraunces, Inter } from 'next/font/google';
 
 import Sidebar from '@/components/Sidebar';
 import { Providers } from '@/components/providers';
+import { DriftBanner } from '@/components/drift/DriftBanner';
 import { getSession } from '@/lib/session';
 import './globals.css';
 
@@ -52,7 +53,10 @@ export default async function RootLayout({
         <div className="bg-blob-hero" aria-hidden />
         <Providers>
           <Sidebar session={session} />
-          <main className="relative z-10 flex-1 overflow-y-auto p-8">{children}</main>
+          <main className="relative z-10 flex-1 overflow-y-auto p-8">
+            <DriftBanner />
+            {children}
+          </main>
         </Providers>
       </body>
     </html>

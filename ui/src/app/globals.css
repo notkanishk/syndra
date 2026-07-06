@@ -78,11 +78,25 @@
   /* Animations */
   --animate-fade-in-up: fadeInUp 0.3s ease-out;
   --animate-pulse-dot: pulseDot 1.6s ease-in-out infinite;
+  --animate-slide-in-down: slideInDown 0.25s ease-out;
+  --animate-row-highlight: rowHighlight 1.5s ease-out;
+  --animate-count-emphasis: countEmphasis 0.4s ease-out;
 
   @keyframes fadeInUp {
     0% {
       opacity: 0;
       transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideInDown {
+    0% {
+      opacity: 0;
+      transform: translateY(-100%);
     }
     100% {
       opacity: 1;
@@ -98,6 +112,24 @@
     50% {
       opacity: 1;
       transform: scale(1.35);
+    }
+  }
+
+  @keyframes rowHighlight {
+    0% {
+      background-color: color-mix(in srgb, var(--error) 25%, transparent);
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+
+  @keyframes countEmphasis {
+    0% {
+      transform: scale(1.4);
+    }
+    100% {
+      transform: scale(1);
     }
   }
 }

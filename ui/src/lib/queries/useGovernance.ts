@@ -18,11 +18,27 @@ export interface PendingPropagationSummary {
   last_queued_at?: string | null;
 }
 
+export interface DriftItem {
+  id: string;
+  user_id: string;
+  project_id: string;
+  role_keys: string[];
+  drift_type: string;
+  detection_source: string;
+  detected_at: string;
+}
+
+export interface DriftSummary {
+  count: number;
+  top?: DriftItem[];
+}
+
 export interface GovernanceSummary {
   pending_requests: Array<{ id: string }>;
   expiring_grants: ExpiringGrant[];
   cleanup_hints: string[];
   pending_propagation: PendingPropagationSummary;
+  drift: DriftSummary;
 }
 
 const KEYS = {
@@ -45,6 +61,7 @@ export function useGovernanceSummary() {
         expiring_grants: Array.isArray(data?.expiring_grants) ? data.expiring_grants : [],
         cleanup_hints: Array.isArray(data?.cleanup_hints) ? data.cleanup_hints : [],
         pending_propagation: data?.pending_propagation ?? { count: 0, zitadel_reachable: true },
+        drift: data?.drift ?? { count: 0, top: [] },
       };
     },
   });
