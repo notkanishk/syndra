@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"mkauth/internal/models"
+	"mkauth/internal/services"
 	"mkauth/internal/zitadel"
 )
 
@@ -26,7 +27,7 @@ var reconciliationPageSize = 500
 //
 // `var` (not const) so tests can override to a smaller number; production
 // callers must not mutate this.
-var reconciliationSafetyCap = 10_000
+var reconciliationSafetyCap = 2_000 // B2: right-sized for the single-LXC ~200-user makerspace (~10× headroom)
 
 // ReconciliationGrant is one (user, project, role-set) pair on either the
 // MkAuth or Zitadel side of the diff. Roles are sorted ascending so equality
@@ -100,7 +101,45 @@ func handleGetReconciliationDiff(w http.ResponseWriter, r *http.Request) {
 	diff.Truncated = truncated
 	diff.GeneratedAt = time.Now().UTC()
 
+	// A lookup failure here MUST NOT silently become an empty set — that would
+	// misclassify rule-derived / excluded grants as red drift. Fail the request.
+	rules, err := svcGetActiveMappingRulesRecon(ctx)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	exclusions, err := svcGetExclusions(ctx)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	holder := services.BuildHolderSet(mkauthGrants, allZitadel)
+	diff.OnlyInZitadel = filterExplained(diff.OnlyInZitadel, holder, rules, exclusions)
+
 	jsonResponse(w, http.StatusOK, diff)
+}
+
+// filterExplained drops (user,project) entries whose every role is now explained
+// by an active mapping rule or an external-grant exclusion — they are no longer
+// pure Zitadel drift. A partially-explained entry keeps only its unexplained roles.
+func filterExplained(in []ReconciliationGrant, holder map[services.HolderKey]bool,
+	rules []models.MappingRule, exclusions []models.ExternalGrantExclusion) []ReconciliationGrant {
+	out := make([]ReconciliationGrant, 0, len(in))
+	for _, g := range in {
+		var unexplained []string
+		for _, rk := range g.RoleKeys {
+			if services.ExpectedViaRule(holder, rules, g.UserID, g.ProjectID, rk) ||
+				services.IsExcluded(exclusions, g.UserID, g.ProjectID, rk) {
+				continue
+			}
+			unexplained = append(unexplained, rk)
+		}
+		if len(unexplained) > 0 {
+			g.RoleKeys = unexplained
+			out = append(out, g)
+		}
+	}
+	return out
 }
 
 // fetchAllZitadelGrants paginates through Zitadel ListAllGrants until either
@@ -262,4 +301,3 @@ func setDifference(a, b map[string]struct{}) []string {
 	sort.Strings(out)
 	return out
 }
-

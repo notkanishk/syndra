@@ -9,6 +9,7 @@ import (
 	"mkauth/internal/cache"
 	"mkauth/internal/db"
 	"mkauth/internal/services"
+	"mkauth/internal/services/drift"
 	"mkauth/internal/services/propagation"
 	"mkauth/internal/zitadel"
 )
@@ -74,6 +75,23 @@ var (
 	dbDeleteGrantIndex   = db.DeleteGrantIndex
 	dbListUserGrantsLive = listUserGrantsViaZitadel
 
+	// Real-time webhook drift detection (C6): a surviving grant_added event
+	// (already past the self-mutation guard) that MkAuth neither expects nor
+	// has excluded is out-of-band drift. See detectWebhookDrift in webhook.go.
+	dbUpsertDriftItem = db.UpsertDriftItem
+	dbHasExclusion    = func(ctx context.Context, u, p, r string) (bool, error) {
+		ex, err := db.GetExclusions(ctx)
+		if err != nil {
+			return false, err
+		}
+		return services.IsExcluded(ex, u, p, r), nil
+	}
+	// svcUserExpectsRole reports whether MkAuth already expects (project,role)
+	// for the user — via direct grant, bundle, or mapping rule. Reuses the
+	// existing per-user resolver so the webhook's "is this explained?" check is
+	// one function, not a re-implementation.
+	svcUserExpectsRole = services.UserExpectsRole
+
 	// Role management injectable vars.
 	svcCreateRole        = services.CreateRole
 	svcGlobalRoleCatalog = services.GlobalRoleCatalog
@@ -82,6 +100,11 @@ var (
 	// without a database or live Zitadel connection. The Zitadel side reuses
 	// zitadelListAllGrants below so a mocked MgmtClient flows through here too.
 	svcAllDirectGrants = services.AllDirectGrants
+	// Rule/exclusion lookups for reconciliation's expected-set filtering (B2).
+	// Errors from these MUST propagate as 500s, not degrade to an empty set —
+	// an empty set would misclassify rule-derived/excluded grants as drift.
+	svcGetActiveMappingRulesRecon = db.GetActiveMappingRules
+	svcGetExclusions              = db.GetExclusions
 
 	// Provisioning intent injectable vars.
 	webhookEmitProvisioningIntent = services.EmitProvisioningIntent
@@ -180,4 +203,16 @@ var (
 	redisSetClaimMode = func(ctx context.Context, projectID, value string, ttlSeconds int) error {
 		return db.Redis.SetEx(ctx, "claim_mode:"+projectID, value, time.Duration(ttlSeconds)*time.Second).Err()
 	}
+
+	// Drift triage injectable vars (B2). The three action helpers are atomic
+	// claim+side-effect transactions (db.*AndEnqueue / db.MarkDriftExternalTx) —
+	// the drift handlers never resolve a drift row outside that transaction.
+	dbGetDriftItems            = db.GetDriftItems
+	dbGetDriftItem             = db.GetDriftItem
+	dbAttributeDriftAndEnqueue = db.AttributeDriftAndEnqueue
+	dbRevokeDriftAndEnqueue    = db.RevokeDriftAndEnqueue
+	dbMarkDriftExternalTx      = db.MarkDriftExternalTx
+	svcDriftSweep              = drift.Sweep
+	svcDrainOne                = propagation.DrainOne
+	svcGetRolesForBundleDrift  = db.GetRolesForBundle
 )

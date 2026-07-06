@@ -63,7 +63,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/requests", withCORS(withUserAuth(handleGetAccessRequests)))
 	mux.HandleFunc("POST /api/v1/requests", withCORS(withUserAuth(handleCreateAccessRequest)))
 	mux.HandleFunc("POST /api/v1/requests/{id}/decision", withCORS(withUserAuth(handleResolveAccessRequest)))
-	mux.HandleFunc("GET /api/v1/governance/summary", withCORS(withUserAuth(handleGetGovernanceSummary)))
+	mux.HandleFunc("GET /api/v1/governance/summary", withCORS(withOperatorAuth(handleGetGovernanceSummary)))
 
 	// Role Management
 	mux.HandleFunc("POST /api/v1/roles", withCORS(withUserAuth(handleCreateRole)))
@@ -134,6 +134,17 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/v1/zitadel/users/{id}/grants", withCORS(withOperatorAuth(handleAssignZitadelGrant)))
 	mux.HandleFunc("PUT /api/v1/zitadel/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleUpdateZitadelGrant)))
 	mux.HandleFunc("DELETE /api/v1/zitadel/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleRemoveZitadelGrant)))
+
+	// Drift triage (B2): operator resolves out-of-band Zitadel grants surfaced by
+	// the webhook listener or the reconciliation sweep. Operator-gated — same
+	// posture as reconciliation/propagations, since drift exposes grant inventory
+	// and every action mutates state (attribute/revoke/mark-external/reconcile).
+	mux.HandleFunc("GET /api/v1/governance/drift", withCORS(withOperatorAuth(handleListDrift)))
+	mux.HandleFunc("POST /api/v1/governance/drift/reconcile", withCORS(withOperatorAuth(handleReconcileDrift)))
+	mux.HandleFunc("POST /api/v1/governance/drift/bulk-attribute", withCORS(withOperatorAuth(handleBulkAttributeDrift)))
+	mux.HandleFunc("POST /api/v1/governance/drift/{id}/attribute", withCORS(withOperatorAuth(handleAttributeDrift)))
+	mux.HandleFunc("POST /api/v1/governance/drift/{id}/revoke", withCORS(withOperatorAuth(handleRevokeDrift)))
+	mux.HandleFunc("POST /api/v1/governance/drift/{id}/mark-external", withCORS(withOperatorAuth(handleMarkDriftExternal)))
 
 	// Data Plane routes — verified by their own mechanisms (HMAC / Redis)
 	mux.HandleFunc("POST /api/webhooks/zitadel",

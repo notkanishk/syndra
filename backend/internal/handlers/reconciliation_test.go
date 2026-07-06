@@ -28,9 +28,19 @@ func withReconciliationDeps(
 
 	origAll := svcAllDirectGrants
 	origZitadel := zitadelListAllGrants
+	origRules := svcGetActiveMappingRulesRecon
+	origExclusions := svcGetExclusions
 
 	svcAllDirectGrants = func(_ context.Context) ([]models.DirectGrant, error) {
 		return mkauth, nil
+	}
+	// Default to no rules/exclusions so existing tests (which don't care about
+	// expected-set filtering) see the pre-B2 diff shape unchanged.
+	svcGetActiveMappingRulesRecon = func(_ context.Context) ([]models.MappingRule, error) {
+		return nil, nil
+	}
+	svcGetExclusions = func(_ context.Context) ([]models.ExternalGrantExclusion, error) {
+		return nil, nil
 	}
 	// Pagination-aware stub: slices the master list by the requested offset
 	// and limit so the handler's pagination loop terminates correctly. Total
@@ -58,6 +68,8 @@ func withReconciliationDeps(
 	t.Cleanup(func() {
 		svcAllDirectGrants = origAll
 		zitadelListAllGrants = origZitadel
+		svcGetActiveMappingRulesRecon = origRules
+		svcGetExclusions = origExclusions
 	})
 }
 
@@ -336,6 +348,33 @@ func TestReconciliation_MultipleUsersStableOrder(t *testing.T) {
 		if got.OnlyInMkAuth[i].UserID != w.u || got.OnlyInMkAuth[i].ProjectID != w.p {
 			t.Fatalf("idx %d expected %s/%s, got %s/%s", i, w.u, w.p,
 				got.OnlyInMkAuth[i].UserID, got.OnlyInMkAuth[i].ProjectID)
+		}
+	}
+}
+
+// TestReconciliation_RuleDerivedNotOnlyInZitadel: a Zitadel grant that is the
+// target of an active mapping rule the user qualifies for (holds the source)
+// is expected, not drift — it must not appear in only_in_zitadel.
+func TestReconciliation_RuleDerivedNotOnlyInZitadel(t *testing.T) {
+	// MkAuth has the source grant; Zitadel has source + rule-derived target.
+	withReconciliationDeps(t,
+		[]models.DirectGrant{directGrant("u-1", "p1", "member")},
+		[]zitadel.UserGrant{
+			{ID: "g1", UserID: "u-1", ProjectID: "p1", RoleKeys: []string{"member"}},
+			{ID: "g2", UserID: "u-1", ProjectID: "p2", RoleKeys: []string{"contributor"}},
+		}, 0, nil,
+	)
+	// Active rule: p1:member → p2:contributor.
+	origRules := svcGetActiveMappingRulesRecon
+	svcGetActiveMappingRulesRecon = func(context.Context) ([]models.MappingRule, error) {
+		return []models.MappingRule{{SourceProject: "p1", SourceRole: "member", TargetProject: "p2", TargetRole: "contributor"}}, nil
+	}
+	t.Cleanup(func() { svcGetActiveMappingRulesRecon = origRules })
+
+	got := decodeReconciliation(t, getReconciliation(t))
+	for _, e := range got.OnlyInZitadel {
+		if e.ProjectID == "p2" {
+			t.Fatalf("rule-derived p2:contributor must NOT be OnlyInZitadel: %+v", got.OnlyInZitadel)
 		}
 	}
 }

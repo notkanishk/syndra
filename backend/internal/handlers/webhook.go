@@ -251,7 +251,39 @@ func processGrantAdded(ctx context.Context, event WebhookPayload, eventID string
 			log.Printf("[WEBHOOK] Provisioning intent emission failed: %v", err)
 		}
 	}
+
+	// Real-time drift: a surviving (non-self, per the self-mutation guard)
+	// grant event that MkAuth neither expects nor has excluded is out-of-band.
+	detectWebhookDrift(ctx, event)
 	return nil
+}
+
+// detectWebhookDrift flags roles on a surviving grant event that MkAuth has no
+// intent for. Best-effort and non-fatal: a detection failure must never bounce
+// a 4xx back to Zitadel (redelivery storm) — the sweep is the backstop.
+func detectWebhookDrift(ctx context.Context, event WebhookPayload) {
+	for _, role := range event.RoleKeys {
+		expected, err := svcUserExpectsRole(ctx, event.UserID, event.SourceProject, role)
+		if err != nil {
+			log.Printf("[DRIFT] webhook expected-check failed user=%s role=%s: %v (skipping)", event.UserID, role, err)
+			continue
+		}
+		if expected {
+			continue
+		}
+		excluded, err := dbHasExclusion(ctx, event.UserID, event.SourceProject, role)
+		if err != nil {
+			log.Printf("[DRIFT] webhook exclusion-check failed user=%s role=%s: %v (skipping — not flagging on uncertainty)", event.UserID, role, err)
+			continue
+		}
+		if excluded {
+			continue
+		}
+		if _, _, err := dbUpsertDriftItem(ctx, event.UserID, event.SourceProject,
+			[]string{role}, event.GrantID, "webhook", "zitadel_only"); err != nil {
+			log.Printf("[DRIFT] webhook upsert failed user=%s role=%s: %v (non-fatal)", event.UserID, role, err)
+		}
+	}
 }
 
 // processGrantRemoved handles grant_removed events:

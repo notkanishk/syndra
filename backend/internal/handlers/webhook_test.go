@@ -56,6 +56,9 @@ func resetWebhookDeps(t *testing.T) {
 	origDeleteIdx := dbDeleteGrantIndex
 	origListLive := dbListUserGrantsLive
 	origDrop := dbDropWebhookEventEnrichmentIncomplete
+	origUserExpectsRole := svcUserExpectsRole
+	origHasExclusion := dbHasExclusion
+	origUpsertDriftItem := dbUpsertDriftItem
 	t.Cleanup(func() {
 		cacheRebuildUser = origRebuild
 		cacheInvalidateUser = origInvalidate
@@ -71,7 +74,17 @@ func resetWebhookDeps(t *testing.T) {
 		dbDeleteGrantIndex = origDeleteIdx
 		dbListUserGrantsLive = origListLive
 		dbDropWebhookEventEnrichmentIncomplete = origDrop
+		svcUserExpectsRole = origUserExpectsRole
+		dbHasExclusion = origHasExclusion
+		dbUpsertDriftItem = origUpsertDriftItem
 	})
+	// Defaults for existing webhook tests that don't care about drift: never
+	// flag drift unless a test explicitly opts in.
+	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return false, nil }
+	dbHasExclusion = func(context.Context, string, string, string) (bool, error) { return false, nil }
+	dbUpsertDriftItem = func(context.Context, string, string, []string, string, string, string) (string, bool, error) {
+		return "", false, nil
+	}
 }
 
 // setupNoopWebhookDeps configures all webhook deps as no-ops for isolated testing.
@@ -782,5 +795,48 @@ func TestHandleZitadelWebhook_ZitadelGrant_EnrichmentIncomplete_PersistedAsDropp
 	}
 	if droppedCalls != 1 {
 		t.Fatalf("expected exactly 1 call to dbDropWebhookEventEnrichmentIncomplete; got %d", droppedCalls)
+	}
+}
+
+// --- Real-time webhook drift detection (C6) ---
+
+func TestProcessGrantAdded_UnexplainedGrantCreatesDrift(t *testing.T) {
+	setupNoopWebhookDeps(t)
+	// Downstream orchestration no-ops so the test isolates the drift hook.
+	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return false, nil }
+	dbHasExclusion = func(context.Context, string, string, string) (bool, error) { return false, nil }
+	var driftUser, driftType string
+	dbUpsertDriftItem = func(_ context.Context, u, _ string, _ []string, _, source, dtype string) (string, bool, error) {
+		driftUser, driftType = u, dtype
+		if source != "webhook" {
+			t.Fatalf("detection_source must be webhook, got %q", source)
+		}
+		return "d1", true, nil
+	}
+
+	ev := WebhookPayload{EventType: "grant_added", UserID: "ext-u", SourceProject: "p1", RoleKeys: []string{"admin"}, GrantID: "g9"}
+	if err := processGrantAdded(context.Background(), ev, "evt-1"); err != nil {
+		t.Fatal(err)
+	}
+	if driftUser != "ext-u" || driftType != "zitadel_only" {
+		t.Fatalf("unexplained external grant must create zitadel_only drift, got user=%q type=%q", driftUser, driftType)
+	}
+}
+
+func TestProcessGrantAdded_ExpectedGrantNoDrift(t *testing.T) {
+	setupNoopWebhookDeps(t)
+	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return true, nil } // MkAuth expects it
+	called := false
+	dbUpsertDriftItem = func(context.Context, string, string, []string, string, string, string) (string, bool, error) {
+		called = true
+		return "", false, nil
+	}
+
+	ev := WebhookPayload{EventType: "grant_added", UserID: "u1", SourceProject: "p1", RoleKeys: []string{"member"}, GrantID: "g1"}
+	if err := processGrantAdded(context.Background(), ev, "evt-2"); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Fatal("a grant MkAuth already expects must not be flagged as drift")
 	}
 }
