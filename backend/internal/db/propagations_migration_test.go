@@ -42,6 +42,63 @@ func TestClaimPendingPropagations_ReclaimsInFlight(t *testing.T) {
 	}
 }
 
+// TestReconcileLedgerOnApplied_RevokeIsSourceScoped is a source-coherence guard for the
+// sub-phase-3 fix (review P1): an applied revoke must delete direct_role_grants scoped to the
+// outbox row's OWN source, not unconditionally. Cascades (source='bundle'|'rule') write no
+// ledger rows, so a cascade revoke's reconcile must delete nothing for that triple — an
+// unscoped delete would strip an operator's source='direct' row sharing the same
+// (user, project, role). The db package has no live-DB harness (see file doc), so this asserts
+// the revoke branch's SQL carries an `AND source=$4` (or equivalent) predicate rather than
+// exercising it against a real database. The replace branch is intentionally NOT re-checked
+// here — it was already source='direct'-scoped before this task.
+func TestReconcileLedgerOnApplied_RevokeIsSourceScoped(t *testing.T) {
+	src, err := os.ReadFile("propagations.go")
+	if err != nil {
+		t.Fatalf("read propagations.go: %v", err)
+	}
+	fn := funcBody(t, string(src), "ReconcileLedgerOnApplied")
+	revokeCase := regexp.MustCompile(`(?s)case "revoke":.*?case "replace":`).FindString(fn)
+	if revokeCase == "" {
+		t.Fatal(`could not isolate the "revoke" case body in ReconcileLedgerOnApplied`)
+	}
+	if !regexp.MustCompile(`AND\s+source\s*=\s*\$4`).MatchString(revokeCase) {
+		t.Errorf("revoke branch must scope its DELETE by source (AND source=$4) so a cascade revoke never strips an operator's direct grant; body:\n%s", revokeCase)
+	}
+}
+
+// TestEnqueueWrites_WritesSourceAndSourceRef is a coherence guard for the shared
+// direct/drift enqueue path (enqueueWrites in propagation_enqueue.go): its outbox INSERT must
+// carry source/source_ref, same as the cascade path's enqueueCascadeRows
+// (TestEnqueueCascadeRows_WritesSourceAndSourceRef in cascade_migration_test.go). Without this,
+// callers that route through enqueueWrites with a non-default Source/SourceRef — e.g.
+// handlers/drift.go's *AndEnqueue variant — would have their pending-worklist attribution
+// silently dropped (source always 'direct', source_ref always NULL) even though the
+// direct_role_grants ledger upsert on the same tx got it right.
+func TestEnqueueWrites_WritesSourceAndSourceRef(t *testing.T) {
+	src, err := os.ReadFile("propagation_enqueue.go")
+	if err != nil {
+		t.Fatalf("read propagation_enqueue.go: %v", err)
+	}
+	fb := funcBody(t, string(src), "enqueueWrites")
+	for _, want := range []string{"source", "source_ref"} {
+		if !strings.Contains(fb, want) {
+			t.Errorf("enqueueWrites must write outbox column %q; body:\n%s", want, fb)
+		}
+	}
+	// Pin it to the actual INSERT INTO pending_zitadel_propagations statement, not just any
+	// mention of "source" in the function (e.g. the ledger upsert or the `source :=` default
+	// above it also contain that substring).
+	insert := regexp.MustCompile(`(?s)INSERT INTO pending_zitadel_propagations.*?RETURNING id`).FindString(fb)
+	if insert == "" {
+		t.Fatal("could not isolate the pending_zitadel_propagations INSERT in enqueueWrites")
+	}
+	for _, want := range []string{"source", "source_ref"} {
+		if !strings.Contains(insert, want) {
+			t.Errorf("pending_zitadel_propagations INSERT in enqueueWrites must list column %q; insert:\n%s", want, insert)
+		}
+	}
+}
+
 // funcBody returns the source text of the named top-level func, from its
 // declaration to the next top-level func (or EOF). Good enough for a string
 // coherence assertion without pulling in go/parser.

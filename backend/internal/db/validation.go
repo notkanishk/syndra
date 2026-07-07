@@ -28,6 +28,41 @@ func DetectCycleOnInsert(ctx context.Context, sourceProject, sourceRole, targetP
 	return nil
 }
 
+// DetectCycleOnUpdate is DetectCycleOnInsert but excludes the rule being edited from the graph
+// before adding the proposed (new) edge. DetectCycleOnInsert would still include the edited
+// rule's OLD edge (it loads ALL current rules), so a valid retarget that only cycles WITH that
+// old edge present would be falsely rejected — e.g. re-pointing a rule to break an existing chain
+// it was itself part of. Shares hasCycleWithRules's DFS with DetectCycleOnInsert (DRY).
+func DetectCycleOnUpdate(ctx context.Context, excludeRuleID, sourceProject, sourceRole, targetProject, targetRole string) error {
+	rules, err := GetActiveMappingRules(ctx)
+	if err != nil {
+		return fmt.Errorf("cycle detection: failed to load rules: %w", err)
+	}
+
+	if hasCycleWithRules(excludeRuleFromGraph(rules, excludeRuleID), sourceProject, sourceRole, targetProject, targetRole) {
+		return fmt.Errorf(
+			"circular dependency detected: updating rule to %s:%s → %s:%s would create a cycle",
+			sourceProject, sourceRole, targetProject, targetRole,
+		)
+	}
+
+	return nil
+}
+
+// excludeRuleFromGraph drops the rule being edited from the loaded set, so DetectCycleOnUpdate's
+// DFS runs on the graph WITHOUT the edited rule's old edge. Pure (no DB access) so it — and the
+// update-vs-insert cycle difference it exists for — is unit-testable without a live database.
+func excludeRuleFromGraph(rules []models.MappingRule, excludeRuleID string) []models.MappingRule {
+	filtered := make([]models.MappingRule, 0, len(rules))
+	for _, r := range rules {
+		if r.ID == excludeRuleID {
+			continue
+		}
+		filtered = append(filtered, r)
+	}
+	return filtered
+}
+
 func hasCycleWithRules(rules []models.MappingRule, sourceProject, sourceRole, targetProject, targetRole string) bool {
 
 	type node struct {

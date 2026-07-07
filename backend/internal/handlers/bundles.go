@@ -18,8 +18,9 @@ type AssignBundleRequest struct {
 }
 
 type CreateBundleRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name             string `json:"name"`
+	Description      string `json:"description"`
+	ConfirmationMode string `json:"confirmation_mode,omitempty"`
 }
 
 func handleGetBundles(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +48,14 @@ func handleCreateBundle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := dbCreateBundle(r.Context(), req.Name, req.Description)
+	// Creating a bundle triggers no cascade (no members/roles yet) — mode just seeds the row for
+	// future add-role/assign cascades. Inherits the global default unless overridden.
+	mode, err := resolveConfirmationMode(r.Context(), req.ConfirmationMode)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	id, err := dbCreateBundle(r.Context(), req.Name, req.Description, mode)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -91,17 +99,22 @@ func handleAddRoleToBundle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := dbAddRoleToBundle(r.Context(), bundleID, req.ProjectID, req.RoleKey); err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-
 	actor := getAdminUserID(r.Context())
 	if actor == "" {
 		actor = "system"
 	}
-	_ = dbInsertAuditLog(r.Context(), actor, "-", "bundle.role_added", bundleID+":"+req.RoleKey)
-	jsonResponse(w, http.StatusOK, map[string]string{"message": "Role added to bundle"})
+	// The cascade owns the mutation now (add-role + per-member outbox rows commit in one tx),
+	// then (auto mode) drains those rows. Enqueue failure rolls back the mutation → 500; a
+	// drain failure rides in cascade.drain and is not fatal.
+	cascade, err := svcCascadeRoleAdded(r.Context(), actor, bundleID, req.ProjectID, req.RoleKey)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "CASCADE_ERROR", err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"message": "Role added to bundle",
+		"cascade": cascade,
+	})
 }
 
 func handleGetUserBundles(w http.ResponseWriter, r *http.Request) {
@@ -130,17 +143,22 @@ func handleAssignBundleToUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := dbAssignBundleToUser(r.Context(), userID, req.BundleID); err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-
 	actor := getAdminUserID(r.Context())
 	if actor == "" {
 		actor = "system"
 	}
-	_ = dbInsertAuditLog(r.Context(), actor, userID, "bundle.assigned", req.BundleID)
-	jsonResponse(w, http.StatusOK, map[string]string{"message": "Bundle assigned to user"})
+	// The cascade owns the mutation now (assign + per-role outbox rows commit in one tx), then
+	// (auto mode) drains those rows. Enqueue failure rolls back the mutation → 500; a drain
+	// failure rides in cascade.drain and is not fatal.
+	cascade, err := svcCascadeBundleAssigned(r.Context(), actor, userID, req.BundleID)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "CASCADE_ERROR", err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"message": "Bundle assigned to user",
+		"cascade": cascade,
+	})
 }
 
 // handleSetWelcomeBundle marks a bundle as the welcome bundle. Clears any

@@ -114,12 +114,12 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) 
 
 	const insertOutbox = `
 		INSERT INTO pending_zitadel_propagations
-			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json, idempotency_key, initiated_by)
-		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8)
+			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json, idempotency_key, initiated_by, source, source_ref)
+		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,NULLIF($10,''))
 		RETURNING id`
 	var outboxID string
 	if err := tx.QueryRow(ctx, insertOutbox, p.OpType, p.UserID, p.ProjectID, p.RoleKeys,
-		p.ZitadelGrantID, p.PayloadJSON, key, p.GrantedBy).Scan(&outboxID); err != nil {
+		p.ZitadelGrantID, p.PayloadJSON, key, p.GrantedBy, source, p.SourceRef).Scan(&outboxID); err != nil {
 		return "", fmt.Errorf("insert outbox: %w", err)
 	}
 	return outboxID, nil

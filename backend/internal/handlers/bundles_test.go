@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"mkauth/internal/models"
+	"mkauth/internal/services"
+	"mkauth/internal/services/propagation"
 )
 
 // resetBundleDeps captures and restores all bundle-related injectable vars.
@@ -20,20 +22,33 @@ func resetBundleDeps(t *testing.T) {
 	origCreate := dbCreateBundle
 	origGetAll := dbGetAllBundles
 	origGetRoles := dbGetRolesForBundle
-	origAddRole := dbAddRoleToBundle
 	origGetUserBundles := dbGetBundlesForUser
-	origAssign := dbAssignBundleToUser
 	origSetWelcome := dbSetWelcomeBundle
 	origAudit := dbInsertAuditLog
+	origGetConfig := dbGetConfigSetting
+	// Default: no configured global default (resolveConfirmationMode normalizes "" to "auto") —
+	// keeps every existing test that doesn't set confirmation_mode from hitting a real DB call.
+	dbGetConfigSetting = func(ctx context.Context, key string) (string, error) { return "", nil }
 	t.Cleanup(func() {
 		dbCreateBundle = origCreate
 		dbGetAllBundles = origGetAll
 		dbGetRolesForBundle = origGetRoles
-		dbAddRoleToBundle = origAddRole
 		dbGetBundlesForUser = origGetUserBundles
-		dbAssignBundleToUser = origAssign
 		dbSetWelcomeBundle = origSetWelcome
 		dbInsertAuditLog = origAudit
+		dbGetConfigSetting = origGetConfig
+	})
+}
+
+// resetCascadeHandlerDeps captures and restores the bundle-side add-cascade injectables
+// (sub-phase 3, Task 20).
+func resetCascadeHandlerDeps(t *testing.T) {
+	t.Helper()
+	origAssigned := svcCascadeBundleAssigned
+	origRoleAdded := svcCascadeRoleAdded
+	t.Cleanup(func() {
+		svcCascadeBundleAssigned = origAssigned
+		svcCascadeRoleAdded = origRoleAdded
 	})
 }
 
@@ -103,7 +118,7 @@ func TestHandleCreateBundle_UnknownField(t *testing.T) {
 func TestHandleCreateBundle_HappyPath(t *testing.T) {
 	resetBundleDeps(t)
 
-	dbCreateBundle = func(ctx context.Context, name, description string) (string, error) {
+	dbCreateBundle = func(ctx context.Context, name, description, confirmationMode string) (string, error) {
 		return "bundle-1", nil
 	}
 	auditAction := ""
@@ -128,6 +143,30 @@ func TestHandleCreateBundle_HappyPath(t *testing.T) {
 	}
 	if auditAction != "bundle.created" {
 		t.Fatalf("expected audit action bundle.created, got %s", auditAction)
+	}
+}
+
+// TestHandleCreateBundle_ResolvedModeReachesCreate is Minor Fix #5: the RESOLVED confirmation
+// mode (not the raw request body) must be the value that actually reaches dbCreateBundle.
+func TestHandleCreateBundle_ResolvedModeReachesCreate(t *testing.T) {
+	resetBundleDeps(t)
+
+	var gotMode string
+	dbCreateBundle = func(ctx context.Context, name, description, confirmationMode string) (string, error) {
+		gotMode = confirmationMode
+		return "bundle-1", nil
+	}
+	dbInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error { return nil }
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bundles", strings.NewReader(`{"name":"Engineering","confirmation_mode":"manual"}`))
+	rr := httptest.NewRecorder()
+	handleCreateBundle(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if gotMode != "manual" {
+		t.Fatalf("expected resolved mode 'manual' to reach dbCreateBundle, got %q", gotMode)
 	}
 }
 
@@ -175,14 +214,12 @@ func TestHandleAddRoleToBundle_UnknownField(t *testing.T) {
 
 func TestHandleAddRoleToBundle_HappyPath(t *testing.T) {
 	resetBundleDeps(t)
+	resetCascadeHandlerDeps(t)
 
-	dbAddRoleToBundle = func(ctx context.Context, bundleID, projectID, roleKey string) error {
-		return nil
-	}
-	auditAction := ""
-	dbInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error {
-		auditAction = action
-		return nil
+	var gotBundleID, gotProjectID, gotRoleKey string
+	svcCascadeRoleAdded = func(ctx context.Context, actor, bundleID, projectID, roleKey string) (services.CascadeResult, error) {
+		gotBundleID, gotProjectID, gotRoleKey = bundleID, projectID, roleKey
+		return services.CascadeResult{Enqueued: 1, Mode: "auto", Drain: propagation.DrainResult{Applied: 1}}, nil
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/bundles/b1/roles", strings.NewReader(`{"project_id":"p1","role_key":"member"}`))
@@ -193,23 +230,27 @@ func TestHandleAddRoleToBundle_HappyPath(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	var resp map[string]string
+	if gotBundleID != "b1" || gotProjectID != "p1" || gotRoleKey != "member" {
+		t.Fatalf("cascade called with bundleID=%q projectID=%q roleKey=%q", gotBundleID, gotProjectID, gotRoleKey)
+	}
+	var resp map[string]any
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 	if resp["message"] != "Role added to bundle" {
-		t.Fatalf("unexpected message: %s", resp["message"])
+		t.Fatalf("unexpected message: %v", resp["message"])
 	}
-	if auditAction != "bundle.role_added" {
-		t.Fatalf("expected audit action bundle.role_added, got %s", auditAction)
+	if resp["cascade"] == nil {
+		t.Fatal("expected a cascade field in the response")
 	}
 }
 
-func TestHandleAddRoleToBundle_DBError(t *testing.T) {
+func TestHandleAddRoleToBundle_CascadeError(t *testing.T) {
 	resetBundleDeps(t)
+	resetCascadeHandlerDeps(t)
 
-	dbAddRoleToBundle = func(ctx context.Context, bundleID, projectID, roleKey string) error {
-		return errors.New("violates foreign key constraint")
+	svcCascadeRoleAdded = func(ctx context.Context, actor, bundleID, projectID, roleKey string) (services.CascadeResult, error) {
+		return services.CascadeResult{}, errors.New("violates foreign key constraint")
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/bundles/b1/roles", strings.NewReader(`{"project_id":"p1","role_key":"admin"}`))
@@ -224,8 +265,8 @@ func TestHandleAddRoleToBundle_DBError(t *testing.T) {
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp["error"] != "DB_ERROR" {
-		t.Fatalf("expected DB_ERROR, got %v", resp["error"])
+	if resp["error"] != "CASCADE_ERROR" {
+		t.Fatalf("expected CASCADE_ERROR, got %v", resp["error"])
 	}
 }
 
@@ -273,13 +314,12 @@ func TestHandleAssignBundleToUser_EmptyBundleID(t *testing.T) {
 
 func TestHandleAssignBundleToUser_Idempotent(t *testing.T) {
 	resetBundleDeps(t)
+	resetCascadeHandlerDeps(t)
 
-	// Simulate ON CONFLICT DO NOTHING — always succeeds, second call is a no-op.
-	dbAssignBundleToUser = func(ctx context.Context, userID, bundleID string) error {
-		return nil
-	}
-	dbInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error {
-		return nil
+	// The atomic AssignBundleAndEnqueue is itself ON CONFLICT DO NOTHING — the cascade stub
+	// always succeeds, second call is a no-op from the handler's perspective.
+	svcCascadeBundleAssigned = func(ctx context.Context, actor, userID, bundleID string) (services.CascadeResult, error) {
+		return services.CascadeResult{Mode: "auto"}, nil
 	}
 
 	call := func() int {
@@ -298,18 +338,20 @@ func TestHandleAssignBundleToUser_Idempotent(t *testing.T) {
 	}
 }
 
-func TestHandleAssignBundleToUser_AuditLogged(t *testing.T) {
+// TestHandleAssignBundleToUser_CallsCascadeWithActorAndTarget asserts the handler resolves the
+// actor (falling back to "system" in dev-mode API-key auth, since no principal is stashed in
+// this test's request context) and passes userID/bundleID straight through to the cascade. Audit
+// logging now happens inside the atomic db.AssignBundleAndEnqueue tx (not a separate handler-level
+// dbInsertAuditLog call), so it is no longer observable at this layer — see
+// db.TestCascadeAndEnqueue_WriteNoDirectRoleGrants and cascade.go's own audit insert for that.
+func TestHandleAssignBundleToUser_CallsCascadeWithActorAndTarget(t *testing.T) {
 	resetBundleDeps(t)
+	resetCascadeHandlerDeps(t)
 
-	dbAssignBundleToUser = func(ctx context.Context, userID, bundleID string) error {
-		return nil
-	}
-	auditAction := ""
-	auditTarget := ""
-	dbInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error {
-		auditAction = action
-		auditTarget = targetID
-		return nil
+	var gotActor, gotUserID, gotBundleID string
+	svcCascadeBundleAssigned = func(ctx context.Context, actor, userID, bundleID string) (services.CascadeResult, error) {
+		gotActor, gotUserID, gotBundleID = actor, userID, bundleID
+		return services.CascadeResult{Mode: "auto"}, nil
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/bundles", strings.NewReader(`{"bundle_id":"b2"}`))
@@ -320,11 +362,36 @@ func TestHandleAssignBundleToUser_AuditLogged(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	if auditAction != "bundle.assigned" {
-		t.Fatalf("expected audit action bundle.assigned, got %s", auditAction)
+	if gotActor != "system" {
+		t.Fatalf("expected actor to fall back to system, got %q", gotActor)
 	}
-	if auditTarget != "u1" {
-		t.Fatalf("expected audit target u1, got %s", auditTarget)
+	if gotUserID != "u1" || gotBundleID != "b2" {
+		t.Fatalf("expected userID=u1 bundleID=b2, got userID=%q bundleID=%q", gotUserID, gotBundleID)
+	}
+}
+
+func TestHandleAssignBundleToUser_CascadeErrorIs500(t *testing.T) {
+	resetBundleDeps(t)
+	resetCascadeHandlerDeps(t)
+
+	svcCascadeBundleAssigned = func(ctx context.Context, actor, userID, bundleID string) (services.CascadeResult, error) {
+		return services.CascadeResult{}, errors.New("assign tx failed")
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/bundles", strings.NewReader(`{"bundle_id":"b2"}`))
+	req.SetPathValue("id", "u1")
+	rr := httptest.NewRecorder()
+	handleAssignBundleToUser(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if resp["error"] != "CASCADE_ERROR" {
+		t.Fatalf("expected CASCADE_ERROR, got %v", resp["error"])
 	}
 }
 

@@ -163,7 +163,7 @@ func (res *DrainResult) processRow(ctx context.Context, row models.PendingPropag
 // stale ledger. add is a ledger no-op; only revoke/replace prune rows.
 func applyRow(ctx context.Context, row models.PendingPropagation) error {
 	if row.OpType == "revoke" || row.OpType == "replace" {
-		if err := reconcileLedger(ctx, row.OpType, row.UserID, row.ProjectID, row.RoleKeys); err != nil {
+		if err := reconcileLedger(ctx, row.OpType, row.UserID, row.ProjectID, row.RoleKeys, row.Source); err != nil {
 			return err
 		}
 	}
@@ -242,7 +242,38 @@ func classifyDispatch(ctx context.Context, row models.PendingPropagation) (ackCl
 	case "replace":
 		err = zitadelUpdateUserGrant(ctx, row.UserID, row.ZitadelGrantID, row.RoleKeys)
 	case "revoke":
-		err = zitadelRemoveUserGrant(ctx, row.UserID, row.ZitadelGrantID)
+		// A Zitadel grant is ONE aggregate per (user, project) holding ALL of that
+		// project's roles in role_keys[] — but the cascade enqueues PER-ROLE
+		// revokes (row.RoleKeys is typically one role). Removing the whole grant
+		// unconditionally would silently strip the user's OTHER roles on this
+		// project that came from a different bundle/rule/operator grant. Mirror
+		// zitadel/orchestrator.go's sole-vs-multi logic: read the grant's live
+		// roles, subtract what this row revokes, and only remove the whole grant
+		// when nothing survives.
+		live, liveErr := liveUserGrantRoles(ctx, row.UserID, row.ProjectID)
+		if liveErr != nil {
+			// Can't confirm what would survive. Removing/updating blind here is
+			// the exact data-loss path this fix exists to close, so the
+			// least-destructive choice is to treat this as transient and let the
+			// next drain retry once the live list is readable again — never
+			// guess and never fall through to an unconditional Remove.
+			return ackTransient, fmt.Sprintf("revoke: could not read live grant roles: %v", liveErr)
+		}
+		revoked := make(map[string]bool, len(row.RoleKeys))
+		for _, rk := range row.RoleKeys {
+			revoked[rk] = true
+		}
+		remaining := make([]string, 0, len(live))
+		for rk := range live {
+			if !revoked[rk] {
+				remaining = append(remaining, rk)
+			}
+		}
+		if len(remaining) == 0 {
+			err = zitadelRemoveUserGrant(ctx, row.UserID, row.ZitadelGrantID)
+		} else {
+			err = zitadelUpdateUserGrant(ctx, row.UserID, row.ZitadelGrantID, remaining)
+		}
 	default:
 		log.Printf("[PROPAGATION] unknown op_type=%s row=%s", row.OpType, row.ID)
 		return ackFailed, fmt.Sprintf("unknown op_type %q", row.OpType)

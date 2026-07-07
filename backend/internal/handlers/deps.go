@@ -39,22 +39,41 @@ var (
 	dbResolveAccessRequest = db.ResolveAccessRequest
 	dbInsertAuditLog       = db.InsertAuditLog
 
-	// Bundle handler injectable vars.
-	dbCreateBundle       = db.CreateBundle
-	dbGetAllBundles      = db.GetAllBundles
-	dbGetRolesForBundle  = db.GetRolesForBundle
-	dbAddRoleToBundle    = db.AddRoleToBundle
-	dbGetBundlesForUser  = db.GetBundlesForUser
-	dbAssignBundleToUser = db.AssignBundleToUser
-	dbSetWelcomeBundle   = db.SetWelcomeBundle
+	// Bundle handler injectable vars. dbAddRoleToBundle/dbAssignBundleToUser were removed
+	// (sub-phase 3, Task 20): the cascade OWNS the source mutation now — see
+	// svcCascadeRoleAdded/svcCascadeBundleAssigned below, which call the atomic
+	// db.AddRoleToBundleAndEnqueue/db.AssignBundleAndEnqueue instead.
+	dbCreateBundle      = db.CreateBundle
+	dbGetAllBundles     = db.GetAllBundles
+	dbGetRolesForBundle = db.GetRolesForBundle
+	dbGetBundlesForUser = db.GetBundlesForUser
+	dbSetWelcomeBundle  = db.SetWelcomeBundle
 
 	// Lookup handler injectable var (single-role accessor, used for UID→name resolution).
 	dbGetRole = db.GetRole
 
-	// Rules handler injectable vars.
+	// Rules handler injectable vars. dbCreateMappingRule was removed (Task 20): the cascade
+	// creates the rule via the atomic db.CreateMappingRuleAndEnqueue — see svcCascadeRuleCreated.
 	dbGetActiveMappingRules = db.GetActiveMappingRules
-	dbCreateMappingRule     = db.CreateMappingRule
 	dbDetectCycleOnInsert   = db.DetectCycleOnInsert
+
+	// Add-side cascade injectables (sub-phase 3, Task 20): the cascade OWNS the source
+	// mutation (assign/add-role/create happen inside the atomic *AndEnqueue tx).
+	svcCascadeBundleAssigned = services.CascadeBundleAssignedToUser // (ctx, actor, userID, bundleID)
+	svcCascadeRoleAdded      = services.CascadeRoleAddedToBundle    // (ctx, actor, bundleID, projectID, roleKey)
+	svcCascadeRuleCreated    = services.CascadeRuleCreated          // (ctx, actor, sp, sr, tp, tr, mode) → (ruleID, res, err)
+
+	// Revoke-side + rule-update cascade injectables (sub-phase 3, Task 21): same ownership —
+	// remove/update happen inside the atomic *AndEnqueue tx, no separate dbRemove*/dbUpdate*
+	// injectable in the handler layer.
+	svcCascadeBundleRemoved = services.CascadeBundleRemovedFromUser // (ctx, actor, userID, bundleID)
+	svcCascadeRoleRemoved   = services.CascadeRoleRemovedFromBundle // (ctx, actor, bundleID, projectID, roleKey)
+	svcCascadeRuleUpdated   = services.CascadeRuleUpdated           // (ctx, actor, old, sp, sr, tp, tr)
+
+	// Rules handler injectables for the 6th trigger (Task 21f): read the pre-update rule, then
+	// validate the retarget against the graph WITHOUT the rule's own old edge.
+	dbGetMappingRuleByID  = db.GetMappingRuleByID
+	dbDetectCycleOnUpdate = db.DetectCycleOnUpdate
 
 	cacheRebuildUser    = cache.RebuildUserCache
 	cacheInvalidateUser = cache.InvalidateUser
@@ -215,4 +234,12 @@ var (
 	svcDriftSweep              = drift.Sweep
 	svcDrainOne                = propagation.DrainOne
 	svcGetRolesForBundleDrift  = db.GetRolesForBundle
+
+	// Confirmation-mode surfaces (Task 22): global default read/write, bulk toggle, and the
+	// recent-cascades feed.
+	dbGetConfigSetting          = db.GetConfigSetting
+	dbSetConfigSetting          = db.SetConfigSetting
+	dbSetRuleConfirmationMode   = db.SetRuleConfirmationMode
+	dbSetBundleConfirmationMode = db.SetBundleConfirmationMode
+	dbGetRecentCascades         = db.GetRecentCascades
 )

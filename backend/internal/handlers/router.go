@@ -22,10 +22,10 @@ func NewRouter() http.Handler {
 
 	// Bundle Routes
 	mux.HandleFunc("GET /api/v1/bundles", withCORS(withUserAuth(handleGetBundles)))
-	mux.HandleFunc("POST /api/v1/bundles", withCORS(withUserAuth(handleCreateBundle)))
+	mux.HandleFunc("POST /api/v1/bundles", withCORS(withOperatorAuth(handleCreateBundle)))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/roles", withCORS(withUserAuth(handleGetBundleRoles)))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/impact", withCORS(withUserAuth(handleGetBundleImpact)))
-	mux.HandleFunc("POST /api/v1/bundles/{id}/roles", withCORS(withUserAuth(handleAddRoleToBundle)))
+	mux.HandleFunc("POST /api/v1/bundles/{id}/roles", withCORS(withOperatorAuth(handleAddRoleToBundle)))
 	// Welcome bundle toggle changes global onboarding policy (every newly-created
 	// Zitadel user gets the flagged bundle), so it requires operator role —
 	// withUserAuth alone would let any authenticated Zitadel user flip it.
@@ -38,7 +38,9 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/users/{id}/grants", withCORS(withUserAuth(handleGetUserDirectGrants)))
 	mux.HandleFunc("POST /api/v1/users/{id}/grants", withCORS(withUserAuth(handleUpsertUserDirectGrant)))
 	mux.HandleFunc("GET /api/v1/users/{id}/bundles", withCORS(withUserAuth(handleGetUserBundles)))
-	mux.HandleFunc("POST /api/v1/users/{id}/bundles", withCORS(withUserAuth(handleAssignBundleToUser)))
+	mux.HandleFunc("POST /api/v1/users/{id}/bundles", withCORS(withOperatorAuth(handleAssignBundleToUser)))
+	mux.HandleFunc("DELETE /api/v1/users/{id}/bundles/{bundleId}", withCORS(withOperatorAuth(handleRemoveBundleFromUser)))
+	mux.HandleFunc("DELETE /api/v1/bundles/{id}/roles/{projectId}/{roleKey}", withCORS(withOperatorAuth(handleRemoveRoleFromBundle)))
 	mux.HandleFunc("GET /api/v1/users/{id}/access", withCORS(withUserAuth(handleGetUserAccess)))
 
 	// Application Views
@@ -55,8 +57,19 @@ func NewRouter() http.Handler {
 
 	// Rules Routes
 	mux.HandleFunc("GET /api/v1/rules/mapping", withCORS(withUserAuth(handleGetMappingRules)))
-	mux.HandleFunc("POST /api/v1/rules/mapping", withCORS(withUserAuth(handleCreateMappingRule)))
+	mux.HandleFunc("POST /api/v1/rules/mapping", withCORS(withOperatorAuth(handleCreateMappingRule)))
+	mux.HandleFunc("PUT /api/v1/rules/mapping/{id}", withCORS(withOperatorAuth(handleUpdateMappingRule)))
 	mux.HandleFunc("POST /api/v1/rules/mapping/validate", withCORS(withUserAuth(handleValidateMappingRule)))
+
+	// Global confirmation-mode default (Task 22): every create-bundle/create-rule form reads this
+	// to prefill its mode selector, so the GET is user-gated like the rest of those forms. Setting
+	// it is global policy — operator-gated, same posture as the welcome-bundle toggle.
+	mux.HandleFunc("GET /api/v1/config/confirmation-mode-default", withCORS(withUserAuth(handleGetGlobalConfirmationDefault)))
+	mux.HandleFunc("PUT /api/v1/config/confirmation-mode-default", withCORS(withOperatorAuth(handleSetGlobalConfirmationDefault)))
+
+	// Bulk confirmation-mode toggle (Task 22): flips confirmation_mode on a set of rules or
+	// bundles in one statement. Operator-gated — a cross-cutting policy mutation.
+	mux.HandleFunc("POST /api/v1/policies/confirmation-mode", withCORS(withOperatorAuth(handleBulkSetConfirmationMode)))
 
 	// Audit Logs
 	mux.HandleFunc("GET /api/v1/audit", withCORS(withUserAuth(handleGetAuditLogs)))
@@ -130,6 +143,9 @@ func NewRouter() http.Handler {
 	// Zitadel mutations and the pending list exposes the grant inventory.
 	mux.HandleFunc("POST /api/v1/propagations/drain", withCORS(withOperatorAuth(handleDrainPropagations)))
 	mux.HandleFunc("GET /api/v1/propagations", withCORS(withOperatorAuth(handleListPendingPropagations)))
+	// Recent cascades feed (Task 22): applied bundle/rule/lifecycle projections, so automated
+	// cascades are never invisible. Operator-gated — same posture as the pending worklist.
+	mux.HandleFunc("GET /api/v1/propagations/cascades", withCORS(withOperatorAuth(handleGetRecentCascades)))
 	mux.HandleFunc("GET /api/v1/zitadel/users/{id}/grants", withCORS(withOperatorAuth(handleListZitadelUserGrants)))
 	mux.HandleFunc("POST /api/v1/zitadel/users/{id}/grants", withCORS(withOperatorAuth(handleAssignZitadelGrant)))
 	mux.HandleFunc("PUT /api/v1/zitadel/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleUpdateZitadelGrant)))

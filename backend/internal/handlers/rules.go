@@ -3,18 +3,16 @@ package handlers
 import (
 	"net/http"
 	"strings"
+
+	"mkauth/internal/db"
 )
 
 type CreateMappingRuleRequest struct {
-	SourceProject string `json:"source_project"`
-	SourceRole    string `json:"source_role"`
-	TargetProject string `json:"target_project"`
-	TargetRole    string `json:"target_role"`
-}
-
-type CreateMappingRuleResponse struct {
-	ID      string `json:"id"`
-	Message string `json:"message"`
+	SourceProject    string `json:"source_project"`
+	SourceRole       string `json:"source_role"`
+	TargetProject    string `json:"target_project"`
+	TargetRole       string `json:"target_role"`
+	ConfirmationMode string `json:"confirmation_mode,omitempty"`
 }
 
 func handleGetMappingRules(w http.ResponseWriter, r *http.Request) {
@@ -69,18 +67,110 @@ func handleCreateMappingRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := dbCreateMappingRule(r.Context(), req.SourceProject, req.SourceRole, req.TargetProject, req.TargetRole)
+	actor := getAdminUserID(r.Context())
+	if actor == "" {
+		actor = "system"
+	}
+	// The cascade owns the mutation now (create rule + per-holder outbox rows commit in one
+	// tx via db.CreateMappingRuleAndEnqueue), then (auto mode) drains those rows. Enqueue
+	// failure rolls back the mutation → 500; a drain failure rides in cascade.drain.
+	mode, err := resolveConfirmationMode(r.Context(), req.ConfirmationMode)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusConflict, "CONFLICT_ERROR", "Likely duplication: "+err.Error())
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	ruleID, cascade, err := svcCascadeRuleCreated(r.Context(), actor, req.SourceProject, req.SourceRole, req.TargetProject, req.TargetRole, mode)
+	if err != nil {
+		if db.IsUniqueViolation(err) {
+			jsonErrorResponse(w, http.StatusConflict, "CONFLICT", "A mapping rule with this source/target combination already exists")
+			return
+		}
+		jsonErrorResponse(w, http.StatusInternalServerError, "CASCADE_ERROR", err.Error())
 		return
 	}
 
-	// Audit log
-	_ = dbInsertAuditLog(r.Context(), "system", "-", "mapping_rule.created", id)
+	jsonResponse(w, http.StatusCreated, map[string]any{
+		"id":      ruleID,
+		"message": "Mapping Rule integrated seamlessly.",
+		"cascade": cascade,
+	})
+}
 
-	jsonResponse(w, http.StatusCreated, CreateMappingRuleResponse{
-		ID:      id,
-		Message: "Mapping Rule integrated seamlessly.",
+// handleUpdateMappingRule is the 6th cascade trigger: a matcher/target change on an existing
+// rule. It reads the PRE-update rule first — the updated fields alone don't tell us the OLD
+// target, and the composition (add new-source holders, revoke old-source holders off the old
+// target unless kept/covered) needs both. Validation mirrors handleCreateMappingRule (self-ref,
+// cycle) but the cycle check must exclude this rule's own old edge (db.DetectCycleOnUpdate), or a
+// valid retarget that only cycles WITH that old edge would be falsely rejected.
+// PUT /api/v1/rules/mapping/{id}
+func handleUpdateMappingRule(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !trimmedNonEmpty(id) {
+		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
+		return
+	}
+
+	var req CreateMappingRuleRequest
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
+	}
+
+	req.SourceProject = strings.TrimSpace(req.SourceProject)
+	req.SourceRole = strings.TrimSpace(req.SourceRole)
+	req.TargetProject = strings.TrimSpace(req.TargetProject)
+	req.TargetRole = strings.TrimSpace(req.TargetRole)
+
+	if req.SourceProject == "" || req.TargetProject == "" || req.SourceRole == "" || req.TargetRole == "" {
+		jsonValidationErrorResponse(w, "source_project, source_role, target_project, and target_role are required", map[string]string{
+			"source_project": "required",
+			"source_role":    "required",
+			"target_project": "required",
+			"target_role":    "required",
+		})
+		return
+	}
+
+	if req.SourceProject == req.TargetProject && req.SourceRole == req.TargetRole {
+		jsonValidationErrorResponse(w, "mapping rule cannot point to itself", map[string]string{
+			"source_project": "must_not_equal_target",
+			"source_role":    "must_not_equal_target",
+		})
+		return
+	}
+
+	old, err := dbGetMappingRuleByID(r.Context(), id)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "mapping rule not found")
+		return
+	}
+
+	// Circular dependency guard — excludes this rule's own old edge from the graph first.
+	if err := dbDetectCycleOnUpdate(r.Context(), id, req.SourceProject, req.SourceRole, req.TargetProject, req.TargetRole); err != nil {
+		jsonErrorResponse(w, http.StatusConflict, "CYCLE_DETECTED", err.Error())
+		return
+	}
+
+	actor := getAdminUserID(r.Context())
+	if actor == "" {
+		actor = "system"
+	}
+	// The cascade owns the mutation (update rule + add/revoke outbox rows commit in one tx via
+	// db.UpdateMappingRuleAndEnqueue), then (auto mode) drains those rows. Enqueue failure rolls
+	// back the mutation → 500; a drain failure rides in cascade.drain and is not fatal.
+	cascade, err := svcCascadeRuleUpdated(r.Context(), actor, old, req.SourceProject, req.SourceRole, req.TargetProject, req.TargetRole)
+	if err != nil {
+		if db.IsUniqueViolation(err) {
+			jsonErrorResponse(w, http.StatusConflict, "CONFLICT", "A mapping rule with this source/target combination already exists")
+			return
+		}
+		jsonErrorResponse(w, http.StatusInternalServerError, "CASCADE_ERROR", err.Error())
+		return
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"message": "Mapping rule updated",
+		"cascade": cascade,
 	})
 }
 

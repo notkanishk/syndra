@@ -151,6 +151,7 @@ func ClaimPendingPropagations(ctx context.Context, limit int) ([]models.PendingP
 		FROM claimed
 		WHERE p.id = claimed.id
 		RETURNING p.id, p.op_type, p.user_id, p.project_id, p.role_keys,
+		          p.source, COALESCE(p.source_ref,''),
 		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
 		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at`
 	rows, err := PG.Query(ctx, q, limit)
@@ -173,7 +174,8 @@ func ClaimPropagationByID(ctx context.Context, id string) (*models.PendingPropag
 		UPDATE pending_zitadel_propagations
 		SET status='in_flight', started_at=NOW()
 		WHERE id=$1 AND status IN ('pending','in_flight')
-		RETURNING id, op_type, user_id, project_id, role_keys, COALESCE(zitadel_grant_id,''),
+		RETURNING id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
+		          COALESCE(zitadel_grant_id,''),
 		          status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at`
 	rows, err := PG.Query(ctx, q, id)
 	if err != nil {
@@ -226,7 +228,8 @@ func RequeuePropagation(ctx context.Context, id, errMsg string) (int, error) {
 // oldest first — the operator's "awaiting Zitadel" worklist.
 func GetPendingPropagations(ctx context.Context) ([]models.PendingPropagation, error) {
 	const q = `
-		SELECT id, op_type, user_id, project_id, role_keys, COALESCE(zitadel_grant_id,''),
+		SELECT id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
+		       COALESCE(zitadel_grant_id,''),
 		       status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at
 		FROM pending_zitadel_propagations
 		WHERE status IN ('pending','in_flight')
@@ -274,7 +277,12 @@ func PruneTerminalPropagations(ctx context.Context, retentionDays int) (int64, e
 // but cannot know, at enqueue time, which old rows a revoke/replace supersedes —
 // that is only settled once the Zitadel mutation applies.
 //
-//   - revoke:  delete the named (user, project, role) rows outright.
+//   - revoke:  delete the named (user, project, role) rows scoped to the outbox row's own
+//     source. Cascades (source='bundle'|'rule') write no ledger rows, so a cascade revoke
+//     deletes nothing here; an operator revoke (source='direct') deletes exactly its own row,
+//     identical to pre-sub-phase-3 behavior (every row was source='direct' then). Without this
+//     scoping an unscoped delete could strip an operator's direct grant that happens to share
+//     the (user, project, role) triple with a cascade-sourced revoke (review P1).
 //   - replace: delete any direct-sourced row on (user, project) whose role is NOT
 //     in the new set; the new roles were already upserted at enqueue. Scoped to
 //     source='direct' so it never prunes a bundle/rule projection sharing the
@@ -283,12 +291,12 @@ func PruneTerminalPropagations(ctx context.Context, retentionDays int) (int64, e
 //
 // Called only AFTER the Zitadel mutation is confirmed applied, so the ledger can
 // never drop a grant Zitadel still holds.
-func ReconcileLedgerOnApplied(ctx context.Context, opType, userID, projectID string, roleKeys []string) error {
+func ReconcileLedgerOnApplied(ctx context.Context, opType, userID, projectID string, roleKeys []string, source string) error {
 	switch opType {
 	case "revoke":
 		const q = `DELETE FROM direct_role_grants
-			WHERE user_id=$1 AND zitadel_project_id=$2 AND zitadel_role_key = ANY($3)`
-		if _, err := PG.Exec(ctx, q, userID, projectID, roleKeys); err != nil {
+			WHERE user_id=$1 AND zitadel_project_id=$2 AND zitadel_role_key = ANY($3) AND source=$4`
+		if _, err := PG.Exec(ctx, q, userID, projectID, roleKeys, source); err != nil {
 			return fmt.Errorf("reconcile ledger (revoke): %w", err)
 		}
 	case "replace":
@@ -314,6 +322,7 @@ func scanPropagations(rows pgx.Rows) ([]models.PendingPropagation, error) {
 	for rows.Next() {
 		var p models.PendingPropagation
 		if err := rows.Scan(&p.ID, &p.OpType, &p.UserID, &p.ProjectID, &p.RoleKeys,
+			&p.Source, &p.SourceRef,
 			&p.ZitadelGrantID, &p.Status, &p.Attempts, &p.LastError, &p.InitiatedBy,
 			&p.CreatedAt, &p.StartedAt, &p.CompletedAt); err != nil {
 			return nil, fmt.Errorf("scan propagation: %w", err)

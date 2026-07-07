@@ -11,10 +11,10 @@ import (
 // BUNDLES REPOSITORY
 // -------------------------------------------------------------
 
-func CreateBundle(ctx context.Context, name string, description string) (string, error) {
-	query := `INSERT INTO bundles (name, description) VALUES ($1, $2) RETURNING id;`
+func CreateBundle(ctx context.Context, name string, description string, confirmationMode string) (string, error) {
+	query := `INSERT INTO bundles (name, description, confirmation_mode) VALUES ($1, $2, $3) RETURNING id;`
 	var id string
-	err := PG.QueryRow(ctx, query, name, description).Scan(&id)
+	err := PG.QueryRow(ctx, query, name, description, NormalizeConfirmationMode(confirmationMode)).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("failed to insert bundle: %w", err)
 	}
@@ -34,7 +34,7 @@ func AddRoleToBundle(ctx context.Context, bundleID, zitadelProjectID, zitadelRol
 }
 
 func GetAllBundles(ctx context.Context) ([]models.Bundle, error) {
-	query := `SELECT id, name, description, is_welcome, created_at FROM bundles ORDER BY created_at DESC;`
+	query := `SELECT id, name, description, is_welcome, confirmation_mode, created_at FROM bundles ORDER BY created_at DESC;`
 	rows, err := PG.Query(ctx, query)
 	if err != nil {
 		return nil, err
@@ -44,12 +44,23 @@ func GetAllBundles(ctx context.Context) ([]models.Bundle, error) {
 	var bundles []models.Bundle
 	for rows.Next() {
 		var b models.Bundle
-		if err := rows.Scan(&b.ID, &b.Name, &b.Description, &b.IsWelcome, &b.CreatedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.Name, &b.Description, &b.IsWelcome, &b.ConfirmationMode, &b.CreatedAt); err != nil {
 			return nil, err
 		}
 		bundles = append(bundles, b)
 	}
 	return bundles, nil
+}
+
+// GetBundleByID fetches a single bundle by id, used by the cascade orchestrator to read its
+// confirmation_mode before fanning out.
+func GetBundleByID(ctx context.Context, id string) (models.Bundle, error) {
+	var b models.Bundle
+	err := PG.QueryRow(ctx,
+		`SELECT id, name, description, is_welcome, confirmation_mode, created_at
+		 FROM bundles WHERE id = $1`, id).
+		Scan(&b.ID, &b.Name, &b.Description, &b.IsWelcome, &b.ConfirmationMode, &b.CreatedAt)
+	return b, err
 }
 
 func GetRolesForBundle(ctx context.Context, bundleID string) ([]models.BundleRole, error) {
@@ -94,7 +105,7 @@ func RemoveBundleFromUser(ctx context.Context, userID, bundleID string) error {
 
 func GetBundlesForUser(ctx context.Context, userID string) ([]models.Bundle, error) {
 	query := `
-		SELECT b.id, b.name, b.description, b.is_welcome, b.created_at
+		SELECT b.id, b.name, b.description, b.is_welcome, b.confirmation_mode, b.created_at
 		FROM bundles b
 		JOIN user_bundle_assignments uba ON b.id = uba.bundle_id
 		WHERE uba.user_id = $1;`
@@ -108,7 +119,7 @@ func GetBundlesForUser(ctx context.Context, userID string) ([]models.Bundle, err
 	var bundles []models.Bundle
 	for rows.Next() {
 		var b models.Bundle
-		if err := rows.Scan(&b.ID, &b.Name, &b.Description, &b.IsWelcome, &b.CreatedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.Name, &b.Description, &b.IsWelcome, &b.ConfirmationMode, &b.CreatedAt); err != nil {
 			return nil, err
 		}
 		bundles = append(bundles, b)

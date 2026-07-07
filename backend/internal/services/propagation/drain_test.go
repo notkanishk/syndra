@@ -30,7 +30,7 @@ func stubDrainDeps(t *testing.T) {
 		swap(&markApplied, func(context.Context, string) error { return nil }),
 		swap(&markFailed, func(context.Context, string, string) error { return nil }),
 		swap(&requeue, func(context.Context, string, string) (int, error) { return 0, nil }),
-		swap(&reconcileLedger, func(context.Context, string, string, string, []string) error { return nil }),
+		swap(&reconcileLedger, func(context.Context, string, string, string, []string, string) error { return nil }),
 		swap(&acquireDrainLock, func(context.Context) (func(), bool, error) { return func() {}, true, nil }),
 		swap(&claimOne, func(context.Context, string) (*models.PendingPropagation, bool, error) { return nil, false, nil }),
 		swap(&zitadelAddUserGrant, func(context.Context, string, string, []string) error { return nil }),
@@ -444,13 +444,13 @@ func TestDrain_ReplaceShortCircuitsOnExactMatch(t *testing.T) {
 func TestDrain_RevokeReconcilesLedgerOnApplied(t *testing.T) {
 	stubDrainDeps(t)
 	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
-		return []models.PendingPropagation{{ID: "rv", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1"}}, nil
+		return []models.PendingPropagation{{ID: "rv", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1", Source: "direct"}}, nil
 	}
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{"r": true}, nil }
-	var gotOp, gotUser, gotProj string
+	var gotOp, gotUser, gotProj, gotSource string
 	var gotRoles []string
-	reconcileLedger = func(_ context.Context, op, user, proj string, roles []string) error {
-		gotOp, gotUser, gotProj, gotRoles = op, user, proj, roles
+	reconcileLedger = func(_ context.Context, op, user, proj string, roles []string, source string) error {
+		gotOp, gotUser, gotProj, gotRoles, gotSource = op, user, proj, roles, source
 		return nil
 	}
 
@@ -458,8 +458,40 @@ func TestDrain_RevokeReconcilesLedgerOnApplied(t *testing.T) {
 	if gotOp != "revoke" || gotUser != "u" || gotProj != "p" || len(gotRoles) != 1 || gotRoles[0] != "r" {
 		t.Fatalf("applied revoke must reconcile the ledger; got op=%q user=%q proj=%q roles=%v", gotOp, gotUser, gotProj, gotRoles)
 	}
+	if gotSource != "direct" {
+		t.Fatalf("reconcile must be scoped to the row's own source, got %q", gotSource)
+	}
 	if res.Applied != 1 {
 		t.Fatalf("revoke should be applied, got %+v", res)
+	}
+}
+
+// TestDrain_CascadeRevokeReconcilesScopedToItsOwnSource is the review-P1 regression: a
+// cascade-sourced revoke (source='bundle'|'rule') must reconcile the ledger scoped to ITS OWN
+// source, not the operator's 'direct'. Since cascades write no direct_role_grants rows, this
+// means a cascade revoke's reconcile deletes nothing — it never touches an operator's row that
+// happens to share the (user, project, role) triple. The SQL-level scoping itself
+// (WHERE ... AND source=$4) is covered by TestReconcileLedgerOnApplied_RevokeIsSourceScoped in
+// db/propagations_migration_test.go (the db package has no live-DB harness); this test only
+// verifies the drain plumbs row.Source through, not the operator's assumed 'direct'.
+func TestDrain_CascadeRevokeReconcilesScopedToItsOwnSource(t *testing.T) {
+	stubDrainDeps(t)
+	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+		return []models.PendingPropagation{{ID: "rv-b", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1", Source: "bundle", SourceRef: "b1"}}, nil
+	}
+	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{"r": true}, nil }
+	var gotSource string
+	reconcileLedger = func(_ context.Context, op, user, proj string, roles []string, source string) error {
+		gotSource = source
+		return nil
+	}
+
+	res, _ := Drain(context.Background())
+	if gotSource != "bundle" {
+		t.Fatalf("cascade revoke must reconcile scoped to its own source (bundle), got %q — an unscoped/direct-scoped reconcile risks stripping an operator row", gotSource)
+	}
+	if res.Applied != 1 {
+		t.Fatalf("got %+v", res)
 	}
 }
 
@@ -471,7 +503,7 @@ func TestDrain_RevokeShortCircuitAlsoReconcilesLedger(t *testing.T) {
 	// Already absent in Zitadel → short-circuit. The stale ledger row must still go.
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{}, nil }
 	var reconciled bool
-	reconcileLedger = func(context.Context, string, string, string, []string) error { reconciled = true; return nil }
+	reconcileLedger = func(context.Context, string, string, string, []string, string) error { reconciled = true; return nil }
 
 	res, _ := Drain(context.Background())
 	if !reconciled {
@@ -485,7 +517,7 @@ func TestDrain_RevokeShortCircuitAlsoReconcilesLedger(t *testing.T) {
 func TestDrain_AddDoesNotReconcileLedger(t *testing.T) {
 	stubDrainDeps(t)
 	claimPending = oneRow("ad", "add")
-	reconcileLedger = func(context.Context, string, string, string, []string) error {
+	reconcileLedger = func(context.Context, string, string, string, []string, string) error {
 		t.Fatal("add must not delete ledger rows — the enqueue already upserted them")
 		return nil
 	}
@@ -501,7 +533,9 @@ func TestDrain_LedgerReconcileFailureLeavesRowForRetry(t *testing.T) {
 		return []models.PendingPropagation{{ID: "rv3", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1"}}, nil
 	}
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{"r": true}, nil }
-	reconcileLedger = func(context.Context, string, string, string, []string) error { return errors.New("db unavailable") }
+	reconcileLedger = func(context.Context, string, string, string, []string, string) error {
+		return errors.New("db unavailable")
+	}
 	markApplied = func(context.Context, string) error {
 		t.Fatal("must not mark applied when the ledger reconcile failed")
 		return nil
@@ -510,6 +544,82 @@ func TestDrain_LedgerReconcileFailureLeavesRowForRetry(t *testing.T) {
 	res, _ := Drain(context.Background())
 	if res.Applied != 0 || res.Errored != 1 {
 		t.Fatalf("a reconcile failure must leave the row non-terminal (errored, not applied), got %+v", res)
+	}
+}
+
+// --- Critical fix: a per-role revoke must never remove the WHOLE grant when
+// other roles (from other bundles/rules/direct grants) still live on it. ---
+
+func TestDrain_RevokePartialCallsUpdateWithRemainingRoles(t *testing.T) {
+	stubDrainDeps(t)
+	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+		return []models.PendingPropagation{{ID: "rv-partial", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r1"}, ZitadelGrantID: "g1"}}, nil
+	}
+	// The grant currently holds r1 (from this row's source) AND r2 (from some
+	// other source) — only r1 may go.
+	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
+		return map[string]bool{"r1": true, "r2": true}, nil
+	}
+	var removeCalled bool
+	var updateRoles []string
+	zitadelRemoveUserGrant = func(context.Context, string, string) error { removeCalled = true; return nil }
+	zitadelUpdateUserGrant = func(_ context.Context, _, _ string, roles []string) error { updateRoles = roles; return nil }
+
+	res, _ := Drain(context.Background())
+	if removeCalled {
+		t.Fatal("a partial revoke on a multi-role grant must NOT call RemoveUserGrant — that would strip the surviving role")
+	}
+	if len(updateRoles) != 1 || updateRoles[0] != "r2" {
+		t.Fatalf("want UpdateUserGrant called with remaining=[r2], got %v", updateRoles)
+	}
+	if res.Applied != 1 {
+		t.Fatalf("got %+v", res)
+	}
+}
+
+func TestDrain_RevokeSoleRoleCallsRemoveUserGrant(t *testing.T) {
+	stubDrainDeps(t)
+	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+		return []models.PendingPropagation{{ID: "rv-sole", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r1"}, ZitadelGrantID: "g1"}}, nil
+	}
+	// The grant holds only r1 — nothing survives the revoke, so the whole grant
+	// must go (identical to pre-fix behavior for the sole-role case).
+	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
+		return map[string]bool{"r1": true}, nil
+	}
+	var removeCalled, updateCalled bool
+	zitadelRemoveUserGrant = func(context.Context, string, string) error { removeCalled = true; return nil }
+	zitadelUpdateUserGrant = func(context.Context, string, string, []string) error { updateCalled = true; return nil }
+
+	res, _ := Drain(context.Background())
+	if !removeCalled || updateCalled {
+		t.Fatalf("a sole-role revoke must call RemoveUserGrant (not UpdateUserGrant), got remove=%v update=%v", removeCalled, updateCalled)
+	}
+	if res.Applied != 1 {
+		t.Fatalf("got %+v", res)
+	}
+}
+
+func TestDrain_RevokeLiveLookupErrorRequeuesInsteadOfRemoving(t *testing.T) {
+	stubDrainDeps(t)
+	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+		return []models.PendingPropagation{{ID: "rv-err", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r1"}, ZitadelGrantID: "g1"}}, nil
+	}
+	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
+		return nil, errors.New("zitadel unreachable")
+	}
+	var removeCalled, updateCalled bool
+	zitadelRemoveUserGrant = func(context.Context, string, string) error { removeCalled = true; return nil }
+	zitadelUpdateUserGrant = func(context.Context, string, string, []string) error { updateCalled = true; return nil }
+	var requeued bool
+	requeue = func(_ context.Context, _, _ string) (int, error) { requeued = true; return 1, nil }
+
+	res, _ := Drain(context.Background())
+	if removeCalled || updateCalled {
+		t.Fatal("a live-lookup error must never fall through to Remove/Update — that risks destroying a surviving role blind")
+	}
+	if !requeued || res.Requeued != 1 {
+		t.Fatalf("a live-lookup error must requeue for retry, got requeued=%v res=%+v", requeued, res)
 	}
 }
 

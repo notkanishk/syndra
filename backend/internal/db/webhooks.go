@@ -212,6 +212,34 @@ func GetGrantIndex(ctx context.Context, grantID string) (ZitadelGrantIndex, erro
 	return row, nil
 }
 
+// GetGrantIndexByUserProject fetches the cached grant-index row for a (user, project) pair —
+// used by the cascade revoke path (Task 21) to resolve the Zitadel grant aggregate id it needs
+// to call RemoveUserGrant, since a revoke computed from (user, project, role) triples never has
+// a grant id handed to it the way drift/discovery revokes do (they already know it from the
+// triggering event/URL param). Returns ErrGrantIndexNotFound on a cache miss — same tolerance as
+// GetGrantIndex; the caller degrades to an empty ZitadelGrantID, and the drain's own 4xx handling
+// fails just that row without halting the batch.
+// ponytail: LIMIT 1 assumes at most one grant aggregate per (user, project), true for how MkAuth
+// and Zitadel model grants today; revisit if a user can hold two grants on the same project.
+func GetGrantIndexByUserProject(ctx context.Context, userID, projectID string) (ZitadelGrantIndex, error) {
+	const query = `
+		SELECT grant_id, user_id, project_id, role_keys, created_at, updated_at
+		FROM zitadel_grants_index
+		WHERE user_id = $1 AND project_id = $2
+		LIMIT 1`
+	var row ZitadelGrantIndex
+	err := PG.QueryRow(ctx, query, userID, projectID).Scan(
+		&row.GrantID, &row.UserID, &row.ProjectID, &row.RoleKeys, &row.CreatedAt, &row.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ZitadelGrantIndex{}, ErrGrantIndexNotFound
+		}
+		return ZitadelGrantIndex{}, fmt.Errorf("get grant index (%s/%s): %w", userID, projectID, err)
+	}
+	return row, nil
+}
+
 // GrantIndexHasRole reports whether the webhook-maintained grant index already
 // records the given (user, project, role) tuple. Used by the propagation drain
 // as a zero-API-call already-exists pre-flight; a false negative is harmless

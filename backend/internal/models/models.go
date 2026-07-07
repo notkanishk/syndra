@@ -11,12 +11,13 @@ type Project struct {
 
 // Bundle represents a group of roles (e.g. "Student", "Lab Assistant")
 type Bundle struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	IsWelcome   bool      `json:"is_welcome"`
-	Roles       []string  `json:"roles"` // The underlying raw roles it applies
-	CreatedAt   time.Time `json:"created_at"`
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	Description      string    `json:"description"`
+	IsWelcome        bool      `json:"is_welcome"`
+	Roles            []string  `json:"roles"` // The underlying raw roles it applies
+	ConfirmationMode string    `json:"confirmation_mode"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 // BundleRole represents a specific Zitadel role mapped to a bundle
@@ -29,12 +30,13 @@ type BundleRole struct {
 // MappingRule defines absolute policy logic
 // IF SourceProject + SourceRole THEN ADD TargetProject + TargetRole
 type MappingRule struct {
-	ID            string    `json:"id"`
-	SourceProject string    `json:"source_project"`
-	SourceRole    string    `json:"source_role"`
-	TargetProject string    `json:"target_project"`
-	TargetRole    string    `json:"target_role"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID               string    `json:"id"`
+	SourceProject    string    `json:"source_project"`
+	SourceRole       string    `json:"source_role"`
+	TargetProject    string    `json:"target_project"`
+	TargetRole       string    `json:"target_role"`
+	ConfirmationMode string    `json:"confirmation_mode"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 // ClaimProfile defines how roles map to JWT output for a specific project
@@ -194,6 +196,8 @@ type PendingPropagation struct {
 	UserID         string     `json:"user_id"`
 	ProjectID      string     `json:"project_id"`
 	RoleKeys       []string   `json:"role_keys"`
+	Source         string     `json:"source"`               // direct | bundle | rule | external_backfill | lifecycle_cascade
+	SourceRef      string     `json:"source_ref,omitempty"` // bundle/rule id for cascade rows; drives worklist attribution
 	ZitadelGrantID string     `json:"zitadel_grant_id,omitempty"`
 	Status         string     `json:"status"` // pending | in_flight | applied | failed
 	Attempts       int        `json:"attempts"`
@@ -202,6 +206,23 @@ type PendingPropagation struct {
 	CreatedAt      time.Time  `json:"created_at"`
 	StartedAt      *time.Time `json:"started_at,omitempty"`
 	CompletedAt    *time.Time `json:"completed_at,omitempty"`
+}
+
+// CascadeSummary is one applied cascade-originated outbox row, surfaced for the
+// operator's "Recent cascades" feed (Task 22). "Applied" here means the
+// projection reached Zitadel — not specifically that it drained automatically
+// (the outbox does not persist auto-vs-operator-resumed per row; see
+// db.GetRecentCascades doc comment).
+type CascadeSummary struct {
+	ID          string     `json:"id"`
+	OpType      string     `json:"op_type"` // add | revoke | replace
+	UserID      string     `json:"user_id"`
+	ProjectID   string     `json:"project_id"`
+	RoleKeys    []string   `json:"role_keys"`
+	Source      string     `json:"source"`               // bundle | rule | lifecycle_cascade
+	SourceRef   string     `json:"source_ref,omitempty"` // originating bundle/rule id
+	Status      string     `json:"status"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
 }
 
 // DriftItem is one out-of-band grant discrepancy awaiting operator triage.
