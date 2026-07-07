@@ -98,6 +98,7 @@ Before MkAuth widens its live Zitadel and provisioning surface, the immediate ne
 | welcome-bundle assignment and similar onboarding mutations | backend service account path after validated event intake | MkAuth Backend remains the single mutation authority for audit, retries, and idempotency |
 | webhook reception and verification | backend endpoint with validated Zitadel event contract | external intake stays on backend; sync service remains private |
 | Backend -> Sync provisioning intents | internal MkAuth contract | self-defined, authenticated, and isolated from Zitadel-facing contracts |
+| Zitadel mutation traceability | outbox (`pending_zitadel_propagations`) before every Management API call; intent ledger (`direct_role_grants`) for direct/operator grants | every MkAuth-mediated mutation leaves a record before it reaches Zitadel; a Zitadel-side change with no such record is not trusted after the fact — it is detected as drift and triaged (Wave 2 · Part 4, `wave-2-part-4-zitadel-state-projection-and-drift-control`) |
 
 ## 10. IdP Chain: Google Workspace -> Zitadel
 

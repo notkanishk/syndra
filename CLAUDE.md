@@ -31,6 +31,7 @@ cd sync && go test ./... && go vet ./...
 - Zitadel Actions v2 is the only source-of-truth claim integration path
 - Backend is the single mutation authority — frontend and triggers signal, backend decides
 - Internal contracts (FE->BE, BE->Sync) are self-defined but isolated from Zitadel-facing boundary
+- MkAuth-mediated Zitadel mutations always leave a trace before the Management API call (intent ledger for direct grants, outbox for bundle/rule cascades) — a Zitadel-side change with no such trace is never silently trusted, it is detected as drift and triaged (Wave 2 · Part 4)
 
 ## Mandatory Workflow
 

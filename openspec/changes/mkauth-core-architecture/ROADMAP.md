@@ -58,7 +58,7 @@ This document defines the high-level phases for the MkAuth implementation, trans
 - [ ] **Service Catalog Abstraction**: Close the gap between the spec'd service-to-bundle request mapping and the current project/role fallback. → [service-catalog spec](specs/service-catalog/spec.md)
 
 ### Consistency & Safety
-- [ ] **Zitadel Reconciliation**: Periodic drift detection between MkAuth local grant/role state and Zitadel's actual state, with operator-visible reports and optional auto-correction.
+- [x] **Zitadel Reconciliation**: Periodic drift detection between MkAuth local grant/role state and Zitadel's actual state, with operator-visible reports and optional auto-correction. Closes out Phase 5.5's Wave 2 · Part 4 (all 3 sub-phases): scheduled (`DRIFT_RECONCILIATION_INTERVAL_HOURS`) + webhook drift detection, operator triage UI (`/governance/drift`), and bundle/rule cascade projection through a confirmable outbox (`auto`/`manual` `confirmation_mode`, `/operations/cascades`). → [wave-2-part-4](../wave-2-part-4-zitadel-state-projection-and-drift-control/) / [drift-control row](specs/feature-coverage.md)
 - [ ] **LLDAP Reconciliation**: Periodic full-sync comparing MkAuth provisioning state against LLDAP group memberships, overwriting LLDAP drift per one-way authority rule. → [ldap-sync spec](specs/ldap-sync/spec.md)
 - [ ] **Partial Failure Rollback**: Compensating revocations in `EnforceMappingRules` and `RevokeMappingRules` when Zitadel API calls partially fail. Currently best-effort log-and-continue. → [provisioning spec](specs/provisioning/spec.md)
 

@@ -65,9 +65,9 @@ Three migrations, each self-contained so each sub-phase ships independently:
 
 - `000015` (sub-phase 1): `pending_zitadel_propagations` + `direct_role_grants.source`/`source_ref`.
 - `000016` (sub-phase 2): `drift_items` + `external_grant_exclusions`.
-- `000017` (sub-phase 3): `mapping_rules.confirmation_mode` + `bundles.confirmation_mode` + `config_settings`.
+- `000017` (sub-phase 3): `mapping_rules.confirmation_mode` + `bundles.confirmation_mode` + `config_settings`, plus `pending_zitadel_propagations.source`/`source_ref` + a supporting index — added late in sub-phase 3 (implementation review) because cascades turned out not to write `direct_role_grants` at all (they'd otherwise misattribute or overwrite an operator's direct grant on the same triple), so attribution had to live on the outbox row instead; `direct_role_grants` already had `source`/`source_ref` from `000015`.
 
-The `source` CHECK enum in `000015` lists **all five** values (`direct`, `bundle`, `rule`, `external_backfill`, `lifecycle_cascade`) even though sub-phase 1 only writes `direct`. This means sub-phase 3 adds no `ALTER`. Migrations follow the established idiom (`IF EXISTS`/`IF NOT EXISTS` guards, `DO $$` constraint blocks, paired `.up`/`.down`) seen in `000013`/`000014`. Down migrations are real (drop tables / columns; restore prior CHECK where one was relaxed).
+The `source` CHECK enum in `000015` lists **all five** values (`direct`, `bundle`, `rule`, `external_backfill`, `lifecycle_cascade`) on `direct_role_grants`, even though sub-phase 1 only writes `direct`. This means sub-phase 3 adds no further `ALTER` to *that* column — but it does ALTER `pending_zitadel_propagations` to add its own `source`/`source_ref` pair with the same five-value enum (000017), since cascades attribute on the outbox row, not the ledger. Migrations follow the established idiom (`IF EXISTS`/`IF NOT EXISTS` guards, `DO $$` constraint blocks, paired `.up`/`.down`) seen in `000013`/`000014`. Down migrations are real (drop tables / columns; restore prior CHECK where one was relaxed).
 
 ```sql
 -- 000015_zitadel_propagation_outbox.up.sql (sub-phase 1)
