@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/Button";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { Select } from "@/components/ui/Select";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useCreateBundle } from "@/lib/queries/useBundles";
+import { useGlobalConfirmationDefault, type ConfirmationMode } from "@/lib/queries/useConfirmationMode";
 import { toastError, toastSuccess } from "@/lib/toast";
 
 interface CreateBundleModalProps {
@@ -28,8 +30,13 @@ interface CreateBundleModalProps {
  */
 export default function CreateBundleModal({ open, onClose, onCreated }: CreateBundleModalProps) {
   const createBundle = useCreateBundle();
+  const globalDefault = useGlobalConfirmationDefault();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  // null until the operator touches the selector — the displayed (and submitted) value falls
+  // back to the fetched global default, else "auto", so the form is always a WYSIWYG submit.
+  const [modeOverride, setModeOverride] = useState<ConfirmationMode | null>(null);
+  const confirmationMode: ConfirmationMode = modeOverride ?? globalDefault.data ?? "auto";
 
   // Reset on close so the next open starts fresh — preserves the operator's
   // expectation that an aborted create doesn't leak into the next attempt.
@@ -37,6 +44,7 @@ export default function CreateBundleModal({ open, onClose, onCreated }: CreateBu
     if (!open) {
       setName("");
       setDescription("");
+      setModeOverride(null);
     }
   }, [open]);
 
@@ -45,7 +53,11 @@ export default function CreateBundleModal({ open, onClose, onCreated }: CreateBu
     const trimmed = name.trim();
     if (!trimmed) return;
     try {
-      const result = await createBundle.mutateAsync({ name: trimmed, description: description.trim() });
+      const result = await createBundle.mutateAsync({
+        name: trimmed,
+        description: description.trim(),
+        confirmation_mode: confirmationMode,
+      });
       toastSuccess("Bundle created", `"${trimmed}" is ready to receive roles.`);
       onCreated?.(result.id);
       onClose();
@@ -95,6 +107,19 @@ export default function CreateBundleModal({ open, onClose, onCreated }: CreateBu
             value={description}
             onChange={(event) => setDescription(event.target.value)}
           />
+        </div>
+        <div>
+          <label htmlFor="create-bundle-mode" className="block text-xs font-medium text-on-surface-variant mb-1.5">
+            Confirmation mode
+          </label>
+          <Select
+            id="create-bundle-mode"
+            value={confirmationMode}
+            onChange={(event) => setModeOverride(event.target.value as ConfirmationMode)}
+          >
+            <option value="auto">Auto — drains immediately</option>
+            <option value="manual">Manual — waits for operator resume</option>
+          </Select>
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-1">

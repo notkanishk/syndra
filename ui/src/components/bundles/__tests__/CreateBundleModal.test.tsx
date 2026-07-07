@@ -76,4 +76,31 @@ describe("CreateBundleModal (Stage 4)", () => {
       expect(onClose).toHaveBeenCalled();
     });
   });
+
+  it("submits confirmation_mode defaulted from the global default (Task 22)", async () => {
+    proxy.register("GET", /\/api\/proxy\/config\/confirmation-mode-default(\?|$)/, () => ({
+      mode: "manual",
+    }));
+
+    renderModal();
+    fireEvent.change(screen.getByLabelText(/Bundle name/i), {
+      target: { value: "Ops Team" },
+    });
+
+    // Wait for the global-default query to resolve before submitting so the
+    // select reflects the fetched value rather than the pre-fetch "auto" fallback.
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Confirmation mode/i)).toHaveValue("manual");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Create bundle/i }));
+
+    await waitFor(() => {
+      const call = proxy.calls.find(
+        (c) => c.method === "POST" && c.url.includes("/bundles") && !c.url.includes("/roles"),
+      );
+      expect(call).toBeDefined();
+      expect(call?.body).toMatchObject({ confirmation_mode: "manual" });
+    });
+  });
 });

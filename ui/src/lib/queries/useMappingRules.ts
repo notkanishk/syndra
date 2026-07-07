@@ -10,6 +10,7 @@ export interface MappingRuleRow {
   source_role: string;
   target_project: string;
   target_role: string;
+  confirmation_mode?: "auto" | "manual";
   created_at: string;
 }
 
@@ -18,6 +19,8 @@ export interface CreateMappingRuleInput {
   source_role: string;
   target_project: string;
   target_role: string;
+  /** Optional override — omitted falls back to the global default (Task 22). */
+  confirmation_mode?: "auto" | "manual";
 }
 
 export interface ValidateMappingRuleResult {

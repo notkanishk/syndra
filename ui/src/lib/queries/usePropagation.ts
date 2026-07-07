@@ -12,6 +12,8 @@ export interface PendingRow {
   user_id: string;
   project_id: string;
   role_keys: string[];
+  source: string;
+  source_ref?: string;
   status: string;
   attempts: number;
   created_at: string;

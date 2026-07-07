@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import CreateRuleForm from "@/components/CreateRuleForm";
 import { ProjectName, RoleName } from "@/components/names";
+import { ConfirmationModeControls } from "@/components/policies/ConfirmationModeControls";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle } from "@/components/ui/Card";
@@ -39,6 +40,22 @@ export default function PoliciesView() {
   const loading = rulesQuery.isLoading || projectsQuery.isLoading;
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [bulkEdit, setBulkEdit] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function exitBulkEdit() {
+    setBulkEdit(false);
+    setSelectedIds(new Set());
+  }
 
   return (
     <div className="space-y-6 animate-fade-in-up relative z-10">
@@ -54,12 +71,27 @@ export default function PoliciesView() {
       </header>
 
       <Card variant="glass">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
           <CardTitle>Active mapping rules</CardTitle>
-          <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-            + New rule
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={bulkEdit ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => (bulkEdit ? exitBulkEdit() : setBulkEdit(true))}
+            >
+              {bulkEdit ? "Done" : "Bulk edit"}
+            </Button>
+            <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+              + New rule
+            </Button>
+          </div>
         </div>
+
+        {bulkEdit && (
+          <div className="mb-4">
+            <ConfirmationModeControls kind="rule" selectedIds={selectedIds} onDone={exitBulkEdit} />
+          </div>
+        )}
 
         {loading ? (
           <SkeletonCardList count={3} />
@@ -78,8 +110,20 @@ export default function PoliciesView() {
                 className="rounded-card border border-outline-variant bg-surface-container-low p-4 transition-colors hover:border-primary-container/50"
               >
                 <div className="flex items-center gap-2">
+                  {bulkEdit && (
+                    <input
+                      type="checkbox"
+                      aria-label={`Select rule ${rule.id}`}
+                      checked={selectedIds.has(rule.id)}
+                      onChange={() => toggleSelected(rule.id)}
+                      className="h-4 w-4"
+                    />
+                  )}
                   <Pulse variant="info" />
                   <Eyebrow tone="primary">Mapping rule</Eyebrow>
+                  <Badge variant="outline" className="ml-auto text-[10px] capitalize">
+                    {rule.confirmation_mode ?? "auto"}
+                  </Badge>
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">

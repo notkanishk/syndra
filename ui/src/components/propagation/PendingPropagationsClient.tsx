@@ -1,5 +1,6 @@
 "use client";
 
+import { BundleName } from "@/components/names/BundleName";
 import { ProjectName } from "@/components/names/ProjectName";
 import { UserName } from "@/components/names/UserName";
 import { Badge } from "@/components/ui/Badge";
@@ -17,6 +18,14 @@ const OP_LABELS: Record<string, string> = {
   add: "Grant",
   replace: "Replace",
   revoke: "Revoke",
+};
+
+const SOURCE_LABELS: Record<string, string> = {
+  direct: "Direct",
+  bundle: "Bundle",
+  rule: "Mapping rule",
+  external_backfill: "Backfill",
+  lifecycle_cascade: "Lifecycle",
 };
 
 /**
@@ -104,6 +113,9 @@ export function PendingPropagationsClient() {
                   <Badge variant={row.status === "in_flight" ? "default" : "outline"} className="text-[10px]">
                     {row.status}
                   </Badge>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {SOURCE_LABELS[row.source] ?? row.source}
+                  </Badge>
                   <span className="text-sm text-on-surface">
                     <UserName id={row.user_id} />
                   </span>
@@ -113,6 +125,16 @@ export function PendingPropagationsClient() {
                   <span className="text-sm text-on-surface-variant">
                     · {row.role_keys.join(", ")}
                   </span>
+                  {row.source_ref && (
+                    <span className="text-xs text-on-surface-variant">
+                      via{" "}
+                      {row.source === "bundle" ? (
+                        <BundleName id={row.source_ref} fallback={row.source_ref} />
+                      ) : (
+                        row.source_ref
+                      )}
+                    </span>
+                  )}
                   {row.attempts > 0 && (
                     <span className="ml-auto text-xs text-warning">retried {row.attempts}×</span>
                   )}

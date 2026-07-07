@@ -10,6 +10,7 @@ export interface BundleRow {
   description?: string;
   is_welcome?: boolean;
   roles?: string[];
+  confirmation_mode?: "auto" | "manual";
   created_at?: string;
 }
 
@@ -27,6 +28,8 @@ export interface BundleImpactView {
 export interface CreateBundleInput {
   name: string;
   description: string;
+  /** Optional override — omitted falls back to the global default (Task 22). */
+  confirmation_mode?: "auto" | "manual";
 }
 
 export interface AddBundleRoleInput {

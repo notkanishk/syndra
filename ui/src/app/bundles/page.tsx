@@ -7,6 +7,7 @@ import BundleImpactAccordion from "@/components/bundles/BundleImpactAccordion";
 import CreateBundleModal from "@/components/bundles/CreateBundleModal";
 import CreateRoleModal from "@/components/roles/CreateRoleModal";
 import { ProjectName, RoleName } from "@/components/names";
+import { ConfirmationModeControls } from "@/components/policies/ConfirmationModeControls";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle } from "@/components/ui/Card";
@@ -25,6 +26,22 @@ export default function BundlesView() {
   const [expandedBundleId, setExpandedBundleId] = useState<string | null>(null);
   // Picker target — when set, AddRolesToBundlePicker is open for this bundle.
   const [pickerBundle, setPickerBundle] = useState<BundleRow | null>(null);
+  const [bulkEdit, setBulkEdit] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function exitBulkEdit() {
+    setBulkEdit(false);
+    setSelectedIds(new Set());
+  }
 
   return (
     <div className="space-y-6 animate-fade-in-up relative z-10">
@@ -43,6 +60,13 @@ export default function BundlesView() {
         <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
           <CardTitle>Bundle library</CardTitle>
           <div className="flex items-center gap-2">
+            <Button
+              variant={bulkEdit ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => (bulkEdit ? exitBulkEdit() : setBulkEdit(true))}
+            >
+              {bulkEdit ? "Done" : "Bulk edit"}
+            </Button>
             <Button variant="secondary" size="sm" onClick={() => setCreateRoleOpen(true)}>
               + Create role
             </Button>
@@ -51,6 +75,12 @@ export default function BundlesView() {
             </Button>
           </div>
         </div>
+
+        {bulkEdit && (
+          <div className="mb-4">
+            <ConfirmationModeControls kind="bundle" selectedIds={selectedIds} onDone={exitBulkEdit} />
+          </div>
+        )}
 
         {loading ? (
           <SkeletonCardList count={3} />
@@ -70,6 +100,9 @@ export default function BundlesView() {
                 expanded={expandedBundleId === bundle.id}
                 onToggle={() => setExpandedBundleId((prev) => (prev === bundle.id ? null : bundle.id))}
                 onOpenPicker={() => setPickerBundle(bundle)}
+                bulkEdit={bulkEdit}
+                selected={selectedIds.has(bundle.id)}
+                onToggleSelected={() => toggleSelected(bundle.id)}
               />
             ))}
           </div>
@@ -96,9 +129,20 @@ interface BundleRowCardProps {
   expanded: boolean;
   onToggle: () => void;
   onOpenPicker: () => void;
+  bulkEdit: boolean;
+  selected: boolean;
+  onToggleSelected: () => void;
 }
 
-function BundleRowCard({ bundle, expanded, onToggle, onOpenPicker }: BundleRowCardProps) {
+function BundleRowCard({
+  bundle,
+  expanded,
+  onToggle,
+  onOpenPicker,
+  bulkEdit,
+  selected,
+  onToggleSelected,
+}: BundleRowCardProps) {
   // Roles are fetched eagerly on expand so the role chips render immediately;
   // impact is deferred behind its own accordion so we never trigger the
   // user-scan unless the operator explicitly asks for it.
@@ -112,34 +156,48 @@ function BundleRowCard({ bundle, expanded, onToggle, onOpenPicker }: BundleRowCa
         expanded ? "border-primary-container/60" : "border-outline-variant hover:border-primary-container/40"
       }`}
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-container focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container rounded-card"
-      >
-        <div>
-          <h3 className="font-semibold text-on-surface">{bundle.name}</h3>
-          <p className="mt-0.5 text-xs text-on-surface-variant">
-            {bundle.description || "No description provided."}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {bundle.is_welcome && (
-            <Badge variant="secondary" className="bg-tertiary-container text-on-tertiary-container">
-              Welcome
+      <div className="flex items-center gap-3 px-4 py-3">
+        {bulkEdit && (
+          <input
+            type="checkbox"
+            aria-label={`Select bundle ${bundle.name}`}
+            checked={selected}
+            onChange={onToggleSelected}
+            className="h-4 w-4 shrink-0"
+          />
+        )}
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          className="flex flex-1 items-center justify-between gap-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container rounded-card"
+        >
+          <div>
+            <h3 className="font-semibold text-on-surface">{bundle.name}</h3>
+            <p className="mt-0.5 text-xs text-on-surface-variant">
+              {bundle.description || "No description provided."}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {bundle.is_welcome && (
+              <Badge variant="secondary" className="bg-tertiary-container text-on-tertiary-container">
+                Welcome
+              </Badge>
+            )}
+            <Badge variant="outline" className="text-[10px] capitalize">
+              {bundle.confirmation_mode ?? "auto"}
             </Badge>
-          )}
-          {bundle.created_at ? (
-            <Badge variant="outline">
-              {new Date(bundle.created_at).toLocaleDateString()}
-            </Badge>
-          ) : null}
-          <span aria-hidden="true" className="text-on-surface-variant">
-            {expanded ? "▾" : "▸"}
-          </span>
-        </div>
-      </button>
+            {bundle.created_at ? (
+              <Badge variant="outline">
+                {new Date(bundle.created_at).toLocaleDateString()}
+              </Badge>
+            ) : null}
+            <span aria-hidden="true" className="text-on-surface-variant">
+              {expanded ? "▾" : "▸"}
+            </span>
+          </div>
+        </button>
+      </div>
 
       {expanded && (
         <div className="px-4 pb-4 pt-2 border-t border-outline-variant bg-surface-container/40 animate-fade-in-up space-y-4">

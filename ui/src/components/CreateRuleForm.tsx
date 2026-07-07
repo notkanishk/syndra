@@ -9,6 +9,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { formatRoleRef } from "@/lib/format";
+import { useGlobalConfirmationDefault, type ConfirmationMode } from "@/lib/queries/useConfirmationMode";
 import {
   useCreateMappingRule,
   useValidateMappingRule,
@@ -40,6 +41,11 @@ interface CreateRuleFormProps {
  */
 export default function CreateRuleForm({ open, onClose, onCreated, projects }: CreateRuleFormProps) {
   const createRule = useCreateMappingRule();
+  const globalDefault = useGlobalConfirmationDefault();
+  // null until the operator touches the selector — the displayed (and submitted) value falls
+  // back to the fetched global default, else "auto", so the form is always a WYSIWYG submit.
+  const [modeOverride, setModeOverride] = useState<ConfirmationMode | null>(null);
+  const confirmationMode: ConfirmationMode = modeOverride ?? globalDefault.data ?? "auto";
   // Destructure the stable callback from the mutation result. The mutation
   // result object's reference changes on every state transition (idle →
   // pending → success), so depending on `validateRule` directly would cause
@@ -105,7 +111,7 @@ export default function CreateRuleForm({ open, onClose, onCreated, projects }: C
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
-      await createRule.mutateAsync(form);
+      await createRule.mutateAsync({ ...form, confirmation_mode: confirmationMode });
       toastSuccess("Mapping rule created");
       onCreated?.();
       onClose();
@@ -208,6 +214,19 @@ export default function CreateRuleForm({ open, onClose, onCreated, projects }: C
                   {role.label}
                 </option>
               ))}
+            </Select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-on-surface-variant mb-1.5">
+              Confirmation mode
+            </label>
+            <Select
+              value={confirmationMode}
+              onChange={(event) => setModeOverride(event.target.value as ConfirmationMode)}
+              aria-label="Confirmation mode"
+            >
+              <option value="auto">Auto — drains immediately</option>
+              <option value="manual">Manual — waits for operator resume</option>
             </Select>
           </div>
         </div>

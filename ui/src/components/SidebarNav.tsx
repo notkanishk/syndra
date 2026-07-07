@@ -93,6 +93,7 @@ export default function SidebarNav({ isAdmin }: { isAdmin: boolean }) {
       items: [
         { href: "/zitadel", label: "Zitadel Diagnostics" },
         { href: "/governance/pending", label: "Pending", badge: propCount > 0 ? propCount : undefined },
+        { href: "/operations/cascades", label: "Recent cascades" },
       ],
     },
     {

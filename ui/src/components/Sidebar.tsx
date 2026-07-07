@@ -1,4 +1,5 @@
 import ChimeToggle from './ChimeToggle';
+import GlobalConfirmationModeSelect from './GlobalConfirmationModeSelect';
 import { Card } from './ui/Card';
 import { Pulse } from './ui/Pulse';
 import SidebarNav from './SidebarNav';
@@ -35,6 +36,14 @@ export default function Sidebar({ session }: { session: SessionUser }) {
               <ThemeToggle />
             </div>
           </div>
+          {/* Global confirmation-mode default (Task 22) — same "no dedicated
+              /settings page" footer location the drift chime toggle uses.
+              Operator-only: setting it mutates global policy. */}
+          {isAdmin && (
+            <div className="mt-4 pt-4 border-t border-outline-variant">
+              <GlobalConfirmationModeSelect />
+            </div>
+          )}
           <form action="/auth/logout" method="post" className="mt-4">
             <button type="submit" className="w-full rounded-lg border border-outline-variant px-3 py-2 text-sm text-on-surface-variant transition-colors hover:border-primary hover:text-on-surface">
               Sign out
