@@ -107,47 +107,10 @@ fi
 
 API_BASE="https://${ZITADEL_DOMAIN}/v2/actions"
 
-# zitadel_api METHOD PATH [JSON_BODY]
-# Same helper shape as register.sh. On HTTP error prints Zitadel's response
-# body verbatim so 401/403 permission failures surface the actual message
-# instead of a bare "curl: (22)". 401/403 hint points at the README's
-# "Service-Account Permissions" section so operators don't over-grant — the
-# narrowest assignment path is a custom
-# instance role carrying just action.target.read + action.target.write +
-# action.execution.write (action.target.delete optional).
-zitadel_api() {
-  local method="$1" path="$2" body="${3:-}"
-  local tmp status
-  tmp="$(mktemp)"
-  # shellcheck disable=SC2064
-  trap "rm -f '$tmp'" RETURN
-  local -a args=(-sS -o "$tmp" -w '%{http_code}'
-    -X "$method" "${API_BASE}${path}"
-    -H "Authorization: Bearer ${TOKEN}")
-  if [[ -n "$body" ]]; then
-    args+=(-H 'Content-Type: application/json' -d "$body")
-  fi
-  status="$(curl "${args[@]}")"
-  if [[ "$status" -lt 200 || "$status" -ge 300 ]]; then
-    {
-      printf 'error: %s %s -> HTTP %s\n' "$method" "$path" "$status"
-      if [[ "$status" == "401" || "$status" == "403" ]]; then
-        printf '       Actions v2 target management is instance-scoped — the org-level\n'
-        printf '       service-user roles (ORG_OWNER / ORG_USER_MANAGER) do not cover it.\n'
-        printf '       Minimum permissions: action.target.read, action.target.write,\n'
-        printf '       action.execution.write (plus action.target.delete for full removal).\n'
-        printf '       Assign via a narrow custom role, a prebuilt action-scoped role, or\n'
-        printf '       IAM_OWNER as a fallback. See the "Service-Account Permissions"\n'
-        printf '       section of zitadel/actions/README.md for the full matrix.\n'
-      fi
-      printf 'response body:\n'
-      cat "$tmp"
-      printf '\n'
-    } >&2
-    return 1
-  fi
-  cat "$tmp"
-}
+# zitadel_api METHOD PATH [JSON_BODY] — shared helper, expects API_BASE + TOKEN
+# in scope (both established above) and honours optional ZITADEL_API_TOLERATE_404.
+# shellcheck source=../../scripts/lib/zitadel-api.sh
+source "${REPO_ROOT}/scripts/lib/zitadel-api.sh"
 
 # rotate_target NAME ENV_VAR_NAME
 # Wire flow per target:
