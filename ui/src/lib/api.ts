@@ -1,5 +1,5 @@
 import { getSession } from "@/lib/session";
-import type { AuditLog, ApplicationView, Bundle, CatalogResponse, MappingRule, ProjectSummary } from "@/lib/types";
+import type { ApplicationView, CatalogResponse } from "@/lib/types";
 
 // Server-side fetches go directly to the backend container
 const SERVER_API = `${process.env.BACKEND_URL || "http://backend:8080"}/api/v1`;
@@ -67,28 +67,12 @@ export async function fetchWithAuth<T = unknown>(path: string, token?: string): 
 // have the session in scope to avoid a redundant cookie read, or omit it to
 // let resolveAuthToken read it automatically.
 
-export async function fetchBundles(token?: string): Promise<Bundle[]> {
-  return fetchServerJson<Bundle[]>("/bundles", token);
-}
-
-export async function fetchMappingRules(token?: string): Promise<MappingRule[]> {
-  return fetchServerJson<MappingRule[]>("/rules/mapping", token);
-}
-
 export async function fetchCatalog(token?: string): Promise<CatalogResponse> {
   return fetchServerJson<CatalogResponse>("/catalog", token);
 }
 
 export async function fetchApplications(token?: string): Promise<ApplicationView[]> {
   return fetchServerJson<ApplicationView[]>("/applications", token);
-}
-
-export async function fetchProjects(token?: string): Promise<ProjectSummary[]> {
-  return fetchServerJson<ProjectSummary[]>("/projects", token);
-}
-
-export async function fetchAudit(limit = 6, token?: string): Promise<AuditLog[]> {
-  return fetchServerJson<AuditLog[]>(`/audit?limit=${limit}`, token);
 }
 
 // SystemMode mirrors the backend SystemModeResponse. `directory` reports the
