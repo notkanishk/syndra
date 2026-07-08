@@ -1,112 +1,132 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { UserName } from "@/components/names/UserName";
-import { NameResolverProvider } from "@/lib/queries/useNameResolver";
+import { NameResolverProvider, useNameResolver } from "@/lib/queries/useNameResolver";
+import { makeProxyFetch, respondWith } from "@/test-utils/proxyFetch";
 
-// Stub fetch to count network calls and return a predictable map.
-let fetchCalls: Array<{ url: string; body: unknown }>;
+const USER_ID = "u1";
+const PROJECT_ID = "p1";
+const ROLE_KEY = "mentor";
+const BUNDLE_ID = "b1";
+
+// Fixture stand-ins for GET /catalog and GET /bundles. `catalog` is a `let` so
+// the invalidation test can mutate it between fetches.
+let catalog: {
+  users: Array<{ id: string; name: string; email: string }>;
+  projects: Array<{ id: string; name: string; roles: Array<{ key: string; label: string }> }>;
+  applications: unknown[];
+};
+
+let proxy: ReturnType<typeof makeProxyFetch>;
+let bundlesStatus: number;
 
 beforeEach(() => {
-  fetchCalls = [];
-  global.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-    const u = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
-    let body: unknown = undefined;
-    if (init?.body && typeof init.body === "string") {
-      try {
-        body = JSON.parse(init.body);
-      } catch {
-        body = init.body;
-      }
-    }
-    fetchCalls.push({ url: u, body });
-    // Echo the requested user_ids back as resolved entries so the resolver
-    // sees a successful response and renders names.
-    const reqUserIds = (body as { user_ids?: string[] } | undefined)?.user_ids ?? [];
-    const users: Record<string, { display_name: string; email: string }> = {};
-    for (const id of reqUserIds) {
-      users[id] = { display_name: `Name-${id}`, email: `${id}@ex.org` };
-    }
-    return new Response(
-      JSON.stringify({ users, projects: {}, roles: {}, bundles: {} }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    );
-  }) as typeof fetch;
+  catalog = {
+    users: [{ id: USER_ID, name: "Jane Doe", email: "jane@x.edu" }],
+    projects: [{ id: PROJECT_ID, name: "Lab Ops", roles: [{ key: ROLE_KEY, label: "Mentor" }] }],
+    applications: [],
+  };
+  bundlesStatus = 200;
+
+  proxy = makeProxyFetch();
+  global.fetch = proxy.fetchImpl;
+
+  proxy.register("GET", /\/api\/proxy\/catalog(\?|$)/, () => catalog);
+  proxy.register("GET", /\/api\/proxy\/bundles(\?|$)/, () =>
+    bundlesStatus === 200
+      ? [{ id: BUNDLE_ID, name: "Starter Bundle", description: "", roles: [], created_at: "" }]
+      : respondWith(bundlesStatus, { error: "Forbidden" }),
+  );
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function renderWithProviders(ui: React.ReactElement) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
-  });
-  return render(
-    <QueryClientProvider client={client}>
-      <NameResolverProvider>{ui}</NameResolverProvider>
-    </QueryClientProvider>,
+// Probe surfaces each resolver result as LOADING / MISS / <value>.
+function Probe() {
+  const r = useNameResolver();
+  const u = r.resolveUser(USER_ID);
+  const uMiss = r.resolveUser("nope");
+  const p = r.resolveProject(PROJECT_ID);
+  const role = r.resolveRole(PROJECT_ID, ROLE_KEY);
+  const b = r.resolveBundle(BUNDLE_ID);
+  const show = <T extends { display_name?: string; name?: string }>(res: {
+    value: T | undefined;
+    resolved: boolean;
+  }) => (!res.resolved ? "LOADING" : (res.value?.display_name ?? res.value?.name ?? "MISS"));
+  return (
+    <div>
+      <span data-testid="user">{show(u)}</span>
+      <span data-testid="user-unknown">{show(uMiss)}</span>
+      <span data-testid="project">{show(p)}</span>
+      <span data-testid="role">{show(role)}</span>
+      <span data-testid="bundle">{show(b)}</span>
+    </div>
   );
 }
 
-describe("useNameResolver batching", () => {
-  it("batches N <UserName/> mounts within one tick into ONE /lookup request", async () => {
-    const ids = Array.from({ length: 50 }, (_, i) => `u-${i}`);
-    renderWithProviders(
-      <div>
-        {ids.map((id) => (
-          <UserName key={id} id={id} />
-        ))}
-      </div>,
-    );
+function renderProbe() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
+  });
+  const utils = render(
+    <QueryClientProvider client={client}>
+      <NameResolverProvider>
+        <Probe />
+      </NameResolverProvider>
+    </QueryClientProvider>,
+  );
+  return { client, ...utils };
+}
 
-    // The resolver flushes inside requestAnimationFrame; wait for the network call to land.
-    await waitFor(() => {
-      expect(fetchCalls.length).toBeGreaterThanOrEqual(1);
-    });
-
-    const lookupCalls = fetchCalls.filter((c) => c.url.includes("/lookup"));
-    expect(lookupCalls).toHaveLength(1);
-
-    const reqUserIds = (lookupCalls[0].body as { user_ids: string[] }).user_ids;
-    expect(reqUserIds.sort()).toEqual([...ids].sort());
+describe("useNameResolver (full-catalog)", () => {
+  it("reports resolved=false while the catalog query is loading", () => {
+    renderProbe();
+    // First synchronous paint: catalog query is still pending.
+    expect(screen.getByTestId("user").textContent).toBe("LOADING");
   });
 
-  it("does not re-fetch when the same id is mounted a second time (cache hit)", async () => {
-    const { unmount } = renderWithProviders(<UserName id="u-A" />);
-    await waitFor(() => {
-      expect(fetchCalls.filter((c) => c.url.includes("/lookup"))).toHaveLength(1);
-    });
-    unmount();
-
-    // Reset call count, mount again — resolver's local Map should still hold u-A
-    // so no additional fetch is issued. Note: each render gets a fresh
-    // NameResolverProvider, so to test true cache-hit we re-render the same provider.
-    fetchCalls = [];
-    renderWithProviders(<UserName id="u-A" />);
-    // Wait one tick — if a fetch were going to happen, it would by now.
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    // A fresh provider has empty local cache, so 1 fetch is expected. The
-    // important guarantee is that two <UserName id="u-A"/> in the SAME tree do
-    // not produce two fetches — covered by the batching test above.
-    const lookupCalls = fetchCalls.filter((c) => c.url.includes("/lookup"));
-    expect(lookupCalls.length).toBeLessThanOrEqual(1);
+  it("resolves a known user, project, and nested role after the catalog loads", async () => {
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("user").textContent).toBe("Jane Doe"));
+    expect(screen.getByTestId("project").textContent).toBe("Lab Ops");
+    expect(screen.getByTestId("role").textContent).toBe("Mentor");
   });
 
-  it("renders fallback gracefully when the id misses (resolver returns no entry)", async () => {
-    // Stub returns echoed ids only — request for a missing id will resolve as
-    // "absent from response" and the component must fall back to the dash.
-    global.fetch = vi.fn(async () => {
-      fetchCalls.push({ url: "lookup", body: null });
-      return new Response(
-        JSON.stringify({ users: {}, projects: {}, roles: {}, bundles: {} }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
-    }) as typeof fetch;
+  it("returns resolved=true with no value for an unknown id after load", async () => {
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("user").textContent).toBe("Jane Doe"));
+    expect(screen.getByTestId("user-unknown").textContent).toBe("MISS");
+  });
 
-    const { findByText } = renderWithProviders(<UserName id="u-missing" fallback="—" />);
-    expect(await findByText("—")).toBeInTheDocument();
+  it("resolves bundles from GET /bundles when allowed", async () => {
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("bundle").textContent).toBe("Starter Bundle"));
+  });
+
+  it("isolates a 403 on GET /bundles: catalog resolves, bundle falls back", async () => {
+    bundlesStatus = 403; // member context — proxy forbids GET /bundles
+    renderProbe();
+    // Catalog-backed resolvers still work...
+    await waitFor(() => expect(screen.getByTestId("user").textContent).toBe("Jane Doe"));
+    expect(screen.getByTestId("project").textContent).toBe("Lab Ops");
+    expect(screen.getByTestId("role").textContent).toBe("Mentor");
+    // ...while the bundle query failed and yields a fallback, not a stuck skeleton.
+    await waitFor(() => expect(screen.getByTestId("bundle").textContent).toBe("MISS"));
+  });
+
+  it("refetches the catalog on invalidation so newly-present ids resolve", async () => {
+    const { client } = renderProbe();
+    await waitFor(() => expect(screen.getByTestId("user").textContent).toBe("Jane Doe"));
+    expect(screen.getByTestId("user-unknown").textContent).toBe("MISS");
+
+    // Simulate a user-create: the catalog now includes the previously-unknown id.
+    catalog.users.push({ id: "nope", name: "New Person", email: "new@x.edu" });
+    await client.invalidateQueries({ queryKey: ["name-catalog"] });
+
+    await waitFor(() => expect(screen.getByTestId("user-unknown").textContent).toBe("New Person"));
   });
 });

@@ -35,7 +35,9 @@ beforeEach(() => {
     users: [{ id: USER_ID, name: "Sam Patel" }],
   }));
 
+  // Name resolution reads the full catalog: users + projects + nested roles.
   proxy.register("GET", /\/api\/proxy\/catalog/, () => ({
+    users: [{ id: USER_ID, name: "Sam Patel", email: "sam@ex.org" }],
     projects: [
       {
         id: PROJECT_ID,
@@ -43,25 +45,8 @@ beforeEach(() => {
         roles: [{ key: "mentor", label: "Mentor" }],
       },
     ],
+    applications: [],
   }));
-
-  proxy.register("POST", /\/api\/proxy\/lookup/, ({ body }) => {
-    const userIds = (body as { user_ids?: string[] } | undefined)?.user_ids ?? [];
-    const projectIds = (body as { project_ids?: string[] } | undefined)?.project_ids ?? [];
-    const roleKeys =
-      (body as { role_keys?: Array<{ project_id: string; role_key: string }> } | undefined)?.role_keys ?? [];
-    const users: Record<string, { display_name: string; email: string }> = {};
-    if (userIds.includes(USER_ID)) users[USER_ID] = { display_name: "Sam Patel", email: "sam@ex.org" };
-    const projects: Record<string, { name: string }> = {};
-    if (projectIds.includes(PROJECT_ID)) projects[PROJECT_ID] = { name: "Lab Ops" };
-    const roles: Record<string, { display_name: string }> = {};
-    for (const rk of roleKeys) {
-      if (rk.project_id === PROJECT_ID && rk.role_key === "mentor") {
-        roles[`${rk.project_id}:${rk.role_key}`] = { display_name: "Mentor" };
-      }
-    }
-    return { users, projects, roles, bundles: {} };
-  });
 });
 
 afterEach(() => {
@@ -119,7 +104,7 @@ describe("BundlesView (Stage 3)", () => {
     fireEvent.click(impactToggle);
     await screen.findAllByText(/Sam Patel/);
     await waitFor(() => {
-      expect(proxy.calls.some((c) => c.url.includes("/lookup"))).toBe(true);
+      expect(proxy.calls.some((c) => c.url.includes("/catalog"))).toBe(true);
     });
     const text = container.textContent ?? "";
     expect(UUID_REGEX.test(text)).toBe(false);

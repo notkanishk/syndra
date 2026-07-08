@@ -104,26 +104,26 @@ beforeEach(() => {
     },
   ]);
 
-  proxy.register("POST", /\/api\/proxy\/lookup/, ({ body }) => {
-    const userIds = (body as { user_ids?: string[] } | undefined)?.user_ids ?? [];
-    const projectIds = (body as { project_ids?: string[] } | undefined)?.project_ids ?? [];
-    const roleKeys = (body as { role_keys?: Array<{ project_id: string; role_key: string }> } | undefined)?.role_keys ?? [];
-    const users: Record<string, { display_name: string; email: string }> = {};
-    if (userIds.includes(USER_ID)) users[USER_ID] = { display_name: "Sam Patel", email: "sam@ex.org" };
-    if (userIds.includes(GRANTED_BY_ID)) users[GRANTED_BY_ID] = { display_name: "Alice Rivera", email: "alice@ex.org" };
-    const projects: Record<string, { name: string }> = {};
-    if (projectIds.includes(PROJECT_ID)) projects[PROJECT_ID] = { name: "Lab Ops" };
-    const roles: Record<string, { display_name: string }> = {};
-    for (const rk of roleKeys) {
-      if (rk.project_id === PROJECT_ID && rk.role_key === "mentor") {
-        roles[`${rk.project_id}:${rk.role_key}`] = { display_name: "Mentor" };
-      }
-      if (rk.project_id === PROJECT_ID && rk.role_key === "trainee") {
-        roles[`${rk.project_id}:${rk.role_key}`] = { display_name: "Trainee" };
-      }
-    }
-    return { users, projects, roles, bundles: {} };
-  });
+  // Name resolution reads the full catalog: users + projects + nested roles.
+  proxy.register("GET", /\/api\/proxy\/catalog(\?|$)/, () => ({
+    users: [
+      { id: USER_ID, name: "Sam Patel", email: "sam@ex.org" },
+      { id: GRANTED_BY_ID, name: "Alice Rivera", email: "alice@ex.org" },
+    ],
+    projects: [
+      {
+        id: PROJECT_ID,
+        name: "Lab Ops",
+        kind: "managed",
+        description: "",
+        roles: [
+          { key: "mentor", label: "Mentor", description: "" },
+          { key: "trainee", label: "Trainee", description: "" },
+        ],
+      },
+    ],
+    applications: [],
+  }));
 });
 
 afterEach(() => {
@@ -183,8 +183,8 @@ describe("UsersView (Stage 2)", () => {
   it("never renders raw Zitadel UUIDs once lookups resolve", async () => {
     const { container } = renderUsers();
     await waitFor(() => {
-      const lookupCalls = proxy.calls.filter((c) => c.url.includes("/api/proxy/lookup"));
-      expect(lookupCalls.length).toBeGreaterThanOrEqual(1);
+      const catalogCalls = proxy.calls.filter((c) => c.url.includes("/api/proxy/catalog"));
+      expect(catalogCalls.length).toBeGreaterThanOrEqual(1);
     });
     // Wait for at least one resolved name to land before asserting.
     await screen.findAllByText("Sam Patel");

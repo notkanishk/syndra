@@ -36,13 +36,15 @@ beforeEach(() => {
   ]);
   proxy.register("GET", /\/api\/proxy\/bundles/, () => [{ id: "b1", name: "Mentor Pack", description: "" }]);
   proxy.register("GET", /\/api\/proxy\/intents/, () => []);
-  proxy.register("POST", /\/api\/proxy\/lookup/, ({ body }) => {
-    const ids = (body as { user_ids?: string[] } | undefined)?.user_ids ?? [];
-    const users: Record<string, { display_name: string; email: string }> = {};
-    if (ids.includes(ACTOR_ID)) users[ACTOR_ID] = { display_name: "Alice Rivera", email: "alice@ex.org" };
-    if (ids.includes(TARGET_ID)) users[TARGET_ID] = { display_name: "Sam Patel", email: "sam@ex.org" };
-    return { users, projects: {}, roles: {}, bundles: {} };
-  });
+  // Name resolution reads the full catalog (users + projects + nested roles).
+  proxy.register("GET", /\/api\/proxy\/catalog(\?|$)/, () => ({
+    users: [
+      { id: ACTOR_ID, name: "Alice Rivera", email: "alice@ex.org" },
+      { id: TARGET_ID, name: "Sam Patel", email: "sam@ex.org" },
+    ],
+    projects: [],
+    applications: [],
+  }));
 });
 
 afterEach(() => {
@@ -77,10 +79,10 @@ describe("AdminDashboard", () => {
 
   it("resolves activity actor & target into names, never raw UUIDs", async () => {
     const { container } = renderDashboard();
-    // The audit row resolves both ids — wait for the lookup batch.
+    // The audit row resolves both ids from the catalog.
     await waitFor(() => {
-      const lookupCalls = proxy.calls.filter((c) => c.url.includes("/api/proxy/lookup"));
-      expect(lookupCalls.length).toBeGreaterThanOrEqual(1);
+      const catalogCalls = proxy.calls.filter((c) => c.url.includes("/api/proxy/catalog"));
+      expect(catalogCalls.length).toBeGreaterThanOrEqual(1);
     });
     await screen.findByText("Alice Rivera");
     await screen.findByText("Sam Patel");

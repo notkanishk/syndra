@@ -62,15 +62,20 @@ beforeEach(() => {
     },
   ]);
 
-  proxy.register("POST", /\/api\/proxy\/lookup/, ({ body }) => {
-    const userIds = (body as { user_ids?: string[] } | undefined)?.user_ids ?? [];
-    const projectIds = (body as { project_ids?: string[] } | undefined)?.project_ids ?? [];
-    const users: Record<string, { display_name: string; email: string }> = {};
-    if (userIds.includes(USER_ID)) users[USER_ID] = { display_name: "Sam Patel", email: "sam@ex.org" };
-    const projects: Record<string, { name: string }> = {};
-    if (projectIds.includes(PROJECT_ID)) projects[PROJECT_ID] = { name: "Lab Ops" };
-    return { users, projects, roles: {}, bundles: {} };
-  });
+  // Name resolution reads the full catalog: users + projects + nested roles.
+  proxy.register("GET", /\/api\/proxy\/catalog(\?|$)/, () => ({
+    users: [{ id: USER_ID, name: "Sam Patel", email: "sam@ex.org" }],
+    projects: [
+      {
+        id: PROJECT_ID,
+        name: "Lab Ops",
+        kind: "managed",
+        description: "",
+        roles: [{ key: "mentor", label: "Mentor", description: "" }],
+      },
+    ],
+    applications: [],
+  }));
 });
 
 afterEach(() => {
@@ -97,9 +102,9 @@ describe("OperationsClient (Stage 4)", () => {
     await screen.findByText("AddRole");
     await screen.findAllByText(/Sam Patel/);
     await screen.findAllByText(/Lab Ops/);
-    // Wait an extra tick so the last batched name resolution has settled.
+    // Wait an extra tick so the catalog-backed name resolution has settled.
     await waitFor(() => {
-      expect(proxy.calls.some((c) => c.url.includes("/lookup"))).toBe(true);
+      expect(proxy.calls.some((c) => c.url.includes("/catalog"))).toBe(true);
     });
     expect(UUID_REGEX.test(container.textContent ?? "")).toBe(false);
   });

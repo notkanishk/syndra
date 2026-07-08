@@ -47,24 +47,18 @@ beforeEach(() => {
     cleanup_hints: ["Remove stale role grant for X"],
   }));
 
-  proxy.register("POST", /\/api\/proxy\/lookup/, ({ body }) => {
-    const userIds = (body as { user_ids?: string[] } | undefined)?.user_ids ?? [];
-    const projectIds = (body as { project_ids?: string[] } | undefined)?.project_ids ?? [];
-    const roleKeys = (body as { role_keys?: Array<{ project_id: string; role_key: string }> } | undefined)?.role_keys ?? [];
-    const users: Record<string, { display_name: string; email: string }> = {};
-    if (userIds.includes(ACTOR_ID)) users[ACTOR_ID] = { display_name: "Alice Rivera", email: "alice@ex.org" };
-    if (userIds.includes(TARGET_ID)) users[TARGET_ID] = { display_name: "Sam Patel", email: "sam@ex.org" };
-    if (userIds.includes(GRANT_USER_ID)) users[GRANT_USER_ID] = { display_name: "Maya Chen", email: "maya@ex.org" };
-    const projects: Record<string, { name: string }> = {};
-    if (projectIds.includes(GRANT_PROJECT_ID)) projects[GRANT_PROJECT_ID] = { name: "Lab Ops" };
-    const roles: Record<string, { display_name: string }> = {};
-    for (const rk of roleKeys) {
-      if (rk.project_id === GRANT_PROJECT_ID && rk.role_key === "mentor") {
-        roles[`${rk.project_id}:${rk.role_key}`] = { display_name: "Mentor" };
-      }
-    }
-    return { users, projects, roles, bundles: {} };
-  });
+  // Name resolution reads the full catalog: users + projects + nested roles.
+  proxy.register("GET", /\/api\/proxy\/catalog(\?|$)/, () => ({
+    users: [
+      { id: ACTOR_ID, name: "Alice Rivera", email: "alice@ex.org" },
+      { id: TARGET_ID, name: "Sam Patel", email: "sam@ex.org" },
+      { id: GRANT_USER_ID, name: "Maya Chen", email: "maya@ex.org" },
+    ],
+    projects: [
+      { id: GRANT_PROJECT_ID, name: "Lab Ops", kind: "managed", description: "", roles: [{ key: "mentor", label: "Mentor", description: "" }] },
+    ],
+    applications: [],
+  }));
 });
 
 afterEach(() => {

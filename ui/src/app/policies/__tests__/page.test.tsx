@@ -48,25 +48,7 @@ beforeEach(() => {
     ],
   }));
 
-  proxy.register("POST", /\/api\/proxy\/lookup/, ({ body }) => {
-    const projectIds = (body as { project_ids?: string[] } | undefined)?.project_ids ?? [];
-    const roleKeys =
-      (body as { role_keys?: Array<{ project_id: string; role_key: string }> } | undefined)
-        ?.role_keys ?? [];
-    const projects: Record<string, { name: string }> = {};
-    if (projectIds.includes(SOURCE_PROJECT)) projects[SOURCE_PROJECT] = { name: "Lab Ops" };
-    if (projectIds.includes(TARGET_PROJECT)) projects[TARGET_PROJECT] = { name: "Workshop" };
-    const roles: Record<string, { display_name: string }> = {};
-    for (const rk of roleKeys) {
-      if (rk.project_id === SOURCE_PROJECT && rk.role_key === "mentor") {
-        roles[`${rk.project_id}:${rk.role_key}`] = { display_name: "Mentor" };
-      }
-      if (rk.project_id === TARGET_PROJECT && rk.role_key === "trainee") {
-        roles[`${rk.project_id}:${rk.role_key}`] = { display_name: "Trainee" };
-      }
-    }
-    return { users: {}, projects, roles, bundles: {} };
-  });
+  // Projects + nested roles above feed name resolution directly.
 });
 
 afterEach(() => {
@@ -108,7 +90,7 @@ describe("PoliciesView (Stage 3)", () => {
     const { container } = renderPolicies();
     await screen.findAllByText(/Lab Ops/);
     await waitFor(() => {
-      expect(proxy.calls.some((c) => c.url.includes("/lookup"))).toBe(true);
+      expect(proxy.calls.some((c) => c.url.includes("/catalog"))).toBe(true);
     });
     const text = container.textContent ?? "";
     expect(UUID_REGEX.test(text)).toBe(false);

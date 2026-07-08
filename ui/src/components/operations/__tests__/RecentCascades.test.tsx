@@ -16,9 +16,9 @@ let proxy: ReturnType<typeof makeProxyFetch>;
 beforeEach(() => {
   proxy = makeProxyFetch();
   global.fetch = proxy.fetchImpl;
-  proxy.register("POST", /\/api\/proxy\/lookup/, () => ({
-    users: {}, projects: {}, roles: {}, bundles: { "bundle-1": { name: "Onboarding Bundle" } },
-  }));
+  proxy.register("GET", /\/api\/proxy\/bundles(\?|$)/, () => [
+    { id: "bundle-1", name: "Onboarding Bundle", description: "", roles: [], created_at: "" },
+  ]);
 });
 
 afterEach(() => {

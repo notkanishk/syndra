@@ -55,27 +55,7 @@ beforeEach(() => {
     ];
   });
 
-  proxy.register("POST", /\/api\/proxy\/lookup/, ({ body }) => {
-    const userIds = (body as { user_ids?: string[] } | undefined)?.user_ids ?? [];
-    const projectIds = (body as { project_ids?: string[] } | undefined)?.project_ids ?? [];
-    const roleKeys =
-      (body as { role_keys?: Array<{ project_id: string; role_key: string }> } | undefined)
-        ?.role_keys ?? [];
-    const users: Record<string, { display_name: string; email: string }> = {};
-    if (userIds.includes(REQUESTER_ID))
-      users[REQUESTER_ID] = { display_name: "Sam Patel", email: "sam@ex.org" };
-    if (userIds.includes(REVIEWER_ID))
-      users[REVIEWER_ID] = { display_name: "Alice Rivera", email: "alice@ex.org" };
-    const projects: Record<string, { name: string }> = {};
-    if (projectIds.includes(PROJECT_ID)) projects[PROJECT_ID] = { name: "Lab Ops" };
-    const roles: Record<string, { display_name: string }> = {};
-    for (const rk of roleKeys) {
-      if (rk.project_id === PROJECT_ID && rk.role_key === "mentor") {
-        roles[`${rk.project_id}:${rk.role_key}`] = { display_name: "Mentor" };
-      }
-    }
-    return { users, projects, roles, bundles: {} };
-  });
+  // Users + projects + nested roles above feed name resolution directly.
 });
 
 afterEach(() => {
@@ -122,8 +102,8 @@ describe("AdminRequestsView (Stage 3)", () => {
   it("never renders raw Zitadel UUIDs once lookups resolve", async () => {
     const { container } = renderAdmin();
     await waitFor(() => {
-      const lookupCalls = proxy.calls.filter((c) => c.url.includes("/api/proxy/lookup"));
-      expect(lookupCalls.length).toBeGreaterThanOrEqual(1);
+      const catalogCalls = proxy.calls.filter((c) => c.url.includes("/api/proxy/catalog"));
+      expect(catalogCalls.length).toBeGreaterThanOrEqual(1);
     });
     await screen.findAllByText(/Sam Patel/);
     const text = container.textContent ?? "";
