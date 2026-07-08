@@ -38,6 +38,7 @@ cd sync && go test ./... && go vet ./...
 **Before any work (every prompt):**
 - Consult OpenSpec (`openspec/INDEX.md`, relevant specs/changes) for intent, contracts, and status
 - Use `codebase-memory-mcp` (`search_graph`, `trace_path`, `get_code_snippet`, `query_graph`, `get_architecture`, `search_code`) for code discovery *before* falling back to Grep/Glob/Read
+- **Token-frugal navigation (always):** prefer targeted tools over broad reads — `codebase-memory-mcp` for structure/callers/impact, LSP (go-to-def, references, symbols, hover) for precise symbol navigation, and Grep/Read with narrow `offset`/`limit` only when those don't fit. Never read whole files or sweep directories when a targeted query answers it. Delegate bulk/multi-file reading to subagents (their output stays out of the main context) and hand off large artifacts as files rather than pasting them into prompts.
 
 **After any code change (always, unprompted), scaled to the change:**
 1. **OpenSpec alignment** — verify or create the relevant change under `openspec/changes/`, update `proposal.md`, `tasks.md`, `design.md`, and affected `specs/*.md` so the documented intent matches the code. If the change is already scoped, tick tasks and keep deltas coherent. Flag any drift between specs and reality.
