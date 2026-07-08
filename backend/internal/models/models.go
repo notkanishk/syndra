@@ -66,7 +66,6 @@ type UserProfile struct {
 	Team     string `json:"team"`
 	Status   string `json:"status"`
 	Avatar   string `json:"avatar"`
-	Location string `json:"location"`
 }
 
 type ProjectRole struct {

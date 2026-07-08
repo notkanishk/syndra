@@ -43,7 +43,7 @@ func (s *stubDirectory) InvalidateUsers()                                       
 func TestHandleGetMyProfile_Success(t *testing.T) {
 	orig := directory.Default
 	directory.Default = &stubDirectory{users: map[string]models.UserProfile{
-		"u1": {ID: "u1", Name: "Alice", Email: "alice@x.test", Title: "Director", Team: "Ops", Location: "HQ", Status: "active"},
+		"u1": {ID: "u1", Name: "Alice", Email: "alice@x.test", Title: "Director", Team: "Ops", Status: "active"},
 	}}
 	t.Cleanup(func() { directory.Default = orig })
 
@@ -60,7 +60,7 @@ func TestHandleGetMyProfile_Success(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.Title != "Director" || got.Team != "Ops" || got.Location != "HQ" {
+	if got.Title != "Director" || got.Team != "Ops" {
 		t.Fatalf("expected metadata-overlay populated, got %+v", got)
 	}
 }

@@ -101,7 +101,7 @@ func NewRouter() http.Handler {
 
 	// User Profile (sync service — internal, API-key auth)
 	mux.HandleFunc("GET /api/v1/users/{uid}/profile", withCORS(withAPIKeyAuth(handleGetUserProfile)))
-	// Self-profile (UI — populates OIDC session cookie with Title/Team/Location)
+	// Self-profile (UI — populates OIDC session cookie with Title/Team)
 	mux.HandleFunc("GET /api/v1/me/profile", withCORS(withUserAuth(handleGetMyProfile)))
 
 	// Operator: event and trigger logs

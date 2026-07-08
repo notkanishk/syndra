@@ -51,7 +51,7 @@ func handleGetUserProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetMyProfile returns the requester's full UserProfile — the same
-// shape directory.Default.FindUser produces, with title/team/location
+// shape directory.Default.FindUser produces, with title/team
 // overlaid from Zitadel metadata. Used by the Next.js OIDC callback to
 // populate the session cookie so OIDC and demo sessions render identically
 // (May 2026 audit C2/D5).

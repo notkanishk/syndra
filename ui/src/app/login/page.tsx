@@ -124,7 +124,7 @@ function DemoIdentityCard() {
               </span>
             </div>
             <p className="mt-3 text-sm text-on-surface-variant">
-              {user.team} • {user.location} • {user.email}
+              {user.team} • {user.email}
             </p>
             <button
               type="submit"

@@ -41,7 +41,6 @@ export interface UserProfile {
   team: string;
   status: string;
   avatar: string;
-  location: string;
 }
 
 export interface CatalogResponse {

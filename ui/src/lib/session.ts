@@ -11,7 +11,6 @@ export interface SessionUser {
   team: string;
   status: string;
   avatar: string;
-  location: string;
   role: SessionRole;
   // Phase 3: present for OIDC sessions, undefined for demo sessions
   accessToken?: string;
@@ -37,7 +36,6 @@ export interface OidcSessionCookie {
   email: string;
   title: string;
   team: string;
-  location: string;
   status: string;
   expiresAt: number; // Unix seconds
 }
@@ -65,7 +63,6 @@ const DEMO_USERS: SessionUser[] = [
     team: "Operations",
     status: "active",
     avatar: "AR",
-    location: "HQ",
     role: "admin",
     sessionType: "demo",
   },
@@ -77,7 +74,6 @@ const DEMO_USERS: SessionUser[] = [
     team: "Members",
     status: "active",
     avatar: "SP",
-    location: "Campus",
     role: "user",
     sessionType: "demo",
   },
@@ -89,7 +85,6 @@ const DEMO_USERS: SessionUser[] = [
     team: "Staff",
     status: "active",
     avatar: "MC",
-    location: "HQ",
     role: "admin",
     sessionType: "demo",
   },
@@ -101,7 +96,6 @@ const DEMO_USERS: SessionUser[] = [
     team: "Training",
     status: "active",
     avatar: "LB",
-    location: "Annex",
     role: "user",
     sessionType: "demo",
   },
@@ -113,7 +107,6 @@ const DEMO_USERS: SessionUser[] = [
     team: "Residency",
     status: "pending",
     avatar: "AM",
-    location: "Studio",
     role: "user",
     sessionType: "demo",
   },
@@ -130,6 +123,16 @@ export function getDemoUser(userId: string): SessionUser | null {
 // ---------------------------------------------------------------------------
 // Cookie encode / decode
 // ---------------------------------------------------------------------------
+
+// Picks the seed for the avatar initials: prefer the display name, then the
+// email local-part, then the opaque userId — so an OIDC session with a blank
+// name never renders an empty avatar.
+function avatarSeed(name: string, email: string, userId: string): string {
+  if (name.trim()) return name;
+  const local = email.split("@")[0] ?? "";
+  if (local.trim()) return local;
+  return userId;
+}
 
 function encodeSession(payload: SessionCookiePayload): string {
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
@@ -151,7 +154,7 @@ function decodeSessionPayload(value: string): SessionCookiePayload | null {
       ) {
         return null;
       }
-      // Older cookies issued before the C2/D5 fix may lack title/team/location/
+      // Older cookies issued before the C2/D5 fix may lack title/team/
       // status — fall back to safe defaults rather than failing validation.
       return {
         type: "oidc",
@@ -162,7 +165,6 @@ function decodeSessionPayload(value: string): SessionCookiePayload | null {
         email: parsed.email,
         title: typeof parsed.title === "string" ? parsed.title : "",
         team: typeof parsed.team === "string" ? parsed.team : "",
-        location: typeof parsed.location === "string" ? parsed.location : "",
         status: typeof parsed.status === "string" ? parsed.status : "active",
         expiresAt: parsed.expiresAt,
       };
@@ -220,8 +222,7 @@ export async function getSession(): Promise<SessionUser | null> {
       title: payload.title,
       team: payload.team,
       status: payload.status,
-      location: payload.location,
-      avatar: nameToAvatar(payload.name),
+      avatar: nameToAvatar(avatarSeed(payload.name, payload.email, payload.userId)),
       role: payload.role,
       accessToken: payload.accessToken,
       sessionType: "oidc",

@@ -143,7 +143,7 @@ func (z *zitadelSource) FindUser(ctx context.Context, userID string) (models.Use
 }
 
 // applyUserMetadataOverlay fans out ListUserMetadata per user with a bounded
-// concurrency limit and merges Title/Team/Location into the corresponding
+// concurrency limit and merges Title/Team into the corresponding
 // UserProfile entry in-place.
 func (z *zitadelSource) applyUserMetadataOverlay(ctx context.Context, users []models.UserProfile) {
 	if len(users) == 0 {
@@ -194,8 +194,6 @@ func applyMetadata(p *models.UserProfile, md []zitadel.UserMetadata) {
 			p.Title = m.Value
 		case "team":
 			p.Team = m.Value
-		case "location":
-			p.Location = m.Value
 		}
 	}
 }
@@ -469,7 +467,7 @@ func (z *zitadelSource) InvalidateUsers() {
 // --- Mapping helpers --------------------------------------------------------
 
 // toUserProfile maps a Zitadel user search result to MkAuth's UserProfile.
-// Title/Team/Location are empty in live mode — Zitadel doesn't model them.
+// Title/Team are empty in live mode — Zitadel doesn't model them.
 // Sync service only reads DisplayName + Email (see sync/internal/worker),
 // so the empty fields are presentational-only.
 func toUserProfile(u zitadel.ZitadelUser) models.UserProfile {
@@ -488,7 +486,6 @@ func toUserProfile(u zitadel.ZitadelUser) models.UserProfile {
 		Team:     "",
 		Status:   normalizeUserState(u.State),
 		Avatar:   nameToAvatar(name),
-		Location: "",
 	}
 }
 

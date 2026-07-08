@@ -218,13 +218,12 @@ export function nameToAvatar(name: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Profile metadata fetch — populates Title/Team/Location for OIDC sessions
+// Profile metadata fetch — populates Title/Team for OIDC sessions
 // ---------------------------------------------------------------------------
 
 export interface ProfileMetadata {
   title: string;
   team: string;
-  location: string;
   status: string;
 }
 
@@ -239,7 +238,7 @@ export async function fetchProfileMetadata(
   accessToken: string,
   backendUrl: string,
 ): Promise<ProfileMetadata> {
-  const empty: ProfileMetadata = { title: "", team: "", location: "", status: "active" };
+  const empty: ProfileMetadata = { title: "", team: "", status: "active" };
   try {
     const res = await fetch(`${backendUrl}/api/v1/me/profile`, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -250,7 +249,6 @@ export async function fetchProfileMetadata(
     return {
       title: typeof body.title === "string" ? body.title : "",
       team: typeof body.team === "string" ? body.team : "",
-      location: typeof body.location === "string" ? body.location : "",
       status: typeof body.status === "string" ? body.status : "active",
     };
   } catch {

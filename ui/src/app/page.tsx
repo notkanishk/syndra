@@ -53,7 +53,7 @@ export default async function Home() {
               <CardTitle>Identity</CardTitle>
             </CardHeader>
             <p className="text-2xl font-semibold">{session.title}</p>
-            <p className="mt-2 text-sm text-on-surface-variant">{session.team} • {session.location}</p>
+            <p className="mt-2 text-sm text-on-surface-variant">{session.team}</p>
           </Card>
           <Card>
             <CardHeader>

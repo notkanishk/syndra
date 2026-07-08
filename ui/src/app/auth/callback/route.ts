@@ -136,7 +136,6 @@ export async function GET(request: Request): Promise<Response> {
     email: fields.email,
     title: profile.title,
     team: profile.team,
-    location: profile.location,
     status: profile.status,
     expiresAt: fields.expiresAt,
   };

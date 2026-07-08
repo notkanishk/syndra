@@ -489,9 +489,6 @@ func TestZitadelSource_Users_MetadataOverlay(t *testing.T) {
 	if byID["u1"].Title != "Director" || byID["u1"].Team != "Operations" {
 		t.Fatalf("u1 metadata overlay failed: %+v", byID["u1"])
 	}
-	if byID["u1"].Location != "" {
-		t.Fatalf("u1 Location should be empty (no key set), got %q", byID["u1"].Location)
-	}
 	if byID["u2"].Title != "" || byID["u2"].Team != "" {
 		t.Fatalf("u2 should have empty metadata fields: %+v", byID["u2"])
 	}

@@ -72,7 +72,6 @@ describe("createOidcSessionValue", () => {
       email: "test@example.com",
       title: "",
       team: "",
-      location: "",
       status: "active",
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
     };
@@ -125,7 +124,6 @@ describe("getSession", () => {
       email: "real@example.com",
       title: "",
       team: "",
-      location: "",
       status: "active",
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
     });
@@ -140,7 +138,7 @@ describe("getSession", () => {
     expect(session).toBeNull();
   });
 
-  it("encodes title/team/location/status into the OIDC cookie payload", () => {
+  it("encodes title/team/status into the OIDC cookie payload", () => {
     const value = createOidcSessionValue({
       type: "oidc",
       accessToken: "tok",
@@ -150,18 +148,35 @@ describe("getSession", () => {
       email: "alice@x.test",
       title: "Director",
       team: "Ops",
-      location: "HQ",
       status: "active",
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
     });
     const decoded = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
     expect(decoded.title).toBe("Director");
     expect(decoded.team).toBe("Ops");
-    expect(decoded.location).toBe("HQ");
     expect(decoded.status).toBe("active");
   });
 
-  it("getSession surfaces title/team/location on OidcSessionUser", async () => {
+  it("OIDC avatar falls back to email then userId when name is empty", async () => {
+    process.env.ZITADEL_DOMAIN = "https://zitadel.example";
+    mockCookieValue = createOidcSessionValue({
+      type: "oidc",
+      accessToken: "tok",
+      userId: "u-1",
+      role: "user",
+      name: "",
+      email: "jane.doe@x.edu",
+      title: "",
+      team: "",
+      status: "active",
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    });
+    const session = await getSession();
+    expect(session?.avatar).not.toBe("");
+    expect(session?.avatar).toBe("JA"); // from email local-part "jane.doe"
+  });
+
+  it("getSession surfaces title/team on OidcSessionUser", async () => {
     process.env.ZITADEL_DOMAIN = "https://zitadel.example";
     mockCookieValue = createOidcSessionValue({
       type: "oidc",
@@ -172,13 +187,11 @@ describe("getSession", () => {
       email: "alice@x.test",
       title: "Director",
       team: "Ops",
-      location: "HQ",
       status: "active",
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
     });
     const session = await getSession();
     expect(session?.title).toBe("Director");
     expect(session?.team).toBe("Ops");
-    expect(session?.location).toBe("HQ");
   });
 });

@@ -70,7 +70,7 @@ type ZitadelClient interface {
 	// Applications (OIDC/API/SAML clients attached to a project)
 	ListApplications(ctx context.Context, projectID string, p SearchParams) (*SearchResult[ZitadelApplication], error)
 
-	// User metadata (arbitrary admin-managed K/V per user, used for Title/Team/Location overlays)
+	// User metadata (arbitrary admin-managed K/V per user, used for Title/Team overlays)
 	ListUserMetadata(ctx context.Context, userID string, p SearchParams) (*SearchResult[UserMetadata], error)
 
 	// Grants (user-role assignments)

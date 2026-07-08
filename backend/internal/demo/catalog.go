@@ -7,11 +7,11 @@ import (
 )
 
 var users = []models.UserProfile{
-	{ID: "dev_admin", Name: "Alice Rivera", Email: "alice@makerspace.local", Title: "Makerspace Director", Team: "Operations", Status: "active", Avatar: "AR", Location: "HQ"},
-	{ID: "sam_student", Name: "Sam Patel", Email: "sam@makerspace.local", Title: "Student Maker", Team: "Members", Status: "active", Avatar: "SP", Location: "Campus"},
-	{ID: "maya_staff", Name: "Maya Chen", Email: "maya@makerspace.local", Title: "Lab Coordinator", Team: "Staff", Status: "active", Avatar: "MC", Location: "HQ"},
-	{ID: "leo_mentor", Name: "Leo Brooks", Email: "leo@makerspace.local", Title: "Laser Mentor", Team: "Training", Status: "active", Avatar: "LB", Location: "Annex"},
-	{ID: "ava_guest", Name: "Ava Morgan", Email: "ava@makerspace.local", Title: "Visiting Artist", Team: "Residency", Status: "pending", Avatar: "AM", Location: "Studio"},
+	{ID: "dev_admin", Name: "Alice Rivera", Email: "alice@makerspace.local", Title: "Makerspace Director", Team: "Operations", Status: "active", Avatar: "AR"},
+	{ID: "sam_student", Name: "Sam Patel", Email: "sam@makerspace.local", Title: "Student Maker", Team: "Members", Status: "active", Avatar: "SP"},
+	{ID: "maya_staff", Name: "Maya Chen", Email: "maya@makerspace.local", Title: "Lab Coordinator", Team: "Staff", Status: "active", Avatar: "MC"},
+	{ID: "leo_mentor", Name: "Leo Brooks", Email: "leo@makerspace.local", Title: "Laser Mentor", Team: "Training", Status: "active", Avatar: "LB"},
+	{ID: "ava_guest", Name: "Ava Morgan", Email: "ava@makerspace.local", Title: "Visiting Artist", Team: "Residency", Status: "pending", Avatar: "AM"},
 }
 
 var projects = []models.ProjectCatalog{
