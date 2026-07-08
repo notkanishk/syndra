@@ -3,7 +3,7 @@
 The `live-zitadel-data-source` change flipped the directory seam from demo fixtures to the live Zitadel Management API when `ZITADEL_DOMAIN` + machine key are configured. Live data now drives the admin UI — but an operator opening the Identity-section pages sees **incomplete** live data:
 
 - **`/applications` page renders Zitadel *projects*, not *applications*.** The first-cut `zitadelSource.Applications()` synthesized one `ApplicationCatalog` per Zitadel project because the Management client had no `ListApplications` method. Real Zitadel applications — OIDC clients, APIs, SAML SPs attached to a project — were never fetched. Operators with multiple apps per project saw only the project; operators with apps-only-no-claim-profile saw no obvious type signal.
-- **`/users` page always shows empty Title, Team, Location** in live mode. The first-cut `toUserProfile()` hardcoded those fields to `""` because Zitadel's first-class user schema doesn't model them. The documented Zitadel mechanism for admin-managed per-user attributes is the user metadata K/V store (`POST /management/v1/users/{id}/metadata/_search`) — which MkAuth didn't call.
+- **`/users` page always shows empty Title, Team** in live mode. The first-cut `toUserProfile()` hardcoded those fields to `""` because Zitadel's first-class user schema doesn't model them. The documented Zitadel mechanism for admin-managed per-user attributes is the user metadata K/V store (`POST /management/v1/users/{id}/metadata/_search`) — which MkAuth didn't call.
 
 This change closes both gaps so the Identity section is genuinely identity-complete in live mode.
 
@@ -21,8 +21,8 @@ This change closes both gaps so the Identity section is genuinely identity-compl
 
 - **`zitadelSource.Users()` enrichment**:
   - After `ListUsers`, fans out `ListUserMetadata` per user (errgroup limit 8, same 30s TTL cache).
-  - Merges well-known keys (case-insensitive) into the existing `UserProfile` struct: `title` → `Title`, `team` → `Team`, `location` → `Location`. Unknown keys ignored.
-  - Per-user metadata fetch failures are logged and the user returns with empty Title/Team/Location, never fails the whole list.
+  - Merges well-known keys (case-insensitive) into the existing `UserProfile` struct: `title` → `Title`, `team` → `Team`. Unknown keys ignored.
+  - Per-user metadata fetch failures are logged and the user returns with empty Title/Team, never fails the whole list.
   - `FindUser` applies the same overlay on both the cached-list hit and the `GetUser` fallback.
 
 - **Invalidation extended**: `InvalidateProject(projectID)` additionally drops the per-project apps cache; `InvalidateUsers()` also drops every user's metadata cache entry so a newly-added `title` metadata row shows up on the next page load, not only after the TTL.
@@ -31,7 +31,7 @@ This change closes both gaps so the Identity section is genuinely identity-compl
 
 ### Modified Capabilities
 
-- `user-management`: `UserProfile.Title`, `.Team`, `.Location` are populated from Zitadel user metadata when the admin has set the corresponding keys; blank otherwise.
+- `user-management`: `UserProfile.Title`, `.Team` are populated from Zitadel user metadata when the admin has set the corresponding keys; blank otherwise.
 - `application-claims` / `service-catalog`: `/applications` renders **real Zitadel applications**, not project stubs. Type (`OIDC` / `API` / `SAML`) surfaces via the existing `consumer` column.
 
 ## Impact

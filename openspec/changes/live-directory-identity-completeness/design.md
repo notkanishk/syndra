@@ -5,14 +5,14 @@
 After `live-zitadel-data-source` landed, the `directory.Source` seam reads live Zitadel state — but the first cut had two known-incomplete areas that read as "data missing" to operators:
 
 1. Applications were fabricated from projects because the Management client didn't implement `ListApplications`.
-2. User Title/Team/Location were hardcoded empty because Zitadel's user schema doesn't model them as first-class fields.
+2. User Title/Team were hardcoded empty because Zitadel's user schema doesn't model them as first-class fields.
 
 This change completes both areas without touching the frontend.
 
 ## Principle: no contract change, no new schema
 
 - `ApplicationCatalog` DTO stays as-is. The existing `consumer` field is repurposed from "always empty in live mode" to "human-readable app type label" (`OIDC Client` / `API` / `SAML SP`). The UI already renders this column.
-- `UserProfile.Title/Team/Location` already exist. We just start populating them from the Zitadel user metadata K/V store when the admin has set the corresponding keys.
+- `UserProfile.Title/Team` already exist. We just start populating them from the Zitadel user metadata K/V store when the admin has set the corresponding keys.
 - No database migration. `claim_profiles` stays project-keyed.
 
 ## Zitadel client extensions
@@ -72,7 +72,7 @@ for each well-known key in the metadata: write into the corresponding UserProfil
 ```
 
 - **Concurrency limit = 8**: higher than apps because metadata endpoints are cheaper (keyed lookups, no nested joins) and the fan-out is per-user, potentially 10x wider.
-- **Well-known key set**: `title`, `team`, `location`. Case-insensitive match — admins tripping over "Title" vs "title" would be a silent failure mode, so we normalize on read.
+- **Well-known key set**: `title`, `team`. Case-insensitive match — admins tripping over "Title" vs "title" would be a silent failure mode, so we normalize on read.
 - **Per-user failure tolerance**: metadata fetch errors are logged, the user returns with the failed fields empty. Never blocks the rest of the user list.
 - **Cache TTL = 30s** (same as list caches). Short enough that metadata edits in Zitadel console propagate quickly, long enough to absorb view-heavy page loads.
 
@@ -95,6 +95,6 @@ Considered and rejected:
 |---|---|
 | `Projects()` fails | `Applications()` returns the same error (projects list is prerequisite). |
 | Single project's `ListApplications` fails | Logged, project contributes 0 apps, other projects rendered. **Global cache write skipped** so next call retries the failed project; successful per-project fetches stay cached. |
-| Single user's `ListUserMetadata` fails | Logged, user returns with empty Title/Team/Location, list continues. |
+| Single user's `ListUserMetadata` fails | Logged, user returns with empty Title/Team, list continues. |
 | `ListUsers` fails | `Users()` returns the error (base list is required). |
 | All apps pagination pages exhausted (>100) | `paginate` returns "pagination exceeded; refusing to spin" — same safety as existing Users/Projects paths. |
