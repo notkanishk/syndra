@@ -118,23 +118,6 @@ func CountPendingDrift(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-// HasPendingDrift reports whether a pending drift row already exists for the
-// exact (user, project, role, drift_type). The sweep uses this to avoid
-// re-enqueueing an mkauth_only grant the operator is already triaging — scoped
-// to the specific role so an unrelated missing role on the same pair is NOT
-// suppressed.
-func HasPendingDrift(ctx context.Context, userID, projectID, roleKey, driftType string) (bool, error) {
-	const q = `SELECT EXISTS(
-		SELECT 1 FROM drift_items
-		WHERE user_id=$1 AND project_id=$2 AND drift_type=$4
-		  AND $3 = ANY(role_keys) AND status='pending_triage')`
-	var exists bool
-	if err := PG.QueryRow(ctx, q, userID, projectID, roleKey, driftType).Scan(&exists); err != nil {
-		return false, fmt.Errorf("has pending drift: %w", err)
-	}
-	return exists, nil
-}
-
 func scanDriftItems(rows pgx.Rows) ([]models.DriftItem, error) {
 	var out []models.DriftItem
 	for rows.Next() {
