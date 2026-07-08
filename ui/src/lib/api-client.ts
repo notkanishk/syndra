@@ -34,6 +34,12 @@ export class ApiError extends Error {
 
 type RequestInitJSON = Omit<RequestInit, "body"> & {
   body?: unknown;
+  /**
+   * When true, a non-2xx response resolves with the parsed body (typed as T)
+   * instead of throwing ApiError. Used by diagnostic probes (e.g. Zitadel
+   * health) where the error envelope IS the payload the caller wants to read.
+   */
+  preserveErrorBody?: boolean;
 };
 
 /**
@@ -79,6 +85,7 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
   }
 
   if (!res.ok) {
+    if (init?.preserveErrorBody) return parsed as T;
     throw new ApiError(res.status, parsed as ApiErrorBody | string);
   }
 
