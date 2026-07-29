@@ -4,6 +4,7 @@ Identity & Access Management orchestration layer for an academic makerspace. Com
 
 ## Quick Navigation
 
+- **Next steps:** `openspec/NEXT.md` — single pickup point: every open gap, operator-gated check, and spec/tooling debt in one place
 - **Spec index:** `openspec/INDEX.md` — master hub for all specs, capabilities, and changes
 - **Architecture:** `openspec/changes/mkauth-core-architecture/design.md` — three-plane design, Zitadel interaction matrix, IdP chain
 - **Roadmap:** `openspec/changes/mkauth-core-architecture/ROADMAP.md` — phase timeline (1-4 complete, 5-6 ahead)
@@ -51,7 +52,7 @@ Scale depth to the task: a one-line typo fix does not need a full spec revision,
 <!-- openlore-fingerprint: 25cdd746ebf39b56 -->
 This project uses OpenLore for persistent architectural memory.
 
-ALWAYS call `orient()` (via the openlore MCP server, or `npx openlore orient --json`)
+ALWAYS call `orient()` (via the openlore MCP server, or `bunx openlore orient --json`)
 before reading source files when starting a new task. This returns the relevant
 functions, callers, spec sections, and insertion points for the task at hand —
 one structural lookup instead of file-by-file rediscovery.
