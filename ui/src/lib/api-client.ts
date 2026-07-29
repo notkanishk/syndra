@@ -86,6 +86,13 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
 
   if (!res.ok) {
     if (init?.preserveErrorBody) return parsed as T;
+    // Session expired mid-SPA-session: /api/proxy is outside the middleware
+    // matcher, so without this the user is stuck on error toasts until their
+    // next full navigation (SC9). Redirect to re-auth; still throw so the
+    // caller's error path settles while the navigation happens.
+    if (res.status === 401 && typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.assign("/login");
+    }
     throw new ApiError(res.status, parsed as ApiErrorBody | string);
   }
 

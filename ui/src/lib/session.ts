@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { nameToAvatar } from "@/lib/oidc";
 
@@ -134,13 +135,39 @@ function avatarSeed(name: string, email: string, userId: string): string {
   return userId;
 }
 
+// The session cookie is `<base64url payload>.<base64url HMAC-SHA256>`.
+// httpOnly stops script reads but nothing stops a client minting its own
+// cookie — without the signature, a forged `role:"admin"` payload would walk
+// through middleware and every page-level gate (July 2026 audit SC4).
+// SESSION_SECRET is preferred; MKAUTH_API_KEY (already shared UI↔backend)
+// is the fallback so no new required env is introduced.
+function sessionSecret(): string {
+  return process.env.SESSION_SECRET || process.env.MKAUTH_API_KEY || "";
+}
+
+function signPayload(body: string): string {
+  return createHmac("sha256", sessionSecret()).update(body).digest("base64url");
+}
+
 function encodeSession(payload: SessionCookiePayload): string {
-  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  if (!sessionSecret()) {
+    // Fail loudly at issue time — an unsigned session would be forgeable.
+    throw new Error("Cannot issue session: SESSION_SECRET or MKAUTH_API_KEY must be set");
+  }
+  const body = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  return `${body}.${signPayload(body)}`;
 }
 
 function decodeSessionPayload(value: string): SessionCookiePayload | null {
   try {
-    const decoded = Buffer.from(value, "base64url").toString("utf8");
+    const [body, sig] = value.split(".");
+    if (!body || !sig || !sessionSecret()) return null;
+    const expected = Buffer.from(signPayload(body));
+    const provided = Buffer.from(sig);
+    if (expected.length !== provided.length || !timingSafeEqual(expected, provided)) {
+      return null; // tampered, forged, or legacy-unsigned — force re-auth
+    }
+    const decoded = Buffer.from(body, "base64url").toString("utf8");
     const parsed = JSON.parse(decoded) as Partial<SessionCookiePayload & LegacySessionCookie>;
 
     if (parsed.type === "oidc") {

@@ -8,6 +8,14 @@ import {
   SESSION_COOKIE_NAME,
 } from "@/lib/session";
 
+// Sessions are HMAC-signed (SC4); a secret must be present for encode/decode.
+process.env.SESSION_SECRET = "test-session-secret";
+
+// Extracts the JSON payload from a signed `payload.hmac` cookie value.
+function decodePayload(value: string): Record<string, unknown> {
+  return JSON.parse(Buffer.from(value.split(".")[0], "base64url").toString("utf8"));
+}
+
 // In-test cookie store. Mutated by beforeEach in the getSession suite below.
 let mockCookieValue: string | undefined;
 vi.mock("next/headers", () => ({
@@ -48,7 +56,7 @@ describe("createSessionValue", () => {
     expect(value).not.toBeNull();
 
     // Decode and verify the payload
-    const decoded = JSON.parse(Buffer.from(value!, "base64url").toString("utf8"));
+    const decoded = decodePayload(value!);
     expect(decoded).toEqual({
       type: "demo",
       userId: "dev_admin",
@@ -77,7 +85,7 @@ describe("createOidcSessionValue", () => {
     };
 
     const value = createOidcSessionValue(payload);
-    const decoded = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+    const decoded = decodePayload(value!);
 
     expect(decoded.type).toBe("oidc");
     expect(decoded.accessToken).toBe(payload.accessToken);
@@ -138,6 +146,37 @@ describe("getSession", () => {
     expect(session).toBeNull();
   });
 
+  it("rejects a tampered cookie whose payload was edited after signing — SC4", async () => {
+    const value = createOidcSessionValue({
+      type: "oidc",
+      accessToken: "tok",
+      userId: "u1",
+      role: "user",
+      name: "Mallory",
+      email: "m@x.test",
+      title: "",
+      team: "",
+      status: "active",
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    });
+    const [, sig] = value.split(".");
+    const escalated = Buffer.from(
+      JSON.stringify({ ...decodePayload(value), role: "admin" }),
+      "utf8",
+    ).toString("base64url");
+    mockCookieValue = `${escalated}.${sig}`;
+    expect(await getSession()).toBeNull();
+  });
+
+  it("rejects an unsigned (pre-SC4 legacy) cookie", async () => {
+    delete process.env.ZITADEL_DOMAIN;
+    mockCookieValue = Buffer.from(
+      JSON.stringify({ type: "demo", userId: "dev_admin", role: "admin" }),
+      "utf8",
+    ).toString("base64url");
+    expect(await getSession()).toBeNull();
+  });
+
   it("encodes title/team/status into the OIDC cookie payload", () => {
     const value = createOidcSessionValue({
       type: "oidc",
@@ -151,7 +190,7 @@ describe("getSession", () => {
       status: "active",
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
     });
-    const decoded = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+    const decoded = decodePayload(value!);
     expect(decoded.title).toBe("Director");
     expect(decoded.team).toBe("Ops");
     expect(decoded.status).toBe("active");

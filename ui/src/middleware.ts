@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { SESSION_COOKIE_NAME } from "@/lib/session";
+// Must match SESSION_COOKIE_NAME in lib/session.ts. Declared locally because
+// this file runs on the Edge runtime and importing lib/session would pull
+// node:crypto (used for cookie signing, SC4) into the Edge bundle.
+const SESSION_COOKIE_NAME = "mkauth_session";
 
 const ADMIN_ONLY_PATHS = [
   "/applications",
@@ -18,14 +21,37 @@ type SessionState =
   | { kind: "missing" }
   | { kind: "stale-demo" };
 
-function readSession(request: NextRequest): SessionState {
+function base64urlDecode(value: string): string {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  return atob(padded);
+}
+
+// Mirrors the HMAC check in lib/session.ts (SC4) on the Edge runtime: the
+// cookie is `<payload>.<signature>`; an unsigned or tampered cookie must not
+// pass middleware. crypto.subtle.verify is constant-time.
+async function verifySignature(body: string, sig: string): Promise<boolean> {
+  const secret = process.env.SESSION_SECRET || process.env.MKAUTH_API_KEY || "";
+  if (!secret) return false;
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["verify"],
+  );
+  const sigBytes = Uint8Array.from(base64urlDecode(sig), (c) => c.charCodeAt(0));
+  return crypto.subtle.verify("HMAC", key, sigBytes, new TextEncoder().encode(body));
+}
+
+async function readSession(request: NextRequest): Promise<SessionState> {
   const raw = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!raw) return { kind: "missing" };
 
   try {
-    const normalized = raw.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
-    const decoded = atob(padded);
+    const [body, sig] = raw.split(".");
+    if (!body || !sig || !(await verifySignature(body, sig))) return { kind: "missing" };
+    const decoded = base64urlDecode(body);
     const parsed = JSON.parse(decoded) as {
       type?: string;
       userId?: string;
@@ -67,7 +93,7 @@ function redirectTo(request: NextRequest, path: string, clearSession = false) {
   return response;
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (
@@ -78,7 +104,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const session = readSession(request);
+  const session = await readSession(request);
 
   if (session.kind === "stale-demo") {
     // Always send to /login and clear the stale cookie so the next request
