@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -88,7 +87,11 @@ func HandleActionInject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	projectIDs := dedupProjectIDs(req.UserGrants)
+	grantProjects := make([]string, len(req.UserGrants))
+	for i, g := range req.UserGrants {
+		grantProjects[i] = g.ProjectID
+	}
+	projectIDs := dedupeNonEmpty(grantProjects)
 
 	switch len(projectIDs) {
 	case 0:
@@ -104,25 +107,6 @@ func HandleActionInject(w http.ResponseWriter, r *http.Request) {
 		}
 		jsonResponse(w, http.StatusOK, merged)
 	}
-}
-
-// dedupProjectIDs extracts unique, trimmed project IDs from the grant list,
-// preserving first-seen order so the output is deterministic for golden tests.
-func dedupProjectIDs(grants []ActionV2UserGrantRef) []string {
-	seen := make(map[string]struct{})
-	out := make([]string, 0, len(grants))
-	for _, g := range grants {
-		pid := strings.TrimSpace(g.ProjectID)
-		if pid == "" {
-			continue
-		}
-		if _, dup := seen[pid]; dup {
-			continue
-		}
-		seen[pid] = struct{}{}
-		out = append(out, pid)
-	}
-	return out
 }
 
 // claimsForProject fetches the pre-compiled claim map for a (user, project)

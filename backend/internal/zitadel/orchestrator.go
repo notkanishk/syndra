@@ -180,20 +180,6 @@ func RevokeMappingRules(ctx context.Context, userID, sourceProjectID, sourceRole
 	return nil
 }
 
-// AssignUserToRole performs a single role grant for a user via the Zitadel API.
-func AssignUserToRole(ctx context.Context, userID, projectID, roleKey string) error {
-	if MgmtClient == nil {
-		return fmt.Errorf("zitadel client uninitialized; operating in local-policy-only mode")
-	}
-
-	if err := MgmtClient.AddUserGrant(ctx, userID, projectID, []string{roleKey}); err != nil {
-		return fmt.Errorf("AddUserGrant failed: %v", err)
-	}
-
-	log.Printf("[ZITADEL] Granted %s -> %s to %s via Management API.", projectID, roleKey, userID)
-	return nil
-}
-
 // fetchAllUserGrants paginates through all grants for a user so that operations
 // like revocation never silently miss grants beyond the first page.
 func fetchAllUserGrants(ctx context.Context, userID string) ([]UserGrant, error) {

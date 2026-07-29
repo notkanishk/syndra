@@ -199,38 +199,6 @@ func TestEnforceMappingRules_GrantErrorContinues(t *testing.T) {
 	}
 }
 
-func TestAssignUserToRole_Success(t *testing.T) {
-	resetDeps(t)
-
-	mock := &mockClient{}
-	MgmtClient = mock
-
-	err := AssignUserToRole(context.Background(), "user-1", "proj-1", "admin")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(mock.addGrantCalls) != 1 {
-		t.Fatalf("expected 1 call, got %d", len(mock.addGrantCalls))
-	}
-	if mock.addGrantCalls[0].RoleKeys[0] != "admin" {
-		t.Errorf("unexpected role: %v", mock.addGrantCalls[0].RoleKeys)
-	}
-}
-
-func TestAssignUserToRole_NilClient(t *testing.T) {
-	resetDeps(t)
-	MgmtClient = nil
-
-	err := AssignUserToRole(context.Background(), "u1", "p1", "r1")
-	if err == nil {
-		t.Fatal("expected error for nil client")
-	}
-	if err.Error() != "zitadel client uninitialized; operating in local-policy-only mode" {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
 // --- RevokeMappingRules tests ---
 
 func TestRevokeMappingRules_NilClient(t *testing.T) {
