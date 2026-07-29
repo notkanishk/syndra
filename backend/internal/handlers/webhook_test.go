@@ -113,6 +113,48 @@ func setupNoopWebhookDeps(t *testing.T) {
 	dbDropWebhookEventEnrichmentIncomplete = func(_ context.Context, _, _, _, _ string) error { return nil }
 }
 
+// SC5 regression: Zitadel redeliveries of the SAME event (retry after
+// timeout/5xx) carry a fresh ZITADEL-Signature header each time — the
+// idempotency key must come from the stable aggregateID:eventType:sequence
+// tuple, never from the signature, or every retry re-dispatches.
+func TestHandleZitadelWebhook_RedeliveryDedupesOnStableKey(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	var keys []string
+	dbInsertWebhookEvent = func(_ context.Context, _, _, _, _, idempotencyKey string) (string, bool, error) {
+		keys = append(keys, idempotencyKey)
+		return "evt-1", len(keys) == 1, nil // ON CONFLICT: only the first insert lands
+	}
+	var dispatches int
+	webhookEnforceMappingRules = func(context.Context, string, string, string) error {
+		dispatches++
+		return nil
+	}
+
+	body := []byte(`{"aggregateID":"agg-7","aggregateType":"user_grant","resourceOwner":"org","instanceID":"inst","version":"v1","sequence":42,"event_type":"user.grant.added","created_at":"2026-07-16T00:00:00Z","userID":"human-1","event_payload":{"userId":"u1","projectId":"p1","roleKeys":["maker"]}}`)
+
+	for i, sig := range []string{"t=100,v1=aaaa", "t=200,v1=bbbb"} { // redelivery: new timestamp, new HMAC
+		req := httptest.NewRequest(http.MethodPost, "/api/webhooks/zitadel", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("ZITADEL-Signature", sig)
+		rr := httptest.NewRecorder()
+		HandleZitadelWebhook(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("delivery %d: expected 200; got %d: %s", i, rr.Code, rr.Body.String())
+		}
+	}
+
+	if len(keys) != 2 || keys[0] != keys[1] {
+		t.Fatalf("expected identical idempotency keys across redeliveries; got %v", keys)
+	}
+	if want := "agg-7:user.grant.added:42"; keys[0] != want {
+		t.Fatalf("expected stable key %q; got %q", want, keys[0])
+	}
+	if dispatches != 1 {
+		t.Fatalf("redelivery must not re-dispatch; got %d dispatches", dispatches)
+	}
+}
+
 func postWebhook(t *testing.T, body []byte) *httptest.ResponseRecorder {
 	t.Helper()
 

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -75,7 +76,12 @@ func translateZitadelEvent(body []byte) (WebhookPayload, bool, error) {
 		return WebhookPayload{}, true, errSelfMutation
 	}
 
-	return translateEventName(ev), true, nil
+	out := translateEventName(ev)
+	if out.EventType != "" {
+		// Stable across Zitadel redeliveries — the dedup key for this event (SC5).
+		out.DedupKey = fmt.Sprintf("%s:%s:%d", ev.AggregateID, ev.EventType, ev.Sequence)
+	}
+	return out, true, nil
 }
 
 // warnSelfMutationGuardDisabled emits a one-time process-lifetime warning

@@ -18,6 +18,12 @@ type WebhookPayload struct {
 	RoleKeys      []string `json:"role_keys"`          // multi-role grants from Zitadel event-trigger payloads
 	ProjectIDs    []string `json:"project_ids"`        // all projects the user touches
 	GrantID       string   `json:"grant_id,omitempty"` // Zitadel user_grant aggregate ID; key for the grants index
+	// DedupKey is the stable idempotency key for Zitadel-shape events:
+	// aggregateID:eventType:sequence, set by translateZitadelEvent. Stable
+	// across redeliveries — unlike the ZITADEL-Signature header, whose
+	// embedded timestamp is recomputed per delivery (SC5). Never decoded
+	// from the wire; internal-shape callers fall back to payload-derived keys.
+	DedupKey string `json:"-"`
 }
 
 var validEventTypes = map[string]bool{
@@ -105,7 +111,7 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 	if isZitadel && isGrantEvent && (!trimmedNonEmpty(event.SourceProject) || len(event.RoleKeys) == 0) {
 		log.Printf("[WEBHOOK] grant event acknowledged without dispatch (enrichment incomplete) event=%s user=%s grant=%s project=%q roles=%v",
 			event.EventType, event.UserID, event.GrantID, event.SourceProject, event.RoleKeys)
-		idempotencyKey := r.Header.Get("ZITADEL-Signature")
+		idempotencyKey := event.DedupKey
 		if idempotencyKey == "" {
 			idempotencyKey = fmt.Sprintf("dropped:%s:%s:%s", event.EventType, event.UserID, event.GrantID)
 		}
@@ -164,12 +170,13 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[WEBHOOK] Event received: type=%s user=%s project=%s role=%s",
 		event.EventType, event.UserID, event.SourceProject, event.RoleKey)
 
-	// Persist event and deduplicate.
-	// Use the Actions v2 ZITADEL-Signature header as idempotency key when
-	// available — unique per (timestamp, body) per Zitadel signing semantics.
+	// Persist event and deduplicate. Zitadel-shape events carry a stable
+	// aggregateID:eventType:sequence key so redeliveries (retry after timeout,
+	// 5xx, dropped response) dedupe correctly — the signature header can't be
+	// used here because its embedded timestamp changes per delivery (SC5).
 	// Internal-shape callers (operator curl, contracts tests) fall back to
 	// payload-derived deduplication.
-	idempotencyKey := r.Header.Get("ZITADEL-Signature")
+	idempotencyKey := event.DedupKey
 	if idempotencyKey == "" {
 		idempotencyKey = fmt.Sprintf("%s:%s:%s:%s",
 			event.EventType, event.UserID, event.SourceProject, event.RoleKey)
