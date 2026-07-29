@@ -50,3 +50,6 @@ zitadel-machine-key.json
 .vscode/
 *.swp
 *.swo
+
+# openlore analysis artifacts
+.openlore/
