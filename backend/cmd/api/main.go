@@ -19,6 +19,7 @@ import (
 	"mkauth/internal/seed"
 	"mkauth/internal/services/drift"
 	"mkauth/internal/services/expiry"
+	"mkauth/internal/services/periodic"
 	"mkauth/internal/zitadel"
 )
 
@@ -100,18 +101,25 @@ func main() {
 	// cascade-revoke derived Zitadel grants. sched is nil when disabled;
 	// shutdown joins on sched.Done() (if non-nil) before closing shared
 	// DB/Redis clients so an in-flight sweep cannot race teardown.
-	var sched *expiry.Scheduler
+	var sched *periodic.Runner
 	if schedulerEnabled() {
-		sched = expiry.NewScheduler(schedulerInterval(), schedulerBatchSize())
+		batch := schedulerBatchSize()
+		sched = periodic.New("SCHEDULER", schedulerInterval(), 5*time.Minute, func(ctx context.Context) error {
+			expiry.Sweep(ctx, batch)
+			return nil
+		})
 		go sched.Start(ctx)
 	} else {
 		log.Println("[SCHEDULER] Disabled via EXPIRY_SCHEDULER_ENABLED=false")
 	}
 
 	// Drift reconciliation scheduler: periodic Zitadel↔MkAuth sweep (B2/C6).
-	var driftSched *drift.Scheduler
+	var driftSched *periodic.Runner
 	if driftSchedulerEnabled() {
-		driftSched = drift.NewScheduler(driftInterval())
+		driftSched = periodic.New("DRIFT", driftInterval(), 6*time.Hour, func(ctx context.Context) error {
+			_, err := drift.Sweep(ctx)
+			return err
+		})
 		go driftSched.Start(ctx)
 	} else {
 		log.Println("[DRIFT] Disabled via DRIFT_SCHEDULER_ENABLED=false")

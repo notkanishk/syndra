@@ -21,7 +21,6 @@ func resetSweepDeps(t *testing.T) {
 	origAudit := svcInsertAuditLog
 	origCache := cacheInvalidateUser
 	origZit := zitadelRevokeMappingRules
-	origNow := timeNow
 	t.Cleanup(func() {
 		svcGetExpiredDirectGrants = origGet
 		svcDeleteExpiredDirectGrantsByIDs = origDel
@@ -29,7 +28,6 @@ func resetSweepDeps(t *testing.T) {
 		svcInsertAuditLog = origAudit
 		cacheInvalidateUser = origCache
 		zitadelRevokeMappingRules = origZit
-		timeNow = origNow
 	})
 }
 
@@ -108,7 +106,7 @@ func TestSweep_NoExpired_NoOp(t *testing.T) {
 		return nil, nil
 	}
 
-	sweep(context.Background(), 10)
+	Sweep(context.Background(), 10)
 
 	if len(r.emitted)+len(r.deletedIDs)+len(r.audited)+len(r.invalidatedFor)+len(r.zitadelCalls) != 0 {
 		t.Fatalf("expected no side effects, got emitted=%d deleted=%d audited=%d inv=%d zit=%d",
@@ -128,7 +126,7 @@ func TestSweep_SingleExpired_FullFlow(t *testing.T) {
 		return []models.DirectGrant{g}, nil
 	}
 
-	sweep(context.Background(), 10)
+	Sweep(context.Background(), 10)
 
 	if len(r.audited) != 1 || r.audited[0] != "g1" {
 		t.Fatalf("expected audit for g1, got %v", r.audited)
@@ -166,7 +164,7 @@ func TestSweep_GrantRenewedMidSweep_NotRevoked(t *testing.T) {
 		return nil, nil
 	}
 
-	sweep(context.Background(), 10)
+	Sweep(context.Background(), 10)
 
 	if len(r.audited) != 0 {
 		t.Fatalf("audit MUST NOT be written for a renewed grant, got %v", r.audited)
@@ -199,7 +197,7 @@ func TestSweep_PartialRenewal_OnlyActuallyDeletedProgressDownstream(t *testing.T
 		return []models.DirectGrant{g1}, nil
 	}
 
-	sweep(context.Background(), 10)
+	Sweep(context.Background(), 10)
 
 	if len(r.audited) != 1 || r.audited[0] != "g1" {
 		t.Fatalf("expected audit for g1 only, got %v", r.audited)
@@ -237,7 +235,7 @@ func TestSweep_MultiUser_OneInvalidateEach(t *testing.T) {
 		return out, nil
 	}
 
-	sweep(context.Background(), 10)
+	Sweep(context.Background(), 10)
 
 	if len(r.invalidatedFor) != 2 {
 		t.Fatalf("expected 2 invalidates (one per user), got %d: %v", len(r.invalidatedFor), r.invalidatedFor)
@@ -265,7 +263,7 @@ func TestSweep_DeleteFails_NoSideEffects(t *testing.T) {
 		return nil, errors.New("db down")
 	}
 
-	sweep(context.Background(), 10)
+	Sweep(context.Background(), 10)
 
 	if len(r.audited) != 0 || len(r.emitted) != 0 || len(r.invalidatedFor) != 0 || len(r.zitadelCalls) != 0 {
 		t.Fatalf("no side effects must happen when delete fails; got audited=%d emitted=%d inv=%d zit=%d",
@@ -294,7 +292,7 @@ func TestSweep_IntentFailsAfterDelete_AuditAndCacheStillLand(t *testing.T) {
 		return errors.New("lldap down")
 	}
 
-	sweep(context.Background(), 10)
+	Sweep(context.Background(), 10)
 
 	if len(r.audited) != 1 {
 		t.Fatalf("audit MUST land after successful delete even if intent emit later fails, got %d", len(r.audited))
@@ -322,7 +320,7 @@ func TestSweep_ZitadelFails_OtherStepsSucceed(t *testing.T) {
 		return errors.New("zitadel unreachable")
 	}
 
-	sweep(context.Background(), 10)
+	Sweep(context.Background(), 10)
 
 	if len(r.audited) != 1 || len(r.emitted) != 1 || len(r.invalidatedFor) != 1 {
 		t.Fatalf("zitadel failure must not roll back earlier steps; got audited=%d emitted=%d inv=%d",
@@ -352,7 +350,7 @@ func TestSweep_BatchSizeRespected(t *testing.T) {
 		return out, nil
 	}
 
-	sweep(context.Background(), 500)
+	Sweep(context.Background(), 500)
 
 	if capturedLimit != 500 {
 		t.Fatalf("expected limit=500 forwarded to DB, got %d", capturedLimit)
@@ -383,7 +381,7 @@ func TestSweep_IntentIdempotencyAcrossReGrants(t *testing.T) {
 	svcDeleteExpiredDirectGrantsByIDs = func(_ context.Context, _ string, _ []string) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{g1}, nil
 	}
-	sweep(context.Background(), 10)
+	Sweep(context.Background(), 10)
 
 	g2 := mkGrant("grant-v2", "user-1", "proj-a", "role-x")
 	svcGetExpiredDirectGrants = func(_ context.Context, _ int) ([]models.DirectGrant, error) {
@@ -392,7 +390,7 @@ func TestSweep_IntentIdempotencyAcrossReGrants(t *testing.T) {
 	svcDeleteExpiredDirectGrantsByIDs = func(_ context.Context, _ string, _ []string) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{g2}, nil
 	}
-	sweep(context.Background(), 10)
+	Sweep(context.Background(), 10)
 
 	if len(seenGrantIDs) != 2 {
 		t.Fatalf("expected 2 emit calls, got %d", len(seenGrantIDs))
@@ -427,7 +425,7 @@ func TestSweep_UserScopedDelete_NoCrossUserBleed(t *testing.T) {
 		}, nil
 	}
 
-	sweep(context.Background(), 10)
+	Sweep(context.Background(), 10)
 
 	if len(deletes) != 2 {
 		t.Fatalf("expected 2 user-scoped delete calls, got %d", len(deletes))
@@ -463,7 +461,7 @@ func TestSweep_ZitadelDedupPerProjectRole(t *testing.T) {
 		return grants, nil
 	}
 
-	sweep(context.Background(), 10)
+	Sweep(context.Background(), 10)
 
 	if len(r.zitadelCalls) != 2 {
 		t.Fatalf("expected 2 zitadel calls (dedup'd by project|role), got %d: %v",
@@ -475,5 +473,21 @@ func TestSweep_ZitadelDedupPerProjectRole(t *testing.T) {
 		if r.zitadelCalls[i] != w {
 			t.Fatalf("call %d = %q, want %q", i, r.zitadelCalls[i], w)
 		}
+	}
+}
+
+// Sweep clamps a misconfigured batch size before it reaches the fetch query
+// (the clamp moved here from the deleted per-package scheduler).
+func TestSweep_ClampsBatchSize(t *testing.T) {
+	resetSweepDeps(t)
+	var got []int
+	svcGetExpiredDirectGrants = func(_ context.Context, limit int) ([]models.DirectGrant, error) {
+		got = append(got, limit)
+		return nil, nil
+	}
+	Sweep(context.Background(), 0)
+	Sweep(context.Background(), 100000)
+	if len(got) != 2 || got[0] != 1 || got[1] != 10000 {
+		t.Fatalf("expected clamped batch sizes [1 10000]; got %v", got)
 	}
 }

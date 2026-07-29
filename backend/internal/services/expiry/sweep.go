@@ -7,8 +7,9 @@ import (
 	"mkauth/internal/models"
 )
 
-// sweep runs a single pass: fetches up to batchSize expired direct grants,
+// Sweep runs a single pass: fetches up to batchSize expired direct grants,
 // groups them by user, and for each user executes the cleanup pipeline.
+// Scheduled by a periodic.Runner in main; batchSize is clamped to [1, 10000].
 //
 // The fetched snapshot is advisory only. Because UpsertDirectGrant renews
 // grants via ON CONFLICT DO UPDATE (same row ID, pushed-forward expires_at),
@@ -33,7 +34,15 @@ import (
 //  5. Best-effort Zitadel cascade per unique (project, role) tuple.
 //     Log-and-continue on failure — matches the deferred
 //     "Partial Failure Rollback" Phase-5 compromise.
-func sweep(ctx context.Context, batchSize int) {
+func Sweep(ctx context.Context, batchSize int) {
+	// Clamp against misconfiguration — a zero batch would sweep nothing
+	// forever, an unbounded one defeats the batching.
+	if batchSize < 1 {
+		batchSize = 1
+	}
+	if batchSize > 10000 {
+		batchSize = 10000
+	}
 	grants, err := svcGetExpiredDirectGrants(ctx, batchSize)
 	if err != nil {
 		log.Printf("[SCHEDULER] Failed to fetch expired grants: %v", err)
