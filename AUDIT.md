@@ -1,6 +1,6 @@
 # MkAuth Codebase Audit
 
-> **🆕 Latest findings: [May 2026 Addendum](#addendum--may-2026-codebase-audit)** — read this first for current state. The sections below are an inventory snapshot from April 2026 (still useful as a reference map but predate Phase 5).
+> **🆕 Latest findings: [July 2026 Addendum](#addendum--july-2026-full-audit)** — read this first for current state (security, correctness, over-engineering, size). The May 2026 addendum and April 2026 inventory below remain useful as reference maps.
 
 ## Quick Navigation
 
@@ -785,3 +785,162 @@ UI security gaps: `middleware.ts` and `api/proxy/[...path]/route.ts` have **no d
 3. **Spec authors:** When updating `feature-coverage.md`, cross-reference the **Spec Drift** table here. Three claims (D1 welcome bundle, D2 ⌘K, D7 1-command install) currently overstate reality.
 
 The architecture is right-sized. Most cleanup is finishing migrations, deleting one scratchpad, and refusing to silently fall through three production-shaped middlewares. Nothing in the findings is structural — they are all *resolvable without re-architecting*.
+
+---
+---
+
+# Addendum — July 2026 Full Audit
+
+> Full-application audit dated **2026-07-16**: security, correctness, over-engineering, and size-vs-features. Three parallel review passes per module (`backend/`, `ui/`, `sync/`), each finding traced to a concrete code path with a constructed failure scenario. Finding IDs here are namespaced **SC** (security/correctness) and **OE** (over-engineering) to avoid collision with the May addendum's B/U/S/C/D IDs. Line numbers are as of commit `a5ff902`; re-validate with `git log` before acting.
+>
+> Several May recommendations have since shipped (U1 full-catalog resolver, U5 zitadel page split, U7 middleware/proxy tests, D6 location drop, D2 spec cleanup — see recent commits). This addendum supersedes the May bug list where they overlap.
+
+> **Status (2026-07-17):** everything except the sync/LDAP items has been implemented (checked boxes below). Deferred by explicit decision: **SC2, SC6, SC7, OE7, OE10, OE11, OE13, OE14** (all in `sync/` — LDAP integration left out for now) and **OE15** (golang-migrate kept: its dirty-state guard on mid-migration failure is worth one dependency). SC2 remains the top priority whenever sync work resumes.
+>
+> **Status (2026-07-29):** a repo-wide over-engineering re-audit confirmed OE1–OE6/OE8/OE9/OE12 shipped and surfaced six findings the July pass missed — **OE16–OE21**, all dead `internal/db` repository helpers left behind when their `*AndEnqueue` replacements landed. OE16–OE20 are now implemented; **OE21 is declined on correctness grounds** (see entry). The two sync data-shape items (**OE10, OE11**) were also pulled forward out of the sync deferral: both are pure decode/return-shape cleanups with no LDAP behavior, so they carried none of the risk the deferral was protecting. Still deferred in `sync/`: SC2, SC6, SC7, OE7, OE13, OE14.
+
+## TL;DR
+
+**Two critical fixes needed** (backend authz middleware on grant/decision routes; sync LDAP error classification). **Size is right for the feature set:** ~28.7k prod lines carrying 75 routes / 16 pages, with only ~330 lines (~1%) identified as removable. The dominant defect pattern: **authorization implemented once in the UI proxy instead of at the trust boundary (the backend)** — one backend enforcement sweep fixes four findings (SC1, SC3, SC4's context, SC8), after which the proxy's checks become genuine defense-in-depth instead of the only gate.
+
+---
+
+## Security & Correctness
+
+### Critical
+
+- [x] **SC1 — Self-service privilege escalation: member-accessible grant + approval routes.**
+  `POST /api/v1/users/{id}/grants` and `POST /api/v1/requests/{id}/decision` are registered behind `withUserAuth` instead of `withOperatorAuth`; handlers do no role or ownership check.
+  - `backend/internal/handlers/router.go:39`, `router.go:78` (route registration)
+  - `backend/internal/handlers/access.go:70-143` (`handleUpsertUserDirectGrant` — no admin check, no self-check on `{id}`)
+  - `backend/internal/handlers/access.go:197-300` (`handleResolveAccessRequest` — only guard is `reviewer != system`; self-approval passes)
+
+  **Failure scenario:** any member with a valid token calls the backend directly with `role_key=<admin role>` for themselves. The grant is enqueued, and `rebuildUserCacheDetached` immediately writes the derived role into the Redis `mapping:<user>:<project>` key that `HandleActionInject` (`handlers/action.go:135`) reads for Actions v2 claim injection — the self-granted role lands in the user's next token with **no operator involved**. Appending `?apply=true` (`access.go:134`) additionally drains a real Zitadel Management API grant inline via `svcDrainPropagationRow` → `zitadelAddUserGrant` (`services/propagation/drain.go:87-110,241`), which has no authorization check of its own. Same escalation via creating an access request and self-approving it.
+
+  The Next.js proxy's `isMemberAllowed` (`ui/src/app/api/proxy/[...path]/route.ts:11-25`) is the *only* current gate and is bypassed by calling the backend directly; the proxy comment "Backend checks this independently" (`route.ts:74-75`) is presently false. Contradicts `openspec/changes/wave-2-part-4-zitadel-state-projection-and-drift-control/specs/access-governance/spec.md:9-36`, which frames both flows as operator actions. Found independently by both the backend and ui review passes (confidence 95-100).
+
+  **Fix:** swap `withUserAuth` → `withOperatorAuth` on `router.go:39` and `router.go:78`. If self-service request *creation* must stay member-accessible, keep `POST /api/v1/requests` on `withUserAuth` and gate only decision + direct grant. The operator-gated alias `POST /api/v1/zitadel/users/{id}/grants` (`router.go:150` → `discovery.go:221-246`) funnels into the same `dbEnqueueDirectGrantPropagation`, proving this is a middleware swap, not a handler rewrite. Add a regression test asserting a member token gets 403 on both routes.
+
+- [ ] **SC2 — Sync never recovers from a dropped LDAP connection.**
+  `IsConnectionError` (`sync/internal/ldap/client.go:289-301`) checks `ServerDown`/`Busy`/`Unavailable` (result codes 81/51/52 — protocol-level *server* responses), but go-ldap wraps every client-detected connection failure as `ldap.NewError(ErrorNetwork, err)` (code 200) — never checked (verified against go-ldap v3.4.13 source: `request.go:41-63`, `conn.go:420-574`). The `*net.OpError` type-assertion fallback is dead code: client.go always `fmt.Errorf`-wraps first (lines 143, 265, 278) and a raw type assertion doesn't unwrap.
+
+  **Failure scenario:** LLDAP restarts while the pool holds a connection. Next op returns `ErrorNetwork` → `withConn` (`client.go:90`) sees "not a connection error" → never reconnects; `retryTransient` (`sync/internal/worker/worker.go:221`) sees "permanent" → `FailIntent` immediately, no retry. Every subsequent intent hits the same dead connection and permanently fails until process restart. Existing tests (`client_test.go` `TestIsConnectionError`, `worker_test.go` transient-retry test) only construct synthetic errors matching the buggy predicate — they never exercise the error shape go-ldap actually returns.
+
+  **Fix:** add `ldapv3.IsErrorWithCode(err, ldapv3.ErrorNetwork)` to the predicate; if keeping the `*net.OpError` branch, use `errors.As`. Add a test using go-ldap's real error shape.
+
+### Important
+
+- [x] **SC3 — Read-side scoping is proxy-only; backend leaks org-wide data to any member.**
+  `GET /users/{id}/grants` (`router.go:38`), `GET /users/{id}/access` (`router.go:44`), `GET /requests` (`router.go:76`), `GET /audit` (`router.go:75`) are `withUserAuth` with no ownership filter (`access.go:60-68`, `views.go:29-38`, `access.go:145-157`). Only the proxy's `isSelfScoped` check and post-hoc `requester_id` filter (`route.ts:7-9`, `route.ts:102-104`) scope these — bypassed by direct backend calls. A member can read any user's access/grants, all access requests org-wide (with justifications), and the full audit trail.
+  **Fix:** principal==`{id}` check on per-user routes (operators exempt); actor/role filtering on `/requests` and `/audit`.
+
+- [x] **SC4 — UI session cookie is forgeable (no integrity protection).**
+  `encodeSession`/`decodeSessionPayload` (`ui/src/lib/session.ts:137-181`, mirrored in `middleware.ts:21-55`) are plain base64url JSON — no HMAC/signature. Anyone can mint `{role:"admin", userId:…, accessToken:…, expiresAt:<future>}` in their own request and pass middleware (`middleware.ts:93-99`) and every admin page's `getSession()` gate (httpOnly blocks JS reads, not attacker-crafted requests). Backend JWT validation stops real data leakage (the forged token 401s), but the entire page-level admin boundary — and the proxy's `isMemberAllowed`/`isSelfScoped` decisions built on it — is decorative.
+  **Fix:** HMAC-sign or seal the cookie with a server secret; reject tampered payloads in `decodeSessionPayload`/`readSession`.
+
+- [x] **SC5 — Webhook redeliveries are not deduplicated → duplicate provisioning intents.**
+  Idempotency key = `ZITADEL-Signature` header (`backend/internal/handlers/webhook.go:172-176`), which is `t=<ts>,v1=<hmac(ts.body)>` — recomputed per delivery, so a Zitadel retry (timeout, 5xx, dropped response) of the *same* event gets a new key. `ON CONFLICT DO NOTHING` never fires; each redelivery emits a fresh provisioning intent (`services/provisioning.go:12-17` keys on `webhookEventID`). Stable identifiers (`aggregateID` + `sequence`) are already parsed in `webhook_translate.go:19-30` but unused for dedup. Downstream LDAP ops are idempotent, so impact is duplicate work + audit noise, not corruption.
+  **Fix:** key on `aggregateID:eventType:sequence` when the Zitadel-shape payload is present; keep the current fallback for internal/test callers.
+
+- [ ] **SC6 — Same-UID intents can apply out of order across sync workers.**
+  `poll()` fans one shared `intentCh` out to N workers (default 5) (`sync/internal/worker/worker.go:43-57,87-89`); `UIDLocker` gives mutual exclusion, not sequencing — which worker reaches `Lock(uid)` first is scheduler nondeterminism. A rapid grant+revoke for one user claimed in the same poll batch can land as revoke-then-grant: final LLDAP state is the opposite of intended, while both intents individually report success. The locker doc comment ("processed sequentially") overstates the guarantee; no test covers cross-worker same-UID ordering.
+  **Fix:** route intents to workers by `hash(uid) % workerCount` (per-worker channels), or have `poll()` dispatch per-UID subsequences serially.
+
+- [ ] **SC7 — Sync graceful shutdown silently loses intent outcomes.**
+  On `ctx.Done()`, the drain reuses the same cancelled `ctx` (`worker.go:63-70`): `withConn` short-circuits on `ctx.Err()` (`ldap/client.go:80-82`) so queued intents' LDAP ops never run, and `CompleteIntent`/`FailIntent` (`worker.go:120,127`) are built on the cancelled context so the HTTP call fails instantly — `FailIntent`'s error is discarded (`_ =`), `CompleteIntent`'s only logged. Any intent queued or completing at SIGTERM strands as "claimed"; the backend never learns its fate.
+  **Fix:** use a fresh bounded context (`context.WithTimeout(context.Background(), grace)`) for post-processing backend calls during drain; stop discarding those errors.
+
+- [x] **SC8 — `requester_id` on access-request creation is client-supplied.**
+  `handleCreateAccessRequest` (`backend/internal/handlers/access.go:159-195`) trusts the payload's `requester_id` verbatim (only the audit `actor` uses the resolved principal). The proxy overwrites it for non-admins (`route.ts:73-76`), but a direct backend call can file requests impersonating any user as requester. Still needs approval to become a grant, but pollutes the request/audit trail with spoofed identities.
+  **Fix:** bind `requester_id` to the authenticated principal (operators may override).
+
+- [x] **SC9 — No global 401 handling when the session expires mid-SPA-session.**
+  `/api/proxy/*` is excluded from the middleware matcher (`ui/src/middleware.ts:104-106`) and neither `request()` (`ui/src/lib/api-client.ts:55-93`) nor the query client reacts to 401. After token expiry on a client-rendered page, every query/mutation surfaces as error toasts until the next full navigation re-runs middleware. Correctness gap, not a security hole (expired tokens are properly rejected, `session.ts:216`).
+  **Fix:** on `ApiError(401)` in `request()`, redirect to `/login` (or a global query-client error handler).
+
+### Verified sound (checked, no issues)
+
+- **JWT validation** (`backend/internal/auth/jwt.go`): RS256 pinned via `WithValidMethods` + keyfunc type assertion (no alg confusion); iss/aud/exp enforced; JWKS refresh-on-miss race-safe under RWMutex; `kid` cache-miss triggers scoped re-fetch, no poisoning path.
+- **Action/webhook HMAC auth** (`zitadel_action_auth.go`): constant-time compare, bounded replay window, fails closed in production when a signing key is required but unset. *(May finding C1 — dev-mode fall-through — appears addressed; re-verify the fail-closed path in prod config.)*
+- **SQL**: fully parameterized across `db/grants.go`, `db/access_requests.go`, `db/intents.go` — no injection.
+- **Outbox drain** (`services/propagation/drain.go`): session-level advisory lock, `FOR UPDATE SKIP LOCKED` claiming, terminal-state-only exits from `in_flight`, persist-failure never counted as success.
+- **Expiry sweep** (`services/expiry/`): fetch-then-delete race closed by delete-time revalidation (`DELETE … WHERE expires_at <= NOW() RETURNING`); downstream driven off actually-deleted rows; panic-recovered per tick.
+- **Provisioning intent claim** (`db/intents.go`): atomic `FOR UPDATE SKIP LOCKED`.
+- **SSRF**: Zitadel URL is operator-set env config, never request-derived.
+- **LDAP injection**: all DNs via `EscapeDN`; search filters static (`sync/internal/ldap/client.go:103-110`).
+- **Credentials**: no bind passwords / shadow hashes in logs or wrapped errors; LDAPS default with opt-in-only skip-verify; backend HTTP uses default (verifying) transport.
+- **Sync intent provenance**: `intentCh` fed only by authenticated `ClaimIntents` polling — no other producer.
+- **LDAP mutation idempotency**: `AttributeOrValueExists`/`NoSuchAttribute`/`NoSuchObject` tolerated — at-least-once redelivery safe.
+- **UIDLocker refcount/delete-on-zero**: no use-after-delete or leak (only the *ordering* claim is wrong — SC6).
+- **OIDC**: state validated against single-use TTL'd PKCE cookie; redirect targets hardcoded — no open redirect.
+- **Token exposure**: `accessToken` never crosses into a Client Component; no `NEXT_PUBLIC_` vars; proxy is the sole token-attachment point.
+- **XSS/CSRF**: no `dangerouslySetInnerHTML`; mutations are non-GET; cookie `SameSite=Lax`, `httpOnly`, `secure` on https.
+- **React Query invalidation + mutation error surfacing**: correct in hooks reviewed (`useUsers`, `useRequests`; `RequestAccessButton`, `CreateRuleForm`).
+
+---
+
+## Over-engineering (ponytail-audit)
+
+Ranked biggest cut first. Tags: `delete:` dead code · `stdlib:`/`native:` platform already ships it · `yagni:` unused flexibility · `shrink:` same logic, fewer lines.
+
+- [x] **OE1** `shrink:` ~30 delegating closures wrap a db func with an identical signature — `svcGetAllBundles = func(ctx)(…){return db.GetAllBundles(ctx)}` → `svcGetAllBundles = db.GetAllBundles`. handlers/deps.go already uses direct refs; tests still override the var. ~60 lines. [`backend/internal/services/deps.go:15-133`, `backend/internal/zitadel/deps.go:19`]
+- [x] **OE2** `delete:` `ResourceName` component never imported anywhere (only barrel re-export + own def). Drop file + barrel line. ~55 lines. [`ui/src/components/names/ResourceName.tsx`, `ui/src/components/names/index.ts:5`]
+- [x] **OE3** `shrink:` `expiry.Scheduler` and `drift.Scheduler` are the same worker (runOnce → ticker → recover → Done); only expiry adds batchSize. Collapse to one periodic worker taking `interval` + `run func(ctx)`. ~50 lines. [`backend/internal/services/expiry/scheduler.go:56-90`, `backend/internal/services/drift/scheduler.go:26-54`]
+- [x] **OE4** `shrink:` Modal and Drawer duplicate the focus-trap/Esc/Tab-loop effect verbatim. Merge into one component with a geometry/`side` prop. ~40 lines. [`ui/src/components/ui/Modal.tsx:43-81`, `ui/src/components/ui/Drawer.tsx:39-74`]
+- [x] **OE5** `shrink:` all four Name components carry an identical `useState(0)` + `setTimeout` force-render hack plus copy-pasted `SHOW_DEBUG_IDS`; the memoized resolver context already re-renders consumers on `catalogQ.data/isLoading`. Delete the hack, hoist the const — verify a Name still fills in on load before cutting. ~32 lines. [`ui/src/components/names/UserName.tsx:32-40`, `ProjectName.tsx:19-23`, `RoleName.tsx:20-25`, `BundleName.tsx:19-23`]
+- [x] **OE6** `delete:` dead ui exports: `getClientApiBase`, `getServerApiBase`, `fetchCatalog` [`ui/src/lib/api.ts:52,56,70`]; `formatProjectName` [`ui/src/lib/format.ts:37`]; `toastInfo`, `toastPromise` [`ui/src/lib/toast.ts:16,20`]. ~24 lines.
+- [ ] **OE7** `yagni:` sync `BackendClient` + `LDAPPool` interfaces exist only to mock in worker_test; one production impl each. Borderline — standard Go test idiom; cut only if you accept concrete types + a thin test seam. ~17 lines. [`sync/internal/worker/worker.go:15-30`]
+- [x] **OE8** `shrink:` `dedupProjectIDs` and `dedupeNonEmpty` are the same trim-dedupe-preserve-order loop in the same package. One shared helper. ~15 lines. [`backend/internal/handlers/action.go:111`, `backend/internal/handlers/lookup.go:146`]
+- [x] **OE9** `delete:` `AssignUserToRole` has no production caller (grants flow through outbox/drain per the B4/D3 comment); only its own tests reference it. ~13 lines + tests. [`backend/internal/zitadel/orchestrator.go:184`]
+- [x] **OE10** `yagni:` `ProvisioningIntent` carries 9 decode-only fields never read (Status, ErrorMessage, CreatedAt, AcknowledgedAt, CompletedAt, WebhookEventID, IdempotencyKey, SourceProject, SourceRole); only ID/TargetUID/Action/LLDAPGroup are used, and `json.Decode` ignores unknowns. ~9 lines. [`sync/internal/backend/types.go:11-18`]
+- [x] **OE11** `shrink:` `GetShadowCredentialHash` returns an algorithm its only caller discards (`hash, _, err`). Return just the hash; drop the Algorithm field. ~5 lines. [`sync/internal/backend/client.go:103-129`, `types.go:22-25`]
+- [x] **OE12** `yagni:` name-resolver `prefetch` is a documented no-op ("retained for interface compatibility") still invoked by its single caller. Remove method + call. ~4 lines. [`ui/src/lib/queries/useNameResolver.tsx:51,118`, `ui/src/components/grants/GrantsClient.tsx:254`]
+- [ ] **OE13** `delete:` `NewConnectionError` lives in production code; sole caller is worker_test. Move into the test package. ~4 lines. [`sync/internal/ldap/client.go:284-287`]
+- [ ] **OE14** `delete:` `UserProfile.UserID` is write-only (set at processAdd, never read). ~2 lines. [`sync/internal/backend/types.go:29`, `sync/internal/worker/worker.go:146`]
+- [ ] **OE15** `yagni:` `golang-migrate/v4` (+ transitive tree) serves one startup `m.Up()`; a ~40-line stdlib runner (sorted `os.ReadDir` + `schema_migrations` + per-file `Exec`) replaces it — at the cost of migrate's dirty-state guard on mid-migration failure. Swap only if that recovery is expendable. −1 dep. [`backend/internal/db/postgres.go:52-61`]
+
+### Addendum — 2026-07-29 repo-wide re-audit (OE16–OE21)
+
+Six findings the July pass missed. OE16–OE20 are the same root cause: when a write path grew an outbox/ledger trace, the helper was reintroduced as `*AndEnqueue` and the traceless original was left in the repository layer. Each was confirmed unreachable from every liveness root (tests, route handlers, `main`) by OpenLore `verify_claim` against index commit `a5ff902`, cross-checked with a repo-wide grep. Leaving them in place is a live hazard, not just dead weight: each is a traceless mutation path that would bypass the drift-detection invariant in `CLAUDE.md` if a future caller reached for the shorter name.
+
+- [x] **OE16** `delete:` `ResolveDriftItem` — no caller; drift triage goes through `AttributeDriftAndEnqueue` / `RevokeDriftAndEnqueue`. ~19 lines. [`backend/internal/db/drift.go:92-110`]
+- [x] **OE17** `delete:` `CreateMappingRule` — superseded by `CreateMappingRuleAndEnqueue`. Removing it also drops the file's last `fmt` use. ~15 lines. [`backend/internal/db/rules.go:14-27`]
+- [x] **OE18** `delete:` `AddRoleToBundle` — superseded by `AddRoleToBundleAndEnqueue`; `services/deps.go` already documented its removal. ~12 lines. [`backend/internal/db/bundles.go:24-34`]
+- [x] **OE19** `delete:` `InsertExclusion` — no writer wired; exclusion rows are only ever read by `GetExclusions`. Re-add when the "mark legitimately external" operator action ships. ~12 lines. [`backend/internal/db/exclusions.go:10-21`]
+- [x] **OE20** `delete:` `RemoveBundleFromUser` — superseded by `RemoveBundleFromUserAndEnqueue`. ~9 lines. [`backend/internal/db/bundles.go:97-104`]
+- [x] **OE22** `delete:` empty `backend/pkg/` directory — no files, nothing imports it. [`backend/pkg`]
+- [ ] **OE21** `stdlib:` `sortedKeys(set)` is spelled `slices.Sorted(maps.Keys(set))` in Go 1.25. **Declined:** `sortedKeys` returns a non-nil empty slice, `slices.Sorted` returns `nil` on an empty map, and `zitadelByPair[k]` is allocated before its `RoleKeys` loop — so a Zitadel grant carrying zero roles would flip `"role_keys": []` to `"role_keys": null` in the reconciliation response. Six lines is not worth a JSON contract change on a defensively-handled edge. [`backend/internal/handlers/reconciliation.go:284`]
+
+**Noted, not worth the churn:** `toastSuccess`/`toastError` are 1:1 sonner pass-throughs but serve as a swap-point across 20 call sites. `ThemeContext` has one consumer but legitimately applies `data-theme` on sidebar-less pages. The backend's injectable package-var seam is pervasive hand-rolled DI, but every var is exercised by tests — OE1 is the only safe mechanical win inside it. The retry/backoff twin in `backend/internal/zitadel` vs `sync/` is not dedupe-able (separate Go modules/containers, no shared-module path). `describeExpiry`'s tone/threshold logic is genuinely custom; only its string interpolation is `Intl.RelativeTimeFormat` territory — leave unless it grows.
+
+**Notably elegant (keep as-is):** JWKS keyStore does read-locked cache-hit / refresh-on-miss without a singleflight dep; `accessSnapshot` kills N×M view fan-out with a plain request-scoped memo; graceful shutdown joins background sweeps before closing shared clients; sync's UIDLocker refcounting earns its 55 lines; ui uses native `Intl`/`toLocaleString`, template-string class composition, native form controls, one shared `request<T>` fetch path, and a WebAudio oscillator instead of a shipped sound asset.
+
+**Over-engineering net: ~−330 lines, −1 dep possible.**
+
+---
+
+## Size Assessment
+
+Production code (excluding `.gomodcache`, `.next`, `node_modules`), measured 2026-07-16:
+
+| Module  | Prod LOC | Test LOC | Test:prod |
+|---------|---------:|---------:|----------:|
+| backend | 14,118   | 13,977   | ~1.0      |
+| ui      | 13,595   | 3,097    | ~0.23     |
+| sync    | 949      | 796      | ~0.85     |
+| **total** | **28,662** | **17,870** | — |
+
+Plus 1,084 lines SQL migrations and 10,288 lines OpenSpec markdown. Surface carried: **75 backend routes, 16 UI pages**; grants, bundles, policies, access requests, audit, drift detection, cascades, propagation, expiry, graph view, Zitadel browser. ~190 lines/route backend all-in; ui runs on 6 runtime deps with no date/css/component libraries; sync is a 950-line worker on one dep.
+
+**Verdict: not bigger than it needs to be.** Removable fat is ~330 lines ≈ 1% of prod code; the size lives in feature count, not implementation. If the system needs to shrink, retire surface area rather than slimming code — e.g. the alias routes (`/zitadel/users/{id}/grants` duplicating `/users/{id}/grants`) add both code *and* the inconsistent-authz matrix SC1 fell through; consolidating them shrinks both.
+
+---
+
+## Suggested Order of Work
+
+1. **SC1 + SC3 + SC8** — one backend authz sweep of `router.go` + handler principal checks (fixes the whole proxy-only-enforcement class; also revisit May's C4 — lift verified claims into request context — while in there).
+2. **SC2** — one-line predicate fix + real-error-shape test in sync.
+3. **SC4** — sign the session cookie.
+4. **SC5, SC6, SC7** — durability/ordering hardening (webhook dedup key, per-UID worker routing, drain context).
+5. **SC9** — global 401 redirect.
+6. **OE1–OE15** — mechanical cleanup, any order; OE5 needs a quick visual check, OE7/OE15 are judgment calls.

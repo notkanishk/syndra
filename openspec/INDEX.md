@@ -67,6 +67,7 @@ Every change directory has: `proposal.md` (why), `design.md` (how), `tasks.md` (
 | [Wave 2 · Part 3 — Operational Polish](changes/wave-2-part-3-operational-polish/) | 5.5 | In progress | [proposal](changes/wave-2-part-3-operational-polish/proposal.md) / [design](changes/wave-2-part-3-operational-polish/design.md) / [tasks](changes/wave-2-part-3-operational-polish/tasks.md) |
 | [Wave 2 · Part 4 — Zitadel State Projection & Drift Control](changes/wave-2-part-4-zitadel-state-projection-and-drift-control/) | 5.5 | Complete | [proposal](changes/wave-2-part-4-zitadel-state-projection-and-drift-control/proposal.md) / [design](changes/wave-2-part-4-zitadel-state-projection-and-drift-control/design.md) / [tasks](changes/wave-2-part-4-zitadel-state-projection-and-drift-control/tasks.md) |
 | [Wave 3 — Frontend Remainder & Consolidation](changes/wave-3-frontend-remainder-and-consolidation/) | 5.5 | Complete | [proposal](changes/wave-3-frontend-remainder-and-consolidation/proposal.md) / [design](changes/wave-3-frontend-remainder-and-consolidation/design.md) / [tasks](changes/wave-3-frontend-remainder-and-consolidation/tasks.md) |
+| [July 2026 Audit Remediation](changes/july-2026-audit-remediation/) | 5.5 | Complete (sync items deferred) | [proposal](changes/july-2026-audit-remediation/proposal.md) / [tasks](changes/july-2026-audit-remediation/tasks.md) — backend authz at trust boundary, signed session cookie, stable webhook dedup, OE cuts; see AUDIT.md July addendum |
 
 ## Roadmap Phase -> Change Mapping
 
