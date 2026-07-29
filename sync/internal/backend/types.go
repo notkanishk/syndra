@@ -1,27 +1,18 @@
 package backend
 
 // ProvisioningIntent mirrors the backend's intent model.
-// Only fields needed by the sync service are included.
+// Only fields the sync service actually reads are declared — the decoder
+// ignores the rest of the backend's payload.
 type ProvisioningIntent struct {
-	ID             string  `json:"id"`
-	TargetUID      string  `json:"target_uid"`
-	Action         string  `json:"action"` // "add" | "remove"
-	LLDAPGroup     string  `json:"lldap_group"`
-	SourceProject  string  `json:"source_project"`
-	SourceRole     string  `json:"source_role"`
-	WebhookEventID string  `json:"webhook_event_id,omitempty"`
-	IdempotencyKey string  `json:"idempotency_key"`
-	Status         string  `json:"status"`
-	ErrorMessage   string  `json:"error_message,omitempty"`
-	CreatedAt      string  `json:"created_at"`
-	AcknowledgedAt *string `json:"acknowledged_at,omitempty"`
-	CompletedAt    *string `json:"completed_at,omitempty"`
+	ID         string `json:"id"`
+	TargetUID  string `json:"target_uid"`
+	Action     string `json:"action"` // "add" | "remove"
+	LLDAPGroup string `json:"lldap_group"`
 }
 
 // ShadowCredentialHash is the response from the shadow credential hash endpoint.
 type ShadowCredentialHash struct {
 	CredentialHash string `json:"credential_hash"`
-	Algorithm      string `json:"algorithm"`
 }
 
 // UserProfile is the response from the user profile endpoint.

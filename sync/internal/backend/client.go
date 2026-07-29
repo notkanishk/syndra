@@ -99,33 +99,33 @@ func (c *Client) FailIntent(ctx context.Context, intentID, errMsg string) error 
 }
 
 // GetShadowCredentialHash retrieves a user's shadow password hash.
-// Returns ("", "", nil) when the user has no shadow credential (HTTP 404).
-func (c *Client) GetShadowCredentialHash(ctx context.Context, uid string) (hash, algorithm string, err error) {
+// Returns ("", nil) when the user has no shadow credential (HTTP 404).
+func (c *Client) GetShadowCredentialHash(ctx context.Context, uid string) (string, error) {
 	url := fmt.Sprintf("%s/api/v1/shadow-credentials/%s/hash", c.baseURL, uid)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return "", "", fmt.Errorf("build shadow credential request: %w", err)
+		return "", fmt.Errorf("build shadow credential request: %w", err)
 	}
 	c.setAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", "", fmt.Errorf("get shadow credential for %s: %w", uid, err)
+		return "", fmt.Errorf("get shadow credential for %s: %w", uid, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return "", "", nil // No credential — not an error.
+		return "", nil // No credential — not an error.
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", "", c.readError(resp)
+		return "", c.readError(resp)
 	}
 
 	var cred ShadowCredentialHash
 	if err := json.NewDecoder(resp.Body).Decode(&cred); err != nil {
-		return "", "", fmt.Errorf("decode shadow credential response: %w", err)
+		return "", fmt.Errorf("decode shadow credential response: %w", err)
 	}
-	return cred.CredentialHash, cred.Algorithm, nil
+	return cred.CredentialHash, nil
 }
 
 // GetUserProfile retrieves a user's display name and email.

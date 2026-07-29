@@ -21,7 +21,7 @@ type mockBackend struct {
 	claimFn       func(ctx context.Context, limit int) ([]backend.ProvisioningIntent, error)
 	completeFn    func(ctx context.Context, id string) error
 	failFn        func(ctx context.Context, id, msg string) error
-	shadowFn      func(ctx context.Context, uid string) (string, string, error)
+	shadowFn      func(ctx context.Context, uid string) (string, error)
 	profileFn     func(ctx context.Context, uid string) (backend.UserProfile, error)
 	completeCalls atomic.Int32
 	failCalls     atomic.Int32
@@ -47,11 +47,11 @@ func (m *mockBackend) FailIntent(ctx context.Context, id, msg string) error {
 	}
 	return nil
 }
-func (m *mockBackend) GetShadowCredentialHash(ctx context.Context, uid string) (string, string, error) {
+func (m *mockBackend) GetShadowCredentialHash(ctx context.Context, uid string) (string, error) {
 	if m.shadowFn != nil {
 		return m.shadowFn(ctx, uid)
 	}
-	return "", "", nil // No shadow credential by default.
+	return "", nil // No shadow credential by default.
 }
 func (m *mockBackend) GetUserProfile(ctx context.Context, uid string) (backend.UserProfile, error) {
 	if m.profileFn != nil {
@@ -202,8 +202,8 @@ func TestProcessIntent_LDAPTransientRetryThenSuccess(t *testing.T) {
 
 func TestProcessIntent_ShadowPasswordSync(t *testing.T) {
 	bc := &mockBackend{
-		shadowFn: func(_ context.Context, _ string) (string, string, error) {
-			return "$argon2id$hash", "argon2id", nil
+		shadowFn: func(_ context.Context, _ string) (string, error) {
+			return "$argon2id$hash", nil
 		},
 	}
 	lp := &mockLDAP{}

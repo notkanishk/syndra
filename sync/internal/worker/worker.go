@@ -16,7 +16,7 @@ type BackendClient interface {
 	ClaimIntents(ctx context.Context, limit int) ([]backend.ProvisioningIntent, error)
 	CompleteIntent(ctx context.Context, intentID string) error
 	FailIntent(ctx context.Context, intentID string, errMsg string) error
-	GetShadowCredentialHash(ctx context.Context, uid string) (hash, algorithm string, err error)
+	GetShadowCredentialHash(ctx context.Context, uid string) (string, error)
 	GetUserProfile(ctx context.Context, uid string) (backend.UserProfile, error)
 }
 
@@ -177,7 +177,7 @@ func syncShadowPassword(
 	lp LDAPPool,
 	cfg Config,
 ) {
-	hash, _, err := bc.GetShadowCredentialHash(ctx, uid)
+	hash, err := bc.GetShadowCredentialHash(ctx, uid)
 	if err != nil {
 		log.Printf("[SYNC] Shadow credential check failed for %s: %v", uid, err)
 		return

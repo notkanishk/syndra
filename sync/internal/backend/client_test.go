@@ -104,21 +104,17 @@ func TestGetShadowCredentialHash_Found(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(ShadowCredentialHash{
 			CredentialHash: "$argon2id$v=19$m=65536,t=1,p=4$salt$key",
-			Algorithm:      "argon2id",
 		})
 	}))
 	defer srv.Close()
 
 	c := NewClient(srv.URL, "test-key")
-	hash, algo, err := c.GetShadowCredentialHash(context.Background(), "u1")
+	hash, err := c.GetShadowCredentialHash(context.Background(), "u1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if hash == "" {
-		t.Error("expected non-empty hash")
-	}
-	if algo != "argon2id" {
-		t.Errorf("expected algorithm=argon2id, got %s", algo)
+	if hash != "$argon2id$v=19$m=65536,t=1,p=4$salt$key" {
+		t.Errorf("unexpected hash: %s", hash)
 	}
 }
 
@@ -130,12 +126,12 @@ func TestGetShadowCredentialHash_NotFound(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, "test-key")
-	hash, algo, err := c.GetShadowCredentialHash(context.Background(), "u1")
+	hash, err := c.GetShadowCredentialHash(context.Background(), "u1")
 	if err != nil {
 		t.Fatalf("expected nil error on 404, got: %v", err)
 	}
-	if hash != "" || algo != "" {
-		t.Errorf("expected empty hash/algo on 404, got hash=%s algo=%s", hash, algo)
+	if hash != "" {
+		t.Errorf("expected empty hash on 404, got hash=%s", hash)
 	}
 }
 
