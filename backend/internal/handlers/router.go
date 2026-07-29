@@ -34,14 +34,18 @@ func NewRouter() http.Handler {
 	// Explorer Views
 	mux.HandleFunc("GET /api/v1/catalog", withCORS(withUserAuth(handleGetCatalog)))
 	mux.HandleFunc("GET /api/v1/users", withCORS(withUserAuth(handleGetUsers)))
-	// User-Bundle Assignments
-	mux.HandleFunc("GET /api/v1/users/{id}/grants", withCORS(withUserAuth(handleGetUserDirectGrants)))
-	mux.HandleFunc("POST /api/v1/users/{id}/grants", withCORS(withUserAuth(handleUpsertUserDirectGrant)))
-	mux.HandleFunc("GET /api/v1/users/{id}/bundles", withCORS(withUserAuth(handleGetUserBundles)))
+	// User-Bundle Assignments. Per-user reads are self-or-operator: members may
+	// inspect their own access, never another user's. Granting is operator-only —
+	// it feeds the claim-injection cache and (via ?apply=true) real Zitadel
+	// mutations, so withUserAuth alone would let any member grant themselves
+	// any role (July 2026 audit SC1/SC3).
+	mux.HandleFunc("GET /api/v1/users/{id}/grants", withCORS(withSelfOrOperatorAuth(handleGetUserDirectGrants)))
+	mux.HandleFunc("POST /api/v1/users/{id}/grants", withCORS(withOperatorAuth(handleUpsertUserDirectGrant)))
+	mux.HandleFunc("GET /api/v1/users/{id}/bundles", withCORS(withSelfOrOperatorAuth(handleGetUserBundles)))
 	mux.HandleFunc("POST /api/v1/users/{id}/bundles", withCORS(withOperatorAuth(handleAssignBundleToUser)))
 	mux.HandleFunc("DELETE /api/v1/users/{id}/bundles/{bundleId}", withCORS(withOperatorAuth(handleRemoveBundleFromUser)))
 	mux.HandleFunc("DELETE /api/v1/bundles/{id}/roles/{projectId}/{roleKey}", withCORS(withOperatorAuth(handleRemoveRoleFromBundle)))
-	mux.HandleFunc("GET /api/v1/users/{id}/access", withCORS(withUserAuth(handleGetUserAccess)))
+	mux.HandleFunc("GET /api/v1/users/{id}/access", withCORS(withSelfOrOperatorAuth(handleGetUserAccess)))
 
 	// Application Views
 	mux.HandleFunc("GET /api/v1/applications", withCORS(withUserAuth(handleGetApplications)))
@@ -71,11 +75,14 @@ func NewRouter() http.Handler {
 	// bundles in one statement. Operator-gated — a cross-cutting policy mutation.
 	mux.HandleFunc("POST /api/v1/policies/confirmation-mode", withCORS(withOperatorAuth(handleBulkSetConfirmationMode)))
 
-	// Audit Logs
-	mux.HandleFunc("GET /api/v1/audit", withCORS(withUserAuth(handleGetAuditLogs)))
+	// Audit log exposes every actor/target pair org-wide — operator-only (SC3).
+	mux.HandleFunc("GET /api/v1/audit", withCORS(withOperatorAuth(handleGetAuditLogs)))
+	// Members may list (own only — handler filters) and create (own only —
+	// handler binds requester to the principal, SC8) requests; deciding one is
+	// an operator action per the access-governance spec (SC1).
 	mux.HandleFunc("GET /api/v1/requests", withCORS(withUserAuth(handleGetAccessRequests)))
 	mux.HandleFunc("POST /api/v1/requests", withCORS(withUserAuth(handleCreateAccessRequest)))
-	mux.HandleFunc("POST /api/v1/requests/{id}/decision", withCORS(withUserAuth(handleResolveAccessRequest)))
+	mux.HandleFunc("POST /api/v1/requests/{id}/decision", withCORS(withOperatorAuth(handleResolveAccessRequest)))
 	mux.HandleFunc("GET /api/v1/governance/summary", withCORS(withOperatorAuth(handleGetGovernanceSummary)))
 
 	// Role Management
@@ -217,35 +224,48 @@ func withUserAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// withOperatorAuth gates endpoints that require operator-level (admin) access.
-// Wraps withUserAuth, then reads the principal stashed in r.Context() to check
-// project-role membership for the admin role key (ZITADEL_ADMIN_ROLE_KEY,
-// default "admin"). In dev mode (no ZITADEL_DOMAIN), the role check is
-// skipped since auth falls through to the shared API key.
+// isOperator reports whether the request carries operator-level (admin)
+// access: the principal stashed by withUserAuth has the admin project role
+// (ZITADEL_ADMIN_ROLE_KEY, default "admin"). In dev mode (no ZITADEL_DOMAIN)
+// it is always true — auth fell through to the shared API key, which is
+// operator tooling by definition.
 //
-// Does NOT re-extract or re-parse the bearer token — the JWT is parsed once
-// in withUserAuth (audit ref C4).
+// Reads the parsed principal from context; never re-extracts or re-parses
+// the bearer token (audit ref C4). Must only be called behind withUserAuth.
+func isOperator(r *http.Request) bool {
+	if os.Getenv("ZITADEL_DOMAIN") == "" {
+		return true
+	}
+	adminRoleKey := os.Getenv("ZITADEL_ADMIN_ROLE_KEY")
+	if adminRoleKey == "" {
+		adminRoleKey = "admin"
+	}
+	return principalFromContext(r.Context()).HasProjectRole(adminRoleKey)
+}
+
+// withOperatorAuth gates endpoints that require operator-level (admin) access.
 func withOperatorAuth(next http.HandlerFunc) http.HandlerFunc {
 	return withUserAuth(func(w http.ResponseWriter, r *http.Request) {
-		// In dev mode, withUserAuth already fell through to API key auth — skip role check.
-		if os.Getenv("ZITADEL_DOMAIN") == "" {
-			next(w, r)
-			return
-		}
-
-		principal := principalFromContext(r.Context())
-		adminRoleKey := os.Getenv("ZITADEL_ADMIN_ROLE_KEY")
-		if adminRoleKey == "" {
-			adminRoleKey = "admin"
-		}
-
-		if !principal.HasProjectRole(adminRoleKey) {
-			log.Printf("[AUTH] Operator access denied for user=%s on %s %s (missing role %q)",
-				getAdminUserID(r.Context()), r.Method, r.URL.Path, adminRoleKey)
+		if !isOperator(r) {
+			log.Printf("[AUTH] Operator access denied for user=%s on %s %s",
+				getAdminUserID(r.Context()), r.Method, r.URL.Path)
 			jsonErrorResponse(w, http.StatusForbidden, "FORBIDDEN", "Operator-level access required")
 			return
 		}
+		next(w, r)
+	})
+}
 
+// withSelfOrOperatorAuth gates per-user reads: the authenticated subject must
+// match the {id} path parameter, or carry the operator role. Prevents a
+// member from reading another user's grants/bundles/access (SC3). Dev mode
+// passes via isOperator (API-key auth carries no subject to compare).
+func withSelfOrOperatorAuth(next http.HandlerFunc) http.HandlerFunc {
+	return withUserAuth(func(w http.ResponseWriter, r *http.Request) {
+		if !isOperator(r) && getAdminUserID(r.Context()) != r.PathValue("id") {
+			jsonErrorResponse(w, http.StatusForbidden, "FORBIDDEN", "You can only view your own access")
+			return
+		}
 		next(w, r)
 	})
 }

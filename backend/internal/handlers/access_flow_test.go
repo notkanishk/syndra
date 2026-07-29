@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"mkauth/internal/auth"
 	"mkauth/internal/db"
 	"mkauth/internal/models"
 	"mkauth/internal/services/propagation"
@@ -278,6 +279,72 @@ func resetAccessDeps(t *testing.T) {
 		svcDrainPropagationRow = origDrainRow
 		dbGetPropagationStatus = origStatus
 	})
+}
+
+// memberContext returns a request carrying a production-mode member principal
+// (no admin role), as withUserAuth would stash it. Callers must also Setenv
+// ZITADEL_DOMAIN so isOperator takes the role-check path instead of the
+// dev-mode pass-through.
+func memberContext(req *http.Request, subject string) *http.Request {
+	return req.WithContext(withPrincipal(req.Context(), &auth.Principal{
+		Subject:      subject,
+		ProjectRoles: map[string]struct{}{"member": {}},
+	}))
+}
+
+// SC3 regression: a member listing requests sees only their own — the
+// org-wide list (with justifications) is operator-scoped.
+func TestHandleGetAccessRequests_MemberSeesOnlyOwn(t *testing.T) {
+	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
+	origGet := dbGetAccessRequests
+	t.Cleanup(func() { dbGetAccessRequests = origGet })
+	dbGetAccessRequests = func(context.Context, string) ([]models.AccessRequest, error) {
+		return []models.AccessRequest{
+			{ID: "r-own", RequesterID: "member-1"},
+			{ID: "r-other", RequesterID: "someone-else"},
+		}, nil
+	}
+
+	req := memberContext(httptest.NewRequest(http.MethodGet, "/api/v1/requests", nil), "member-1")
+	rr := httptest.NewRecorder()
+	handleGetAccessRequests(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200; got %d: %s", rr.Code, rr.Body.String())
+	}
+	var got []models.AccessRequest
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "r-own" {
+		t.Fatalf("expected only the member's own request; got %+v", got)
+	}
+}
+
+// SC8 regression: a member cannot file a request impersonating another user —
+// the authenticated subject overrides the client-supplied requester_id.
+func TestHandleCreateAccessRequest_BindsRequesterToPrincipal(t *testing.T) {
+	resetAccessDeps(t)
+	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
+
+	var gotRequester string
+	dbCreateAccessRequest = func(_ context.Context, requesterID, _, _, _ string, _ *int) (string, error) {
+		gotRequester = requesterID
+		return "req-1", nil
+	}
+	dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
+
+	body := `{"requester_id":"victim-1","project_id":"p1","role_key":"maker","justification":"3d printing"}`
+	req := memberContext(httptest.NewRequest(http.MethodPost, "/api/v1/requests", strings.NewReader(body)), "member-1")
+	rr := httptest.NewRecorder()
+	handleCreateAccessRequest(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201; got %d: %s", rr.Code, rr.Body.String())
+	}
+	if gotRequester != "member-1" {
+		t.Fatalf("spoofed requester_id must be overridden by the principal; persisted requester=%q", gotRequester)
+	}
 }
 
 // --- handleUpsertUserDirectGrant ---

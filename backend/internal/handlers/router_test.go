@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"mkauth/internal/auth"
@@ -98,6 +99,83 @@ func TestWithOperatorAuth_DeniesWhenAdminRoleMissing(t *testing.T) {
 	}
 	if innerCalls != 0 {
 		t.Fatalf("inner handler must not be invoked when role check fails; got %d calls", innerCalls)
+	}
+}
+
+// stubMemberAuth puts the router in production mode with a jwtValidate stub
+// that returns a plain member principal (no admin role) for any token.
+func stubMemberAuth(t *testing.T, subject string) {
+	t.Helper()
+	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
+	t.Setenv("ZITADEL_AUDIENCE", "test-aud")
+	t.Setenv("ZITADEL_ADMIN_ROLE_KEY", "admin")
+	origValidate := jwtValidate
+	jwtValidate = func(context.Context, string, string, string) (*auth.Principal, error) {
+		return &auth.Principal{
+			Subject:      subject,
+			ProjectRoles: map[string]struct{}{"member": {}},
+		}, nil
+	}
+	t.Cleanup(func() { jwtValidate = origValidate })
+}
+
+// TestRouter_MemberDeniedOnOperatorRoutes is the SC1/SC3 regression: a plain
+// authenticated member must get 403 — through the REAL router wiring, so a
+// future withOperatorAuth→withUserAuth downgrade on any of these routes fails
+// this test. Grant upsert and request decision are the privilege-escalation
+// paths; audit and cross-user reads are the data-exposure paths. All 403
+// before the handler runs, so no db stubs are needed.
+func TestRouter_MemberDeniedOnOperatorRoutes(t *testing.T) {
+	stubMemberAuth(t, "member-1")
+	router := NewRouter()
+
+	cases := []struct{ method, path string }{
+		{http.MethodPost, "/api/v1/users/member-1/grants"}, // even a self-grant
+		{http.MethodPost, "/api/v1/requests/req-1/decision"},
+		{http.MethodGet, "/api/v1/audit"},
+		{http.MethodGet, "/api/v1/users/someone-else/grants"},
+		{http.MethodGet, "/api/v1/users/someone-else/access"},
+		{http.MethodGet, "/api/v1/users/someone-else/bundles"},
+	}
+	for _, tc := range cases {
+		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{}`))
+		req.Header.Set("Authorization", "Bearer member-token")
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		if rr.Code != http.StatusForbidden {
+			t.Errorf("%s %s: expected 403 for member; got %d: %s", tc.method, tc.path, rr.Code, rr.Body.String())
+		}
+	}
+}
+
+// TestWithSelfOrOperatorAuth_AllowsSelfDeniesOther pins the self-scoping
+// middleware: a member reaches the handler for their own {id}, never for
+// another user's.
+func TestWithSelfOrOperatorAuth_AllowsSelfDeniesOther(t *testing.T) {
+	stubMemberAuth(t, "member-1")
+
+	var innerCalls int
+	inner := func(w http.ResponseWriter, _ *http.Request) {
+		innerCalls++
+		w.WriteHeader(http.StatusOK)
+	}
+
+	other := httptest.NewRequest(http.MethodGet, "/api/v1/users/other/grants", nil)
+	other.SetPathValue("id", "other")
+	other.Header.Set("Authorization", "Bearer t")
+	rr := httptest.NewRecorder()
+	withSelfOrOperatorAuth(inner)(rr, other)
+	if rr.Code != http.StatusForbidden || innerCalls != 0 {
+		t.Fatalf("cross-user read: expected 403 with handler untouched; got %d, calls=%d", rr.Code, innerCalls)
+	}
+
+	self := httptest.NewRequest(http.MethodGet, "/api/v1/users/member-1/grants", nil)
+	self.SetPathValue("id", "member-1")
+	self.Header.Set("Authorization", "Bearer t")
+	rr = httptest.NewRecorder()
+	withSelfOrOperatorAuth(inner)(rr, self)
+	if rr.Code != http.StatusOK || innerCalls != 1 {
+		t.Fatalf("self read: expected 200 with handler invoked; got %d, calls=%d", rr.Code, innerCalls)
 	}
 }
 

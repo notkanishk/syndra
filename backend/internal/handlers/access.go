@@ -12,6 +12,7 @@ import (
 
 	"mkauth/internal/db"
 	"mkauth/internal/directory"
+	"mkauth/internal/models"
 	"mkauth/internal/services"
 )
 
@@ -153,6 +154,18 @@ func handleGetAccessRequests(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
+	// Members see only their own requests — the org-wide list (with
+	// justifications) is operator-scoped (SC3).
+	if !isOperator(r) {
+		self := getAdminUserID(r.Context())
+		own := make([]models.AccessRequest, 0, len(requests))
+		for _, req := range requests {
+			if req.RequesterID == self {
+				own = append(own, req)
+			}
+		}
+		requests = own
+	}
 	jsonResponse(w, http.StatusOK, requests)
 }
 
@@ -161,6 +174,12 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 	if err := decodeJSONStrict(r.Body, &req); err != nil {
 		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
 		return
+	}
+	// A member can only file requests as themselves — the authenticated subject
+	// overrides whatever requester_id the client sent (SC8). Operators may file
+	// on behalf of another user; dev mode (API-key, no subject) trusts the body.
+	if !isOperator(r) {
+		req.RequesterID = getAdminUserID(r.Context())
 	}
 	if !trimmedNonEmpty(req.RequesterID) || !trimmedNonEmpty(req.ProjectID) || !trimmedNonEmpty(req.RoleKey) || !trimmedNonEmpty(req.Justification) {
 		jsonValidationErrorResponse(w, "requester_id, project_id, role_key, and justification are required", map[string]string{
