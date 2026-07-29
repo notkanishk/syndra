@@ -1,10 +1,9 @@
 {
   "mcpServers": {
     "openlore": {
-      "command": "npx",
+      "command": "bunx",
       "args": [
-        "--yes",
-        "openlore",
+        "openlore@2.1.7",
         "mcp",
         "--preset",
         "substrate"

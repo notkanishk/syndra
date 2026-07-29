@@ -2,7 +2,7 @@
 <!-- openlore-fingerprint: 25cdd746ebf39b56 -->
 This project uses OpenLore for persistent architectural memory.
 
-ALWAYS call `orient()` (via the openlore MCP server, or `npx openlore orient --json`)
+ALWAYS call `orient()` (via the openlore MCP server, or `bunx openlore orient --json`)
 before reading source files when starting a new task. This returns the relevant
 functions, callers, spec sections, and insertion points for the task at hand —
 one structural lookup instead of file-by-file rediscovery.

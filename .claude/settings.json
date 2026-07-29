@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx --yes openlore orient --json"
+            "command": "bunx openlore@2.1.7 orient --json"
           }
         ]
       }
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx --yes openlore orient --inject"
+            "command": "bunx openlore@2.1.7 orient --inject"
           }
         ]
       }
