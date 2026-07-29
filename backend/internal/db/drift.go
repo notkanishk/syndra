@@ -89,26 +89,6 @@ func GetDriftItem(ctx context.Context, id string) (models.DriftItem, error) {
 	return items[0], nil
 }
 
-// ResolveDriftItem transitions a pending row to a terminal status
-// (attributed | revoked | marked_external), guarded on status='pending_triage'
-// so a concurrent double-triage loses the race cleanly. Returns
-// ErrDriftNotPending when the row is already resolved.
-func ResolveDriftItem(ctx context.Context, id, status, resolvedBy, payloadJSON string) error {
-	const q = `
-		UPDATE drift_items
-		SET status = $2, resolved_at = NOW(), resolved_by = $3,
-		    resolution_payload_json = NULLIF($4,'')::jsonb
-		WHERE id = $1 AND status = 'pending_triage'`
-	tag, err := PG.Exec(ctx, q, id, status, resolvedBy, payloadJSON)
-	if err != nil {
-		return fmt.Errorf("resolve drift item: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrDriftNotPending
-	}
-	return nil
-}
-
 // CountPendingDrift is the number badge for the sidebar dot + dashboard callout.
 func CountPendingDrift(ctx context.Context) (int, error) {
 	var n int

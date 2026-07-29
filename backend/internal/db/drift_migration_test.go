@@ -18,7 +18,8 @@ func TestDriftMigrationEnumsMatchCode(t *testing.T) {
 	}
 	sql := string(up)
 
-	// Values the Go code actually writes (UpsertDriftItem, ResolveDriftItem, sweep, webhook).
+	// Values the Go code actually writes (UpsertDriftItem, the *AndEnqueue triage
+	// helpers, sweep, webhook).
 	for _, v := range []string{"'webhook'", "'reconciliation_sweep'"} {
 		if !strings.Contains(sql, v) {
 			t.Errorf("detection_source %s written by code but missing from 000016 CHECK", v)

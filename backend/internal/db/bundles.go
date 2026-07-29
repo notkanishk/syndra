@@ -21,18 +21,6 @@ func CreateBundle(ctx context.Context, name string, description string, confirma
 	return id, nil
 }
 
-func AddRoleToBundle(ctx context.Context, bundleID, zitadelProjectID, zitadelRoleKey string) error {
-	query := `
-		INSERT INTO bundle_roles (bundle_id, zitadel_project_id, zitadel_role_key)
-		VALUES ($1, $2, $3)
-		ON CONFLICT DO NOTHING;`
-	_, err := PG.Exec(ctx, query, bundleID, zitadelProjectID, zitadelRoleKey)
-	if err != nil {
-		return fmt.Errorf("failed to map role to bundle: %w", err)
-	}
-	return nil
-}
-
 func GetAllBundles(ctx context.Context) ([]models.Bundle, error) {
 	query := `SELECT id, name, description, is_welcome, confirmation_mode, created_at FROM bundles ORDER BY created_at DESC;`
 	rows, err := PG.Query(ctx, query)
@@ -90,15 +78,6 @@ func AssignBundleToUser(ctx context.Context, userID, bundleID string) error {
 	_, err := PG.Exec(ctx, query, userID, bundleID)
 	if err != nil {
 		return fmt.Errorf("failed to assign bundle: %w", err)
-	}
-	return nil
-}
-
-func RemoveBundleFromUser(ctx context.Context, userID, bundleID string) error {
-	query := `DELETE FROM user_bundle_assignments WHERE user_id = $1 AND bundle_id = $2;`
-	_, err := PG.Exec(ctx, query, userID, bundleID)
-	if err != nil {
-		return fmt.Errorf("failed to remove bundle: %w", err)
 	}
 	return nil
 }

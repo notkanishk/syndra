@@ -7,19 +7,6 @@ import (
 	"mkauth/internal/models"
 )
 
-// InsertExclusion records an operator "legitimately external" marker. Idempotent
-// on (user, project, role) — re-marking the same triple is a no-op.
-func InsertExclusion(ctx context.Context, userID, projectID, roleKey, markedBy, reason string) error {
-	const q = `
-		INSERT INTO external_grant_exclusions (user_id, project_id, role_key, marked_by, reason)
-		VALUES ($1,$2,$3,$4,NULLIF($5,''))
-		ON CONFLICT (user_id, project_id, role_key) DO NOTHING`
-	if _, err := PG.Exec(ctx, q, userID, projectID, roleKey, markedBy, reason); err != nil {
-		return fmt.Errorf("insert exclusion: %w", err)
-	}
-	return nil
-}
-
 // GetExclusions returns all exclusion triples so the reconciliation sweep and
 // the webhook can filter known-external grants out of drift detection.
 func GetExclusions(ctx context.Context) ([]models.ExternalGrantExclusion, error) {
