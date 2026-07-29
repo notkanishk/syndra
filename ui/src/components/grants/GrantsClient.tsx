@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { ProjectName, RoleName, UserName } from "@/components/names";
 import { Badge } from "@/components/ui/Badge";
@@ -240,20 +240,6 @@ function AllGrantsTab({ zitadelQuery, reconQuery, rulesTargets }: AllGrantsTabPr
     () => Array.from(new Set(rows.map((r) => r.project_id))),
     [rows],
   );
-
-  // Prefetch every distinct user_id so the resolver cache is warm before the
-  // operator types into the user filter. Without this, the filter only matches
-  // ids whose <UserName/> mounted recently — every other row falls back to
-  // UUID-prefix matching even though the rendered label is the resolved name.
-  const distinctUserIds = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.user_id))).filter(Boolean),
-    [rows],
-  );
-  useEffect(() => {
-    if (distinctUserIds.length > 0) {
-      resolver.prefetch({ user_ids: distinctUserIds });
-    }
-  }, [distinctUserIds, resolver]);
 
   const filteredRows = useMemo(() => {
     const userQ = userFilter.trim().toLowerCase();

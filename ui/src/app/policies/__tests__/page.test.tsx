@@ -10,7 +10,6 @@ import { UUID_REGEX, makeProxyFetch } from "@/test-utils/proxyFetch";
 vi.mock("@/lib/toast", () => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
-  toastInfo: vi.fn(),
 }));
 
 const SOURCE_PROJECT = "11111111-1111-4111-8111-111111111111";

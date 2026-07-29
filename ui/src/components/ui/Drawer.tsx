@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
+
+import { useDialogFocusTrap } from "@/components/ui/Modal";
 
 interface DrawerProps {
   open: boolean;
@@ -35,43 +37,7 @@ export function Drawer({
   children,
 }: DrawerProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    const focusables = panelRef.current?.querySelectorAll<HTMLElement>(
-      "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
-    );
-    focusables?.[0]?.focus();
-
-    function handleKey(event: KeyboardEvent) {
-      if (event.key === "Escape" && !busy) {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      if (!panelRef.current) return;
-      const list = panelRef.current.querySelectorAll<HTMLElement>(
-        "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
-      );
-      if (list.length === 0) return;
-      const first = list[0];
-      const last = list[list.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener("keydown", handleKey);
-    return () => {
-      document.removeEventListener("keydown", handleKey);
-      previouslyFocused?.focus();
-    };
-  }, [open, busy, onClose]);
+  useDialogFocusTrap(panelRef, open, busy, onClose);
 
   if (!open) return null;
 

@@ -10,7 +10,6 @@ import { UUID_REGEX, makeProxyFetch } from "@/test-utils/proxyFetch";
 vi.mock("@/lib/toast", () => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
-  toastInfo: vi.fn(),
 }));
 
 const USER_ID = "44444444-4444-4444-8444-444444444444";

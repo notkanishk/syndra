@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 import { Skeleton } from "@/components/ui/Skeleton";
+import { SHOW_DEBUG_IDS } from "@/components/names/UserName";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 
 interface ProjectNameProps {
@@ -11,16 +10,8 @@ interface ProjectNameProps {
   className?: string;
 }
 
-const SHOW_DEBUG_IDS =
-  typeof window !== "undefined" && new URLSearchParams(window.location.search).has("debug");
-
 export function ProjectName({ id, fallback = "—", className = "" }: ProjectNameProps) {
   const resolver = useNameResolver();
-  const [, force] = useState(0);
-  useEffect(() => {
-    const t = setTimeout(() => force((n) => n + 1), 0);
-    return () => clearTimeout(t);
-  }, [id]);
 
   if (!id) {
     return <span className={className}>{fallback}</span>;

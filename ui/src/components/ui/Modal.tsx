@@ -23,32 +23,25 @@ const SIZE_CLASS: Record<NonNullable<ModalProps["size"]>, string> = {
   lg: "max-w-3xl",
 };
 
-/**
- * Generic modal primitive — focus trap, aria-modal, Esc + click-outside
- * dismiss, glass-card panel. Use this directly for confirmation flows and
- * compose `<ConfirmModal/>` (destructive footer) on top of it. Drawer mirrors
- * the same a11y model with right-side slide-in geometry.
- */
-export function Modal({
-  open,
-  onClose,
-  labelledBy,
-  describedBy,
-  busy = false,
-  size = "md",
-  children,
-}: ModalProps) {
-  const panelRef = useRef<HTMLDivElement | null>(null);
+const FOCUSABLE_SELECTOR =
+  "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
 
+/**
+ * Shared dialog behavior for Modal and Drawer: focus the first focusable
+ * element on open, trap Tab inside the panel, Esc-to-close (unless busy),
+ * restore focus to the previously focused element on close.
+ */
+export function useDialogFocusTrap(
+  panelRef: React.RefObject<HTMLDivElement | null>,
+  open: boolean,
+  busy: boolean,
+  onClose: () => void,
+) {
   useEffect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
-    // Focus the first focusable element inside the panel on open.
-    const focusables = panelRef.current?.querySelectorAll<HTMLElement>(
-      "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
-    );
-    focusables?.[0]?.focus();
+    panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)[0]?.focus();
 
     function handleKey(event: KeyboardEvent) {
       if (event.key === "Escape" && !busy) {
@@ -58,9 +51,7 @@ export function Modal({
       }
       if (event.key !== "Tab") return;
       if (!panelRef.current) return;
-      const list = panelRef.current.querySelectorAll<HTMLElement>(
-        "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
-      );
+      const list = panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
       if (list.length === 0) return;
       const first = list[0];
       const last = list[list.length - 1];
@@ -78,7 +69,26 @@ export function Modal({
       document.removeEventListener("keydown", handleKey);
       previouslyFocused?.focus();
     };
-  }, [open, busy, onClose]);
+  }, [panelRef, open, busy, onClose]);
+}
+
+/**
+ * Generic modal primitive — focus trap, aria-modal, Esc + click-outside
+ * dismiss, glass-card panel. Use this directly for confirmation flows and
+ * compose `<ConfirmModal/>` (destructive footer) on top of it. Drawer mirrors
+ * the same a11y model with right-side slide-in geometry.
+ */
+export function Modal({
+  open,
+  onClose,
+  labelledBy,
+  describedBy,
+  busy = false,
+  size = "md",
+  children,
+}: ModalProps) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  useDialogFocusTrap(panelRef, open, busy, onClose);
 
   if (!open) return null;
 

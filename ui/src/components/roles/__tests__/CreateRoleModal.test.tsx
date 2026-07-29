@@ -10,7 +10,6 @@ import { makeProxyFetch, respondWith } from "@/test-utils/proxyFetch";
 vi.mock("@/lib/toast", () => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
-  toastInfo: vi.fn(),
 }));
 
 const PROJECT_ID = "33333333-3333-4333-8333-333333333333";

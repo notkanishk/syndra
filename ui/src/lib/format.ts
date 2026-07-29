@@ -31,14 +31,6 @@ export function formatRoleRef(
 }
 
 /**
- * Format a project_id alone — used by the project chips in audit logs and
- * topology nodes. Falls back to the raw id when no matching project is found.
- */
-export function formatProjectName(projectId: string, projects: ProjectInfo[]): string {
-  return projects.find((p) => p.id === projectId)?.name ?? projectId;
-}
-
-/**
  * Convert a snake/kebab/lower role key into a friendlier label. Used as a
  * fallback when the project catalog doesn't carry an explicit `label` for
  * the role.

@@ -9,7 +9,6 @@ import {
   type ResolvedProject,
   type ResolvedRole,
   type ResolvedUser,
-  type LookupRequest,
   roleCompositeKey,
 } from "@/lib/lookup-types";
 import type { Bundle, CatalogResponse } from "@/lib/types";
@@ -47,8 +46,6 @@ interface NameResolverContextValue {
   resolveProject: (id: string) => ResolveResult<ResolvedProject>;
   resolveRole: (projectId: string, roleKey: string) => ResolveResult<ResolvedRole>;
   resolveBundle: (id: string) => ResolveResult<ResolvedBundle>;
-  /** Retained for interface compatibility — the full catalog is already loaded. */
-  prefetch: (ids: LookupRequest) => void;
 }
 
 const NameResolverContext = createContext<NameResolverContextValue | null>(null);
@@ -115,7 +112,6 @@ export function NameResolverProvider({ children }: { children: React.ReactNode }
         resolved: !catalogQ.isLoading,
       }),
       resolveBundle: (id) => ({ value: bundleMap.get(id), resolved: !bundlesQ.isLoading }),
-      prefetch: () => {}, // no-op: catalog is already complete
     }),
     [catalogMaps, bundleMap, catalogQ.isLoading, bundlesQ.isLoading],
   );
@@ -135,7 +131,6 @@ export function useNameResolver(): NameResolverContextValue {
       resolveProject: () => miss,
       resolveRole: () => miss,
       resolveBundle: () => miss,
-      prefetch: () => {},
     };
   }
   return ctx;

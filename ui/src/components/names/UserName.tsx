@@ -1,7 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 
@@ -16,7 +14,9 @@ interface UserNameProps {
   className?: string;
 }
 
-const SHOW_DEBUG_IDS =
+// With ?debug in the URL, Name components expose the raw id via `title` for
+// forensic access. Shared by all four Name components.
+export const SHOW_DEBUG_IDS =
   typeof window !== "undefined" && new URLSearchParams(window.location.search).has("debug");
 
 /**
@@ -24,20 +24,12 @@ const SHOW_DEBUG_IDS =
  * shows a Skeleton block. On miss, renders `fallback` (default em dash) with
  * the raw id available via the `title` attribute for forensic access.
  *
- * Single-tick batching is handled by the surrounding NameResolverProvider —
- * mounting many <UserName/>s in one render produces ONE /lookup request.
+ * Re-rendering when the catalog lands is the NameResolverProvider's job: its
+ * context value is memoized on the catalog query state, so consumers re-render
+ * exactly when resolution data changes.
  */
 export function UserName({ id, fallback = "—", showEmail = false, className = "" }: UserNameProps) {
   const resolver = useNameResolver();
-  // useState forces a re-render when the resolver's cache fills in. The
-  // resolver itself is memoized; we read from it once per render.
-  const [, force] = useState(0);
-  useEffect(() => {
-    // Bump on mount so the next render re-reads the cache. The resolver
-    // updates its internal Map asynchronously after the lookup resolves.
-    const t = setTimeout(() => force((n) => n + 1), 0);
-    return () => clearTimeout(t);
-  }, [id]);
 
   if (!id) {
     return <span className={className}>{fallback}</span>;

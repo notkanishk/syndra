@@ -10,7 +10,6 @@ import { ConfirmationModeControls } from "../ConfirmationModeControls";
 vi.mock("@/lib/toast", () => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
-  toastInfo: vi.fn(),
 }));
 
 let proxy: ReturnType<typeof makeProxyFetch>;

@@ -12,15 +12,3 @@ export function toastSuccess(message: string, description?: string) {
 export function toastError(message: string, description?: string) {
   toast.error(message, { description });
 }
-
-export function toastInfo(message: string, description?: string) {
-  toast(message, { description });
-}
-
-export function toastPromise<T>(
-  promise: Promise<T>,
-  messages: { loading: string; success: string; error: string },
-): Promise<T> {
-  toast.promise(promise, messages);
-  return promise;
-}

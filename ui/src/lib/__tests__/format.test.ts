@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { describeExpiry, formatRoleRef, formatProjectName, humanizeKey } from "@/lib/format";
+import { describeExpiry, formatRoleRef, humanizeKey } from "@/lib/format";
 
 const projects = [
   {
@@ -28,15 +28,6 @@ describe("formatRoleRef", () => {
   it("falls back to project_id when project is unknown", () => {
     const { label } = formatRoleRef("unknown", "member", projects);
     expect(label).toBe("unknown · Member");
-  });
-});
-
-describe("formatProjectName", () => {
-  it("returns project name when found", () => {
-    expect(formatProjectName("printing", projects)).toBe("3D Lab");
-  });
-  it("returns the id when not found", () => {
-    expect(formatProjectName("ghost", projects)).toBe("ghost");
   });
 });
 

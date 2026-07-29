@@ -1,10 +1,8 @@
 import { getSession } from "@/lib/session";
-import type { ApplicationView, CatalogResponse } from "@/lib/types";
+import type { ApplicationView } from "@/lib/types";
 
 // Server-side fetches go directly to the backend container
 const SERVER_API = `${process.env.BACKEND_URL || "http://backend:8080"}/api/v1`;
-// Client-side fetches go through our Next.js proxy route
-const CLIENT_API = "/api/proxy";
 
 const API_KEY = process.env.MKAUTH_API_KEY || "";
 const OIDC_MODE = Boolean(process.env.ZITADEL_DOMAIN);
@@ -49,14 +47,6 @@ async function fetchServerJson<T = unknown>(path: string, token?: string): Promi
   return res.json() as Promise<T>;
 }
 
-export function getServerApiBase() {
-  return SERVER_API;
-}
-
-export function getClientApiBase() {
-  return CLIENT_API;
-}
-
 // Generic authenticated fetch for ad-hoc SSR calls in pages
 export async function fetchWithAuth<T = unknown>(path: string, token?: string): Promise<T> {
   return fetchServerJson<T>(path, token);
@@ -66,10 +56,6 @@ export async function fetchWithAuth<T = unknown>(path: string, token?: string): 
 // The token parameter is optional: pass session.accessToken when you already
 // have the session in scope to avoid a redundant cookie read, or omit it to
 // let resolveAuthToken read it automatically.
-
-export async function fetchCatalog(token?: string): Promise<CatalogResponse> {
-  return fetchServerJson<CatalogResponse>("/catalog", token);
-}
 
 export async function fetchApplications(token?: string): Promise<ApplicationView[]> {
   return fetchServerJson<ApplicationView[]>("/applications", token);
