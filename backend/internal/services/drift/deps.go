@@ -25,9 +25,7 @@ var (
 	svcAllDirectGrants = func(ctx context.Context) ([]models.DirectGrant, error) {
 		return db.GetAllDirectGrants(ctx, false) // active grants only — expired grants are not expected in Zitadel
 	}
-	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
-		return db.GetActiveMappingRules(ctx)
-	}
+	svcGetActiveMappingRules = db.GetActiveMappingRules
 	svcGetExclusions = func(ctx context.Context) ([]models.ExternalGrantExclusion, error) {
 		return db.GetExclusions(ctx)
 	}

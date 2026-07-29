@@ -10,12 +10,8 @@
 package expiry
 
 import (
-	"context"
-	"time"
-
 	"mkauth/internal/cache"
 	"mkauth/internal/db"
-	"mkauth/internal/models"
 	"mkauth/internal/services"
 	"mkauth/internal/zitadel"
 )
@@ -24,24 +20,10 @@ import (
 // the backend (see services/deps.go, cache/deps.go, zitadel/deps.go). Tests
 // exercise sweep logic without a live DB/Redis/Zitadel by swapping these.
 var (
-	svcGetExpiredDirectGrants = func(ctx context.Context, limit int) ([]models.DirectGrant, error) {
-		return db.GetExpiredDirectGrants(ctx, limit)
-	}
-	svcDeleteExpiredDirectGrantsByIDs = func(ctx context.Context, userID string, ids []string) ([]models.DirectGrant, error) {
-		return db.DeleteExpiredDirectGrantsByIDs(ctx, userID, ids)
-	}
-	svcEmitIntentFromScheduler = func(ctx context.Context, targetUID, action, projectID, roleKey, grantID string) error {
-		return services.EmitProvisioningIntentFromScheduler(ctx, targetUID, action, projectID, roleKey, grantID)
-	}
-	svcInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error {
-		return db.InsertAuditLog(ctx, actorID, targetID, action, resourceID)
-	}
-	cacheInvalidateUser = func(ctx context.Context, userID string) error {
-		return cache.InvalidateUser(ctx, userID)
-	}
-	zitadelRevokeMappingRules = func(ctx context.Context, userID, projectID, roleKey string) error {
-		return zitadel.RevokeMappingRules(ctx, userID, projectID, roleKey)
-	}
-
-	timeNow = time.Now
+	svcGetExpiredDirectGrants         = db.GetExpiredDirectGrants
+	svcDeleteExpiredDirectGrantsByIDs = db.DeleteExpiredDirectGrantsByIDs
+	svcEmitIntentFromScheduler        = services.EmitProvisioningIntentFromScheduler
+	svcInsertAuditLog                 = db.InsertAuditLog
+	cacheInvalidateUser               = cache.InvalidateUser
+	zitadelRevokeMappingRules         = zitadel.RevokeMappingRules
 )
