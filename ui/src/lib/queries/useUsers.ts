@@ -17,8 +17,19 @@ export interface UserListEntry {
     avatar: string;
   };
   bundle_count: number;
+  bundle_names: string[];
   effective_role_count: number;
+  project_count: number;
   key_projects: string[];
+  /**
+   * The "needs attention" trio. Each is rendered in the semantic colour it
+   * belongs to — expiring amber, open requests accent, unexplained red — and
+   * a row with none of them shows a faint dash rather than nothing at all.
+   */
+  expiring_count: number;
+  open_request_count: number;
+  unexplained_count: number;
+  soonest_expiry?: string | null;
 }
 
 export interface AccessRoleReason {

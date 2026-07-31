@@ -6,11 +6,10 @@ import { toast } from "sonner";
 
 import { AccessSource } from "@/components/access/AccessSource";
 import { ErrorState, RowSkeleton } from "@/components/states";
-import { Avatar } from "@/components/ui/Avatar";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { Mono } from "@/components/ui/Badge";
-import { ProjectName, UserName } from "@/components/names";
+import { ProjectName, UserAvatar, UserName } from "@/components/names";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
 import {
   useDecideRequest,
@@ -146,7 +145,7 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
       />
       {visible.map((entry) => (
         <CardRow key={entry.id}>
-          <Avatar name={undefined} size="list" />
+          <UserAvatar id={entry.requester_id} size="list" />
           <div className="w-[170px] shrink-0 truncate text-[15px] font-semibold">
             <UserName id={entry.requester_id} />
           </div>
@@ -213,7 +212,7 @@ function ExpiringRow({
 
   return (
     <CardRow>
-      <Avatar name={undefined} size="list" />
+      <UserAvatar id={grant.user_id} size="list" />
       <div className="w-[170px] shrink-0 truncate text-[15px] font-semibold">
         <UserName id={grant.user_id} />
       </div>

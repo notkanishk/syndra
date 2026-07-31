@@ -11,6 +11,8 @@ export interface MappingRuleRow {
   target_project: string;
   target_role: string;
   confirmation_mode?: "auto" | "manual";
+  /** How many people hold the input role — i.e. how many this rule acts on. */
+  holder_count: number;
   created_at: string;
 }
 
@@ -54,6 +56,43 @@ export function useCreateMappingRule() {
         body: input,
       });
     },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.list });
+    },
+  });
+}
+
+/**
+ * Retarget an existing rule. The backend recomputes the closure diff and
+ * enqueues the adds and revokes in one transaction, so a retarget is never
+ * half-applied — which is exactly the failure that produces access nobody can
+ * explain later.
+ */
+export function useUpdateMappingRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...input }: CreateMappingRuleInput & { id: string }) =>
+      request<MappingRuleRow>(`/rules/mapping/${id}`, { method: "PUT", body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.list });
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
+  });
+}
+
+/**
+ * Change when a rule's writes reach the identity provider. Uses the bulk
+ * endpoint with a single id — there is no per-rule route, and inventing one
+ * for a set of size one would be a second way to do the same thing.
+ */
+export function useSetRuleConfirmationMode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, mode }: { id: string; mode: "auto" | "manual" }) =>
+      request("/policies/confirmation-mode", {
+        method: "POST",
+        body: { kind: "rule", ids: [id], mode },
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.list });
     },

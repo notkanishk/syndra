@@ -1,59 +1,103 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Card, CardColumns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Select } from "@/components/ui/Select";
 import { UserName } from "@/components/names";
-import { useAuditEntries } from "@/lib/queries/useAudit";
+import { useAuditEntries, type AuditEntry } from "@/lib/queries/useAudit";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useDebounce } from "@/lib/useDebounce";
-import { Relative } from "@/components/ui/Time";
+import { formatShortDate } from "@/lib/format";
+
+type Window = "7" | "30" | "all";
 
 /**
- * S8 · Review › Audit. Who did what, when. A historical record you consult —
- * which is exactly why expiring access, which is work with a deadline, is a
- * separate destination rather than a tab in here.
+ * S8 · Review › Audit. Who did what, when.
+ *
+ * A record you consult — which is exactly why expiring access, which is work
+ * with a deadline, is a separate destination rather than a tab in here.
+ *
+ * Every line names a human or a NAMED machine, and reads as a sentence rather
+ * than a verb key: "Approved request — Ike Nwosu, Laser Lab / operator" is
+ * something an operator can scan; `request.approve` is something they have to
+ * decode. Colour marks the exception only — a destructive verb takes the
+ * danger tone on the word itself, and nothing else on the row is coloured.
  */
 export default function AuditPage() {
   const [actor, setActor] = useState("");
+  const [window, setWindow] = useState<Window>("7");
   const debounced = useDebounce(actor, 250).trim().toLowerCase();
-  // The endpoint takes a limit and nothing else, so the filter narrows the
+  const resolver = useNameResolver();
+
+  // The endpoint takes a limit and nothing else, so both filters narrow the
   // window that was fetched rather than the query. The header says which,
   // because a filter that silently searches only part of the log is how
   // somebody concludes an action never happened.
   const entries = useAuditEntries({ limit: 200 });
 
-  const all = entries.data ?? [];
-  const rows = debounced
-    ? all.filter((entry) =>
-        [entry.actor_id, entry.target_id, entry.action, entry.resource_id]
-          .join(" ")
-          .toLowerCase()
-          .includes(debounced),
-      )
-    : all;
+  const all = useMemo(() => entries.data ?? [], [entries.data]);
+
+  const rows = useMemo(() => {
+    const cutoff =
+      window === "all" ? 0 : Date.now() - Number(window) * 24 * 60 * 60 * 1000;
+    return all.filter((entry) => {
+      if (cutoff && new Date(entry.created_at).getTime() < cutoff) return false;
+      if (!debounced) return true;
+      const actorName = resolver.resolveUser(entry.actor_id).value?.display_name ?? "";
+      const targetName = resolver.resolveUser(entry.target_id).value?.display_name ?? "";
+      return [entry.actor_id, entry.target_id, entry.action, entry.resource_id, actorName, targetName]
+        .join(" ")
+        .toLowerCase()
+        .includes(debounced);
+    });
+  }, [all, debounced, window, resolver]);
 
   return (
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Audit"
-        meta="Every mutation MkAuth made, and who asked for it. Showing the most recent 200."
+        meta="Every mutation MkAuth made, and who asked for it. Showing the most recent 200 entries — the filters below narrow those, not the whole log."
         actions={
-          <Input
-            value={actor}
-            onChange={(event) => setActor(event.target.value)}
-            placeholder="Filter these 200 entries"
-            aria-label="Filter the loaded audit entries"
-            className="w-[280px]"
-          />
+          <>
+            <Select
+              value={window}
+              onChange={(event) => setWindow(event.target.value as Window)}
+              aria-label="Date range"
+              className="w-[150px]"
+            >
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="all">All 200 loaded</option>
+            </Select>
+            <Input
+              value={actor}
+              onChange={(event) => setActor(event.target.value)}
+              placeholder="Any actor"
+              aria-label="Filter by actor"
+              className="w-[220px]"
+            />
+            <Button onClick={() => downloadCsv(rows, resolver)} disabled={rows.length === 0}>
+              Export CSV
+            </Button>
+          </>
         }
       />
 
       <Card>
-        <CardHeader title="Recorded" count={rows.length} />
+        <CardColumns>
+          <span className="w-[110px]">When</span>
+          <span className="w-[150px]">Who</span>
+          <span className="flex-1">What they did</span>
+          <span className="w-[80px] text-right">Trace</span>
+        </CardColumns>
+
         <ListStates
           isLoading={entries.isLoading}
           error={entries.error}
@@ -63,32 +107,164 @@ export default function AuditPage() {
           skeleton={<RowSkeleton rows={6} avatar={false} label="Loading audit entries" />}
           empty={
             <EmptyState
-              title={debounced ? "Nothing matches in the last 200 entries." : "Nothing recorded yet."}
+              title={
+                debounced || window !== "all"
+                  ? "Nothing matches in the entries that are loaded."
+                  : "Nothing recorded yet."
+              }
               guidance={
-                debounced
-                  ? "Older entries are not loaded — this filter searches what is on screen."
+                debounced || window !== "all"
+                  ? "Older entries are not loaded — these filters search what is on screen."
                   : "Grants, revokes and policy changes are written here as they happen."
               }
             />
           }
         >
           {rows.map((entry) => (
-            <div key={entry.id} className="row-divider flex flex-wrap items-center gap-4 px-5 py-3">
-              <div className="w-[190px] shrink-0 truncate text-[14.5px] font-semibold">
-                <UserName id={entry.actor_id} />
-              </div>
-              <Mono className="w-[220px] shrink-0 truncate text-muted">{entry.action}</Mono>
-              <div className="min-w-0 flex-1 truncate text-[14px] text-muted">
-                <UserName id={entry.target_id} />
-              </div>
-              <Mono className="w-[220px] shrink-0 truncate text-faint">{entry.resource_id}</Mono>
-              <div className="w-[110px] shrink-0 text-right text-[13px] text-faint">
-                <Relative iso={entry.created_at} />
-              </div>
+            <div
+              key={entry.id}
+              className="row-divider flex flex-wrap items-baseline gap-4 px-5 py-3"
+            >
+              <Mono className="w-[110px] shrink-0 text-faint">
+                {formatShortDate(entry.created_at)}
+              </Mono>
+              <span className="w-[150px] shrink-0 truncate text-[14.5px] font-semibold">
+                <UserName id={entry.actor_id} fallback={machineName(entry.actor_id)} />
+              </span>
+              <span className="min-w-[240px] flex-1 text-[14px] text-muted">
+                <Sentence entry={entry} />
+              </span>
+              <span className="w-[80px] shrink-0 text-right">
+                {isCascadeTrace(entry) ? (
+                  <Link
+                    href="/operations/cascades"
+                    className="text-[13px] font-semibold text-accent-text"
+                  >
+                    <Mono>{shortTrace(entry.resource_id)}</Mono>
+                  </Link>
+                ) : (
+                  <span className="text-[13px] text-faint">—</span>
+                )}
+              </span>
             </div>
           ))}
         </ListStates>
       </Card>
     </div>
   );
+}
+
+/**
+ * The verb, in words, with only the destructive one carrying colour. Unknown
+ * actions fall back to the raw key rather than a guess — a log that invents a
+ * description for something it doesn't recognise is worse than one that admits
+ * it.
+ */
+function Sentence({ entry }: { entry: AuditEntry }) {
+  const { verb, destructive } = describeAction(entry.action);
+  const hasTarget = entry.target_id && entry.target_id !== "-" && entry.target_id !== "system";
+
+  return (
+    <>
+      <span className={destructive ? "font-semibold text-danger-text" : undefined}>{verb}</span>
+      {hasTarget ? (
+        <>
+          {" — "}
+          <UserName id={entry.target_id} />
+        </>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The verbs the backend actually writes. Keeping this map honest matters more
+ * than making it complete: an unrecognised action falls through to its raw key
+ * below, which is ugly but true, whereas a wrong sentence in an audit log is
+ * the one kind of bug nobody catches until it matters.
+ */
+const ACTIONS: Record<string, { verb: string; destructive?: boolean }> = {
+  "direct_grant.upserted": { verb: "Granted direct access" },
+  "direct_grant.replaced": { verb: "Replaced a direct grant" },
+  "direct_grant.revoked": { verb: "Revoked direct access", destructive: true },
+  "direct_grant.removed": { verb: "Removed direct access", destructive: true },
+  "direct_grant.revoked_by_expiry": { verb: "Removed an expired grant", destructive: true },
+  "bundle.created": { verb: "Created a bundle" },
+  "bundle.assigned": { verb: "Assigned a bundle" },
+  "bundle.unassigned": { verb: "Removed a bundle assignment", destructive: true },
+  "bundle.role_added": { verb: "Added a role to a bundle" },
+  "bundle.role_removed": { verb: "Removed a role from a bundle", destructive: true },
+  "bundle.welcome_set": { verb: "Set the default bundle for new members" },
+  "welcome_bundle_assigned": { verb: "Assigned the default bundle to a new member" },
+  "mapping_rule.created": { verb: "Created an automatic rule" },
+  "mapping_rule.updated": { verb: "Changed an automatic rule" },
+  "role.created": { verb: "Created a role" },
+  "access_request.created": { verb: "Asked for access" },
+  "access_request.approved": { verb: "Approved a request" },
+  "access_request.rejected": { verb: "Declined a request" },
+  "claim_profile.updated": { verb: "Changed a project's token format" },
+  "app_claim_override.updated": { verb: "Changed an app's token format" },
+  "app_claim_override.deleted": { verb: "Removed an app's token override" },
+  "intent.emitted": { verb: "Queued a hardware provisioning intent" },
+};
+
+function describeAction(action: string): { verb: string; destructive: boolean } {
+  const known = ACTIONS[action];
+  if (known) return { verb: known.verb, destructive: Boolean(known.destructive) };
+  return { verb: action, destructive: /revoke|delete|remove/i.test(action) };
+}
+
+/**
+ * Every line names a human or a NAMED machine. The backend writes system
+ * actors as "system:onboarding" / "system:scheduler"; rendering the bare
+ * string is right — it IS the machine's name — but the prefix is noise.
+ */
+function machineName(id: string): string {
+  if (!id || id === "-") return "system";
+  return id.startsWith("system:") ? `${id.slice(7)} (automatic)` : id;
+}
+
+/**
+ * The trace column links into Change history, which is the only place to see
+ * what an entry actually did downstream. Only cascade-producing actions have
+ * one; everything else shows an honest dash.
+ */
+function isCascadeTrace(entry: AuditEntry): boolean {
+  return (
+    Boolean(entry.resource_id) &&
+    /^(mapping_rule|bundle)\./.test(entry.action) &&
+    entry.action !== "bundle.created"
+  );
+}
+
+function shortTrace(id: string): string {
+  return `c_${id.replace(/-/g, "").slice(0, 4)}`;
+}
+
+/**
+ * Export what is on screen, with the names resolved — a CSV full of UUIDs is a
+ * file somebody has to come back and ask about.
+ */
+function downloadCsv(
+  rows: AuditEntry[],
+  resolver: ReturnType<typeof useNameResolver>,
+): void {
+  const header = ["when", "who", "what", "target", "resource"];
+  const lines = rows.map((entry) => [
+    entry.created_at,
+    resolver.resolveUser(entry.actor_id).value?.display_name ?? entry.actor_id,
+    describeAction(entry.action).verb,
+    resolver.resolveUser(entry.target_id).value?.display_name ?? entry.target_id,
+    entry.resource_id,
+  ]);
+  const csv = [header, ...lines]
+    .map((cells) => cells.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `mkauth-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
 }

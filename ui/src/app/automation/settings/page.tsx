@@ -34,7 +34,16 @@ export default function AutomationSettingsPage() {
       />
 
       <Card>
-        <CardHeader title="New rules apply" />
+        <CardHeader
+          title="Default confirmation mode"
+          note="What a newly created rule does when it fires. Existing rules keep their own setting."
+        />
+
+        {/*
+          Each option is described by its COST rather than its name. "Manual"
+          and "auto" tell an operator nothing about what they are trading; "no
+          chance to catch a bad rule before it lands" does.
+        */}
         <div className="row-divider flex flex-col gap-3 px-5 py-4">
           <Segmented<"auto" | "manual">
             label="Default confirmation mode"
@@ -56,14 +65,50 @@ export default function AutomationSettingsPage() {
               { value: "auto", label: "Apply immediately" },
             ]}
           />
-          <p className="max-w-[70ch] text-[14px] leading-[1.55] text-muted">
-            {mode === "manual"
-              ? "A new rule's writes wait under Pending changes until an operator resumes them. Slower, and nothing reaches the identity provider without somebody looking at it."
-              : "A new rule's writes go straight to the identity provider as it fires. Faster, and a mistake in a rule reaches every holder before anybody reviews it."}
-          </p>
-          <p className="text-[13px] text-faint">
-            This is the default for rules created from now on. Existing rules keep the mode they
-            were created with.
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <div
+              className={`rounded-inner border px-4 py-3.5 ${
+                mode === "manual" ? "border-accent-line bg-accent-soft" : "border-line"
+              }`}
+            >
+              <div className="text-[14.5px] font-semibold">Queue for review</div>
+              <p className="mt-1 text-[13.5px] leading-[1.55] text-muted">
+                Writes wait in Pending changes until someone confirms them. Slower, and nothing
+                reaches a machine without a person seeing it first.
+              </p>
+            </div>
+            <div
+              className={`rounded-inner border px-4 py-3.5 ${
+                mode === "auto" ? "border-accent-line bg-accent-soft" : "border-line"
+              }`}
+            >
+              <div className="text-[14.5px] font-semibold">Apply immediately</div>
+              <p className="mt-1 text-[13.5px] leading-[1.55] text-muted">
+                Cascades reach the identity provider the moment a rule fires. Fewer clicks, and no
+                chance to catch a bad rule before it lands.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/*
+          The placement rule, stated on the screen rather than only in the spec.
+          Somebody who finds this page in a preferences drawer one day should
+          be able to tell it was moved by mistake.
+        */}
+        <div className="warn-note m-5 flex items-start gap-3 px-4 py-3.5">
+          <span
+            aria-hidden
+            className="mt-px flex h-5 w-5 flex-none items-center justify-center rounded-pill bg-warn-soft text-[12px] font-bold text-warn-text"
+          >
+            !
+          </span>
+          <p className="max-w-[86ch] text-[13.5px] leading-[1.55] text-muted">
+            This is org-wide policy, which is why it has a page inside Automation rather than a row
+            in a preferences drawer. A setting that changes what happens to everybody must not sit
+            where personal preferences live — someone will flip it for the whole makerspace
+            thinking they changed something about themselves.
           </p>
         </div>
       </Card>

@@ -11,6 +11,8 @@ export interface BundleRow {
   is_welcome?: boolean;
   roles?: string[];
   confirmation_mode?: "auto" | "manual";
+  /** How many people currently hold this bundle. Editing it changes all of them. */
+  holder_count?: number;
   created_at?: string;
 }
 
@@ -129,6 +131,29 @@ export function useAddBundleRole(bundleId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.rolesFor(bundleId) });
       qc.invalidateQueries({ queryKey: KEYS.impactFor(bundleId) });
+    },
+  });
+}
+
+/**
+ * Remove a role from a bundle. This is the Advanced half of the split: it
+ * changes access for every holder at once, which is why the screen shows the
+ * impact breakdown before the click rather than a confirmation after it.
+ */
+export function useRemoveBundleRole(bundleId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ projectId, roleKey }: { projectId: string; roleKey: string }) =>
+      request(
+        `/bundles/${bundleId}/roles/${encodeURIComponent(projectId)}/${encodeURIComponent(roleKey)}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.rolesFor(bundleId) });
+      qc.invalidateQueries({ queryKey: KEYS.impactFor(bundleId) });
+      qc.invalidateQueries({ queryKey: KEYS.list });
+      // Holders' effective access just changed.
+      qc.invalidateQueries({ queryKey: ["users"] });
     },
   });
 }

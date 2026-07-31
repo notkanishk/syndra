@@ -1,29 +1,29 @@
 "use client";
 
-import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Badge, Mono } from "@/components/ui/Badge";
+import { ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { UserName } from "@/components/names";
 import { useIntents } from "@/lib/queries/useIntents";
-import { formatRelative } from "@/lib/format";
+import { Relative } from "@/components/ui/Time";
 
 /**
- * S10 · System › Hardware sync.
+ * S10 · System › Hardware sync — parked.
  *
- * Parked pending LLDAP. What it needs is an honest "not connected yet" state,
- * not a spinner: a screen that looks like it is loading forever teaches people
- * that the product is broken, when in fact the integration simply does not
- * exist yet.
+ * The whole panel carries a dashed border and says "not connected yet" out
+ * loud, because the alternatives all lie: a spinner implies it is coming, an
+ * empty table implies it works and is idle, and "0 intents" implies a queue
+ * that is being drained. None of that is true — the LLDAP integration is not
+ * built, and the honest state is unbuilt rather than empty.
  *
- * The intent ledger is real and worth showing — those rows are what the sync
- * service will consume when it arrives, and their existence is the evidence
- * that nothing has been lost while waiting.
+ * The intent ledger is only rendered when it actually holds something. Real
+ * rows are evidence worth showing; zero rows are exactly the "0 intents" the
+ * design forbids.
  */
 export default function HardwareSyncPage() {
   const intents = useIntents();
   const rows = intents.data ?? [];
-  const waiting = rows.filter((row) => row.status === "pending").length;
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -32,63 +32,62 @@ export default function HardwareSyncPage() {
         meta="For the door controllers and shop machines that can't speak OIDC."
       />
 
-      <div className="warn-note flex items-start gap-3.5 px-5 py-4">
+      <div className="rounded-card border border-dashed border-line-strong px-[30px] py-12">
         <span
           aria-hidden
-          className="mt-px flex h-5 w-5 flex-none items-center justify-center rounded-pill bg-warn-soft text-[12px] font-bold text-warn-text"
+          className="mb-5 flex h-11 w-11 items-center justify-center rounded-pill border border-dashed border-line-strong"
+        />
+        <h2 className="font-display text-[26px] font-semibold">Not connected yet.</h2>
+
+        <p className="mt-3 max-w-[68ch] text-[15px] leading-[1.6] text-muted">
+          This is where provisioning intents for the sync service and per-user shadow credentials
+          will live — the path for door controllers and machine interlocks that can&rsquo;t speak
+          OIDC.
+        </p>
+        <p className="mt-3 max-w-[68ch] text-[15px] leading-[1.6] text-muted">
+          The LLDAP integration isn&rsquo;t built. Nothing is queued, nothing is pending, and no
+          hardware is currently reading from MkAuth. When it lands, this page gains an intents
+          queue and a per-person credential panel on the person detail.
+        </p>
+
+        <ButtonLink
+          href="https://github.com/lldap/lldap"
+          target="_blank"
+          rel="noreferrer"
+          className="mt-6"
         >
-          !
-        </span>
-        <div>
-          <div className="text-[15px] font-semibold text-warn-text">Not connected yet.</div>
-          <p className="mt-1 max-w-[70ch] text-[14px] leading-[1.55] text-muted">
-            The sync service that applies these to LLDAP isn&rsquo;t deployed. MkAuth keeps writing
-            the intents below, so nothing is being missed — but no hardware group has changed as a
-            result of them. {waiting > 0 ? `${waiting} are waiting.` : ""}
-          </p>
-        </div>
+          Read the integration plan
+        </ButtonLink>
       </div>
 
-      <Card>
-        <CardHeader
-          title="Provisioning intents"
-          count={rows.length}
-          note="What the sync service will apply once it exists."
-        />
-        <ListStates
-          isLoading={intents.isLoading}
-          error={intents.error}
-          isEmpty={rows.length === 0}
-          onRetry={() => intents.refetch()}
-          errorTitle="Couldn't load provisioning intents."
-          skeleton={<RowSkeleton rows={4} avatar={false} label="Loading intents" />}
-          empty={
-            <EmptyState
-              title="No intents recorded."
-              guidance="An intent is written whenever access changes for somebody who needs a hardware group."
-            />
-          }
-        >
+      {/*
+        Only rendered when the ledger genuinely holds rows. An empty table here
+        would say the feature works and simply has nothing to do.
+      */}
+      {rows.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Intents already recorded"
+            count={rows.length}
+            note="Written by MkAuth, consumed by nothing yet."
+          />
           {rows.map((intent) => (
             <div key={intent.id} className="row-divider flex flex-wrap items-center gap-4 px-5 py-3">
               <Badge tone={intent.action === "remove" ? "danger" : "accent"}>{intent.action}</Badge>
-              <div className="min-w-[180px] flex-1 truncate text-[14.5px] font-semibold">
+              <span className="min-w-[180px] flex-1 truncate text-[14.5px] font-semibold">
                 <UserName id={intent.target_uid} />
-              </div>
+              </span>
               <Mono className="w-[200px] shrink-0 truncate text-muted">{intent.lldap_group}</Mono>
-              <div className="w-[200px] shrink-0 truncate text-[13.5px] text-faint">
-                from {intent.source_project} / {intent.source_role}
-              </div>
               <Badge tone={intent.status === "failed" ? "danger" : "neutral"}>
                 {intent.status}
               </Badge>
               <div className="w-[110px] shrink-0 text-right text-[13px] text-faint">
-                {formatRelative(intent.created_at)}
+                <Relative iso={intent.created_at} />
               </div>
             </div>
           ))}
-        </ListStates>
-      </Card>
+        </Card>
+      )}
     </div>
   );
 }

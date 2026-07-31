@@ -6,6 +6,7 @@ import { TokenFormatEditor } from "@/components/apps/TokenFormatEditor";
 import { TokenPreview } from "@/components/apps/TokenPreview";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
+import { ProjectName } from "@/components/names";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useApplications } from "@/lib/queries/useApplications";
@@ -69,7 +70,7 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
         title={app.application.name}
         meta={
           <span className="flex flex-wrap items-center gap-2 text-[14px] text-faint">
-            {app.application.consumer} · reads {app.application.project_id} ·{" "}
+            {app.application.consumer} · reads <ProjectName id={app.application.project_id} /> ·{" "}
             <Mono>{app.application.id}</Mono>
           </span>
         }

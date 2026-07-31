@@ -15,6 +15,10 @@ export interface CatalogRole {
   role_key: string;
   display_name: string;
   description: string;
+  /** The identity provider's own grouping — "Safety-gated", "Open bench". */
+  group?: string;
+  cloned_from_project?: string;
+  cloned_from_role?: string;
   bundle_count: number;
   rule_count: number;
   assigned_user_count: number;

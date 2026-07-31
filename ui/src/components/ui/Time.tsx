@@ -26,6 +26,25 @@ export function Relative({ iso }: { iso: string | null | undefined }) {
  * The wall-clock time this page last looked. Client-only: on the server it is
  * a different second, in a different timezone, in a different locale.
  */
+/**
+ * "09:42:07" — the log ruler. Client-only for the same reason as the others:
+ * the server renders in UTC and the browser in the operator's zone, and a
+ * timestamp column that shifts by hours on hydration is worse than one that
+ * appears a frame late.
+ */
+export function LogTime({ iso }: { iso: string | null | undefined }) {
+  const [time, setTime] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!iso) return;
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return;
+    setTime(date.toLocaleTimeString("en-GB", { hour12: false }));
+  }, [iso]);
+
+  return <>{time ?? "··:··:··"}</>;
+}
+
 export function ClockTime() {
   const [time, setTime] = useState<string | null>(null);
 

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Mono } from "@/components/ui/Badge";
+import { ProjectName } from "@/components/names";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { useBundleRolesByBundle, useBundles, useRemoveBundle } from "@/lib/queries/useBundles";
@@ -163,7 +164,7 @@ export function ManageBundles({
                         previewAdding && alreadyHeld ? "bg-ink/30" : "bg-accent"
                       }`}
                     />
-                    {projectId} / <Mono>{roleKey}</Mono>
+                    <ProjectName id={projectId} /> / <Mono>{roleKey}</Mono>
                     {previewAdding && alreadyHeld && (
                       <span className="text-[13px]">— already held, no change</span>
                     )}
@@ -174,7 +175,7 @@ export function ManageBundles({
                         aria-hidden
                         className="h-1.5 w-1.5 rounded-pill border border-dashed border-ink/60"
                       />
-                      and cascade to {cascade.target_project} /{" "}
+                      and cascade to <ProjectName id={cascade.target_project} /> /{" "}
                       <Mono>{cascade.target_role}</Mono>
                     </div>
                   )}

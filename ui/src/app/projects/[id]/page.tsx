@@ -5,6 +5,7 @@ import { use, useMemo } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
+import { ButtonLink } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useCrumb } from "@/lib/page-crumb";
@@ -14,8 +15,12 @@ import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { humanizeKey } from "@/lib/format";
 
 /**
- * A project's roles. Each row's member count is the link into E2 — "who can
- * currently use this?" is one click from "what roles exist here?".
+ * E1 detail · a project's roles. Each row's member count is the link into E2 —
+ * "who can currently use this?" is one click from "what roles exist here?".
+ *
+ * Descriptions are shown in FULL, never truncated to a tooltip: "can cut
+ * unsupervised" versus "may enter and watch" is the entire decision an operator
+ * is making, and a role key alone never conveys it.
  */
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -35,32 +40,32 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   return (
     <div className="flex flex-col gap-[18px]">
       <PageHeader
-        eyebrow="Project"
+        eyebrow="Projects"
         title={project?.project.name ?? id}
         meta={
           <span className="flex flex-wrap items-center gap-2">
             <span>
-              {projectRoles.length} {projectRoles.length === 1 ? "role" : "roles"} ·{" "}
-              {project?.member_count ?? 0} people
+              {project?.member_count ?? 0} people · {projectRoles.length}{" "}
+              {projectRoles.length === 1 ? "role" : "roles"}
+              {served.length > 0
+                ? ` · serves ${served.map((entry) => entry.application.name).join(" and ")}`
+                : " · no app reads this yet"}
             </span>
-            {served.map((entry) => (
-              <span
-                key={entry.application.id}
-                className="rounded-pill bg-tint-2 px-2.5 py-1 text-[12.5px]"
-              >
-                {entry.application.name}
-              </span>
-            ))}
+            <Mono className="text-faint">{id}</Mono>
           </span>
+        }
+        actions={
+          served.length > 0 ? (
+            <ButtonLink href={`/applications/${served[0].application.id}`}>Token format</ButtonLink>
+          ) : undefined
         }
       />
 
       <Card>
         <CardColumns>
           <span className="flex-1">Role</span>
-          <span className="w-[150px]">Group</span>
-          <span className="w-[240px]">Description</span>
-          <span className="w-[90px] text-right">Members</span>
+          <span className="w-[130px]">Group</span>
+          <span className="w-[96px] text-right">Members</span>
         </CardColumns>
 
         <ListStates
@@ -72,29 +77,45 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           skeleton={<RowSkeleton rows={4} avatar={false} label="Loading roles" />}
           empty={
             <EmptyState
-              title="No MkAuth-managed roles in this project."
-              guidance="Roles created directly in the identity provider aren't listed here yet."
+              title="No roles listed in this project."
+              guidance="Roles created directly in the identity provider may not be listed here yet."
+              action={{ label: "Check upstream", href: "/zitadel/projects" }}
             />
           }
         >
           {projectRoles.map((role) => (
-            <Link
+            <div
               key={role.role_key}
-              href={`/projects/${id}/roles/${encodeURIComponent(role.role_key)}`}
-              className="row-divider flex items-center gap-[18px] px-5 py-3.5 transition-colors hover:bg-[var(--hover)]"
+              className="row-divider flex items-start gap-[18px] px-5 py-3.5"
             >
-              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">
-                {role.display_name || humanizeKey(role.role_key)}{" "}
-                <Mono className="font-normal text-faint">{role.role_key}</Mono>
+              <div className="min-w-0 flex-1">
+                <div className="text-[15px] font-semibold">
+                  {role.display_name || humanizeKey(role.role_key)}{" "}
+                  <Mono className="font-normal text-faint">{role.role_key}</Mono>
+                </div>
+                {role.description && (
+                  <p className="mt-1 max-w-[80ch] text-[13.5px] leading-[1.5] text-ink/50">
+                    {role.description}
+                  </p>
+                )}
+                {role.cloned_from_role && (
+                  <p className="mt-1 text-[12.5px] text-faint">
+                    cloned from {role.cloned_from_project} / {role.cloned_from_role}
+                  </p>
+                )}
+              </div>
+
+              <span className="w-[130px] shrink-0 truncate text-[13.5px] text-muted">
+                {role.group || "—"}
               </span>
-              <span className="w-[150px] truncate text-[13.5px] text-muted">
-                {role.source === "mkauth" ? "MkAuth-managed" : role.source}
-              </span>
-              <span className="w-[240px] truncate text-[13.5px] text-muted">
-                {role.description || "—"}
-              </span>
-              <span className="w-[90px] text-right text-[15px]">{role.assigned_user_count}</span>
-            </Link>
+
+              <Link
+                href={`/projects/${id}/roles/${encodeURIComponent(role.role_key)}`}
+                className="w-[96px] shrink-0 text-right text-[15px] font-semibold text-accent-text"
+              >
+                {role.assigned_user_count} →
+              </Link>
+            </div>
           ))}
         </ListStates>
       </Card>

@@ -6,15 +6,19 @@ import { toast } from "sonner";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Badge, Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Card, CardColumns } from "@/components/ui/Card";
 import { FieldHint, FieldLabel } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Segmented, Select } from "@/components/ui/Select";
+import { ProjectName } from "@/components/names";
 import {
   useCreateMappingRule,
   useMappingRules,
+  useSetRuleConfirmationMode,
+  useUpdateMappingRule,
   useValidateMappingRule,
+  type MappingRuleRow,
 } from "@/lib/queries/useMappingRules";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
@@ -23,13 +27,14 @@ import { humanizeKey } from "@/lib/format";
 /**
  * S2 · Automation › Automatic rules.
  *
- * "Role A in project X ⇒ role B in project Y." A rule is the reason a role
- * shows up with a dashed chip and nobody remembers clicking it, so every rule
- * is written here as the sentence it produces.
+ * A rule is the reason a role shows up with a dashed chip and nobody remembers
+ * clicking it, so every rule is written here as the English sentence it
+ * produces — "3D Lab / operator ⇒ Laser Lab / trained" — with the antecedent
+ * muted and the consequent bold. Not a form with a "source" and a "target".
  */
 export default function AutomaticRulesPage() {
   const rules = useMappingRules();
-  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<MappingRuleRow | "new" | null>(null);
 
   const rows = rules.data ?? [];
 
@@ -39,14 +44,20 @@ export default function AutomaticRulesPage() {
         title="Automatic rules"
         meta="Holding one role produces another, without anybody clicking."
         actions={
-          <Button variant="accent" onClick={() => setCreating(true)}>
+          <Button variant="accent" onClick={() => setEditing("new")}>
             New rule
           </Button>
         }
       />
 
       <Card>
-        <CardHeader title="Active rules" count={rows.length} />
+        <CardColumns>
+          <span className="w-[110px]">Rule</span>
+          <span className="flex-1">If … then</span>
+          <span className="w-[90px] text-right">Holders</span>
+          <span className="w-[150px] text-right">On fire</span>
+        </CardColumns>
+
         <ListStates
           isLoading={rules.isLoading}
           error={rules.error}
@@ -58,70 +69,182 @@ export default function AutomaticRulesPage() {
             <EmptyState
               title="No automatic rules."
               guidance="Every role somebody holds was given to them deliberately. Add a rule when one role should always imply another."
-              action={{ label: "Create a rule", onClick: () => setCreating(true) }}
+              action={{ label: "Create a rule", onClick: () => setEditing("new") }}
             />
           }
         >
           {rows.map((rule) => (
-            <div key={rule.id} className="row-divider flex flex-wrap items-center gap-4 px-5 py-3.5">
-              <div className="min-w-[320px] flex-1 text-[14.5px]">
+            <button
+              key={rule.id}
+              type="button"
+              onClick={() => setEditing(rule)}
+              className="row-divider flex w-full flex-wrap items-center gap-[18px] px-5 py-3.5 text-left transition-colors hover:bg-[var(--hover)]"
+            >
+              <Mono className="w-[110px] shrink-0 truncate text-faint">
+                {shortRuleId(rule.id)}
+              </Mono>
+
+              <span className="min-w-[320px] flex-1 text-[14.5px]">
                 <span className="text-muted">
-                  {rule.source_project} / <Mono>{rule.source_role}</Mono>
+                  <ProjectName id={rule.source_project} /> / <Mono>{rule.source_role}</Mono>
                 </span>
                 <span className="mx-2.5 text-faint">⇒</span>
                 <span className="font-semibold">
-                  {rule.target_project} / <Mono>{rule.target_role}</Mono>
+                  <ProjectName id={rule.target_project} /> / <Mono>{rule.target_role}</Mono>
                 </span>
-              </div>
-              <Badge tone={rule.confirmation_mode === "auto" ? "accent" : "neutral"}>
-                {rule.confirmation_mode === "auto" ? "Applies immediately" : "Queues for review"}
-              </Badge>
-              <Mono className="text-faint">{rule.id.slice(0, 8)}</Mono>
-            </div>
+              </span>
+
+              <span className="w-[90px] text-right text-[15px]">{rule.holder_count ?? 0}</span>
+
+              <span className="flex w-[150px] justify-end">
+                {/*
+                  Amber for "Immediate": it is not an error, but it is the
+                  setting where a bad rule reaches every holder before anybody
+                  can look at it. Queue is the quiet default.
+                */}
+                <Badge tone={rule.confirmation_mode === "auto" ? "warn" : "neutral"}>
+                  {rule.confirmation_mode === "auto" ? "Immediate" : "Queue"}
+                </Badge>
+              </span>
+            </button>
           ))}
         </ListStates>
       </Card>
 
-      <NewRuleDialog open={creating} onClose={() => setCreating(false)} />
+      <p className="max-w-[900px] text-[14px] leading-[1.55] text-faint">
+        A rule that triggers another rule is the single most surprising thing this system does, so
+        validation names the chain before you save.
+      </p>
+
+      {editing && (
+        <RuleEditor
+          rule={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   );
 }
 
-function NewRuleDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+/**
+ * One editor for both create and retarget. Two fields either side of a ⇒,
+ * labelled as the sentence reads. Save is blocked until validation passes, and
+ * the note says so rather than leaving a dead button.
+ */
+function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: () => void }) {
   const projects = useProjects();
   const catalog = useGlobalRoleCatalog();
   const create = useCreateMappingRule();
+  const update = useUpdateMappingRule();
+  const setMode = useSetRuleConfirmationMode();
   const validate = useValidateMappingRule();
 
-  const [sourceProject, setSourceProject] = useState("");
-  const [sourceRole, setSourceRole] = useState("");
-  const [targetProject, setTargetProject] = useState("");
-  const [targetRole, setTargetRole] = useState("");
-  const [mode, setMode] = useState<"auto" | "manual">("manual");
+  const [sourceProject, setSourceProject] = useState(rule?.source_project ?? "");
+  const [sourceRole, setSourceRole] = useState(rule?.source_role ?? "");
+  const [targetProject, setTargetProject] = useState(rule?.target_project ?? "");
+  const [targetRole, setTargetRole] = useState(rule?.target_role ?? "");
+  const [mode, setModeValue] = useState<"auto" | "manual">(rule?.confirmation_mode ?? "manual");
+  const [validated, setValidated] = useState<{ ok: boolean; notes: string[] } | null>(null);
+
+  const existingRules = useMappingRules().data ?? [];
 
   const rolesFor = (projectId: string) =>
     (catalog.data ?? []).filter((role) => role.project_id === projectId);
 
-  const complete = sourceProject && sourceRole && targetProject && targetRole;
+  // Names, not ids, in every validation sentence: "Chains into R-022, which
+  // would also give them Studio Access / door" is readable; the same line
+  // built from UUIDs is not.
+  const roleLabel = (projectId: string, roleKey: string) => {
+    const entry = (catalog.data ?? []).find(
+      (role) => role.project_id === projectId && role.role_key === roleKey,
+    );
+    const project =
+      entry?.project_name ||
+      (projects.data ?? []).find((p) => p.project.id === projectId)?.project.name ||
+      projectId;
+    return `${project} / ${roleKey}`;
+  };
 
-  if (!open) return null;
+  const complete = Boolean(sourceProject && sourceRole && targetProject && targetRole);
+  const busy = create.isPending || update.isPending || validate.isPending;
+
+  // Any edit invalidates a previous verdict: a rule validated against different
+  // roles has told you nothing about this one.
+  function change<T>(setter: (value: T) => void) {
+    return (value: T) => {
+      setValidated(null);
+      setter(value);
+    };
+  }
+
+  async function runValidation() {
+    const input = {
+      source_project: sourceProject,
+      source_role: sourceRole,
+      target_project: targetProject,
+      target_role: targetRole,
+    };
+    const check = await validate.mutateAsync(input);
+    if (check.would_cycle || check.self_reference) {
+      setValidated({
+        ok: false,
+        notes: [
+          check.reason ??
+            (check.self_reference
+              ? "A role can't produce itself."
+              : "That would close a loop — the rules would keep firing."),
+        ],
+      });
+      return false;
+    }
+
+    const notes: string[] = [];
+    const targetRoleName = roleLabel(targetProject, targetRole);
+    const holders = (catalog.data ?? []).find(
+      (role) => role.project_id === sourceProject && role.role_key === sourceRole,
+    )?.assigned_user_count;
+    if (holders) {
+      notes.push(
+        `Would grant ${targetRoleName} to ${holders} ${holders === 1 ? "person" : "people"} immediately on save.`,
+      );
+    }
+
+    // Naming the chain matters more than any other line here: a rule that
+    // triggers another rule is the single most surprising thing this system
+    // does, and finding out afterwards is how people stop trusting it.
+    for (const chained of existingRules) {
+      if (chained.id === rule?.id) continue;
+      if (chained.source_project === targetProject && chained.source_role === targetRole) {
+        notes.push(
+          `Chains into ${shortRuleId(chained.id)}, which would then also give them ${roleLabel(
+            chained.target_project,
+            chained.target_role,
+          )}.`,
+        );
+      }
+    }
+
+    setValidated({ ok: true, notes });
+    return true;
+  }
 
   return (
-    <Modal open onClose={onClose} busy={create.isPending} size="md" labelledBy="new-rule-title">
+    <Modal open onClose={onClose} busy={busy} size="md" labelledBy="rule-title">
       <ModalHeader
-        title="New automatic rule"
-        titleId="new-rule-title"
+        title={rule ? `Editing ${shortRuleId(rule.id)}` : "New automatic rule"}
+        titleId="rule-title"
         lede="Anybody who holds the first role gets the second, from now on and retroactively."
       />
+
       <div className="flex flex-col gap-3.5 px-6">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <FieldLabel htmlFor="rule-source-project">When somebody holds — project</FieldLabel>
+            <FieldLabel htmlFor="rule-source-project">If someone holds — project</FieldLabel>
             <Select
               id="rule-source-project"
               value={sourceProject}
               onChange={(event) => {
-                setSourceProject(event.target.value);
+                change(setSourceProject)(event.target.value);
                 setSourceRole("");
               }}
             >
@@ -139,7 +262,7 @@ function NewRuleDialog({ open, onClose }: { open: boolean; onClose: () => void }
               id="rule-source-role"
               value={sourceRole}
               disabled={!sourceProject}
-              onChange={(event) => setSourceRole(event.target.value)}
+              onChange={(event) => change(setSourceRole)(event.target.value)}
             >
               <option value="">{sourceProject ? "Choose…" : "Pick a project"}</option>
               {rolesFor(sourceProject).map((role) => (
@@ -151,14 +274,18 @@ function NewRuleDialog({ open, onClose }: { open: boolean; onClose: () => void }
           </div>
         </div>
 
+        <div aria-hidden className="text-center text-[18px] text-faint">
+          ⇒
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <FieldLabel htmlFor="rule-target-project">They also get — project</FieldLabel>
+            <FieldLabel htmlFor="rule-target-project">then also give them — project</FieldLabel>
             <Select
               id="rule-target-project"
               value={targetProject}
               onChange={(event) => {
-                setTargetProject(event.target.value);
+                change(setTargetProject)(event.target.value);
                 setTargetRole("");
               }}
             >
@@ -176,7 +303,7 @@ function NewRuleDialog({ open, onClose }: { open: boolean; onClose: () => void }
               id="rule-target-role"
               value={targetRole}
               disabled={!targetProject}
-              onChange={(event) => setTargetRole(event.target.value)}
+              onChange={(event) => change(setTargetRole)(event.target.value)}
             >
               <option value="">{targetProject ? "Choose…" : "Pick a project"}</option>
               {rolesFor(targetProject).map((role) => (
@@ -189,11 +316,11 @@ function NewRuleDialog({ open, onClose }: { open: boolean; onClose: () => void }
         </div>
 
         <div>
-          <FieldLabel>When it fires</FieldLabel>
+          <FieldLabel>When this rule fires</FieldLabel>
           <Segmented<"auto" | "manual">
             label="Confirmation mode"
             value={mode}
-            onChange={setMode}
+            onChange={setModeValue}
             options={[
               { value: "manual", label: "Queue for review" },
               { value: "auto", label: "Apply immediately" },
@@ -201,69 +328,92 @@ function NewRuleDialog({ open, onClose }: { open: boolean; onClose: () => void }
           />
           <FieldHint>
             {mode === "manual"
-              ? "Its writes wait under Pending changes until somebody resumes them."
-              : "Its writes go straight to the identity provider as the rule fires."}
+              ? "Its writes wait under Pending changes until somebody confirms them."
+              : "Its writes reach the identity provider the moment the rule fires."}
           </FieldHint>
         </div>
 
-        {complete && (
-          <div className="accent-note px-4 py-3.5 text-[14px] leading-[1.55] text-ink/[.78]">
-            Everybody holding{" "}
-            <strong className="font-semibold text-ink">
-              {sourceProject} / {sourceRole}
-            </strong>{" "}
-            — now and in future — also gets{" "}
-            <strong className="font-semibold text-ink">
-              {targetProject} / {targetRole}
-            </strong>
-            . Their rows will read <em>Automatic</em>, because nobody clicked it.
+        {validated && (
+          <div
+            className={`${validated.ok ? "warn-note" : "danger-note"} px-4 py-3.5 text-[14px] leading-[1.55]`}
+          >
+            <div
+              className={`type-label mb-1 ${validated.ok ? "text-warn-text" : "text-danger-text"}`}
+            >
+              {validated.ok
+                ? validated.notes.length
+                  ? `Validated — ${validated.notes.length} ${validated.notes.length === 1 ? "thing" : "things"} to know`
+                  : "Validated"
+                : "Not valid"}
+            </div>
+            {validated.notes.length ? (
+              <ul className="flex flex-col gap-1 text-muted">
+                {validated.notes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-muted">Nothing changes for anybody who already holds the role.</p>
+            )}
           </div>
         )}
       </div>
 
-      <ModalFooter>
+      <ModalFooter
+        note={
+          validated?.ok ? undefined : "Save is blocked until validation passes."
+        }
+      >
         <Button
           variant="accent"
-          disabled={!complete}
-          isPending={create.isPending || validate.isPending}
+          disabled={!complete || !validated?.ok}
+          isPending={busy}
           onClick={async () => {
             try {
-              // Validate first. A rule that points at itself or closes a cycle
-              // would fire forever; catching that before the write means the
-              // operator never has to undo a live cascade.
-              const check = await validate.mutateAsync({
+              const input = {
                 source_project: sourceProject,
                 source_role: sourceRole,
                 target_project: targetProject,
                 target_role: targetRole,
-              });
-              if (check.would_cycle || check.self_reference) {
-                toast.error(
-                  check.reason ??
-                    (check.self_reference
-                      ? "A role can't produce itself."
-                      : "That would close a loop — the rules would keep firing."),
-                );
-                return;
+              };
+              if (rule) {
+                await update.mutateAsync({ id: rule.id, ...input });
+                if (mode !== rule.confirmation_mode) {
+                  await setMode.mutateAsync({ id: rule.id, mode });
+                }
+                toast.success("Rule updated.");
+              } else {
+                await create.mutateAsync({ ...input, confirmation_mode: mode });
+                toast.success("Rule created.");
               }
-              await create.mutateAsync({
-                source_project: sourceProject,
-                source_role: sourceRole,
-                target_project: targetProject,
-                target_role: targetRole,
-                confirmation_mode: mode,
-              });
-              toast.success("Rule created.");
               onClose();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The rule wasn't created.");
+              toast.error(error instanceof Error ? error.message : "The rule wasn't saved.");
             }
           }}
         >
-          Create rule
+          {rule ? "Save rule" : "Create rule"}
+        </Button>
+        <Button
+          disabled={!complete}
+          isPending={validate.isPending}
+          onClick={async () => {
+            try {
+              await runValidation();
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Validation didn't run.");
+            }
+          }}
+        >
+          {validated ? "Re-validate" : "Validate"}
         </Button>
         <Button onClick={onClose}>Cancel</Button>
       </ModalFooter>
     </Modal>
   );
+}
+
+/** "R-014" reads as a rule; a raw UUID reads as noise. */
+function shortRuleId(id: string): string {
+  return `R-${id.replace(/-/g, "").slice(0, 4)}`;
 }

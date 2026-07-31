@@ -14,11 +14,16 @@ export interface PendingRow {
   role_keys: string[];
   source: string;
   source_ref?: string;
+  /** Shared by every write one triggering event produced. Empty on older rows. */
+  cascade_id?: string;
   status: string;
   attempts: number;
   created_at: string;
   last_error?: string;
 }
+
+/** Named for the screen that reads it, where "propagation" is never spoken. */
+export type PendingPropagationRow = PendingRow;
 
 export interface DrainResult {
   applied: number;

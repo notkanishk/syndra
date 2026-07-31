@@ -17,13 +17,33 @@ export interface CascadeSummaryRow {
   role_keys: string[];
   source: string;
   source_ref?: string;
+  cascade_id?: string;
   status: string;
   completed_at?: string;
+}
+
+/**
+ * Change history's unit: every write ONE triggering event produced, collapsed
+ * into a single entry. "8 applied", "2 waiting", "no writes" is the whole
+ * vocabulary — an entry is a sentence about consequence, not a diff.
+ */
+export interface CascadeGroupRow {
+  cascade_id: string;
+  source: string;
+  source_ref?: string;
+  applied: number;
+  waiting: number;
+  failed: number;
+  user_ids: string[];
+  writes: CascadeSummaryRow[];
+  started_at: string;
+  settled_at?: string | null;
 }
 
 const KEYS = {
   globalDefault: ["config", "confirmation-mode-default"] as const,
   recentCascades: ["propagations", "cascades"] as const,
+  cascadeGroups: ["propagations", "cascade-groups"] as const,
 };
 
 /** The operator-configured global default confirmation mode for new rules/bundles. */
@@ -80,6 +100,20 @@ export function useRecentCascades() {
     queryKey: KEYS.recentCascades,
     queryFn: async () =>
       (await request<{ cascades: CascadeSummaryRow[] }>("/propagations/cascades")).cascades ?? [],
+  });
+}
+
+/**
+ * Change history. Unlike the flat feed above this includes cascades whose
+ * writes have NOT landed: a half-applied cascade is the thing that creates
+ * unexplained access, and it has to be visible as one.
+ */
+export function useCascadeGroups() {
+  return useQuery({
+    queryKey: KEYS.cascadeGroups,
+    queryFn: async () =>
+      (await request<{ cascades: CascadeGroupRow[] }>("/propagations/cascade-groups")).cascades ??
+      [],
   });
 }
 
