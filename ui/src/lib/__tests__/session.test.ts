@@ -234,3 +234,27 @@ describe("getSession", () => {
     expect(session?.team).toBe("Ops");
   });
 });
+
+describe("demo identities are gated at the source", () => {
+  // vi.stubEnv rather than assigning process.env directly: process.env is
+  // shared across everything running in this worker, and a hand-rolled restore
+  // that misses a throw leaves the whole suite in demo-disabled mode.
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("returns nothing when a live identity provider is configured", () => {
+    // The login page and getSession each check this too. This is the gate a
+    // future caller cannot forget: there is no path to the array except these
+    // two functions.
+    vi.stubEnv("ZITADEL_DOMAIN", "id.example.org");
+    expect(getDemoUsers()).toEqual([]);
+    expect(getDemoUser("dev_admin")).toBeNull();
+  });
+
+  it("serves them in local development", () => {
+    vi.stubEnv("ZITADEL_DOMAIN", "");
+    expect(getDemoUsers().length).toBeGreaterThan(0);
+    expect(getDemoUser("dev_admin")).not.toBeNull();
+  });
+});

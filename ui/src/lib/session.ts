@@ -113,11 +113,25 @@ const DEMO_USERS: SessionUser[] = [
   },
 ];
 
+/**
+ * The demo catalog is gated at the source, not only at its call sites.
+ *
+ * A live deployment must never serialise these names into an RSC payload or
+ * mint a session from them. The login page and getSession each check
+ * ZITADEL_DOMAIN too — this is the third gate, and the one a future caller
+ * cannot forget, because there is no way to reach the array except through
+ * these two functions.
+ */
+function demoIdentitiesEnabled(): boolean {
+  return !process.env.ZITADEL_DOMAIN;
+}
+
 export function getDemoUsers(): SessionUser[] {
-  return DEMO_USERS;
+  return demoIdentitiesEnabled() ? DEMO_USERS : [];
 }
 
 export function getDemoUser(userId: string): SessionUser | null {
+  if (!demoIdentitiesEnabled()) return null;
   return DEMO_USERS.find((user) => user.id === userId) ?? null;
 }
 

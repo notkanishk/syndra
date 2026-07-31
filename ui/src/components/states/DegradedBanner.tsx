@@ -5,7 +5,16 @@ import { useQuery } from "@tanstack/react-query";
 import { request } from "@/lib/api-client";
 
 interface SystemMode {
-  mode?: string;
+  /** "zitadel" when the live directory is answering; "demo" when it is not. */
+  directory?: string;
+  /**
+   * True when demo fixtures were seeded into THIS process's database. In pure
+   * local dev that is expected. Anywhere else it means seeded rows — bundles,
+   * rules, audit entries — are mixed in with real ones, and no other signal
+   * on the screen distinguishes them.
+   */
+  seed_active?: boolean;
+  zitadel_configured?: boolean;
   degraded?: boolean;
   reason?: string;
 }
@@ -29,7 +38,17 @@ export function DegradedBanner() {
     retry: false,
   });
 
-  if (!data?.degraded) return null;
+  // Two different lies, two different banners.
+  //
+  // `degraded` means the directory itself fell back — every person, project and
+  // role on screen is fiction. `seed_active` alongside a live directory means
+  // something narrower and easier to miss: real people and projects, with demo
+  // bundles, rules and audit rows seeded underneath them. The second case used
+  // to show nothing at all, which is how fixture data ends up being read as
+  // production state.
+  const seededOverLive = Boolean(data?.seed_active) && data?.directory === "zitadel";
+
+  if (!data?.degraded && !seededOverLive) return null;
 
   return (
     <div
@@ -43,12 +62,27 @@ export function DegradedBanner() {
         !
       </span>
       <div>
-        <div className="font-display text-[19px] font-bold">These numbers are not real.</div>
-        <p className="max-w-[70ch] text-[14px] font-medium">
-          The identity provider is configured but unreachable, so MkAuth is serving demo data.
-          Don&rsquo;t grant or revoke anything until this clears.
-          {data.reason ? ` (${data.reason})` : ""}
-        </p>
+        {data?.degraded ? (
+          <>
+            <div className="font-display text-[19px] font-bold">These numbers are not real.</div>
+            <p className="max-w-[70ch] text-[14px] font-medium">
+              The identity provider is configured but unreachable, so MkAuth is serving demo data.
+              Don&rsquo;t grant or revoke anything until this clears.
+              {data.reason ? ` (${data.reason})` : ""}
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="font-display text-[19px] font-bold">
+              Demo data is seeded into this deployment.
+            </div>
+            <p className="max-w-[70ch] text-[14px] font-medium">
+              People and projects are real, but some bundles, rules and audit entries were created
+              by the demo seeder and nothing on screen distinguishes them. Unset MKAUTH_SEED_DEMO
+              and restart before treating any of this as a record.
+            </p>
+          </>
+        )}
       </div>
     </div>
   );
