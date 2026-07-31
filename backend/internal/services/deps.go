@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"mkauth/internal/db"
+	"mkauth/internal/directory"
 	"mkauth/internal/models"
 	"mkauth/internal/zitadel"
 )
@@ -42,7 +43,12 @@ var (
 	// drift queue is expected to stay small enough that fetching-then-slicing is
 	// cheap; revisit if the pending queue routinely grows large.
 	svcCountPendingDrift = db.CountPendingDrift
-	svcGetTopDrift       = func(ctx context.Context, n int) ([]models.DriftItem, error) {
+	// Whole pending queue, unfiltered. Shared by the triage view and the
+	// People index's "1 unexplained" column so the two can never disagree.
+	svcGetPendingDriftItems = func(ctx context.Context) ([]models.DriftItem, error) {
+		return db.GetDriftItems(ctx, db.DriftFilter{})
+	}
+	svcGetTopDrift = func(ctx context.Context, n int) ([]models.DriftItem, error) {
 		items, err := db.GetDriftItems(ctx, db.DriftFilter{})
 		if err != nil || len(items) <= n {
 			return items, err
@@ -74,6 +80,12 @@ var (
 	svcListAppClaimOverrides  = db.ListAppClaimOverrides
 	svcUpsertAppClaimOverride = db.UpsertAppClaimOverride
 	svcDeleteAppClaimOverride = db.DeleteAppClaimOverride
+
+	// Directory lookup used by drift triage to tell a departed alumnus from an
+	// active member and a person from a service account.
+	directoryFindUser = func(ctx context.Context, id string) (models.UserProfile, bool, error) {
+		return directory.Default.FindUser(ctx, id)
+	}
 
 	// Provisioning intents
 	svcInsertProvisioningIntent = db.InsertProvisioningIntent

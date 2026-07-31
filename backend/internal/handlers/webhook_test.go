@@ -58,7 +58,7 @@ func resetWebhookDeps(t *testing.T) {
 	origDrop := dbDropWebhookEventEnrichmentIncomplete
 	origUserExpectsRole := svcUserExpectsRole
 	origHasExclusion := dbHasExclusion
-	origUpsertDriftItem := dbUpsertDriftItem
+	origUpsertDriftItem := dbUpsertDriftItemWithEvidence
 	t.Cleanup(func() {
 		cacheRebuildUser = origRebuild
 		cacheInvalidateUser = origInvalidate
@@ -76,13 +76,13 @@ func resetWebhookDeps(t *testing.T) {
 		dbDropWebhookEventEnrichmentIncomplete = origDrop
 		svcUserExpectsRole = origUserExpectsRole
 		dbHasExclusion = origHasExclusion
-		dbUpsertDriftItem = origUpsertDriftItem
+		dbUpsertDriftItemWithEvidence = origUpsertDriftItem
 	})
 	// Defaults for existing webhook tests that don't care about drift: never
 	// flag drift unless a test explicitly opts in.
 	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return false, nil }
 	dbHasExclusion = func(context.Context, string, string, string) (bool, error) { return false, nil }
-	dbUpsertDriftItem = func(context.Context, string, string, []string, string, string, string) (string, bool, error) {
+	dbUpsertDriftItemWithEvidence = func(context.Context, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
 		return "", false, nil
 	}
 }
@@ -848,7 +848,7 @@ func TestProcessGrantAdded_UnexplainedGrantCreatesDrift(t *testing.T) {
 	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return false, nil }
 	dbHasExclusion = func(context.Context, string, string, string) (bool, error) { return false, nil }
 	var driftUser, driftType string
-	dbUpsertDriftItem = func(_ context.Context, u, _ string, _ []string, _, source, dtype string) (string, bool, error) {
+	dbUpsertDriftItemWithEvidence = func(_ context.Context, u, _ string, _ []string, _, source, dtype string, _ db.DriftEvidence) (string, bool, error) {
 		driftUser, driftType = u, dtype
 		if source != "webhook" {
 			t.Fatalf("detection_source must be webhook, got %q", source)
@@ -869,7 +869,7 @@ func TestProcessGrantAdded_ExpectedGrantNoDrift(t *testing.T) {
 	setupNoopWebhookDeps(t)
 	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return true, nil } // MkAuth expects it
 	called := false
-	dbUpsertDriftItem = func(context.Context, string, string, []string, string, string, string) (string, bool, error) {
+	dbUpsertDriftItemWithEvidence = func(context.Context, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
 		called = true
 		return "", false, nil
 	}

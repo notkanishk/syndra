@@ -105,3 +105,27 @@ func GetBundlesForUser(ctx context.Context, userID string) ([]models.Bundle, err
 	}
 	return bundles, nil
 }
+
+// GetBundleHolderCounts returns holder counts keyed by bundle id, in one query
+// rather than one per bundle. Editing a bundle changes access for every holder
+// at once, so the number belongs on the list beside the name — and a list that
+// fanned out a query per row would be a list nobody keeps open.
+func GetBundleHolderCounts(ctx context.Context) (map[string]int, error) {
+	const q = `SELECT bundle_id, COUNT(DISTINCT user_id) FROM user_bundle_assignments GROUP BY bundle_id`
+	rows, err := PG.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("query bundle holder counts: %w", err)
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int)
+	for rows.Next() {
+		var id string
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, fmt.Errorf("scan bundle holder count: %w", err)
+		}
+		counts[id] = n
+	}
+	return counts, rows.Err()
+}

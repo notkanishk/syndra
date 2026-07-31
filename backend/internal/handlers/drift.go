@@ -17,13 +17,34 @@ import (
 	"mkauth/internal/models"
 )
 
+// handleListDrift serves the triage queue. Unfiltered, it returns the enriched
+// view — risk, holder status and the other-items count each row needs to be
+// decided on without a click, ordered by risk then age. A filtered request
+// (user/project/source) stays on the raw listing: those callers are looking up
+// specific rows, not triaging a queue, and the enrichment cost isn't theirs to
+// pay.
 func handleListDrift(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	items, err := dbGetDriftItems(r.Context(), db.DriftFilter{
+	filter := db.DriftFilter{
 		UserID:          q.Get("user_id"),
 		ProjectID:       q.Get("project_id"),
 		DetectionSource: q.Get("source"),
-	})
+	}
+
+	if filter.UserID == "" && filter.ProjectID == "" && filter.DetectionSource == "" {
+		items, err := svcDriftTriageQueue(r.Context())
+		if err != nil {
+			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+			return
+		}
+		if items == nil {
+			items = []models.DriftTriageItem{}
+		}
+		jsonResponse(w, http.StatusOK, map[string]any{"drift": items})
+		return
+	}
+
+	items, err := dbGetDriftItems(r.Context(), filter)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -35,19 +56,31 @@ func handleListDrift(w http.ResponseWriter, r *http.Request) {
 }
 
 type attributeRequest struct {
-	Source    string `json:"source"`     // external_backfill | bundle | rule
-	SourceRef string `json:"source_ref"` // bundle_id / rule_id
+	Source string `json:"source"` // external_backfill — the only attribution this endpoint can honour
 }
 
 // validAttributionSource gates the source an operator may attribute drift to.
 // An empty/unknown source must never reach enqueueWrites, which would silently
 // default it to "direct" and mislabel attributed drift as an ordinary grant.
+//
+// "bundle" and "rule" were once accepted here and no longer are. Adoption writes
+// a direct_role_grants row; it does not assign a bundle to the person or create
+// a rule-derived relationship — cascades deliberately never touch the ledger, so
+// a row labelled source='bundle' had nothing whatsoever behind the label. The
+// access then survived removal of the very bundle it claimed to come from, and
+// the ledger said otherwise.
+//
+// Routing adoption through real ownership was the alternative, and it is worse.
+// Assigning the bundle to explain ONE drifting role hands the person every other
+// role that bundle carries; making a rule produce the role means granting them
+// the rule's input role, which is frequently safety-gated. Triage explains or
+// removes access that already exists. It must not be a way to grant more.
+//
+// So adoption means exactly what the screen says it means: MkAuth records a
+// direct grant, the operator becomes granter of record, nothing changes
+// upstream. That is external_backfill, and it is the only honest option.
 func validAttributionSource(s string) bool {
-	switch s {
-	case "external_backfill", "bundle", "rule":
-		return true
-	}
-	return false
+	return s == "external_backfill"
 }
 
 func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
@@ -58,7 +91,7 @@ func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validAttributionSource(req.Source) {
-		jsonErrorResponse(w, http.StatusBadRequest, "BAD_SOURCE", "source must be external_backfill, bundle, or rule")
+		jsonErrorResponse(w, http.StatusBadRequest, "BAD_SOURCE", badSourceMessage)
 		return
 	}
 	item, err := dbGetDriftItem(r.Context(), id)
@@ -76,31 +109,22 @@ func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
 // attributeOneDrift writes the ledger intent for a zitadel_only drift and marks
 // it attributed. The grant already exists in Zitadel, so it flows through the
 // outbox as an `add` that self-resolves (grant-index short-circuit / 409→applied)
-// — one code path, no special "skip Zitadel" branch. Bundle attribution is
-// source-remap-validated: the bundle must actually contain the drift role.
+// — one code path, no special "skip Zitadel" branch.
 //
-// Atomicity: read-only validation first, then a SINGLE transaction
-// (db.AttributeDriftAndEnqueue) that guard-transitions the drift row to
-// 'attributed' AND writes the ledger+audit+outbox rows together. A lost
-// concurrent-triage race returns ErrDriftNotPending (→409) with the whole tx
-// rolled back; a write failure rolls back the resolution too — the drift never
+// The recorded source is always external_backfill and carries no source_ref:
+// there is no bundle or rule owning this access, and saying otherwise would be
+// a provenance the ledger cannot honour. See validAttributionSource.
+//
+// Atomicity: a SINGLE transaction (db.AttributeDriftAndEnqueue) guard-transitions
+// the drift row to 'attributed' AND writes the ledger+audit+outbox rows together.
+// A lost concurrent-triage race returns ErrDriftNotPending (→409) with the whole
+// tx rolled back; a write failure rolls back the resolution too — the drift never
 // leaves the triage queue without its durable outbox row.
 func attributeOneDrift(ctx context.Context, item models.DriftItem, req attributeRequest, actor string) error {
-	if req.Source == "bundle" {
-		roles, err := svcGetRolesForBundleDrift(ctx, req.SourceRef)
-		if err != nil {
-			return err
-		}
-		for _, rk := range item.RoleKeys {
-			if !bundleHasRole(roles, item.ProjectID, rk) {
-				return errDriftBadRemap // handler maps to 400
-			}
-		}
-	}
 	payload, _ := json.Marshal(req)
 	return dbAttributeDriftAndEnqueue(ctx, item.ID, db.EnqueueParams{
 		UserID: item.UserID, ProjectID: item.ProjectID, RoleKeys: item.RoleKeys,
-		GrantedBy: actor, Reason: "drift attribution", Source: req.Source, SourceRef: req.SourceRef,
+		GrantedBy: actor, Reason: "drift attribution", Source: req.Source,
 		OpType: "add", ZitadelGrantID: item.ZitadelGrantID, PayloadJSON: string(payload),
 	})
 }
@@ -162,9 +186,8 @@ func handleMarkDriftExternal(w http.ResponseWriter, r *http.Request) {
 }
 
 type bulkAttributeRequest struct {
-	IDs       []string `json:"ids"`
-	Source    string   `json:"source"`
-	SourceRef string   `json:"source_ref"`
+	IDs    []string `json:"ids"`
+	Source string   `json:"source"`
 }
 
 func handleBulkAttributeDrift(w http.ResponseWriter, r *http.Request) {
@@ -176,24 +199,75 @@ func handleBulkAttributeDrift(w http.ResponseWriter, r *http.Request) {
 	// Same source gate as the single-item endpoint: an empty/invalid source must
 	// not slip through to enqueueWrites and default to "direct" for the whole batch.
 	if !validAttributionSource(req.Source) {
-		jsonErrorResponse(w, http.StatusBadRequest, "BAD_SOURCE", "source must be external_backfill, bundle, or rule")
+		jsonErrorResponse(w, http.StatusBadRequest, "BAD_SOURCE", badSourceMessage)
 		return
 	}
 	actor := resolveActor(r, "operator")
-	attributed, failed := 0, 0
+	attributed := 0
+	// The ids that did NOT resolve, not just how many. A caller that knows only
+	// a count can either re-send everything — re-attempting work that already
+	// succeeded — or drop the failures on the floor. Naming them lets the queue
+	// keep exactly the unresolved rows selected.
+	failedIDs := make([]string, 0)
 	for _, id := range req.IDs {
 		item, err := dbGetDriftItem(r.Context(), id)
 		if err != nil {
-			failed++
+			failedIDs = append(failedIDs, id)
 			continue
 		}
-		if err := attributeOneDrift(r.Context(), item, attributeRequest{Source: req.Source, SourceRef: req.SourceRef}, actor); err != nil {
-			failed++
+		if err := attributeOneDrift(r.Context(), item, attributeRequest{Source: req.Source}, actor); err != nil {
+			failedIDs = append(failedIDs, id)
 			continue
 		}
 		attributed++
 	}
-	jsonResponse(w, http.StatusOK, map[string]any{"attributed": attributed, "failed": failed})
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"attributed": attributed,
+		"failed":     len(failedIDs),
+		"failed_ids": failedIDs,
+	})
+}
+
+type bulkMarkExternalRequest struct {
+	IDs    []string `json:"ids"`
+	Reason string   `json:"reason"`
+}
+
+// handleBulkMarkDriftExternal is the second of exactly two bulk resolutions.
+//
+// There is deliberately no bulk revoke, and that absence is a design decision
+// rather than an omission: adopting and marking-as-external are reversible
+// bookkeeping, but revoking removes real access from real machines. Reading
+// twelve consequences at once is not something anyone actually does, so revoke
+// stays one row, one dialog, one decision.
+// POST /api/v1/governance/drift/bulk-mark-external
+func handleBulkMarkDriftExternal(w http.ResponseWriter, r *http.Request) {
+	var req bulkMarkExternalRequest
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonErrorResponse(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	actor := resolveActor(r, "operator")
+	marked := 0
+	failedIDs := make([]string, 0)
+	for _, id := range req.IDs {
+		item, err := dbGetDriftItem(r.Context(), id)
+		if err != nil {
+			failedIDs = append(failedIDs, id)
+			continue
+		}
+		if err := dbMarkDriftExternalTx(r.Context(), item.ID, item.UserID, item.ProjectID,
+			item.RoleKeys, actor, req.Reason, "{}"); err != nil {
+			failedIDs = append(failedIDs, id)
+			continue
+		}
+		marked++
+	}
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"marked":     marked,
+		"failed":     len(failedIDs),
+		"failed_ids": failedIDs,
+	})
 }
 
 func handleReconcileDrift(w http.ResponseWriter, r *http.Request) {
@@ -205,18 +279,10 @@ func handleReconcileDrift(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, res)
 }
 
-func bundleHasRole(roles []models.BundleRole, projectID, roleKey string) bool {
-	for _, r := range roles {
-		if r.ProjectID == projectID && r.RoleKey == roleKey {
-			return true
-		}
-	}
-	return false
-}
-
-// errDriftBadRemap signals a bundle attribution whose target bundle does not
-// actually contain the drift role — the handler maps this to 400.
-var errDriftBadRemap = errors.New("bundle does not contain the drift role")
+// badSourceMessage names the only attribution this endpoint can honour, and
+// says why the other two are gone — an operator or integration that used to
+// send them deserves the reason, not just a rejection.
+const badSourceMessage = "source must be external_backfill; adopting records a direct grant and cannot create a bundle assignment or a rule-derived relationship"
 
 // writeDriftActionError maps a triage action error to its HTTP status.
 // db.ErrDriftNotPending → 409 is load-bearing: it is how a lost
@@ -226,8 +292,6 @@ func writeDriftActionError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, db.ErrDriftNotPending):
 		jsonErrorResponse(w, http.StatusConflict, "DRIFT_NOT_PENDING", err.Error())
-	case errors.Is(err, errDriftBadRemap):
-		jsonErrorResponse(w, http.StatusBadRequest, "BAD_REMAP", err.Error())
 	default:
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 	}

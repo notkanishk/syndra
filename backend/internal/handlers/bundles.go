@@ -33,6 +33,16 @@ func handleGetBundles(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, http.StatusOK, []interface{}{})
 		return
 	}
+
+	// Holder counts are decoration on this list, not its subject: if the count
+	// query fails the bundles still render, with zeros, rather than the whole
+	// screen turning into an error over a number.
+	if counts, err := dbGetBundleHolderCounts(r.Context()); err == nil {
+		for i := range bundles {
+			bundles[i].HolderCount = counts[bundles[i].ID]
+		}
+	}
+
 	jsonResponse(w, http.StatusOK, bundles)
 }
 

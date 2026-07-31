@@ -126,6 +126,24 @@ func handleGetRecentCascades(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]any{"cascades": rows})
 }
 
+// handleGetCascadeGroups is Change history: every cascade-originated write,
+// grouped by the event that produced it. Unlike the flat feed above it does NOT
+// filter to applied — a cascade with writes still waiting is exactly the entry
+// worth seeing, and "8 applied · 2 waiting" is the whole vocabulary of this
+// screen.
+// GET /api/v1/propagations/cascade-groups
+func handleGetCascadeGroups(w http.ResponseWriter, r *http.Request) {
+	groups, err := dbGetCascadeGroups(r.Context(), recentCascadesLimit)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	if groups == nil {
+		groups = []models.CascadeGroup{}
+	}
+	jsonResponse(w, http.StatusOK, map[string]any{"cascades": groups})
+}
+
 // handleRemoveBundleFromUser is the revoke-side counterpart to handleAssignBundleToUser. The
 // cascade OWNS the mutation (delete assignment + per-role revoke outbox rows commit in one tx via
 // db.RemoveBundleFromUserAndEnqueue), then (auto mode) drains those rows. The handler only

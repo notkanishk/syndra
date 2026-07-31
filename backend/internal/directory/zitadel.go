@@ -252,9 +252,12 @@ func (z *zitadelSource) roles(ctx context.Context, projectID string) ([]models.P
 	roles := make([]models.ProjectRole, 0, len(items))
 	for _, r := range items {
 		roles = append(roles, models.ProjectRole{
-			Key:         r.Key,
-			Label:       coalesce(r.DisplayName, r.Key),
-			Description: r.Group,
+			Key:   r.Key,
+			Label: coalesce(r.DisplayName, r.Key),
+			// Zitadel has no per-role description field; Group is a group, and
+			// rendering it as a description is how "Safety-gated" ended up
+			// standing in for "can cut and engrave unsupervised".
+			Group: r.Group,
 		})
 	}
 	z.cachePut(key, roles)

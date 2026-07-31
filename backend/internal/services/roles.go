@@ -151,6 +151,9 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 		roleKey     string
 		displayName string
 		description string
+		group       string
+		clonedFromP string
+		clonedFromR string
 		source      string
 	}
 	seen := make(map[string]*catalogEntry) // key: "projectID:roleKey"
@@ -165,6 +168,8 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 		seen[key] = &catalogEntry{
 			projectID: r.ProjectID, roleKey: r.RoleKey,
 			displayName: r.DisplayName, description: r.Description,
+			group:       r.Group,
+			clonedFromP: r.ClonedFromProject, clonedFromR: r.ClonedFromRole,
 			source: "mkauth",
 		}
 	}
@@ -185,6 +190,7 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 				seen[key] = &catalogEntry{
 					projectID: proj.ID, roleKey: role.Key,
 					displayName: role.Label, description: role.Description,
+					group:  role.Group,
 					source: dirSource,
 				}
 			}
@@ -243,6 +249,9 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 			RoleKey:           entry.roleKey,
 			DisplayName:       entry.displayName,
 			Description:       entry.description,
+			Group:             entry.group,
+			ClonedFromProject: entry.clonedFromP,
+			ClonedFromRole:    entry.clonedFromR,
 			BundleCount:       usage.BundleCount,
 			RuleCount:         usage.RuleCount,
 			AssignedUserCount: assignedUsers,

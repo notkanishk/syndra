@@ -151,7 +151,7 @@ func ClaimPendingPropagations(ctx context.Context, limit int) ([]models.PendingP
 		FROM claimed
 		WHERE p.id = claimed.id
 		RETURNING p.id, p.op_type, p.user_id, p.project_id, p.role_keys,
-		          p.source, COALESCE(p.source_ref,''),
+		          p.source, COALESCE(p.source_ref,''), COALESCE(p.cascade_id::text,''),
 		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
 		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at`
 	rows, err := PG.Query(ctx, q, limit)
@@ -175,7 +175,7 @@ func ClaimPropagationByID(ctx context.Context, id string) (*models.PendingPropag
 		SET status='in_flight', started_at=NOW()
 		WHERE id=$1 AND status IN ('pending','in_flight')
 		RETURNING id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
-		          COALESCE(zitadel_grant_id,''),
+		          COALESCE(cascade_id::text,''), COALESCE(zitadel_grant_id,''),
 		          status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at`
 	rows, err := PG.Query(ctx, q, id)
 	if err != nil {
@@ -229,11 +229,11 @@ func RequeuePropagation(ctx context.Context, id, errMsg string) (int, error) {
 func GetPendingPropagations(ctx context.Context) ([]models.PendingPropagation, error) {
 	const q = `
 		SELECT id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
-		       COALESCE(zitadel_grant_id,''),
+		       COALESCE(cascade_id::text,''), COALESCE(zitadel_grant_id,''),
 		       status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at
 		FROM pending_zitadel_propagations
 		WHERE status IN ('pending','in_flight')
-		ORDER BY created_at`
+		ORDER BY cascade_id NULLS LAST, created_at`
 	rows, err := PG.Query(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("get pending propagations: %w", err)
@@ -322,7 +322,7 @@ func scanPropagations(rows pgx.Rows) ([]models.PendingPropagation, error) {
 	for rows.Next() {
 		var p models.PendingPropagation
 		if err := rows.Scan(&p.ID, &p.OpType, &p.UserID, &p.ProjectID, &p.RoleKeys,
-			&p.Source, &p.SourceRef,
+			&p.Source, &p.SourceRef, &p.CascadeID,
 			&p.ZitadelGrantID, &p.Status, &p.Attempts, &p.LastError, &p.InitiatedBy,
 			&p.CreatedAt, &p.StartedAt, &p.CompletedAt); err != nil {
 			return nil, fmt.Errorf("scan propagation: %w", err)

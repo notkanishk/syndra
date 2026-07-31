@@ -46,8 +46,10 @@ var (
 	dbCreateBundle      = db.CreateBundle
 	dbGetAllBundles     = db.GetAllBundles
 	dbGetRolesForBundle = db.GetRolesForBundle
-	dbGetBundlesForUser = db.GetBundlesForUser
-	dbSetWelcomeBundle  = db.SetWelcomeBundle
+	dbGetBundlesForUser     = db.GetBundlesForUser
+	dbSetWelcomeBundle      = db.SetWelcomeBundle
+	dbGetBundleHolderCounts = db.GetBundleHolderCounts
+	dbGetAssignedUserCounts = db.GetAssignedUserCounts
 
 	// Lookup handler injectable var (single-role accessor, used for UID→name resolution).
 	dbGetRole = db.GetRole
@@ -97,8 +99,8 @@ var (
 	// Real-time webhook drift detection (C6): a surviving grant_added event
 	// (already past the self-mutation guard) that MkAuth neither expects nor
 	// has excluded is out-of-band drift. See detectWebhookDrift in webhook.go.
-	dbUpsertDriftItem = db.UpsertDriftItem
-	dbHasExclusion    = func(ctx context.Context, u, p, r string) (bool, error) {
+	dbUpsertDriftItemWithEvidence = db.UpsertDriftItemWithEvidence
+	dbHasExclusion                = func(ctx context.Context, u, p, r string) (bool, error) {
 		ex, err := db.GetExclusions(ctx)
 		if err != nil {
 			return false, err
@@ -248,7 +250,7 @@ var (
 	dbMarkDriftExternalTx      = db.MarkDriftExternalTx
 	svcDriftSweep              = drift.Sweep
 	svcDrainOne                = propagation.DrainOne
-	svcGetRolesForBundleDrift  = db.GetRolesForBundle
+	svcDriftTriageQueue        = services.DriftTriageQueue
 
 	// Confirmation-mode surfaces (Task 22): global default read/write, bulk toggle, and the
 	// recent-cascades feed.
@@ -257,4 +259,10 @@ var (
 	dbSetRuleConfirmationMode   = db.SetRuleConfirmationMode
 	dbSetBundleConfirmationMode = db.SetBundleConfirmationMode
 	dbGetRecentCascades         = db.GetRecentCascades
+	dbGetCascadeGroups          = db.GetCascadeGroups
+
+	// Review › Expiring access reads its own window rather than a slice of the
+	// governance summary, so a 30-day review and Today's 14-day queue can
+	// differ without either lying about the other.
+	dbGetExpiringDirectGrants = db.GetExpiringDirectGrants
 )

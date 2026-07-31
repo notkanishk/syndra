@@ -150,6 +150,11 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 // never disagree about what counts as soon.
 const expiryHorizon = 14 * 24 * time.Hour
 
+// reviewHorizon is the wider window Review › Expiring access and the People
+// index work to. Today deliberately stays at expiryHorizon: its job is a queue
+// short enough to finish, and a 30-day list is a review, not a queue.
+const reviewHorizon = 30 * 24 * time.Hour
+
 // Indicators is the compact badge payload the sidebar polls. Four integers, so
 // the rail never downloads every pending request object to render a "3".
 type Indicators struct {

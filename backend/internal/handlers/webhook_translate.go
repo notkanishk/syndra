@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 )
 
 // zitadelEventPayload mirrors Zitadel's ContextInfoEvent wire format
@@ -80,8 +81,27 @@ func translateZitadelEvent(body []byte) (WebhookPayload, bool, error) {
 	if out.EventType != "" {
 		// Stable across Zitadel redeliveries — the dedup key for this event (SC5).
 		out.DedupKey = fmt.Sprintf("%s:%s:%d", ev.AggregateID, ev.EventType, ev.Sequence)
+		// Evidence for drift triage: who Zitadel says did this, and when it
+		// recorded it. Both stay empty when the event omits them.
+		out.EditorID = ev.editorID()
+		out.EventCreatedAt = parseEventTime(ev.CreatedAt)
 	}
 	return out, true, nil
+}
+
+// parseEventTime accepts Zitadel's RFC3339 created_at and returns nil on
+// anything it cannot parse. A missing or malformed timestamp is not an error
+// worth failing a webhook over — it only means the drift row cannot say when
+// the upstream change happened, which it then doesn't claim to know.
+func parseEventTime(raw string) *time.Time {
+	if raw == "" {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return nil
+	}
+	return &t
 }
 
 // warnSelfMutationGuardDisabled emits a one-time process-lifetime warning

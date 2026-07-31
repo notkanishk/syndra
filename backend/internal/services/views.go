@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"mkauth/internal/cache"
 	"mkauth/internal/claims"
@@ -105,21 +106,81 @@ func ListUsers(ctx context.Context, query string) ([]models.UserListItem, error)
 	if err != nil {
 		return nil, err
 	}
-	return listUsersFromSnapshot(snap, query)
+	attention, err := loadAttention(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return listUsersFromSnapshot(snap, query, attention)
 }
 
-func listUsersFromSnapshot(snap *accessSnapshot, query string) ([]models.UserListItem, error) {
+// attentionIndex is the "needs attention" side of the People index, loaded once
+// per request rather than per row: three cheap whole-table reads instead of
+// three queries times N people.
+type attentionIndex struct {
+	expiring    map[string]int
+	soonest     map[string]time.Time
+	requests    map[string]int
+	unexplained map[string]int
+}
+
+func loadAttention(ctx context.Context) (attentionIndex, error) {
+	idx := attentionIndex{
+		expiring:    map[string]int{},
+		soonest:     map[string]time.Time{},
+		requests:    map[string]int{},
+		unexplained: map[string]int{},
+	}
+
+	grants, err := svcGetExpiringDirectGrants(ctx, reviewHorizon)
+	if err != nil {
+		return idx, fmt.Errorf("load expiring grants: %w", err)
+	}
+	for _, g := range grants {
+		idx.expiring[g.UserID]++
+		if g.ExpiresAt == nil {
+			continue
+		}
+		if cur, ok := idx.soonest[g.UserID]; !ok || g.ExpiresAt.Before(cur) {
+			idx.soonest[g.UserID] = *g.ExpiresAt
+		}
+	}
+
+	requests, err := svcGetAccessRequests(ctx, "pending")
+	if err != nil {
+		return idx, fmt.Errorf("load pending requests: %w", err)
+	}
+	for _, r := range requests {
+		idx.requests[r.RequesterID]++
+	}
+
+	// Drift is operator-only data; a failure here must not blank the whole
+	// index. It is one column of one screen, and "we couldn't count" is better
+	// rendered as zero than as a 500 on the People page.
+	drift, err := svcGetPendingDriftItems(ctx)
+	if err == nil {
+		for _, d := range drift {
+			idx.unexplained[d.UserID]++
+		}
+	}
+
+	return idx, nil
+}
+
+func listUsersFromSnapshot(snap *accessSnapshot, query string, attention attentionIndex) ([]models.UserListItem, error) {
 	query = strings.ToLower(strings.TrimSpace(query))
 	items := make([]models.UserListItem, 0, len(snap.Users()))
 
 	for _, user := range snap.Users() {
-		if query != "" && !matchesUser(user, query) {
-			continue
-		}
-
 		roleMap, bundles, err := snap.For(user.ID)
 		if err != nil {
 			return nil, err
+		}
+
+		// Search matches role keys as well as names and emails: "who has
+		// `trained` in the laser lab" gets typed here before anyone thinks to
+		// go to Roles, and a search that silently ignores it looks broken.
+		if query != "" && !matchesUser(user, query) && !holdsMatchingRole(roleMap, query) {
+			continue
 		}
 
 		keyProjects := make([]string, 0, len(roleMap))
@@ -133,12 +194,28 @@ func listUsersFromSnapshot(snap *accessSnapshot, query string) ([]models.UserLis
 		}
 		sort.Strings(keyProjects)
 
-		items = append(items, models.UserListItem{
+		bundleNames := make([]string, 0, len(bundles))
+		for _, b := range bundles {
+			bundleNames = append(bundleNames, b.Name)
+		}
+		sort.Strings(bundleNames)
+
+		item := models.UserListItem{
 			User:               user,
 			BundleCount:        len(bundles),
+			BundleNames:        bundleNames,
 			EffectiveRoleCount: len(roleMap),
+			ProjectCount:       len(keyProjects),
 			KeyProjects:        keyProjects,
-		})
+			ExpiringCount:      attention.expiring[user.ID],
+			OpenRequestCount:   attention.requests[user.ID],
+			UnexplainedCount:   attention.unexplained[user.ID],
+		}
+		if when, ok := attention.soonest[user.ID]; ok {
+			soonest := when
+			item.SoonestExpiry = &soonest
+		}
+		items = append(items, item)
 	}
 
 	sort.Slice(items, func(i, j int) bool {
@@ -146,6 +223,17 @@ func listUsersFromSnapshot(snap *accessSnapshot, query string) ([]models.UserLis
 	})
 
 	return items, nil
+}
+
+// holdsMatchingRole reports whether any role this person holds matches the
+// query by key or display name.
+func holdsMatchingRole(roleMap map[roleKey]*models.EffectiveRole, query string) bool {
+	for key := range roleMap {
+		if strings.Contains(strings.ToLower(key.roleKey), query) {
+			return true
+		}
+	}
+	return false
 }
 
 func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessView, error) {

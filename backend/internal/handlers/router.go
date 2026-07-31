@@ -102,6 +102,10 @@ func NewRouter() http.Handler {
 	// it must never pull the full summary payload to render four numbers.
 	mux.HandleFunc("GET /api/v1/governance/indicators", withCORS(withOperatorAuth(handleGetGovernanceIndicators)))
 
+	// Review › Expiring access. Its own read with its own window — the screen is
+	// time-boxed work with a deadline, not a slice of Today's queue.
+	mux.HandleFunc("GET /api/v1/review/expiring-grants", withCORS(withOperatorAuth(handleGetExpiringGrants)))
+
 	// Role Management
 	mux.HandleFunc("POST /api/v1/roles", withCORS(withUserAuth(handleCreateRole)))
 	mux.HandleFunc("GET /api/v1/roles", withCORS(withUserAuth(handleGetGlobalRoleCatalog)))
@@ -173,6 +177,10 @@ func NewRouter() http.Handler {
 	// Recent cascades feed (Task 22): applied bundle/rule/lifecycle projections, so automated
 	// cascades are never invisible. Operator-gated — same posture as the pending worklist.
 	mux.HandleFunc("GET /api/v1/propagations/cascades", withCORS(withOperatorAuth(handleGetRecentCascades)))
+	// Change history: the same rows grouped by the event that produced them,
+	// including the ones still waiting. A half-applied cascade has to be
+	// visible AS a half-applied cascade.
+	mux.HandleFunc("GET /api/v1/propagations/cascade-groups", withCORS(withOperatorAuth(handleGetCascadeGroups)))
 	mux.HandleFunc("GET /api/v1/zitadel/users/{id}/grants", withCORS(withOperatorAuth(handleListZitadelUserGrants)))
 	mux.HandleFunc("POST /api/v1/zitadel/users/{id}/grants", withCORS(withOperatorAuth(handleAssignZitadelGrant)))
 	mux.HandleFunc("PUT /api/v1/zitadel/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleUpdateZitadelGrant)))
@@ -185,6 +193,9 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/governance/drift", withCORS(withOperatorAuth(handleListDrift)))
 	mux.HandleFunc("POST /api/v1/governance/drift/reconcile", withCORS(withOperatorAuth(handleReconcileDrift)))
 	mux.HandleFunc("POST /api/v1/governance/drift/bulk-attribute", withCORS(withOperatorAuth(handleBulkAttributeDrift)))
+	// The second and last bulk resolution. Bulk revoke is deliberately absent —
+	// see handleBulkMarkDriftExternal.
+	mux.HandleFunc("POST /api/v1/governance/drift/bulk-mark-external", withCORS(withOperatorAuth(handleBulkMarkDriftExternal)))
 	mux.HandleFunc("POST /api/v1/governance/drift/{id}/attribute", withCORS(withOperatorAuth(handleAttributeDrift)))
 	mux.HandleFunc("POST /api/v1/governance/drift/{id}/revoke", withCORS(withOperatorAuth(handleRevokeDrift)))
 	mux.HandleFunc("POST /api/v1/governance/drift/{id}/mark-external", withCORS(withOperatorAuth(handleMarkDriftExternal)))

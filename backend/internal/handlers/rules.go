@@ -28,6 +28,16 @@ func handleGetMappingRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// How many people each rule applies to — the count of holders of its input
+	// role. Editing a rule changes access for all of them at once, so the
+	// number belongs in the list rather than behind the editor. Best-effort:
+	// a failed count renders zeros, never a failed page.
+	if counts, err := dbGetAssignedUserCounts(r.Context()); err == nil {
+		for i := range rules {
+			rules[i].HolderCount = counts[rules[i].SourceProject+":"+rules[i].SourceRole]
+		}
+	}
+
 	jsonResponse(w, http.StatusOK, rules)
 }
 

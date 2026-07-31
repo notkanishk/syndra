@@ -7,6 +7,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
+
+	"mkauth/internal/db"
 )
 
 // WebhookPayload represents our interpretation of a Zitadel event payload.
@@ -24,6 +27,15 @@ type WebhookPayload struct {
 	// embedded timestamp is recomputed per delivery (SC5). Never decoded
 	// from the wire; internal-shape callers fall back to payload-derived keys.
 	DedupKey string `json:"-"`
+
+	// EditorID is who Zitadel attributes the change to, and EventCreatedAt is
+	// when Zitadel recorded it. Both are internal-only (never decoded from the
+	// internal-shape wire) and exist for one reason: a drift row has to be able
+	// to say "created in the identity provider on 21 Jul by svc-badge-sync"
+	// rather than only "found 9 days ago". Empty when the event did not carry
+	// them — the row then says the actor is unknown instead of guessing.
+	EditorID       string     `json:"-"`
+	EventCreatedAt *time.Time `json:"-"`
 }
 
 var validEventTypes = map[string]bool{
@@ -286,8 +298,9 @@ func detectWebhookDrift(ctx context.Context, event WebhookPayload) {
 		if excluded {
 			continue
 		}
-		if _, _, err := dbUpsertDriftItem(ctx, event.UserID, event.SourceProject,
-			[]string{role}, event.GrantID, "webhook", "zitadel_only"); err != nil {
+		if _, _, err := dbUpsertDriftItemWithEvidence(ctx, event.UserID, event.SourceProject,
+			[]string{role}, event.GrantID, "webhook", "zitadel_only",
+			db.DriftEvidence{UpstreamActor: event.EditorID, UpstreamCreatedAt: event.EventCreatedAt}); err != nil {
 			log.Printf("[DRIFT] webhook upsert failed user=%s role=%s: %v (non-fatal)", event.UserID, role, err)
 		}
 	}

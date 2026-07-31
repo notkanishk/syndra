@@ -18,6 +18,11 @@ type Bundle struct {
 	Roles            []string  `json:"roles"` // The underlying raw roles it applies
 	ConfirmationMode string    `json:"confirmation_mode"`
 	CreatedAt        time.Time `json:"created_at"`
+
+	// HolderCount is how many people currently hold this bundle. Computed on
+	// read, never persisted. Editing a bundle changes access for all of them
+	// at once, so the number belongs next to the name rather than a click away.
+	HolderCount int `json:"holder_count"`
 }
 
 // BundleRole represents a specific Zitadel role mapped to a bundle
@@ -37,6 +42,11 @@ type MappingRule struct {
 	TargetRole       string    `json:"target_role"`
 	ConfirmationMode string    `json:"confirmation_mode"`
 	CreatedAt        time.Time `json:"created_at"`
+
+	// HolderCount is how many people currently hold the target role because of
+	// this rule. Computed on read, never persisted — "this affects 7 people" is
+	// the difference between editing a rule and gambling with one.
+	HolderCount int `json:"holder_count"`
 }
 
 // ClaimProfile defines how roles map to JWT output for a specific project
@@ -69,8 +79,14 @@ type UserProfile struct {
 }
 
 type ProjectRole struct {
-	Key         string `json:"key"`
-	Label       string `json:"label"`
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	// Group is the identity provider's own grouping for the role ("Safety-gated",
+	// "Open bench"). It is what separates "can cut unsupervised" from "may enter
+	// and watch" at a glance, so it is its own field rather than being folded
+	// into Description — which it used to be, making every upstream role render
+	// its group where its description belonged.
+	Group       string `json:"group,omitempty"`
 	Description string `json:"description"`
 }
 
@@ -129,11 +145,29 @@ type UserAccessView struct {
 	CleanupHints []string            `json:"cleanup_hints"`
 }
 
+// UserListItem is one row of the People index. Beyond the counts, it carries
+// the "needs attention" trio — the one thing about this person that might need
+// an operator today. The index exists to surface those; without them it is a
+// plain directory, and a directory is not worth a top-level destination.
 type UserListItem struct {
 	User               UserProfile `json:"user"`
 	BundleCount        int         `json:"bundle_count"`
+	BundleNames        []string    `json:"bundle_names"`
 	EffectiveRoleCount int         `json:"effective_role_count"`
+	ProjectCount       int         `json:"project_count"`
 	KeyProjects        []string    `json:"key_projects"`
+
+	// Needs attention. Each is a count so the UI can render the semantic
+	// colour it belongs to: expiring is amber, open requests accent,
+	// unexplained red.
+	ExpiringCount    int `json:"expiring_count"`
+	OpenRequestCount int `json:"open_request_count"`
+	UnexplainedCount int `json:"unexplained_count"`
+
+	// SoonestExpiry is the nearest expiry among this person's direct grants
+	// inside the watch window, so the row can say "1 expires in 2 days"
+	// rather than only "1 expiring".
+	SoonestExpiry *time.Time `json:"soonest_expiry,omitempty"`
 }
 
 type ApplicationView struct {
@@ -218,6 +252,7 @@ type PendingPropagation struct {
 	RoleKeys       []string   `json:"role_keys"`
 	Source         string     `json:"source"`               // direct | bundle | rule | external_backfill | lifecycle_cascade
 	SourceRef      string     `json:"source_ref,omitempty"` // bundle/rule id for cascade rows; drives worklist attribution
+	CascadeID      string     `json:"cascade_id,omitempty"` // shared by every write one triggering event produced
 	ZitadelGrantID string     `json:"zitadel_grant_id,omitempty"`
 	Status         string     `json:"status"` // pending | in_flight | applied | failed
 	Attempts       int        `json:"attempts"`
@@ -241,8 +276,26 @@ type CascadeSummary struct {
 	RoleKeys    []string   `json:"role_keys"`
 	Source      string     `json:"source"`               // bundle | rule | lifecycle_cascade
 	SourceRef   string     `json:"source_ref,omitempty"` // originating bundle/rule id
+	CascadeID   string     `json:"cascade_id,omitempty"`
 	Status      string     `json:"status"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
+}
+
+// CascadeGroup is Change history's unit: every write one triggering event
+// produced, collapsed into one entry. An operator reads consequence, not a
+// diff — "8 applied", "2 waiting", "no writes" is the whole vocabulary, and a
+// half-applied cascade has to be visible AS a half-applied cascade.
+type CascadeGroup struct {
+	CascadeID string     `json:"cascade_id"`
+	Source    string     `json:"source"`               // bundle | rule | lifecycle_cascade
+	SourceRef string     `json:"source_ref,omitempty"` // originating bundle/rule id
+	Applied   int        `json:"applied"`
+	Waiting   int        `json:"waiting"`
+	Failed    int        `json:"failed"`
+	UserIDs   []string   `json:"user_ids"`
+	Writes    []CascadeSummary `json:"writes"`
+	StartedAt time.Time  `json:"started_at"`
+	SettledAt *time.Time `json:"settled_at,omitempty"`
 }
 
 // DriftItem is one out-of-band grant discrepancy awaiting operator triage.
@@ -261,6 +314,40 @@ type DriftItem struct {
 	ResolvedAt        *time.Time `json:"resolved_at,omitempty"`
 	ResolvedBy        string     `json:"resolved_by,omitempty"`
 	ResolutionPayload string     `json:"resolution_payload_json,omitempty"`
+
+	// Evidence — who made this upstream and when. Nullable by design: the
+	// reconciliation sweep compares grant sets and genuinely cannot know the
+	// actor, and an invented one is worse than an absent one. The triage row
+	// says "we don't know who" rather than guessing.
+	UpstreamActor     string     `json:"upstream_actor,omitempty"`
+	UpstreamCreatedAt *time.Time `json:"upstream_created_at,omitempty"`
+	LastSeenAt        *time.Time `json:"last_seen_at,omitempty"`
+}
+
+// DriftTriageItem is a DriftItem enriched for the triage queue: enough context
+// on the row to answer "what is this, and what happens if I revoke it" without
+// a click. Computed on read; nothing here is persisted.
+type DriftTriageItem struct {
+	DriftItem
+
+	// RoleGroup is the catalogue group of the drifting role ("Safety-gated",
+	// "Open bench"). Empty when the role is not in the catalogue at all —
+	// see RoleInCatalogue, which is its own kind of finding.
+	RoleGroup string `json:"role_group,omitempty"`
+
+	// RoleInCatalogue is false when the role no longer exists in MkAuth.
+	// Adopting such a row would recreate a retired role, so the UI says so.
+	RoleInCatalogue bool `json:"role_in_catalogue"`
+
+	// UserStatus mirrors the directory ("active", "departed", …) and
+	// UserIsServiceAccount marks machine accounts, for which "adopt" is the
+	// wrong verb and "owned elsewhere" is almost always the right one.
+	UserStatus           string `json:"user_status,omitempty"`
+	UserIsServiceAccount bool   `json:"user_is_service_account"`
+
+	// OtherItemsForUser is how many OTHER pending items this same person has.
+	// "Marta has 2 more items" is the context that changes a revoke decision.
+	OtherItemsForUser int `json:"other_items_for_user"`
 }
 
 // DriftSummary feeds the red dashboard callout + sidebar dot: pending count
@@ -401,12 +488,21 @@ type ShadowCredentialStatus struct {
 }
 
 // CatalogRole is the computed view for the global role inventory.
+//
+// Group and the ClonedFrom pair come from the local roles table when MkAuth
+// created the role. Both are load-bearing on screen: Group is what separates
+// "Safety-gated" from "Open bench" at a glance, and clone provenance is how an
+// operator knows two similar roles are deliberately related rather than an
+// accidental duplicate.
 type CatalogRole struct {
 	ProjectID         string `json:"project_id"`
 	ProjectName       string `json:"project_name"`
 	RoleKey           string `json:"role_key"`
 	DisplayName       string `json:"display_name"`
 	Description       string `json:"description"`
+	Group             string `json:"group,omitempty"`
+	ClonedFromProject string `json:"cloned_from_project,omitempty"`
+	ClonedFromRole    string `json:"cloned_from_role,omitempty"`
 	BundleCount       int    `json:"bundle_count"`
 	RuleCount         int    `json:"rule_count"`
 	AssignedUserCount int    `json:"assigned_user_count"`

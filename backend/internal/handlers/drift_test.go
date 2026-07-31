@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,7 +24,7 @@ func resetDriftDeps(t *testing.T) {
 	origMarkExternal := dbMarkDriftExternalTx
 	origSweep := svcDriftSweep
 	origDrainOne := svcDrainOne
-	origRolesForBundle := svcGetRolesForBundleDrift
+	origRuleByID := dbGetMappingRuleByID
 	t.Cleanup(func() {
 		dbGetDriftItems = origGetItems
 		dbGetDriftItem = origGetItem
@@ -31,8 +33,117 @@ func resetDriftDeps(t *testing.T) {
 		dbMarkDriftExternalTx = origMarkExternal
 		svcDriftSweep = origSweep
 		svcDrainOne = origDrainOne
-		svcGetRolesForBundleDrift = origRolesForBundle
+		dbGetMappingRuleByID = origRuleByID
 	})
+}
+
+// --- Adoption records a direct grant, and says only that ---
+//
+// Attribution used to accept "bundle" and "rule". It wrote a direct_role_grants
+// row labelled with that source and nothing else: no bundle assignment, no
+// rule-derived relationship. Cascades deliberately never touch the ledger, so
+// the label had nothing behind it — the access survived removal of the very
+// bundle it claimed to come from.
+//
+// Routing adoption through real ownership would be worse than the bug: assigning
+// a bundle to explain ONE role hands over every other role it carries. So the
+// endpoint accepts the one source it can honour.
+
+func pendingDrift() models.DriftItem {
+	return models.DriftItem{
+		ID: "d1", UserID: "u1", ProjectID: "p_laser",
+		RoleKeys: []string{"trained"}, DriftType: "zitadel_only", Status: "pending_triage",
+	}
+}
+
+// attributeAttempt runs one attribution and reports the status plus whether the
+// ledger write happened. Nothing may be written when validation fails.
+func attributeAttempt(t *testing.T, body string) (int, bool, db.EnqueueParams) {
+	t.Helper()
+	var wrote bool
+	var params db.EnqueueParams
+	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) { return pendingDrift(), nil }
+	dbAttributeDriftAndEnqueue = func(_ context.Context, _ string, p db.EnqueueParams) error {
+		wrote = true
+		params = p
+		return nil
+	}
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/attribute", strings.NewReader(body))
+	req.SetPathValue("id", "d1")
+	w := httptest.NewRecorder()
+	handleAttributeDrift(w, req)
+	return w.Code, wrote, params
+}
+
+func TestAttributeDrift_BundleSourceIsRejected(t *testing.T) {
+	resetDriftDeps(t)
+	code, wrote, _ := attributeAttempt(t, `{"source":"bundle"}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("bundle attribution cannot be honoured and must be 400, got %d", code)
+	}
+	if wrote {
+		t.Fatal("must not record a bundle provenance it cannot create")
+	}
+}
+
+func TestAttributeDrift_RuleSourceIsRejected(t *testing.T) {
+	resetDriftDeps(t)
+	code, wrote, _ := attributeAttempt(t, `{"source":"rule"}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("rule attribution cannot be honoured and must be 400, got %d", code)
+	}
+	if wrote {
+		t.Fatal("must not record a rule provenance it cannot create")
+	}
+}
+
+func TestAttributeDrift_RejectionSaysWhy(t *testing.T) {
+	resetDriftDeps(t)
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/attribute",
+		strings.NewReader(`{"source":"bundle"}`))
+	req.SetPathValue("id", "d1")
+	w := httptest.NewRecorder()
+	handleAttributeDrift(w, req)
+
+	// A bare "invalid source" leaves an integrator guessing. The reason is the
+	// whole point: adoption writes a direct grant and cannot do otherwise.
+	if !strings.Contains(w.Body.String(), "cannot create a bundle assignment") {
+		t.Fatalf("the rejection must explain itself, got %s", w.Body.String())
+	}
+}
+
+// A source_ref is no longer part of this contract. Strict decoding rejects it
+// loudly rather than accepting a reference that would be silently discarded.
+func TestAttributeDrift_SourceRefIsNoLongerAccepted(t *testing.T) {
+	resetDriftDeps(t)
+	code, wrote, _ := attributeAttempt(t, `{"source":"external_backfill","source_ref":"b1"}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("an unknown source_ref field must be 400, got %d", code)
+	}
+	if wrote {
+		t.Fatal("must not write when the request carries a field the contract dropped")
+	}
+}
+
+func TestAttributeDrift_ExternalBackfillRecordsADirectGrantWithNoRef(t *testing.T) {
+	resetDriftDeps(t)
+	code, wrote, params := attributeAttempt(t, `{"source":"external_backfill"}`)
+	if code != http.StatusOK {
+		t.Fatalf("external_backfill is the supported attribution, got %d", code)
+	}
+	if !wrote {
+		t.Fatal("a valid attribution must reach the ledger")
+	}
+	if params.Source != "external_backfill" {
+		t.Fatalf("recorded source = %q, want external_backfill", params.Source)
+	}
+	// The ledger must not carry a reference to an owner that does not exist.
+	if params.SourceRef != "" {
+		t.Fatalf("recorded source_ref = %q, want empty", params.SourceRef)
+	}
+	if params.OpType != "add" {
+		t.Fatalf("adoption is an add that self-resolves upstream, got op %q", params.OpType)
+	}
 }
 
 func TestHandleMarkExternal_ResolvesAtomically(t *testing.T) {
@@ -88,26 +199,6 @@ func TestHandleRevokeDrift_EnqueuesRevokeAtomicallyThenDrains(t *testing.T) {
 	}
 	if gotOp != "revoke" || drained != "o1" {
 		t.Fatalf("revoke must enqueue op=revoke atomically then drain that row (op=%q drained=%q)", gotOp, drained)
-	}
-}
-
-func TestHandleAttributeToBundle_RejectsBundleWithoutRole(t *testing.T) {
-	resetDriftDeps(t)
-	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
-		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, Status: "pending_triage"}, nil
-	}
-	// The chosen bundle does NOT contain the drift role → source-remap validation fails.
-	svcGetRolesForBundleDrift = func(context.Context, string) ([]models.BundleRole, error) {
-		return []models.BundleRole{{ProjectID: "p1", RoleKey: "editor"}}, nil
-	}
-
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/attribute", strings.NewReader(`{"source":"bundle","source_ref":"b1"}`))
-	req.SetPathValue("id", "d1")
-	w := httptest.NewRecorder()
-	handleAttributeDrift(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("attributing to a bundle lacking the drift role must be 400, got %d", w.Code)
 	}
 }
 
@@ -245,5 +336,101 @@ func TestHandleReconcileNow_TriggersSweep(t *testing.T) {
 	handleReconcileDrift(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"drift_items_created":2`) {
 		t.Fatalf("reconcile-now must run the sweep, got %d %s", w.Code, w.Body)
+	}
+}
+
+// --- Bulk resolutions must report what happened, per id ---
+
+func TestBulkAttributeDrift_NamesTheIdsThatFailed(t *testing.T) {
+	resetDriftDeps(t)
+	// d2 was resolved by somebody else a moment ago and no longer loads.
+	dbGetDriftItem = func(_ context.Context, id string) (models.DriftItem, error) {
+		if id == "d2" {
+			return models.DriftItem{}, errors.New("no rows in result set")
+		}
+		item := pendingDrift()
+		item.ID = id
+		return item, nil
+	}
+	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) error { return nil }
+
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute",
+		strings.NewReader(`{"ids":["d1","d2","d3"],"source":"external_backfill"}`))
+	w := httptest.NewRecorder()
+	handleBulkAttributeDrift(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("a partially-failing batch is still a 200, got %d", w.Code)
+	}
+	var got struct {
+		Attributed int      `json:"attributed"`
+		Failed     int      `json:"failed"`
+		FailedIDs  []string `json:"failed_ids"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Attributed != 2 || got.Failed != 1 {
+		t.Fatalf("want 2 attributed / 1 failed, got %d / %d", got.Attributed, got.Failed)
+	}
+	// The count alone would leave the caller unable to retry only what failed.
+	if len(got.FailedIDs) != 1 || got.FailedIDs[0] != "d2" {
+		t.Fatalf("the failed id must be named, got %v", got.FailedIDs)
+	}
+}
+
+func TestBulkMarkExternalDrift_NamesTheIdsThatFailed(t *testing.T) {
+	resetDriftDeps(t)
+	dbGetDriftItem = func(_ context.Context, id string) (models.DriftItem, error) {
+		item := pendingDrift()
+		item.ID = id
+		return item, nil
+	}
+	dbMarkDriftExternalTx = func(_ context.Context, id, _, _ string, _ []string, _, _, _ string) error {
+		if id == "d3" {
+			return db.ErrDriftNotPending
+		}
+		return nil
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-mark-external",
+		strings.NewReader(`{"ids":["d1","d3"],"reason":""}`))
+	w := httptest.NewRecorder()
+	handleBulkMarkDriftExternal(w, req)
+
+	var got struct {
+		Marked    int      `json:"marked"`
+		Failed    int      `json:"failed"`
+		FailedIDs []string `json:"failed_ids"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Marked != 1 || got.Failed != 1 {
+		t.Fatalf("want 1 marked / 1 failed, got %d / %d", got.Marked, got.Failed)
+	}
+	if len(got.FailedIDs) != 1 || got.FailedIDs[0] != "d3" {
+		t.Fatalf("the failed id must be named, got %v", got.FailedIDs)
+	}
+}
+
+func TestBulkResolutions_ReportEmptyFailureListAsAnArray(t *testing.T) {
+	resetDriftDeps(t)
+	dbGetDriftItem = func(_ context.Context, id string) (models.DriftItem, error) {
+		item := pendingDrift()
+		item.ID = id
+		return item, nil
+	}
+	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) error { return nil }
+
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute",
+		strings.NewReader(`{"ids":["d1"],"source":"external_backfill"}`))
+	w := httptest.NewRecorder()
+	handleBulkAttributeDrift(w, req)
+
+	// [] rather than null: a client checking Array.isArray must not have to
+	// special-case the happy path.
+	if !strings.Contains(w.Body.String(), `"failed_ids":[]`) {
+		t.Fatalf("an empty failure list must serialise as [], got %s", w.Body.String())
 	}
 }

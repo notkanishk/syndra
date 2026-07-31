@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -35,9 +36,21 @@ func enqueueCascadeRows(ctx context.Context, tx pgx.Tx, params []EnqueueParams) 
 	const insertOutbox = `
 		INSERT INTO pending_zitadel_propagations
 			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json,
-			 idempotency_key, initiated_by, source, source_ref)
-		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,NULLIF($10,''))
+			 idempotency_key, initiated_by, source, source_ref, cascade_id)
+		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,NULLIF($10,''),$11)
 		RETURNING id`
+
+	// One id for the whole batch: these rows are the writes ONE triggering
+	// event produced, including the ones a chained rule contributed (the
+	// closure diff is computed before this call, so a chain arrives here as a
+	// single set). Grouping by it is what lets Pending changes say "they
+	// confirm together or not at all" — a half-applied cascade is the thing
+	// that creates unexplained access, and it has to be visible as one.
+	cascadeID, err := newOutboxIdempotencyKey()
+	if err != nil {
+		return nil, err
+	}
+
 	ids := make([]string, 0, len(params))
 	for _, p := range params {
 		if p.OpType == "revoke" && p.ZitadelGrantID == "" {
@@ -57,7 +70,8 @@ func enqueueCascadeRows(ctx context.Context, tx pgx.Tx, params []EnqueueParams) 
 		}
 		var id string
 		if err := tx.QueryRow(ctx, insertOutbox, p.OpType, p.UserID, p.ProjectID, p.RoleKeys,
-			p.ZitadelGrantID, jsonOrEmpty(p.PayloadJSON), key, p.GrantedBy, src, p.SourceRef).Scan(&id); err != nil {
+			p.ZitadelGrantID, jsonOrEmpty(p.PayloadJSON), key, p.GrantedBy, src, p.SourceRef,
+			cascadeID).Scan(&id); err != nil {
 			return nil, err
 		}
 		ids = append(ids, id)
@@ -292,7 +306,8 @@ func SetBundleConfirmationMode(ctx context.Context, ids []string, mode string) e
 // that reached Zitadel, which is the right thing to show an operator (never invisible).
 func GetRecentCascades(ctx context.Context, limit int) ([]models.CascadeSummary, error) {
 	const q = `
-		SELECT id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''), status, completed_at
+		SELECT id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
+		       COALESCE(cascade_id::text,''), status, completed_at
 		FROM pending_zitadel_propagations
 		WHERE source IN ('bundle','rule','lifecycle_cascade') AND status = 'applied'
 		ORDER BY completed_at DESC NULLS LAST LIMIT $1`
@@ -306,12 +321,104 @@ func GetRecentCascades(ctx context.Context, limit int) ([]models.CascadeSummary,
 	for rows.Next() {
 		var c models.CascadeSummary
 		if err := rows.Scan(&c.ID, &c.OpType, &c.UserID, &c.ProjectID, &c.RoleKeys,
-			&c.Source, &c.SourceRef, &c.Status, &c.CompletedAt); err != nil {
+			&c.Source, &c.SourceRef, &c.CascadeID, &c.Status, &c.CompletedAt); err != nil {
 			return nil, fmt.Errorf("scan cascade summary: %w", err)
 		}
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// GetCascadeGroups is Change history's read: every cascade-originated write,
+// grouped by the event that produced it, newest first.
+//
+// Deliberately NOT filtered to status='applied' the way GetRecentCascades is.
+// A cascade with two writes still waiting is exactly the entry an operator
+// needs to see — "8 applied" and "2 writes waiting" are the same vocabulary,
+// and hiding the unfinished ones is how a half-applied cascade goes unnoticed
+// until it surfaces as unexplained access.
+//
+// Rows written before 000019 have no cascade_id; each falls back to its own
+// outbox id so history stays complete rather than silently dropping them.
+func GetCascadeGroups(ctx context.Context, limit int) ([]models.CascadeGroup, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	const q = `
+		SELECT COALESCE(cascade_id::text, id::text) AS group_id,
+		       id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
+		       COALESCE(cascade_id::text,''), status, created_at, completed_at
+		FROM pending_zitadel_propagations
+		WHERE source IN ('bundle','rule','lifecycle_cascade')
+		  AND COALESCE(cascade_id::text, id::text) IN (
+		      SELECT COALESCE(cascade_id::text, id::text)
+		      FROM pending_zitadel_propagations
+		      WHERE source IN ('bundle','rule','lifecycle_cascade')
+		      GROUP BY COALESCE(cascade_id::text, id::text)
+		      ORDER BY MAX(created_at) DESC
+		      LIMIT $1
+		  )
+		ORDER BY created_at DESC`
+	rows, err := PG.Query(ctx, q, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get cascade groups: %w", err)
+	}
+	defer rows.Close()
+
+	byID := make(map[string]*models.CascadeGroup)
+	order := make([]string, 0, limit)
+	seenUser := make(map[string]map[string]bool)
+
+	for rows.Next() {
+		var groupID string
+		var c models.CascadeSummary
+		var createdAt time.Time
+		if err := rows.Scan(&groupID, &c.ID, &c.OpType, &c.UserID, &c.ProjectID, &c.RoleKeys,
+			&c.Source, &c.SourceRef, &c.CascadeID, &c.Status, &createdAt, &c.CompletedAt); err != nil {
+			return nil, fmt.Errorf("scan cascade group row: %w", err)
+		}
+
+		g := byID[groupID]
+		if g == nil {
+			g = &models.CascadeGroup{
+				CascadeID: groupID,
+				Source:    c.Source,
+				SourceRef: c.SourceRef,
+				StartedAt: createdAt,
+			}
+			byID[groupID] = g
+			order = append(order, groupID)
+			seenUser[groupID] = make(map[string]bool)
+		}
+		if createdAt.Before(g.StartedAt) {
+			g.StartedAt = createdAt
+		}
+		switch c.Status {
+		case "applied":
+			g.Applied++
+			if c.CompletedAt != nil && (g.SettledAt == nil || c.CompletedAt.After(*g.SettledAt)) {
+				g.SettledAt = c.CompletedAt
+			}
+		case "failed":
+			g.Failed++
+		default:
+			g.Waiting++
+		}
+		if !seenUser[groupID][c.UserID] {
+			seenUser[groupID][c.UserID] = true
+			g.UserIDs = append(g.UserIDs, c.UserID)
+		}
+		g.Writes = append(g.Writes, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	out := make([]models.CascadeGroup, 0, len(order))
+	for _, id := range order {
+		out = append(out, *byID[id])
+	}
+	return out, nil
 }
 
 // UpdateMappingRuleAndEnqueue updates the rule matcher/target AND enqueues the add/revoke

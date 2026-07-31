@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"mkauth/internal/models"
@@ -25,21 +26,48 @@ type DriftFilter struct {
 // ("", false) — a re-detection of the same drift is a no-op, not a second entry.
 func UpsertDriftItem(ctx context.Context, userID, projectID string, roleKeys []string,
 	zitadelGrantID, detectionSource, driftType string) (string, bool, error) {
+	return UpsertDriftItemWithEvidence(ctx, userID, projectID, roleKeys,
+		zitadelGrantID, detectionSource, driftType, DriftEvidence{})
+}
+
+// DriftEvidence is what the detector knows about the upstream change, if
+// anything. A webhook carries the editor and the event time; the reconciliation
+// sweep compares grant sets and knows neither. Zero values stay NULL — the
+// triage row then says the actor is unknown instead of naming a plausible one.
+type DriftEvidence struct {
+	UpstreamActor     string
+	UpstreamCreatedAt *time.Time
+}
+
+// UpsertDriftItemWithEvidence is UpsertDriftItem plus the upstream evidence a
+// triage row needs to explain itself. `last_seen_at` is stamped on every call —
+// including the deduped no-op — so "still there as of this morning's sweep" is
+// answerable for a row first found nine days ago.
+func UpsertDriftItemWithEvidence(ctx context.Context, userID, projectID string, roleKeys []string,
+	zitadelGrantID, detectionSource, driftType string, ev DriftEvidence) (string, bool, error) {
 	const q = `
-		INSERT INTO drift_items (user_id, project_id, role_keys, zitadel_grant_id, detection_source, drift_type)
-		VALUES ($1,$2,$3,NULLIF($4,''),$5,$6)
+		INSERT INTO drift_items (user_id, project_id, role_keys, zitadel_grant_id, detection_source, drift_type,
+		                         upstream_actor, upstream_created_at, last_seen_at)
+		VALUES ($1,$2,$3,NULLIF($4,''),$5,$6,NULLIF($7,''),$8,NOW())
 		ON CONFLICT (user_id, project_id, drift_type, role_keys) WHERE (status = 'pending_triage')
-		DO NOTHING
-		RETURNING id`
+		DO UPDATE SET
+			last_seen_at        = NOW(),
+			-- Never overwrite known evidence with an unknown: a sweep re-detecting
+			-- what a webhook already attributed must not erase the actor.
+			upstream_actor      = COALESCE(drift_items.upstream_actor, EXCLUDED.upstream_actor),
+			upstream_created_at = COALESCE(drift_items.upstream_created_at, EXCLUDED.upstream_created_at)
+		RETURNING id, (xmax = 0) AS inserted`
 	var id string
-	err := PG.QueryRow(ctx, q, userID, projectID, roleKeys, zitadelGrantID, detectionSource, driftType).Scan(&id)
+	var inserted bool
+	err := PG.QueryRow(ctx, q, userID, projectID, roleKeys, zitadelGrantID, detectionSource, driftType,
+		ev.UpstreamActor, ev.UpstreamCreatedAt).Scan(&id, &inserted)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", false, nil // an identical pending row already exists
+		return "", false, nil
 	}
 	if err != nil {
 		return "", false, fmt.Errorf("upsert drift item: %w", err)
 	}
-	return id, true, nil
+	return id, inserted, nil
 }
 
 // GetDriftItems lists drift rows by filter, newest first (design §7 Q5:
@@ -52,7 +80,8 @@ func GetDriftItems(ctx context.Context, f DriftFilter) ([]models.DriftItem, erro
 	const q = `
 		SELECT id, user_id, project_id, role_keys, COALESCE(zitadel_grant_id,''),
 		       detected_at, detection_source, drift_type, status,
-		       resolved_at, COALESCE(resolved_by,''), COALESCE(resolution_payload_json::text,'')
+		       resolved_at, COALESCE(resolved_by,''), COALESCE(resolution_payload_json::text,''),
+		       COALESCE(upstream_actor,''), upstream_created_at, last_seen_at
 		FROM drift_items
 		WHERE status = $1
 		  AND ($2 = '' OR user_id = $2)
@@ -72,7 +101,8 @@ func GetDriftItem(ctx context.Context, id string) (models.DriftItem, error) {
 	const q = `
 		SELECT id, user_id, project_id, role_keys, COALESCE(zitadel_grant_id,''),
 		       detected_at, detection_source, drift_type, status,
-		       resolved_at, COALESCE(resolved_by,''), COALESCE(resolution_payload_json::text,'')
+		       resolved_at, COALESCE(resolved_by,''), COALESCE(resolution_payload_json::text,''),
+		       COALESCE(upstream_actor,''), upstream_created_at, last_seen_at
 		FROM drift_items WHERE id = $1`
 	rows, err := PG.Query(ctx, q, id)
 	if err != nil {
@@ -104,7 +134,8 @@ func scanDriftItems(rows pgx.Rows) ([]models.DriftItem, error) {
 		var d models.DriftItem
 		if err := rows.Scan(&d.ID, &d.UserID, &d.ProjectID, &d.RoleKeys, &d.ZitadelGrantID,
 			&d.DetectedAt, &d.DetectionSource, &d.DriftType, &d.Status,
-			&d.ResolvedAt, &d.ResolvedBy, &d.ResolutionPayload); err != nil {
+			&d.ResolvedAt, &d.ResolvedBy, &d.ResolutionPayload,
+			&d.UpstreamActor, &d.UpstreamCreatedAt, &d.LastSeenAt); err != nil {
 			return nil, fmt.Errorf("scan drift item: %w", err)
 		}
 		out = append(out, d)
