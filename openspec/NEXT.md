@@ -35,6 +35,14 @@ Paused pending research on real LLDAP password-propagation and credential semant
 - **BIA-37** — legacy path alignment (`/policies` → `/automation/rules`, `/graph` → `/automation/access-map`, `/operations` → `/system/events`) behind redirects. Cosmetic, deliberately deferred: the nav labels are already right, only the URLs lag.
 - **Claim template versioning** — a claim profile edit takes effect on the next token with no record of what the previous shape was. If an app breaks after an edit, the audit row says who changed it, not what it was. Worth a `claim_profile_versions` table if this bites.
 
+### IA screen completion — what the second handoff drop left open
+
+- **ISC-42** — exercise migration `000019`, the enriched drift read and the restored upstream console against a live Postgres + Redis + Zitadel. Unit-tested only. `cascade_id` in particular has never been written by a real cascade.
+- **ISC-43** — per-route manual a11y checklist for the twelve screens this change touched. Same checklist as BIA-36; these routes were rebuilt after it was written.
+- **ISC-44** — thread a cascade id through audit writes. The Trace column currently infers a trace from the action name, which is a guess dressed as a link. A real trace needs the id carried on every `INSERT INTO audit_logs`.
+- **ISC-45** — decide whether an application may read more than one project. The design draws Badge Reader reading four; Zitadel puts an app inside exactly one, and `app_claim_overrides.application_id` is unique. Until this is settled the apps index warns per project rather than per app, which is the same failure in the shape the data supports.
+- **Drift evidence for sweep-detected rows** — the reconciliation sweep cannot name an actor because it compares grant sets. Reading Zitadel's event stream for the grant's creation event would close that, at the cost of a second API path. Only worth it if operators routinely hit rows the webhook missed.
+
 ### Phase 5 — Automation & Governance
 
 - **Service Catalog Abstraction** — the spec'd service→bundle request mapping still falls back to project/role. [`specs/service-catalog`]
