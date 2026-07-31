@@ -1,96 +1,133 @@
 "use client";
 
+import Link from "next/link";
 import React from "react";
 
-type Variant =
-  | "primary"
-  | "secondary"
-  | "ghost"
-  | "outline"
-  | "destructive"
-  | "danger"
-  | "success"
-  | "warning"
-  | "link";
-type Size = "sm" | "md" | "lg";
+/**
+ * Pill buttons. Semantic roles only, and one rule that is not negotiable:
+ *
+ *   `danger` is an OUTLINE. A solid destructive fill appears only on the
+ *   confirming button inside a dialog (`dangerConfirm`) — a solid red button
+ *   sitting in a table row is one stray click from an outage on the laser
+ *   cutter.
+ *
+ * Disabled controls state their reason in visible copy, never only in a
+ * title: hover does not exist on touch and does not survive a screenshot sent
+ * to a colleague. Pass `reason` and it renders beneath the button.
+ */
+
+type Variant = "accent" | "accentSoft" | "outline" | "ghost" | "danger" | "dangerConfirm";
+type Size = "sm" | "md";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   size?: Size;
   isPending?: boolean;
+  /** Visible explanation rendered under a disabled control. */
+  reason?: string;
 }
 
-/**
- * Pill-shaped action button. Pill-default is intentional ("touchable, organic"
- * surface treatment per Obsidian Clarity). All existing variant names from
- * the prior Button are preserved (`danger`, `success`, `warning`) so callers
- * don't break; new variants `outline`, `destructive`, `link` extend the set.
- *
- * Primary uses a luminous indigo→violet gradient with a 1px white-10% inset
- * top stroke and an ambient shadow tinted to match — the "glass bead" effect
- * called out in the design spec.
- */
+const VARIANTS: Record<Variant, string> = {
+  accent: "bg-accent text-accent-ink hover:brightness-105 active:brightness-95",
+  accentSoft: "bg-accent-soft text-accent-text hover:brightness-110",
+  outline: "border border-line-strong text-ink hover:bg-[var(--hover)]",
+  ghost: "text-muted hover:text-ink hover:bg-[var(--hover)]",
+  danger: "border border-danger-line text-danger-text hover:bg-danger-soft",
+  dangerConfirm: "bg-danger text-danger-ink hover:brightness-105 active:brightness-95",
+};
+
+/** A blocked control keeps the semantic colour it would otherwise carry, at
+ *  reduced alpha — it must still read as the destructive action it is. */
+const DISABLED: Record<Variant, string> = {
+  accent: "bg-accent/25 text-accent-ink/50",
+  accentSoft: "bg-accent-soft/50 text-accent-text/40",
+  outline: "border border-line text-faint",
+  ghost: "text-faint",
+  danger: "border border-danger/[.16] bg-danger/[.06] text-danger-text/40",
+  dangerConfirm: "bg-danger/[.14] text-danger-text/40",
+};
+
 export function Button({
-  variant = "primary",
+  variant = "outline",
   size = "md",
   isPending = false,
+  reason,
   disabled,
   className = "",
   type = "button",
   children,
   ...props
 }: ButtonProps) {
-  const sizeClasses =
-    size === "sm"
-      ? "px-3 py-1 text-xs"
-      : size === "lg"
-        ? "px-6 py-3 text-base"
-        : "px-4 py-2 text-sm";
-
-  const baseClasses =
-    "inline-flex items-center justify-center gap-2 rounded-full font-medium transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container disabled:cursor-not-allowed disabled:opacity-50";
-
-  // Note: the gradient + inset stroke + colored shadow combination is the
-  // "glass bead" treatment. We keep the gradient inline (not a token) because
-  // it composes two tokens and Tailwind v4 doesn't expose a clean way to mix
-  // them via utilities. We use --primary and --secondary (the saturated
-  // tokens, NOT the *-container variants) so on-primary white-on-saturated in
-  // light theme and dark-on-luminous in dark theme both meet WCAG AA.
-  const variants: Record<Variant, string> = {
-    primary:
-      "text-on-primary bg-[linear-gradient(135deg,var(--primary),var(--secondary))] shadow-[0_8px_24px_-8px_var(--primary),inset_0_1px_0_rgba(255,255,255,0.15)] hover:brightness-110",
-    secondary:
-      "bg-surface-container-high text-on-surface hover:bg-surface-container-highest shadow-sm",
-    ghost: "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low",
-    outline:
-      "border border-outline-variant text-on-surface bg-transparent hover:bg-surface-container-low",
-    destructive:
-      "bg-error-container text-on-error-container hover:opacity-90 shadow-[0_8px_24px_-8px_var(--error-container)]",
-    // `danger` is the historical name for destructive — alias for back-compat.
-    danger:
-      "bg-error-container text-on-error-container hover:opacity-90 shadow-[0_8px_24px_-8px_var(--error-container)]",
-    success: "bg-success text-on-success hover:bg-success-hover shadow-sm",
-    warning: "bg-warning text-on-warning hover:bg-warning-hover shadow-sm",
-    link: "text-primary-container hover:underline underline-offset-4 px-1 py-0 shadow-none",
-  };
-
   const isDisabled = disabled || isPending;
 
-  return (
+  const button = (
     <button
       type={type}
       disabled={isDisabled}
       aria-busy={isPending || undefined}
-      className={`${baseClasses} ${sizeClasses} ${variants[variant]} ${className}`}
+      className={buttonClasses({ variant, size, disabled: isDisabled, className })}
       {...props}
     >
       {isPending && (
         <span
-          aria-hidden="true"
-          className="h-4 w-4 animate-spin rounded-full border-2 border-current/40 border-t-current"
+          aria-hidden
+          className="h-3.5 w-3.5 animate-spin rounded-pill border-2 border-current/40 border-t-current"
         />
       )}
-      <span>{children}</span>
+      {children}
     </button>
   );
+
+  if (!reason) return button;
+  return (
+    <span className="inline-flex flex-col items-start gap-1.5">
+      {button}
+      <span className="max-w-[46ch] text-[12.5px] leading-[1.5] text-faint">{reason}</span>
+    </span>
+  );
+}
+
+/**
+ * A navigation that looks like a button.
+ *
+ * Wrapping `<Button>` in a `<Link>` would nest a native `<button>` inside an
+ * `<a>` — invalid HTML, two overlapping interactive elements, and unreliable
+ * keyboard and screen-reader behaviour. Something that navigates is a link and
+ * must be exactly one element; only the styling is shared.
+ */
+export function ButtonLink({
+  href,
+  variant = "outline",
+  size = "md",
+  className = "",
+  children,
+  ...props
+}: Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "href"> & {
+  href: string;
+  variant?: Variant;
+  size?: Size;
+}) {
+  return (
+    <Link href={href} className={buttonClasses({ variant, size, className })} {...props}>
+      {children}
+    </Link>
+  );
+}
+
+/** The shared surface, so a link and a button are visually one control. */
+function buttonClasses({
+  variant,
+  size,
+  disabled = false,
+  className = "",
+}: {
+  variant: Variant;
+  size: Size;
+  disabled?: boolean;
+  className?: string;
+}): string {
+  const sizeClass = size === "sm" ? "px-3.5 py-1.5 text-[13px]" : "px-4 py-[7px] text-[13.5px]";
+  return `inline-flex items-center justify-center gap-2 rounded-pill font-semibold transition-all duration-150 disabled:cursor-not-allowed ${sizeClass} ${
+    disabled ? DISABLED[variant] : VARIANTS[variant]
+  } ${className}`;
 }

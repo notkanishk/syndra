@@ -1,0 +1,415 @@
+"use client";
+
+import Link from "next/link";
+import { useMemo, useState } from "react";
+
+import { AccessSourceList, orderedSources, sourceQualifier, type RoleReason } from "@/components/access/AccessSource";
+import { GrantDirectAccess } from "@/components/people/GrantDirectAccess";
+import { ManageBundles } from "@/components/people/ManageBundles";
+import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
+import { ErrorState, RowSkeleton } from "@/components/states";
+import { Avatar } from "@/components/ui/Avatar";
+import { Chip, Mono } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
+import { useCrumb } from "@/lib/page-crumb";
+import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
+import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
+import { useIsAdvanced, useUiView } from "@/lib/ui-view";
+
+type Tab = "access" | "requests" | "activity";
+
+interface AccessRole {
+  role_key: string;
+  reasons: RoleReason[];
+}
+
+/**
+ * Grouped by project; Granted above Automatic inside each group, so the things
+ * a human decided read first. Every row carries its source, and the overflow
+ * on each row opens the removal that belongs to THAT source — there is never a
+ * generic "revoke role".
+ */
+export function PersonAccess({ userId, isOperator }: { userId: string; isOperator: boolean }) {
+  const access = useUserAccess(userId);
+  const grants = useUserGrants(userId);
+  const advanced = useIsAdvanced();
+  const { revealInAdvanced } = useUiView();
+
+  const [tab, setTab] = useState<Tab>("access");
+  const [bundlesOpen, setBundlesOpen] = useState(false);
+  const [grantOpen, setGrantOpen] = useState(false);
+  const [removal, setRemoval] = useState<Removal | null>(null);
+
+  const user = access.data?.user;
+  useCrumb(user?.name);
+
+  const multiSource = useMemo(() => findMultiSource(access.data?.projects ?? []), [access.data]);
+
+  if (access.isLoading) {
+    return (
+      <Card>
+        <RowSkeleton rows={5} label="Loading this person's access" />
+      </Card>
+    );
+  }
+  if (access.error) {
+    return (
+      <ErrorState
+        title="Couldn't load this person's access."
+        error={access.error}
+        onRetry={() => access.refetch()}
+      />
+    );
+  }
+  if (!access.data || !user) return null;
+
+  const grantsByRole = new Map(
+    (grants.data ?? []).map((grant) => [`${grant.project_id}::${grant.role_key}`, grant]),
+  );
+
+  return (
+    <div className="flex flex-col gap-[18px]">
+      <div className="flex items-start gap-[22px]">
+        <Avatar name={user.name} size="header" />
+        <PageHeader
+          className="flex-1"
+          title={user.name}
+          meta={
+            <MetaRow>
+              {[
+                user.email,
+                user.title || null,
+                user.team || null,
+                <Mono key="id">{user.id}</Mono>,
+              ]}
+            </MetaRow>
+          }
+          actions={
+            isOperator ? (
+              <>
+                <Button onClick={() => setBundlesOpen(true)}>Manage bundles</Button>
+                <Button variant="accent" onClick={() => setGrantOpen(true)}>
+                  Grant direct access
+                </Button>
+              </>
+            ) : null
+          }
+        />
+      </div>
+
+      {/* Pill tabs, not underlines. */}
+      <div className="flex gap-2">
+        {(["access", "requests", "activity"] as const).map((entry) => (
+          <button
+            key={entry}
+            type="button"
+            onClick={() => setTab(entry)}
+            aria-current={tab === entry ? "page" : undefined}
+            className={`rounded-pill px-4 py-2 text-[14.5px] transition-colors duration-150 ${
+              tab === entry ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
+            }`}
+          >
+            {entry === "access" ? "Access" : entry === "requests" ? "Requests" : "Activity"}
+          </button>
+        ))}
+      </div>
+
+      {tab !== "access" ? (
+        <Card>
+          <div className="px-6 py-8">
+            <div className="type-empty-title">
+              {tab === "requests" ? "Requests live on their own page." : "Activity is in the audit log."}
+            </div>
+            <p className="mt-2 max-w-[60ch] text-[14px] text-muted">
+              {tab === "requests"
+                ? "Every request this person has made, with its decision, is on the Requests page."
+                : "Who changed what and when is recorded in Review › Audit."}
+            </p>
+            <Link
+              href={tab === "requests" ? "/requests" : "/audit"}
+              className="mt-3 inline-block text-[13.5px] font-semibold text-accent-text"
+            >
+              {tab === "requests" ? "Go to Requests" : "Go to Audit"} →
+            </Link>
+          </div>
+        </Card>
+      ) : (
+        <>
+          {/* Bundle chips state membership and nothing else — no inline ✕.
+              Removal lives behind Manage bundles, which shows the impact. */}
+          <div className="panel flex flex-wrap items-center gap-3 px-5 py-4">
+            <span className="type-label">Bundles</span>
+            {access.data.bundles.length === 0 ? (
+              <span className="text-[14px] text-faint">None assigned</span>
+            ) : (
+              access.data.bundles.map((bundle) => <Chip key={bundle.id}>{bundle.name}</Chip>)
+            )}
+            <span className="flex-1" />
+            {isOperator && (
+              <button
+                type="button"
+                onClick={() => setBundlesOpen(true)}
+                className="text-[13.5px] font-semibold text-accent-text"
+              >
+                Manage bundles →
+              </button>
+            )}
+          </div>
+
+          {multiSource && (
+            <div className="accent-note flex items-start gap-3 px-5 py-4">
+              <span
+                aria-hidden
+                className="mt-px flex h-5 w-5 flex-none items-center justify-center rounded-pill bg-accent-soft text-[12px] font-bold text-accent-text"
+              >
+                i
+              </span>
+              <p className="text-[14.5px] leading-[1.55] text-ink/[.78]">
+                <strong className="font-semibold text-ink">
+                  {multiSource.projectName} / {multiSource.roleKey} is held twice
+                </strong>{" "}
+                — {multiSource.explanation}. Removing one would not remove this role.
+              </p>
+            </div>
+          )}
+
+          {access.data.projects.map((project) => (
+            <Card key={project.project_id}>
+              <div className="flex flex-wrap items-center gap-3 px-5 py-4">
+                <span className="type-card-title">{project.project_name}</span>
+                <span className="text-[13.5px] text-faint">
+                  {project.effective_role_keys.length}{" "}
+                  {project.effective_role_keys.length === 1 ? "role" : "roles"}
+                </span>
+              </div>
+
+              <RoleGroup
+                label="Granted"
+                roles={project.source_roles}
+                projectId={project.project_id}
+                projectName={project.project_name}
+                grantsByRole={grantsByRole}
+                advanced={advanced}
+                isOperator={isOperator}
+                onRemove={setRemoval}
+                onReveal={revealInAdvanced}
+              />
+              <RoleGroup
+                label="Automatic"
+                roles={project.derived_roles}
+                projectId={project.project_id}
+                projectName={project.project_name}
+                grantsByRole={grantsByRole}
+                advanced={advanced}
+                isOperator={isOperator}
+                onRemove={setRemoval}
+                onReveal={revealInAdvanced}
+              />
+            </Card>
+          ))}
+
+          {/* Advisory notes. Never an error — cleanup_hints are opinions. */}
+          {access.data.cleanup_hints.map((hint) => (
+            <div key={hint} className="flex items-start gap-3 px-1 py-0.5">
+              <span
+                aria-hidden
+                className="mt-px flex h-5 w-5 flex-none items-center justify-center rounded-pill border border-line-strong text-[12px] text-muted"
+              >
+                ?
+              </span>
+              <p className="max-w-[840px] text-[14px] leading-[1.55] text-faint">
+                Advisory · {hint}
+              </p>
+            </div>
+          ))}
+        </>
+      )}
+
+      {isOperator && (
+        <>
+          <ManageBundles
+            userId={userId}
+            userName={user.name}
+            assigned={access.data.bundles}
+            open={bundlesOpen}
+            onClose={() => setBundlesOpen(false)}
+          />
+          <GrantDirectAccess
+            userId={userId}
+            userName={user.name}
+            open={grantOpen}
+            onClose={() => setGrantOpen(false)}
+          />
+          <RemovalDialog removal={removal} onClose={() => setRemoval(null)} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function RoleGroup({
+  label,
+  roles,
+  projectId,
+  projectName,
+  grantsByRole,
+  advanced,
+  isOperator,
+  onRemove,
+  onReveal,
+}: {
+  label: "Granted" | "Automatic";
+  roles: AccessRole[];
+  projectId: string;
+  projectName: string;
+  grantsByRole: Map<string, { id: string; expires_at?: string | null; granted_by: string }>;
+  advanced: boolean;
+  isOperator: boolean;
+  onRemove: (removal: Removal) => void;
+  onReveal: (panelId: string) => void;
+}) {
+  if (roles.length === 0) return null;
+
+  return (
+    <>
+      <div className="row-divider px-5 pb-2 pt-1.5">
+        <span className="type-label">{label}</span>
+      </div>
+      {roles.map((role) => {
+        const grant = grantsByRole.get(`${projectId}::${role.role_key}`);
+        const sources = orderedSources(role.reasons);
+        const strongest = sources[0];
+        const expires = grant?.expires_at ?? null;
+        const remaining = daysUntil(expires);
+
+        return (
+          <div
+            key={role.role_key}
+            id={`role-${projectId}-${role.role_key}`}
+            className="flex flex-wrap items-center gap-[18px] px-5 py-3"
+          >
+            <div className="w-[230px] shrink-0 text-[15px] font-semibold">
+              {humanizeKey(role.role_key)}{" "}
+              <Mono className="font-normal text-faint">{role.role_key}</Mono>
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <AccessSourceList reasons={role.reasons} />
+            </div>
+
+            <span className="shrink-0 text-[13.5px]">
+              {expires ? (
+                <span className="font-semibold text-warn-text">
+                  Expires {formatShortDate(expires)}
+                  {remaining !== null && remaining >= 0 ? ` · ${remaining} days` : ""}
+                </span>
+              ) : sources.length > 1 ? (
+                <span className="text-faint">Held {sources.length} ways</span>
+              ) : strongest?.kind === "mapping" ? (
+                <span className="text-faint">Nobody clicked this</span>
+              ) : (
+                <span className="text-faint">No expiry</span>
+              )}
+            </span>
+
+            {isOperator && strongest && (
+              <button
+                type="button"
+                aria-label={`Actions for ${role.role_key}`}
+                onClick={() =>
+                  onRemove({
+                    projectId,
+                    projectName,
+                    roleKey: role.role_key,
+                    sources,
+                    grantId: grant?.id,
+                  })
+                }
+                className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-pill border border-line-strong text-[15px] leading-none text-muted transition-colors hover:text-ink"
+              >
+                ⋯
+              </button>
+            )}
+
+            {/* Advanced reveals lineage in place, on the same URL. */}
+            {advanced && (
+              <div className="w-full">
+                <dl className="mt-1 grid grid-cols-[118px_1fr] gap-x-4 gap-y-1.5 rounded-block bg-tint-1 px-4 py-3 text-[13.5px]">
+                  <dt className="text-faint">Grant id</dt>
+                  <dd>
+                    {grant ? (
+                      <Mono className="text-muted">{grant.id}</Mono>
+                    ) : (
+                      <Mono className="text-muted">derived — no row in direct_grants</Mono>
+                    )}
+                  </dd>
+                  {strongest?.kind === "mapping" && (
+                    <>
+                      <dt className="text-faint">Rule input</dt>
+                      <dd>{sourceQualifier(strongest) ?? "—"}</dd>
+                    </>
+                  )}
+                  {strongest?.kind === "bundle" && (
+                    <>
+                      <dt className="text-faint">Bundle</dt>
+                      <dd>{strongest.bundle_name ?? strongest.bundle_id ?? "—"}</dd>
+                    </>
+                  )}
+                  {grant?.granted_by && (
+                    <>
+                      <dt className="text-faint">Granted by</dt>
+                      <dd>{grant.granted_by}</dd>
+                    </>
+                  )}
+                </dl>
+              </div>
+            )}
+
+            {/* No dead ends: Basic names the cause and offers one scoped jump. */}
+            {!advanced && strongest?.kind === "mapping" && (
+              <div className="w-full">
+                <button
+                  type="button"
+                  onClick={() => onReveal(`role-${projectId}-${role.role_key}`)}
+                  className="mt-1 inline-flex items-center gap-2 rounded-pill bg-accent-soft px-4 py-2 text-[13.5px] font-semibold text-accent-text"
+                >
+                  This came from an automatic rule — Open automation details →
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+/**
+ * The multi-source notice: a role held more than once, stated plainly above
+ * the groups. Without it, removing a bundle looks like it will remove the role.
+ */
+function findMultiSource(
+  projects: Array<{ project_name: string; source_roles: AccessRole[]; derived_roles: AccessRole[] }>,
+) {
+  for (const project of projects) {
+    for (const role of [...project.source_roles, ...project.derived_roles]) {
+      const sources = orderedSources(role.reasons);
+      if (sources.length > 1) {
+        const parts = sources.map((source) => {
+          const qualifier = sourceQualifier(source);
+          if (source.kind === "bundle") return `the ${qualifier ?? "assigned"} bundle`;
+          if (source.kind === "mapping") return `an automatic rule${qualifier ? ` from ${qualifier}` : ""}`;
+          return "a direct grant";
+        });
+        return {
+          projectName: project.project_name,
+          roleKey: role.role_key,
+          explanation: `through ${parts.join(" and ")}`,
+        };
+      }
+    }
+  }
+  return null;
+}

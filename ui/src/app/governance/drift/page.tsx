@@ -1,21 +1,12 @@
-import { redirect } from "next/navigation";
-
-import { DriftTriageClient } from "@/components/drift/DriftTriageClient";
-import { getSession } from "@/lib/session";
+import { UnexplainedAccess } from "@/components/review/UnexplainedAccess";
 
 /**
- * Operator triage worklist for out-of-band Zitadel/MkAuth drift (B2). Every
- * row needs an explicit Attribute / Revoke / Mark-external — drift is RED and
- * undismissible, unlike the amber pending-propagation worklist. Server-gated
- * to admins; the client island owns the data + triage actions.
+ * S6 · Review › Unexplained access. The highest-stakes screen in the product.
+ *
+ * Two tabs: the triage queue (access found in Zitadel that MkAuth cannot
+ * explain) and reconciliation (the MkAuth ↔ Zitadel diff, relocated from the
+ * retired /grants route).
  */
-export default async function DriftPage() {
-  const session = await getSession();
-  if (!session) {
-    redirect("/login");
-  }
-  if (session.role !== "admin") {
-    redirect("/");
-  }
-  return <DriftTriageClient />;
+export default function UnexplainedAccessPage() {
+  return <UnexplainedAccess />;
 }

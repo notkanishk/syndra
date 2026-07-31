@@ -18,11 +18,29 @@ export interface ApplicationView {
   assigned_user_count: number;
 }
 
+/**
+ * The dry run of a real token. `custom_claims` is the exact map the Actions v2
+ * path would append for this (user, project) pair — same profile resolution,
+ * same shaper, nothing invented for display.
+ *
+ * A project's token carries every claim key configured on that project, since
+ * Zitadel's function trigger does not say which application the token is for.
+ * `owned_claims` narrows that to the keys THIS app reads; `claim_owners`
+ * attributes the rest so a sibling's key is never mistaken for a bug.
+ */
 export interface SimulationResponse {
   application: ApplicationView["application"];
   user: { id: string; name: string; title: string };
   raw_roles: string[];
   custom_claims: Record<string, unknown>;
+  owned_claims: string[];
+  claim_owners: Array<{
+    key: string;
+    owner_label: string;
+    application_id?: string;
+    kind: "roles" | "attribute" | "static";
+    source?: string;
+  }>;
 }
 
 const KEYS = {

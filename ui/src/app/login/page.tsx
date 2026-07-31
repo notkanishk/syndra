@@ -1,136 +1,96 @@
 import { redirect } from "next/navigation";
 
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Eyebrow } from "@/components/ui/Eyebrow";
+import { Avatar } from "@/components/ui/Avatar";
 import { getDemoUsers, getSession, type SessionUser } from "@/lib/session";
 
 /**
- * Login surface. Stage 3 reskins the hero treatment to the Obsidian Clarity
- * language: Fraunces display headline, glass-card login form, and the global
- * `bg-blob-hero` background mounted by the root layout. Functional behavior
- * is unchanged — demo cookies are still rejected when ZITADEL_DOMAIN is set,
- * and the post-login redirect goes to `/`.
+ * The one unauthenticated surface. It sits outside the shell — no rail, no
+ * view switch, nothing to navigate — so it is the one place the display face
+ * gets to be large.
+ *
+ * Demo identities are rendered ONLY when ZITADEL_DOMAIN is unset, guarded in
+ * two places: a live deployment must never serialise the demo catalog into its
+ * RSC payload.
  */
 export default async function LoginPage() {
   const session = await getSession();
-  if (session) {
-    redirect("/");
-  }
+  if (session) redirect("/");
 
   const isOidcMode = Boolean(process.env.ZITADEL_DOMAIN);
 
   return (
-    <div className="min-h-screen px-6 py-10 text-on-surface relative z-10">
-      <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1.15fr,0.95fr] items-start">
-        <section className="glass-card p-10">
-          <Eyebrow tone="primary">{isOidcMode ? "Live · Zitadel OIDC" : "Local development"}</Eyebrow>
-          <h1 className="mt-4 text-5xl md:text-6xl font-semibold tracking-tight font-display">
-            MkAuth session gateway
-          </h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-on-surface-variant">
-            {isOidcMode
-              ? "Live Zitadel OIDC authentication. Your Zitadel-issued token is forwarded to the backend for verification on every request."
-              : "Local-development session. Pick a demo identity to exercise admin and member flows without a live Zitadel."}
-          </p>
-
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            <div className="rounded-card border border-outline-variant bg-surface-container-low p-5">
-              <Eyebrow>Admin control</Eyebrow>
-              <p className="mt-3 text-base font-semibold text-on-surface">
-                Policy, governance, and simulation views stay reserved for operators.
-              </p>
-            </div>
-            <div className="rounded-card border border-outline-variant bg-surface-container-low p-5">
-              <Eyebrow>Member portal</Eyebrow>
-              <p className="mt-3 text-base font-semibold text-on-surface">
-                Standard users land in a service-first view with access status
-                and request flows.
-              </p>
-            </div>
-            <div className="rounded-card border border-outline-variant bg-surface-container-low p-5">
-              <Eyebrow>{isOidcMode ? "Live auth" : "Future OIDC"}</Eyebrow>
-              <p className="mt-3 text-base font-semibold text-on-surface">
-                {isOidcMode
-                  ? "RS256 JWTs from Zitadel are validated by the backend on every API call."
-                  : "The cookie session is shaped to be swapped for live Zitadel login later."}
-              </p>
-            </div>
+    <div className="min-h-screen bg-ground px-6 py-14">
+      <div className="mx-auto grid max-w-[1100px] items-start gap-10 lg:grid-cols-[1.05fr_0.95fr]">
+        <section>
+          <div className="mb-6 flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-accent font-display text-[17px] font-bold text-accent-ink">
+              m
+            </span>
+            <span className="font-display text-[20px] font-semibold tracking-[-0.01em]">MkAuth</span>
           </div>
+
+          <h1 className="font-display text-[62px] font-semibold leading-[0.96] tracking-[-0.03em]">
+            Who can get in,
+            <br />
+            <span className="text-accent-text">and why.</span>
+          </h1>
+          <p className="mt-6 max-w-[46ch] text-[17px] leading-[1.55] text-muted">
+            {isOidcMode
+              ? "Sign in with your makerspace account. Your token is forwarded to MkAuth and verified on every request."
+              : "Local development. Pick an identity to exercise the operator and member surfaces without a live identity provider."}
+          </p>
         </section>
 
-        <Card variant="glass" className="self-start">
-          {isOidcMode ? <ZitadelLoginCard /> : <DemoIdentityCard />}
-        </Card>
+        <div className="panel p-6">
+          {isOidcMode ? <ZitadelLogin /> : <DemoIdentities />}
+        </div>
       </div>
     </div>
   );
 }
 
-function ZitadelLoginCard() {
+function ZitadelLogin() {
   return (
     <>
-      <CardHeader>
-        <CardTitle>Sign in with Zitadel</CardTitle>
-      </CardHeader>
-      <p className="text-sm text-on-surface-variant mb-6">
-        You will be redirected to your Zitadel instance to authenticate. Your
-        token will be forwarded to MkAuth on return.
+      <h2 className="type-card-title mb-2">Sign in</h2>
+      <p className="mb-5 text-[14px] leading-[1.55] text-muted">
+        You&rsquo;ll be sent to the identity provider and back.
       </p>
       <a
         href="/auth/zitadel"
-        className="flex w-full items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--primary),var(--secondary))] text-on-primary px-4 py-3 text-sm font-semibold shadow-[0_8px_24px_-8px_var(--primary),inset_0_1px_0_rgba(255,255,255,0.15)] hover:brightness-110 transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+        className="flex w-full items-center justify-center rounded-pill bg-accent px-4 py-3 text-[14.5px] font-semibold text-accent-ink transition-all hover:brightness-105"
       >
-        Continue with Zitadel
+        Continue
       </a>
     </>
   );
 }
 
-// DemoIdentityCard is rendered ONLY when ZITADEL_DOMAIN is unset. The runtime
-// guard mirrors the JSX branch in LoginPage as defense-in-depth: the demo
-// identity catalog must never be serialized into the RSC payload of a
-// production deployment.
-function DemoIdentityCard() {
+function DemoIdentities() {
   if (process.env.ZITADEL_DOMAIN) return null;
 
   const users: SessionUser[] = getDemoUsers();
 
   return (
     <>
-      <CardHeader>
-        <CardTitle>Choose a demo identity</CardTitle>
-      </CardHeader>
-      <div className="space-y-3">
+      <h2 className="type-card-title mb-2">Choose an identity</h2>
+      <p className="mb-4 text-[14px] text-muted">Development only.</p>
+      <div className="flex flex-col gap-2.5">
         {users.map((user) => (
-          <form
-            key={user.id}
-            action="/auth/login"
-            method="post"
-            className="rounded-card border border-outline-variant bg-surface-container-low p-4 transition-colors hover:border-primary-container/50"
-          >
+          <form key={user.id} action="/auth/login" method="post">
             <input type="hidden" name="userId" value={user.id} />
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary-container/15 text-sm font-semibold text-primary-container">
-                  {user.avatar}
-                </div>
-                <div>
-                  <p className="font-semibold text-on-surface">{user.name}</p>
-                  <p className="text-sm text-on-surface-variant">{user.title}</p>
-                </div>
-              </div>
-              <span className="rounded-full border border-outline-variant px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
-                {user.role === "admin" ? "Admin" : "Member"}
-              </span>
-            </div>
-            <p className="mt-3 text-sm text-on-surface-variant">
-              {user.team} • {user.email}
-            </p>
             <button
               type="submit"
-              className="mt-4 w-full rounded-full bg-[linear-gradient(135deg,var(--primary),var(--secondary))] text-on-primary px-4 py-3 text-sm font-semibold shadow-[0_8px_24px_-8px_var(--primary),inset_0_1px_0_rgba(255,255,255,0.15)] hover:brightness-110 transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+              className="flex w-full items-center gap-3 rounded-inner border border-line-strong px-4 py-3 text-left transition-colors hover:bg-[var(--hover)]"
             >
-              Continue as {user.name}
+              <Avatar name={user.name} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-semibold">{user.name}</span>
+                <span className="block truncate text-[13px] text-faint">{user.title}</span>
+              </span>
+              <span className="rounded-pill border border-line-strong px-2.5 py-1 text-[11.5px] font-semibold uppercase tracking-[0.1em] text-muted">
+                {user.role === "admin" ? "Operator" : "Member"}
+              </span>
             </button>
           </form>
         ))}

@@ -1,36 +1,73 @@
-import { redirect } from "next/navigation";
+"use client";
 
-import { RecentCascades } from "@/components/operations/RecentCascades";
-import { Eyebrow } from "@/components/ui/Eyebrow";
-import { getSession } from "@/lib/session";
+import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { Badge, Mono } from "@/components/ui/Badge";
+import { Card, CardHeader } from "@/components/ui/Card";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { ProjectName, UserName } from "@/components/names";
+import { useRecentCascades } from "@/lib/queries/useConfirmationMode";
+import { Relative } from "@/components/ui/Time";
 
 /**
- * Recent automated cascades feed (Task 22) — applied bundle/rule/lifecycle
- * outbox projections, so "auto" confirmation mode never means invisible.
- * Server-gated to admins, same posture as the other propagation/drift pages.
+ * S4 · Automation › Change history. What a bundle or rule change actually did
+ * downstream — the record that turns "I edited Lab Tech" into "and these
+ * eleven people gained a role because of it".
  */
-export default async function RecentCascadesPage() {
-  const session = await getSession();
-  if (!session) {
-    redirect("/login");
-  }
-  if (session.role !== "admin") {
-    redirect("/");
-  }
+export default function ChangeHistoryPage() {
+  const cascades = useRecentCascades();
+  const rows = cascades.data ?? [];
+
   return (
-    <div className="p-8 space-y-6 animate-fade-in-up relative z-10">
-      <header>
-        <Eyebrow tone="primary">Operations</Eyebrow>
-        <h1 className="text-3xl font-semibold text-on-surface mt-1 font-display">
-          Recent cascades
-        </h1>
-        <p className="text-sm text-on-surface-variant max-w-2xl">
-          Bundle, mapping-rule, and lifecycle projections that already reached Zitadel — the
-          audit trail for every automated cascade so an &ldquo;auto&rdquo; confirmation mode is
-          never invisible.
-        </p>
-      </header>
-      <RecentCascades />
+    <div className="flex flex-col gap-[18px]">
+      <PageHeader
+        title="Change history"
+        meta="What each bundle or rule change did to real people's access."
+      />
+
+      <Card>
+        <CardHeader title="Applied" count={rows.length} />
+        <ListStates
+          isLoading={cascades.isLoading}
+          error={cascades.error}
+          isEmpty={rows.length === 0}
+          onRetry={() => cascades.refetch()}
+          errorTitle="Couldn't load change history."
+          skeleton={<RowSkeleton rows={4} label="Loading change history" />}
+          empty={
+            <EmptyState
+              title="Nothing has cascaded yet."
+              guidance="Editing a bundle or a rule writes its downstream effect here."
+            />
+          }
+        >
+          {rows.map((row) => (
+            <div key={row.id} className="row-divider flex flex-wrap items-center gap-4 px-5 py-3.5">
+              <Badge tone={row.op_type === "revoke" ? "danger" : "accent"}>
+                {row.op_type === "revoke" ? "Removed" : "Added"}
+              </Badge>
+              <div className="min-w-[220px] flex-1">
+                <div className="text-[15px] font-semibold">
+                  <UserName id={row.user_id} />
+                </div>
+                <div className="truncate text-[13.5px] text-muted">
+                  <ProjectName id={row.project_id} /> ·{" "}
+                  {(row.role_keys ?? []).map((key) => (
+                    <Mono key={key} className="mr-1.5">
+                      {key}
+                    </Mono>
+                  ))}
+                </div>
+              </div>
+              <div className="w-[170px] text-[13.5px] text-muted">
+                because of {row.source === "rule" ? "an automatic rule" : `a ${row.source} change`}
+              </div>
+              <div className="w-[140px] text-[13px] text-faint">
+                <Relative iso={row.completed_at ?? undefined} />
+              </div>
+            </div>
+          ))}
+        </ListStates>
+      </Card>
     </div>
   );
 }

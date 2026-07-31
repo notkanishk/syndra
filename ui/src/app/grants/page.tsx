@@ -1,21 +1,14 @@
-import { redirect } from "next/navigation";
-
-import GrantsClient from "@/components/grants/GrantsClient";
-import { getSession } from "@/lib/session";
+import { permanentRedirect } from "next/navigation";
 
 /**
- * Admin-only cross-source grants ledger and reconciliation diff. Server-side
- * gates non-admins to / so the page never even hydrates for member sessions.
- * Client island owns the data layer (Zitadel grants + reconciliation diff +
- * mapping rules in parallel).
+ * /grants ceases to exist as a destination.
+ *
+ * It hosted two tabs doing unrelated jobs. "All grants" is absorbed: People
+ * and role membership answer the same question with the access source
+ * attached, which the flat ledger never had. Reconciliation had no other home,
+ * so it moved into Review › Unexplained access as a second tab — and that is
+ * where an old bookmark now lands, adjacent and legible rather than on a 404.
  */
-export default async function GrantsPage() {
-  const session = await getSession();
-  if (!session) {
-    redirect("/login");
-  }
-  if (session.role !== "admin") {
-    redirect("/");
-  }
-  return <GrantsClient />;
+export default function GrantsRedirect() {
+  permanentRedirect("/governance/drift?tab=reconciliation");
 }

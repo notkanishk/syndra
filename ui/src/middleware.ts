@@ -6,15 +6,16 @@ import type { NextRequest } from "next/server";
 // node:crypto (used for cookie signing, SC4) into the Edge bundle.
 const SESSION_COOKIE_NAME = "mkauth_session";
 
-const ADMIN_ONLY_PATHS = [
-  "/applications",
-  "/audit",
-  "/bundles",
-  "/graph",
-  "/policies",
-  "/projects",
-  "/users",
-];
+/**
+ * Members reach exactly two destinations. Everything else is not rendered and
+ * not reachable for them — the backend 403s the underlying reads regardless,
+ * and this keeps a hand-typed URL from landing on a page that will only fail.
+ *
+ * An allowlist rather than a denylist on purpose: a new operator route added
+ * to the rail is protected by default, instead of being exposed until somebody
+ * remembers to add it here.
+ */
+const MEMBER_ALLOWED_PATHS = ["/", "/requests", "/login"];
 
 type SessionState =
   | { kind: "valid"; userId: string; role: string }
@@ -120,7 +121,11 @@ export async function middleware(request: NextRequest) {
     return redirectTo(request, "/");
   }
 
-  if (session.kind === "valid" && session.role === "user" && ADMIN_ONLY_PATHS.some((entry) => pathname.startsWith(entry))) {
+  if (
+    session.kind === "valid" &&
+    session.role === "user" &&
+    !MEMBER_ALLOWED_PATHS.includes(pathname)
+  ) {
     return redirectTo(request, "/");
   }
 

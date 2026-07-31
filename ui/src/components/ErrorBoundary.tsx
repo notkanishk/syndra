@@ -7,10 +7,13 @@ interface ErrorBoundaryState {
 }
 
 /**
- * Page-scoped error boundary. Catches render errors that escape try/catch
- * (e.g., async component throws, malformed API response). Renders a small
- * recovery surface with a Retry button rather than letting the whole tree
- * crash. Mounted around each major view.
+ * Page-scoped error boundary. Catches render errors that escape try/catch and
+ * renders a recovery surface rather than letting the tree crash and take the
+ * shell with it.
+ *
+ * It says nothing was changed for the same reason the list-level error state
+ * does: after a failure on a screen about who can operate a laser cutter, the
+ * first question is whether the failure did something.
  */
 export class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -35,17 +38,17 @@ export class ErrorBoundary extends React.Component<
       return (
         <div
           role="alert"
-          className="rounded-xl border border-dashed border-error/40 bg-error-container/40 p-8 text-center"
+          className="flex flex-col gap-2.5 rounded-card border border-danger-line bg-surface-1 px-6 py-7"
         >
-          <p className="text-sm font-semibold text-on-error-container">Something went wrong</p>
-          <p className="mx-auto mt-2 max-w-md text-sm text-on-surface-variant">
-            The page hit an unexpected error while rendering. Try again, or refresh if it
+          <div className="type-empty-title">This page couldn&rsquo;t render.</div>
+          <p className="max-w-[60ch] text-[14px] text-muted">
+            Something went wrong while drawing it. Nothing was changed — try again, or reload if it
             keeps happening.
           </p>
           <button
             onClick={this.reset}
             type="button"
-            className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-on-primary"
+            className="mt-1.5 self-start rounded-pill bg-tint-3 px-4 py-1.5 text-[13px] font-semibold text-ink transition-colors hover:bg-tint-2"
           >
             Try again
           </button>

@@ -1,59 +1,95 @@
 import React from "react";
 
-type CardVariant = "default" | "glass" | "container";
-
-interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: CardVariant;
-}
-
 /**
- * Container surface. Three variants:
- * - `default`: Tailwind's solid surface — used for skeletons + fallback paths.
- * - `glass` (Obsidian Clarity hero surface): translucent surface-container,
- *   28px backdrop blur, ambient lift shadow, 1px white-10% top stroke.
- * - `container`: opaque surface-container fill without shadow — for nested
- *   sub-cards inside a glass surface where another lift would feel busy.
+ * The container surface: 20px radius, one hairline, no padding of its own so
+ * a card can hold either a padded body or a run of full-bleed rows.
  *
- * All variants share the same border radius and padding so callers can swap
- * without layout drift.
+ * `Card` + `CardHeader` + `CardRow` is the shape every list on the product
+ * uses — a header carrying the title, a count badge and an optional right-side
+ * note, then one row per item separated by a divider.
  */
-export function Card({ className = "", variant = "glass", children, ...props }: CardProps) {
-  const variantClass =
-    variant === "glass"
-      ? "glass-card"
-      : variant === "container"
-        ? "bg-surface-container rounded-card"
-        : "bg-surface-container rounded-card border border-outline-variant";
+
+export function Card({
+  className = "",
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`${variantClass} p-6 ${className}`} {...props}>
+    <div className={`card overflow-hidden ${className}`} {...props}>
       {children}
     </div>
   );
 }
 
 export function CardHeader({
+  title,
+  count,
+  tone = "accent",
+  note,
+  action,
   className = "",
+}: {
+  title: React.ReactNode;
+  count?: number;
+  tone?: "accent" | "warn" | "danger";
+  /** Quiet right-aligned copy — a rule, a caveat, a timestamp. */
+  note?: React.ReactNode;
+  /** Right-aligned link or control. */
+  action?: React.ReactNode;
+  className?: string;
+}) {
+  const badgeTone =
+    tone === "warn"
+      ? "bg-warn text-warn-ink"
+      : tone === "danger"
+        ? "bg-danger text-danger-ink"
+        : "bg-accent text-accent-ink";
+
+  return (
+    <div className={`flex flex-wrap items-center gap-[11px] px-5 py-4 ${className}`}>
+      <span className="type-card-title">{title}</span>
+      {count !== undefined && (
+        <span className={`rounded-pill px-2.5 py-0.5 text-[12px] font-bold ${badgeTone}`}>
+          {count}
+        </span>
+      )}
+      <span className="flex-1" />
+      {note && <span className="text-[13.5px] text-faint">{note}</span>}
+      {action}
+    </div>
+  );
+}
+
+/** One item in a card. The first row omits its divider. */
+export function CardRow({
+  className = "",
+  first = false,
   children,
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+}: React.HTMLAttributes<HTMLDivElement> & { first?: boolean }) {
   return (
-    <div className={`flex flex-col space-y-1.5 mb-4 ${className}`} {...props}>
+    <div
+      className={`flex items-center gap-[18px] px-5 py-3.5 ${first ? "" : "row-divider"} ${className}`}
+      {...props}
+    >
       {children}
     </div>
   );
 }
 
-export function CardTitle({
+/** Column headings for a table-shaped card. */
+export function CardColumns({
   className = "",
   children,
-  ...props
-}: React.HTMLAttributes<HTMLHeadingElement>) {
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <h3
-      className={`font-semibold leading-none tracking-tight text-on-surface ${className}`}
-      {...props}
+    <div
+      className={`flex gap-[18px] px-5 py-[11px] text-[11.5px] font-semibold uppercase tracking-[0.09em] text-label ${className}`}
     >
       {children}
-    </h3>
+    </div>
   );
 }

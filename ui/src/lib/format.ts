@@ -81,3 +81,67 @@ export function describeExpiry(expiresAt: string | null | undefined, now: Date =
   }
   return { countdown: `expires in ${daysLeft} days`, tone: "neutral", daysLeft };
 }
+
+/**
+ * "4h ago" / "2d ago" — the relative stamp list rows use. Deliberately coarse:
+ * on a work queue the difference between 4 and 5 hours changes nothing, and a
+ * precise timestamp invites reading it as an SLA.
+ */
+export function formatRelative(iso: string | null | undefined, now: Date = new Date()): string {
+  if (!iso) return "—";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "—";
+
+  const seconds = Math.max(0, Math.round((now.getTime() - then) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return formatShortDate(iso);
+}
+
+/**
+ * Dates are formatted in a FIXED locale, not the ambient one.
+ *
+ * A date rendered on the server in one locale and re-rendered in the browser in
+ * another is a hydration mismatch: React discards the subtree and rebuilds it,
+ * and the operator sees the value flicker. en-GB also happens to be the form
+ * the design speaks in — "2 Aug", not "Aug 2".
+ */
+const DATE_LOCALE = "en-GB";
+
+/** "2 Aug" — the form a deadline is spoken in. */
+export function formatShortDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString(DATE_LOCALE, { day: "numeric", month: "short" });
+}
+
+/** "18 Dec 2026" — the form a resolved expiry date is confirmed in. */
+export function formatLongDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString(DATE_LOCALE, { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** "Friday 31 July" — the line under a greeting. */
+export function formatWeekday(date: Date = new Date()): string {
+  return date.toLocaleDateString(DATE_LOCALE, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+}
+
+/** Whole days until an expiry, or null when there isn't one. */
+export function daysUntil(iso: string | null | undefined, now: Date = new Date()): number | null {
+  if (!iso) return null;
+  const target = new Date(iso).getTime();
+  if (Number.isNaN(target)) return null;
+  return Math.ceil((target - now.getTime()) / (1000 * 60 * 60 * 24));
+}

@@ -36,7 +36,7 @@ export function UserName({ id, fallback = "—", showEmail = false, className = 
   }
 
   if (id === "system" || id === "-") {
-    return <span className={`text-on-surface-variant ${className}`}>System</span>;
+    return <span className={`text-muted ${className}`}>System</span>;
   }
 
   const { value, resolved } = resolver.resolveUser(id);
@@ -60,7 +60,7 @@ export function UserName({ id, fallback = "—", showEmail = false, className = 
     <span className={className} title={SHOW_DEBUG_IDS ? id : undefined}>
       {value.display_name || (fallback as React.ReactNode)}
       {showEmail && value.email ? (
-        <span className="text-on-surface-variant"> · {value.email}</span>
+        <span className="text-muted"> · {value.email}</span>
       ) : null}
     </span>
   );

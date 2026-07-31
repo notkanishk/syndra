@@ -1,52 +1,67 @@
 import React from "react";
 
-type BadgeVariant =
-  | "default"
-  | "secondary"
-  | "outline"
-  | "destructive"
-  | "success"
-  | "warning"
-  | "info";
-
-interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: BadgeVariant;
-  /** When true, overlays a small animated pulse dot at the trailing edge. */
-  pulse?: boolean;
-}
-
 /**
- * Pill badge for status, tag, or count display. The `pulse` prop overlays a
- * small animated dot at the trailing edge to indicate live or in-flight
- * state — used on Operations page rows for in-flight intents and on the
- * watchlist for active escalations.
+ * Count and status pills. Tone follows the semantic palette and nothing else:
+ * neutral for a kind, accent for work, warn for a deadline, danger for
+ * something that already went wrong.
+ *
+ * `hollow` renders the zero form — a count that is currently nothing still
+ * occupies its seat rather than disappearing.
  */
+
+type Tone = "neutral" | "accent" | "warn" | "danger";
+
+const TONES: Record<Tone, string> = {
+  neutral: "bg-tint-2 text-ink/[.82]",
+  accent: "bg-accent text-accent-ink",
+  warn: "bg-warn text-warn-ink",
+  danger: "bg-danger text-danger-ink",
+};
+
 export function Badge({
+  tone = "neutral",
+  hollow = false,
   className = "",
-  variant = "default",
-  pulse = false,
   children,
   ...props
-}: BadgeProps) {
-  const baseClasses =
-    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors";
-
-  const variants: Record<BadgeVariant, string> = {
-    default: "border-transparent bg-primary-container text-on-primary-container",
-    secondary: "border-transparent bg-surface-container-high text-on-surface",
-    outline: "border-outline-variant text-on-surface",
-    destructive: "border-transparent bg-error-container text-on-error-container",
-    success:
-      "border-transparent bg-[color-mix(in_srgb,var(--success)_18%,transparent)] text-[var(--success)]",
-    warning:
-      "border-transparent bg-[color-mix(in_srgb,var(--warning)_18%,transparent)] text-[var(--warning)]",
-    info: "border-transparent bg-[color-mix(in_srgb,var(--info)_18%,transparent)] text-[var(--info)]",
-  };
-
+}: React.HTMLAttributes<HTMLSpanElement> & { tone?: Tone; hollow?: boolean }) {
   return (
-    <div className={`${baseClasses} ${variants[variant]} ${className}`} {...props}>
-      <span>{children}</span>
-      {pulse && <span aria-hidden="true" className="pulse-dot" />}
-    </div>
+    <span
+      className={`inline-flex items-center rounded-pill px-2.5 py-0.5 text-[12px] font-semibold ${
+        hollow ? "border border-line-strong text-label" : TONES[tone]
+      } ${className}`}
+      {...props}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** A neutral outline pill — bundle membership, an app served, a role group. */
+export function Chip({
+  className = "",
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLSpanElement>) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-pill bg-tint-2 px-3.5 py-1.5 text-[14px] font-semibold ${className}`}
+      {...props}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** A role key, grant id or claim name. Always mono, never the body face. */
+export function Mono({
+  className = "",
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLSpanElement>) {
+  return (
+    <span className={`type-mono ${className}`} {...props}>
+      {children}
+    </span>
   );
 }

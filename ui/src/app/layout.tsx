@@ -1,31 +1,43 @@
-import { Fraunces, Inter } from 'next/font/google';
+import { Bricolage_Grotesque, Figtree, JetBrains_Mono } from 'next/font/google';
 
-import Sidebar from '@/components/Sidebar';
+import { AppShell } from '@/components/shell/AppShell';
 import { Providers } from '@/components/providers';
-import { DriftBanner } from '@/components/drift/DriftBanner';
 import { getSession } from '@/lib/session';
 import './globals.css';
 
-// Body face — high-frequency reading. CSS var consumed via @theme in globals.css.
-const inter = Inter({
+// Display face — page titles, card titles, dialog titles. Optical sizing is
+// exposed so a 42px greeting and a 20px card title are drawn as the same face
+// rather than the same outline scaled twice.
+const bricolage = Bricolage_Grotesque({
   subsets: ['latin'],
   display: 'swap',
-  variable: '--font-inter',
+  // Variable font: the weight axis comes for free, opsz is opted into.
+  axes: ['opsz'],
+  variable: '--font-bricolage',
 });
 
-// Display face — h1 hero surfaces only (login, page titles). Variable axes
-// kept conservative; `display: 'swap'` prevents FOUC on hero pages by allowing
-// Inter to render first while Fraunces streams in.
-const fraunces = Fraunces({
+// Body face — every row, label and paragraph.
+const figtree = Figtree({
   subsets: ['latin'],
   display: 'swap',
-  axes: ['SOFT', 'WONK', 'opsz'],
-  variable: '--font-fraunces',
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-figtree',
+});
+
+// Mono — role keys, grant ids, claim names, token payloads. Never the body
+// face for any of those: they are things an operator pastes into a config
+// file, and the shape of the glyphs is the difference between reading them
+// and re-reading them.
+const jetbrains = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  weight: ['400', '500'],
+  variable: '--font-jetbrains',
 });
 
 export const metadata = {
-  title: 'MkAuth — Control Plane',
-  description: 'Identity Orchestration for Makerspace Infrastructure',
+  title: 'MkAuth',
+  description: 'Access management for the makerspace',
 };
 
 export default async function RootLayout({
@@ -34,29 +46,20 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const session = await getSession();
-  const fontVars = `${inter.variable} ${fraunces.variable}`;
+  const fontVars = `${bricolage.variable} ${figtree.variable} ${jetbrains.variable}`;
 
-  if (!session) {
-    return (
-      <html lang="en" className={fontVars}>
-        <body className="bg-background text-on-surface antialiased">
-          <div className="bg-blob-hero" aria-hidden />
-          <Providers>{children}</Providers>
-        </body>
-      </html>
-    );
-  }
+  // Dark is the default; the stored preference is applied before paint so a
+  // light-theme operator never sees a frame of the dark room.
+  const themeScript = `try{var t=localStorage.getItem('mkauth-theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark')}catch(e){document.documentElement.setAttribute('data-theme','dark')}`;
 
   return (
-    <html lang="en" className={fontVars}>
-      <body className="flex h-screen bg-background text-on-surface overflow-hidden antialiased">
-        <div className="bg-blob-hero" aria-hidden />
+    <html lang="en" className={fontVars} data-theme="dark" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
+      <body className="bg-ground text-ink antialiased">
         <Providers>
-          <Sidebar session={session} />
-          <main className="relative z-10 flex-1 overflow-y-auto p-8">
-            <DriftBanner />
-            {children}
-          </main>
+          {session ? <AppShell session={session}>{children}</AppShell> : children}
         </Providers>
       </body>
     </html>

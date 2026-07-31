@@ -1,349 +1,424 @@
 @import "tailwindcss";
 
 /* ──────────────────────────────────────────────────────────────────────────
- * Obsidian Clarity — design system
+ * MkAuth — Basic / Advanced design system
  *
- * Glassmorphism + minimalism for an admin console. Depth via translucent
- * layering, backdrop blur, and ambient shadow rather than hard borders.
+ * Dark is home; light is daylight. Same geometry, same spacing, same
+ * components — only colour changes between them. The brand accent shifts hue
+ * with the ground so it keeps its weight: lime carries a near-black room,
+ * violet carries a paper one.
  *
- * Tokens are defined under [data-theme="dark"] (default) and [data-theme="light"]
- * (deliberate counterpart, not auto-inverted). The @theme block maps Tailwind
- * utility names (bg-surface-container-high, text-on-surface-variant, etc.) to
- * these variables so utilities work uniformly across themes.
+ * Colour is semantic, never decorative. Four roles:
  *
- * The light counterpart MUST validate WCAG AA for body text (4.5:1) and
- * primary-on-primary-container button states (3:1 large / 4.5:1 body).
+ *   accent      the primary action and the current selection, one per screen
+ *               region. Never means "good" or "safe".
+ *   warn        a deadline or a broken assumption — expiring access, queued
+ *               writes, an unreachable provider. Nothing is lost yet.
+ *   danger      takes access away, or reports that something already failed.
+ *               Solid fill ONLY on the confirming button inside a dialog.
+ *   neutral     everything else, which is most of the interface.
+ *
+ * Access source chips encode a kind, not a severity: Direct takes the accent
+ * because it is the one source an operator can act on; Via bundle and
+ * Automatic stay neutral. Severity never rides on a source chip.
  * ────────────────────────────────────────────────────────────────────────── */
 
 @theme {
-  /* Surfaces — lifted into generic Tailwind tokens so utilities like
-     bg-surface-container-high and text-on-surface-variant resolve correctly. */
-  --color-background: var(--background);
-  --color-on-background: var(--on-background);
-  --color-surface: var(--surface);
-  --color-on-surface: var(--on-surface);
-  --color-on-surface-variant: var(--on-surface-variant);
-  --color-surface-container-lowest: var(--surface-container-lowest);
-  --color-surface-container-low: var(--surface-container-low);
-  --color-surface-container: var(--surface-container);
-  --color-surface-container-high: var(--surface-container-high);
-  --color-surface-container-highest: var(--surface-container-highest);
-
-  /* Brand */
-  --color-primary: var(--primary);
-  --color-on-primary: var(--on-primary);
-  --color-primary-container: var(--primary-container);
-  --color-on-primary-container: var(--on-primary-container);
-  --color-secondary: var(--secondary);
-  --color-on-secondary: var(--on-secondary);
-  --color-secondary-container: var(--secondary-container);
-  --color-on-secondary-container: var(--on-secondary-container);
-  --color-tertiary: var(--tertiary);
-  --color-on-tertiary: var(--on-tertiary);
+  /* Surfaces */
+  --color-ground: var(--ground);
+  --color-canvas: var(--canvas);
+  --color-surface-0: var(--surface-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-rail: var(--rail);
 
   /* Strokes */
-  --color-outline: var(--outline);
-  --color-outline-variant: var(--outline-variant);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
 
-  /* Status */
-  --color-error: var(--error);
-  --color-on-error: var(--on-error);
-  --color-error-container: var(--error-container);
-  --color-on-error-container: var(--on-error-container);
+  /* Text */
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-label: var(--label);
 
-  /* Semantic status tokens — no MD3 baseline equivalent; kept for
-     <Pulse>, <Badge>, SubmitButton variants, Button success/warning
-     variants, and graph/page.tsx + JsonView tones. The on-* foreground
-     pair (added in Task 1) survives this deletion because it is a
-     semantic status mapping, not a legacy alias. */
-  --color-success: var(--success);
-  --color-success-hover: var(--success-hover);
-  --color-warning: var(--warning);
-  --color-warning-hover: var(--warning-hover);
-  --color-info: var(--info);
-  --color-info-hover: var(--info-hover);
-  --color-on-success: var(--on-success);
-  --color-on-warning: var(--on-warning);
-  --color-on-info: var(--on-info);
+  /* Neutral tints — secondary pills, hover states, skeletons */
+  --color-tint-1: var(--tint-1);
+  --color-tint-2: var(--tint-2);
+  --color-tint-3: var(--tint-3);
+  --color-divider: var(--divider);
 
-  /* Typography — wired to next/font CSS variables exposed in layout.tsx. */
-  --font-sans: var(--font-inter);
-  --font-display: var(--font-fraunces);
+  /* Accent — the primary action and the current selection */
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
 
-  /* Radii — pill primitives + sculpted card surfaces. */
-  --radius-pill: 9999px;
-  --radius-card: 1.5rem;
-  --radius-card-lg: 2rem;
+  /* Attention */
+  --color-warn: var(--warn);
+  --color-warn-text: var(--warn-text);
+  --color-warn-ink: var(--warn-ink);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-line: var(--warn-line);
 
-  /* Animations */
-  --animate-fade-in-up: fadeInUp 0.3s ease-out;
-  --animate-pulse-dot: pulseDot 1.6s ease-in-out infinite;
-  --animate-slide-in-down: slideInDown 0.25s ease-out;
-  --animate-row-highlight: rowHighlight 1.5s ease-out;
-  --animate-count-emphasis: countEmphasis 0.4s ease-out;
+  /* Destructive */
+  --color-danger: var(--danger);
+  --color-danger-text: var(--danger-text);
+  --color-danger-ink: var(--danger-ink);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
 
-  @keyframes fadeInUp {
-    0% {
+  /* Typography — wired to the next/font variables exposed in layout.tsx.
+     A role key, grant id, claim name or token payload is ALWAYS mono. */
+  --font-sans: var(--font-figtree);
+  --font-display: var(--font-bricolage);
+  --font-mono: var(--font-jetbrains);
+
+  /* Geometry */
+  --radius-shell: 26px;
+  --radius-card: 20px;
+  --radius-panel: 18px;
+  --radius-block: 16px;
+  --radius-inner: 14px;
+  --radius-nav: 12px;
+  --radius-pill: 999px;
+
+  /* Motion — this is a tool used in a hurry. Nothing longer than 200ms. */
+  --animate-panel-in: panelIn 0.2s ease-out;
+  --animate-row-in: rowIn 0.16s ease-out;
+
+  @keyframes panelIn {
+    from {
       opacity: 0;
-      transform: translateY(10px);
+      transform: translateY(6px) scale(0.99);
     }
-    100% {
+    to {
       opacity: 1;
-      transform: translateY(0);
+      transform: translateY(0) scale(1);
     }
   }
 
-  @keyframes slideInDown {
-    0% {
+  @keyframes rowIn {
+    from {
       opacity: 0;
-      transform: translateY(-100%);
     }
-    100% {
+    to {
       opacity: 1;
-      transform: translateY(0);
     }
   }
 
-  @keyframes pulseDot {
-    0%, 100% {
-      opacity: 0.5;
-      transform: scale(1);
+  @keyframes shimmer {
+    0%,
+    100% {
+      opacity: 0.55;
     }
     50% {
       opacity: 1;
-      transform: scale(1.35);
-    }
-  }
-
-  @keyframes rowHighlight {
-    0% {
-      background-color: color-mix(in srgb, var(--error) 25%, transparent);
-    }
-    100% {
-      background-color: transparent;
-    }
-  }
-
-  @keyframes countEmphasis {
-    0% {
-      transform: scale(1.4);
-    }
-    100% {
-      transform: scale(1);
     }
   }
 }
 
 @layer base {
-  /* ── Light theme (deliberate counterpart, not auto-inverted) ─────────── */
+  /* ── Dark — the default room ─────────────────────────────────────────── */
   :root,
+  [data-theme="dark"] {
+    --ground: #080906;
+    --surface-0: #0b0c0a;
+    /* The content column behind the cards. Near-black in the dark room; the
+       lilac page ground in daylight, where white-on-white would erase the
+       card edges entirely. */
+    --canvas: #0b0c0a;
+    --surface-1: #141612;
+    --surface-2: #1b1e19;
+    --rail: #101210;
+
+    --line: rgba(255, 255, 255, 0.06);
+    --line-strong: rgba(255, 255, 255, 0.14);
+
+    --ink: #f3f5ef;
+    --muted: rgba(243, 245, 239, 0.6);
+    --faint: rgba(243, 245, 239, 0.42);
+    --label: rgba(243, 245, 239, 0.34);
+
+    --accent: #d8f24e;
+    --accent-text: #d8f24e;
+    --accent-ink: #12140d;
+    --accent-soft: rgba(216, 242, 78, 0.15);
+    --accent-line: rgba(216, 242, 78, 0.28);
+
+    --warn: #f5a524;
+    --warn-text: #f7b955;
+    --warn-ink: #231703;
+    --warn-soft: rgba(245, 165, 36, 0.12);
+    --warn-line: rgba(245, 165, 36, 0.3);
+
+    --danger: #ff5c4d;
+    --danger-text: #ff8d82;
+    --danger-ink: #2a0c08;
+    --danger-soft: rgba(255, 92, 77, 0.1);
+    --danger-line: rgba(255, 92, 77, 0.4);
+
+    --tint-1: rgba(243, 245, 239, 0.04);
+    --tint-2: rgba(243, 245, 239, 0.07);
+    --tint-3: rgba(243, 245, 239, 0.09);
+    --hover: rgba(243, 245, 239, 0.05);
+    --divider: rgba(255, 255, 255, 0.05);
+
+    --shadow-dialog: 0 22px 50px rgba(0, 0, 0, 0.55);
+    --shadow-popover: 0 18px 40px rgba(0, 0, 0, 0.5);
+    --shadow-card: none;
+
+    --avatar-from: #454b34;
+    --avatar-to: #23261c;
+
+    color-scheme: dark;
+  }
+
+  /* ── Light — same geometry, violet on a lilac ground ─────────────────── */
   [data-theme="light"] {
-    /* Surfaces: warm-white ladder ascending from #ffffff to dim lavender. */
-    --background: #fbfaff;
-    --surface: #fbfaff;
-    --surface-container-lowest: #ffffff;
-    --surface-container-low: #f5f3ff;
-    --surface-container: #efedfa;
-    --surface-container-high: #e8e5f4;
-    --surface-container-highest: #dfdcef;
+    --ground: #f4f1fb;
+    --surface-0: #ffffff;
+    --canvas: #f4f1fb;
+    --surface-1: #ffffff;
+    --surface-2: #ffffff;
+    --rail: #ffffff;
 
-    /* Text */
-    --on-background: #1a1d2e;
-    --on-surface: #1a1d2e;
-    --on-surface-variant: #4a4d63;
+    --line: rgba(37, 28, 66, 0.08);
+    --line-strong: rgba(37, 28, 66, 0.16);
 
-    /* Brand — desaturated indigo on warm-white passes WCAG AA at 4.5:1. */
-    --primary: #5057f7;
-    --on-primary: #ffffff;
-    --primary-container: #dfe3ff;
-    --on-primary-container: #131e8c;
-    --secondary: #7c3aed;
-    --on-secondary: #ffffff;
-    --secondary-container: #ede4ff;
-    --on-secondary-container: #2c0051;
-    --tertiary: #666c80;
-    --on-tertiary: #ffffff;
+    --ink: #1d1830;
+    --muted: rgba(29, 24, 48, 0.6);
+    --faint: rgba(29, 24, 48, 0.45);
+    --label: rgba(29, 24, 48, 0.4);
 
-    /* Strokes */
-    --outline: #7a7986;
-    --outline-variant: #cbcad6;
+    /* Fill and text differ: #7a5af8 carries a white pill, #5b3fd6 is the
+       AA-contrast text/link tone on a white card. */
+    --accent: #7a5af8;
+    --accent-text: #5b3fd6;
+    --accent-ink: #ffffff;
+    --accent-soft: rgba(122, 90, 248, 0.12);
+    --accent-line: rgba(122, 90, 248, 0.32);
 
-    /* Status — desaturated to maintain the calm aesthetic. */
-    --error: #ba1a1a;
-    --on-error: #ffffff;
-    --error-container: #ffdad6;
-    --on-error-container: #410002;
-    --success: #047857;
-    --success-hover: #065f46;
-    --warning: #b45309;
-    --warning-hover: #92400e;
-    --info: #0369a1;
-    --info-hover: #075985;
-    --on-success: #ffffff;
-    --on-warning: #ffffff;
-    --on-info: #ffffff;
+    --warn: #a86a00;
+    --warn-text: #8a5600;
+    --warn-ink: #ffffff;
+    --warn-soft: rgba(168, 106, 0, 0.1);
+    --warn-line: rgba(168, 106, 0, 0.3);
+
+    --danger: #d5382a;
+    --danger-text: #b32b20;
+    --danger-ink: #ffffff;
+    --danger-soft: rgba(213, 56, 42, 0.08);
+    --danger-line: rgba(213, 56, 42, 0.35);
+
+    --tint-1: rgba(37, 28, 66, 0.03);
+    --tint-2: rgba(37, 28, 66, 0.06);
+    --tint-3: rgba(37, 28, 66, 0.08);
+    --hover: rgba(37, 28, 66, 0.04);
+    --divider: rgba(37, 28, 66, 0.06);
+
+    --shadow-dialog: 0 22px 50px rgba(60, 40, 120, 0.18);
+    --shadow-popover: 0 18px 40px rgba(60, 40, 120, 0.14);
+    --shadow-card: 0 2px 10px rgba(60, 40, 120, 0.05);
+
+    --avatar-from: #cdbdfa;
+    --avatar-to: #a58ef0;
+
+    color-scheme: light;
   }
 
-  /* ── Dark theme — Obsidian Clarity (default aesthetic) ───────────────── */
-  [data-theme="dark"],
-  :root[data-theme-system="dark"]:not([data-theme]) {
-    /* Surfaces: obsidian → indigo-tinted layers. */
-    --background: #0c1324;
-    --surface: #0c1324;
-    --surface-container-lowest: #070d1f;
-    --surface-container-low: #151b2d;
-    --surface-container: #191f31;
-    --surface-container-high: #23293c;
-    --surface-container-highest: #2e3447;
-
-    /* Text */
-    --on-background: #dce1fb;
-    --on-surface: #dce1fb;
-    --on-surface-variant: #c6c5d5;
-
-    /* Brand — luminous indigo/violet appears to emit light from the substrate. */
-    --primary: #bdc2ff;
-    --on-primary: #131e8c;
-    --primary-container: #818cf8;
-    --on-primary-container: #101b8a;
-    --secondary: #ddb8ff;
-    --on-secondary: #490081;
-    --secondary-container: #62259b;
-    --on-secondary-container: #d1a1ff;
-    --tertiary: #bec6e0;
-    --on-tertiary: #283044;
-
-    /* Strokes — soft, never harsh on the deep substrate. */
-    --outline: #908f9e;
-    --outline-variant: #454653;
-
-    /* Status — desaturated luminous variants. */
-    --error: #ffb4ab;
-    --on-error: #690005;
-    --error-container: #93000a;
-    --on-error-container: #ffdad6;
-    --success: #34d399;
-    --success-hover: #6ee7b7;
-    --warning: #fbbf24;
-    --warning-hover: #fcd34d;
-    --info: #60a5fa;
-    --info-hover: #93c5fd;
-    --on-success: #003822;  /* deep forest green; AA against #34d399 success */
-    --on-warning: #2a1800;  /* deep amber-brown; AA against #fbbf24 warning */
-    --on-info: #001a4a;     /* deep navy; AA against #60a5fa info */
+  html {
+    background: var(--ground);
   }
 
-  /* Visible focus rings for keyboard users. Pair with `focus-visible:` utilities
-     on interactive controls; this base rule covers anything that forgot.
-     Excludes mouse/touch focus to avoid noise on click. */
+  body {
+    background-color: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-figtree), system-ui, sans-serif;
+    font-size: 14.5px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Every interactive element gets a themed focus ring in the accent. The
+     default browser ring is never acceptable — it vanishes against the dark
+     ground and clashes with the accent in light. */
   :focus-visible {
-    outline: 2px solid var(--primary-container);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
     border-radius: 4px;
   }
+
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 28%, transparent);
+  }
+
+  /* Respect a stated preference for less motion — every animation here is an
+     affordance, never information. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
-body {
-  background-color: var(--background);
-  color: var(--on-surface);
-  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* ── Atmospheric depth ────────────────────────────────────────────────────
- * .bg-blob-hero mounts large indigo + violet radial gradients behind hero
- * areas to evoke the "luminous accents emitting light from within the dark
- * substrate" aesthetic. Mounted once in the root layout; pointer-events:none
- * so it never intercepts clicks.
+/* ── Type roles ───────────────────────────────────────────────────────────
+ * Display face is Bricolage Grotesque; body is Figtree; anything an operator
+ * might paste into a terminal or a config file is JetBrains Mono.
  * ───────────────────────────────────────────────────────────────────────── */
-@utility bg-blob-hero {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background:
-    radial-gradient(
-      ellipse 80% 60% at 15% 20%,
-      color-mix(in srgb, #818cf8 12%, transparent) 0%,
-      transparent 60%
-    ),
-    radial-gradient(
-      ellipse 70% 50% at 85% 80%,
-      color-mix(in srgb, #c084fc 10%, transparent) 0%,
-      transparent 60%
-    );
-  filter: blur(60px);
+
+@utility type-greeting {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 42px;
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
 }
 
-[data-theme="light"] .bg-blob-hero {
-  background:
-    radial-gradient(
-      ellipse 80% 60% at 15% 20%,
-      color-mix(in srgb, #818cf8 6%, transparent) 0%,
-      transparent 60%
-    ),
-    radial-gradient(
-      ellipse 70% 50% at 85% 80%,
-      color-mix(in srgb, #c084fc 5%, transparent) 0%,
-      transparent 60%
-    );
+@utility type-page-title {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 40px;
+  font-weight: 500;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
 }
 
-/* ── Glass card surface ───────────────────────────────────────────────────
- * Replaces the previous flat-bg card. Translucent surface-container with a
- * 28px backdrop blur, ambient lift shadow, and a 1px white-10% top stroke
- * (rim light effect). Hover deepens the lift.
+@utility type-section-title {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 32px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+@utility type-card-title {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+@utility type-dialog-title {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+@utility type-empty-title {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+/* Uppercase micro-label — the one place letter-spacing is this wide, so a
+   label can never be misread as body copy. */
+@utility type-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+
+/* Sidebar group heading: smaller and wider still, because it is structure
+   rather than content. It is a label, never a link. */
+@utility type-nav-group {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+
+@utility type-mono {
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+/* ── Surfaces ─────────────────────────────────────────────────────────────
+ * One card treatment used everywhere. In light it carries a soft lift instead
+ * of a hairline, per the design's light-theme note.
  * ───────────────────────────────────────────────────────────────────────── */
-@utility glass-card {
-  background-color: color-mix(in srgb, var(--surface-container) 70%, transparent);
-  backdrop-filter: blur(28px) saturate(140%);
-  -webkit-backdrop-filter: blur(28px) saturate(140%);
+
+@utility card {
+  background-color: var(--surface-1);
+  border: 1px solid var(--line);
   border-radius: var(--radius-card);
-  box-shadow:
-    0 30px 60px -20px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  transition: box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
+  box-shadow: var(--shadow-card);
+}
+
+@utility panel {
+  background-color: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-card);
+}
+
+/* Row divider inside a card. Lighter than --line: it separates items that
+   belong together rather than bounding the card itself. */
+@utility row-divider {
+  border-top: 1px solid var(--divider);
+}
+
+@utility accent-note {
+  background-color: color-mix(in srgb, var(--accent) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: var(--radius-panel);
+}
+
+@utility warn-note {
+  background-color: color-mix(in srgb, var(--warn) 9%, transparent);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--radius-panel);
+}
+
+@utility danger-note {
+  background-color: var(--danger-soft);
+  border: 1px solid var(--danger-line);
+  border-radius: var(--radius-inner);
+}
+
+/* Neutral hover for nav rows and list rows. */
+@utility hover-tint {
+  transition: background-color 0.14s ease-out, color 0.14s ease-out;
 
   &:hover {
-    box-shadow:
-      0 40px 80px -20px rgba(0, 0, 0, 0.55),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    background-color: var(--hover);
   }
 }
 
-[data-theme="light"] .glass-card {
-  background-color: color-mix(in srgb, var(--surface-container) 85%, transparent);
-  box-shadow:
-    0 20px 40px -16px rgba(80, 87, 247, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
-
-  &:hover {
-    box-shadow:
-      0 28px 56px -16px rgba(80, 87, 247, 0.18),
-      inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  }
-}
-
-/* ── Pulse dot ────────────────────────────────────────────────────────────
- * Small animated indicator used by <Pulse/> and <Badge pulse/> for live or
- * in-flight state. Steady (non-animated) usage achieved via `static` class.
+/* ── Skeletons ────────────────────────────────────────────────────────────
+ * Row-shaped, at the real row height, so nothing jumps when data lands.
  * ───────────────────────────────────────────────────────────────────────── */
-@utility pulse-dot {
-  display: inline-block;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 9999px;
-  background-color: currentColor;
-  animation: pulseDot 1.6s ease-in-out infinite;
-  box-shadow: 0 0 12px currentColor;
+
+@utility skeleton-bar {
+  background-color: var(--tint-2);
+  border-radius: var(--radius-pill);
+  animation: shimmer 1.6s ease-in-out infinite;
 }
 
-@utility pulse-dot-static {
-  display: inline-block;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 9999px;
-  background-color: currentColor;
-  box-shadow: 0 0 8px currentColor;
+/* ── Avatar ───────────────────────────────────────────────────────────────
+ * A CSS gradient standing in for a photo. No images anywhere in this system.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+@utility avatar-fill {
+  background: linear-gradient(150deg, var(--avatar-from), var(--avatar-to));
+}
+
+/* ── Dialog + popover shadows ─────────────────────────────────────────── */
+
+@utility shadow-dialog {
+  box-shadow: var(--shadow-dialog);
+}
+
+@utility shadow-popover {
+  box-shadow: var(--shadow-popover);
 }

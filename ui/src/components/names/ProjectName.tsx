@@ -17,7 +17,7 @@ export function ProjectName({ id, fallback = "—", className = "" }: ProjectNam
     return <span className={className}>{fallback}</span>;
   }
   if (id === "-") {
-    return <span className={`text-on-surface-variant ${className}`}>—</span>;
+    return <span className={`text-muted ${className}`}>—</span>;
   }
 
   const { value, resolved } = resolver.resolveProject(id);

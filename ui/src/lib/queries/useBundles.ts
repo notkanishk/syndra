@@ -147,3 +147,20 @@ export function useSetWelcomeBundle() {
 }
 
 export const bundlesQueryKeys = KEYS;
+
+/**
+ * Unassigns a bundle from one person. The bundle itself is untouched — this is
+ * the "acting on one person" half of the split, and it is Basic work.
+ */
+export function useRemoveBundle(userId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (bundleId: string) =>
+      request(`/users/${userId}/bundles/${bundleId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users", "access", userId] });
+      qc.invalidateQueries({ queryKey: ["users", "list"] });
+      qc.invalidateQueries({ queryKey: ["bundles"] });
+    },
+  });
+}
