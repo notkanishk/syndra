@@ -9,6 +9,7 @@ Identity & Access Management orchestration layer for an academic makerspace. Com
 - **Architecture:** `openspec/changes/mkauth-core-architecture/design.md` — three-plane design, Zitadel interaction matrix, IdP chain
 - **Roadmap:** `openspec/changes/mkauth-core-architecture/ROADMAP.md` — phase timeline (1-4 complete, 5-6 ahead)
 - **Reality check:** `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md` — planned vs integrated
+- **UI design system + IA:** `openspec/changes/basic-advanced-ia/design.md` — Basic/Advanced views, the navigation contract, and where the token shape lives
 
 ## Tech Stack
 
@@ -27,6 +28,8 @@ cd sync && go test ./... && go vet ./...
 
 ## Key Conventions
 
+- **UI:** design tokens live only in `ui/src/app/globals.css`; navigation structure only in `ui/src/lib/nav.ts`. Both themes are authored in full — never a hardcoded hex in a component. Structure never moves in response to data (see `basic-advanced-ia`)
+- **Token shape:** `internal/claims` is the only shaper, applied on read by BOTH the Actions v2 handler and the simulator. A preview computed by different code from the token it previews is a preview of nothing
 - Strict JSON decoding (`decodeJSONStrict`) on all mutation endpoints
 - Injectable dependency pattern for testability (`deps.go` files)
 - Zitadel Actions v2 is the only source-of-truth claim integration path

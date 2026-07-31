@@ -1,6 +1,6 @@
 # MkAuth — Next Steps
 
-> Single pickup point. Everything open, in one place, as of **2026-07-30**.
+> Single pickup point. Everything open, in one place, as of **2026-07-31**.
 > Sources consolidated here: `ROADMAP.md` phases 4–6, `AUDIT.md` deferrals, open `changes/*/tasks.md`, and tooling debt.
 > [< Index](INDEX.md) · [Architecture](changes/mkauth-core-architecture/design.md) · [Roadmap](changes/mkauth-core-architecture/ROADMAP.md)
 
@@ -27,6 +27,13 @@ Paused pending research on real LLDAP password-propagation and credential semant
 - **LLDAP Integration** — end-to-end wiring against the real external LLDAP (separate Proxmox LXC), production connectivity validation.
 - **LLDAP Reconciliation** — periodic full sync comparing MkAuth provisioning state to LLDAP group membership, overwriting drift per the one-way authority rule.
 - **OE7 / OE13 / OE14** — cosmetic sync cleanups; do them while you're in there, not as their own errand.
+
+### Basic / Advanced IA — what the redesign left open
+
+- **BIA-35** — exercise the claim editor, the simulator, role → members and `DELETE /users/{id}/grants/{grantId}` against a live Postgres + Redis + Zitadel. Unit-tested only; the write paths have never run against a real database.
+- **BIA-36** — the per-route manual a11y checklist (empty / loading / error / dense / ultra-wide / narrow / keyboard / light-theme contrast). The components are built to pass it; nobody has walked it.
+- **BIA-37** — legacy path alignment (`/policies` → `/automation/rules`, `/graph` → `/automation/access-map`, `/operations` → `/system/events`) behind redirects. Cosmetic, deliberately deferred: the nav labels are already right, only the URLs lag.
+- **Claim template versioning** — a claim profile edit takes effect on the next token with no record of what the previous shape was. If an app breaks after an edit, the audit row says who changed it, not what it was. Worth a `claim_profile_versions` table if this bites.
 
 ### Phase 5 — Automation & Governance
 
