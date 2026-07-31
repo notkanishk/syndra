@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"mkauth/internal/db"
+	"mkauth/internal/directory"
 	"mkauth/internal/models"
 )
 
@@ -14,6 +15,13 @@ var (
 	dbGetActiveMappingRules  = db.GetActiveMappingRules
 	dbGetBundlesForUser      = db.GetBundlesForUser
 	dbGetRolesForBundle      = db.GetRolesForBundle
+
+	// cacheFindUser supplies the profile attributes (email, name, title,
+	// team) a claim profile may project into a token. Injectable so compiler
+	// tests don't need a live directory.
+	cacheFindUser = func(ctx context.Context, userID string) (models.UserProfile, bool, error) {
+		return directory.Default.FindUser(ctx, userID)
+	}
 
 	redisSet = func(ctx context.Context, key string, value string, ttl time.Duration) error {
 		return db.Redis.Set(ctx, key, value, ttl).Err()

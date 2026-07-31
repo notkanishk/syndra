@@ -7,6 +7,8 @@ import (
 	"log"
 	"sort"
 	"time"
+
+	"mkauth/internal/claims"
 )
 
 const cacheTTL = 24 * time.Hour
@@ -100,16 +102,30 @@ func CompileUserCache(ctx context.Context, userID, projectID string) error {
 	}
 	sort.Strings(derivedRoles)
 
-	// 5. Construct the claims payload
-	claims := map[string]any{
-		"roles":       derivedRoles,
-		"user_id":     userID,
-		"project_id":  projectID,
-		"compiled_at": time.Now().UTC().Format(time.RFC3339),
-		"source":      "mkauth_cache_compiler_v1",
+	// 5. Persist the FACTS, not a finished claim map.
+	//
+	// The token's shape is an operator-editable profile resolved at read time
+	// (internal/claims). Baking the shape in here would mean every claim-name
+	// or format edit silently applied only to users whose cache happened to be
+	// recompiled afterwards — an edit that takes effect per-user at random is
+	// worse than no edit at all. Profile attributes (email, team, ...) are
+	// captured now because a directory call is affordable during compile and
+	// is not affordable inside the Actions v2 latency budget.
+	facts := claims.Facts{
+		Roles:      derivedRoles,
+		UserID:     userID,
+		ProjectID:  projectID,
+		CompiledAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	if profile, ok, err := cacheFindUser(ctx, userID); err != nil {
+		// Non-fatal: roles are the load-bearing part of the token. A missing
+		// email claim is a degraded token; a missing roles claim is a locked door.
+		log.Printf("[CACHE WARN] Profile attributes unavailable for %s: %v", userID, err)
+	} else if ok {
+		facts.Email, facts.Name, facts.Title, facts.Team = profile.Email, profile.Name, profile.Title, profile.Team
 	}
 
-	data, err := json.Marshal(claims)
+	data, err := json.Marshal(facts)
 	if err != nil {
 		return fmt.Errorf("cache compile: marshal failed: %w", err)
 	}

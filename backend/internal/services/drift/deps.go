@@ -26,7 +26,7 @@ var (
 		return db.GetAllDirectGrants(ctx, false) // active grants only — expired grants are not expected in Zitadel
 	}
 	svcGetActiveMappingRules = db.GetActiveMappingRules
-	svcGetExclusions = func(ctx context.Context) ([]models.ExternalGrantExclusion, error) {
+	svcGetExclusions         = func(ctx context.Context) ([]models.ExternalGrantExclusion, error) {
 		return db.GetExclusions(ctx)
 	}
 	upsertDriftItem        = db.UpsertDriftItem          // (ctx,user,project,roleKeys,grantID,source,type) (id,inserted,err)

@@ -466,3 +466,54 @@ func CascadeRuleUpdated(ctx context.Context, actor string, old models.MappingRul
 	}
 	return applyMode(ctx, old.ConfirmationMode, ids)
 }
+
+// userBaseHoldingsExcludingGrant is userBaseHoldings but omits exactly one
+// direct grant by id — the simulation of "after this direct access is removed",
+// computed from a PRE-mutation read.
+//
+// It excludes by GRANT ID rather than by (project, role): another source may
+// legitimately contribute the same pair, and blinding the base to the pair
+// would make a role look lost when a bundle still carries it.
+func userBaseHoldingsExcludingGrant(ctx context.Context, userID, excludeGrantID string) (map[roleKey]bool, error) {
+	base := make(map[roleKey]bool)
+	directs, err := svcGetDirectGrantsForUser(ctx, userID, false)
+	if err != nil {
+		return nil, err
+	}
+	for _, g := range directs {
+		if g.ID == excludeGrantID {
+			continue // this grant is the one being removed
+		}
+		base[roleKey{projectID: g.ProjectID, roleKey: g.RoleKey}] = true
+	}
+	bundles, err := svcGetBundlesForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	for _, b := range bundles {
+		roles, err := svcCascGetRolesForBundle(ctx, b.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, ro := range roles {
+			base[roleKey{projectID: ro.ProjectID, roleKey: ro.RoleKey}] = true
+		}
+	}
+	return base, nil
+}
+
+// directGrantRoleKey resolves which (project, role) a grant id names. Absence is
+// not an error here: the authoritative "does this grant exist" answer comes from
+// the delete itself, which returns ErrGrantNotFound inside its transaction.
+func directGrantRoleKey(ctx context.Context, userID, grantID string) (roleKey, bool) {
+	grants, err := svcGetDirectGrantsForUser(ctx, userID, true)
+	if err != nil {
+		return roleKey{}, false
+	}
+	for _, g := range grants {
+		if g.ID == grantID {
+			return roleKey{projectID: g.ProjectID, roleKey: g.RoleKey}, true
+		}
+	}
+	return roleKey{}, false
+}

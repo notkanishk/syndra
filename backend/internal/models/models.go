@@ -142,11 +142,32 @@ type ApplicationView struct {
 	AssignedUserCount int                `json:"assigned_user_count"`
 }
 
+// ApplicationSimulation is the dry run of a real token. CustomClaims is the
+// exact map the Actions v2 path would append for this (user, project) pair —
+// same profile resolution, same shaper, nothing invented for display.
+//
+// A project's token carries every claim key configured on that project, since
+// Zitadel's function trigger does not say which application the token is for.
+// OwnedClaims narrows that to the keys THIS application reads; ClaimOwners
+// attributes the rest, so a sibling app's key is never mistaken for a bug.
 type ApplicationSimulation struct {
 	Application  ApplicationCatalog     `json:"application"`
 	User         UserProfile            `json:"user"`
 	RawRoles     []string               `json:"raw_roles"`
 	CustomClaims map[string]interface{} `json:"custom_claims"`
+	OwnedClaims  []string               `json:"owned_claims"`
+	ClaimOwners  []ClaimKeyOwner        `json:"claim_owners"`
+}
+
+// ClaimKeyOwner is one key present in an issued token and the profile that put
+// it there. Kind is roles | attribute | static; Source names the attribute
+// when Kind is attribute.
+type ClaimKeyOwner struct {
+	Key           string `json:"key"`
+	OwnerLabel    string `json:"owner_label"`
+	ApplicationID string `json:"application_id,omitempty"`
+	Kind          string `json:"kind"`
+	Source        string `json:"source,omitempty"`
 }
 
 type ProjectSummary struct {

@@ -41,6 +41,11 @@ func NewRouter() http.Handler {
 	// any role (July 2026 audit SC1/SC3).
 	mux.HandleFunc("GET /api/v1/users/{id}/grants", withCORS(withSelfOrOperatorAuth(handleGetUserDirectGrants)))
 	mux.HandleFunc("POST /api/v1/users/{id}/grants", withCORS(withOperatorAuth(handleUpsertUserDirectGrant)))
+	// Removing a direct grant deletes the MkAuth ledger row and queues the
+	// Zitadel revoke in one transaction. NOT the same object as
+	// DELETE /zitadel/users/{id}/grants/{grantId}, which removes the Zitadel-side
+	// grant and would leave this row to restore the access on the next compile.
+	mux.HandleFunc("DELETE /api/v1/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleDeleteUserDirectGrant)))
 	mux.HandleFunc("GET /api/v1/users/{id}/bundles", withCORS(withSelfOrOperatorAuth(handleGetUserBundles)))
 	mux.HandleFunc("POST /api/v1/users/{id}/bundles", withCORS(withOperatorAuth(handleAssignBundleToUser)))
 	mux.HandleFunc("DELETE /api/v1/users/{id}/bundles/{bundleId}", withCORS(withOperatorAuth(handleRemoveBundleFromUser)))
@@ -50,6 +55,15 @@ func NewRouter() http.Handler {
 	// Application Views
 	mux.HandleFunc("GET /api/v1/applications", withCORS(withUserAuth(handleGetApplications)))
 	mux.HandleFunc("GET /api/v1/applications/{id}/simulate", withCORS(withUserAuth(handleSimulateApplication)))
+
+	// Claim shaping — what an application actually receives in its token.
+	// Reads are operator-only: a claim template names the attributes the
+	// organisation projects into tokens, which is not member-facing detail.
+	mux.HandleFunc("GET /api/v1/claim-attributes", withCORS(withOperatorAuth(handleGetClaimAttributes)))
+	mux.HandleFunc("GET /api/v1/projects/{id}/claim-shape", withCORS(withOperatorAuth(handleGetProjectClaimShape)))
+	mux.HandleFunc("PUT /api/v1/projects/{id}/claim-profile", withCORS(withOperatorAuth(handleSetProjectClaimProfile)))
+	mux.HandleFunc("PUT /api/v1/applications/{id}/claim-profile", withCORS(withOperatorAuth(handleSetApplicationClaimProfile)))
+	mux.HandleFunc("DELETE /api/v1/applications/{id}/claim-profile", withCORS(withOperatorAuth(handleDeleteApplicationClaimProfile)))
 
 	// Batch UID→name resolver. Powers <UserName/>/<ProjectName/>/<RoleName/>/<BundleName/>
 	// components in the dashboard so raw UUIDs never reach the visible layer.
@@ -84,10 +98,16 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/v1/requests", withCORS(withUserAuth(handleCreateAccessRequest)))
 	mux.HandleFunc("POST /api/v1/requests/{id}/decision", withCORS(withOperatorAuth(handleResolveAccessRequest)))
 	mux.HandleFunc("GET /api/v1/governance/summary", withCORS(withOperatorAuth(handleGetGovernanceSummary)))
+	// Compact scalars for the sidebar badges. The rail polls this frequently;
+	// it must never pull the full summary payload to render four numbers.
+	mux.HandleFunc("GET /api/v1/governance/indicators", withCORS(withOperatorAuth(handleGetGovernanceIndicators)))
 
 	// Role Management
 	mux.HandleFunc("POST /api/v1/roles", withCORS(withUserAuth(handleCreateRole)))
 	mux.HandleFunc("GET /api/v1/roles", withCORS(withUserAuth(handleGetGlobalRoleCatalog)))
+	// Role → members: the reverse of "what can this person get into". Every row
+	// carries its access sources so removal can be named after its own source.
+	mux.HandleFunc("GET /api/v1/projects/{id}/roles/{key}/members", withCORS(withOperatorAuth(handleGetRoleMembers)))
 
 	// Provisioning Intents (operator view)
 	mux.HandleFunc("GET /api/v1/intents", withCORS(withUserAuth(handleGetProvisioningIntents)))

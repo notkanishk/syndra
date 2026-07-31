@@ -53,7 +53,10 @@ var (
 	svcGetRolesForBundle      = db.GetRolesForBundle
 	svcGetDirectGrantsForUser = db.GetDirectGrantsForUser
 	svcGetAllDirectGrants     = db.GetAllDirectGrants
-	svcGetActiveMappingRules  = db.GetActiveMappingRules
+	// Direct-grant removal: ledger delete + audit + the caller-computed
+	// effective-access delta, in one transaction.
+	svcDeleteDirectGrantAndEnqueue = db.DeleteDirectGrantAndEnqueue
+	svcGetActiveMappingRules       = db.GetActiveMappingRules
 
 	// Role management
 	svcDbCreateRole               = db.CreateRole
@@ -63,6 +66,14 @@ var (
 	svcDbGetRoleUsageCounts       = db.GetRoleUsageCounts
 	svcDbGetAssignedUserCounts    = db.GetAssignedUserCounts
 	svcDbGetAllReferencedRoleKeys = db.GetAllReferencedRoleKeys
+
+	// Claim shaping (token format + per-application overrides).
+	svcGetClaimProfile        = db.GetClaimProfile
+	svcListClaimProfiles      = db.ListClaimProfiles
+	svcUpsertClaimProfile     = db.UpsertClaimProfile
+	svcListAppClaimOverrides  = db.ListAppClaimOverrides
+	svcUpsertAppClaimOverride = db.UpsertAppClaimOverride
+	svcDeleteAppClaimOverride = db.DeleteAppClaimOverride
 
 	// Provisioning intents
 	svcInsertProvisioningIntent = db.InsertProvisioningIntent

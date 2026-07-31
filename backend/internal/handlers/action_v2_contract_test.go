@@ -76,9 +76,9 @@ func TestHandleActionInject_CanonicalV2Payload_Accepted(t *testing.T) {
 	redisGetClaims = func(ctx context.Context, key string) (string, error) {
 		switch key {
 		case "mapping:250124622953808001:pPrinting":
-			return `{"role":"operator"}`, nil
+			return factsJSON("250124622953808001", "pPrinting", "operator"), nil
 		case "mapping:250124622953808001:pDoors":
-			return `{"role":"3d_lab_pin"}`, nil
+			return factsJSON("250124622953808001", "pDoors", "3d_lab_pin"), nil
 		}
 		return "", fmt.Errorf("unexpected key: %s", key)
 	}
@@ -96,19 +96,36 @@ func TestHandleActionInject_CanonicalV2Payload_Accepted(t *testing.T) {
 	}
 
 	got := decodeActionResponse(t, rr)
-	// Response must be the v2 envelope with two namespaced claims (multi-project).
+	// Neither project has a configured claim profile, so both fall back to the
+	// built-in "roles" key. The merge step must keep BOTH sets by namespacing
+	// the collision rather than letting one project's roles land under a key
+	// the other project's application also reads.
 	if len(got.AppendClaims) != 2 {
 		t.Fatalf("expected 2 append_claims (one per project), got %v", got.AppendClaims)
 	}
-	printing, okP := claimByKey(got.AppendClaims, "mkauth.pPrinting.role")
-	doors, okD := claimByKey(got.AppendClaims, "mkauth.pDoors.role")
+	printing, okP := claimByKey(got.AppendClaims, "mkauth.pPrinting.roles")
+	doors, okD := claimByKey(got.AppendClaims, "mkauth.pDoors.roles")
 	if !okP || !okD {
-		t.Fatalf("expected namespaced keys mkauth.pPrinting.role and mkauth.pDoors.role, got %v", got.AppendClaims)
+		t.Fatalf("expected the colliding default key to be namespaced per project, got %v", got.AppendClaims)
 	}
-	if printing.Value != "operator" {
-		t.Errorf("expected printing role=operator, got %v", printing.Value)
+	if !rolesEqual(printing.Value, "operator") {
+		t.Errorf("expected printing roles=[operator], got %v", printing.Value)
 	}
-	if doors.Value != "3d_lab_pin" {
-		t.Errorf("expected doors role=3d_lab_pin, got %v", doors.Value)
+	if !rolesEqual(doors.Value, "3d_lab_pin") {
+		t.Errorf("expected doors roles=[3d_lab_pin], got %v", doors.Value)
 	}
+}
+
+// rolesEqual compares a decoded array-format roles claim against expected values.
+func rolesEqual(value interface{}, want ...string) bool {
+	list, ok := value.([]interface{})
+	if !ok || len(list) != len(want) {
+		return false
+	}
+	for i, w := range want {
+		if list[i] != w {
+			return false
+		}
+	}
+	return true
 }

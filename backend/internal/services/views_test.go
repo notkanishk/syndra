@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -46,39 +45,6 @@ func resetGovernanceDeps(t *testing.T) {
 	svcZitadelReachable = func(context.Context) bool { return false }
 	svcCountPendingDrift = func(context.Context) (int, error) { return 0, nil }
 	svcGetTopDrift = func(context.Context, int) ([]models.DriftItem, error) { return nil, nil }
-}
-
-func TestFormatRolesContract(t *testing.T) {
-	roles := []string{"admin", "viewer"}
-
-	gotDefault := formatRoles(roles, "array")
-	defaultRoles, ok := gotDefault.([]string)
-	if !ok {
-		t.Fatalf("expected []string for default format, got %T", gotDefault)
-	}
-	if !reflect.DeepEqual(defaultRoles, roles) {
-		t.Fatalf("default format mismatch: got %#v want %#v", defaultRoles, roles)
-	}
-
-	gotCSV := formatRoles(roles, "csv")
-	if gotCSV != "admin,viewer" {
-		t.Fatalf("csv mismatch: got %v", gotCSV)
-	}
-
-	gotSpace := formatRoles(roles, "space_delimited")
-	if gotSpace != "admin viewer" {
-		t.Fatalf("space_delimited mismatch: got %v", gotSpace)
-	}
-}
-
-func TestReadRolesFromClaims(t *testing.T) {
-	input := []interface{}{"admin", 12, "viewer", true}
-	got := readRoles(input)
-	want := []string{"admin", "viewer"}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("readRoles mismatch: got %#v want %#v", got, want)
-	}
 }
 
 // --- Governance tests ---
@@ -402,20 +368,6 @@ func TestExplainUserAccess_MultiHopDerivation(t *testing.T) {
 	}
 	if !foundP3 {
 		t.Fatalf("expected p3:r3 in derived roles after multi-hop, got projects: %v", view.Projects)
-	}
-}
-
-// --- Simulation (pure logic) ---
-
-func TestFormatRoles_UnknownType_FallsBackToArray(t *testing.T) {
-	roles := []string{"admin", "viewer"}
-	result := formatRoles(roles, "unknown_format_type")
-	got, ok := result.([]string)
-	if !ok {
-		t.Fatalf("expected []string for unknown format type, got %T", result)
-	}
-	if !reflect.DeepEqual(got, roles) {
-		t.Fatalf("expected %v, got %v", roles, got)
 	}
 }
 

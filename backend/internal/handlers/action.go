@@ -7,8 +7,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"time"
+
+	"mkauth/internal/claims"
 )
 
 // ActionV2UserRef is the subset of the Zitadel Actions v2 user block MkAuth reads.
@@ -61,12 +64,12 @@ const redisTimeout = 50 * time.Millisecond
 // Zitadel POSTs the function trigger payload (preaccesstoken or preuserinfo);
 // MkAuth returns the pre-compiled per-project claim envelope.
 //
-// Project resolution:
-//   - Zero unique projects in user_grants: emit empty append_claims.
-//   - One unique project: flat claim keys (preserves the spec's "Printing
-//     Portal only gets Printing roles" least-privilege scenario).
-//   - Multiple projects: namespaced keys "mkauth.<projectID>.<claim>" so
-//     claims from different projects cannot collide in the issued token.
+// Project resolution: every unique project in user_grants is shaped through
+// its own claim profiles and the results merged into one flat envelope. Keys
+// are operator-authored and validated unique across projects at save time, so
+// a multi-project token cannot collide with itself — the old
+// "mkauth.<projectID>." prefixing that guaranteed this is gone, along with the
+// unreadable keys it produced.
 //
 // Degraded behavior is resolved per-project via dbGetClaimFailureMode:
 //   - fail_closed (default): empty append_claims for that project
@@ -93,29 +96,78 @@ func HandleActionInject(w http.ResponseWriter, r *http.Request) {
 	}
 	projectIDs := dedupeNonEmpty(grantProjects)
 
-	switch len(projectIDs) {
-	case 0:
+	if len(projectIDs) == 0 {
 		log.Printf("[DATA PLANE] No project grants in request for user=%s function=%s", req.User.ID, req.Function)
 		jsonResponse(w, http.StatusOK, ActionV2Response{AppendClaims: []ActionV2Claim{}})
-	case 1:
-		jsonResponse(w, http.StatusOK, claimsForProject(r.Context(), req.User.ID, projectIDs[0], false))
-	default:
-		merged := ActionV2Response{AppendClaims: []ActionV2Claim{}}
-		for _, pid := range projectIDs {
-			resp := claimsForProject(r.Context(), req.User.ID, pid, true)
-			merged.AppendClaims = append(merged.AppendClaims, resp.AppendClaims...)
-		}
-		jsonResponse(w, http.StatusOK, merged)
+		return
 	}
+
+	perProject := make(map[string][]ActionV2Claim, len(projectIDs))
+	for _, pid := range projectIDs {
+		perProject[pid] = claimsForProject(r.Context(), req.User.ID, pid).AppendClaims
+	}
+
+	jsonResponse(w, http.StatusOK, ActionV2Response{
+		AppendClaims: mergeProjectClaims(projectIDs, perProject),
+	})
 }
 
-// claimsForProject fetches the pre-compiled claim map for a (user, project)
-// pair from Redis and converts it into the Zitadel Actions v2 append_claims
-// envelope. When namespace=true, every emitted key is prefixed with
-// "mkauth.<projectID>." so claims from different projects cannot collide
-// in the issued token. Degraded paths (Redis miss/timeout, malformed cache,
-// DB lookup failure) fall through to degradedResponse for that project.
-func claimsForProject(ctx context.Context, userID, projectID string, namespace bool) ActionV2Response {
+// mergeProjectClaims flattens per-project claim lists into one envelope,
+// disambiguating any key two projects both want.
+//
+// Configured keys cannot collide — they are validated unique across projects
+// at save time. What can collide is the BUILT-IN default: two projects nobody
+// has opened the Token format panel for both emit "roles", and a user holding
+// grants in both would otherwise receive one project's roles under a key the
+// other project's application is also reading. Prefixing the colliding keys
+// keeps both sets present and wrong-for-nobody, rather than silently dropping
+// one; the operator fixes it properly by naming the claims.
+func mergeProjectClaims(projectIDs []string, perProject map[string][]ActionV2Claim) []ActionV2Claim {
+	owners := map[string]int{}
+	for _, pid := range projectIDs {
+		seen := map[string]bool{}
+		for _, c := range perProject[pid] {
+			if !seen[c.Key] {
+				seen[c.Key] = true
+				owners[c.Key]++
+			}
+		}
+	}
+
+	out := make([]ActionV2Claim, 0, len(owners))
+	for _, pid := range projectIDs {
+		for _, c := range perProject[pid] {
+			if owners[c.Key] > 1 {
+				log.Printf("[DATA PLANE] Claim key %q is claimed by %d projects; namespacing project=%s. "+
+					"Give each project a distinct claim name in Token format.", c.Key, owners[c.Key], pid)
+				c.Key = fmt.Sprintf("mkauth.%s.%s", pid, c.Key)
+			}
+			out = append(out, c)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out
+}
+
+// claimsForProject reads the compiled access facts for a (user, project) pair
+// from Redis, shapes them through the project's operator-configured claim
+// profiles, and converts the result into the Zitadel Actions v2 append_claims
+// envelope.
+//
+// Shaping happens HERE, on read, not at compile time. A claim-name or format
+// edit therefore lands on the very next token for every user, instead of only
+// for those whose cache happened to be rebuilt afterwards.
+//
+// There is no key namespacing: claim keys are explicit, operator-owned, and
+// validated unique across projects at save time. The old
+// "mkauth.<projectID>.<claim>" prefixing existed to stop collisions between
+// per-project claim maps that all used the same generic key names — with
+// explicit keys the collision cannot arise, and the prefix only made the token
+// unreadable to the application that asked for a specific name.
+//
+// Degraded paths (Redis miss/timeout, malformed cache, DB lookup failure) fall
+// through to degradedResponse for that project.
+func claimsForProject(ctx context.Context, userID, projectID string) ActionV2Response {
 	cacheKey := fmt.Sprintf("mapping:%s:%s", userID, projectID)
 
 	redisCtx, cancel := context.WithTimeout(ctx, redisTimeout)
@@ -128,32 +180,96 @@ func claimsForProject(ctx context.Context, userID, projectID string, namespace b
 		} else {
 			log.Printf("[DATA PLANE] Cache miss for key=%s: %v", cacheKey, err)
 		}
-		return degradedResponse(ctx, projectID, namespace)
+		return degradedResponse(ctx, projectID)
 	}
 
-	var claims map[string]interface{}
-	if err := json.Unmarshal([]byte(val), &claims); err != nil {
+	var facts claims.Facts
+	if err := json.Unmarshal([]byte(val), &facts); err != nil {
 		log.Printf("[DATA PLANE] Malformed cache data for key=%s: %v", cacheKey, err)
-		return degradedResponse(ctx, projectID, namespace)
+		return degradedResponse(ctx, projectID)
+	}
+	if facts.ProjectID == "" {
+		facts.ProjectID = projectID
+	}
+	if facts.UserID == "" {
+		facts.UserID = userID
 	}
 
 	log.Printf("[DATA PLANE] Cache hit for key=%s", cacheKey)
-	return ActionV2Response{AppendClaims: claimsToEnvelope(claims, projectID, namespace)}
+	profiles := claimProfilesRead(ctx, projectID)
+	return ActionV2Response{AppendClaims: claimsToEnvelope(claims.Shape(profiles, facts))}
 }
 
-// claimsToEnvelope converts a raw claim map into the append_claims list.
-// When namespace=true, keys are prefixed with "mkauth.<projectID>." so a
-// multi-project response cannot have colliding claim keys across projects.
-func claimsToEnvelope(claims map[string]interface{}, projectID string, namespace bool) []ActionV2Claim {
-	out := make([]ActionV2Claim, 0, len(claims))
-	for k, v := range claims {
-		key := k
-		if namespace {
-			key = fmt.Sprintf("mkauth.%s.%s", projectID, k)
-		}
-		out = append(out, ActionV2Claim{Key: key, Value: v})
+// claimsToEnvelope converts a shaped claim map into the append_claims list,
+// key-sorted so a token's claim order is stable across issues (it makes
+// diffing two captured tokens during an incident possible).
+func claimsToEnvelope(shaped map[string]interface{}) []ActionV2Claim {
+	keys := make([]string, 0, len(shaped))
+	for k := range shaped {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	out := make([]ActionV2Claim, 0, len(shaped))
+	for _, k := range keys {
+		out = append(out, ActionV2Claim{Key: k, Value: shaped[k]})
 	}
 	return out
+}
+
+// claimShapeCacheKey is the Redis read-through key for a project's resolved
+// claim profiles. Written by claimProfilesRead, deleted by the claim-shaping
+// handlers on every save so an operator's edit is visible immediately rather
+// than up to one TTL later.
+func claimShapeCacheKey(projectID string) string {
+	return "claim_shape:" + projectID
+}
+
+// claimProfilesRead resolves the profile set for a project — the project
+// default plus every application override on it — via a Redis read-through
+// cache, so the data plane does not hit Postgres per token.
+//
+// Every failure path returns the built-in default profile rather than an empty
+// set: emitting the roles under the default key is a degraded token, emitting
+// nothing is a locked door.
+func claimProfilesRead(ctx context.Context, projectID string) []claims.Profile {
+	fallback := []claims.Profile{{
+		ProjectID:  projectID,
+		ClaimName:  claims.DefaultClaimName,
+		FormatType: claims.DefaultFormat,
+	}}
+
+	redisCtx, cancel := context.WithTimeout(ctx, redisTimeout)
+	defer cancel()
+
+	if raw, err := redisGetKey(redisCtx, claimShapeCacheKey(projectID)); err == nil {
+		var cached []claims.Profile
+		if jerr := json.Unmarshal([]byte(raw), &cached); jerr == nil {
+			if len(cached) == 0 {
+				return fallback
+			}
+			return cached
+		}
+		log.Printf("[DATA PLANE] Malformed claim shape cache for project=%s: %v", projectID, err)
+	}
+
+	profiles, err := dbResolveClaimProfiles(ctx, projectID)
+	if err != nil {
+		log.Printf("[DATA PLANE] Claim profile lookup failed for project=%s, using default shape: %v", projectID, err)
+		return fallback
+	}
+	if len(profiles) == 0 {
+		profiles = fallback
+	}
+
+	if encoded, jerr := json.Marshal(profiles); jerr == nil {
+		writeCtx, writeCancel := context.WithTimeout(context.WithoutCancel(ctx), redisTimeout)
+		defer writeCancel()
+		if serr := redisSetKey(writeCtx, claimShapeCacheKey(projectID), string(encoded), claimFailureModeCacheTTL()); serr != nil {
+			log.Printf("[DATA PLANE] Claim shape cache write failed for project=%s: %v", projectID, serr)
+		}
+	}
+	return profiles
 }
 
 // claimFailureModeCacheTTL returns the Redis TTL for the read-through cache
@@ -195,7 +311,7 @@ func claimFailureModeRead(ctx context.Context, projectID string) (string, map[st
 		log.Printf("[CLAIM-MODE-CACHE] malformed cached value for project=%s; refreshing from DB", projectID)
 	}
 
-	mode, claims, err := dbGetClaimFailureMode(ctx, projectID)
+	mode, minimalClaims, err := dbGetClaimFailureMode(ctx, projectID)
 	if err != nil {
 		log.Printf("[CLAIM-MODE-CACHE] DB read failed for project=%s; defaulting to fail_closed: %v", projectID, err)
 		return "fail_closed", nil, nil
@@ -204,7 +320,7 @@ func claimFailureModeRead(ctx context.Context, projectID string) (string, map[st
 	encoded, jerr := json.Marshal(struct {
 		Mode              string                 `json:"mode"`
 		MinimalSafeClaims map[string]interface{} `json:"minimal_safe_claims"`
-	}{Mode: mode, MinimalSafeClaims: claims})
+	}{Mode: mode, MinimalSafeClaims: minimalClaims})
 	if jerr == nil {
 		writeCtx, wcancel := context.WithTimeout(ctx, redisTimeout)
 		serr := redisSetClaimMode(writeCtx, projectID, string(encoded), claimFailureModeCacheTTL())
@@ -213,7 +329,7 @@ func claimFailureModeRead(ctx context.Context, projectID string) (string, map[st
 			log.Printf("[CLAIM-MODE-CACHE] cache write failed for project=%s: %v (non-fatal)", projectID, serr)
 		}
 	}
-	return mode, claims, nil
+	return mode, minimalClaims, nil
 }
 
 // degradedResponse returns the per-project fallback envelope when the Redis
@@ -222,10 +338,11 @@ func claimFailureModeRead(ctx context.Context, projectID string) (string, map[st
 // fail_closed (default): empty append_claims — applications must cope with
 // absent custom claims.
 // minimal_safe: the configured minimal claim map from the DB, wrapped in the
-// v2 envelope (namespacing preserved when namespace=true).
+// v2 envelope verbatim — it is an explicit operator-authored safety net, not
+// something the shaper should reinterpret.
 // DB lookup failure: defaulted to fail_closed and logged (handled inside
 // claimFailureModeRead).
-func degradedResponse(ctx context.Context, projectID string, namespace bool) ActionV2Response {
+func degradedResponse(ctx context.Context, projectID string) ActionV2Response {
 	mode, minimalClaims, _ := claimFailureModeRead(ctx, projectID)
 
 	switch mode {
@@ -234,7 +351,7 @@ func degradedResponse(ctx context.Context, projectID string, namespace bool) Act
 			minimalClaims = map[string]interface{}{}
 		}
 		log.Printf("[DATA PLANE] Degraded mode=minimal_safe for project=%s", projectID)
-		return ActionV2Response{AppendClaims: claimsToEnvelope(minimalClaims, projectID, namespace)}
+		return ActionV2Response{AppendClaims: claimsToEnvelope(minimalClaims)}
 	default:
 		log.Printf("[DATA PLANE] Degraded mode=fail_closed for project=%s", projectID)
 		return ActionV2Response{AppendClaims: []ActionV2Claim{}}

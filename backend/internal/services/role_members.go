@@ -1,0 +1,280 @@
+package services
+
+import (
+	"context"
+	"sort"
+	"strings"
+	"time"
+
+	"mkauth/internal/directory"
+	"mkauth/internal/models"
+)
+
+// RoleMembers answers "who can currently use the laser cutter?" — the reverse
+// of ExplainUserAccess, which only ever answered it one person at a time.
+//
+// Every row carries the access sources that produced it, because the screen's
+// whole job is to make each row's removal action name the thing being removed.
+// A generic "revoke role" against a person holding it three ways is either
+// ambiguous or destructive.
+
+// RoleMember is one holder of a (project, role) pair.
+type RoleMember struct {
+	User models.UserProfile `json:"user"`
+	// Reasons is ordered direct → bundle → mapping, the fixed reading order
+	// the Access source component uses everywhere.
+	Reasons []models.RoleReason `json:"reasons"`
+	// Since / Expires come from the direct grant when one exists.
+	Since   string `json:"since,omitempty"`
+	Expires string `json:"expires,omitempty"`
+	// GrantID is the direct_role_grants row id, present only for a direct
+	// source — it is what the removal endpoint takes.
+	GrantID string `json:"grant_id,omitempty"`
+}
+
+// RoleMembersView is the response for GET /projects/{id}/roles/{key}/members.
+type RoleMembersView struct {
+	ProjectID   string       `json:"project_id"`
+	ProjectName string       `json:"project_name"`
+	RoleKey     string       `json:"role_key"`
+	DisplayName string       `json:"display_name,omitempty"`
+	Description string       `json:"description,omitempty"`
+	Group       string       `json:"group,omitempty"`
+	ClonedFrom  string       `json:"cloned_from,omitempty"`
+	Members     []RoleMember `json:"members"`
+	// Counts per source, for the filter pills. A person held two ways is
+	// counted under both — the pills filter rows, they do not partition people.
+	DirectCount    int `json:"direct_count"`
+	BundleCount    int `json:"bundle_count"`
+	AutomaticCount int `json:"automatic_count"`
+}
+
+// reasonRank fixes the Direct → Via bundle → Automatic order.
+func reasonRank(kind string) int {
+	switch kind {
+	case "direct":
+		return 0
+	case "bundle":
+		return 1
+	case "mapping":
+		return 2
+	default:
+		return 3
+	}
+}
+
+// RoleMembers resolves every holder of one (project, role) pair.
+func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, error) {
+	snap, err := newAccessSnapshot(ctx)
+	if err != nil {
+		return RoleMembersView{}, err
+	}
+
+	view := RoleMembersView{
+		ProjectID:   projectID,
+		ProjectName: projectID,
+		RoleKey:     key,
+		Members:     []RoleMember{},
+	}
+	if name, nerr := directory.Default.ProjectName(ctx, projectID); nerr == nil && name != "" {
+		view.ProjectName = name
+	}
+
+	// Role metadata is best-effort: a role that exists only in Zitadel has no
+	// local row, and the members list must still render rather than 404. The
+	// UI states that scope limit rather than implying the list is exhaustive.
+	if role, rerr := svcDbGetRole(ctx, projectID, key); rerr == nil {
+		view.DisplayName = role.DisplayName
+		view.Description = role.Description
+		view.Group = role.Group
+		if role.ClonedFromProject != "" && role.ClonedFromRole != "" {
+			view.ClonedFrom = role.ClonedFromProject + " / " + role.ClonedFromRole
+		}
+	}
+
+	// Direct grants carry the grant id, timestamps and expiry that the role
+	// map does not — index them so a direct row can offer a real removal.
+	grantsByUser := map[string]models.DirectGrant{}
+	if grants, gerr := svcGetAllDirectGrants(ctx, false); gerr == nil {
+		for _, g := range grants {
+			if g.ProjectID == projectID && g.RoleKey == key {
+				grantsByUser[g.UserID] = g
+			}
+		}
+	}
+
+	for _, user := range snap.Users() {
+		roleMap, _, ferr := snap.For(user.ID)
+		if ferr != nil {
+			return RoleMembersView{}, ferr
+		}
+		role := roleMap[roleKey{projectID: projectID, roleKey: key}]
+		if role == nil {
+			continue
+		}
+
+		reasons := append([]models.RoleReason(nil), role.Reasons...)
+		sort.SliceStable(reasons, func(i, j int) bool {
+			return reasonRank(reasons[i].Kind) < reasonRank(reasons[j].Kind)
+		})
+
+		member := RoleMember{User: user, Reasons: reasons}
+		for _, reason := range reasons {
+			switch reason.Kind {
+			case "direct":
+				view.DirectCount++
+			case "bundle":
+				view.BundleCount++
+			case "mapping":
+				view.AutomaticCount++
+			}
+		}
+		if grant, ok := grantsByUser[user.ID]; ok {
+			member.GrantID = grant.ID
+			member.Since = grant.CreatedAt.UTC().Format("2006-01-02")
+			if grant.ExpiresAt != nil {
+				member.Expires = grant.ExpiresAt.UTC().Format("2006-01-02")
+			}
+		}
+		view.Members = append(view.Members, member)
+	}
+
+	sort.Slice(view.Members, func(i, j int) bool {
+		return strings.ToLower(view.Members[i].User.Name) < strings.ToLower(view.Members[j].User.Name)
+	})
+	return view, nil
+}
+
+// expiryHorizon is how far ahead "expiring soon" looks. Shared by the Today
+// summary and the sidebar indicators so a badge and the page it points at can
+// never disagree about what counts as soon.
+const expiryHorizon = 14 * 24 * time.Hour
+
+// Indicators is the compact badge payload the sidebar polls. Four integers, so
+// the rail never downloads every pending request object to render a "3".
+type Indicators struct {
+	PendingRequests    int  `json:"pending_requests"`
+	ExpiringGrants     int  `json:"expiring_grants"`
+	PendingPropagation int  `json:"pending_propagation"`
+	Drift              int  `json:"drift"`
+	ZitadelReachable   bool `json:"zitadel_reachable"`
+}
+
+// GovernanceIndicators counts the four badge signals directly, without
+// building the full GovernanceSummary payload.
+func GovernanceIndicators(ctx context.Context) (Indicators, error) {
+	out := Indicators{ZitadelReachable: true}
+
+	requests, err := svcGetAccessRequests(ctx, "pending")
+	if err != nil {
+		return Indicators{}, err
+	}
+	out.PendingRequests = len(requests)
+
+	expiring, err := svcGetExpiringDirectGrants(ctx, expiryHorizon)
+	if err != nil {
+		return Indicators{}, err
+	}
+	out.ExpiringGrants = len(expiring)
+
+	pending, err := svcCountPendingPropagations(ctx)
+	if err != nil {
+		return Indicators{}, err
+	}
+	out.PendingPropagation = pending
+
+	drift, err := svcCountPendingDrift(ctx)
+	if err != nil {
+		return Indicators{}, err
+	}
+	out.Drift = drift
+
+	// Only worth probing when there is something queued: the flag exists to
+	// explain why "Resume now" is disabled, and with an empty outbox there is
+	// nothing to resume.
+	if pending > 0 {
+		out.ZitadelReachable = svcZitadelReachable(ctx)
+	}
+	return out, nil
+}
+
+// DirectGrantRemoval reports what removing a direct grant actually did.
+//
+// Revoked and Retained exist so the caller can verify the promise the
+// confirmation dialog made: "they will lose this role" versus "they will still
+// hold this role via Lab Tech". A removal that claims retention and then
+// revokes upstream is the failure this type is here to make visible.
+type DirectGrantRemoval struct {
+	OutboxIDs []string `json:"outbox_ids"`
+	// Revoked lists "project/role" pairs that lost their last source and are
+	// queued for removal from the identity provider.
+	Revoked []string `json:"revoked_roles"`
+	// Retained lists pairs the person keeps because another source still
+	// covers them. Nothing is queued for these.
+	Retained []string `json:"retained_roles"`
+	Status   string   `json:"status"`
+}
+
+// DeleteDirectGrant removes one MkAuth direct grant and enqueues only the
+// access the person actually loses.
+//
+// The delta is computed the same way every other cascade computes it: the
+// effective-role closure before the deletion versus the closure after it, from
+// pre-mutation reads plus an in-memory simulation of the removal. A role still
+// carried by a bundle or produced by a mapping rule stays in `after` and is
+// never revoked; a rule-derived role this grant alone supported falls out of
+// `after` and is.
+//
+// Enqueuing an unconditional revoke — which is what this did before — removed
+// access upstream that the person demonstrably still held, contradicting the
+// dialog and taking the role away until the next compile restored it.
+//
+// This is deliberately NOT the Zitadel-side grant delete: that removes a
+// different object and leaves the MkAuth row behind, so the next cache compile
+// puts the access straight back. Deleting the ledger row is what actually ends
+// the access; the outbox rows are what carry it upstream.
+func DeleteDirectGrant(ctx context.Context, userID, grantID, actor string) (DirectGrantRemoval, error) {
+	rules, err := svcGetActiveMappingRules(ctx)
+	if err != nil {
+		return DirectGrantRemoval{}, err
+	}
+
+	before, err := userBaseHoldings(ctx, userID)
+	if err != nil {
+		return DirectGrantRemoval{}, err
+	}
+	after, err := userBaseHoldingsExcludingGrant(ctx, userID, grantID)
+	if err != nil {
+		return DirectGrantRemoval{}, err
+	}
+
+	afterClosure := effectiveClosure(after, rules)
+	_, revokes := closureDelta(effectiveClosure(before, rules), afterClosure)
+
+	// Retained is the dialog's exact claim: the role this grant carried, still
+	// effective afterwards because a bundle or a rule also covers it. Reported,
+	// never enqueued — it is precisely the role that must NOT be revoked.
+	retained := make([]string, 0, 1)
+	if target, found := directGrantRoleKey(ctx, userID, grantID); found && afterClosure[target] {
+		retained = append(retained, target.projectID+"/"+target.roleKey)
+	}
+
+	params := deltaParams(userID, nil, revokes, actor, "Direct access removal", "direct", grantID)
+
+	ids, err := svcDeleteDirectGrantAndEnqueue(ctx, actor, userID, grantID, params)
+	if err != nil {
+		return DirectGrantRemoval{}, err
+	}
+
+	revoked := make([]string, 0, len(revokes))
+	for _, key := range revokes {
+		revoked = append(revoked, key.projectID+"/"+key.roleKey)
+	}
+
+	return DirectGrantRemoval{
+		OutboxIDs: ids,
+		Revoked:   revoked,
+		Retained:  retained,
+		Status:    "pending",
+	}, nil
+}

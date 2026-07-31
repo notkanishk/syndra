@@ -30,10 +30,10 @@ func (s stubSource) FindApplication(context.Context, string) (models.Application
 }
 func (s stubSource) RoleKeysForProject(context.Context, string) ([]string, error) { return nil, nil }
 func (s stubSource) ProjectName(context.Context, string) (string, error)          { return "", nil }
-func (s stubSource) Tag() string                                                   { return s.tag }
-func (s stubSource) InvalidateAll()                                                {}
-func (s stubSource) InvalidateProject(string)                                      {}
-func (s stubSource) InvalidateUsers()                                              {}
+func (s stubSource) Tag() string                                                  { return s.tag }
+func (s stubSource) InvalidateAll()                                               {}
+func (s stubSource) InvalidateProject(string)                                     {}
+func (s stubSource) InvalidateUsers()                                             {}
 
 func withSystemDeps(t *testing.T, source directory.Source, configured, seeded bool) {
 	t.Helper()

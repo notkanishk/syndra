@@ -11,23 +11,56 @@ import (
 	"testing"
 
 	"github.com/redis/go-redis/v9"
+
+	"mkauth/internal/claims"
 )
 
 // resetActionDeps restores the injectable vars used by HandleActionInject and
 // degradedResponse. Stubs the claim_mode read-through cache vars to bypass
 // Redis (always miss → DB) so legacy tests that only configure
 // dbGetClaimFailureMode keep flowing through to the DB stub.
+//
+// The claim-shape read-through is stubbed the same way: Redis always misses
+// and dbResolveClaimProfiles returns the built-in default profile, so tests
+// that care about degraded behaviour rather than shaping stay short.
 func resetActionDeps(t *testing.T, origRedis func(context.Context, string) (string, error), origMode func(context.Context, string) (string, map[string]interface{}, error)) {
 	t.Helper()
 	origGetMode, origSetMode := redisGetClaimMode, redisSetClaimMode
+	origGetKey, origSetKey, origResolve := redisGetKey, redisSetKey, dbResolveClaimProfiles
 	redisGetClaimMode = func(context.Context, string) (string, error) { return "", redis.Nil }
 	redisSetClaimMode = func(context.Context, string, string, int) error { return nil }
+	redisGetKey = func(context.Context, string) (string, error) { return "", redis.Nil }
+	redisSetKey = func(context.Context, string, string, int) error { return nil }
+	dbResolveClaimProfiles = func(_ context.Context, projectID string) ([]claims.Profile, error) {
+		return []claims.Profile{{
+			ProjectID:  projectID,
+			ClaimName:  claims.DefaultClaimName,
+			FormatType: claims.DefaultFormat,
+		}}, nil
+	}
 	t.Cleanup(func() {
 		redisGetClaims = origRedis
 		dbGetClaimFailureMode = origMode
 		redisGetClaimMode = origGetMode
 		redisSetClaimMode = origSetMode
+		redisGetKey = origGetKey
+		redisSetKey = origSetKey
+		dbResolveClaimProfiles = origResolve
 	})
+}
+
+// factsJSON builds the cache body the compiler writes: facts, not claims.
+func factsJSON(userID, projectID string, roles ...string) string {
+	b, _ := json.Marshal(claims.Facts{
+		Roles:      roles,
+		UserID:     userID,
+		ProjectID:  projectID,
+		Email:      userID + "@makerspace.local",
+		Name:       "Test " + userID,
+		Team:       "Fabrication",
+		CompiledAt: "2026-07-30T11:04:00Z",
+	})
+	return string(b)
 }
 
 func decodeActionResponse(t *testing.T, rr *httptest.ResponseRecorder) ActionV2Response {
@@ -164,16 +197,23 @@ func TestHandleActionInject_DBOutage_DefaultsToFailClosed(t *testing.T) {
 	}
 }
 
-func TestHandleActionInject_CacheHit_SingleProject_FlatKeys(t *testing.T) {
+func TestHandleActionInject_CacheHit_UsesConfiguredClaimNameAndFormat(t *testing.T) {
 	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
 	resetActionDeps(t, origRedis, origMode)
 
 	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		return `{"x-groups":"admin,lab"}`, nil
+		return factsJSON("u1", "p1", "admin", "lab"), nil
 	}
 	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
 		t.Error("GetClaimFailureMode called on cache hit — should not happen")
 		return "fail_closed", nil, nil
+	}
+	dbResolveClaimProfiles = func(_ context.Context, projectID string) ([]claims.Profile, error) {
+		return []claims.Profile{{
+			ProjectID:  projectID,
+			ClaimName:  "x-groups",
+			FormatType: claims.FormatCSV,
+		}}, nil
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
@@ -187,31 +227,121 @@ func TestHandleActionInject_CacheHit_SingleProject_FlatKeys(t *testing.T) {
 	got := decodeActionResponse(t, rr)
 	claim, ok := claimByKey(got.AppendClaims, "x-groups")
 	if !ok {
-		t.Fatalf("cache hit: expected flat key x-groups (no namespace), got %v", got.AppendClaims)
+		t.Fatalf("expected the operator-configured claim key x-groups, got %v", got.AppendClaims)
 	}
 	if claim.Value != "admin,lab" {
-		t.Fatalf("cache hit: expected x-groups=admin,lab, got %v", claim.Value)
+		t.Fatalf("expected csv-formatted roles admin,lab, got %v", claim.Value)
 	}
 }
 
-func TestHandleActionInject_MultiProject_NamespacedKeys(t *testing.T) {
+// The token an operator previews and the token Zitadel receives must be shaped
+// by the same profile. This pins the half of that contract the data plane owns:
+// an attribute claim and a static claim configured on the profile both reach
+// the envelope, alongside the roles.
+func TestHandleActionInject_EmitsAttributeAndStaticClaims(t *testing.T) {
 	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
 	resetActionDeps(t, origRedis, origMode)
 
-	// Two distinct projects, both hit Redis. Returned keys MUST be namespaced
-	// so claims across projects cannot collide in the issued token.
+	redisGetClaims = func(ctx context.Context, key string) (string, error) {
+		return factsJSON("u1", "pLaser", "trained"), nil
+	}
+	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
+		t.Error("GetClaimFailureMode called on cache hit — should not happen")
+		return "fail_closed", nil, nil
+	}
+	dbResolveClaimProfiles = func(_ context.Context, projectID string) ([]claims.Profile, error) {
+		return []claims.Profile{{
+			ProjectID:       projectID,
+			ClaimName:       "mkauth.laser.roles",
+			FormatType:      claims.FormatArray,
+			AttributeClaims: map[string]string{"mkauth.laser.team": claims.AttrTeam},
+			StaticClaims:    map[string]any{"mkauth.tenant": "makerspace"},
+		}}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
+		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "pLaser", Roles: []string{"trained"}})))
+	rr := httptest.NewRecorder()
+	HandleActionInject(rr, req)
+
+	got := decodeActionResponse(t, rr)
+	roles, okRoles := claimByKey(got.AppendClaims, "mkauth.laser.roles")
+	team, okTeam := claimByKey(got.AppendClaims, "mkauth.laser.team")
+	tenant, okTenant := claimByKey(got.AppendClaims, "mkauth.tenant")
+	if !okRoles || !okTeam || !okTenant {
+		t.Fatalf("expected roles, attribute and static claims, got %v", got.AppendClaims)
+	}
+	if team.Value != "Fabrication" {
+		t.Errorf("expected team claim from cached facts, got %v", team.Value)
+	}
+	if tenant.Value != "makerspace" {
+		t.Errorf("expected static claim verbatim, got %v", tenant.Value)
+	}
+	list, ok := roles.Value.([]interface{})
+	if !ok || len(list) != 1 || list[0] != "trained" {
+		t.Errorf("expected array-formatted roles, got %#v", roles.Value)
+	}
+}
+
+// A project's token carries the project default AND every application
+// override, because the Actions v2 payload does not say which application the
+// token is for. Each app reads its own key.
+func TestHandleActionInject_EmitsProjectDefaultAndAppOverrides(t *testing.T) {
+	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
+	resetActionDeps(t, origRedis, origMode)
+
+	redisGetClaims = func(ctx context.Context, key string) (string, error) {
+		return factsJSON("u1", "pLaser", "trained", "maintainer"), nil
+	}
+	dbResolveClaimProfiles = func(_ context.Context, projectID string) ([]claims.Profile, error) {
+		return []claims.Profile{
+			{ProjectID: projectID, ClaimName: "mkauth.laser.roles", FormatType: claims.FormatArray},
+			{ProjectID: projectID, ApplicationID: "app_badge", ClaimName: "badge.roles", FormatType: claims.FormatCSV},
+		}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
+		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "pLaser", Roles: []string{"trained"}})))
+	rr := httptest.NewRecorder()
+	HandleActionInject(rr, req)
+
+	got := decodeActionResponse(t, rr)
+	if len(got.AppendClaims) != 2 {
+		t.Fatalf("expected both the default and the override key, got %v", got.AppendClaims)
+	}
+	badge, ok := claimByKey(got.AppendClaims, "badge.roles")
+	if !ok || badge.Value != "trained,maintainer" {
+		t.Fatalf("expected the override to apply its own csv format, got %v", got.AppendClaims)
+	}
+}
+
+func TestHandleActionInject_MultiProject_KeepsEachProjectsOwnKeys(t *testing.T) {
+	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
+	resetActionDeps(t, origRedis, origMode)
+
+	// Two distinct projects, both hit Redis. Each keeps the claim key its
+	// operator configured — no "mkauth.<projectID>." prefix, because keys are
+	// validated unique across projects at save time and an application that
+	// asked for "printing.roles" must receive exactly that.
 	redisGetClaims = func(ctx context.Context, key string) (string, error) {
 		switch key {
 		case "mapping:u1:pPrint":
-			return `{"role":"operator"}`, nil
+			return factsJSON("u1", "pPrint", "operator"), nil
 		case "mapping:u1:pDoor":
-			return `{"role":"keyholder"}`, nil
+			return factsJSON("u1", "pDoor", "keyholder"), nil
 		}
 		return "", fmt.Errorf("unexpected key: %s", key)
 	}
 	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
 		t.Errorf("GetClaimFailureMode called for project=%s on cache hit", projectID)
 		return "fail_closed", nil, nil
+	}
+	dbResolveClaimProfiles = func(_ context.Context, projectID string) ([]claims.Profile, error) {
+		return []claims.Profile{{
+			ProjectID:  projectID,
+			ClaimName:  projectID + ".roles",
+			FormatType: claims.FormatCSV,
+		}}, nil
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
@@ -226,10 +356,10 @@ func TestHandleActionInject_MultiProject_NamespacedKeys(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 	got := decodeActionResponse(t, rr)
-	printClaim, okP := claimByKey(got.AppendClaims, "mkauth.pPrint.role")
-	doorClaim, okD := claimByKey(got.AppendClaims, "mkauth.pDoor.role")
+	printClaim, okP := claimByKey(got.AppendClaims, "pPrint.roles")
+	doorClaim, okD := claimByKey(got.AppendClaims, "pDoor.roles")
 	if !okP || !okD {
-		t.Fatalf("multi-project: expected namespaced keys, got %v", got.AppendClaims)
+		t.Fatalf("multi-project: expected each project's own key, got %v", got.AppendClaims)
 	}
 	if printClaim.Value != "operator" || doorClaim.Value != "keyholder" {
 		t.Fatalf("multi-project: wrong values; got print=%v door=%v", printClaim.Value, doorClaim.Value)
@@ -244,7 +374,7 @@ func TestHandleActionInject_MultiProject_OneDegraded(t *testing.T) {
 	// only the pPrint claim — degraded projects MUST NOT block sibling projects.
 	redisGetClaims = func(ctx context.Context, key string) (string, error) {
 		if key == "mapping:u1:pPrint" {
-			return `{"role":"operator"}`, nil
+			return factsJSON("u1", "pPrint", "operator"), nil
 		}
 		return "", fmt.Errorf("redis: nil")
 	}
@@ -271,9 +401,10 @@ func TestHandleActionInject_MultiProject_OneDegraded(t *testing.T) {
 	if len(got.AppendClaims) != 1 {
 		t.Fatalf("expected exactly 1 claim (sibling should not be blocked), got %v", got.AppendClaims)
 	}
-	claim, ok := claimByKey(got.AppendClaims, "mkauth.pPrint.role")
-	if !ok || claim.Value != "operator" {
-		t.Fatalf("expected mkauth.pPrint.role=operator, got %v", got.AppendClaims)
+	claim, ok := claimByKey(got.AppendClaims, "roles")
+	list, isList := claim.Value.([]interface{})
+	if !ok || !isList || len(list) != 1 || list[0] != "operator" {
+		t.Fatalf("expected the healthy project's roles claim to survive, got %v", got.AppendClaims)
 	}
 }
 
@@ -317,7 +448,7 @@ func TestHandleActionInject_DuplicateProjectGrants_DedupedToFlatKeys(t *testing.
 		if key != "mapping:u1:p1" {
 			t.Errorf("unexpected cache key: %s", key)
 		}
-		return `{"role":"admin"}`, nil
+		return factsJSON("u1", "p1", "admin"), nil
 	}
 	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
 		t.Error("should not call failure mode on cache hit")
@@ -339,8 +470,10 @@ func TestHandleActionInject_DuplicateProjectGrants_DedupedToFlatKeys(t *testing.
 		t.Fatalf("expected exactly one Redis call after dedup, got %d", calls)
 	}
 	got := decodeActionResponse(t, rr)
-	if claim, ok := claimByKey(got.AppendClaims, "role"); !ok || claim.Value != "admin" {
-		t.Fatalf("expected flat role=admin (single-project fast path), got %v", got.AppendClaims)
+	claim, ok := claimByKey(got.AppendClaims, "roles")
+	list, isList := claim.Value.([]interface{})
+	if !ok || !isList || len(list) != 1 || list[0] != "admin" {
+		t.Fatalf("expected one deduped roles claim, got %v", got.AppendClaims)
 	}
 }
 
@@ -365,7 +498,7 @@ func TestHandleActionInject_UnknownFields_Accepted(t *testing.T) {
 	resetActionDeps(t, origRedis, origMode)
 
 	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		return `{"role":"admin"}`, nil
+		return factsJSON("u1", "p1", "admin"), nil
 	}
 	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
 		return "fail_closed", nil, nil
@@ -386,8 +519,10 @@ func TestHandleActionInject_UnknownFields_Accepted(t *testing.T) {
 		t.Fatalf("expected 200 with unknown fields accepted, got %d (body=%s)", rr.Code, rr.Body.String())
 	}
 	got := decodeActionResponse(t, rr)
-	if claim, ok := claimByKey(got.AppendClaims, "role"); !ok || claim.Value != "admin" {
-		t.Fatalf("expected role=admin, got %v", got.AppendClaims)
+	claim, ok := claimByKey(got.AppendClaims, "roles")
+	list, isList := claim.Value.([]interface{})
+	if !ok || !isList || len(list) != 1 || list[0] != "admin" {
+		t.Fatalf("expected roles=[admin], got %v", got.AppendClaims)
 	}
 }
 

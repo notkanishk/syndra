@@ -2,8 +2,11 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"mkauth/internal/models"
 )
@@ -190,4 +193,68 @@ func DeleteExpiredDirectGrantsByIDs(ctx context.Context, userID string, ids []st
 		deleted = append(deleted, g)
 	}
 	return deleted, nil
+}
+
+// ErrGrantNotFound is returned when the (user, grant) pair names no row. The
+// handler maps it to 404 rather than a generic 500 — an operator clicking
+// remove twice should be told the grant is already gone, not that the server
+// broke.
+var ErrGrantNotFound = errors.New("direct grant not found")
+
+// DeleteDirectGrantAndEnqueue removes one direct grant and enqueues the
+// caller-computed effective-access delta in a single transaction: ledger
+// delete, audit row, outbox rows.
+//
+// `params` is a DELTA, not "a revoke". The caller (services.DeleteDirectGrant)
+// computes the user's effective-role closure before and after the deletion, so
+// a role the person still holds through a bundle or a mapping rule produces no
+// revoke at all. Enqueuing an unconditional revoke here would contradict the
+// confirmation dialog's promise that the role is retained, and would take the
+// access away upstream until the next compile put it back.
+//
+// params may be empty — every role stayed covered — and the grant row is still
+// deleted. Nothing reaches Zitadel here; the drain does that later, from rows
+// that are already durable.
+//
+// This is the MkAuth-side delete. The Zitadel-side grant delete
+// (DELETE /zitadel/users/{id}/grants/{grantId}) removes a different object and
+// leaves this row behind, so the next cache compile would restore the access.
+func DeleteDirectGrantAndEnqueue(ctx context.Context, actor, userID, grantID string, params []EnqueueParams) ([]string, error) {
+	tx, err := PG.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin delete grant tx: %w", err)
+	}
+	defer tx.Rollback(ctx) // no-op after a successful Commit
+
+	// Delete and read back in one statement: the returned project/role are what
+	// the audit row names, and taking them from the deleted row makes the record
+	// provably about the grant that just went away.
+	const deleteGrant = `
+		DELETE FROM direct_role_grants
+		WHERE id = $1 AND user_id = $2
+		RETURNING zitadel_project_id, zitadel_role_key`
+	var projectID, roleKey string
+	if err := tx.QueryRow(ctx, deleteGrant, grantID, userID).Scan(&projectID, &roleKey); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrGrantNotFound
+		}
+		return nil, fmt.Errorf("delete direct grant %s: %w", grantID, err)
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
+		 VALUES ($1,$2,'direct_grant.removed',$3)`,
+		actor, userID, projectID+"/"+roleKey); err != nil {
+		return nil, fmt.Errorf("insert audit for grant %s: %w", grantID, err)
+	}
+
+	ids, err := enqueueCascadeRows(ctx, tx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit delete grant tx: %w", err)
+	}
+	return ids, nil
 }

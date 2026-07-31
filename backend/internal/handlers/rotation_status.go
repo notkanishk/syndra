@@ -16,10 +16,10 @@ const defaultRotationThresholdDays = 90
 // Env vars that feed the rotation-status endpoint.
 //
 //   - envActionKey           : the signing key itself. When unset the
-//                              backend is in dev-mode signature pass-through
-//                              and the rotation panel MUST reflect that —
-//                              otherwise a stale/lying "ok" would mask a
-//                              production misconfiguration.
+//     backend is in dev-mode signature pass-through
+//     and the rotation panel MUST reflect that —
+//     otherwise a stale/lying "ok" would mask a
+//     production misconfiguration.
 //   - envActionKeyRotatedAt  : RFC3339 UTC timestamp emitted by rotate.sh.
 //   - envActionKeyThresholdDays : integer; warn threshold.
 const (
@@ -33,10 +33,10 @@ const (
 //
 // Status ladder (highest precedence first):
 //   - disabled : ZITADEL_ACTION_SIGNING_KEY is unset. Signature verification
-//                is passing every Action request through unchecked; no
-//                rotation metric is meaningful until a real key is installed.
+//     is passing every Action request through unchecked; no
+//     rotation metric is meaningful until a real key is installed.
 //   - unknown  : key is installed, but rotation timestamp is unset, not
-//                RFC3339-parseable, or in the future (clock skew / typo).
+//     RFC3339-parseable, or in the future (clock skew / typo).
 //   - ok       : key installed, age < threshold
 //   - warn     : key installed, threshold <= age < 2*threshold
 //   - stale    : key installed, age >= 2*threshold

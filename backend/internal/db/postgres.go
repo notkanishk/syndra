@@ -6,11 +6,11 @@ import (
 	"log"
 	"os"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/golang-migrate/migrate/v4"
 	pgx5 "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 var PG *pgxpool.Pool

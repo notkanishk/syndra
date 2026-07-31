@@ -223,6 +223,21 @@ var (
 		return db.Redis.SetEx(ctx, "claim_mode:"+projectID, value, time.Duration(ttlSeconds)*time.Second).Err()
 	}
 
+	// Claim shaping. dbResolveClaimProfiles is the data plane's read of the
+	// operator-configured token shape; the Redis pair in front of it keeps that
+	// read off the token hot path, and redisDelKeys drops the cached shape the
+	// moment an operator saves so an edit is never one TTL late.
+	dbResolveClaimProfiles = services.ResolveClaimProfiles
+	redisGetKey            = func(ctx context.Context, key string) (string, error) {
+		return db.Redis.Get(ctx, key).Result()
+	}
+	redisSetKey = func(ctx context.Context, key, value string, ttlSeconds int) error {
+		return db.Redis.SetEx(ctx, key, value, time.Duration(ttlSeconds)*time.Second).Err()
+	}
+	redisDelKeys = func(ctx context.Context, keys ...string) error {
+		return db.Redis.Del(ctx, keys...).Err()
+	}
+
 	// Drift triage injectable vars (B2). The three action helpers are atomic
 	// claim+side-effect transactions (db.*AndEnqueue / db.MarkDriftExternalTx) —
 	// the drift handlers never resolve a drift row outside that transaction.

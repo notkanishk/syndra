@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"mkauth/internal/cache"
+	"mkauth/internal/claims"
 	"mkauth/internal/db"
 	"mkauth/internal/directory"
 	"mkauth/internal/models"
@@ -293,29 +293,62 @@ func SimulateApplication(ctx context.Context, appID, userID string) (models.Appl
 		return models.ApplicationSimulation{}, err
 	}
 
-	var claims map[string]interface{}
-	if err := json.Unmarshal([]byte(val), &claims); err != nil {
+	var facts claims.Facts
+	if err := json.Unmarshal([]byte(val), &facts); err != nil {
 		return models.ApplicationSimulation{}, err
 	}
-
-	rawRoles := readRoles(claims["roles"])
-	sort.Strings(rawRoles)
-
-	payload := map[string]interface{}{
-		"iss":     "https://auth.makerspace.local",
-		"sub":     user.ID,
-		"aud":     app.Name,
-		"source":  "mkauth-demo-simulator",
-		"project": app.ProjectID,
+	if facts.ProjectID == "" {
+		facts.ProjectID = app.ProjectID
 	}
-	payload[app.ClaimName] = formatRoles(rawRoles, app.FormatType)
+	if facts.UserID == "" {
+		facts.UserID = user.ID
+	}
+
+	rawRoles := append([]string(nil), facts.Roles...)
+	sort.Strings(rawRoles)
+	facts.Roles = rawRoles
+
+	// The preview is the data plane. Same profile resolution, same shaper, same
+	// facts — the only difference is that nothing is signed. Previously this
+	// function invented an {iss, sub, aud, source, project} envelope that the
+	// Actions v2 path never emitted, so the screen operators used to debug
+	// "my app isn't seeing the roles it expects" was showing them a token that
+	// did not exist.
+	profiles, err := ResolveClaimProfiles(ctx, app.ProjectID)
+	if err != nil {
+		return models.ApplicationSimulation{}, err
+	}
+	payload := claims.Shape(profiles, facts)
+
+	// Which of those keys does THIS application actually read? Everything else
+	// in the map belongs to a sibling application on the same project and is
+	// carried because Zitadel does not tell us which app the token is for.
+	own := ownedKeys(profiles, appID)
 
 	return models.ApplicationSimulation{
 		Application:  app,
 		User:         user,
 		RawRoles:     rawRoles,
 		CustomClaims: payload,
+		OwnedClaims:  own,
+		ClaimOwners:  emittedKeys(profiles),
 	}, nil
+}
+
+// ownedKeys lists the claim keys the given application reads: its own override
+// if it has one, otherwise the project default.
+func ownedKeys(profiles []claims.Profile, applicationID string) []string {
+	for _, p := range profiles {
+		if p.ApplicationID == applicationID {
+			return p.Keys()
+		}
+	}
+	for _, p := range profiles {
+		if p.ApplicationID == "" {
+			return p.Keys()
+		}
+	}
+	return []string{}
 }
 
 func ListProjects(ctx context.Context) ([]models.ProjectSummary, error) {
@@ -474,7 +507,7 @@ func governanceFromSnapshot(snap *accessSnapshot) (models.GovernanceSummary, err
 		return models.GovernanceSummary{}, err
 	}
 
-	expiring, err := svcGetExpiringDirectGrants(snap.ctx, 14*24*time.Hour)
+	expiring, err := svcGetExpiringDirectGrants(snap.ctx, expiryHorizon)
 	if err != nil {
 		return models.GovernanceSummary{}, err
 	}
@@ -863,33 +896,6 @@ func matchesUser(user models.UserProfile, query string) bool {
 		strings.Contains(strings.ToLower(user.Name), query) ||
 		strings.Contains(strings.ToLower(user.Email), query) ||
 		strings.Contains(strings.ToLower(user.Team), query)
-}
-
-func readRoles(value interface{}) []string {
-	raw, ok := value.([]interface{})
-	if !ok {
-		return nil
-	}
-
-	roles := make([]string, 0, len(raw))
-	for _, item := range raw {
-		role, ok := item.(string)
-		if ok {
-			roles = append(roles, role)
-		}
-	}
-	return roles
-}
-
-func formatRoles(roles []string, formatType string) interface{} {
-	switch formatType {
-	case "csv":
-		return strings.Join(roles, ",")
-	case "space_delimited":
-		return strings.Join(roles, " ")
-	default:
-		return roles
-	}
 }
 
 func ensureBundles(bundles []models.Bundle) []models.Bundle {
