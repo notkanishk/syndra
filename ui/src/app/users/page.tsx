@@ -1,14 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { BulkBar } from "@/components/people/BulkBar";
+import { BulkDialog } from "@/components/people/BulkDialog";
 import { ListStates, EmptyState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
+import {
+  ATTENTION_LABELS,
+  ATTENTION_VALUES,
+  applyFilters,
+  describeFilters,
+  hasAnyFilter,
+  isDeparted,
+  parseFilters,
+  serializeFilters,
+  type PeopleFilters,
+} from "@/lib/people-filters";
+import type { BulkOp } from "@/lib/queries/useBulkGrants";
+import { useProjects } from "@/lib/queries/useProjects";
+import { useRoleMembers } from "@/lib/queries/useRoleMembers";
 import { useUsers, type UserListEntry } from "@/lib/queries/useUsers";
 import { useDebounce } from "@/lib/useDebounce";
 import { daysUntil } from "@/lib/format";
@@ -23,26 +40,128 @@ const PAGE = 50;
  * directory: it carries the one thing about this person that might need you.
  * Everything else on the row is context for recognising the right human
  * quickly. Take that column away and this is a phone book.
+ *
+ * Two things layer on top of that, both off by default:
+ *
+ *   - **Filters live in the URL.** Every count elsewhere in the product links
+ *     here already narrowed, and the resulting view is shareable.
+ *   - **Bulk mode is a toggle.** Checkboxes, the selection bar, and every bulk
+ *     verb exist only while it is on. The default reading experience is
+ *     unchanged — a list you scan, not a form you operate.
  */
 export default function PeoplePage() {
-  const [query, setQuery] = useState("");
-  const [project, setProject] = useState("");
+  const router = useRouter();
+  const params = useSearchParams();
+
+  const filters = useMemo(() => parseFilters(new URLSearchParams(params.toString())), [params]);
+  const bulkMode = params.get("bulk") === "1";
+
+  // The search box is typed into, so it holds local state and syncs to the URL
+  // on a debounce — writing a history entry per keystroke would make the back
+  // button useless.
+  const [queryDraft, setQueryDraft] = useState(filters.q);
+  const debounced = useDebounce(queryDraft, 250);
   const [limit, setLimit] = useState(PAGE);
-  const debounced = useDebounce(query, 250);
-  const users = useUsers(debounced);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const [wholeFilter, setWholeFilter] = useState(false);
+  const [bulkOp, setBulkOp] = useState<BulkOp | null>(null);
 
-  const all = useMemo(() => users.data ?? [], [users.data]);
+  const users = useUsers(filters.q);
+  const projects = useProjects();
+  // A role filter is only meaningful inside a project, and membership comes
+  // from the role-members endpoint so "who holds this" cannot mean two
+  // different things on two screens.
+  const roleMembers = useRoleMembers(filters.role ? filters.project : "", filters.role);
 
-  // Project filter options come from the rows themselves — every project
-  // anybody actually holds a role in, which is the only set worth filtering by.
-  const projects = useMemo(
-    () => Array.from(new Set(all.flatMap((entry) => entry.key_projects))).sort(),
-    [all],
+  const setParams = useCallback(
+    (next: Partial<PeopleFilters>, extra: Record<string, string> = {}) => {
+      const merged = { ...filters, ...next };
+      const carried = bulkMode ? { bulk: "1", ...extra } : extra;
+      router.replace(`/users${serializeFilters(merged, carried)}`, { scroll: false });
+    },
+    [filters, bulkMode, router],
   );
 
-  const rows = project ? all.filter((entry) => entry.key_projects.includes(project)) : all;
+  useEffect(() => {
+    if (debounced !== filters.q) setParams({ q: debounced });
+    // Only the debounced draft should drive this; re-running on every filter
+    // change would fight the URL it just wrote.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debounced]);
+
+  const filterKey = `${filters.q}|${filters.project}|${filters.role}|${filters.bundle}|${filters.attention}`;
+
+  // Changing what the filter matches while a selection is live would silently
+  // re-aim the pending action at a different set of people. Drop it, and reset
+  // the page window with it.
+  useEffect(() => {
+    setLimit(PAGE);
+    setSelected(new Set());
+    setWholeFilter(false);
+  }, [filterKey]);
+
+  // Leaving bulk mode clears the selection, so re-entering never resumes a
+  // selection the operator has forgotten making.
+  useEffect(() => {
+    if (!bulkMode) {
+      setSelected(new Set());
+      setWholeFilter(false);
+    }
+  }, [bulkMode]);
+
+  const all = useMemo(() => users.data ?? [], [users.data]);
+  const holders = useMemo(() => {
+    if (!filters.role || !roleMembers.data) return null;
+    return new Set(roleMembers.data.members.map((member) => member.user.id));
+  }, [filters.role, roleMembers.data]);
+
+  const rows = useMemo(() => applyFilters(all, filters, holders), [all, filters, holders]);
   const visible = rows.slice(0, limit);
   const expiringSoon = all.filter((entry) => entry.expiring_count > 0).length;
+
+  const projectName = useMemo(
+    () => projects.data?.find((row) => row.project.id === filters.project)?.project.name ?? "",
+    [projects.data, filters.project],
+  );
+  const scope = describeFilters(filters, projectName);
+
+  const exitBulk = useCallback(() => {
+    router.replace(`/users${serializeFilters(filters)}`, { scroll: false });
+  }, [filters, router]);
+
+  useEffect(() => {
+    if (!bulkMode) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") exitBulk();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [bulkMode, exitBulk]);
+
+  function toggleOne(id: string) {
+    setWholeFilter(false);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const allSelected = rows.length > 0 && selected.size === rows.length;
+
+  function toggleAll() {
+    if (allSelected) {
+      setSelected(new Set());
+      setWholeFilter(false);
+      return;
+    }
+    // Selects everything matching the filter, not just the rendered page —
+    // otherwise selecting 214 people means paging four times first, which is
+    // the tedium this mode exists to remove.
+    setSelected(new Set(rows.map((entry) => entry.user.id)));
+    setWholeFilter(rows.length > visible.length);
+  }
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -51,49 +170,105 @@ export default function PeoplePage() {
         meta={
           all.length > 0
             ? `${all.length} ${all.length === 1 ? "account" : "accounts"}${
-                expiringSoon > 0
-                  ? ` · ${expiringSoon} with access expiring inside 30 days`
-                  : ""
+                expiringSoon > 0 ? ` · ${expiringSoon} with access expiring inside 30 days` : ""
               }`
             : undefined
         }
         actions={
           <>
             <Input
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setLimit(PAGE);
-              }}
+              value={queryDraft}
+              onChange={(event) => setQueryDraft(event.target.value)}
               // Role keys are searchable here because "who has `trained` in the
               // laser lab" gets typed on this page before anyone thinks to go
               // to Roles. The placeholder has to say so or nobody tries it.
               placeholder="Search name, email or role key…"
               aria-label="Search people by name, email or role key"
-              className="min-w-[260px]"
+              className="min-w-[240px]"
             />
             <Select
-              value={project}
-              onChange={(event) => {
-                setProject(event.target.value);
-                setLimit(PAGE);
-              }}
+              value={filters.project}
+              onChange={(event) => setParams({ project: event.target.value, role: "" })}
               aria-label="Filter by project"
-              className="w-[180px]"
+              className="w-[170px]"
             >
               <option value="">Any project</option>
-              {projects.map((name) => (
-                <option key={name} value={name}>
-                  {name}
+              {(projects.data ?? []).map((row) => (
+                <option key={row.project.id} value={row.project.id}>
+                  {row.project.name}
                 </option>
               ))}
             </Select>
+            <Select
+              value={filters.attention}
+              onChange={(event) =>
+                setParams({ attention: event.target.value as PeopleFilters["attention"] })
+              }
+              aria-label="Filter by what needs attention"
+              className="w-[190px]"
+            >
+              <option value="">Anything</option>
+              {ATTENTION_VALUES.map((value) => (
+                <option key={value} value={value}>
+                  {ATTENTION_LABELS[value]}
+                </option>
+              ))}
+            </Select>
+            <button
+              type="button"
+              onClick={() => (bulkMode ? exitBulk() : setParams({}, { bulk: "1" }))}
+              aria-pressed={bulkMode}
+              className={`rounded-pill border px-4 py-[7px] text-[13.5px] font-semibold transition-colors ${
+                bulkMode
+                  ? "border-accent-line bg-accent-soft text-accent-text"
+                  : "border-line-strong hover:bg-[var(--hover)]"
+              }`}
+            >
+              {bulkMode ? "Done selecting" : "Select"}
+            </button>
           </>
         }
       />
 
+      {(filters.role || filters.bundle) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {filters.role && (
+            <FilterChip
+              label={`Holding ${filters.role}${projectName ? ` in ${projectName}` : ""}`}
+              onClear={() => setParams({ role: "" })}
+            />
+          )}
+          {filters.bundle && (
+            <FilterChip
+              label={`In the ${filters.bundle} bundle`}
+              onClear={() => setParams({ bundle: "" })}
+            />
+          )}
+        </div>
+      )}
+
       <Card>
         <CardColumns>
+          {bulkMode && (
+            <span className="w-[26px]">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                // Indeterminate reads as "some, not all" without needing a
+                // third label nobody would parse in a header row.
+                ref={(node) => {
+                  if (node) node.indeterminate = selected.size > 0 && !allSelected;
+                }}
+                onChange={toggleAll}
+                aria-label={
+                  allSelected
+                    ? "Clear the selection"
+                    : `Select all ${rows.length} people matching this filter`
+                }
+                className="h-4 w-4 accent-[var(--accent)]"
+              />
+            </span>
+          )}
           <span className="w-[250px]">Person</span>
           <span className="w-[150px]">Team</span>
           <span className="w-[220px]">Bundles</span>
@@ -110,21 +285,19 @@ export default function PeoplePage() {
           skeleton={<RowSkeleton rows={6} label="Loading people" />}
           empty={
             <EmptyState
-              title={
-                debounced || project ? "Nobody matches that." : "There's nobody here yet."
-              }
+              title={hasAnyFilter(filters) ? "Nobody matches that." : "There's nobody here yet."}
               guidance={
-                debounced || project
+                hasAnyFilter(filters)
                   ? "Try a shorter search, part of an email address, or a role key."
                   : "People appear here once they exist in the identity provider."
               }
               action={
-                debounced || project
+                hasAnyFilter(filters)
                   ? {
-                      label: "Clear the search",
+                      label: "Clear the filters",
                       onClick: () => {
-                        setQuery("");
-                        setProject("");
+                        setQueryDraft("");
+                        router.replace(`/users${bulkMode ? "?bulk=1" : ""}`, { scroll: false });
                       },
                     }
                   : undefined
@@ -133,14 +306,18 @@ export default function PeoplePage() {
           }
         >
           {visible.map((entry) => (
-            <PersonRow key={entry.user.id} entry={entry} />
+            <PersonRow
+              key={entry.user.id}
+              entry={entry}
+              bulkMode={bulkMode}
+              selected={selected.has(entry.user.id)}
+              onToggle={() => toggleOne(entry.user.id)}
+            />
           ))}
 
           {rows.length > visible.length && (
             <div className="row-divider flex items-center gap-4 px-5 py-3.5">
-              <span className="text-[13.5px] text-faint">
-                {rows.length - visible.length} more
-              </span>
+              <span className="text-[13.5px] text-faint">{rows.length - visible.length} more</span>
               <button
                 type="button"
                 onClick={() => setLimit((current) => current + PAGE)}
@@ -152,27 +329,89 @@ export default function PeoplePage() {
           )}
         </ListStates>
       </Card>
+
+      {bulkMode && (
+        <BulkBar
+          count={selected.size}
+          scope={scope}
+          wholeFilter={wholeFilter}
+          visibleCount={visible.length}
+          onSelectVisibleOnly={() => {
+            setSelected(new Set(visible.map((entry) => entry.user.id)));
+            setWholeFilter(false);
+          }}
+          onClear={() => {
+            setSelected(new Set());
+            setWholeFilter(false);
+          }}
+          onAct={setBulkOp}
+        />
+      )}
+
+      {bulkOp && (
+        <BulkDialog
+          op={bulkOp}
+          userIds={Array.from(selected)}
+          scope={scope}
+          initial={{ projectId: filters.project, roleKey: filters.role }}
+          onClose={() => setBulkOp(null)}
+        />
+      )}
     </div>
   );
 }
 
-function PersonRow({ entry }: { entry: UserListEntry }) {
+/** A filter that has no dropdown of its own — arrived by link, cleared by hand. */
+function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <div className="flex items-center gap-2.5 self-start rounded-pill bg-tint-2 py-1.5 pl-4 pr-2.5 text-[13.5px]">
+      {label}
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={`Clear filter: ${label}`}
+        className="rounded-pill px-2 py-0.5 font-semibold text-muted transition-colors hover:text-ink"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+function PersonRow({
+  entry,
+  bulkMode,
+  selected,
+  onToggle,
+}: {
+  entry: UserListEntry;
+  bulkMode: boolean;
+  selected: boolean;
+  onToggle: () => void;
+}) {
   // A departed account still belongs in the list — it is often exactly who you
   // came looking for — but it reads at reduced contrast so a live person is
   // never mistaken for one who left.
   const departed = isDeparted(entry.user.status);
 
-  return (
-    <Link
-      href={`/users/${entry.user.id}`}
-      className={`row-divider flex items-center gap-[18px] px-5 py-3.5 transition-colors hover:bg-[var(--hover)] ${
-        departed ? "opacity-60" : ""
-      }`}
-    >
+  const body = (
+    <>
       <span className="flex w-[250px] min-w-0 items-center gap-3">
         <Avatar name={entry.user.name} />
         <span className="min-w-0">
-          <span className="block truncate text-[15px] font-semibold">{entry.user.name}</span>
+          {/* In bulk mode the row is a control, so the name becomes the only
+              link out — clicking anywhere else selects rather than navigates. */}
+          {bulkMode ? (
+            <Link
+              href={`/users/${entry.user.id}`}
+              onClick={(event) => event.stopPropagation()}
+              className="block truncate text-[15px] font-semibold hover:text-accent-text"
+            >
+              {entry.user.name}
+            </Link>
+          ) : (
+            <span className="block truncate text-[15px] font-semibold">{entry.user.name}</span>
+          )}
           <span className="block truncate text-[12.5px] text-faint">
             {entry.user.title || entry.user.email}
           </span>
@@ -193,14 +432,41 @@ function PersonRow({ entry }: { entry: UserListEntry }) {
         )}
       </span>
 
-      <span className="min-w-0 flex-1 truncate text-[14px] text-muted">
-        {describeAccess(entry)}
-      </span>
+      <span className="min-w-0 flex-1 truncate text-[14px] text-muted">{describeAccess(entry)}</span>
 
       <span className="w-[150px] text-right">
         <NeedsAttention entry={entry} />
       </span>
-    </Link>
+    </>
+  );
+
+  const shared = `row-divider flex items-center gap-[18px] px-5 py-3.5 transition-colors hover:bg-[var(--hover)] ${
+    departed ? "opacity-60" : ""
+  }`;
+
+  if (!bulkMode) {
+    return (
+      <Link href={`/users/${entry.user.id}`} className={shared}>
+        {body}
+      </Link>
+    );
+  }
+
+  return (
+    // A label rather than a div: the whole row becomes the checkbox's hit area
+    // for free, keyboard and screen reader included.
+    <label className={`${shared} cursor-pointer ${selected ? "bg-accent-soft/40" : ""}`}>
+      <span className="w-[26px]">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggle}
+          aria-label={`Select ${entry.user.name}`}
+          className="h-4 w-4 accent-[var(--accent)]"
+        />
+      </span>
+      {body}
+    </label>
   );
 }
 
@@ -241,9 +507,4 @@ function describeAccess(entry: UserListEntry): string {
   const roles = `${entry.effective_role_count} ${entry.effective_role_count === 1 ? "role" : "roles"}`;
   if (!entry.project_count) return roles;
   return `${roles} across ${entry.project_count} ${entry.project_count === 1 ? "project" : "projects"}`;
-}
-
-function isDeparted(status: string | undefined): boolean {
-  const value = (status ?? "").toLowerCase();
-  return value === "departed" || value === "inactive" || value === "alumni";
 }

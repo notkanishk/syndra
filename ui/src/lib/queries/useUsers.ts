@@ -20,7 +20,10 @@ export interface UserListEntry {
   bundle_names: string[];
   effective_role_count: number;
   project_count: number;
+  /** Project display names — what the row and the filter dropdown show. */
   key_projects: string[];
+  /** The same projects by id — what a shareable filter URL carries. */
+  key_project_ids: string[];
   /**
    * The "needs attention" trio. Each is rendered in the semantic colour it
    * belongs to — expiring amber, open requests accent, unexplained red — and
