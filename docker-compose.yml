@@ -33,7 +33,12 @@ services:
       - REDIS_URL=${REDIS_URL:-redis:6379}
       - PORT=${PORT:-8080}
       - MKAUTH_API_KEY=${MKAUTH_API_KEY:-dev_auth_token_secret}
-      - MKAUTH_SEED_DEMO=${MKAUTH_SEED_DEMO:-true}
+      # Deliberately has no compose-level default. Unset, the backend seeds
+      # only when no live Zitadel client came up — demo data locally, nothing
+      # in production. Defaulting to `true` here overrode that decision and
+      # seeded fixtures into live deployments whose .env simply didn't mention
+      # the variable. Set it explicitly to force either direction.
+      - MKAUTH_SEED_DEMO=${MKAUTH_SEED_DEMO:-}
       - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
       - MIGRATION_PATH=${MIGRATION_PATH:-file:///app/db/migrations}
       - ZITADEL_DOMAIN=${ZITADEL_DOMAIN:-}
