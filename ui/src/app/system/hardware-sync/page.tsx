@@ -3,6 +3,7 @@
 import { Badge, Mono } from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { CommandBlock } from "@/components/ui/CommandBlock";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { UserName } from "@/components/names";
 import { useIntents } from "@/lib/queries/useIntents";
@@ -59,6 +60,50 @@ export default function HardwareSyncPage() {
           Read the integration plan
         </ButtonLink>
       </div>
+
+      {/*
+        The sync container ships in docker-compose and refuses to start without
+        LLDAP credentials, so a deployment with no directory server has one
+        service restarting every sixty seconds forever. That looks like a fault
+        and is in fact the configured behaviour — worth saying out loud here,
+        because this is the only page in the product that has anything to do
+        with it.
+      */}
+      <Card>
+        <CardHeader
+          title="If the sync container is restarting"
+          note="Expected on any deployment without an LLDAP server. It is not a fault, and nothing else is affected."
+        />
+        <div className="flex flex-col gap-4 px-5 py-4">
+          <p className="max-w-[84ch] text-[14.5px] leading-[1.6]">
+            <Mono>mkauth_sync</Mono> exits at startup unless <Mono>LLDAP_BIND_DN</Mono> and{" "}
+            <Mono>LLDAP_BIND_PASSWORD</Mono> are both set, and Compose restarts it on a loop.
+            Nothing queues up and nothing is lost while it is down — the intents ledger is written
+            by the backend, and the sync service only reads from it.
+          </p>
+
+          <CommandBlock
+            command="docker compose logs --tail 20 sync"
+            caption="Confirm that is what you're looking at — the last line names the missing variable."
+          />
+
+          <CommandBlock
+            command="docker compose stop sync"
+            caption="If you have no LLDAP server, stop it. Leaving it looping buries real failures in restart noise."
+            steps={[
+              <>
+                When you do connect one, set <Mono>LLDAP_URL</Mono>, <Mono>LLDAP_BIND_DN</Mono>,{" "}
+                <Mono>LLDAP_BIND_PASSWORD</Mono> and <Mono>LLDAP_BASE_DN</Mono> in{" "}
+                <Mono>.env</Mono>.
+              </>,
+              <>
+                Bring it back with <Mono>docker compose up -d sync</Mono>. Any intents recorded in
+                the meantime are picked up on its first poll.
+              </>,
+            ]}
+          />
+        </div>
+      </Card>
 
       {/*
         Only rendered when the ledger genuinely holds rows. An empty table here
