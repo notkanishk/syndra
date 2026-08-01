@@ -1,18 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge, Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
+import {
+  RowCheckbox,
+  SelectAllCheckbox,
+  SelectionAction,
+  SelectionBar,
+} from "@/components/ui/SelectionBar";
+import { useRowSelection } from "@/lib/useRowSelection";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { FilterPills, Select } from "@/components/ui/Select";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProjectName, UserName } from "@/components/names";
+import { useApplyBulkDecision, useRehearseBulkDecision } from "@/lib/queries/useRequests";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import {
@@ -36,8 +45,17 @@ function OperatorQueue() {
   const requests = useRequestsAdmin(status);
   const decide = useDecideRequest();
   const [resolved, setResolved] = useState<Set<string>>(new Set());
+  const [bulkStatus, setBulkStatus] = useState<"approved" | "rejected" | null>(null);
 
-  const rows = (requests.data ?? []).filter((entry) => !resolved.has(entry.id));
+  const rows = useMemo(
+    () => (requests.data ?? []).filter((entry) => !resolved.has(entry.id)),
+    [requests.data, resolved],
+  );
+
+  // Only open requests can be decided, so only they can be selected — offering
+  // a checkbox on a settled row would be offering an action that cannot happen.
+  const openRows = useMemo(() => rows.filter((entry) => entry.status === "pending"), [rows]);
+  const selection = useRowSelection(useMemo(() => openRows.map((entry) => entry.id), [openRows]));
 
   async function act(entry: AccessRequest, next: "approved" | "rejected") {
     setResolved((prev) => new Set(prev).add(entry.id));
@@ -74,6 +92,26 @@ function OperatorQueue() {
       />
 
       <Card>
+        {openRows.length > 0 && (
+          <CardColumns>
+            <span className="w-[26px]">
+              <SelectAllCheckbox
+                label={
+                  selection.allSelected
+                    ? "Clear the selection"
+                    : `Select all ${openRows.length} open requests`
+                }
+                {...selection.headerCheckboxProps}
+              />
+            </span>
+            <span className="w-[170px]">Who</span>
+            <span className="w-[250px]">What they asked for</span>
+            <span className="flex-1">Why</span>
+            <span className="w-[66px]">When</span>
+            <span className="w-[150px] text-right">Decision</span>
+          </CardColumns>
+        )}
+        <div data-selection-scope {...selection.containerProps}>
         <ListStates
           isLoading={requests.isLoading}
           error={requests.error}
@@ -93,7 +131,23 @@ function OperatorQueue() {
           }
         >
           {rows.map((entry) => (
-            <div key={entry.id} className="row-divider flex items-center gap-[18px] px-5 py-3.5">
+            <div
+              key={entry.id}
+              className={`row-divider flex items-center gap-[18px] px-5 py-3.5 ${
+                selection.isSelected(entry.id) ? "bg-accent-soft/30" : ""
+              }`}
+              {...selection.rowProps(entry.id)}
+            >
+              {openRows.length > 0 && (
+                <span className="w-[26px]">
+                  {entry.status === "pending" ? (
+                    <RowCheckbox
+                      label="Select this request"
+                      {...selection.checkboxProps(entry.id)}
+                    />
+                  ) : null}
+                </span>
+              )}
               <Avatar name={undefined} />
               <div className="w-[170px] shrink-0 truncate text-[15px] font-semibold">
                 <UserName id={entry.requester_id} />
@@ -124,7 +178,28 @@ function OperatorQueue() {
             </div>
           ))}
         </ListStates>
+        </div>
       </Card>
+
+      <SelectionBar
+        count={selection.count}
+        noun={["request", "requests"]}
+        onClear={selection.clear}
+      >
+        <SelectionAction onClick={() => setBulkStatus("approved")}>Approve</SelectionAction>
+        <SelectionAction tone="danger" onClick={() => setBulkStatus("rejected")}>
+          Deny
+        </SelectionAction>
+      </SelectionBar>
+
+      {bulkStatus && (
+        <BulkDecisionDialog
+          status={bulkStatus}
+          ids={Array.from(selection.selected)}
+          onClose={() => setBulkStatus(null)}
+          onApplied={selection.clear}
+        />
+      )}
     </div>
   );
 }
@@ -293,5 +368,44 @@ function RequestDialog({ open, onClose }: { open: boolean; onClose: () => void }
         <Button onClick={onClose}>Cancel</Button>
       </ModalFooter>
     </Modal>
+  );
+}
+
+/**
+ * Deciding a batch of requests, rehearsed.
+ *
+ * The same dialog People opens for a bulk grant, because approving nine
+ * requests IS nine grants — the inbox framing is what makes that easy to
+ * forget, so the plan says it per row before anything is written.
+ */
+function BulkDecisionDialog({
+  status,
+  ids,
+  onClose,
+  onApplied,
+}: {
+  status: "approved" | "rejected";
+  ids: string[];
+  onClose: () => void;
+  onApplied: () => void;
+}) {
+  const rehearse = useRehearseBulkDecision();
+  const apply = useApplyBulkDecision();
+  const body = { ids, status };
+
+  return (
+    <RehearsalDialog
+      title={status === "approved" ? "Approve requests" : "Deny requests"}
+      lede=""
+      noun={["request", "requests"]}
+      destructive={false}
+      onRehearse={() => rehearse.mutateAsync(body)}
+      onApply={async () => {
+        const plan = await apply.mutateAsync(body);
+        onApplied();
+        return plan;
+      }}
+      onClose={onClose}
+    />
   );
 }

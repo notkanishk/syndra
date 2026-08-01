@@ -1,12 +1,22 @@
 "use client";
 
+import { useMemo, useState } from "react";
+
 import { toast } from "sonner";
 
 import { AccessSource } from "@/components/access/AccessSource";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { BulkDialog } from "@/components/people/BulkDialog";
 import { Card, CardColumns } from "@/components/ui/Card";
+import {
+  RowCheckbox,
+  SelectAllCheckbox,
+  SelectionAction,
+  SelectionBar,
+} from "@/components/ui/SelectionBar";
+import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProjectName, UserAvatar, UserName } from "@/components/names";
 import { useExpiringGrants, type ExpiringGrantRow } from "@/lib/queries/useExpiringAccess";
@@ -30,7 +40,23 @@ const EXTEND_DAYS = 90;
  */
 export default function ExpiringAccessPage() {
   const grants = useExpiringGrants(30);
-  const rows = [...(grants.data ?? [])].sort(sortBySoonest);
+  const rows = useMemo(() => [...(grants.data ?? [])].sort(sortBySoonest), [grants.data]);
+  // Extending is the only action on this queue, and it is the one that most
+  // obviously wants doing to a dozen rows at once.
+  const selection = useRowSelection(useMemo(() => rows.map((grant) => grant.id), [rows]));
+  const [extending, setExtending] = useState(false);
+
+  // The bulk endpoint extends by user, and it only ever touches grants that
+  // actually expire — which is every row on this screen.
+  const selectedUsers = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          rows.filter((grant) => selection.isSelected(grant.id)).map((grant) => grant.user_id),
+        ),
+      ),
+    [rows, selection],
+  );
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -41,6 +67,16 @@ export default function ExpiringAccessPage() {
 
       <Card>
         <CardColumns>
+          <span className="w-[26px]">
+            <SelectAllCheckbox
+              label={
+                selection.allSelected
+                  ? "Clear the selection"
+                  : `Select all ${rows.length} expiring grants`
+              }
+              {...selection.headerCheckboxProps}
+            />
+          </span>
           <span className="w-[210px]">Who</span>
           <span className="w-[260px]">What</span>
           <span className="w-[180px]">Granted</span>
@@ -49,6 +85,7 @@ export default function ExpiringAccessPage() {
           <span className="w-[110px] text-right">Action</span>
         </CardColumns>
 
+        <div data-selection-scope {...selection.containerProps}>
         <ListStates
           isLoading={grants.isLoading}
           error={grants.error}
@@ -67,10 +104,36 @@ export default function ExpiringAccessPage() {
             // Only the soonest row is emphasised. Amber is a deadline signal,
             // not a decoration for the whole table — paint every row and the
             // one that actually needs attention stops standing out.
-            <ExpiringRow key={grant.id} grant={grant} soonest={index === 0} />
+            <ExpiringRow key={grant.id} grant={grant} soonest={index === 0} selection={selection} />
           ))}
         </ListStates>
+        </div>
       </Card>
+
+      <SelectionBar
+        count={selection.count}
+        noun={["grant", "grants"]}
+        composition={
+          selectedUsers.length > 0
+            ? `${selectedUsers.length} ${selectedUsers.length === 1 ? "person" : "people"}`
+            : ""
+        }
+        onClear={selection.clear}
+      >
+        <SelectionAction onClick={() => setExtending(true)}>Extend</SelectionAction>
+      </SelectionBar>
+
+      {extending && (
+        <BulkDialog
+          op="extend"
+          userIds={selectedUsers}
+          scope="with access expiring"
+          onClose={() => {
+            setExtending(false);
+            selection.clear();
+          }}
+        />
+      )}
 
       <div className="flex flex-wrap gap-[18px]">
         <div className="card min-w-[320px] flex-1 px-5 py-4">
@@ -95,7 +158,15 @@ export default function ExpiringAccessPage() {
   );
 }
 
-function ExpiringRow({ grant, soonest }: { grant: ExpiringGrantRow; soonest: boolean }) {
+function ExpiringRow({
+  grant,
+  soonest,
+  selection,
+}: {
+  grant: ExpiringGrantRow;
+  soonest: boolean;
+  selection: RowSelection;
+}) {
   // Extending re-submits the grant with a later date: POST upserts on
   // (user, project, role) and overwrites expires_at, so this renews in place
   // rather than creating a duplicate.
@@ -106,8 +177,12 @@ function ExpiringRow({ grant, soonest }: { grant: ExpiringGrantRow; soonest: boo
     <div
       className={`row-divider flex flex-wrap items-center gap-[18px] px-5 py-3.5 ${
         soonest ? "border-l-[3px] border-warn bg-warn-soft" : "border-l-[3px] border-transparent"
-      }`}
+      } ${selection.isSelected(grant.id) ? "bg-accent-soft/30" : ""}`}
+      {...selection.rowProps(grant.id)}
     >
+      <span className="w-[26px]">
+        <RowCheckbox label="Select this expiring grant" {...selection.checkboxProps(grant.id)} />
+      </span>
       <span className="flex w-[210px] min-w-0 items-center gap-3">
         <UserAvatar id={grant.user_id} />
         <span className="truncate text-[15px] font-semibold">

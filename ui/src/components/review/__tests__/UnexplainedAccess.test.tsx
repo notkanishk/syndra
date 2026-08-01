@@ -8,10 +8,17 @@ import type { DriftTriageItem } from "@/lib/queries/useDrift";
 
 const drift = vi.hoisted(() => ({ data: [] as DriftTriageItem[] }));
 
-// What the bulk endpoints report back. Defaults to "everything worked"; the
-// partial-failure tests override it.
+// The plan the bulk endpoints return — the same shape every bulk surface in the
+// product returns, so the triage queue and the People page share one renderer.
 const bulk = vi.hoisted(() => ({
-  result: { attributed: 0, marked: 0, failed: 0, failed_ids: [] as string[] },
+  plan: {
+    op: "adopt",
+    applied: false,
+    outcomes: [] as Array<Record<string, unknown>>,
+    summary: { total: 0, apply: 0, no_change: 0, blocked: 0, failed: 0, succeeded: 0 },
+  },
+  rehearsals: 0,
+  applies: 0,
 }));
 
 const toasts = vi.hoisted(() => ({
@@ -38,12 +45,32 @@ vi.mock("@/lib/queries/useDrift", () => ({
   useAttributeDrift: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRevokeDrift: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useMarkExternalDrift: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRehearseAdoptDrift: () => ({
+    mutateAsync: async () => {
+      bulk.rehearsals += 1;
+      return bulk.plan;
+    },
+    isPending: false,
+  }),
+  useRehearseMarkExternalDrift: () => ({
+    mutateAsync: async () => {
+      bulk.rehearsals += 1;
+      return bulk.plan;
+    },
+    isPending: false,
+  }),
   useBulkAttributeDrift: () => ({
-    mutateAsync: async () => bulk.result,
+    mutateAsync: async () => {
+      bulk.applies += 1;
+      return { ...bulk.plan, applied: true };
+    },
     isPending: false,
   }),
   useBulkMarkExternalDrift: () => ({
-    mutateAsync: async () => bulk.result,
+    mutateAsync: async () => {
+      bulk.applies += 1;
+      return { ...bulk.plan, applied: true };
+    },
     isPending: false,
   }),
   useReconcileNow: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -80,7 +107,14 @@ function renderTriage() {
 
 beforeEach(() => {
   drift.data = [item()];
-  bulk.result = { attributed: 0, marked: 0, failed: 0, failed_ids: [] };
+  bulk.plan = {
+    op: "adopt",
+    applied: false,
+    outcomes: [],
+    summary: { total: 0, apply: 0, no_change: 0, blocked: 0, failed: 0, succeeded: 0 },
+  };
+  bulk.rehearsals = 0;
+  bulk.applies = 0;
   toasts.success = [];
   toasts.warning = [];
   toasts.error = [];
@@ -111,11 +145,64 @@ describe("Unexplained access — triage", () => {
 
   it("offers bulk adopt and bulk mark-external once rows are selected — and never bulk revoke", () => {
     renderTriage();
-    fireEvent.click(screen.getAllByRole("checkbox")[0]);
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
 
-    expect(screen.getByRole("button", { name: /Adopt 1 in MkAuth/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Mark 1 as owned elsewhere/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Revoke 1/ })).not.toBeInTheDocument();
+    const bar = screen.getByRole("region", { name: "Selection" });
+    expect(within(bar).getByRole("button", { name: "Adopt in MkAuth" })).toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "Mark as owned elsewhere" })).toBeInTheDocument();
+    expect(within(bar).queryByRole("button", { name: /Revoke/ })).not.toBeInTheDocument();
+  });
+
+  it("has a select-all that covers the whole queue, not the rendered page", () => {
+    drift.data = Array.from({ length: 20 }, (_, index) =>
+      item({ id: `d${index}`, user_id: `u${index}` }),
+    );
+    renderTriage();
+
+    // The queue pages at 12, but the queue is what you are triaging.
+    fireEvent.click(screen.getByRole("checkbox", { name: /Select all 20 unexplained items/ }));
+    expect(screen.getByText(/20 items selected/)).toBeInTheDocument();
+  });
+
+  it("extends a range on shift-click instead of making you tick each row", () => {
+    drift.data = Array.from({ length: 5 }, (_, index) =>
+      item({ id: `d${index}`, user_id: `u${index}` }),
+    );
+    renderTriage();
+
+    const boxes = screen.getAllByRole("checkbox").slice(1);
+    fireEvent.click(boxes[0]);
+    fireEvent.click(boxes[3], { shiftKey: true });
+    expect(screen.getByText(/4 items selected/)).toBeInTheDocument();
+  });
+
+  it("says what the selection is made of, not just how much of it there is", () => {
+    drift.data = [
+      item({ id: "d1", user_id: "u1", role_group: "Safety-gated" }),
+      item({ id: "d2", user_id: "u1", role_group: "Open bench" }),
+    ];
+    renderTriage();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Select all/ }));
+
+    // Safety-gated is what the queue's own ordering keys on, so it is what an
+    // operator needs before resolving several rows at once.
+    expect(screen.getByText(/1 safety-gated/)).toBeInTheDocument();
+    expect(screen.getByText(/1 person/)).toBeInTheDocument();
+  });
+
+  it("selects the whole cluster a drift row belongs to", () => {
+    drift.data = [
+      item({ id: "d1", user_id: "u1", project_id: "p1" }),
+      item({ id: "d2", user_id: "u1", project_id: "p9" }),
+      item({ id: "d3", user_id: "u7", project_id: "p1" }),
+      item({ id: "d4", user_id: "u7", project_id: "p9" }),
+    ];
+    renderTriage();
+
+    // Drift arrives in clusters — one rule, one person, one project — and no
+    // amount of shift-clicking finds the cluster as reliably as asking for it.
+    fireEvent.click(screen.getAllByRole("button", { name: "Select similar" })[0]);
+    expect(screen.getByText(/3 items selected/)).toBeInTheDocument();
   });
 
   it("names the upstream actor and date when the detector knew them", () => {
@@ -166,54 +253,84 @@ describe("Unexplained access — triage", () => {
   });
 });
 
-describe("Unexplained access — bulk resolution feedback", () => {
-  async function selectBothAndAdopt() {
+describe("Unexplained access — bulk resolution is rehearsed", () => {
+  function selectTwo() {
     drift.data = [item({ id: "d1" }), item({ id: "d2", user_id: "u2" })];
     renderTriage();
-    fireEvent.click(screen.getAllByRole("checkbox")[0]);
     fireEvent.click(screen.getAllByRole("checkbox")[1]);
-    fireEvent.click(screen.getByRole("button", { name: /Adopt 2 in MkAuth/ }));
-    // Wait for the mutation to settle: exactly one toast is raised per batch,
-    // whatever the outcome.
-    await waitFor(() => {
-      expect(toasts.success.length + toasts.warning.length + toasts.error.length).toBe(1);
-    });
+    fireEvent.click(screen.getAllByRole("checkbox")[2]);
   }
 
-  it("reports the count the server resolved, not the count that was selected", async () => {
-    bulk.result = { attributed: 1, marked: 0, failed: 1, failed_ids: ["d2"] };
-    await selectBothAndAdopt();
+  it("shows what would happen before anything is written", async () => {
+    bulk.plan = {
+      op: "adopt",
+      applied: false,
+      outcomes: [
+        { user_id: "d1", name: "Ada Lovelace", email: "u1", effect: "apply", detail: "Adopted into MkAuth (trained)." },
+        { user_id: "d2", name: "Sam Patel", email: "u2", effect: "no_change", detail: "Already resolved as adopted." },
+      ],
+      summary: { total: 2, apply: 1, no_change: 1, blocked: 0, failed: 0, succeeded: 0 },
+    };
+    selectTwo();
+    fireEvent.click(screen.getByRole("button", { name: "Adopt in MkAuth" }));
 
-    // The bug this pins: two selected, one resolved, and the operator told
-    // "2 adopted" — leaving one piece of unexplained access reported as handled.
-    expect(toasts.success).toHaveLength(0);
-    expect(toasts.warning.join(" ")).toMatch(/1 adopted in MkAuth/);
-    expect(toasts.warning.join(" ")).toMatch(/1 failed/);
+    // Rows are named, and the confirm button counts only what will change —
+    // offering "Apply to 2" when one is already resolved would be a lie.
+    expect(await screen.findByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByText(/Already resolved as adopted/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Apply to 1 item" })).toBeInTheDocument();
+    expect(bulk.applies).toBe(0);
   });
 
-  it("keeps the rows that failed selected so the retry is exactly those", async () => {
-    bulk.result = { attributed: 1, marked: 0, failed: 1, failed_ids: ["d2"] };
-    await selectBothAndAdopt();
+  it("does not write until the plan is confirmed", async () => {
+    bulk.plan = {
+      op: "adopt",
+      applied: false,
+      outcomes: [{ user_id: "d1", name: "Ada", email: "u1", effect: "apply", detail: "Adopted." }],
+      summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0 },
+    };
+    selectTwo();
+    fireEvent.click(screen.getByRole("button", { name: "Adopt in MkAuth" }));
 
-    expect(await screen.findByRole("button", { name: /Adopt 1 in MkAuth/ })).toBeInTheDocument();
+    await waitFor(() => expect(bulk.rehearsals).toBeGreaterThan(0));
+    expect(bulk.applies).toBe(0);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Apply to 1 item" }));
+    await waitFor(() => expect(bulk.applies).toBe(1));
   });
 
-  it("says nothing succeeded when nothing did", async () => {
-    bulk.result = { attributed: 0, marked: 0, failed: 2, failed_ids: ["d1", "d2"] };
-    await selectBothAndAdopt();
+  it("refuses to apply a plan that would change nothing", async () => {
+    bulk.plan = {
+      op: "adopt",
+      applied: false,
+      outcomes: [
+        { user_id: "d1", name: "Ada", email: "u1", effect: "no_change", detail: "Already resolved." },
+      ],
+      summary: { total: 1, apply: 0, no_change: 1, blocked: 0, failed: 0, succeeded: 0 },
+    };
+    selectTwo();
+    fireEvent.click(screen.getByRole("button", { name: "Adopt in MkAuth" }));
 
-    expect(toasts.success).toHaveLength(0);
-    expect(toasts.error.join(" ")).toMatch(/Nothing was adopted in MkAuth/);
+    expect(await screen.findByRole("button", { name: "Nothing to apply" })).toBeDisabled();
   });
 
-  it("clears the selection and celebrates only on a clean batch", async () => {
-    bulk.result = { attributed: 2, marked: 0, failed: 0, failed_ids: [] };
-    await selectBothAndAdopt();
+  it("reports what actually happened, per row, after applying", async () => {
+    bulk.plan = {
+      op: "adopt",
+      applied: false,
+      outcomes: [
+        { user_id: "d1", name: "Ada", email: "u1", effect: "apply", detail: "Adopted." },
+        { user_id: "d2", name: "Sam", email: "u2", effect: "apply", detail: "Adopted." },
+      ],
+      summary: { total: 2, apply: 2, no_change: 0, blocked: 0, failed: 0, succeeded: 0 },
+    };
+    selectTwo();
+    fireEvent.click(screen.getByRole("button", { name: "Adopt in MkAuth" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Apply to 2 items" }));
 
-    expect(toasts.success.join(" ")).toMatch(/2 adopted in MkAuth\./);
-    expect(toasts.warning).toHaveLength(0);
-    await waitFor(() => {
-      expect(screen.queryByRole("button", { name: /Adopt \d+ in MkAuth/ })).not.toBeInTheDocument();
-    });
+    // The result is a diff against the plan that was approved, not a fresh
+    // document with no relationship to it.
+    await waitFor(() => expect(bulk.applies).toBe(1));
+    expect(await screen.findByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 });

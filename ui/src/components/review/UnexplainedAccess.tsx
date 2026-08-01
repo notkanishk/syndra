@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
@@ -18,10 +18,19 @@ import {
   useDriftItems,
   useMarkExternalDrift,
   useReconcileNow,
+  useRehearseAdoptDrift,
+  useRehearseMarkExternalDrift,
   useRevokeDrift,
-  type BulkDriftResult,
   type DriftTriageItem,
 } from "@/lib/queries/useDrift";
+import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
+import {
+  RowCheckbox,
+  SelectAllCheckbox,
+  SelectionAction,
+  SelectionBar,
+} from "@/components/ui/SelectionBar";
+import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
 import { useReconciliationDiff } from "@/lib/queries/useGrants";
 import { Relative } from "@/components/ui/Time";
 import { formatLongDate, formatRelative } from "@/lib/format";
@@ -52,60 +61,63 @@ export function UnexplainedAccess() {
 
   const drift = useDriftItems();
   const reconcile = useReconcileNow();
-  const bulkAdopt = useBulkAttributeDrift();
-  const bulkExternal = useBulkMarkExternalDrift();
 
   const [pending, setPending] = useState<{ item: DriftTriageItem; resolution: Resolution } | null>(
     null,
   );
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [limit, setLimit] = useState(PAGE);
+  const [bulkOp, setBulkOp] = useState<"adopt" | "external" | null>(null);
 
   const items = useMemo(() => drift.data ?? [], [drift.data]);
   const visible = items.slice(0, limit);
+  // Selection spans the whole queue, not the rendered page: a triage backlog is
+  // exactly the case where paging four times before you can act is the tedium
+  // worth removing.
+  const selection = useRowSelection(useMemo(() => items.map((item) => item.id), [items]));
   const oldest = items.reduce<string | null>(
     (acc, item) => (!acc || item.detected_at < acc ? item.detected_at : acc),
     null,
   );
 
-  function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
+  const selectedIds = useMemo(() => Array.from(selection.selected), [selection.selected]);
 
   /**
-   * Report what the batch actually did, not what was asked of it.
-   *
-   * A bulk resolution can partially fail — a row somebody else triaged a second
-   * earlier, a write that did not land. Announcing the selected count regardless
-   * tells an operator that twelve items are handled when eleven are, and the
-   * twelfth is unexplained access nobody is going back to. The rows that failed
-   * stay selected, so the next click retries exactly those.
+   * Drift arrives in clusters — one misconfigured rule, one person onboarded by
+   * hand, one project nobody told MkAuth about. Selecting the cluster is the
+   * actual shape of the work, and no amount of shift-clicking finds it as
+   * reliably as asking for it.
    */
-  function reportBulk(result: BulkDriftResult, succeeded: number, verb: string) {
-    setSelected(new Set(result.failed_ids));
+  const selectSimilar = useCallback(
+    (item: DriftTriageItem) => {
+      const kin = items.filter(
+        (candidate) =>
+          candidate.user_id === item.user_id || candidate.project_id === item.project_id,
+      );
+      selection.selectOnly(kin.map((candidate) => candidate.id));
+    },
+    [items, selection],
+  );
 
-    if (result.failed === 0) {
-      toast.success(`${succeeded} ${verb}.`);
-      return;
-    }
-    if (succeeded === 0) {
-      toast.error(`Nothing was ${verb} — all ${result.failed} failed. They are still selected.`);
-      return;
-    }
-    toast.warning(
-      `${succeeded} ${verb}. ${result.failed} failed and ${
-        result.failed === 1 ? "is" : "are"
-      } still selected — somebody may have resolved ${
-        result.failed === 1 ? "it" : "them"
-      } first.`,
-    );
-  }
+  /**
+   * What the selection is made of, not just how much of it there is.
+   *
+   * Safety-gated access is what the queue's ordering already keys on, so it is
+   * what an operator needs to know before resolving twelve rows at once — a
+   * batch of twelve wiki roles and a batch containing three laser-cutter roles
+   * are not the same decision.
+   */
+  const composition = useMemo(() => {
+    if (selection.count === 0) return "";
+    const chosen = items.filter((item) => selection.selected.has(item.id));
+    const safety = chosen.filter((item) =>
+      (item.role_group ?? "").toLowerCase().includes("safety"),
+    ).length;
+    const people = new Set(chosen.map((item) => item.user_id)).size;
+    const parts = [`${people} ${people === 1 ? "person" : "people"}`];
+    if (safety > 0) parts.unshift(`${safety} safety-gated`);
+    return parts.join(" · ");
+  }, [items, selection]);
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -160,38 +172,18 @@ export function UnexplainedAccess() {
 
       {tab === "triage" ? (
         <>
-          {selected.size > 0 && (
-            <BulkBar
-              count={selected.size}
-              busy={bulkAdopt.isPending || bulkExternal.isPending}
-              onAdopt={async () => {
-                try {
-                  const result = await bulkAdopt.mutateAsync({
-                    ids: Array.from(selected),
-                    source: "external_backfill",
-                  });
-                  reportBulk(result, result.attributed ?? 0, "adopted in MkAuth");
-                } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "That didn't go through.");
-                }
-              }}
-              onMarkExternal={async () => {
-                try {
-                  const result = await bulkExternal.mutateAsync({
-                    ids: Array.from(selected),
-                    reason: "Marked in bulk from triage",
-                  });
-                  reportBulk(result, result.marked ?? 0, "marked as owned elsewhere");
-                } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "That didn't go through.");
-                }
-              }}
-            />
-          )}
-
           <Card>
             <CardColumns>
-              <span className="w-[18px]" />
+              <span className="w-[18px]">
+                <SelectAllCheckbox
+                  label={
+                    selection.allSelected
+                      ? "Clear the selection"
+                      : `Select all ${items.length} unexplained items`
+                  }
+                  {...selection.headerCheckboxProps}
+                />
+              </span>
               <span className="w-[186px]">Who</span>
               <span className="w-[250px]">What they can get into</span>
               <span className="flex-1">Why MkAuth can&rsquo;t explain it</span>
@@ -199,6 +191,7 @@ export function UnexplainedAccess() {
               <span className="w-[300px] text-right">Resolve</span>
             </CardColumns>
 
+            <div data-selection-scope {...selection.containerProps}>
             <ListStates
               isLoading={drift.isLoading}
               error={drift.error}
@@ -221,8 +214,8 @@ export function UnexplainedAccess() {
                   // safety-gated row were marked, the marking would stop
                   // meaning "start here".
                   leading={index === 0 && (item.role_group ?? "").toLowerCase().includes("safety")}
-                  checked={selected.has(item.id)}
-                  onToggle={() => toggle(item.id)}
+                  selection={selection}
+                  onSelectSimilar={() => selectSimilar(item)}
                   expanded={expanded === item.id}
                   onExpand={() => setExpanded((cur) => (cur === item.id ? null : item.id))}
                   onResolve={(resolution) => setPending({ item, resolution })}
@@ -244,7 +237,20 @@ export function UnexplainedAccess() {
                 </div>
               )}
             </ListStates>
+            </div>
           </Card>
+
+          <SelectionBar
+            count={selection.count}
+            noun={["item", "items"]}
+            composition={composition}
+            onClear={selection.clear}
+          >
+            <SelectionAction onClick={() => setBulkOp("adopt")}>Adopt in MkAuth</SelectionAction>
+            <SelectionAction onClick={() => setBulkOp("external")}>
+              Mark as owned elsewhere
+            </SelectionAction>
+          </SelectionBar>
 
           {/*
             The absence is stated on the screen, not only in a spec. An operator
@@ -273,50 +279,34 @@ export function UnexplainedAccess() {
       )}
 
       <ResolutionDialog pending={pending} onClose={() => setPending(null)} />
+
+      {bulkOp && (
+        <BulkResolutionDialog
+          op={bulkOp}
+          ids={selectedIds}
+          composition={composition}
+          onClose={() => setBulkOp(null)}
+          onApplied={selection.clear}
+        />
+      )}
     </div>
   );
 }
 
-function BulkBar({
-  count,
-  busy,
-  onAdopt,
-  onMarkExternal,
-}: {
-  count: number;
-  busy: boolean;
-  onAdopt: () => void;
-  onMarkExternal: () => void;
-}) {
-  return (
-    <div className="card flex flex-wrap items-center gap-3 px-5 py-3.5">
-      <span className="text-[14.5px] font-semibold">{count} selected</span>
-      <Button variant="accent" size="sm" isPending={busy} onClick={onAdopt}>
-        Adopt {count} in MkAuth
-      </Button>
-      <Button size="sm" isPending={busy} onClick={onMarkExternal}>
-        Mark {count} as owned elsewhere
-      </Button>
-      <span className="text-[13px] text-faint">
-        Bulk revoke is deliberately not offered — see below.
-      </span>
-    </div>
-  );
-}
 
 function TriageRow({
   item,
   leading,
-  checked,
-  onToggle,
+  selection,
+  onSelectSimilar,
   expanded,
   onExpand,
   onResolve,
 }: {
   item: DriftTriageItem;
   leading: boolean;
-  checked: boolean;
-  onToggle: () => void;
+  selection: RowSelection;
+  onSelectSimilar: () => void;
   expanded: boolean;
   onExpand: () => void;
   onResolve: (resolution: Resolution) => void;
@@ -329,13 +319,15 @@ function TriageRow({
 
   return (
     <div className={leading ? "border-l-[3px] border-danger" : "border-l-[3px] border-transparent"}>
-      <div className="row-divider flex flex-wrap items-center gap-[18px] px-5 py-3.5">
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={onToggle}
-          aria-label={`Select this item for bulk resolution`}
-          className="h-[18px] w-[18px] flex-none rounded-[5px] accent-[var(--accent)]"
+      <div
+        className={`row-divider flex flex-wrap items-center gap-[18px] px-5 py-3.5 ${
+          selection.isSelected(item.id) ? "bg-accent-soft/30" : ""
+        }`}
+        {...selection.rowProps(item.id)}
+      >
+        <RowCheckbox
+          label={`Select this unexplained grant`}
+          {...selection.checkboxProps(item.id)}
         />
 
         <button
@@ -390,6 +382,15 @@ function TriageRow({
           <Button size="sm" onClick={() => onResolve("external")}>
             Owned elsewhere
           </Button>
+          {/* Drift arrives in clusters, so the fastest way to select the ones
+              that belong together is to say so, not to hunt for them. */}
+          <button
+            type="button"
+            onClick={onSelectSimilar}
+            className="text-[12.5px] font-semibold text-muted underline-offset-2 transition-colors hover:text-accent-text hover:underline"
+          >
+            Select similar
+          </button>
         </div>
       </div>
 
@@ -745,5 +746,58 @@ function DiffSection({
         </div>
       ))}
     </>
+  );
+}
+
+/**
+ * Bulk adopt / bulk mark-as-external, rehearsed.
+ *
+ * The same dialog the People page opens for a bulk grant, because it is the
+ * same decision shape: see what would happen to every selected row, then apply
+ * it. Adopting writes ledger rows and marking-external suppresses future
+ * detection — neither is trivially undone from here, and a triage queue is
+ * exactly where an operator is moving fast.
+ */
+function BulkResolutionDialog({
+  op,
+  ids,
+  composition,
+  onClose,
+  onApplied,
+}: {
+  op: "adopt" | "external";
+  ids: string[];
+  composition: string;
+  onClose: () => void;
+  onApplied: () => void;
+}) {
+  const rehearseAdopt = useRehearseAdoptDrift();
+  const applyAdopt = useBulkAttributeDrift();
+  const rehearseExternal = useRehearseMarkExternalDrift();
+  const applyExternal = useBulkMarkExternalDrift();
+
+  const adoptBody = { ids, source: "external_backfill" as const };
+  const externalBody = { ids, reason: "Marked in bulk from triage" };
+
+  return (
+    <RehearsalDialog
+      title={op === "adopt" ? "Adopt in MkAuth" : "Mark as owned elsewhere"}
+      lede={composition}
+      noun={["item", "items"]}
+      onRehearse={() =>
+        op === "adopt"
+          ? rehearseAdopt.mutateAsync(adoptBody)
+          : rehearseExternal.mutateAsync(externalBody)
+      }
+      onApply={async () => {
+        const plan =
+          op === "adopt"
+            ? await applyAdopt.mutateAsync(adoptBody)
+            : await applyExternal.mutateAsync(externalBody);
+        onApplied();
+        return plan;
+      }}
+      onClose={onClose}
+    />
   );
 }

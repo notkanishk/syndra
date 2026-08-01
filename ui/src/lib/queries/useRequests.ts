@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import type { BulkPlan } from "@/lib/queries/useBulkGrants";
 
 export interface AccessRequest {
   id: string;
@@ -98,3 +99,38 @@ export function useDecideRequest() {
 }
 
 export const requestsQueryKeys = KEYS;
+
+/**
+ * Bulk approve / deny, rehearsed.
+ *
+ * Returns the same plan shape every other bulk surface returns, so the queue
+ * shares one renderer and one vocabulary with People and the drift triage.
+ * Approving in bulk has the least obvious blast radius on the product: each
+ * approval mints a direct grant, so "approve 9" is nine access changes wearing
+ * the clothes of an inbox action.
+ */
+export interface BulkDecisionInput {
+  ids: string[];
+  status: "approved" | "rejected";
+  review_note?: string;
+}
+
+function useBulkDecisionMutation(apply: boolean) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: BulkDecisionInput) =>
+      request<BulkPlan>(apply ? "/requests/bulk-decision?apply=true" : "/requests/bulk-decision", {
+        method: "POST",
+        body: input,
+      }),
+    onSuccess: () => {
+      if (!apply) return;
+      qc.invalidateQueries({ queryKey: ["requests"] });
+      qc.invalidateQueries({ queryKey: ["governance"] });
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
+  });
+}
+
+export const useRehearseBulkDecision = () => useBulkDecisionMutation(false);
+export const useApplyBulkDecision = () => useBulkDecisionMutation(true);

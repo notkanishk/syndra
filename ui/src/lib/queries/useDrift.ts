@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import type { BulkPlan } from "@/lib/queries/useBulkGrants";
 
 import { governanceQueryKeys, type DriftItem } from "./useGovernance";
 
@@ -57,56 +58,42 @@ export function useDriftItems(filter?: DriftFilter) {
 }
 
 /**
- * What a bulk resolution actually did.
+ * Bulk adopt / bulk mark-as-external, rehearsed.
  *
- * `failed_ids` names the rows that did NOT resolve, so the caller can keep
- * exactly those selected. A count alone leaves only bad options: re-send
- * everything and redo work that succeeded, or quietly drop the failures — and
- * the second one is how access nobody resolved gets reported as handled.
+ * Both return the same `BulkPlan` every other bulk surface returns, so the
+ * triage queue and the People page share one renderer and one vocabulary
+ * rather than each explaining "what will change" in its own words.
+ *
+ * There is still deliberately no bulk revoke: adopting and marking-external are
+ * reversible bookkeeping, but revoking removes real access from real machines,
+ * and reading twelve consequences at once is not something anyone actually
+ * does. Revoke stays one row, one dialog, one decision.
  */
-export interface BulkDriftResult {
-  /** Present on bulk-attribute. */
-  attributed?: number;
-  /** Present on bulk-mark-external. */
-  marked?: number;
-  failed: number;
-  failed_ids: string[];
-}
-
-function useBulkDriftMutation<B>(path: string) {
+function useBulkDriftMutation<B>(path: string, apply: boolean) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (body: B) => {
-      const raw = await request<Partial<BulkDriftResult>>(path, { method: "POST", body });
-      return {
-        attributed: raw?.attributed,
-        marked: raw?.marked,
-        failed: raw?.failed ?? 0,
-        failed_ids: Array.isArray(raw?.failed_ids) ? raw.failed_ids : [],
-      } satisfies BulkDriftResult;
-    },
+    mutationFn: (body: B) =>
+      request<BulkPlan>(apply ? `${path}?apply=true` : path, { method: "POST", body }),
     onSuccess: () => {
+      if (!apply) return;
       qc.invalidateQueries({ queryKey: ["drift"] });
       qc.invalidateQueries({ queryKey: governanceQueryKeys.summary });
     },
   });
 }
 
-/**
- * Bulk adopt / bulk mark-as-external. There is deliberately no bulk revoke:
- * adopting is reversible bookkeeping, but revoking removes real access from
- * real machines, and reading twelve consequences at once is not something
- * anyone actually does. Revoke stays one row, one dialog, one decision.
- */
-export const useBulkAttributeDrift = () =>
-  useBulkDriftMutation<{ ids: string[]; source: AttributionSource }>(
-    "/governance/drift/bulk-attribute",
-  );
+type AdoptBody = { ids: string[]; source: AttributionSource };
+type ExternalBody = { ids: string[]; reason: string };
 
+export const useRehearseAdoptDrift = () =>
+  useBulkDriftMutation<AdoptBody>("/governance/drift/bulk-attribute", false);
+export const useBulkAttributeDrift = () =>
+  useBulkDriftMutation<AdoptBody>("/governance/drift/bulk-attribute", true);
+
+export const useRehearseMarkExternalDrift = () =>
+  useBulkDriftMutation<ExternalBody>("/governance/drift/bulk-mark-external", false);
 export const useBulkMarkExternalDrift = () =>
-  useBulkDriftMutation<{ ids: string[]; reason: string }>(
-    "/governance/drift/bulk-mark-external",
-  );
+  useBulkDriftMutation<ExternalBody>("/governance/drift/bulk-mark-external", true);
 
 /**
  * Shared shape for the drift triage actions (attribute/revoke/mark-external):

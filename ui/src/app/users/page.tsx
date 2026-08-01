@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { BulkBar } from "@/components/people/BulkBar";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { ListStates, EmptyState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
@@ -12,6 +11,13 @@ import { Card, CardColumns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
+import {
+  RowCheckbox,
+  SelectAllCheckbox,
+  SelectionAction,
+  SelectionBar,
+} from "@/components/ui/SelectionBar";
+import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
 import {
   ATTENTION_LABELS,
   ATTENTION_VALUES,
@@ -62,7 +68,6 @@ export default function PeoplePage() {
   const [queryDraft, setQueryDraft] = useState(filters.q);
   const debounced = useDebounce(queryDraft, 250);
   const [limit, setLimit] = useState(PAGE);
-  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [wholeFilter, setWholeFilter] = useState(false);
   const [bulkOp, setBulkOp] = useState<BulkOp | null>(null);
 
@@ -96,17 +101,13 @@ export default function PeoplePage() {
   // the page window with it.
   useEffect(() => {
     setLimit(PAGE);
-    setSelected(new Set());
     setWholeFilter(false);
   }, [filterKey]);
 
   // Leaving bulk mode clears the selection, so re-entering never resumes a
   // selection the operator has forgotten making.
   useEffect(() => {
-    if (!bulkMode) {
-      setSelected(new Set());
-      setWholeFilter(false);
-    }
+    if (!bulkMode) setWholeFilter(false);
   }, [bulkMode]);
 
   const all = useMemo(() => users.data ?? [], [users.data]);
@@ -117,6 +118,8 @@ export default function PeoplePage() {
 
   const rows = useMemo(() => applyFilters(all, filters, holders), [all, filters, holders]);
   const visible = rows.slice(0, limit);
+  // Selection spans the whole filter, not the rendered page.
+  const selection = useRowSelection(useMemo(() => rows.map((entry) => entry.user.id), [rows]));
   const expiringSoon = all.filter((entry) => entry.expiring_count > 0).length;
 
   const projectName = useMemo(
@@ -138,29 +141,14 @@ export default function PeoplePage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [bulkMode, exitBulk]);
 
-  function toggleOne(id: string) {
-    setWholeFilter(false);
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  const allSelected = rows.length > 0 && selected.size === rows.length;
-
+  // Select-all covers every row matching the filter rather than the rendered
+  // page — otherwise selecting 214 people means paging four times first, which
+  // is the tedium this mode exists to remove. `wholeFilter` only remembers that
+  // it happened, so the bar can offer to narrow back to what is on screen.
   function toggleAll() {
-    if (allSelected) {
-      setSelected(new Set());
-      setWholeFilter(false);
-      return;
-    }
-    // Selects everything matching the filter, not just the rendered page —
-    // otherwise selecting 214 people means paging four times first, which is
-    // the tedium this mode exists to remove.
-    setSelected(new Set(rows.map((entry) => entry.user.id)));
-    setWholeFilter(rows.length > visible.length);
+    const wasAll = selection.allSelected;
+    selection.toggleAll();
+    setWholeFilter(!wasAll && rows.length > visible.length);
   }
 
   return (
@@ -251,21 +239,14 @@ export default function PeoplePage() {
         <CardColumns>
           {bulkMode && (
             <span className="w-[26px]">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                // Indeterminate reads as "some, not all" without needing a
-                // third label nobody would parse in a header row.
-                ref={(node) => {
-                  if (node) node.indeterminate = selected.size > 0 && !allSelected;
-                }}
+              <SelectAllCheckbox
+                {...selection.headerCheckboxProps}
                 onChange={toggleAll}
-                aria-label={
-                  allSelected
+                label={
+                  selection.allSelected
                     ? "Clear the selection"
                     : `Select all ${rows.length} people matching this filter`
                 }
-                className="h-4 w-4 accent-[var(--accent)]"
               />
             </span>
           )}
@@ -276,6 +257,7 @@ export default function PeoplePage() {
           <span className="w-[150px] text-right">Needs attention</span>
         </CardColumns>
 
+        <div data-selection-scope {...selection.containerProps}>
         <ListStates
           isLoading={users.isLoading}
           error={users.error}
@@ -310,8 +292,7 @@ export default function PeoplePage() {
               key={entry.user.id}
               entry={entry}
               bulkMode={bulkMode}
-              selected={selected.has(entry.user.id)}
-              onToggle={() => toggleOne(entry.user.id)}
+              selection={selection}
             />
           ))}
 
@@ -328,30 +309,41 @@ export default function PeoplePage() {
             </div>
           )}
         </ListStates>
+        </div>
       </Card>
 
       {bulkMode && (
-        <BulkBar
-          count={selected.size}
+        <SelectionBar
+          count={selection.count}
+          noun={["person", "people"]}
           scope={scope}
-          wholeFilter={wholeFilter}
+          wholeScope={wholeFilter}
           visibleCount={visible.length}
           onSelectVisibleOnly={() => {
-            setSelected(new Set(visible.map((entry) => entry.user.id)));
+            selection.selectOnly(visible.map((entry) => entry.user.id));
             setWholeFilter(false);
           }}
           onClear={() => {
-            setSelected(new Set());
+            selection.clear();
             setWholeFilter(false);
           }}
-          onAct={setBulkOp}
-        />
+        >
+          <SelectionAction onClick={() => setBulkOp("assign_role")}>Grant role</SelectionAction>
+          <SelectionAction onClick={() => setBulkOp("assign_bundle")}>Add to bundle</SelectionAction>
+          <SelectionAction onClick={() => setBulkOp("extend")}>Extend expiring</SelectionAction>
+          <SelectionAction tone="danger" onClick={() => setBulkOp("remove_bundle")}>
+            Remove bundle
+          </SelectionAction>
+          <SelectionAction tone="danger" onClick={() => setBulkOp("remove_role")}>
+            Remove role
+          </SelectionAction>
+        </SelectionBar>
       )}
 
       {bulkOp && (
         <BulkDialog
           op={bulkOp}
-          userIds={Array.from(selected)}
+          userIds={Array.from(selection.selected)}
           scope={scope}
           initial={{ projectId: filters.project, roleKey: filters.role }}
           onClose={() => setBulkOp(null)}
@@ -381,14 +373,13 @@ function FilterChip({ label, onClear }: { label: string; onClear: () => void }) 
 function PersonRow({
   entry,
   bulkMode,
-  selected,
-  onToggle,
+  selection,
 }: {
   entry: UserListEntry;
   bulkMode: boolean;
-  selected: boolean;
-  onToggle: () => void;
+  selection: RowSelection;
 }) {
+  const selected = selection.isSelected(entry.user.id);
   // A departed account still belongs in the list — it is often exactly who you
   // came looking for — but it reads at reduced contrast so a live person is
   // never mistaken for one who left.
@@ -455,14 +446,14 @@ function PersonRow({
   return (
     // A label rather than a div: the whole row becomes the checkbox's hit area
     // for free, keyboard and screen reader included.
-    <label className={`${shared} cursor-pointer ${selected ? "bg-accent-soft/40" : ""}`}>
+    <label
+      className={`${shared} cursor-pointer select-none ${selected ? "bg-accent-soft/40" : ""}`}
+      {...selection.rowProps(entry.user.id)}
+    >
       <span className="w-[26px]">
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={onToggle}
-          aria-label={`Select ${entry.user.name}`}
-          className="h-4 w-4 accent-[var(--accent)]"
+        <RowCheckbox
+          label={`Select ${entry.user.name}`}
+          {...selection.checkboxProps(entry.user.id)}
         />
       </span>
       {body}
