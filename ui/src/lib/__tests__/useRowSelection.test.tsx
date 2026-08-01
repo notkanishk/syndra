@@ -100,13 +100,49 @@ describe("useRowSelection — shift-click ranges", () => {
 });
 
 describe("useRowSelection — drag painting", () => {
+  /**
+   * A real drag moves the pointer, so the window pointermove fires too. The
+   * first version of these tests omitted it, which is exactly why the wobble
+   * regression below went unnoticed.
+   */
   function drag(from: string, through: string[]) {
     fireEvent.pointerDown(box(from), { button: 0, clientX: 0, clientY: 0 });
+    let y = 0;
     for (const id of through) {
+      y += 40;
+      fireEvent.pointerMove(window, { clientX: 0, clientY: y });
       fireEvent.pointerEnter(screen.getByTestId(`row-${id}`));
     }
     fireEvent.pointerUp(window);
   }
+
+  /** Pointer travel that crosses the threshold without ever leaving its row. */
+  function wobble(id: string) {
+    fireEvent.pointerDown(box(id), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(window, { clientX: 6, clientY: 3 });
+    fireEvent.pointerUp(window);
+  }
+
+  it("still toggles the row when the pointer wobbled but never left it", () => {
+    // Nobody presses a checkbox perfectly still. Treating "moved a few pixels"
+    // as a completed drag swallowed the click and the row did not toggle at all.
+    renderList();
+    wobble("b");
+    fireEvent.click(box("b"));
+    expect(selected()).toBe("b");
+  });
+
+  it("still paints the starting row when the drag began with a wobble", () => {
+    renderList();
+    fireEvent.pointerDown(box("a"), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(window, { clientX: 6, clientY: 3 });
+    fireEvent.pointerMove(window, { clientX: 6, clientY: 45 });
+    fireEvent.pointerEnter(screen.getByTestId("row-b"));
+    fireEvent.pointerUp(window);
+    // The wobble must not consume the "first row" bookkeeping, or the row the
+    // gesture started on is silently left out of the range it painted.
+    expect(selected()).toBe("a,b");
+  });
 
   it("paints the whole path, including the row it started on", () => {
     renderList();

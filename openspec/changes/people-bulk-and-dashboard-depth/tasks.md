@@ -59,10 +59,11 @@
 - [x] PBD-44 Adopted in People, drift triage, the request queue and Review › Expiring access. Expiring reuses the existing `grants/bulk` extend op — no new endpoint.
 - [x] PBD-45 "Select similar" on triage rows selects the cluster (same person or same project).
 - [x] PBD-46 Bulk revoke of drift stays absent, and the screen still says so.
+- [x] PBD-47 The drag tracks "moved past the threshold" and "has painted a row" separately. Conflating them meant the first pointermove marked the gesture complete before anything was painted: a wobble on a checkbox swallowed the click entirely, and — because a real pointer always moves before crossing into the next row — every drag silently omitted its starting row. The original tests missed it by never firing pointermove.
 
 ## Verification
 
 - [x] PBD-31 `go test ./... && go vet ./...` — backend green.
-- [x] PBD-32 `bun run test && bun run lint && bun run build` — UI green (243 tests).
+- [x] PBD-32 `bun run test && bun run lint && bun run build` — UI green (245 tests).
 - [ ] PBD-33 **Operator-gated:** sign in against the live Zitadel at `198.51.100.16` and confirm the header and Today greeting render the operator's name. This is the defect that started the change and it cannot be confirmed from a test — the fixture path never had the bug.
 - [ ] PBD-34 **Operator-gated:** run one bulk rehearsal against real data and confirm the per-person verdicts match what the individual screens say.
