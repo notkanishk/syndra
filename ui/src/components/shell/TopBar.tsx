@@ -61,7 +61,9 @@ export function TopBar({ session }: { session: SessionUser }) {
         >
           {session.avatar}
         </span>
-        <span className="text-[13.5px] text-muted">{session.name}</span>
+        {/* Email is the fallback, never the id: if every naming source came up
+            empty, an address still identifies a human. */}
+        <span className="text-[13.5px] text-muted">{session.name || session.email}</span>
       </span>
 
       <form action="/auth/logout" method="post">

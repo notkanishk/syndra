@@ -7,8 +7,8 @@ import {
   exchangeCodeForToken,
   extractSessionFields,
   fetchProfileMetadata,
-  nameToAvatar,
   parseJwtClaims,
+  resolveDisplayName,
   PKCE_COOKIE_NAME,
 } from "@/lib/oidc";
 import { createOidcSessionValue, SESSION_COOKIE_NAME, type OidcSessionCookie } from "@/lib/session";
@@ -127,13 +127,19 @@ export async function GET(request: Request): Promise<Response> {
   const backendUrl = process.env.BACKEND_URL || "http://backend:8080";
   const profile = await fetchProfileMetadata(tokenResponse.access_token, backendUrl);
 
+  // Name resolution is layered because no single source is reliable: the
+  // access token carries profile claims only if the Zitadel instance inlines
+  // userinfo, and /me/profile is authoritative but can be unreachable. The one
+  // thing that is never a name is `fields.userId`.
+  const displayName = resolveDisplayName(fields.name, profile.name, fields.email || profile.email);
+
   const payload: OidcSessionCookie = {
     type: "oidc",
     accessToken: tokenResponse.access_token,
     userId: fields.userId,
     role: fields.role,
-    name: fields.name || nameToAvatar(fields.userId), // fallback to derived string
-    email: fields.email,
+    name: displayName,
+    email: fields.email || profile.email,
     title: profile.title,
     team: profile.team,
     status: profile.status,

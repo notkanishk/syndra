@@ -181,12 +181,19 @@ export function extractSessionFields(
   adminRoleKey: string
 ): ExtractedSessionFields {
   const userId = typeof claims.sub === "string" ? claims.sub : "";
+  // Never fall back to `sub`. A Zitadel access token carries profile claims
+  // only when the instance is configured to inline userinfo; by default it
+  // carries none, so a `?? userId` fallback here silently turned every
+  // signed-in operator's display name into their opaque Zitadel id — in the
+  // shell header and in the Today greeting, the two places a name is most
+  // obviously a name. An empty string is the honest answer: the caller layers
+  // /me/profile behind it, which does know.
   const name =
-    typeof claims.name === "string"
+    typeof claims.name === "string" && claims.name.trim()
       ? claims.name
-      : typeof claims.preferred_username === "string"
+      : typeof claims.preferred_username === "string" && claims.preferred_username.trim()
         ? claims.preferred_username
-        : userId;
+        : "";
   const email = typeof claims.email === "string" ? claims.email : "";
   const expiresAt = typeof claims.exp === "number" ? claims.exp : 0;
 
@@ -222,6 +229,13 @@ export function nameToAvatar(name: string): string {
 // ---------------------------------------------------------------------------
 
 export interface ProfileMetadata {
+  /**
+   * The directory's own display name. Carried here because `/me/profile`
+   * already returns it and the token often doesn't — dropping it on the floor
+   * is what left the session holding a raw Zitadel id.
+   */
+  name: string;
+  email: string;
   title: string;
   team: string;
   status: string;
@@ -238,7 +252,7 @@ export async function fetchProfileMetadata(
   accessToken: string,
   backendUrl: string,
 ): Promise<ProfileMetadata> {
-  const empty: ProfileMetadata = { title: "", team: "", status: "active" };
+  const empty: ProfileMetadata = { name: "", email: "", title: "", team: "", status: "active" };
   try {
     const res = await fetch(`${backendUrl}/api/v1/me/profile`, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -247,6 +261,8 @@ export async function fetchProfileMetadata(
     if (!res.ok) return empty;
     const body = (await res.json()) as Partial<ProfileMetadata>;
     return {
+      name: typeof body.name === "string" ? body.name : "",
+      email: typeof body.email === "string" ? body.email : "",
       title: typeof body.title === "string" ? body.title : "",
       team: typeof body.team === "string" ? body.team : "",
       status: typeof body.status === "string" ? body.status : "active",
@@ -254,4 +270,33 @@ export async function fetchProfileMetadata(
   } catch {
     return empty;
   }
+}
+
+/**
+ * Last resort before giving up on a name: "kanishk.singh@example.edu" reads
+ * as "Kanishk Singh". Still a person's name rather than an opaque id, which is
+ * the whole point — a raw `sub` is never an acceptable display name.
+ */
+export function nameFromEmail(email: string): string {
+  const local = email.split("@")[0] ?? "";
+  if (!local.trim()) return "";
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+/**
+ * The display name for a session, in descending order of authority: the token
+ * said so, the directory said so, or the email implies it. Never the id.
+ * Returns "" when nothing knows — callers render an identity-less state rather
+ * than leaking the subject id into the UI.
+ */
+export function resolveDisplayName(
+  claimName: string,
+  profileName: string,
+  email: string,
+): string {
+  return claimName.trim() || profileName.trim() || nameFromEmail(email);
 }
