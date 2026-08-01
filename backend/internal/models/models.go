@@ -156,6 +156,12 @@ type UserListItem struct {
 	EffectiveRoleCount int         `json:"effective_role_count"`
 	ProjectCount       int         `json:"project_count"`
 	KeyProjects        []string    `json:"key_projects"`
+	// KeyProjectIDs is the same set addressed by id rather than display name.
+	// Names are what an operator reads; ids are what a link can carry without
+	// breaking when a project is renamed, and what a role-scoped filter needs
+	// to be exact. Both are sent because the People filter shows one and
+	// matches on the other.
+	KeyProjectIDs []string `json:"key_project_ids"`
 
 	// Needs attention. Each is a count so the UI can render the semantic
 	// colour it belongs to: expiring is amber, open requests accent,

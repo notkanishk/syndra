@@ -184,15 +184,18 @@ func listUsersFromSnapshot(snap *accessSnapshot, query string, attention attenti
 		}
 
 		keyProjects := make([]string, 0, len(roleMap))
+		keyProjectIDs := make([]string, 0, len(roleMap))
 		seenProjects := make(map[string]bool)
 		for _, role := range roleMap {
-			if seenProjects[role.ProjectName] {
+			if seenProjects[role.ProjectID] {
 				continue
 			}
-			seenProjects[role.ProjectName] = true
+			seenProjects[role.ProjectID] = true
 			keyProjects = append(keyProjects, role.ProjectName)
+			keyProjectIDs = append(keyProjectIDs, role.ProjectID)
 		}
 		sort.Strings(keyProjects)
+		sort.Strings(keyProjectIDs)
 
 		bundleNames := make([]string, 0, len(bundles))
 		for _, b := range bundles {
@@ -207,6 +210,7 @@ func listUsersFromSnapshot(snap *accessSnapshot, query string, attention attenti
 			EffectiveRoleCount: len(roleMap),
 			ProjectCount:       len(keyProjects),
 			KeyProjects:        keyProjects,
+			KeyProjectIDs:      keyProjectIDs,
 			ExpiringCount:      attention.expiring[user.ID],
 			OpenRequestCount:   attention.requests[user.ID],
 			UnexplainedCount:   attention.unexplained[user.ID],
