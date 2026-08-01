@@ -16,7 +16,13 @@ func handleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	logs, err := db.GetAuditLogs(r.Context(), limit)
+	// `user_id` narrows the tail to one person's involvement — actor or target.
+	// Without it a person's Activity tab would have to client-filter the global
+	// tail, which silently truncates: an account whose last action fell outside
+	// the most recent 200 rows would render as "nothing ever happened".
+	userID := r.URL.Query().Get("user_id")
+
+	logs, err := db.GetAuditLogsForUser(r.Context(), userID, limit)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return

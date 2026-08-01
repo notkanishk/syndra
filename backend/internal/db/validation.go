@@ -111,10 +111,29 @@ func hasCycleWithRules(rules []models.MappingRule, sourceProject, sourceRole, ta
 
 // GetAuditLogs retrieves the most recent audit log entries.
 func GetAuditLogs(ctx context.Context, limit int) ([]models.AuditLog, error) {
-	query := `SELECT id, actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, created_at 
-	          FROM audit_logs ORDER BY created_at DESC LIMIT $1;`
+	return GetAuditLogsForUser(ctx, "", limit)
+}
 
-	rows, err := PG.Query(ctx, query, limit)
+// GetAuditLogsForUser returns the audit tail, optionally narrowed to one person.
+//
+// "Involved in" deliberately means actor OR target: a person's activity is both
+// what they did and what was done to them, and splitting those into two feeds
+// would make a grant look like it happened to nobody. An empty userID returns
+// the unfiltered tail, which is what the global audit page wants.
+func GetAuditLogsForUser(ctx context.Context, userID string, limit int) ([]models.AuditLog, error) {
+	query := `SELECT id, actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, created_at
+	          FROM audit_logs ORDER BY created_at DESC LIMIT $1;`
+	args := []any{limit}
+
+	if userID != "" {
+		query = `SELECT id, actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, created_at
+		         FROM audit_logs
+		         WHERE actor_zitadel_user_id = $1 OR target_zitadel_user_id = $1
+		         ORDER BY created_at DESC LIMIT $2;`
+		args = []any{userID, limit}
+	}
+
+	rows, err := PG.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
