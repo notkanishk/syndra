@@ -48,9 +48,21 @@
 - [x] PBD-36 Activity tab and the audit-trail link are operator-only. The route serves a member their own record, and `/audit` is operator-gated — a member was being offered two controls whose only possible outcome was a 403. Requests stays available to both, because that endpoint accepts self-reads.
 - [x] PBD-37 The lookup queue drops settled ids so the next batch proceeds, and answers accumulate across batches. Previously the queue kept settled ids and re-sliced the same first 256 forever; anything past the ceiling never resolved, and the accumulator bug would have discarded earlier batches even once it did.
 
+## Track 5 — One selection model, one rehearsal
+
+- [x] PBD-38 `lib/useRowSelection.ts` — select-all across scope, shift-range from an anchor that resets, paint-from-anchor drag with threshold and no auto-scroll, Space/Shift+Arrow/`a`/`Esc`.
+- [x] PBD-39 The drag paints its starting row on the second row it reaches, not on pointerdown, so a press that never moves stays a click — and the trailing click is suppressed so it doesn't undo the first row.
+- [x] PBD-40 `SelectionBar` docked at the bottom with a composition line; the triage bar no longer pushes the list down when the first row is ticked.
+- [x] PBD-41 `PlanReview` + `RehearsalDialog` extracted; `BulkDialog` reduced to its compose step.
+- [x] PBD-42 Drift bulk-attribute and bulk-mark-external rehearse by default, return `BulkPlan`, and report rows somebody else already resolved as no-change rather than rewriting them.
+- [x] PBD-43 `POST /api/v1/requests/bulk-decision` — rehearses, then applies through the extracted `resolveOneAccessRequest` so bulk and single decisions cannot diverge. Approving without an attributable reviewer is refused.
+- [x] PBD-44 Adopted in People, drift triage, the request queue and Review › Expiring access. Expiring reuses the existing `grants/bulk` extend op — no new endpoint.
+- [x] PBD-45 "Select similar" on triage rows selects the cluster (same person or same project).
+- [x] PBD-46 Bulk revoke of drift stays absent, and the screen still says so.
+
 ## Verification
 
 - [x] PBD-31 `go test ./... && go vet ./...` — backend green.
-- [x] PBD-32 `bun run test && bun run lint && bun run build` — UI green (216 tests).
+- [x] PBD-32 `bun run test && bun run lint && bun run build` — UI green (243 tests).
 - [ ] PBD-33 **Operator-gated:** sign in against the live Zitadel at `198.51.100.16` and confirm the header and Today greeting render the operator's name. This is the defect that started the change and it cannot be confirmed from a test — the fixture path never had the bug.
 - [ ] PBD-34 **Operator-gated:** run one bulk rehearsal against real data and confirm the per-person verdicts match what the individual screens say.
