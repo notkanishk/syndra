@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
+import { CommandBlock } from "@/components/ui/CommandBlock";
 import { request } from "@/lib/api-client";
 
 interface SystemMode {
@@ -14,6 +15,15 @@ interface SystemMode {
    * on the screen distinguishes them.
    */
   seed_active?: boolean;
+  /**
+   * How many stored rows still reference a demo fixture, whichever process
+   * wrote them. This is the number that matters: `seed_active` goes false the
+   * moment MKAUTH_SEED_DEMO is unset and the backend restarts, while every row
+   * the seeder already wrote stays in the database and keeps being served.
+   */
+  seed_residue?: number;
+  /** The command that clears the residue, supplied by the backend. */
+  reset_command?: string;
   zitadel_configured?: boolean;
   degraded?: boolean;
   reason?: string;
@@ -41,12 +51,19 @@ export function DegradedBanner() {
   // Two different lies, two different banners.
   //
   // `degraded` means the directory itself fell back — every person, project and
-  // role on screen is fiction. `seed_active` alongside a live directory means
-  // something narrower and easier to miss: real people and projects, with demo
-  // bundles, rules and audit rows seeded underneath them. The second case used
-  // to show nothing at all, which is how fixture data ends up being read as
-  // production state.
-  const seededOverLive = Boolean(data?.seed_active) && data?.directory === "zitadel";
+  // role on screen is fiction. The second case is narrower and much easier to
+  // miss: real people and projects, with demo bundles, rules and audit rows
+  // sitting underneath them.
+  //
+  // That second case keys off `seed_residue`, not `seed_active`, and the
+  // difference is the whole point. `seed_active` reports whether THIS process
+  // seeded. An operator who notices demo data, sets MKAUTH_SEED_DEMO=false and
+  // restarts gets a backend that stops seeding, keeps serving every row it
+  // already seeded, and now reports itself as clean — the banner disappearing
+  // reads as confirmation that the fix worked. Counting the rows is the only
+  // signal that survives the restart.
+  const residue = data?.seed_residue ?? 0;
+  const seededOverLive = residue > 0 && data?.directory === "zitadel";
 
   if (!data?.degraded && !seededOverLive) return null;
 
@@ -74,13 +91,27 @@ export function DegradedBanner() {
         ) : (
           <>
             <div className="font-display text-[19px] font-bold">
-              Demo data is seeded into this deployment.
+              {residue} rows here came from the demo seeder.
             </div>
-            <p className="max-w-[70ch] text-[14px] font-medium">
-              People and projects are real, but some bundles, rules and audit entries were created
-              by the demo seeder and nothing on screen distinguishes them. Unset MKAUTH_SEED_DEMO
-              and restart before treating any of this as a record.
+            <p className="max-w-[74ch] text-[14px] font-medium">
+              People and projects are real. Some bundles, rules, grants and audit entries are
+              fixtures, and nothing else on screen tells them apart.{" "}
+              {data?.seed_active
+                ? "Seeding is still switched on, so a restart would put back anything you delete — set MKAUTH_SEED_DEMO=false first."
+                : "Seeding is already off, so these are leftovers from an earlier run; turning the flag off never removed the rows it had already written."}
             </p>
+            <div className="mt-3 max-w-[86ch]">
+              <CommandBlock
+                tone="onWarn"
+                command={data?.reset_command ?? "make reset-demo-data"}
+                caption="Run this on the deployment host. It prints what it would delete and stops — add APPLY=1 to commit."
+                steps={[
+                  "Only rows referencing a demo fixture go. Real people, real projects and every decision you actually made stay exactly as they are.",
+                  "Nothing upstream is touched. Zitadel keeps whatever it holds; the next reconciliation sweep reports anything unaccounted for as unexplained access.",
+                  "For a genuine blank slate instead — no bundles, no rules, no history — use make reset-all-data APPLY=1.",
+                ]}
+              />
+            </div>
           </>
         )}
       </div>
