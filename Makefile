@@ -1,4 +1,4 @@
-.PHONY: dev dev-backend dev-ui test test-backend test-ui lint lint-backend lint-ui zitadel-actions-register zitadel-actions-verify zitadel-actions-verify-events zitadel-actions-remove zitadel-actions-purge zitadel-actions-rotate-key
+.PHONY: dev dev-backend dev-ui test test-backend test-ui lint lint-backend lint-ui zitadel-actions-register zitadel-actions-verify zitadel-actions-verify-events zitadel-actions-remove zitadel-actions-purge zitadel-actions-rotate-key reset-demo-data reset-all-data
 
 dev-backend:
 	cd backend && go run ./cmd/api
@@ -24,6 +24,23 @@ lint-ui:
 	cd ui && bun run lint
 
 lint: lint-backend lint-ui
+
+# --- Starting state ---
+# Both targets are DRY RUN by default: they print per-table counts and delete
+# nothing. Append APPLY=1 to commit, which then asks for typed confirmation.
+#
+#   make reset-demo-data           # what would go
+#   make reset-demo-data APPLY=1   # remove only rows referencing demo fixtures
+#   make reset-all-data APPLY=1    # truncate every operator table — blank slate
+#
+# Neither touches Zitadel. Clearing MkAuth's ledger does not revoke anything
+# upstream; the next reconciliation sweep re-detects those grants as
+# unexplained access, which is how they get re-adopted deliberately.
+reset-demo-data:
+	@scripts/reset-data.sh demo $(if $(APPLY),--apply)
+
+reset-all-data:
+	@scripts/reset-data.sh all $(if $(APPLY),--apply)
 
 # --- Zitadel Actions v2 deployment (see zitadel/actions/README.md) ---
 # Requires env: ZITADEL_DOMAIN, MKAUTH_EXTERNAL_URL, and either

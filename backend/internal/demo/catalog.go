@@ -154,6 +154,33 @@ func Applications() []models.ApplicationCatalog {
 	return slices.Clone(applications)
 }
 
+// ProjectIDs and UserIDs are the fingerprint of the demo seeder.
+//
+// Every row EnsureDemoData writes references one of these — a bundle role on
+// `printing`, a mapping rule into `doors`, an assignment to `sam_student`. Real
+// Zitadel ids are numeric snowflakes, so a stored `wiki` or `leo_mentor` in a
+// live deployment can only have come from the seeder.
+//
+// This exists because MKAUTH_SEED_DEMO answers the wrong question. It says
+// whether THIS process seeded; it says nothing about rows a previous process
+// left behind. An operator who sets it to false and restarts gets a backend
+// that reports no demo data while still serving all of it.
+func ProjectIDs() []string {
+	ids := make([]string, 0, len(projects))
+	for _, project := range projects {
+		ids = append(ids, project.ID)
+	}
+	return ids
+}
+
+func UserIDs() []string {
+	ids := make([]string, 0, len(users))
+	for _, user := range users {
+		ids = append(ids, user.ID)
+	}
+	return ids
+}
+
 func FindUser(userID string) (models.UserProfile, bool) {
 	for _, user := range users {
 		if user.ID == userID {
