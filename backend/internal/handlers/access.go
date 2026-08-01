@@ -238,16 +238,38 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	request, err := dbGetAccessRequestByID(r.Context(), requestID)
-	if err != nil {
+	switch err := resolveOneAccessRequest(r.Context(), requestID, status, reviewer, req.ReviewNote); {
+	case err == nil:
+		jsonResponse(w, http.StatusOK, map[string]string{"message": "Request resolved"})
+	case errors.Is(err, errRequestNotFound):
 		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
-		return
+	case errors.Is(err, errRequestAlreadyResolved):
+		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RESOLVED", err.Error())
+	default:
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+	}
+}
+
+var (
+	errRequestNotFound        = errors.New("access request not found")
+	errRequestAlreadyResolved = errors.New("access request is already resolved")
+)
+
+// resolveOneAccessRequest is the decision itself, with no HTTP in it.
+//
+// Extracted so the bulk endpoint runs exactly this code rather than a second
+// implementation of it. The sequence below — conditional transaction, race
+// guard, cache rebuild, inline drain — is the part that must not diverge: a
+// second copy that drifted would leave requests approved but ungranted, which
+// re-surfaces later as mkauth_only drift and is diagnosed by nobody.
+func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, reviewNote string) error {
+	request, err := dbGetAccessRequestByID(ctx, requestID)
+	if err != nil {
+		return fmt.Errorf("%w: %s", errRequestNotFound, err.Error())
 	}
 
 	if request.Status == "approved" || request.Status == "rejected" {
-		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RESOLVED",
-			fmt.Sprintf("access request is already %s", request.Status))
-		return
+		return fmt.Errorf("%w (already %s)", errRequestAlreadyResolved, request.Status)
 	}
 
 	if status == "approved" {
@@ -271,7 +293,7 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 			"role_key":     request.RoleKey,
 			"from_request": requestID,
 		})
-		res, err := dbApproveRequestAndEnqueue(r.Context(), requestID, reviewer, req.ReviewNote, db.EnqueueParams{
+		res, err := dbApproveRequestAndEnqueue(ctx, requestID, reviewer, reviewNote, db.EnqueueParams{
 			UserID:      request.RequesterID,
 			ProjectID:   request.ProjectID,
 			RoleKeys:    []string{request.RoleKey},
@@ -285,37 +307,33 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 		})
 		if err != nil {
 			if errors.Is(err, db.ErrRequestNotPending) {
-				jsonErrorResponse(w, http.StatusConflict, "ALREADY_RESOLVED", "access request is already resolved")
-				return
+				return errRequestAlreadyResolved
 			}
-			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-			return
+			return err
 		}
 		// Rebuild the compiled cache from the just-committed ledger row FIRST, so
 		// access is effective immediately — independent of the best-effort inline
 		// drain below, and on a context detached from the request so a client
 		// disconnect after commit cannot leave access ineffective.
-		rebuildUserCacheDetached(r.Context(), request.RequesterID)
+		rebuildUserCacheDetached(ctx, request.RequesterID)
 
 		// Apply inline: the approval is the operator's confirmation, so project the
 		// grant to Zitadel now rather than waiting for a separate resume. Targeted
 		// to THIS row only (never the global batch), and non-fatal — a drain
 		// failure (e.g. Zitadel offline) leaves the row pending in the worklist for
 		// a later resume; access already works via the ledger.
-		_, _ = svcDrainPropagationRow(r.Context(), res.OutboxID)
+		_, _ = svcDrainPropagationRow(ctx, res.OutboxID)
 	} else { // rejected — no grant, just the conditional resolution
-		if err := dbResolveAccessRequest(r.Context(), requestID, status, reviewer, req.ReviewNote); err != nil {
+		if err := dbResolveAccessRequest(ctx, requestID, status, reviewer, reviewNote); err != nil {
 			if errors.Is(err, db.ErrRequestNotPending) {
-				jsonErrorResponse(w, http.StatusConflict, "ALREADY_RESOLVED", "access request is already resolved")
-				return
+				return errRequestAlreadyResolved
 			}
-			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-			return
+			return err
 		}
 	}
 
-	_ = dbInsertAuditLog(r.Context(), reviewer, request.RequesterID, "access_request."+status, requestID)
-	jsonResponse(w, http.StatusOK, map[string]string{"message": "Request resolved"})
+	_ = dbInsertAuditLog(ctx, reviewer, request.RequesterID, "access_request."+status, requestID)
+	return nil
 }
 
 func handleGetGovernanceSummary(w http.ResponseWriter, r *http.Request) {

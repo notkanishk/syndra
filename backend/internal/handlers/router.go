@@ -100,6 +100,8 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/requests", withCORS(withUserAuth(handleGetAccessRequests)))
 	mux.HandleFunc("POST /api/v1/requests", withCORS(withUserAuth(handleCreateAccessRequest)))
 	mux.HandleFunc("POST /api/v1/requests/{id}/decision", withCORS(withOperatorAuth(handleResolveAccessRequest)))
+	// Bulk decisions. Rehearses by default, like every other bulk surface.
+	mux.HandleFunc("POST /api/v1/requests/bulk-decision", withCORS(withOperatorAuth(handleBulkDecideRequests)))
 	mux.HandleFunc("GET /api/v1/governance/summary", withCORS(withOperatorAuth(handleGetGovernanceSummary)))
 	// Compact scalars for the sidebar badges. The rail polls this frequently;
 	// it must never pull the full summary payload to render four numbers.

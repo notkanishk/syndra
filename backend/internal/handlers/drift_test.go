@@ -11,6 +11,7 @@ import (
 
 	"mkauth/internal/db"
 	"mkauth/internal/models"
+	"mkauth/internal/services"
 	"mkauth/internal/services/drift"
 	"mkauth/internal/services/propagation"
 )
@@ -316,15 +317,93 @@ func TestHandleBulkAttributeDrift_ValidSourceAttributes(t *testing.T) {
 		return nil
 	}
 
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute", strings.NewReader(`{"ids":["d1"],"source":"external_backfill"}`))
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true", strings.NewReader(`{"ids":["d1"],"source":"external_backfill"}`))
 	w := httptest.NewRecorder()
 	handleBulkAttributeDrift(w, req)
 
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"attributed":1`) {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"succeeded":1`) {
 		t.Fatalf("valid bulk-attribute must succeed, got %d %s", w.Code, w.Body)
 	}
 	if gotSource != "external_backfill" {
 		t.Fatalf("bulk-attribute must pass the validated source through, got %q", gotSource)
+	}
+}
+
+// Rehearsal is the default here for the same reason it is on bulk grants:
+// adopting writes ledger rows and marking-external suppresses future detection,
+// and a triage queue is exactly where an operator is moving fast.
+func TestBulkDrift_RehearsesByDefaultAndWritesNothing(t *testing.T) {
+	resetDriftDeps(t)
+	dbGetDriftItem = func(_ context.Context, id string) (models.DriftItem, error) {
+		item := pendingDrift()
+		item.ID = id
+		return item, nil
+	}
+	writes := 0
+	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) error {
+		writes++
+		return nil
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute",
+		strings.NewReader(`{"ids":["d1","d2"],"source":"external_backfill"}`))
+	w := httptest.NewRecorder()
+	handleBulkAttributeDrift(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("a rehearsal is a 200, got %d", w.Code)
+	}
+	if writes != 0 {
+		t.Fatalf("a rehearsal must not write, got %d writes", writes)
+	}
+	var plan services.BulkPlan
+	if err := json.Unmarshal(w.Body.Bytes(), &plan); err != nil {
+		t.Fatal(err)
+	}
+	if plan.Applied {
+		t.Error("a rehearsal must not report itself as applied")
+	}
+	if plan.Summary.Apply != 2 {
+		t.Errorf("both rows are actionable, got %+v", plan.Summary)
+	}
+	// The same plan shape bulk grants uses, so one renderer serves both.
+	if len(plan.Outcomes) != 2 || plan.Outcomes[0].Detail == "" {
+		t.Errorf("every row must state what would happen: %+v", plan.Outcomes)
+	}
+}
+
+// A queue two people are working produces this constantly, and it is
+// information rather than an error.
+func TestBulkDrift_ReportsRowsSomebodyElseAlreadyResolved(t *testing.T) {
+	resetDriftDeps(t)
+	dbGetDriftItem = func(_ context.Context, id string) (models.DriftItem, error) {
+		item := pendingDrift()
+		item.ID = id
+		if id == "d2" {
+			item.Status = "marked_external"
+		}
+		return item, nil
+	}
+	writes := 0
+	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) error {
+		writes++
+		return nil
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
+		strings.NewReader(`{"ids":["d1","d2"],"source":"external_backfill"}`))
+	w := httptest.NewRecorder()
+	handleBulkAttributeDrift(w, req)
+
+	var plan services.BulkPlan
+	if err := json.Unmarshal(w.Body.Bytes(), &plan); err != nil {
+		t.Fatal(err)
+	}
+	if plan.Summary.NoChange != 1 || plan.Summary.Succeeded != 1 {
+		t.Fatalf("want 1 already-resolved / 1 applied, got %+v", plan.Summary)
+	}
+	if writes != 1 {
+		t.Errorf("an already-resolved row must not be re-written, got %d writes", writes)
 	}
 }
 
@@ -354,7 +433,7 @@ func TestBulkAttributeDrift_NamesTheIdsThatFailed(t *testing.T) {
 	}
 	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) error { return nil }
 
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute",
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
 		strings.NewReader(`{"ids":["d1","d2","d3"],"source":"external_backfill"}`))
 	w := httptest.NewRecorder()
 	handleBulkAttributeDrift(w, req)
@@ -362,21 +441,33 @@ func TestBulkAttributeDrift_NamesTheIdsThatFailed(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("a partially-failing batch is still a 200, got %d", w.Code)
 	}
-	var got struct {
-		Attributed int      `json:"attributed"`
-		Failed     int      `json:"failed"`
-		FailedIDs  []string `json:"failed_ids"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+	var plan services.BulkPlan
+	if err := json.Unmarshal(w.Body.Bytes(), &plan); err != nil {
 		t.Fatal(err)
 	}
-	if got.Attributed != 2 || got.Failed != 1 {
-		t.Fatalf("want 2 attributed / 1 failed, got %d / %d", got.Attributed, got.Failed)
+	if plan.Summary.Succeeded != 2 || plan.Summary.Blocked != 1 {
+		t.Fatalf("want 2 applied / 1 blocked, got %+v", plan.Summary)
 	}
-	// The count alone would leave the caller unable to retry only what failed.
-	if len(got.FailedIDs) != 1 || got.FailedIDs[0] != "d2" {
-		t.Fatalf("the failed id must be named, got %v", got.FailedIDs)
+	// A count alone would leave the operator unable to retry only what failed;
+	// the row itself carries the id and says why.
+	blocked := outcomeByID(t, plan, "d2")
+	if blocked.Effect != services.EffectBlocked {
+		t.Fatalf("the vanished row must be named and blocked, got %+v", blocked)
 	}
+	if !strings.Contains(blocked.Detail, "No longer in the queue") {
+		t.Errorf("it must say why, got %q", blocked.Detail)
+	}
+}
+
+func outcomeByID(t *testing.T, plan services.BulkPlan, id string) services.BulkOutcome {
+	t.Helper()
+	for _, o := range plan.Outcomes {
+		if o.UserID == id {
+			return o
+		}
+	}
+	t.Fatalf("no outcome for %s in %+v", id, plan.Outcomes)
+	return services.BulkOutcome{}
 }
 
 func TestBulkMarkExternalDrift_NamesTheIdsThatFailed(t *testing.T) {
@@ -393,28 +484,29 @@ func TestBulkMarkExternalDrift_NamesTheIdsThatFailed(t *testing.T) {
 		return nil
 	}
 
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-mark-external",
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-mark-external?apply=true",
 		strings.NewReader(`{"ids":["d1","d3"],"reason":""}`))
 	w := httptest.NewRecorder()
 	handleBulkMarkDriftExternal(w, req)
 
-	var got struct {
-		Marked    int      `json:"marked"`
-		Failed    int      `json:"failed"`
-		FailedIDs []string `json:"failed_ids"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+	var plan services.BulkPlan
+	if err := json.Unmarshal(w.Body.Bytes(), &plan); err != nil {
 		t.Fatal(err)
 	}
-	if got.Marked != 1 || got.Failed != 1 {
-		t.Fatalf("want 1 marked / 1 failed, got %d / %d", got.Marked, got.Failed)
+	if plan.Summary.Succeeded != 1 || plan.Summary.Failed != 1 {
+		t.Fatalf("want 1 marked / 1 failed, got %+v", plan.Summary)
 	}
-	if len(got.FailedIDs) != 1 || got.FailedIDs[0] != "d3" {
-		t.Fatalf("the failed id must be named, got %v", got.FailedIDs)
+	failed := outcomeByID(t, plan, "d3")
+	if failed.Effect != services.EffectFailed {
+		t.Fatalf("the failing row must be named, got %+v", failed)
+	}
+	// The cause travels with the row, so a retry is aimed rather than blind.
+	if !strings.Contains(failed.Detail, "go through") {
+		t.Errorf("the failure must carry its cause, got %q", failed.Detail)
 	}
 }
 
-func TestBulkResolutions_ReportEmptyFailureListAsAnArray(t *testing.T) {
+func TestBulkResolutions_AlwaysReturnARowPerRequestedID(t *testing.T) {
 	resetDriftDeps(t)
 	dbGetDriftItem = func(_ context.Context, id string) (models.DriftItem, error) {
 		item := pendingDrift()
@@ -423,14 +515,21 @@ func TestBulkResolutions_ReportEmptyFailureListAsAnArray(t *testing.T) {
 	}
 	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) error { return nil }
 
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute",
-		strings.NewReader(`{"ids":["d1"],"source":"external_backfill"}`))
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
+		strings.NewReader(`{"ids":["d1","d1",""],"source":"external_backfill"}`))
 	w := httptest.NewRecorder()
 	handleBulkAttributeDrift(w, req)
 
-	// [] rather than null: a client checking Array.isArray must not have to
-	// special-case the happy path.
-	if !strings.Contains(w.Body.String(), `"failed_ids":[]`) {
-		t.Fatalf("an empty failure list must serialise as [], got %s", w.Body.String())
+	var plan services.BulkPlan
+	if err := json.Unmarshal(w.Body.Bytes(), &plan); err != nil {
+		t.Fatal(err)
+	}
+	// Duplicates and blanks collapse; every distinct id still gets exactly one
+	// row, so the plan an operator reads accounts for the whole selection.
+	if len(plan.Outcomes) != 1 {
+		t.Fatalf("want one row per distinct id, got %+v", plan.Outcomes)
+	}
+	if plan.Summary.Total != 1 {
+		t.Fatalf("the summary must match the rows, got %+v", plan.Summary)
 	}
 }

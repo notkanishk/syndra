@@ -202,30 +202,15 @@ func handleBulkAttributeDrift(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusBadRequest, "BAD_SOURCE", badSourceMessage)
 		return
 	}
-	actor := resolveActor(r, "operator")
-	attributed := 0
-	// The ids that did NOT resolve, not just how many. A caller that knows only
-	// a count can either re-send everything — re-attempting work that already
-	// succeeded — or drop the failures on the floor. Naming them lets the queue
-	// keep exactly the unresolved rows selected.
-	failedIDs := make([]string, 0)
-	for _, id := range req.IDs {
-		item, err := dbGetDriftItem(r.Context(), id)
-		if err != nil {
-			failedIDs = append(failedIDs, id)
-			continue
-		}
-		if err := attributeOneDrift(r.Context(), item, attributeRequest{Source: req.Source}, actor); err != nil {
-			failedIDs = append(failedIDs, id)
-			continue
-		}
-		attributed++
+
+	plan := rehearseDriftBatch(r.Context(), req.IDs, driftOpAdopt)
+	if r.URL.Query().Get("apply") != "true" {
+		jsonResponse(w, http.StatusOK, plan)
+		return
 	}
-	jsonResponse(w, http.StatusOK, map[string]any{
-		"attributed": attributed,
-		"failed":     len(failedIDs),
-		"failed_ids": failedIDs,
-	})
+
+	applyDriftPlan(r, &plan, driftOpAdopt, resolveActor(r, "operator"), "")
+	jsonResponse(w, http.StatusOK, plan)
 }
 
 type bulkMarkExternalRequest struct {
@@ -247,27 +232,15 @@ func handleBulkMarkDriftExternal(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
 	}
-	actor := resolveActor(r, "operator")
-	marked := 0
-	failedIDs := make([]string, 0)
-	for _, id := range req.IDs {
-		item, err := dbGetDriftItem(r.Context(), id)
-		if err != nil {
-			failedIDs = append(failedIDs, id)
-			continue
-		}
-		if err := dbMarkDriftExternalTx(r.Context(), item.ID, item.UserID, item.ProjectID,
-			item.RoleKeys, actor, req.Reason, "{}"); err != nil {
-			failedIDs = append(failedIDs, id)
-			continue
-		}
-		marked++
+
+	plan := rehearseDriftBatch(r.Context(), req.IDs, driftOpExternal)
+	if r.URL.Query().Get("apply") != "true" {
+		jsonResponse(w, http.StatusOK, plan)
+		return
 	}
-	jsonResponse(w, http.StatusOK, map[string]any{
-		"marked":     marked,
-		"failed":     len(failedIDs),
-		"failed_ids": failedIDs,
-	})
+
+	applyDriftPlan(r, &plan, driftOpExternal, resolveActor(r, "operator"), req.Reason)
+	jsonResponse(w, http.StatusOK, plan)
 }
 
 func handleReconcileDrift(w http.ResponseWriter, r *http.Request) {
