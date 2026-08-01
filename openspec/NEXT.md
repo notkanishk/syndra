@@ -76,6 +76,8 @@ None of these are code. All need a live instance and a human.
 - **Application/metadata smoke** — `/applications` shows real app names per project typed `OIDC Client` / `API` / `SAML SP`; setting a user's `title` metadata in the Zitadel console reflects on `/users` within ~30s.
 - **Event-trigger end-to-end** — live verification of the lifecycle event path.
 - **Grant expiry smoke** — seed a grant with `expires_at=NOW()+'10s'`, confirm the row is removed, audit + intent rows written, and the `[SCHEDULER] Sweep complete duration=...` line appears.
+- **Session name on a live login** (`PBD-33`) — sign in against the live Zitadel and confirm the shell header and the Today greeting render the operator's *name*, not their subject id. This was the defect `people-bulk-and-dashboard-depth` fixed, and it cannot be confirmed from a test: the demo/fixture path never had it, because those sessions always carry a name.
+- **Bulk rehearsal against real data** (`PBD-34`) — run one `POST /grants/bulk` rehearsal over a real cohort and confirm each per-person verdict matches what that person's own screen says. The rehearsal is the only thing standing between a bulk remove and an unrecoverable surprise, so it is worth checking once against data nobody wrote as a fixture.
 - **Obsidian-clarity UI checklists** (`OCR-S2-19`, `OCR-S3-10`) — per-route manual pass over empty / loading / error / dense / ultra-wide / narrow / keyboard / light-theme contrast. Browser-driven, can't be automated as specified.
 
 ---
