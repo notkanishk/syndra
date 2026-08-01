@@ -261,6 +261,12 @@ var (
 	dbGetRecentCascades         = db.GetRecentCascades
 	dbGetCascadeGroups          = db.GetCascadeGroups
 
+	// Bulk access changes. Rehearsal is its own injectable so the handler's
+	// central contract — apply NEVER trusts a client-supplied plan, it
+	// re-rehearses server-side first — is assertable without a database.
+	svcRehearseBulk     = services.RehearseBulk
+	svcUserDirectGrants = services.UserDirectGrants
+
 	// Review › Expiring access reads its own window rather than a slice of the
 	// governance summary, so a 30-day review and Today's 14-day queue can
 	// differ without either lying about the other.

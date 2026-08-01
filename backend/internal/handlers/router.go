@@ -46,6 +46,9 @@ func NewRouter() http.Handler {
 	// DELETE /zitadel/users/{id}/grants/{grantId}, which removes the Zitadel-side
 	// grant and would leave this row to restore the access on the next compile.
 	mux.HandleFunc("DELETE /api/v1/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleDeleteUserDirectGrant)))
+	// Bulk access changes across a selection of people. Defaults to a rehearsal;
+	// ?apply=true executes the plan it just computed.
+	mux.HandleFunc("POST /api/v1/grants/bulk", withCORS(withOperatorAuth(handleBulkGrants)))
 	mux.HandleFunc("GET /api/v1/users/{id}/bundles", withCORS(withSelfOrOperatorAuth(handleGetUserBundles)))
 	mux.HandleFunc("POST /api/v1/users/{id}/bundles", withCORS(withOperatorAuth(handleAssignBundleToUser)))
 	mux.HandleFunc("DELETE /api/v1/users/{id}/bundles/{bundleId}", withCORS(withOperatorAuth(handleRemoveBundleFromUser)))
