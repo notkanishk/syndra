@@ -6,6 +6,8 @@ import { useMemo, useState } from "react";
 import { AccessSourceList, orderedSources, sourceQualifier, type RoleReason } from "@/components/access/AccessSource";
 import { GrantDirectAccess } from "@/components/people/GrantDirectAccess";
 import { ManageBundles } from "@/components/people/ManageBundles";
+import { PersonActivity } from "@/components/people/PersonActivity";
+import { PersonRequests } from "@/components/people/PersonRequests";
 import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
@@ -13,12 +15,31 @@ import { Chip, Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
+import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 
 type Tab = "access" | "requests" | "activity";
+
+const TAB_LABELS: Record<Tab, string> = {
+  access: "Access",
+  requests: "Requests",
+  activity: "Activity",
+};
+
+/**
+ * Which tabs this viewer can actually use.
+ *
+ * A member reaching their own record gets Access and Requests — both are backed
+ * by endpoints that accept self-reads. Activity is not: it reads the audit log,
+ * which is operator-only, so rendering the tab for a member would put a control
+ * on screen whose only possible outcome is an error.
+ */
+function tabsFor(isOperator: boolean): Tab[] {
+  return isOperator ? ["access", "requests", "activity"] : ["access", "requests"];
+}
 
 interface AccessRole {
   role_key: string;
@@ -82,7 +103,24 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                 user.email,
                 user.title || null,
                 user.team || null,
-                <Mono key="id">{user.id}</Mono>,
+                // The id stays reachable — this is the one page where an
+                // operator genuinely needs it — but it sits last, after every
+                // human-readable fact, and never stands in for a name.
+                <Mono key="id" title="Zitadel user id">
+                  {user.id}
+                </Mono>,
+                // Operator-only for the same reason the Activity tab is: /audit
+                // is operator-gated, so a member following this link would land
+                // on a page they cannot read.
+                isOperator ? (
+                  <Link
+                    key="trail"
+                    href={`/audit?user=${encodeURIComponent(user.id)}`}
+                    className="font-semibold text-accent-text"
+                  >
+                    Full audit trail
+                  </Link>
+                ) : null,
               ]}
             </MetaRow>
           }
@@ -99,9 +137,12 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
         />
       </div>
 
-      {/* Pill tabs, not underlines. */}
+      {/* Pill tabs, not underlines. Activity is operator-only: this same route
+          serves a member looking at their own record, and the audit endpoint
+          behind that tab is operator-gated, so offering it to a member would
+          be offering a control that can only fail. */}
       <div className="flex gap-2">
-        {(["access", "requests", "activity"] as const).map((entry) => (
+        {tabsFor(isOperator).map((entry) => (
           <button
             key={entry}
             type="button"
@@ -111,30 +152,15 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
               tab === entry ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
             }`}
           >
-            {entry === "access" ? "Access" : entry === "requests" ? "Requests" : "Activity"}
+            {TAB_LABELS[entry]}
           </button>
         ))}
       </div>
 
-      {tab !== "access" ? (
-        <Card>
-          <div className="px-6 py-8">
-            <div className="type-empty-title">
-              {tab === "requests" ? "Requests live on their own page." : "Activity is in the audit log."}
-            </div>
-            <p className="mt-2 max-w-[60ch] text-[14px] text-muted">
-              {tab === "requests"
-                ? "Every request this person has made, with its decision, is on the Requests page."
-                : "Who changed what and when is recorded in Review › Audit."}
-            </p>
-            <Link
-              href={tab === "requests" ? "/requests" : "/audit"}
-              className="mt-3 inline-block text-[13.5px] font-semibold text-accent-text"
-            >
-              {tab === "requests" ? "Go to Requests" : "Go to Audit"} →
-            </Link>
-          </div>
-        </Card>
+      {tab === "requests" ? (
+        <PersonRequests userId={userId} name={user.name} isOperator={isOperator} />
+      ) : tab === "activity" && isOperator ? (
+        <PersonActivity userId={userId} name={user.name} />
       ) : (
         <>
           {/* Bundle chips state membership and nothing else — no inline ✕.
@@ -144,7 +170,14 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
             {access.data.bundles.length === 0 ? (
               <span className="text-[14px] text-faint">None assigned</span>
             ) : (
-              access.data.bundles.map((bundle) => <Chip key={bundle.id}>{bundle.name}</Chip>)
+              // A chip that names a bundle should reach the people in it —
+            // "who else has this?" is the next question every single time,
+            // and it used to dead-end here.
+            access.data.bundles.map((bundle) => (
+              <Link key={bundle.id} href={peopleHref({ bundle: bundle.name })}>
+                <Chip>{bundle.name}</Chip>
+              </Link>
+            ))
             )}
             <span className="flex-1" />
             {isOperator && (

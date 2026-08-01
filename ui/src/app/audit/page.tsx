@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
@@ -11,6 +12,12 @@ import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
 import { UserName } from "@/components/names";
+import {
+  describeAction,
+  isCascadeTrace,
+  machineName,
+  shortTrace,
+} from "@/lib/audit-vocabulary";
 import { useAuditEntries, type AuditEntry } from "@/lib/queries/useAudit";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useDebounce } from "@/lib/useDebounce";
@@ -31,16 +38,21 @@ type Window = "7" | "30" | "all";
  * danger tone on the word itself, and nothing else on the row is coloured.
  */
 export default function AuditPage() {
+  const params = useSearchParams();
+  const router = useRouter();
+  // `?user=` scopes the whole log to one person's involvement — actor OR
+  // target — and it does so server-side. That distinction matters: the text
+  // filter below narrows the 200 rows already fetched, while this narrows the
+  // query, so a person's trail is complete rather than "complete within the
+  // most recent 200 events overall".
+  const scopedUser = params.get("user") ?? "";
+
   const [actor, setActor] = useState("");
-  const [window, setWindow] = useState<Window>("7");
+  const [window, setWindow] = useState<Window>(scopedUser ? "all" : "7");
   const debounced = useDebounce(actor, 250).trim().toLowerCase();
   const resolver = useNameResolver();
 
-  // The endpoint takes a limit and nothing else, so both filters narrow the
-  // window that was fetched rather than the query. The header says which,
-  // because a filter that silently searches only part of the log is how
-  // somebody concludes an action never happened.
-  const entries = useAuditEntries({ limit: 200 });
+  const entries = useAuditEntries({ limit: 200, userId: scopedUser || undefined });
 
   const all = useMemo(() => entries.data ?? [], [entries.data]);
 
@@ -63,7 +75,11 @@ export default function AuditPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Audit"
-        meta="Every mutation MkAuth made, and who asked for it. Showing the most recent 200 entries — the filters below narrow those, not the whole log."
+        meta={
+          scopedUser
+            ? "Everything this person did, and everything done to them. Filtered at the source, so nothing is missing from the window."
+            : "Every mutation MkAuth made, and who asked for it. Showing the most recent 200 entries — the filters below narrow those, not the whole log."
+        }
         actions={
           <>
             <Select
@@ -89,6 +105,24 @@ export default function AuditPage() {
           </>
         }
       />
+
+      {scopedUser && (
+        // A scoped log must always show a way back out, or an operator who
+        // arrived by link has no way to tell they are not looking at everything.
+        <div className="flex items-center gap-2.5 self-start rounded-pill bg-tint-2 py-1.5 pl-4 pr-2.5 text-[13.5px]">
+          <span>
+            Scoped to <UserName id={scopedUser} />
+          </span>
+          <button
+            type="button"
+            onClick={() => router.replace("/audit", { scroll: false })}
+            aria-label="Show the whole audit log"
+            className="rounded-pill px-2 py-0.5 font-semibold text-muted transition-colors hover:text-ink"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <Card>
         <CardColumns>
@@ -175,70 +209,6 @@ function Sentence({ entry }: { entry: AuditEntry }) {
       ) : null}
     </>
   );
-}
-
-/**
- * The verbs the backend actually writes. Keeping this map honest matters more
- * than making it complete: an unrecognised action falls through to its raw key
- * below, which is ugly but true, whereas a wrong sentence in an audit log is
- * the one kind of bug nobody catches until it matters.
- */
-const ACTIONS: Record<string, { verb: string; destructive?: boolean }> = {
-  "direct_grant.upserted": { verb: "Granted direct access" },
-  "direct_grant.replaced": { verb: "Replaced a direct grant" },
-  "direct_grant.revoked": { verb: "Revoked direct access", destructive: true },
-  "direct_grant.removed": { verb: "Removed direct access", destructive: true },
-  "direct_grant.revoked_by_expiry": { verb: "Removed an expired grant", destructive: true },
-  "bundle.created": { verb: "Created a bundle" },
-  "bundle.assigned": { verb: "Assigned a bundle" },
-  "bundle.unassigned": { verb: "Removed a bundle assignment", destructive: true },
-  "bundle.role_added": { verb: "Added a role to a bundle" },
-  "bundle.role_removed": { verb: "Removed a role from a bundle", destructive: true },
-  "bundle.welcome_set": { verb: "Set the default bundle for new members" },
-  "welcome_bundle_assigned": { verb: "Assigned the default bundle to a new member" },
-  "mapping_rule.created": { verb: "Created an automatic rule" },
-  "mapping_rule.updated": { verb: "Changed an automatic rule" },
-  "role.created": { verb: "Created a role" },
-  "access_request.created": { verb: "Asked for access" },
-  "access_request.approved": { verb: "Approved a request" },
-  "access_request.rejected": { verb: "Declined a request" },
-  "claim_profile.updated": { verb: "Changed a project's token format" },
-  "app_claim_override.updated": { verb: "Changed an app's token format" },
-  "app_claim_override.deleted": { verb: "Removed an app's token override" },
-  "intent.emitted": { verb: "Queued a hardware provisioning intent" },
-};
-
-function describeAction(action: string): { verb: string; destructive: boolean } {
-  const known = ACTIONS[action];
-  if (known) return { verb: known.verb, destructive: Boolean(known.destructive) };
-  return { verb: action, destructive: /revoke|delete|remove/i.test(action) };
-}
-
-/**
- * Every line names a human or a NAMED machine. The backend writes system
- * actors as "system:onboarding" / "system:scheduler"; rendering the bare
- * string is right — it IS the machine's name — but the prefix is noise.
- */
-function machineName(id: string): string {
-  if (!id || id === "-") return "system";
-  return id.startsWith("system:") ? `${id.slice(7)} (automatic)` : id;
-}
-
-/**
- * The trace column links into Change history, which is the only place to see
- * what an entry actually did downstream. Only cascade-producing actions have
- * one; everything else shows an honest dash.
- */
-function isCascadeTrace(entry: AuditEntry): boolean {
-  return (
-    Boolean(entry.resource_id) &&
-    /^(mapping_rule|bundle)\./.test(entry.action) &&
-    entry.action !== "bundle.created"
-  );
-}
-
-function shortTrace(id: string): string {
-  return `c_${id.replace(/-/g, "").slice(0, 4)}`;
 }
 
 /**

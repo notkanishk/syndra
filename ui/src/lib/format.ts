@@ -121,6 +121,18 @@ export function formatShortDate(iso: string | null | undefined): string {
   return date.toLocaleDateString(DATE_LOCALE, { day: "numeric", month: "short" });
 }
 
+/**
+ * "14:32" — the time of day, for a feed already grouped under its date. Fixed
+ * to a 24-hour clock so a row never renders "2:05" ambiguously between morning
+ * and afternoon in an audit trail.
+ */
+export function formatClock(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleTimeString(DATE_LOCALE, { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
 /** "18 Dec 2026" — the form a resolved expiry date is confirmed in. */
 export function formatLongDate(iso: string | null | undefined): string {
   if (!iso) return "—";

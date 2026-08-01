@@ -13,11 +13,12 @@ import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { Mono } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FilterPills } from "@/components/ui/Select";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useCrumb } from "@/lib/page-crumb";
+import { peopleHref } from "@/lib/people-filters";
 import { useRoleMembers, type RoleMember } from "@/lib/queries/useRoleMembers";
 import { formatShortDate, humanizeKey } from "@/lib/format";
 
@@ -67,6 +68,17 @@ export default function RoleMembersPage({
               <span className="text-[13.5px] text-faint">cloned from {view.cloned_from}</span>
             )}
           </span>
+        }
+        actions={
+          // The only outbound link this page has, and deliberately one-way.
+          // This page stays read-only and source-aware: it knows WHY each
+          // person holds the role, which a people list cannot. Adding people is
+          // the one thing it can't answer from what it knows, so that — and
+          // only that — hands off to People in bulk mode, pre-armed with this
+          // project and role.
+          <ButtonLink href={peopleHref({ project: id, role: roleKey }, { bulk: "1" })} variant="accent">
+            Add people to this role
+          </ButtonLink>
         }
       />
 
