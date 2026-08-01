@@ -43,6 +43,12 @@ Paused pending research on real LLDAP password-propagation and credential semant
 - **ISC-45** — decide whether an application may read more than one project. The design draws Badge Reader reading four; Zitadel puts an app inside exactly one, and `app_claim_overrides.application_id` is unique. Until this is settled the apps index warns per project rather than per app, which is the same failure in the shape the data supports.
 - **Drift evidence for sweep-detected rows** — the reconciliation sweep cannot name an actor because it compares grant sets. Reading Zitadel's event stream for the grant's creation event would close that, at the cost of a second API path. Only worth it if operators routinely hit rows the webhook missed.
 
+### Operator runbook surfaces — what the reset work left open
+
+- **ORS-18** — `reset-data.sh --apply` has only ever been dry-run. Both modes were exercised against the live deployment and their counts verified, but the transaction, the typed-confirmation gate and the Redis flush have never executed. The first real run is on a database worth backing up first.
+- **ORS-19** — `CountDemoResidue` matches audit rows on actor and target user id, and the seeder writes audit actors as display names (`alice.rivera`, `maya.chen`), so two of its four seeded audit rows are invisible to the count. Harmless while any other table carries residue — the banner still fires — but it would under-report on a database where audit rows are all that remain. Fix by matching the seeder's actor strings, or by giving seeded audit rows a marker.
+- **Wider fixture drift** — the residue check and the reset script both read the demo catalog's project and user ids, and a `demo` package test fails when the script's copy diverges. Nothing guards a *new table* the seeder starts writing: it would be missed by both, silently. Worth revisiting if the seeder grows.
+
 ### Phase 5 — Automation & Governance
 
 - **Service Catalog Abstraction** — the spec'd service→bundle request mapping still falls back to project/role. [`specs/service-catalog`]
