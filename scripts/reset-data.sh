@@ -54,7 +54,19 @@ fi
 DEMO_PROJECTS="'platform','printing','laser','doors','wiki','finance'"
 DEMO_USERS="'dev_admin','sam_student','maya_staff','leo_mentor','ava_guest'"
 
-psql() { docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 "$@"; }
+# Two helpers, and the difference matters.
+#
+# `docker exec -i` attaches the container's stdin to ours and drains it, even
+# for a -c query that reads nothing. Using it for the counting queries ate the
+# script's own stdin, so the confirmation prompt below hit EOF and aborted —
+# meaning the reset could never be run non-interactively, only by a human
+# typing into a terminal. It failed closed, which is the right direction, but
+# it failed on every piped invocation.
+#
+# So: -i only where a plan is actually piped in, and </dev/null everywhere
+# else to make the isolation explicit rather than incidental.
+psql() { docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 "$@" </dev/null; }
+psql_stdin() { docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 "$@"; }
 
 # Operator-owned tables, ordered so children go before parents. Anything not
 # listed here is either schema (schema_migrations) or a derived index the
@@ -160,7 +172,7 @@ fi
 # either COMMIT or ROLLBACK. ON_ERROR_STOP aborts before the ending either
 # way, so a failure never half-applies.
 run_plan() {
-  { echo "BEGIN;"; printf '%s\n' "${PLAN[@]}"; echo "$1;"; } | psql -q
+  { echo "BEGIN;"; printf '%s\n' "${PLAN[@]}"; echo "$1;"; } | psql_stdin -q
 }
 
 echo
