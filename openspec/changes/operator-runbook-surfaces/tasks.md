@@ -28,8 +28,10 @@
 - [x] ORS-15 Frontend: banner survives the restart that used to silence it, uses the backend's command, six signing-key cases. Mutation-checked by removing the panel — six failures.
 - [x] ORS-16 `go test ./... && go vet ./...`, `bun run test && bun run lint && bun run build` green.
 - [x] ORS-17 Both reset modes dry-run against the live deployment. Caught and fixed two defects: `drift_items`/`zitadel_grants_index` use `project_id`, not `zitadel_project_id`; and a real account assigned to a demo bundle was being deleted without being counted.
+- [x] ORS-20 The dry run rehearses the plan against the database inside a transaction ending in `ROLLBACK`, and prints the SQL. Counting rows never builds the statements that delete, so a plan that cannot parse still reported a row total and failed only after the operator typed the confirmation — which is how `TRUNCATE a b c` reached `--apply`. `"${ALL_TABLES[*]}"` joins on a space; the list is now comma-joined. Mutation-checked by restoring the space join: the rehearsal fails, prints the server's error, and exits before the prompt.
+- [x] ORS-21 `demo --apply` exercised against the live deployment: 48 rows removed in one transaction, real accounts and their grants intact, the mode now reporting clean.
 
 ## Open
 
-- [ ] ORS-18 `reset-data.sh --apply` has never been committed against a real database — only its dry-run half has. The transaction, the confirmation gate and the Redis flush are unexercised.
+- [ ] ORS-18 `all --apply` has still never been committed against a real database. Its plan is rehearsed and rolls back clean, and `demo --apply` has run for real, but the `TRUNCATE ... RESTART IDENTITY CASCADE` itself has never been allowed to commit.
 - [ ] ORS-19 `CountDemoResidue` matches audit rows by actor/target user id, but the seeder writes audit actors as display names (`alice.rivera`), so two of its four seeded audit rows are invisible to the count. Harmless while other tables carry residue; it would under-report on a database where only audit rows remain.

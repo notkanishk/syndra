@@ -45,7 +45,7 @@ Paused pending research on real LLDAP password-propagation and credential semant
 
 ### Operator runbook surfaces — what the reset work left open
 
-- **ORS-18** — `reset-data.sh --apply` has only ever been dry-run. Both modes were exercised against the live deployment and their counts verified, but the transaction, the typed-confirmation gate and the Redis flush have never executed. The first real run is on a database worth backing up first.
+- **ORS-18** — `reset-data.sh all --apply` has never committed. `demo --apply` has now run for real against the live deployment (48 rows, one transaction, real accounts untouched), and `all`'s plan rehearses and rolls back clean, but the `TRUNCATE ... RESTART IDENTITY CASCADE` has never been allowed to commit. Worth a `pg_dump` before the first one.
 - **ORS-19** — `CountDemoResidue` matches audit rows on actor and target user id, and the seeder writes audit actors as display names (`alice.rivera`, `maya.chen`), so two of its four seeded audit rows are invisible to the count. Harmless while any other table carries residue — the banner still fires — but it would under-report on a database where audit rows are all that remain. Fix by matching the seeder's actor strings, or by giving seeded audit rows a marker.
 - **Wider fixture drift** — the residue check and the reset script both read the demo catalog's project and user ids, and a `demo` package test fails when the script's copy diverges. Nothing guards a *new table* the seeder starts writing: it would be missed by both, silently. Worth revisiting if the seeder grows.
 

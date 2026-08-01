@@ -110,7 +110,12 @@ else
     (( n > 0 )) && printf '  %-28s %5s rows\n' "$table" "$n"
     total=$((total + n))
   done
-  PLAN+=("TRUNCATE ${ALL_TABLES[*]} RESTART IDENTITY CASCADE;")
+  # Comma-separated, not space-separated. "${array[*]}" joins on the first
+  # character of IFS, which is a space, and `TRUNCATE a b c` is a syntax
+  # error — one that only appears at --apply time, because counting rows
+  # never builds this statement.
+  truncate_list="$(printf '%s, ' "${ALL_TABLES[@]}")"
+  PLAN+=("TRUNCATE ${truncate_list%, } RESTART IDENTITY CASCADE;")
 fi
 
 if (( total == 0 )); then
@@ -151,6 +156,36 @@ if [[ "$MODE" == "demo" ]]; then
   fi
 fi
 
+# run_plan pipes the whole plan through psql in one transaction, ending in
+# either COMMIT or ROLLBACK. ON_ERROR_STOP aborts before the ending either
+# way, so a failure never half-applies.
+run_plan() {
+  { echo "BEGIN;"; printf '%s\n' "${PLAN[@]}"; echo "$1;"; } | psql -q
+}
+
+echo
+echo "  SQL:"
+printf '    %s\n' "${PLAN[@]}"
+
+# Rehearse against the real database and roll back.
+#
+# Counting rows never builds the statements that do the deleting, so a dry run
+# that only counts will happily report "89 rows" for a plan that cannot parse —
+# and the operator finds out at --apply, after typing the confirmation. Running
+# the plan for real inside a transaction that ends in ROLLBACK checks the
+# syntax, the column names, the permissions and the foreign keys against the
+# actual schema, and deletes nothing. TRUNCATE is transactional in Postgres,
+# so this covers `all` mode too.
+echo
+if run_plan ROLLBACK >/dev/null 2>&1; then
+  echo "  Rehearsed against the database and rolled back — the plan runs clean."
+else
+  echo "  The plan FAILED against the database. Nothing was changed." >&2
+  echo "  Re-running it to show the error:" >&2
+  run_plan ROLLBACK >&2 || true
+  exit 1
+fi
+
 if [[ -z "$APPLY" ]]; then
   echo
   echo "Dry run. Nothing was deleted. Re-run with --apply to commit:"
@@ -165,7 +200,7 @@ read -r -p "Type the mode name to confirm deletion (${MODE}): " answer
 # One transaction. A partial reset that drops bundle_roles but keeps bundles
 # leaves an empty bundle nobody can explain, which is worse than either
 # end state.
-{ echo "BEGIN;"; printf '%s\n' "${PLAN[@]}"; echo "COMMIT;"; } | psql -q
+run_plan COMMIT
 echo "Database reset."
 
 # Redis holds only derived per-user claim caches (mapping:<user>:<project>),
