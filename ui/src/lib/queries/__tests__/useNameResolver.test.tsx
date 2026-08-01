@@ -21,6 +21,8 @@ let catalog: {
 
 let proxy: ReturnType<typeof makeProxyFetch>;
 let bundlesStatus: number;
+let lookupCalls: string[][];
+let lookupUsers: Record<string, { display_name: string; email: string }>;
 
 beforeEach(() => {
   catalog = {
@@ -33,7 +35,21 @@ beforeEach(() => {
   proxy = makeProxyFetch();
   global.fetch = proxy.fetchImpl;
 
+  lookupCalls = [];
+  lookupUsers = {};
+
   proxy.register("GET", /\/api\/proxy\/catalog(\?|$)/, () => catalog);
+  // POST /lookup is the resolver's second chance at an id the catalog doesn't
+  // carry — a deleted account, one created seconds ago, a machine principal.
+  proxy.register("POST", /\/api\/proxy\/lookup(\?|$)/, ({ body }) => {
+    const ids = (body as { user_ids?: string[] } | undefined)?.user_ids ?? [];
+    lookupCalls.push(ids);
+    const users: Record<string, { display_name: string; email: string }> = {};
+    for (const id of ids) {
+      if (lookupUsers[id]) users[id] = lookupUsers[id];
+    }
+    return { users, projects: {}, roles: {}, bundles: {} };
+  });
   proxy.register("GET", /\/api\/proxy\/bundles(\?|$)/, () =>
     bundlesStatus === 200
       ? [{ id: BUNDLE_ID, name: "Starter Bundle", description: "", roles: [], created_at: "" }]
@@ -96,10 +112,75 @@ describe("useNameResolver (full-catalog)", () => {
     expect(screen.getByTestId("role").textContent).toBe("Mentor");
   });
 
-  it("returns resolved=true with no value for an unknown id after load", async () => {
+  it("settles on MISS only after the backend lookup also fails to place the id", async () => {
     renderProbe();
     await waitFor(() => expect(screen.getByTestId("user").textContent).toBe("Jane Doe"));
-    expect(screen.getByTestId("user-unknown").textContent).toBe("MISS");
+    // The catalog missed, so the resolver asks the backend — which is where
+    // deleted accounts and machine principals still resolve from. Only when
+    // that also comes back empty is the id genuinely unknown.
+    await waitFor(() => expect(lookupCalls.length).toBeGreaterThan(0));
+    expect(lookupCalls[0]).toContain("nope");
+    await waitFor(() => expect(screen.getByTestId("user-unknown").textContent).toBe("MISS"));
+  });
+
+  it("resolves a catalog miss from the backend lookup", async () => {
+    // The case that motivated the fallback: an id the user list doesn't carry
+    // but the directory can still name. Without this it renders as a raw id.
+    lookupUsers = { nope: { display_name: "Deleted Person", email: "gone@x.edu" } };
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("user-unknown").textContent).toBe("Deleted Person"));
+  });
+
+  it("works through more misses than fit in one batch", async () => {
+    // The backend caps a lookup at 256 ids. A queue that kept settled ids would
+    // re-slice the same first 256 forever, so everything past the ceiling would
+    // render as a raw identifier and never recover.
+    const ids = Array.from({ length: 300 }, (_, index) => `miss-${String(index).padStart(3, "0")}`);
+    for (const id of ids) lookupUsers[id] = { display_name: `Person ${id}`, email: "" };
+
+    function ManyProbe() {
+      const r = useNameResolver();
+      return (
+        <div>
+          {ids.map((id) => (
+            <span key={id} data-testid={id}>
+              {r.resolveUser(id).value?.display_name ?? ""}
+            </span>
+          ))}
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}
+      >
+        <NameResolverProvider>
+          <ManyProbe />
+        </NameResolverProvider>
+      </QueryClientProvider>,
+    );
+
+    // The last id — well past the batch ceiling — must still resolve.
+    await waitFor(
+      () => expect(screen.getByTestId("miss-299").textContent).toBe("Person miss-299"),
+      { timeout: 4000 },
+    );
+    // ...and the first batch's answers must survive the second batch landing.
+    expect(screen.getByTestId("miss-000").textContent).toBe("Person miss-000");
+    expect(lookupCalls.length).toBeGreaterThan(1);
+    expect(lookupCalls.every((batch) => batch.length <= 256)).toBe(true);
+  });
+
+  it("asks about an unresolvable id once, not on every render", async () => {
+    renderProbe();
+    await waitFor(() => expect(lookupCalls.length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByTestId("user-unknown").textContent).toBe("MISS"));
+    const after = lookupCalls.length;
+    // A miss the backend can't place must stop being re-requested, or a single
+    // deleted account would re-fire a lookup for the life of the session.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(lookupCalls.length).toBe(after);
   });
 
   it("resolves bundles from GET /bundles when allowed", async () => {
@@ -121,7 +202,7 @@ describe("useNameResolver (full-catalog)", () => {
   it("refetches the catalog on invalidation so newly-present ids resolve", async () => {
     const { client } = renderProbe();
     await waitFor(() => expect(screen.getByTestId("user").textContent).toBe("Jane Doe"));
-    expect(screen.getByTestId("user-unknown").textContent).toBe("MISS");
+    await waitFor(() => expect(screen.getByTestId("user-unknown").textContent).toBe("MISS"));
 
     // Simulate a user-create: the catalog now includes the previously-unknown id.
     catalog.users.push({ id: "nope", name: "New Person", email: "new@x.edu" });

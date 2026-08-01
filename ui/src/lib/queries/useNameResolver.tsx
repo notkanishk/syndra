@@ -1,10 +1,11 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { request } from "@/lib/api-client";
 import {
+  type LookupResponse,
   type ResolvedBundle,
   type ResolvedProject,
   type ResolvedRole,
@@ -83,6 +84,93 @@ function buildBundleMap(data: Bundle[] | undefined): Map<string, ResolvedBundle>
   return map;
 }
 
+/**
+ * Ids the catalog didn't know, collected during render and resolved in one
+ * batched POST /lookup.
+ *
+ * The catalog is the directory as it stands now, so it cannot contain an
+ * account that has since been deleted, one created in the seconds since the
+ * last fetch, or a machine principal that never appears in a user list. Those
+ * ids show up in audit rows and old grants and used to resolve to nothing —
+ * which is how a screen ends up displaying a raw Zitadel id. The backend's
+ * FindUser falls through to a direct Zitadel read, so a miss here is usually
+ * recoverable; asking once and caching the answer makes it permanent.
+ */
+function useMissResolver(known: (id: string) => boolean) {
+  // `queue` holds only ids that have NOT yet been asked about. Ids leave it
+  // when their lookup settles, which is what lets the next batch through: a
+  // queue that kept settled ids would re-slice the same first LOOKUP_MAX_BATCH
+  // forever, and every id past that ceiling would never be requested at all.
+  const [queue, setQueue] = useState<ReadonlySet<string>>(() => new Set());
+  // Answers accumulate across batches. Reading them off the current query
+  // instead would drop every earlier batch's names the moment the query key
+  // advanced — the ids would be marked asked and resolve to nothing.
+  const [resolved, setResolved] = useState<ReadonlyMap<string, ResolvedUser>>(() => new Map());
+  const pending = useRef<Set<string>>(new Set());
+  const asked = useRef<Set<string>>(new Set());
+
+  const note = useCallback(
+    (id: string) => {
+      if (!id || known(id) || asked.current.has(id) || pending.current.has(id)) return;
+      pending.current.add(id);
+      // Defer the state write out of the render that discovered the miss.
+      queueMicrotask(() => {
+        if (pending.current.size === 0) return;
+        const batch = Array.from(pending.current);
+        pending.current.clear();
+        setQueue((prev) => {
+          const next = new Set(prev);
+          batch.forEach((value) => next.add(value));
+          return next.size === prev.size ? prev : next;
+        });
+      });
+    },
+    [known],
+  );
+
+  const ids = useMemo(() => Array.from(queue).sort().slice(0, LOOKUP_MAX_BATCH), [queue]);
+
+  const lookupQ = useQuery({
+    queryKey: ["name-lookup", ids],
+    queryFn: () =>
+      request<LookupResponse>("lookup", { method: "POST", body: { user_ids: ids } }),
+    enabled: ids.length > 0,
+    staleTime: STALE_TIME,
+    retry: false,
+  });
+
+  const settled = lookupQ.isSuccess || lookupQ.isError;
+  const answers = lookupQ.data?.users;
+
+  useEffect(() => {
+    if (!settled || ids.length === 0) return;
+
+    if (answers) {
+      setResolved((prev) => {
+        const next = new Map(prev);
+        for (const [id, user] of Object.entries(answers)) next.set(id, user);
+        return next;
+      });
+    }
+
+    // Every id in the batch is now answered, resolved or not. Marking them
+    // asked stops an id the backend also can't place from re-firing a lookup
+    // for the life of the session; dropping them from the queue lets whatever
+    // is behind them become the next batch.
+    ids.forEach((id) => asked.current.add(id));
+    setQueue((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.delete(id));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [ids, settled, answers]);
+
+  return { note, resolved, pendingLookup: lookupQ.isFetching };
+}
+
+/** Matches the backend's `lookupMaxBatchSize`. */
+const LOOKUP_MAX_BATCH = 256;
+
 export function NameResolverProvider({ children }: { children: React.ReactNode }) {
   // Catalog: users + projects + nested roles. Member-allowed via proxy.
   const catalogQ = useQuery({
@@ -103,9 +191,24 @@ export function NameResolverProvider({ children }: { children: React.ReactNode }
   const catalogMaps = useMemo(() => buildCatalogMaps(catalogQ.data), [catalogQ.data]);
   const bundleMap = useMemo(() => buildBundleMap(bundlesQ.data), [bundlesQ.data]);
 
+  const catalogHas = useCallback(
+    (id: string) => catalogMaps.users.has(id),
+    [catalogMaps],
+  );
+  const { note, resolved: lateUsers, pendingLookup } = useMissResolver(catalogHas);
+
   const value = useMemo<NameResolverContextValue>(
     () => ({
-      resolveUser: (id) => ({ value: catalogMaps.users.get(id), resolved: !catalogQ.isLoading }),
+      resolveUser: (id) => {
+        const hit = catalogMaps.users.get(id) ?? lateUsers.get(id);
+        if (hit) return { value: hit, resolved: true };
+        if (catalogQ.isLoading) return { value: undefined, resolved: false };
+        // The catalog has answered and doesn't know this id. Ask the backend
+        // once; report "still resolving" while that is in flight so the caller
+        // shows a skeleton rather than settling on a fallback it will replace.
+        note(id);
+        return { value: undefined, resolved: !pendingLookup };
+      },
       resolveProject: (id) => ({ value: catalogMaps.projects.get(id), resolved: !catalogQ.isLoading }),
       resolveRole: (pid, rk) => ({
         value: catalogMaps.roles.get(roleCompositeKey(pid, rk)),
@@ -113,7 +216,7 @@ export function NameResolverProvider({ children }: { children: React.ReactNode }
       }),
       resolveBundle: (id) => ({ value: bundleMap.get(id), resolved: !bundlesQ.isLoading }),
     }),
-    [catalogMaps, bundleMap, catalogQ.isLoading, bundlesQ.isLoading],
+    [catalogMaps, bundleMap, catalogQ.isLoading, bundlesQ.isLoading, lateUsers, note, pendingLookup],
   );
 
   return <NameResolverContext.Provider value={value}>{children}</NameResolverContext.Provider>;

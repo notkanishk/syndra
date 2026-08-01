@@ -6,7 +6,12 @@ import { useNameResolver } from "@/lib/queries/useNameResolver";
 interface UserNameProps {
   /** Zitadel user ID. */
   id: string | null | undefined;
-  /** Rendered when the id is empty/falsy or resolution misses. Default: em dash. */
+  /**
+   * Rendered when the id is empty/falsy. Default: em dash. Also used for a
+   * resolution miss when the caller has a better word for it than "Unknown
+   * account" — the audit log, for instance, calls its machine principals by
+   * name rather than reporting them as unknown.
+   */
   fallback?: React.ReactNode;
   /** When true, the email is rendered as a muted suffix after the display name. */
   showEmail?: boolean;
@@ -49,9 +54,14 @@ export function UserName({ id, fallback = "—", showEmail = false, className = 
         </span>
       );
     }
+    // Resolution finished and nothing — not the catalog, not the backend's own
+    // lookup — could place this id. Say that in words. The id itself stays
+    // reachable through `title` for forensics, but it is never the label: an
+    // opaque subject id rendered where a name belongs reads as a bug to
+    // everyone who sees it, and usually is one.
     return (
-      <span className={className} title={SHOW_DEBUG_IDS ? id : undefined}>
-        {fallback}
+      <span className={className} title={id}>
+        {fallback === "—" ? <span className="text-faint">Unknown account</span> : fallback}
       </span>
     );
   }
