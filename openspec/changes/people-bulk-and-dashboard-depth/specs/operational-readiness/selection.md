@@ -99,6 +99,52 @@ reading twelve consequences at once is not something anyone actually does.
 - **THEN** the plan states that each approval mints a direct grant
 - **AND** an approval without an attributable reviewer is refused for the whole batch
 
+### Requirement: Applying MUST reach Zitadel, and the queue MUST hold only work MkAuth owes
+
+The pending-changes queue means one thing: mutations MkAuth intends to make to
+Zitadel and has not made yet. Two paths were putting rows into it that did not
+belong there, and both were read by the operator as the system contradicting
+itself.
+
+**Adoption MUST resolve its own outbox row.** Adopting drift is the operator
+saying "Zitadel is right, MkAuth was wrong" — there is no mutation owed
+upstream. The `add` row exists only so adoption shares one code path with every
+other ledger write, and it MUST be drained in the same request, exactly as
+revoke already was. Left pending it is not merely noise: forty adopted roles
+appear in the queue as forty writes MkAuth owes Zitadel, so accepting what
+Zitadel already had reads as a queue of writes back to Zitadel. And a pending
+`add` is a live instruction — an operator who adopts a role and then removes it
+in Zitadel by hand gets it re-created by the next drain.
+
+**Applying a bulk operation MUST project each row upstream.** `?apply=true` is
+the operator authorising the write they just rehearsed; it MUST NOT mean "wrote
+it down". A bulk removal reported as applied while the roles were still live in
+Zitadel is the sharp end — the screen and the door disagree. The single-person
+handlers already drained on `?apply=true`; the bulk path MUST match them. Bundle
+operations are the one exception: their cascade drains according to the bundle's
+own confirmation mode, and the bulk path MUST NOT override an owner who set that
+bundle to manual.
+
+A drain that fails MUST NOT undo the committed ledger write. The row stays
+pending, which is then the honest state — MkAuth could not reach Zitadel to
+confirm, so the change genuinely is still owed — and the next drain reclaims it.
+
+#### Scenario: Adopting unexplained access
+- **THEN** the drift is recorded as a direct grant
+- **AND** its outbox row is resolved in the same request
+- **AND** it does not appear in pending changes
+
+#### Scenario: Adopting while Zitadel is unreachable
+- **THEN** the adoption still succeeds
+- **AND** the row stays pending, to be reclaimed by the next drain
+
+#### Scenario: Applying a bulk role removal
+- **THEN** each removal's outbox rows are drained before the response
+- **AND** a row the rehearsal blocked drains nothing
+
+#### Scenario: Applying a bulk bundle assignment
+- **THEN** the cascade decides whether to drain, from the bundle's confirmation mode
+
 ### Requirement: Triage MUST offer selection by cluster
 
 Drift arrives in clusters — one misconfigured rule, one person onboarded by

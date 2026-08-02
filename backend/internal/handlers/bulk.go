@@ -91,7 +91,8 @@ func applyBulkPlan(r *http.Request, plan *services.BulkPlan, input services.Bulk
 			continue
 		}
 
-		if err := applyBulkOne(r, actor, input, *out); err != nil {
+		outboxIDs, err := applyBulkOne(r, actor, input, *out)
+		if err != nil {
 			out.Effect = services.EffectFailed
 			out.Detail = "Didn't go through: " + err.Error()
 			continue
@@ -101,34 +102,61 @@ func applyBulkPlan(r *http.Request, plan *services.BulkPlan, input services.Bulk
 		// immediately, on a context detached from the request — a client that
 		// disconnects mid-batch must not leave people with stale claims.
 		rebuildUserCacheDetachedFn(r.Context(), out.UserID)
+
+		// Then project the rows upstream, exactly as the single-person handlers
+		// do on ?apply=true. Without this, apply meant "wrote it down": the
+		// operator read a plan, confirmed it, saw every row marked applied, and
+		// the roles were still whatever they had been in Zitadel until somebody
+		// happened to visit the governance queue. Bulk removal was the sharp
+		// end — access reported as gone that was still live.
+		//
+		// Bundle ops are absent here on purpose: their cascade already drains
+		// according to the bundle's own confirmation mode, and overriding that
+		// from the bulk path would apply a bundle the owner marked manual.
+		for _, id := range outboxIDs {
+			_, _ = svcDrainPropagationRow(r.Context(), id)
+		}
 		out.Effect = services.EffectApplied
 	}
 
 	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
 }
 
-func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out services.BulkOutcome) error {
+// applyBulkOne performs one person's share of the operation and returns the
+// outbox rows it created, for the caller to drain. Bundle ops return none: the
+// cascade decides for itself whether to drain, from the bundle's confirmation
+// mode.
+func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out services.BulkOutcome) ([]string, error) {
 	ctx := r.Context()
 
 	switch input.Op {
 	case services.BulkOpAssignRole:
-		return enqueueBulkGrant(ctx, actor, out.UserID, input.ProjectID, input.RoleKey, input.Reason, input.DurationDays)
+		id, err := enqueueBulkGrant(ctx, actor, out.UserID, input.ProjectID, input.RoleKey, input.Reason, input.DurationDays)
+		if err != nil {
+			return nil, err
+		}
+		return []string{id}, nil
 
 	case services.BulkOpRemoveRole:
+		var ids []string
 		for _, grantID := range out.GrantIDs {
-			if _, err := svcDeleteDirectGrant(ctx, out.UserID, grantID, actor); err != nil {
-				return err
+			res, err := svcDeleteDirectGrant(ctx, out.UserID, grantID, actor)
+			if err != nil {
+				return nil, err
 			}
+			// There may be none — every role the grant carried is still covered
+			// by another source, so nothing is queued and nothing is drained.
+			ids = append(ids, res.OutboxIDs...)
 		}
-		return nil
+		return ids, nil
 
 	case services.BulkOpAssignBundle:
 		_, err := svcCascadeBundleAssigned(ctx, actor, out.UserID, input.BundleID)
-		return err
+		return nil, err
 
 	case services.BulkOpRemoveBundle:
 		_, err := svcCascadeBundleRemoved(ctx, actor, out.UserID, input.BundleID)
-		return err
+		return nil, err
 
 	case services.BulkOpExtend:
 		// The grant ledger upserts on (user, project, role), so re-enqueuing
@@ -137,31 +165,34 @@ func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out
 		// grants those are.
 		grants, err := svcUserDirectGrants(ctx, out.UserID)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		wanted := map[string]struct{}{}
 		for _, id := range out.GrantIDs {
 			wanted[id] = struct{}{}
 		}
+		var ids []string
 		for _, g := range grants {
 			if _, ok := wanted[g.ID]; !ok {
 				continue
 			}
-			if err := enqueueBulkGrant(ctx, actor, out.UserID, g.ProjectID, g.RoleKey, input.Reason, input.DurationDays); err != nil {
-				return err
+			id, err := enqueueBulkGrant(ctx, actor, out.UserID, g.ProjectID, g.RoleKey, input.Reason, input.DurationDays)
+			if err != nil {
+				return nil, err
 			}
+			ids = append(ids, id)
 		}
-		return nil
+		return ids, nil
 	}
 
-	return nil
+	return nil, nil
 }
 
 // enqueueBulkGrant writes the ledger + audit + outbox row in one transaction,
-// exactly as the single-grant handler does. The Zitadel mutation itself happens
-// on the operator-triggered drain — a bulk write is still not allowed to call
-// the Management API from a handler.
-func enqueueBulkGrant(ctx context.Context, actor, userID, projectID, roleKey, reason string, durationDays int) error {
+// exactly as the single-grant handler does, and returns the outbox id. The
+// Zitadel mutation itself happens on the drain the caller runs afterwards — a
+// bulk write is still not allowed to call the Management API from a handler.
+func enqueueBulkGrant(ctx context.Context, actor, userID, projectID, roleKey, reason string, durationDays int) (string, error) {
 	var expiresAt *time.Time
 	if durationDays > 0 {
 		expiry := time.Now().UTC().Add(time.Duration(durationDays) * 24 * time.Hour)
@@ -176,7 +207,7 @@ func enqueueBulkGrant(ctx context.Context, actor, userID, projectID, roleKey, re
 		"bulk":          true,
 	})
 
-	_, err := dbEnqueueDirectGrantPropagation(ctx, db.EnqueueParams{
+	res, err := dbEnqueueDirectGrantPropagation(ctx, db.EnqueueParams{
 		UserID:      userID,
 		ProjectID:   projectID,
 		RoleKeys:    []string{roleKey},
@@ -187,5 +218,8 @@ func enqueueBulkGrant(ctx context.Context, actor, userID, projectID, roleKey, re
 		OpType:      "add",
 		PayloadJSON: string(payload),
 	})
-	return err
+	if err != nil {
+		return "", err
+	}
+	return res.OutboxID, nil
 }

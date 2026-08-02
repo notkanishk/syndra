@@ -61,6 +61,12 @@
 - [x] PBD-46 Bulk revoke of drift stays absent, and the screen still says so.
 - [x] PBD-47 The drag tracks "moved past the threshold" and "has painted a row" separately. Conflating them meant the first pointermove marked the gesture complete before anything was painted: a wobble on a checkbox swallowed the click entirely, and — because a real pointer always moves before crossing into the next row — every drag silently omitted its starting row. The original tests missed it by never firing pointermove.
 
+## Track 6 — Applying means applied
+
+- [x] PBD-48 `AttributeDriftAndEnqueue` returns its outbox id and `attributeOneDrift` drains it, as `handleRevokeDrift` already did. Adoption owes Zitadel nothing; leaving the row pending listed forty adopted roles as writes MkAuth still owed Zitadel, so accepting Zitadel's state produced a queue of writes back to it. A stale pending `add` is also a live instruction — it would re-create a role the operator later removed by hand.
+- [x] PBD-49 `applyBulkPlan` drains the rows each person's operation enqueued. `?apply=true` meant "wrote it down": a bulk role removal reported every row applied while the roles stayed live in Zitadel. Bundle ops stay out of it — their cascade drains per the bundle's confirmation mode, and overriding that would apply a bundle its owner set to manual.
+- [x] PBD-50 A failed drain leaves the row applied and the outbox row pending. The ledger write is committed and durable; discarding it over an unreachable Zitadel would lose real intent, and pending is the honest state when MkAuth could not confirm.
+
 ## Verification
 
 - [x] PBD-31 `go test ./... && go vet ./...` — backend green.

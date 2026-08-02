@@ -11,6 +11,7 @@ import (
 
 	"mkauth/internal/db"
 	"mkauth/internal/services"
+	"mkauth/internal/services/propagation"
 )
 
 func bulkRequest(t *testing.T, body string, apply bool) *http.Request {
@@ -51,6 +52,22 @@ func stubRehearsal(t *testing.T, plan services.BulkPlan) *services.BulkRequest {
 	return seen
 }
 
+// stubDrain captures the outbox rows the handler projects upstream. Applying is
+// not "wrote it down": every row a bulk apply enqueues has to reach Zitadel in
+// the same request, exactly as the single-person handlers do on ?apply=true.
+func stubDrain(t *testing.T) *[]string {
+	t.Helper()
+	orig := svcDrainPropagationRow
+	t.Cleanup(func() { svcDrainPropagationRow = orig })
+
+	var drained []string
+	svcDrainPropagationRow = func(_ context.Context, id string) (propagation.DrainResult, error) {
+		drained = append(drained, id)
+		return propagation.DrainResult{Applied: 1}, nil
+	}
+	return &drained
+}
+
 func stubNoWrites(t *testing.T) *int {
 	t.Helper()
 	origEnqueue := dbEnqueueDirectGrantPropagation
@@ -59,6 +76,7 @@ func stubNoWrites(t *testing.T) *int {
 		dbEnqueueDirectGrantPropagation = origEnqueue
 		rebuildUserCacheDetachedFn = origRebuild
 	})
+	stubDrain(t)
 
 	writes := 0
 	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams) (db.EnqueueResult, error) {
@@ -184,6 +202,7 @@ func TestHandleBulkGrants_PartialFailureIsIsolatedAndReported(t *testing.T) {
 		rebuildUserCacheDetachedFn = origRebuild
 	})
 
+	stubDrain(t)
 	var rebuilt []string
 	rebuildUserCacheDetachedFn = func(_ context.Context, uid string) { rebuilt = append(rebuilt, uid) }
 	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
@@ -239,11 +258,12 @@ func TestHandleBulkGrants_RemoveActsOnRehearsedGrantIDs(t *testing.T) {
 		rebuildUserCacheDetachedFn = origRebuild
 	})
 	rebuildUserCacheDetachedFn = func(context.Context, string) {}
+	drained := stubDrain(t)
 
 	var gotUser, gotGrant string
 	svcDeleteDirectGrant = func(_ context.Context, uid, gid, _ string) (services.DirectGrantRemoval, error) {
 		gotUser, gotGrant = uid, gid
-		return services.DirectGrantRemoval{Status: "pending"}, nil
+		return services.DirectGrantRemoval{Status: "pending", OutboxIDs: []string{"ob_rm"}}, nil
 	}
 
 	rr := httptest.NewRecorder()
@@ -254,6 +274,78 @@ func TestHandleBulkGrants_RemoveActsOnRehearsedGrantIDs(t *testing.T) {
 	}
 	if gotUser != "u1" || gotGrant != "g_77" {
 		t.Errorf("wrong grant removed: user=%q grant=%q", gotUser, gotGrant)
+	}
+	// The removal's own outbox rows must be projected, not left queued. Reporting
+	// access as removed while the role is still live in Zitadel is the worst
+	// version of this bug: the screen and the door disagree.
+	if len(*drained) != 1 || (*drained)[0] != "ob_rm" {
+		t.Errorf("removal must drain its own outbox rows, drained=%v", *drained)
+	}
+}
+
+// Applying a bulk grant has to reach Zitadel in the same request. Enqueuing and
+// stopping there marked every row "applied" while the roles sat in the
+// governance queue, waiting for somebody to notice them.
+func TestHandleBulkGrants_ApplyProjectsEachRowUpstream(t *testing.T) {
+	stubRehearsal(t, services.BulkPlan{
+		Op: services.BulkOpAssignRole,
+		Outcomes: []services.BulkOutcome{
+			{UserID: "u1", Effect: services.EffectApply},
+			{UserID: "u2", Effect: services.EffectApply},
+			{UserID: "u_blocked", Effect: services.EffectBlocked},
+		},
+	})
+
+	origEnqueue, origRebuild := dbEnqueueDirectGrantPropagation, rebuildUserCacheDetachedFn
+	t.Cleanup(func() {
+		dbEnqueueDirectGrantPropagation = origEnqueue
+		rebuildUserCacheDetachedFn = origRebuild
+	})
+	rebuildUserCacheDetachedFn = func(context.Context, string) {}
+	drained := stubDrain(t)
+
+	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
+		return db.EnqueueResult{OutboxID: "ob_" + p.UserID, Status: "pending"}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	handleBulkGrants(rr, bulkRequest(t, `{"op":"assign_role","user_ids":["u1","u2","u_blocked"],"project_id":"p","role_key":"r","reason":"x"}`, true))
+
+	if len(*drained) != 2 || (*drained)[0] != "ob_u1" || (*drained)[1] != "ob_u2" {
+		t.Fatalf("each applied row drains its own outbox row and a blocked row drains nothing, got %v", *drained)
+	}
+}
+
+// A drain that cannot reach Zitadel leaves the row pending, which is the honest
+// state — but the ledger write already happened, so the row is applied, not
+// failed. Rolling it back would discard a durable intent over a transient
+// network problem.
+func TestHandleBulkGrants_DrainFailureLeavesTheRowApplied(t *testing.T) {
+	stubRehearsal(t, services.BulkPlan{
+		Op:       services.BulkOpAssignRole,
+		Outcomes: []services.BulkOutcome{{UserID: "u1", Effect: services.EffectApply}},
+	})
+
+	origEnqueue, origRebuild, origDrain := dbEnqueueDirectGrantPropagation, rebuildUserCacheDetachedFn, svcDrainPropagationRow
+	t.Cleanup(func() {
+		dbEnqueueDirectGrantPropagation = origEnqueue
+		rebuildUserCacheDetachedFn = origRebuild
+		svcDrainPropagationRow = origDrain
+	})
+	rebuildUserCacheDetachedFn = func(context.Context, string) {}
+	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams) (db.EnqueueResult, error) {
+		return db.EnqueueResult{OutboxID: "ob_1", Status: "pending"}, nil
+	}
+	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
+		return propagation.DrainResult{}, errors.New("zitadel unreachable")
+	}
+
+	rr := httptest.NewRecorder()
+	handleBulkGrants(rr, bulkRequest(t, `{"op":"assign_role","user_ids":["u1"],"project_id":"p","role_key":"r","reason":"x"}`, true))
+
+	plan := decodePlan(t, rr)
+	if plan.Outcomes[0].Effect != services.EffectApplied {
+		t.Errorf("a failed drain must not undo a committed ledger write, got %q", plan.Outcomes[0].Effect)
 	}
 }
 

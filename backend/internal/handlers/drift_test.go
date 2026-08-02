@@ -36,6 +36,12 @@ func resetDriftDeps(t *testing.T) {
 		svcDrainOne = origDrainOne
 		dbGetMappingRuleByID = origRuleByID
 	})
+	// Every triage action now drains its own outbox row — adoption as well as
+	// revocation — so the default has to be a no-op rather than the real drain
+	// reaching for a database that isn't there. Tests that care override it.
+	svcDrainOne = func(context.Context, string) (propagation.DrainResult, error) {
+		return propagation.DrainResult{Applied: 1}, nil
+	}
 }
 
 // --- Adoption records a direct grant, and says only that ---
@@ -64,10 +70,10 @@ func attributeAttempt(t *testing.T, body string) (int, bool, db.EnqueueParams) {
 	var wrote bool
 	var params db.EnqueueParams
 	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) { return pendingDrift(), nil }
-	dbAttributeDriftAndEnqueue = func(_ context.Context, _ string, p db.EnqueueParams) error {
+	dbAttributeDriftAndEnqueue = func(_ context.Context, _ string, p db.EnqueueParams) (string, error) {
 		wrote = true
 		params = p
-		return nil
+		return "ob-1", nil
 	}
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/attribute", strings.NewReader(body))
 	req.SetPathValue("id", "d1")
@@ -203,6 +209,90 @@ func TestHandleRevokeDrift_EnqueuesRevokeAtomicallyThenDrains(t *testing.T) {
 	}
 }
 
+// Adoption is the operator saying "Zitadel is right, MkAuth was wrong". Leaving
+// its outbox row pending said the opposite: the governance queue listed every
+// adopted role as a change MkAuth still owed Zitadel, so accepting what Zitadel
+// already had produced a queue of writes back to Zitadel. The row must resolve
+// in the same request, exactly as the revoke path already did.
+func TestHandleAttributeDrift_ResolvesItsOwnOutboxRow(t *testing.T) {
+	resetDriftDeps(t)
+	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) { return pendingDrift(), nil }
+	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) {
+		return "ob_adopt", nil
+	}
+	var drained string
+	svcDrainOne = func(_ context.Context, id string) (propagation.DrainResult, error) {
+		drained = id
+		return propagation.DrainResult{Applied: 1}, nil
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/attribute",
+		strings.NewReader(`{"source":"external_backfill"}`))
+	req.SetPathValue("id", "d1")
+	w := httptest.NewRecorder()
+	handleAttributeDrift(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body)
+	}
+	if drained != "ob_adopt" {
+		t.Fatalf("adoption must drain the row it enqueued, drained=%q", drained)
+	}
+}
+
+// The bulk path shares attributeOneDrift, so it inherits the drain — but it is
+// the path the operator actually used to adopt forty roles at once, and it is
+// worth pinning that forty adoptions leave forty resolved rows, not a queue.
+func TestHandleBulkAttributeDrift_ResolvesEveryOutboxRow(t *testing.T) {
+	resetDriftDeps(t)
+	dbGetDriftItem = func(_ context.Context, id string) (models.DriftItem, error) {
+		item := pendingDrift()
+		item.ID = id
+		return item, nil
+	}
+	dbAttributeDriftAndEnqueue = func(_ context.Context, driftID string, _ db.EnqueueParams) (string, error) {
+		return "ob_" + driftID, nil
+	}
+	var drained []string
+	svcDrainOne = func(_ context.Context, id string) (propagation.DrainResult, error) {
+		drained = append(drained, id)
+		return propagation.DrainResult{Applied: 1}, nil
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
+		strings.NewReader(`{"ids":["d1","d2","d3"],"source":"external_backfill"}`))
+	w := httptest.NewRecorder()
+	handleBulkAttributeDrift(w, req)
+
+	if len(drained) != 3 {
+		t.Fatalf("every adopted row must be projected, drained=%v", drained)
+	}
+}
+
+// A drain that cannot reach Zitadel is not an adoption failure. The drift is
+// resolved and the ledger records it; the outbox row stays pending because
+// MkAuth genuinely could not confirm, and the next drain reclaims it.
+func TestHandleAttributeDrift_DrainFailureStillAdopts(t *testing.T) {
+	resetDriftDeps(t)
+	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) { return pendingDrift(), nil }
+	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) {
+		return "ob_adopt", nil
+	}
+	svcDrainOne = func(context.Context, string) (propagation.DrainResult, error) {
+		return propagation.DrainResult{}, errors.New("zitadel unreachable")
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/attribute",
+		strings.NewReader(`{"source":"external_backfill"}`))
+	req.SetPathValue("id", "d1")
+	w := httptest.NewRecorder()
+	handleAttributeDrift(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("an unreachable Zitadel must not undo a committed adoption, got %d: %s", w.Code, w.Body)
+	}
+}
+
 func TestHandleRevokeDrift_LostRaceIs409(t *testing.T) {
 	resetDriftDeps(t)
 	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
@@ -288,9 +378,9 @@ func TestHandleBulkAttributeDrift_MissingSourceIs400(t *testing.T) {
 	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
 		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, Status: "pending_triage"}, nil
 	}
-	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) error {
+	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) {
 		attributed = true
-		return nil
+		return "ob-1", nil
 	}
 
 	// Source omitted → must 400 before the loop, never defaulting to "direct".
@@ -312,9 +402,9 @@ func TestHandleBulkAttributeDrift_ValidSourceAttributes(t *testing.T) {
 		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, Status: "pending_triage"}, nil
 	}
 	var gotSource string
-	dbAttributeDriftAndEnqueue = func(_ context.Context, _ string, p db.EnqueueParams) error {
+	dbAttributeDriftAndEnqueue = func(_ context.Context, _ string, p db.EnqueueParams) (string, error) {
 		gotSource = p.Source
-		return nil
+		return "ob-1", nil
 	}
 
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true", strings.NewReader(`{"ids":["d1"],"source":"external_backfill"}`))
@@ -340,9 +430,9 @@ func TestBulkDrift_RehearsesByDefaultAndWritesNothing(t *testing.T) {
 		return item, nil
 	}
 	writes := 0
-	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) error {
+	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) {
 		writes++
-		return nil
+		return "ob-1", nil
 	}
 
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute",
@@ -385,9 +475,9 @@ func TestBulkDrift_ReportsRowsSomebodyElseAlreadyResolved(t *testing.T) {
 		return item, nil
 	}
 	writes := 0
-	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) error {
+	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) {
 		writes++
-		return nil
+		return "ob-1", nil
 	}
 
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
@@ -431,7 +521,7 @@ func TestBulkAttributeDrift_NamesTheIdsThatFailed(t *testing.T) {
 		item.ID = id
 		return item, nil
 	}
-	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) error { return nil }
+	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) { return "ob-1", nil }
 
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
 		strings.NewReader(`{"ids":["d1","d2","d3"],"source":"external_backfill"}`))
@@ -513,7 +603,7 @@ func TestBulkResolutions_AlwaysReturnARowPerRequestedID(t *testing.T) {
 		item.ID = id
 		return item, nil
 	}
-	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) error { return nil }
+	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) { return "ob-1", nil }
 
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
 		strings.NewReader(`{"ids":["d1","d1",""],"source":"external_backfill"}`))

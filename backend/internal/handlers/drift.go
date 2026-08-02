@@ -111,6 +111,19 @@ func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
 // outbox as an `add` that self-resolves (grant-index short-circuit / 409→applied)
 // — one code path, no special "skip Zitadel" branch.
 //
+// That self-resolution has to happen HERE, inline, exactly as handleRevokeDrift
+// drains its own row. Adoption is the operator saying "Zitadel is right, MkAuth
+// was wrong"; leaving its outbox row pending told them the opposite — the
+// governance queue listed forty adopted roles as changes MkAuth still owed
+// Zitadel, so accepting what Zitadel already had produced a queue of writes back
+// to Zitadel. Worse than the confusion: a pending `add` is a live instruction. An
+// operator who adopts a role and then removes it in Zitadel by hand gets it
+// re-created by the next drain.
+//
+// A drain failure is non-fatal and correct: the row stays pending only when
+// MkAuth could not reach Zitadel to confirm, which is a change genuinely still
+// owed, and the next drain reclaims it.
+//
 // The recorded source is always external_backfill and carries no source_ref:
 // there is no bundle or rule owning this access, and saying otherwise would be
 // a provenance the ledger cannot honour. See validAttributionSource.
@@ -122,11 +135,16 @@ func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
 // leaves the triage queue without its durable outbox row.
 func attributeOneDrift(ctx context.Context, item models.DriftItem, req attributeRequest, actor string) error {
 	payload, _ := json.Marshal(req)
-	return dbAttributeDriftAndEnqueue(ctx, item.ID, db.EnqueueParams{
+	outboxID, err := dbAttributeDriftAndEnqueue(ctx, item.ID, db.EnqueueParams{
 		UserID: item.UserID, ProjectID: item.ProjectID, RoleKeys: item.RoleKeys,
 		GrantedBy: actor, Reason: "drift attribution", Source: req.Source,
 		OpType: "add", ZitadelGrantID: item.ZitadelGrantID, PayloadJSON: string(payload),
 	})
+	if err != nil {
+		return err
+	}
+	_, _ = svcDrainOne(ctx, outboxID)
+	return nil
 }
 
 func handleRevokeDrift(w http.ResponseWriter, r *http.Request) {

@@ -156,23 +156,32 @@ var (
 // grant already exists in Zitadel; the outbox row self-resolves during drain via
 // the grant-index short-circuit / 409). p.PayloadJSON doubles as the resolution
 // payload. ErrDriftNotPending on a lost race (whole tx rolled back — no outbox row).
-func AttributeDriftAndEnqueue(ctx context.Context, driftID string, p EnqueueParams) error {
+//
+// Returns the outbox id so the handler can drain it AFTER commit. That drain is
+// not an optimization: an adoption row left pending tells the operator MkAuth
+// owes Zitadel a grant it does not owe, and a stale one would re-create access
+// somebody removed by hand in the meantime. See attributeOneDrift.
+func AttributeDriftAndEnqueue(ctx context.Context, driftID string, p EnqueueParams) (string, error) {
 	tx, err := PG.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin attribute tx: %w", err)
+		return "", fmt.Errorf("begin attribute tx: %w", err)
 	}
 	defer tx.Rollback(ctx) // no-op after Commit
 	if err := claimDriftTx(ctx, tx, driftID, "attributed", p.GrantedBy, p.PayloadJSON); err != nil {
-		return err
+		return "", err
 	}
 	key, err := newOutboxIdempotencyKey()
 	if err != nil {
-		return err
+		return "", err
 	}
-	if _, err := enqueueWrites(ctx, tx, p, key); err != nil {
-		return fmt.Errorf("attribute enqueue writes: %w", err)
+	outboxID, err := enqueueWrites(ctx, tx, p, key)
+	if err != nil {
+		return "", fmt.Errorf("attribute enqueue writes: %w", err)
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("commit attribute tx: %w", err)
+	}
+	return outboxID, nil
 }
 
 // RevokeDriftAndEnqueue claims a pending drift (→revoked) and enqueues a revoke
