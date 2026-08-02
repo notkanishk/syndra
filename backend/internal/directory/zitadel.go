@@ -482,13 +482,13 @@ func toUserProfile(u zitadel.ZitadelUser) models.UserProfile {
 		name = u.ID
 	}
 	return models.UserProfile{
-		ID:       u.ID,
-		Name:     name,
-		Email:    u.Email,
-		Title:    "",
-		Team:     "",
-		Status:   normalizeUserState(u.State),
-		Avatar:   nameToAvatar(name),
+		ID:     u.ID,
+		Name:   name,
+		Email:  u.Email,
+		Title:  "",
+		Team:   "",
+		Status: normalizeUserState(u.State),
+		Avatar: nameToAvatar(name),
 	}
 }
 
