@@ -13,8 +13,11 @@ import (
 var (
 	dbGetDirectGrantsForUser = db.GetDirectGrantsForUser
 	dbGetActiveMappingRules  = db.GetActiveMappingRules
-	dbGetBundlesForUser      = db.GetBundlesForUser
-	dbGetRolesForBundle      = db.GetRolesForBundle
+	// Version-aware. The cache compiles the claims a token is issued from, so
+	// resolving bundles through the mutable working copy meant an unpublished
+	// edit reached real tokens on the next rebuild — before anybody published
+	// it, and without appearing in any plan.
+	dbGetUserBundleRoles = db.GetUserBundleRolesGrouped
 
 	// cacheFindUser supplies the profile attributes (email, name, title,
 	// team) a claim profile may project into a token. Injectable so compiler
@@ -39,15 +42,16 @@ var (
 	}
 )
 
-// grantsToBundleRoles is a helper to look up roles for multiple bundles.
-func grantsToBundleRoles(ctx context.Context, bundles []models.Bundle) []models.BundleRole {
+// bundleRolesFor returns everything this user gets from their bundles, each
+// resolved through the version THEY are pinned to.
+func bundleRolesFor(ctx context.Context, userID string) []models.BundleRole {
+	byBundle, err := dbGetUserBundleRoles(ctx, userID)
+	if err != nil {
+		log.Printf("[CACHE WARN] Failed to fetch bundle roles for %s: %v", userID, err)
+		return nil
+	}
 	var roles []models.BundleRole
-	for _, b := range bundles {
-		r, err := dbGetRolesForBundle(ctx, b.ID)
-		if err != nil {
-			log.Printf("[CACHE WARN] Failed to fetch roles for bundle %s: %v", b.ID, err)
-			continue
-		}
+	for _, r := range byBundle {
 		roles = append(roles, r...)
 	}
 	return roles

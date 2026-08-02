@@ -52,6 +52,7 @@ describe("parseFilters", () => {
       project: "pLaser",
       role: "trained",
       bundle: "Safety",
+      version: "",
       attention: "expiring",
     });
   });
@@ -69,6 +70,7 @@ describe("serializeFilters", () => {
       project: "pLaser",
       role: "trained",
       bundle: "Safety",
+      version: "2",
       attention: "expiring" as const,
     };
     const query = serializeFilters(original);
@@ -146,5 +148,43 @@ describe("describeFilters", () => {
   it("says nothing when nothing is filtered", () => {
     expect(describeFilters(EMPTY_FILTERS)).toBe("");
     expect(hasAnyFilter(EMPTY_FILTERS)).toBe(false);
+  });
+});
+
+describe("the version dimension", () => {
+  it("narrows a bundle to the people on one version of it", () => {
+    const onV2 = person({
+      user: { ...person().user, id: "u1" },
+      bundle_names: ["Safety"],
+      bundle_versions: { Safety: 2 },
+    });
+    const onV4 = person({
+      user: { ...person().user, id: "u2" },
+      bundle_names: ["Safety"],
+      bundle_versions: { Safety: 4 },
+    });
+
+    const both = applyFilters([onV2, onV4], { ...EMPTY_FILTERS, bundle: "Safety" });
+    expect(both).toHaveLength(2);
+
+    const stragglers = applyFilters([onV2, onV4], {
+      ...EMPTY_FILTERS,
+      bundle: "Safety",
+      version: "2",
+    });
+    expect(stragglers.map((r) => r.user.id)).toEqual(["u1"]);
+  });
+
+  // A version with no bundle spans unrelated bundles and answers nothing, so a
+  // hand-edited URL degrades to the bundle-less view rather than an empty one.
+  it("ignores a version with no bundle", () => {
+    expect(parseFilters(new URLSearchParams("version=2")).version).toBe("");
+  });
+
+  it("says which version it narrowed to", () => {
+    expect(describeFilters({ ...EMPTY_FILTERS, bundle: "Safety", version: "2" })).toBe(
+      "on v2 of the Safety bundle",
+    );
+    expect(describeFilters({ ...EMPTY_FILTERS, bundle: "Safety" })).toBe("in the Safety bundle");
   });
 });

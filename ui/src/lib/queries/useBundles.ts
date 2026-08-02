@@ -13,6 +13,14 @@ export interface BundleRow {
   confirmation_mode?: "auto" | "manual";
   /** How many people currently hold this bundle. Editing it changes all of them. */
   holder_count?: number;
+  /** Highest published version. */
+  latest_version?: number;
+  /** Holders pinned to something older than the latest version. */
+  stale_holders?: number;
+  /** Role additions or removals sitting in the working copy, unpublished. */
+  unpublished_changes?: number;
+  /** Set only when the bundle was read for one person: the version THEY hold. */
+  pinned_version?: number;
   created_at?: string;
 }
 
@@ -105,6 +113,27 @@ export function useBundleRolesByBundle(bundleIds: string[]) {
   return { byId, allLoaded };
 }
 
+/**
+ * What a working-copy edit invalidates.
+ *
+ * The draft query is the one that must not be missed. It backs the unpublished-
+ * change strip and the Publish button, so leaving it stale meant an operator
+ * added a role, saw the row appear, and had no way to publish it until they
+ * reloaded — the edit looked applied and nothing said otherwise.
+ *
+ * The bundle LIST is included for the same reason: it carries the
+ * unpublished-changes marker.
+ *
+ * `users` is NOT invalidated. An edit reaches nobody, so nobody's access
+ * changed; refetching People after one would be claiming otherwise.
+ */
+function invalidateAfterEdit(qc: ReturnType<typeof useQueryClient>, bundleId: string) {
+  qc.invalidateQueries({ queryKey: KEYS.rolesFor(bundleId) });
+  qc.invalidateQueries({ queryKey: KEYS.impactFor(bundleId) });
+  qc.invalidateQueries({ queryKey: ["bundles", bundleId, "draft"] });
+  qc.invalidateQueries({ queryKey: KEYS.list });
+}
+
 /** Create a new bundle. Invalidates the list. */
 export function useCreateBundle() {
   const qc = useQueryClient();
@@ -128,10 +157,7 @@ export function useAddBundleRole(bundleId: string) {
         body: input,
       });
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.rolesFor(bundleId) });
-      qc.invalidateQueries({ queryKey: KEYS.impactFor(bundleId) });
-    },
+    onSuccess: () => invalidateAfterEdit(qc, bundleId),
   });
 }
 
@@ -148,13 +174,7 @@ export function useRemoveBundleRole(bundleId: string) {
         `/bundles/${bundleId}/roles/${encodeURIComponent(projectId)}/${encodeURIComponent(roleKey)}`,
         { method: "DELETE" },
       ),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.rolesFor(bundleId) });
-      qc.invalidateQueries({ queryKey: KEYS.impactFor(bundleId) });
-      qc.invalidateQueries({ queryKey: KEYS.list });
-      // Holders' effective access just changed.
-      qc.invalidateQueries({ queryKey: ["users"] });
-    },
+    onSuccess: () => invalidateAfterEdit(qc, bundleId),
   });
 }
 

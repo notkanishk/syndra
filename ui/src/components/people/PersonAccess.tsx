@@ -174,8 +174,28 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
             // "who else has this?" is the next question every single time,
             // and it used to dead-end here.
             access.data.bundles.map((bundle) => (
-              <Link key={bundle.id} href={peopleHref({ bundle: bundle.name })}>
-                <Chip>{bundle.name}</Chip>
+              // Linking with the version narrows to the people on the SAME
+              // version, which is the cohort question: "who else is still on
+              // v2 with them".
+              <Link
+                key={bundle.id}
+                href={peopleHref({
+                  bundle: bundle.name,
+                  version: bundle.pinned_version ? String(bundle.pinned_version) : "",
+                })}
+              >
+                <Chip>
+                  {bundle.name}
+                  {bundle.pinned_version ? (
+                    <span className="text-faint">
+                      {" "}
+                      v{bundle.pinned_version}
+                      {bundle.latest_version && bundle.latest_version > bundle.pinned_version
+                        ? ` · v${bundle.latest_version} available`
+                        : ""}
+                    </span>
+                  ) : null}
+                </Chip>
               </Link>
             ))
             )}

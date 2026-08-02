@@ -20,9 +20,66 @@ type Bundle struct {
 	CreatedAt        time.Time `json:"created_at"`
 
 	// HolderCount is how many people currently hold this bundle. Computed on
-	// read, never persisted. Editing a bundle changes access for all of them
-	// at once, so the number belongs next to the name rather than a click away.
+	// read, never persisted. Publishing a version can change access for all of
+	// them at once, so the number belongs next to the name rather than a click
+	// away.
 	HolderCount int `json:"holder_count"`
+
+	// LatestVersion is the highest published version number, and StaleHolders
+	// how many people are pinned to something older than it. Both computed on
+	// read.
+	//
+	// StaleHolders is the number the list exists to show. A bundle where
+	// everybody is current and one where eleven people are two versions back
+	// are different objects, and only one of them means "the edit you made
+	// last term never reached anyone".
+	LatestVersion int `json:"latest_version"`
+	StaleHolders  int `json:"stale_holders"`
+
+	// UnpublishedChanges is how many role additions or removals sit in the
+	// working copy and have not been published. Zero means the bundle and its
+	// latest version agree.
+	UnpublishedChanges int `json:"unpublished_changes"`
+
+	// PinnedVersion is set only when the bundle was read for one person: which
+	// version of it THEY hold. Zero elsewhere.
+	//
+	// It is on the person's copy of the bundle rather than looked up separately
+	// because "Ada has Lab Tech" and "Ada has Lab Tech v2" are the same fact,
+	// and the screens that say the first should not have to fetch again to say
+	// the second.
+	PinnedVersion int `json:"pinned_version,omitempty"`
+}
+
+// BundleVersion is one published snapshot of a bundle's roles.
+//
+// Immutable once written: an operator saying "they are on v2" has to be able to
+// look up what v2 was, and a snapshot that can be edited afterwards answers a
+// different question than the one they asked.
+type BundleVersion struct {
+	ID          string    `json:"id"`
+	BundleID    string    `json:"bundle_id"`
+	Version     int       `json:"version"`
+	Note        string    `json:"note"`
+	PublishedBy string    `json:"published_by"`
+	PublishedAt time.Time `json:"published_at"`
+
+	// HolderCount is how many people are pinned to THIS version. Computed on read.
+	HolderCount int `json:"holder_count"`
+	// LatestVersion is the bundle's highest version, so a reader can tell how
+	// far behind this one is without a second lookup.
+	LatestVersion int `json:"latest_version,omitempty"`
+	// Roles is populated only where a caller asked for the contents.
+	Roles []BundleRole `json:"roles,omitempty"`
+}
+
+// BundleHolder is one person's pin: which version of a bundle they hold.
+type BundleHolder struct {
+	BundleID   string    `json:"bundle_id"`
+	UserID     string    `json:"user_id"`
+	VersionID  string    `json:"version_id"`
+	Version    int       `json:"version"`
+	AssignedAt time.Time `json:"assigned_at"`
 }
 
 // BundleRole represents a specific Zitadel role mapped to a bundle
@@ -69,13 +126,13 @@ type AuditLog struct {
 }
 
 type UserProfile struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Title    string `json:"title"`
-	Team     string `json:"team"`
-	Status   string `json:"status"`
-	Avatar   string `json:"avatar"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+	Title  string `json:"title"`
+	Team   string `json:"team"`
+	Status string `json:"status"`
+	Avatar string `json:"avatar"`
 }
 
 type ProjectRole struct {
@@ -150,12 +207,17 @@ type UserAccessView struct {
 // an operator today. The index exists to surface those; without them it is a
 // plain directory, and a directory is not worth a top-level destination.
 type UserListItem struct {
-	User               UserProfile `json:"user"`
-	BundleCount        int         `json:"bundle_count"`
-	BundleNames        []string    `json:"bundle_names"`
-	EffectiveRoleCount int         `json:"effective_role_count"`
-	ProjectCount       int         `json:"project_count"`
-	KeyProjects        []string    `json:"key_projects"`
+	User        UserProfile `json:"user"`
+	BundleCount int         `json:"bundle_count"`
+	BundleNames []string    `json:"bundle_names"`
+	// BundleVersions maps bundle name → the version THIS person is pinned to.
+	// Alongside BundleNames rather than replacing it: the chips render from the
+	// names, and the People filter narrows "in the Lab Tech bundle" down to "on
+	// v2 of it" from the same row without a second request.
+	BundleVersions     map[string]int `json:"bundle_versions,omitempty"`
+	EffectiveRoleCount int            `json:"effective_role_count"`
+	ProjectCount       int            `json:"project_count"`
+	KeyProjects        []string       `json:"key_projects"`
 	// KeyProjectIDs is the same set addressed by id rather than display name.
 	// Names are what an operator reads; ids are what a link can carry without
 	// breaking when a project is renamed, and what a role-scoped filter needs
@@ -292,16 +354,16 @@ type CascadeSummary struct {
 // diff — "8 applied", "2 waiting", "no writes" is the whole vocabulary, and a
 // half-applied cascade has to be visible AS a half-applied cascade.
 type CascadeGroup struct {
-	CascadeID string     `json:"cascade_id"`
-	Source    string     `json:"source"`               // bundle | rule | lifecycle_cascade
-	SourceRef string     `json:"source_ref,omitempty"` // originating bundle/rule id
-	Applied   int        `json:"applied"`
-	Waiting   int        `json:"waiting"`
-	Failed    int        `json:"failed"`
-	UserIDs   []string   `json:"user_ids"`
+	CascadeID string           `json:"cascade_id"`
+	Source    string           `json:"source"`               // bundle | rule | lifecycle_cascade
+	SourceRef string           `json:"source_ref,omitempty"` // originating bundle/rule id
+	Applied   int              `json:"applied"`
+	Waiting   int              `json:"waiting"`
+	Failed    int              `json:"failed"`
+	UserIDs   []string         `json:"user_ids"`
 	Writes    []CascadeSummary `json:"writes"`
-	StartedAt time.Time  `json:"started_at"`
-	SettledAt *time.Time `json:"settled_at,omitempty"`
+	StartedAt time.Time        `json:"started_at"`
+	SettledAt *time.Time       `json:"settled_at,omitempty"`
 }
 
 // DriftItem is one out-of-band grant discrepancy awaiting operator triage.
@@ -513,6 +575,5 @@ type CatalogRole struct {
 	RuleCount         int    `json:"rule_count"`
 	AssignedUserCount int    `json:"assigned_user_count"`
 	IsUnused          bool   `json:"is_unused"`
-	Source            string `json:"source"`        // "mkauth" | "demo" | "referenced"
-	DisplayLabel      string `json:"display_label"` // "Printing Lab: admin"
+	Source            string `json:"source"` // "mkauth" | "demo" | "referenced"
 }

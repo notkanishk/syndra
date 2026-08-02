@@ -37,8 +37,10 @@ func grantRemovalFixture(
 	svcGetBundlesForUser = func(context.Context, string) ([]models.Bundle, error) {
 		return bundles, nil
 	}
-	svcCascGetRolesForBundle = func(_ context.Context, id string) ([]models.BundleRole, error) {
-		return bundleRoles[id], nil
+	// Keyed by bundle id, exactly as the version-aware lookup returns it: what
+	// this person gets from each bundle, through the version they are pinned to.
+	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) {
+		return bundleRoles, nil
 	}
 	svcGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) {
 		return rules, nil

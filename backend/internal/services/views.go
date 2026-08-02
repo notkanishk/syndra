@@ -198,8 +198,10 @@ func listUsersFromSnapshot(snap *accessSnapshot, query string, attention attenti
 		sort.Strings(keyProjectIDs)
 
 		bundleNames := make([]string, 0, len(bundles))
+		bundleVersions := make(map[string]int, len(bundles))
 		for _, b := range bundles {
 			bundleNames = append(bundleNames, b.Name)
+			bundleVersions[b.Name] = b.PinnedVersion
 		}
 		sort.Strings(bundleNames)
 
@@ -207,6 +209,7 @@ func listUsersFromSnapshot(snap *accessSnapshot, query string, attention attenti
 			User:               user,
 			BundleCount:        len(bundles),
 			BundleNames:        bundleNames,
+			BundleVersions:     bundleVersions,
 			EffectiveRoleCount: len(roleMap),
 			ProjectCount:       len(keyProjects),
 			KeyProjects:        keyProjects,
@@ -892,16 +895,21 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 		return nil, nil, err
 	}
 
+	// Resolved through each person's pinned version, not the bundle's working
+	// copy: somebody left on v2 holds v2's roles, and reading the working copy
+	// here would show them access they do not have.
+	byBundle, err := svcGetUserBundleRolesGrouped(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	for _, bundle := range bundles {
-		roles, err := svcGetRolesForBundle(ctx, bundle.ID)
-		if err != nil {
-			return nil, nil, err
-		}
+		roles := byBundle[bundle.ID]
 		for _, role := range roles {
 			key := roleKey{projectID: role.ProjectID, roleKey: role.RoleKey}
 			upsertRole(ctx, roleMap, key, true, models.RoleReason{
 				Kind:        "bundle",
-				Description: fmt.Sprintf("Granted by bundle %s", bundle.Name),
+				Description: fmt.Sprintf("Granted by bundle %s v%d", bundle.Name, bundle.PinnedVersion),
 				BundleID:    bundle.ID,
 				BundleName:  bundle.Name,
 			})

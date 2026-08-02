@@ -14,16 +14,18 @@ func resetCacheDeps(t *testing.T) {
 	t.Helper()
 	origGrants := dbGetDirectGrantsForUser
 	origRules := dbGetActiveMappingRules
-	origBundles := dbGetBundlesForUser
-	origRoles := dbGetRolesForBundle
+	origBundleRoles := dbGetUserBundleRoles
 	origSet := redisSet
 	t.Cleanup(func() {
 		dbGetDirectGrantsForUser = origGrants
 		dbGetActiveMappingRules = origRules
-		dbGetBundlesForUser = origBundles
-		dbGetRolesForBundle = origRoles
+		dbGetUserBundleRoles = origBundleRoles
 		redisSet = origSet
 	})
+
+	dbGetUserBundleRoles = func(context.Context, string) (map[string][]models.BundleRole, error) {
+		return nil, nil
+	}
 }
 
 // capturedCache collects what was written to Redis.
@@ -73,9 +75,6 @@ func TestCompileUserCache_NoGrants(t *testing.T) {
 	dbGetActiveMappingRules = func(_ context.Context) ([]models.MappingRule, error) {
 		return nil, nil
 	}
-	dbGetBundlesForUser = func(_ context.Context, _ string) ([]models.Bundle, error) {
-		return nil, nil
-	}
 
 	err := CompileUserCache(context.Background(), "user1", "proj1")
 	if err != nil {
@@ -103,9 +102,6 @@ func TestCompileUserCache_DirectGrants(t *testing.T) {
 		}, nil
 	}
 	dbGetActiveMappingRules = func(_ context.Context) ([]models.MappingRule, error) {
-		return nil, nil
-	}
-	dbGetBundlesForUser = func(_ context.Context, _ string) ([]models.Bundle, error) {
 		return nil, nil
 	}
 
@@ -144,9 +140,6 @@ func TestCompileUserCache_MappingRuleTransitivity(t *testing.T) {
 			{SourceProject: "proj_b", SourceRole: "reader", TargetProject: "proj_c", TargetRole: "viewer"},
 		}, nil
 	}
-	dbGetBundlesForUser = func(_ context.Context, _ string) ([]models.Bundle, error) {
-		return nil, nil
-	}
 
 	err := CompileUserCache(context.Background(), "user1", "proj_c")
 	if err != nil {
@@ -169,17 +162,14 @@ func TestCompileUserCache_BundleRolesIncluded(t *testing.T) {
 	dbGetActiveMappingRules = func(_ context.Context) ([]models.MappingRule, error) {
 		return nil, nil
 	}
-	dbGetBundlesForUser = func(_ context.Context, _ string) ([]models.Bundle, error) {
-		return []models.Bundle{{ID: "bundle1", Name: "Student"}}, nil
-	}
-	dbGetRolesForBundle = func(_ context.Context, bundleID string) ([]models.BundleRole, error) {
-		if bundleID == "bundle1" {
-			return []models.BundleRole{
+	// Keyed by bundle, resolved through the version this user is pinned to.
+	dbGetUserBundleRoles = func(_ context.Context, _ string) (map[string][]models.BundleRole, error) {
+		return map[string][]models.BundleRole{
+			"bundle1": {
 				{ProjectID: "proj1", RoleKey: "student"},
 				{ProjectID: "proj1", RoleKey: "lab_access"},
-			}, nil
-		}
-		return nil, nil
+			},
+		}, nil
 	}
 
 	err := CompileUserCache(context.Background(), "user1", "proj1")
@@ -213,9 +203,6 @@ func TestCompileUserCache_FixedPointTerminates(t *testing.T) {
 			{SourceProject: "p5", SourceRole: "r5", TargetProject: "p5", TargetRole: "r_final"},
 		}, nil
 	}
-	dbGetBundlesForUser = func(_ context.Context, _ string) ([]models.Bundle, error) {
-		return nil, nil
-	}
 
 	err := CompileUserCache(context.Background(), "user1", "p5")
 	if err != nil {
@@ -225,5 +212,45 @@ func TestCompileUserCache_FixedPointTerminates(t *testing.T) {
 	roles := parseCachedRoles(t, cached)
 	if len(roles) != 2 {
 		t.Fatalf("expected 2 roles (r5, r_final), got %d: %v", len(roles), roles)
+	}
+}
+
+// An unpublished edit must never reach a token.
+//
+// The cache compiles the claims a token is issued from, and it used to resolve
+// bundles through `bundle_roles` — the mutable working copy. Any rebuild after
+// a draft edit (a webhook, a rule change, a manual recompile) baked the draft
+// into real tokens, before anybody published it and without it appearing in any
+// plan. The version-aware lookup is what makes that impossible: it can only
+// return roles that belong to a version somebody is pinned to.
+func TestCompileUserCache_ResolvesBundlesThroughThePinnedVersion(t *testing.T) {
+	resetCacheDeps(t)
+	cached := setupNoopRedis(t)
+	dbGetDirectGrantsForUser = func(_ context.Context, _ string, _ bool) ([]models.DirectGrant, error) {
+		return nil, nil
+	}
+	dbGetActiveMappingRules = func(_ context.Context) ([]models.MappingRule, error) {
+		return nil, nil
+	}
+	// v2 is what they hold. The working copy has since gained `draft_only`,
+	// which this lookup cannot see and must not return.
+	dbGetUserBundleRoles = func(_ context.Context, _ string) (map[string][]models.BundleRole, error) {
+		return map[string][]models.BundleRole{
+			"bundle1": {{ProjectID: "proj1", RoleKey: "student"}},
+		}, nil
+	}
+
+	if err := CompileUserCache(context.Background(), "user1", "proj1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	roles := parseCachedRoles(t, cached)
+	for _, r := range roles {
+		if r == "draft_only" {
+			t.Fatal("an unpublished role reached the compiled claims")
+		}
+	}
+	if len(roles) != 1 || roles[0] != "student" {
+		t.Fatalf("expected only the pinned version's roles, got %v", roles)
 	}
 }

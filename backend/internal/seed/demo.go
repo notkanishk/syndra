@@ -151,6 +151,26 @@ func seedBundles(ctx context.Context) error {
 				return err
 			}
 		}
+
+		// Seeded bundles arrive published at v1 holding what they were seeded
+		// with. A demo bundle sitting in a permanently unpublished state would
+		// be a demo of a bug.
+		var versionID string
+		if err := db.PG.QueryRow(ctx, `
+			INSERT INTO bundle_versions (bundle_id, version, note, published_by)
+			VALUES ($1, 1, 'Seeded.', 'system')
+			ON CONFLICT (bundle_id, version) DO UPDATE SET note = EXCLUDED.note
+			RETURNING id
+		`, bundleID).Scan(&versionID); err != nil {
+			return err
+		}
+		if _, err := db.PG.Exec(ctx, `
+			INSERT INTO bundle_version_roles (version_id, zitadel_project_id, zitadel_role_key)
+			SELECT $1, zitadel_project_id, zitadel_role_key FROM bundle_roles WHERE bundle_id = $2
+			ON CONFLICT DO NOTHING
+		`, versionID, bundleID); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -227,8 +247,9 @@ func seedAssignments(ctx context.Context) error {
 			return err
 		}
 		if _, err := db.PG.Exec(ctx, `
-			INSERT INTO user_bundle_assignments (user_id, bundle_id)
-			VALUES ($1, $2)
+			INSERT INTO user_bundle_assignments (user_id, bundle_id, version_id)
+			SELECT $1, $2, id FROM bundle_versions
+			WHERE bundle_id = $2 ORDER BY version DESC LIMIT 1
 			ON CONFLICT DO NOTHING
 		`, userID, bundleID); err != nil {
 			return err

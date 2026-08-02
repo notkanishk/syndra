@@ -54,6 +54,16 @@ export interface PeopleFilters {
   role: string;
   /** Bundle name — what the chips on a person's record already carry. */
   bundle: string;
+  /**
+   * Bundle version, only meaningful alongside `bundle`. Narrows "in the Lab
+   * Tech bundle" to "on v2 of it" — the question that only exists once bundles
+   * are versioned, and the one that finds the people an earlier publish left
+   * behind.
+   *
+   * A string because it comes from and goes back to the URL; compared against
+   * the row's pinned version by value.
+   */
+  version: string;
   attention: Attention | "";
 }
 
@@ -62,6 +72,7 @@ export const EMPTY_FILTERS: PeopleFilters = {
   project: "",
   role: "",
   bundle: "",
+  version: "",
   attention: "",
 };
 
@@ -77,6 +88,11 @@ export function parseFilters(params: URLSearchParams): PeopleFilters {
     project: params.get("project") ?? "",
     role: params.get("role") ?? "",
     bundle: params.get("bundle") ?? "",
+    // A version with no bundle narrows nothing — "everyone on v2" spans
+    // unrelated bundles and is not a question anybody asks. Dropped rather
+    // than honoured, so a hand-edited URL degrades to the bundle-less view
+    // instead of an empty one.
+    version: params.get("bundle") ? (params.get("version") ?? "") : "",
     attention: isAttention(attention) ? attention : "",
   };
 }
@@ -101,7 +117,9 @@ export function peopleHref(filters: Partial<PeopleFilters>, extra: Record<string
 }
 
 export function hasAnyFilter(filters: PeopleFilters): boolean {
-  return Boolean(filters.q || filters.project || filters.role || filters.bundle || filters.attention);
+  return Boolean(
+    filters.q || filters.project || filters.role || filters.bundle || filters.version || filters.attention,
+  );
 }
 
 export function isDeparted(status: string | undefined): boolean {
@@ -145,6 +163,9 @@ export function applyFilters(
     if (filters.project && !(entry.key_project_ids ?? []).includes(filters.project)) return false;
     if (filters.role && roleHolders && !roleHolders.has(entry.user.id)) return false;
     if (filters.bundle && !(entry.bundle_names ?? []).includes(filters.bundle)) return false;
+    if (filters.version && String(entry.bundle_versions?.[filters.bundle] ?? "") !== filters.version) {
+      return false;
+    }
     if (filters.attention && !matchesAttention(entry, filters.attention)) return false;
     return true;
   });
@@ -161,7 +182,13 @@ export function describeFilters(filters: PeopleFilters, projectName?: string): s
   if (filters.q) parts.push(`matching “${filters.q}”`);
   if (filters.project) parts.push(`in ${projectName || "one project"}`);
   if (filters.role) parts.push(`holding ${filters.role}`);
-  if (filters.bundle) parts.push(`in the ${filters.bundle} bundle`);
+  if (filters.bundle) {
+    parts.push(
+      filters.version
+        ? `on v${filters.version} of the ${filters.bundle} bundle`
+        : `in the ${filters.bundle} bundle`,
+    );
+  }
   if (filters.attention) parts.push(`with ${ATTENTION_LABELS[filters.attention].toLowerCase()}`);
   if (parts.length === 0) return "";
   if (parts.length === 1) return parts[0];

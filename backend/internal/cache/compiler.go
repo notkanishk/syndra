@@ -59,12 +59,8 @@ func CompileUserCache(ctx context.Context, userID, projectID string) error {
 		activeRoles[g.ProjectID][g.RoleKey] = true
 	}
 
-	// Fetch user's assigned bundles from MkAuth DB
-	userBundles, err := dbGetBundlesForUser(ctx, userID)
-	if err != nil {
-		log.Printf("[CACHE WARN] Failed to fetch bundles for %s: %v", userID, err)
-	}
-	for _, r := range grantsToBundleRoles(ctx, userBundles) {
+	// What their bundles give them, through each assignment's pinned version.
+	for _, r := range bundleRolesFor(ctx, userID) {
 		if activeRoles[r.ProjectID] == nil {
 			activeRoles[r.ProjectID] = make(map[string]bool)
 		}

@@ -20,6 +20,7 @@ func resetGovernanceDeps(t *testing.T) {
 	origGetAllBundles := svcGetAllBundles
 	origGetBundlesForUser := svcGetBundlesForUser
 	origGetRolesForBundle := svcGetRolesForBundle
+	origUserBundleRoles := svcGetUserBundleRolesGrouped
 	origGetDirectGrants := svcGetDirectGrantsForUser
 	origGetRules := svcGetActiveMappingRules
 	origCount := svcCountPendingPropagations
@@ -32,6 +33,7 @@ func resetGovernanceDeps(t *testing.T) {
 		svcGetAllBundles = origGetAllBundles
 		svcGetBundlesForUser = origGetBundlesForUser
 		svcGetRolesForBundle = origGetRolesForBundle
+		svcGetUserBundleRolesGrouped = origUserBundleRoles
 		svcGetDirectGrantsForUser = origGetDirectGrants
 		svcGetActiveMappingRules = origGetRules
 		svcCountPendingPropagations = origCount
@@ -39,6 +41,13 @@ func resetGovernanceDeps(t *testing.T) {
 		svcCountPendingDrift = origCountDrift
 		svcGetTopDrift = origTopDrift
 	})
+
+	// Default: this person holds nothing through any bundle. Version-aware
+	// resolution is the path every closure now takes, so a harness that left it
+	// pointing at the real database would fail on the pool, not on the case.
+	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) {
+		return nil, nil
+	}
 	// Safe baseline so Governance() tests don't hit the nil PG pool / MgmtClient
 	// via the pending-propagation/drift summary blocks. Tests override as needed.
 	svcCountPendingPropagations = func(context.Context) (int, error) { return 0, nil }
@@ -62,6 +71,9 @@ func TestGovernance_NilSafeCollections(t *testing.T) {
 		return []models.Bundle{}, nil
 	}
 	svcGetBundlesForUser = func(ctx context.Context, userID string) ([]models.Bundle, error) {
+		return nil, nil
+	}
+	svcGetUserBundleRolesGrouped = func(ctx context.Context, userID string) (map[string][]models.BundleRole, error) {
 		return nil, nil
 	}
 	svcGetRolesForBundle = func(ctx context.Context, bundleID string) ([]models.BundleRole, error) {
@@ -168,6 +180,13 @@ func TestGovernance_UnusedBundleHintGenerated(t *testing.T) {
 	svcGetRolesForBundle = func(ctx context.Context, bundleID string) ([]models.BundleRole, error) {
 		return []models.BundleRole{}, nil
 	}
+	svcGetUserBundleRolesGrouped = func(ctx context.Context, userID string) (map[string][]models.BundleRole, error) {
+		grouped := map[string][]models.BundleRole{}
+		for _, r := range []models.BundleRole{} {
+			grouped[r.BundleID] = append(grouped[r.BundleID], r)
+		}
+		return grouped, nil
+	}
 
 	summary, err := Governance(context.Background())
 	if err != nil {
@@ -198,6 +217,9 @@ func TestExplainUserAccess_NilSafeCollections(t *testing.T) {
 		return nil, nil
 	}
 	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
+		return nil, nil
+	}
+	svcGetUserBundleRolesGrouped = func(ctx context.Context, userID string) (map[string][]models.BundleRole, error) {
 		return nil, nil
 	}
 	svcGetRolesForBundle = func(ctx context.Context, bundleID string) ([]models.BundleRole, error) {
@@ -236,6 +258,9 @@ func TestExplainUserAccess_SourceVsDerivedLabeling(t *testing.T) {
 		return []models.MappingRule{
 			{ID: "rule-1", SourceProject: "p1", SourceRole: "r1", TargetProject: "p2", TargetRole: "r2"},
 		}, nil
+	}
+	svcGetUserBundleRolesGrouped = func(ctx context.Context, userID string) (map[string][]models.BundleRole, error) {
+		return nil, nil
 	}
 	svcGetRolesForBundle = func(ctx context.Context, bundleID string) ([]models.BundleRole, error) {
 		return nil, nil
@@ -285,10 +310,14 @@ func TestExplainUserAccess_BundleGrantLabeled(t *testing.T) {
 		return []models.DirectGrant{}, nil
 	}
 	svcGetBundlesForUser = func(ctx context.Context, userID string) ([]models.Bundle, error) {
-		return []models.Bundle{{ID: "b1", Name: "Engineering"}}, nil
+		return []models.Bundle{{ID: "b1", Name: "Engineering", PinnedVersion: 2}}, nil
 	}
-	svcGetRolesForBundle = func(ctx context.Context, bundleID string) ([]models.BundleRole, error) {
-		return []models.BundleRole{{BundleID: "b1", ProjectID: "p1", RoleKey: "r1"}}, nil
+	// What this person gets from b1 comes from the version they are pinned to,
+	// not from the bundle's working copy.
+	svcGetUserBundleRolesGrouped = func(ctx context.Context, userID string) (map[string][]models.BundleRole, error) {
+		return map[string][]models.BundleRole{
+			"b1": {{BundleID: "b1", ProjectID: "p1", RoleKey: "r1"}},
+		}, nil
 	}
 	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
 		return []models.MappingRule{}, nil

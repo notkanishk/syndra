@@ -196,13 +196,17 @@ func handleRemoveRoleFromBundle(w http.ResponseWriter, r *http.Request) {
 	if actor == "" {
 		actor = "system"
 	}
-	cascade, err := svcCascadeRoleRemoved(r.Context(), actor, bundleID, projectID, roleKey)
+	if err := svcEditBundleWorkingCopy(r.Context(), actor, bundleID, projectID, roleKey, false); err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	draft, err := svcBundleDraft(r.Context(), bundleID)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "CASCADE_ERROR", err.Error())
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{
-		"message": "Role removed from bundle",
-		"cascade": cascade,
+		"message": "Role removed from the bundle's working copy. Publish a version to apply it.",
+		"draft":   draft,
 	})
 }

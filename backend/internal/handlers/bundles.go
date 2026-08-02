@@ -42,6 +42,19 @@ func handleGetBundles(w http.ResponseWriter, r *http.Request) {
 			bundles[i].HolderCount = counts[bundles[i].ID]
 		}
 	}
+	// Same treatment for the version numbers: a failed count leaves zeros
+	// rather than failing the list. Stale holders is the one an operator scans
+	// for — "eleven people never got the edit you made last term".
+	if stale, err := dbGetStaleHolderCounts(r.Context()); err == nil {
+		for i := range bundles {
+			bundles[i].StaleHolders = stale[bundles[i].ID]
+		}
+	}
+	for i := range bundles {
+		if draft, err := svcBundleDraft(r.Context(), bundles[i].ID); err == nil {
+			bundles[i].UnpublishedChanges = len(draft.Added) + len(draft.Removed)
+		}
+	}
 
 	jsonResponse(w, http.StatusOK, bundles)
 }
@@ -113,17 +126,21 @@ func handleAddRoleToBundle(w http.ResponseWriter, r *http.Request) {
 	if actor == "" {
 		actor = "system"
 	}
-	// The cascade owns the mutation now (add-role + per-member outbox rows commit in one tx),
-	// then (auto mode) drains those rows. Enqueue failure rolls back the mutation → 500; a
-	// drain failure rides in cascade.drain and is not fatal.
-	cascade, err := svcCascadeRoleAdded(r.Context(), actor, bundleID, req.ProjectID, req.RoleKey)
+	// This edits the working copy and reaches nobody. The consequence is a
+	// separate, rehearsed step — POST /bundles/{id}/publish — so that adding six
+	// roles is one decision about fourteen people rather than six.
+	if err := svcEditBundleWorkingCopy(r.Context(), actor, bundleID, req.ProjectID, req.RoleKey, true); err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	draft, err := svcBundleDraft(r.Context(), bundleID)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "CASCADE_ERROR", err.Error())
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{
-		"message": "Role added to bundle",
-		"cascade": cascade,
+		"message": "Role added to the bundle's working copy. Publish a version to apply it.",
+		"draft":   draft,
 	})
 }
 
@@ -165,8 +182,15 @@ func handleAssignBundleToUser(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "CASCADE_ERROR", err.Error())
 		return
 	}
+	// Idempotent, and it says which of the two happened. "Bundle assigned"
+	// after a no-op reads as a change that was made, which is what the caller
+	// will tell the operator.
+	message := "Bundle assigned to user"
+	if cascade.NoOp {
+		message = "Already holds this bundle — nothing changed."
+	}
 	jsonResponse(w, http.StatusOK, map[string]any{
-		"message": "Bundle assigned to user",
+		"message": message,
 		"cascade": cascade,
 	})
 }

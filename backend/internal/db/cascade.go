@@ -127,30 +127,59 @@ func scanUserIDs(ctx context.Context, q string, args ...any) ([]string, error) {
 // AssignBundleAndEnqueue assigns a bundle to a user and enqueues its cascade outbox rows in
 // ONE tx, so a committed assignment always has its projection rows (design pivot: NO
 // direct_role_grants write — bundle membership already lives in user_bundle_assignments).
-func AssignBundleAndEnqueue(ctx context.Context, actor, userID, bundleID string, params []EnqueueParams) ([]string, error) {
+// It reports `assigned = false` when the person already held the bundle, in
+// which case NOTHING is written: no outbox rows, no audit row, no repin.
+func AssignBundleAndEnqueue(ctx context.Context, actor, userID, bundleID, versionID string, params []EnqueueParams) (ids []string, assigned bool, err error) {
 	tx, err := PG.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer tx.Rollback(ctx)
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO user_bundle_assignments (user_id, bundle_id) VALUES ($1,$2)
-		 ON CONFLICT DO NOTHING`, userID, bundleID); err != nil {
-		return nil, err
+
+	// Pinned to the version the CALLER projected, not to whatever is latest at
+	// this instant. Re-resolving "latest" here would race a concurrent publish:
+	// the member would be pinned to v3 holding v2's roles, and the mismatch is
+	// undetectable afterwards — both rows look correct on their own.
+	//
+	// A publish that lands mid-assignment simply leaves this member on the
+	// version they were assigned, which is the same position as every other
+	// holder who was not migrated.
+	//
+	// RETURNING is what makes the conflict visible. `ON CONFLICT DO NOTHING`
+	// alone is silent, and silence here was a real defect: re-assigning a
+	// bundle to somebody already on v1 left their v1 pin intact while the
+	// caller's params — computed against v2 — were enqueued anyway. They got
+	// v2's access and the records said v1. The conflict has to be ANSWERED, in
+	// the transaction, before anything else is written; asking beforehand would
+	// only move the race.
+	var pinned string
+	switch err := tx.QueryRow(ctx,
+		`INSERT INTO user_bundle_assignments (user_id, bundle_id, version_id)
+		 VALUES ($1, $2, $3) ON CONFLICT DO NOTHING
+		 RETURNING version_id`, userID, bundleID, versionID).Scan(&pinned); {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Already a holder. Re-assigning is a no-op, not a re-pin: moving
+		// somebody between versions is its own rehearsed action, and doing it
+		// as a side effect of an idempotent assign would move people nobody
+		// planned to move.
+		return nil, false, nil
+	case err != nil:
+		return nil, false, err
 	}
+
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
 		 VALUES ($1,$2,'bundle.assigned',$3)`, actor, userID, bundleID); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	ids, err := enqueueCascadeRows(ctx, tx, params)
+	ids, err = enqueueCascadeRows(ctx, tx, params)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return ids, nil
+	return ids, true, nil
 }
 
 // AddRoleToBundleAndEnqueue adds a role to a bundle and enqueues the per-member cascade in one

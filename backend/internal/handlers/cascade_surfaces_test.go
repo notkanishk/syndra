@@ -18,11 +18,16 @@ import (
 func resetRemoveCascadeDeps(t *testing.T) {
 	t.Helper()
 	origBundleRemoved := svcCascadeBundleRemoved
-	origRoleRemoved := svcCascadeRoleRemoved
+	origEdit := svcEditBundleWorkingCopy
+	origDraft := svcBundleDraft
 	t.Cleanup(func() {
 		svcCascadeBundleRemoved = origBundleRemoved
-		svcCascadeRoleRemoved = origRoleRemoved
+		svcEditBundleWorkingCopy = origEdit
+		svcBundleDraft = origDraft
 	})
+	svcBundleDraft = func(context.Context, string) (services.DraftDiff, error) {
+		return services.DraftDiff{LatestVersion: 2, NextVersion: 3}, nil
+	}
 }
 
 // --- handleRemoveBundleFromUser ---
@@ -157,13 +162,17 @@ func TestHandleRemoveRoleFromBundle_EmptyPathParams(t *testing.T) {
 	}
 }
 
-func TestHandleRemoveRoleFromBundle_DeletesThenCascades(t *testing.T) {
+// Removing a role edits the working copy. The holders keep it until a version
+// that lacks it is published and they are moved onto it — which is the whole
+// reason removing a role from a bundle is no longer a frightening click.
+func TestHandleRemoveRoleFromBundle_EditsTheWorkingCopyAndCascadesToNobody(t *testing.T) {
 	resetRemoveCascadeDeps(t)
 
 	var gotBundleID, gotProjectID, gotRoleKey string
-	svcCascadeRoleRemoved = func(ctx context.Context, actor, bundleID, projectID, roleKey string) (services.CascadeResult, error) {
-		gotBundleID, gotProjectID, gotRoleKey = bundleID, projectID, roleKey
-		return services.CascadeResult{Enqueued: 2, Mode: "auto"}, nil
+	var gotAdd = true
+	svcEditBundleWorkingCopy = func(ctx context.Context, actor, bundleID, projectID, roleKey string, add bool) error {
+		gotBundleID, gotProjectID, gotRoleKey, gotAdd = bundleID, projectID, roleKey, add
+		return nil
 	}
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bundles/b1/roles/p1/admin", nil)
@@ -176,51 +185,26 @@ func TestHandleRemoveRoleFromBundle_DeletesThenCascades(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if gotBundleID != "b1" || gotProjectID != "p1" || gotRoleKey != "admin" {
-		t.Fatalf("cascade called with bundleID=%q projectID=%q roleKey=%q", gotBundleID, gotProjectID, gotRoleKey)
+	if gotBundleID != "b1" || gotProjectID != "p1" || gotRoleKey != "admin" || gotAdd {
+		t.Fatalf("edit called with bundleID=%q projectID=%q roleKey=%q add=%v", gotBundleID, gotProjectID, gotRoleKey, gotAdd)
 	}
 	var resp map[string]any
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp["message"] != "Role removed from bundle" {
-		t.Fatalf("unexpected message: %v", resp["message"])
+	if resp["cascade"] != nil {
+		t.Fatal("a working-copy edit must not report a cascade")
+	}
+	if resp["draft"] == nil {
+		t.Fatal("expected the draft in the response")
 	}
 }
 
-func TestHandleRemoveRoleFromBundle_CoveredMembersYieldZeroEnqueued(t *testing.T) {
+func TestHandleRemoveRoleFromBundle_WriteErrorIs500(t *testing.T) {
 	resetRemoveCascadeDeps(t)
 
-	svcCascadeRoleRemoved = func(ctx context.Context, actor, bundleID, projectID, roleKey string) (services.CascadeResult, error) {
-		return services.CascadeResult{Enqueued: 0, Mode: "manual"}, nil
-	}
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bundles/b1/roles/p1/admin", nil)
-	req.SetPathValue("id", "b1")
-	req.SetPathValue("projectId", "p1")
-	req.SetPathValue("roleKey", "admin")
-	rr := httptest.NewRecorder()
-	handleRemoveRoleFromBundle(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	var resp struct {
-		Cascade services.CascadeResult `json:"cascade"`
-	}
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if resp.Cascade.Enqueued != 0 {
-		t.Fatalf("expected cascade.enqueued=0, got %d", resp.Cascade.Enqueued)
-	}
-}
-
-func TestHandleRemoveRoleFromBundle_CascadeErrorIs500(t *testing.T) {
-	resetRemoveCascadeDeps(t)
-
-	svcCascadeRoleRemoved = func(ctx context.Context, actor, bundleID, projectID, roleKey string) (services.CascadeResult, error) {
-		return services.CascadeResult{}, errors.New("remove tx failed")
+	svcEditBundleWorkingCopy = func(ctx context.Context, actor, bundleID, projectID, roleKey string, add bool) error {
+		return errors.New("remove tx failed")
 	}
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bundles/b1/roles/p1/admin", nil)
@@ -237,8 +221,8 @@ func TestHandleRemoveRoleFromBundle_CascadeErrorIs500(t *testing.T) {
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp["error"] != "CASCADE_ERROR" {
-		t.Fatalf("expected CASCADE_ERROR, got %v", resp["error"])
+	if resp["error"] != "DB_ERROR" {
+		t.Fatalf("expected DB_ERROR, got %v", resp["error"])
 	}
 }
 

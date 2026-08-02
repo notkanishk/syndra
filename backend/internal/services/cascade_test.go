@@ -28,6 +28,15 @@ func resetCascadeDeps(t *testing.T) {
 	// so cascade tests must snapshot/restore them too.
 	origGetDirectGrants := svcGetDirectGrantsForUser
 	origGetBundlesForUser := svcGetBundlesForUser
+	origUserBundleRoles := svcGetUserBundleRolesGrouped
+	origLatestVersion := svcLatestVersion
+	origRolesForVersion := svcGetRolesForVersion
+	origHoldersByVersion := svcGetBundleHoldersByVersion
+	origListVersions := svcListBundleVersions
+	origBelongsTo := svcVersionBelongsTo
+	origLatestVersionRoles := svcLatestVersionRoles
+	origPublishAndEnqueue := svcPublishVersionAndEnqueue
+	origMoveHolders := svcMoveHoldersAndEnqueue
 	origGetActiveRules := svcGetActiveMappingRules
 	// Revoke-side + rule-update atomic mutation+enqueue (Task 21).
 	origRemoveBundleAndEnqueue := svcRemoveBundleFromUserAndEnqueue
@@ -45,11 +54,27 @@ func resetCascadeDeps(t *testing.T) {
 		svcCreateRuleAndEnqueue = origCreateRuleAndEnqueue
 		svcGetDirectGrantsForUser = origGetDirectGrants
 		svcGetBundlesForUser = origGetBundlesForUser
+		svcGetUserBundleRolesGrouped = origUserBundleRoles
+		svcLatestVersion = origLatestVersion
+		svcGetRolesForVersion = origRolesForVersion
+		svcGetBundleHoldersByVersion = origHoldersByVersion
+		svcListBundleVersions = origListVersions
+		svcVersionBelongsTo = origBelongsTo
+		svcLatestVersionRoles = origLatestVersionRoles
+		svcPublishVersionAndEnqueue = origPublishAndEnqueue
+		svcMoveHoldersAndEnqueue = origMoveHolders
 		svcGetActiveMappingRules = origGetActiveRules
 		svcRemoveBundleFromUserAndEnqueue = origRemoveBundleAndEnqueue
 		svcRemoveRoleFromBundleAndEnqueue = origRemoveRoleAndEnqueue
 		svcUpdateRuleAndEnqueue = origUpdateRuleAndEnqueue
 	})
+
+	// Same default as the governance harness: closures resolve bundle roles
+	// through each person's pinned version, so the unstubbed path must not be
+	// the real database.
+	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) {
+		return nil, nil
+	}
 }
 
 // noBundles/noDirects/noRules are the common "holds nothing else" stubs used by most closure-diff
@@ -58,7 +83,15 @@ func noDirects(ctx context.Context, u string, inc bool) ([]models.DirectGrant, e
 	return nil, nil
 }
 func noBundles(ctx context.Context, u string) ([]models.Bundle, error) { return nil, nil }
-func noRules(ctx context.Context) ([]models.MappingRule, error)        { return nil, nil }
+
+// noBundleRoles is the version-aware "holds nothing via any bundle" stub. It
+// replaces noBundles in every closure test: closures resolve a person's bundle
+// roles through the version they are pinned to, so stubbing the bundle LIST no
+// longer stubs what they hold.
+func noBundleRoles(ctx context.Context, u string) (map[string][]models.BundleRole, error) {
+	return nil, nil
+}
+func noRules(ctx context.Context) ([]models.MappingRule, error) { return nil, nil }
 
 // --- CascadeBundleAssignedToUser ---
 
@@ -67,18 +100,18 @@ func TestCascadeBundleAssignedToUser_AutoEnqueuesPerRoleAndDrains(t *testing.T) 
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
 		return models.Bundle{ID: id, ConfirmationMode: "auto"}, nil
 	}
-	svcCascGetRolesForBundle = func(ctx context.Context, id string) ([]models.BundleRole, error) {
-		return []models.BundleRole{
+	svcLatestVersionRoles = func(ctx context.Context, id string) (models.BundleVersion, []models.BundleRole, error) {
+		return models.BundleVersion{ID: "v-latest", Version: 2}, []models.BundleRole{
 			{ProjectID: "p1", RoleKey: "r1"}, {ProjectID: "p1", RoleKey: "r2"},
 		}, nil
 	}
 	svcGetDirectGrantsForUser = noDirects
-	svcGetBundlesForUser = noBundles
+	svcGetUserBundleRolesGrouped = noBundleRoles
 	svcGetActiveMappingRules = noRules
 	var enqueued []db.EnqueueParams
-	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID string, ps []db.EnqueueParams) ([]string, error) {
+	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
 		enqueued = ps
-		return []string{"o1", "o2"}, nil
+		return []string{"o1", "o2"}, true, nil
 	}
 	var drainedIDs []string
 	svcDrainBatch = func(ctx context.Context, ids []string) (propagation.DrainResult, error) {
@@ -114,14 +147,14 @@ func TestCascadeBundleAssignedToUser_ManualQueuesWithoutDrain(t *testing.T) {
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
 		return models.Bundle{ID: id, ConfirmationMode: "manual"}, nil
 	}
-	svcCascGetRolesForBundle = func(ctx context.Context, id string) ([]models.BundleRole, error) {
-		return []models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}}, nil
+	svcLatestVersionRoles = func(ctx context.Context, id string) (models.BundleVersion, []models.BundleRole, error) {
+		return models.BundleVersion{ID: "v-latest", Version: 2}, []models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}}, nil
 	}
 	svcGetDirectGrantsForUser = noDirects
-	svcGetBundlesForUser = noBundles
+	svcGetUserBundleRolesGrouped = noBundleRoles
 	svcGetActiveMappingRules = noRules
-	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID string, ps []db.EnqueueParams) ([]string, error) {
-		return []string{"o1"}, nil
+	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
+		return []string{"o1"}, true, nil
 	}
 	drainCalled := false
 	svcDrainBatch = func(ctx context.Context, ids []string) (propagation.DrainResult, error) {
@@ -145,15 +178,15 @@ func TestCascadeBundleAssignedToUser_EnqueueErrorPropagates(t *testing.T) {
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
 		return models.Bundle{ID: id, ConfirmationMode: "auto"}, nil
 	}
-	svcCascGetRolesForBundle = func(ctx context.Context, id string) ([]models.BundleRole, error) {
-		return []models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}}, nil
+	svcLatestVersionRoles = func(ctx context.Context, id string) (models.BundleVersion, []models.BundleRole, error) {
+		return models.BundleVersion{ID: "v-latest", Version: 2}, []models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}}, nil
 	}
 	svcGetDirectGrantsForUser = noDirects
-	svcGetBundlesForUser = noBundles
+	svcGetUserBundleRolesGrouped = noBundleRoles
 	svcGetActiveMappingRules = noRules
 	wantErr := errors.New("assign tx failed")
-	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID string, ps []db.EnqueueParams) ([]string, error) {
-		return nil, wantErr
+	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
+		return nil, false, wantErr
 	}
 	drainCalled := false
 	svcDrainBatch = func(ctx context.Context, ids []string) (propagation.DrainResult, error) {
@@ -179,18 +212,18 @@ func TestCascadeBundleAssignedToUser_ClosureDiffIncludesRuleDerivedTarget(t *tes
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
 		return models.Bundle{ID: id, ConfirmationMode: "auto"}, nil
 	}
-	svcCascGetRolesForBundle = func(ctx context.Context, id string) ([]models.BundleRole, error) {
-		return []models.BundleRole{{ProjectID: "p1", RoleKey: "A"}}, nil
+	svcLatestVersionRoles = func(ctx context.Context, id string) (models.BundleVersion, []models.BundleRole, error) {
+		return models.BundleVersion{ID: "v-latest", Version: 2}, []models.BundleRole{{ProjectID: "p1", RoleKey: "A"}}, nil
 	}
 	svcGetDirectGrantsForUser = noDirects
-	svcGetBundlesForUser = noBundles
+	svcGetUserBundleRolesGrouped = noBundleRoles
 	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
 		return []models.MappingRule{{ID: "rule1", SourceProject: "p1", SourceRole: "A", TargetProject: "p1", TargetRole: "B2"}}, nil
 	}
 	var enqueued []db.EnqueueParams
-	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID string, ps []db.EnqueueParams) ([]string, error) {
+	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
 		enqueued = ps
-		return []string{"o1", "o2"}, nil
+		return []string{"o1", "o2"}, true, nil
 	}
 	svcDrainBatch = func(ctx context.Context, ids []string) (propagation.DrainResult, error) {
 		return propagation.DrainResult{}, nil
@@ -222,20 +255,20 @@ func TestCascadeBundleAssignedToUser_IdempotentWhenAlreadyEffectivelyGranted(t *
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
 		return models.Bundle{ID: id, ConfirmationMode: "auto"}, nil
 	}
-	svcCascGetRolesForBundle = func(ctx context.Context, id string) ([]models.BundleRole, error) {
-		return []models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}}, nil
+	svcLatestVersionRoles = func(ctx context.Context, id string) (models.BundleVersion, []models.BundleRole, error) {
+		return models.BundleVersion{ID: "v-latest", Version: 2}, []models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}}, nil
 	}
 	svcGetDirectGrantsForUser = func(ctx context.Context, u string, inc bool) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{{UserID: u, ProjectID: "p1", RoleKey: "r1"}}, nil // already holds r1 directly
 	}
-	svcGetBundlesForUser = noBundles
+	svcGetUserBundleRolesGrouped = noBundleRoles
 	svcGetActiveMappingRules = noRules
 	var enqueued []db.EnqueueParams
 	assignCalled := false
-	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID string, ps []db.EnqueueParams) ([]string, error) {
+	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
 		assignCalled = true
 		enqueued = ps
-		return nil, nil
+		return nil, true, nil
 	}
 
 	res, err := CascadeBundleAssignedToUser(context.Background(), "admin", "u1", "b1")
@@ -253,79 +286,54 @@ func TestCascadeBundleAssignedToUser_IdempotentWhenAlreadyEffectivelyGranted(t *
 	}
 }
 
-// --- CascadeRoleAddedToBundle ---
+// --- EditBundleWorkingCopy ---
 
-func TestCascadeRoleAddedToBundle_AutoEnqueuesPerMemberAndDrains(t *testing.T) {
+// The behaviour versioning changed: editing a bundle used to reach every holder
+// the moment it saved. It must now reach nobody — the consequence belongs to
+// publishing, which is rehearsed.
+
+func TestEditBundleWorkingCopy_AddEnqueuesNothing(t *testing.T) {
 	resetCascadeDeps(t)
-	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "auto"}, nil
-	}
-	svcGetUsersForBundle = func(ctx context.Context, id string) ([]string, error) {
-		return []string{"u1", "u2"}, nil
-	}
-	svcGetDirectGrantsForUser = noDirects
-	svcGetBundlesForUser = noBundles
-	svcGetActiveMappingRules = noRules
 	var enqueued []db.EnqueueParams
+	called := false
 	svcAddRoleToBundleAndEnqueue = func(ctx context.Context, actor, bundleID, projectID, roleKey string, ps []db.EnqueueParams) ([]string, error) {
+		called = true
 		enqueued = ps
-		return []string{"o1", "o2"}, nil
+		return nil, nil
 	}
-	var drainedIDs []string
+	drained := false
 	svcDrainBatch = func(ctx context.Context, ids []string) (propagation.DrainResult, error) {
-		drainedIDs = ids
-		return propagation.DrainResult{Applied: 2}, nil
-	}
-
-	res, err := CascadeRoleAddedToBundle(context.Background(), "admin", "b1", "p1", "r1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(enqueued) != 2 {
-		t.Fatalf("enqueued %d params, want 2", len(enqueued))
-	}
-	for _, p := range enqueued {
-		if p.Source != "bundle" || p.SourceRef != "b1" || p.OpType != "add" || p.ProjectID != "p1" || p.RoleKeys[0] != "r1" {
-			t.Fatalf("bad param: %+v", p)
-		}
-	}
-	if strings.Join(drainedIDs, ",") != "o1,o2" {
-		t.Fatalf("drained %v", drainedIDs)
-	}
-	if res.Mode != "auto" {
-		t.Fatalf("mode = %q", res.Mode)
-	}
-}
-
-func TestCascadeRoleAddedToBundle_ManualQueuesWithoutDrain(t *testing.T) {
-	resetCascadeDeps(t)
-	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "manual"}, nil
-	}
-	svcGetUsersForBundle = func(ctx context.Context, id string) ([]string, error) {
-		return []string{"u1"}, nil
-	}
-	svcGetDirectGrantsForUser = noDirects
-	svcGetBundlesForUser = noBundles
-	svcGetActiveMappingRules = noRules
-	svcAddRoleToBundleAndEnqueue = func(ctx context.Context, actor, bundleID, projectID, roleKey string, ps []db.EnqueueParams) ([]string, error) {
-		return []string{"o1"}, nil
-	}
-	drainCalled := false
-	svcDrainBatch = func(ctx context.Context, ids []string) (propagation.DrainResult, error) {
-		drainCalled = true
+		drained = true
 		return propagation.DrainResult{}, nil
 	}
 
-	res, err := CascadeRoleAddedToBundle(context.Background(), "admin", "b1", "p1", "r1")
-	if err != nil {
+	if err := EditBundleWorkingCopy(context.Background(), "admin", "b1", "p1", "r1", true); err != nil {
 		t.Fatal(err)
 	}
-	if drainCalled {
-		t.Fatal("manual mode must not drain")
+	if !called {
+		t.Fatal("the working copy was not written")
 	}
-	if res.Mode != "manual" {
-		t.Fatalf("mode = %q", res.Mode)
+	if len(enqueued) != 0 {
+		t.Fatalf("a working-copy edit must enqueue nothing, got %d rows", len(enqueued))
+	}
+	if drained {
+		t.Fatal("a working-copy edit must not drain")
+	}
+}
+
+func TestEditBundleWorkingCopy_RemoveEnqueuesNothing(t *testing.T) {
+	resetCascadeDeps(t)
+	var enqueued []db.EnqueueParams
+	svcRemoveRoleFromBundleAndEnqueue = func(ctx context.Context, actor, bundleID, projectID, roleKey string, ps []db.EnqueueParams) ([]string, error) {
+		enqueued = ps
+		return nil, nil
+	}
+
+	if err := EditBundleWorkingCopy(context.Background(), "admin", "b1", "p1", "r1", false); err != nil {
+		t.Fatal(err)
+	}
+	if len(enqueued) != 0 {
+		t.Fatalf("a working-copy edit must enqueue nothing, got %d rows", len(enqueued))
 	}
 }
 
@@ -345,8 +353,8 @@ func TestCascadeRuleCreated_DiscoversHolderAbsentFromGrantIndex(t *testing.T) {
 	svcGetBundlesForUser = func(ctx context.Context, u string) ([]models.Bundle, error) {
 		return []models.Bundle{{ID: "b1"}}, nil
 	}
-	svcCascGetRolesForBundle = func(ctx context.Context, id string) ([]models.BundleRole, error) {
-		return []models.BundleRole{{ProjectID: "sp", RoleKey: "sr"}}, nil
+	svcGetUserBundleRolesGrouped = func(ctx context.Context, u string) (map[string][]models.BundleRole, error) {
+		return map[string][]models.BundleRole{"b1": {{ProjectID: "sp", RoleKey: "sr"}}}, nil
 	}
 	svcGetActiveMappingRules = noRules
 	var gotParams []db.EnqueueParams
@@ -385,7 +393,7 @@ func TestCascadeRuleCreated_SkipsUsersWithEmptyDelta(t *testing.T) {
 		}
 		return nil, nil
 	}
-	svcGetBundlesForUser = noBundles
+	svcGetUserBundleRolesGrouped = noBundleRoles
 	svcGetActiveMappingRules = noRules
 	var gotParams []db.EnqueueParams
 	svcCreateRuleAndEnqueue = func(ctx context.Context, actor, sp, sr, tp, tr, mode string, params []db.EnqueueParams) (string, []string, error) {
@@ -409,7 +417,7 @@ func TestCascadeRuleCreated_ManualQueuesWithoutDrain(t *testing.T) {
 	svcGetDirectGrantsForUser = func(ctx context.Context, u string, inc bool) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{{UserID: u, ProjectID: "sp", RoleKey: "sr"}}, nil
 	}
-	svcGetBundlesForUser = noBundles
+	svcGetUserBundleRolesGrouped = noBundleRoles
 	svcGetActiveMappingRules = noRules
 	svcCreateRuleAndEnqueue = func(ctx context.Context, actor, sp, sr, tp, tr, mode string, params []db.EnqueueParams) (string, []string, error) {
 		return "rule-3", []string{"o1"}, nil
@@ -469,8 +477,12 @@ func TestCascadeBundleRemoved_ClosureCoverageSuppressesRevoke(t *testing.T) {
 	svcGetBundlesForUser = func(ctx context.Context, u string) ([]models.Bundle, error) {
 		return []models.Bundle{{ID: "b1"}, {ID: "b2"}}, nil // still assigned to both at read time
 	}
-	svcCascGetRolesForBundle = func(ctx context.Context, id string) ([]models.BundleRole, error) {
-		return []models.BundleRole{{ProjectID: "p1", RoleKey: "A"}}, nil // both b1 and b2 grant A
+	svcGetUserBundleRolesGrouped = func(ctx context.Context, u string) (map[string][]models.BundleRole, error) {
+		// Both b1 and b2 grant A, each through the version this user is pinned to.
+		return map[string][]models.BundleRole{
+			"b1": {{ProjectID: "p1", RoleKey: "A"}},
+			"b2": {{ProjectID: "p1", RoleKey: "A"}},
+		}, nil
 	}
 	svcGetActiveMappingRules = noRules
 	var passed []db.EnqueueParams
@@ -503,8 +515,8 @@ func TestCascadeBundleRemoved_ClosureRevokeSymmetry(t *testing.T) {
 	svcGetBundlesForUser = func(ctx context.Context, u string) ([]models.Bundle, error) {
 		return []models.Bundle{{ID: "b1"}}, nil
 	}
-	svcCascGetRolesForBundle = func(ctx context.Context, id string) ([]models.BundleRole, error) {
-		return []models.BundleRole{{ProjectID: "p1", RoleKey: "A"}}, nil
+	svcGetUserBundleRolesGrouped = func(ctx context.Context, u string) (map[string][]models.BundleRole, error) {
+		return map[string][]models.BundleRole{"b1": {{ProjectID: "p1", RoleKey: "A"}}}, nil
 	}
 	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
 		return []models.MappingRule{{ID: "rule1", SourceProject: "p1", SourceRole: "A", TargetProject: "p1", TargetRole: "B2"}}, nil
@@ -549,8 +561,8 @@ func TestCascadeBundleRemoved_RevokesWhenUncovered(t *testing.T) {
 	svcGetBundlesForUser = func(ctx context.Context, u string) ([]models.Bundle, error) {
 		return []models.Bundle{{ID: "b1"}}, nil
 	}
-	svcCascGetRolesForBundle = func(ctx context.Context, id string) ([]models.BundleRole, error) {
-		return []models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}}, nil
+	svcGetUserBundleRolesGrouped = func(ctx context.Context, u string) (map[string][]models.BundleRole, error) {
+		return map[string][]models.BundleRole{"b1": {{ProjectID: "p1", RoleKey: "r1"}}}, nil
 	}
 	svcGetActiveMappingRules = noRules
 	var got []db.EnqueueParams
@@ -583,8 +595,8 @@ func TestCascadeBundleRemoved_EnqueueErrorPropagates(t *testing.T) {
 	svcGetBundlesForUser = func(ctx context.Context, u string) ([]models.Bundle, error) {
 		return []models.Bundle{{ID: "b1"}}, nil
 	}
-	svcCascGetRolesForBundle = func(ctx context.Context, id string) ([]models.BundleRole, error) {
-		return []models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}}, nil
+	svcGetUserBundleRolesGrouped = func(ctx context.Context, u string) (map[string][]models.BundleRole, error) {
+		return map[string][]models.BundleRole{"b1": {{ProjectID: "p1", RoleKey: "r1"}}}, nil
 	}
 	svcGetActiveMappingRules = noRules
 	wantErr := errors.New("remove tx failed")
@@ -598,77 +610,223 @@ func TestCascadeBundleRemoved_EnqueueErrorPropagates(t *testing.T) {
 	}
 }
 
-// --- CascadeRoleRemovedFromBundle ---
-
-func TestCascadeRoleRemoved_SuppressesRevokeWhenCoveredByAnotherRule(t *testing.T) {
-	resetCascadeDeps(t)
-	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "auto"}, nil
-	}
-	svcGetUsersForBundle = func(ctx context.Context, id string) ([]string, error) {
-		return []string{"u1"}, nil
-	}
-	svcGetDirectGrantsForUser = func(ctx context.Context, u string, inc bool) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{{UserID: u, ProjectID: "sp", RoleKey: "sr"}}, nil
-	}
-	svcGetBundlesForUser = noBundles
-	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
-		return []models.MappingRule{{ID: "rule-1", SourceProject: "sp", SourceRole: "sr", TargetProject: "p1", TargetRole: "r1"}}, nil
-	}
-	var passed []db.EnqueueParams
-	svcRemoveRoleFromBundleAndEnqueue = func(ctx context.Context, actor, bundleID, projectID, roleKey string, ps []db.EnqueueParams) ([]string, error) {
-		passed = ps
-		return nil, nil
-	}
-
-	res, err := CascadeRoleRemovedFromBundle(context.Background(), "admin", "b1", "p1", "r1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(passed) != 0 {
-		t.Fatalf("role still covered by an active rule must not enqueue a revoke, got %+v", passed)
-	}
-	if res.Enqueued != 0 {
-		t.Fatalf("enqueued = %d, want 0", res.Enqueued)
-	}
-}
-
-func TestCascadeRoleRemoved_RevokesUncoveredMembers(t *testing.T) {
+// Assigning a bundle projects the version the assignment PINS — the latest
+// published one — not the working copy.
+//
+// The two are written in the same transaction: AssignBundleAndEnqueue pins the
+// latest version while the caller supplies the outbox rows. Building those rows
+// from `bundle_roles` meant a new member was pinned to v2 and simultaneously
+// granted whatever unpublished edit was sitting in the working copy.
+func TestCascadeBundleAssigned_ProjectsThePublishedVersionNotTheWorkingCopy(t *testing.T) {
 	resetCascadeDeps(t)
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
 		return models.Bundle{ID: id, ConfirmationMode: "manual"}, nil
 	}
-	svcGetUsersForBundle = func(ctx context.Context, id string) ([]string, error) {
-		return []string{"u1", "u2"}, nil
-	}
 	svcGetDirectGrantsForUser = noDirects
-	svcGetBundlesForUser = func(ctx context.Context, u string) ([]models.Bundle, error) {
-		return []models.Bundle{{ID: "b1"}}, nil
-	}
-	svcCascGetRolesForBundle = func(ctx context.Context, id string) ([]models.BundleRole, error) {
-		return []models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}}, nil
-	}
+	svcGetUserBundleRolesGrouped = noBundleRoles
 	svcGetActiveMappingRules = noRules
-	var got []db.EnqueueParams
-	svcRemoveRoleFromBundleAndEnqueue = func(ctx context.Context, actor, bundleID, projectID, roleKey string, ps []db.EnqueueParams) ([]string, error) {
-		got = ps
-		return []string{"o1", "o2"}, nil
+
+	// The working copy has an unpublished addition. Reading it here is the bug.
+	svcCascGetRolesForBundle = func(ctx context.Context, id string) ([]models.BundleRole, error) {
+		return []models.BundleRole{
+			{ProjectID: "p1", RoleKey: "published"},
+			{ProjectID: "p1", RoleKey: "draft_only"},
+		}, nil
+	}
+	svcLatestVersionRoles = func(ctx context.Context, id string) (models.BundleVersion, []models.BundleRole, error) {
+		return models.BundleVersion{ID: "v-latest", Version: 2}, []models.BundleRole{{ProjectID: "p1", RoleKey: "published"}}, nil
 	}
 
-	res, err := CascadeRoleRemovedFromBundle(context.Background(), "admin", "b1", "p1", "r1")
+	var passed []db.EnqueueParams
+	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
+		passed = ps
+		return nil, true, nil
+	}
+
+	if _, err := CascadeBundleAssignedToUser(context.Background(), "admin", "u1", "b1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(passed) != 1 {
+		t.Fatalf("expected exactly the published role, got %+v", passed)
+	}
+	if passed[0].RoleKeys[0] != "published" {
+		t.Fatalf("an unpublished role was projected to a new holder: %+v", passed)
+	}
+}
+
+// --- Publishing a version ---
+//
+// These are the two suppression properties that used to be tested against
+// CascadeRoleRemovedFromBundle. The behaviour moved to publish, so the tests
+// moved with it: what must survive is that a revoke is only projected when
+// NOTHING else still grants the role.
+
+func publishStubs(t *testing.T, working, published []models.BundleRole, holders []models.BundleHolder) {
+	t.Helper()
+	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
+		return models.Bundle{ID: id, ConfirmationMode: "manual"}, nil
+	}
+	svcLatestVersion = func(ctx context.Context, id string) (models.BundleVersion, error) {
+		return models.BundleVersion{ID: "v-old", BundleID: id, Version: 2}, nil
+	}
+	svcCascGetRolesForBundle = func(ctx context.Context, id string) ([]models.BundleRole, error) {
+		return working, nil
+	}
+	svcGetRolesForVersion = func(ctx context.Context, id string) ([]models.BundleRole, error) {
+		return published, nil
+	}
+	svcGetBundleHoldersByVersion = func(ctx context.Context, id string) ([]models.BundleHolder, error) {
+		return holders, nil
+	}
+	svcGetUsersForBundle = func(ctx context.Context, id string) ([]string, error) {
+		ids := make([]string, 0, len(holders))
+		for _, h := range holders {
+			ids = append(ids, h.UserID)
+		}
+		return ids, nil
+	}
+	svcListBundleVersions = func(ctx context.Context, id string) ([]models.BundleVersion, error) {
+		return []models.BundleVersion{{ID: "v-old", BundleID: id, Version: 2}}, nil
+	}
+	svcVersionBelongsTo = func(ctx context.Context, bundleID, versionID string) (bool, error) {
+		return versionID == "v-old", nil
+	}
+}
+
+func TestPublish_SuppressesRevokeWhenAnotherRuleStillGrantsIt(t *testing.T) {
+	resetCascadeDeps(t)
+	// v2 had r1; the working copy drops it. u1 also holds sp/sr directly, and a
+	// mapping rule turns that into p1/r1 — so the revoke must not be projected.
+	publishStubs(t,
+		nil,
+		[]models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}},
+		[]models.BundleHolder{{UserID: "u1", VersionID: "v-old", Version: 2}})
+	svcGetDirectGrantsForUser = func(ctx context.Context, u string, inc bool) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{UserID: u, ProjectID: "sp", RoleKey: "sr"}}, nil
+	}
+	svcGetUserBundleRolesGrouped = noBundleRoles
+	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
+		return []models.MappingRule{{ID: "rule-1", SourceProject: "sp", SourceRole: "sr", TargetProject: "p1", TargetRole: "r1"}}, nil
+	}
+
+	var passed []db.EnqueueParams
+	svcPublishVersionAndEnqueue = func(ctx context.Context, actor, bundleID, note string, roles []models.BundleRole, moved []string, ps []db.EnqueueParams) (models.BundleVersion, []string, error) {
+		passed = ps
+		return models.BundleVersion{ID: "v-new", Version: 3}, nil, nil
+	}
+
+	plan, _, err := PublishBundleVersion(context.Background(), "admin",
+		PublishRequest{BundleID: "b1", Migrate: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 {
-		t.Fatalf("expected a revoke per uncovered member, got %+v", got)
+	if len(passed) != 0 {
+		t.Fatalf("role still produced by an active rule must not be revoked, got %+v", passed)
 	}
-	for _, p := range got {
-		if p.OpType != "revoke" || p.Source != "bundle" || p.SourceRef != "b1" || p.ProjectID != "p1" || p.RoleKeys[0] != "r1" {
-			t.Fatalf("bad revoke param: %+v", p)
+	if plan.Summary.NoChange != 1 {
+		t.Fatalf("the holder should read as no-change, got %+v", plan.Summary)
+	}
+}
+
+func TestPublish_RevokesHoldersNothingElseCovers(t *testing.T) {
+	resetCascadeDeps(t)
+	publishStubs(t,
+		nil,
+		[]models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}},
+		[]models.BundleHolder{
+			{UserID: "u1", VersionID: "v-old", Version: 2},
+			{UserID: "u2", VersionID: "v-old", Version: 2},
+		})
+	svcGetDirectGrantsForUser = noDirects
+	svcGetUserBundleRolesGrouped = func(ctx context.Context, u string) (map[string][]models.BundleRole, error) {
+		return map[string][]models.BundleRole{"b1": {{BundleID: "b1", ProjectID: "p1", RoleKey: "r1"}}}, nil
+	}
+	svcGetActiveMappingRules = noRules
+
+	var passed []db.EnqueueParams
+	svcPublishVersionAndEnqueue = func(ctx context.Context, actor, bundleID, note string, roles []models.BundleRole, moved []string, ps []db.EnqueueParams) (models.BundleVersion, []string, error) {
+		passed = ps
+		return models.BundleVersion{ID: "v-new", Version: 3}, []string{"o1", "o2"}, nil
+	}
+
+	plan, _, err := PublishBundleVersion(context.Background(), "admin",
+		PublishRequest{BundleID: "b1", Migrate: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(passed) != 2 {
+		t.Fatalf("expected one revoke per uncovered holder, got %+v", passed)
+	}
+	for _, p := range passed {
+		if p.OpType != "revoke" || p.ProjectID != "p1" || p.RoleKeys[0] != "r1" {
+			t.Fatalf("bad param: %+v", p)
 		}
 	}
-	if res.Mode != "manual" {
-		t.Fatalf("mode = %q, want manual", res.Mode)
+	// Applied, not Apply: the plan has been through the apply pass.
+	if plan.Summary.Succeeded != 2 {
+		t.Fatalf("both holders should be acted on, got %+v", plan.Summary)
+	}
+}
+
+// "Leave them where they are" is a real answer, not a deferral: the version is
+// still written, and not one outbox row is queued.
+func TestPublish_WithoutMigrateWritesTheVersionAndTouchesNobody(t *testing.T) {
+	resetCascadeDeps(t)
+	publishStubs(t,
+		[]models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}, {ProjectID: "p2", RoleKey: "r2"}},
+		[]models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}},
+		[]models.BundleHolder{{UserID: "u1", VersionID: "v-old", Version: 2}})
+	svcGetDirectGrantsForUser = noDirects
+	svcGetUserBundleRolesGrouped = noBundleRoles
+	svcGetActiveMappingRules = noRules
+
+	var passed []db.EnqueueParams
+	var movedUsers []string
+	var snapshot []models.BundleRole
+	svcPublishVersionAndEnqueue = func(ctx context.Context, actor, bundleID, note string, roles []models.BundleRole, moved []string, ps []db.EnqueueParams) (models.BundleVersion, []string, error) {
+		passed, movedUsers, snapshot = ps, moved, roles
+		return models.BundleVersion{ID: "v-new", Version: 3}, nil, nil
+	}
+
+	plan, version, err := PublishBundleVersion(context.Background(), "admin",
+		PublishRequest{BundleID: "b1", Migrate: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version.Version != 3 {
+		t.Fatalf("the version must still be published, got v%d", version.Version)
+	}
+	if len(passed) != 0 || len(movedUsers) != 0 {
+		t.Fatalf("nobody was migrated, so nothing may be enqueued or repinned: %v / %v", passed, movedUsers)
+	}
+	// The snapshot is the caller's set, from the same read the plan was built
+	// from — not a fresh SELECT that a concurrent edit could have moved.
+	if len(snapshot) != 2 {
+		t.Fatalf("the version must be snapshotted from the working copy the plan used, got %+v", snapshot)
+	}
+	if plan.Summary.NoChange != 1 {
+		t.Fatalf("the holder stays put, got %+v", plan.Summary)
+	}
+}
+
+// Publishing a bundle that matches its latest version is refused rather than
+// writing an identical v4 — a version list where half the entries changed
+// nothing is a list nobody reads.
+func TestPublish_RefusesWhenThereIsNothingToPublish(t *testing.T) {
+	resetCascadeDeps(t)
+	same := []models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}}
+	publishStubs(t, same, same, nil)
+	svcGetDirectGrantsForUser = noDirects
+	svcGetUserBundleRolesGrouped = noBundleRoles
+	svcGetActiveMappingRules = noRules
+	svcPublishVersionAndEnqueue = func(ctx context.Context, actor, bundleID, note string, roles []models.BundleRole, moved []string, ps []db.EnqueueParams) (models.BundleVersion, []string, error) {
+		t.Fatal("must not write a version when nothing changed")
+		return models.BundleVersion{}, nil, nil
+	}
+
+	if _, _, err := PublishBundleVersion(context.Background(), "admin",
+		PublishRequest{BundleID: "b1", Migrate: true}); err == nil {
+		t.Fatal("expected publishing an unchanged bundle to be refused")
 	}
 }
 
@@ -687,7 +845,7 @@ func TestCascadeRuleUpdated_TargetChangeClosureDiff(t *testing.T) {
 	svcGetDirectGrantsForUser = func(ctx context.Context, u string, inc bool) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{{UserID: u, ProjectID: "sp", RoleKey: "sr"}}, nil
 	}
-	svcGetBundlesForUser = noBundles
+	svcGetUserBundleRolesGrouped = noBundleRoles
 	var got []db.EnqueueParams
 	svcUpdateRuleAndEnqueue = func(ctx context.Context, actor, id, sp, sr, tp, tr string, ps []db.EnqueueParams) ([]string, error) {
 		got = ps
@@ -733,8 +891,8 @@ func TestCascadeRuleUpdated_OldTargetStillCoveredByBundle_NoRevoke(t *testing.T)
 	svcGetBundlesForUser = func(ctx context.Context, u string) ([]models.Bundle, error) {
 		return []models.Bundle{{ID: "b1"}}, nil // still covers the old target via a bundle
 	}
-	svcCascGetRolesForBundle = func(ctx context.Context, id string) ([]models.BundleRole, error) {
-		return []models.BundleRole{{ProjectID: "tp", RoleKey: "trOld"}}, nil
+	svcGetUserBundleRolesGrouped = func(ctx context.Context, u string) (map[string][]models.BundleRole, error) {
+		return map[string][]models.BundleRole{"b1": {{ProjectID: "tp", RoleKey: "trOld"}}}, nil
 	}
 	var got []db.EnqueueParams
 	svcUpdateRuleAndEnqueue = func(ctx context.Context, actor, id, sp, sr, tp, tr string, ps []db.EnqueueParams) ([]string, error) {
@@ -769,7 +927,7 @@ func TestCascadeRuleUpdated_SameTripleReAdded_NoChurnForKeptUser(t *testing.T) {
 			{UserID: u, ProjectID: "spNew", RoleKey: "sr"},
 		}, nil
 	}
-	svcGetBundlesForUser = noBundles
+	svcGetUserBundleRolesGrouped = noBundleRoles
 	var got []db.EnqueueParams
 	svcUpdateRuleAndEnqueue = func(ctx context.Context, actor, id, sp, sr, tp, tr string, ps []db.EnqueueParams) ([]string, error) {
 		got = ps
@@ -798,7 +956,7 @@ func TestCascadeRuleUpdated_SkipsUsersWithEmptyDelta(t *testing.T) {
 		}
 		return nil, nil // u2 holds nothing — empty delta, must be skipped
 	}
-	svcGetBundlesForUser = noBundles
+	svcGetUserBundleRolesGrouped = noBundleRoles
 	var got []db.EnqueueParams
 	svcUpdateRuleAndEnqueue = func(ctx context.Context, actor, id, sp, sr, tp, tr string, ps []db.EnqueueParams) ([]string, error) {
 		got = ps
@@ -812,5 +970,178 @@ func TestCascadeRuleUpdated_SkipsUsersWithEmptyDelta(t *testing.T) {
 		if p.UserID == "u2" {
 			t.Fatalf("u2 has an empty delta and must be skipped, got %+v", got)
 		}
+	}
+}
+
+// A failed read of the working copy used to be indistinguishable from an empty
+// bundle, and an empty bundle plans a revoke of everything. The error has to
+// come back.
+func TestPublish_ReadFailureIsNotAnEmptyBundle(t *testing.T) {
+	resetCascadeDeps(t)
+	publishStubs(t, nil, []models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}},
+		[]models.BundleHolder{{UserID: "u1", VersionID: "v-old", Version: 2}})
+	svcCascGetRolesForBundle = func(ctx context.Context, id string) ([]models.BundleRole, error) {
+		return nil, errors.New("connection reset")
+	}
+	svcGetDirectGrantsForUser = noDirects
+	svcGetUserBundleRolesGrouped = noBundleRoles
+	svcGetActiveMappingRules = noRules
+	svcPublishVersionAndEnqueue = func(ctx context.Context, actor, bundleID, note string, roles []models.BundleRole, moved []string, ps []db.EnqueueParams) (models.BundleVersion, []string, error) {
+		t.Fatal("must not publish on a failed working-copy read")
+		return models.BundleVersion{}, nil, nil
+	}
+
+	if _, _, err := PublishBundleVersion(context.Background(), "admin",
+		PublishRequest{BundleID: "b1", Migrate: true}); err == nil {
+		t.Fatal("expected the read error to propagate")
+	}
+}
+
+// A version from another bundle produced a plan reading "v2 → v0" and was only
+// rejected on apply — a nonsense plan somebody had already approved.
+func TestMoveHolders_RehearsalRejectsAForeignVersion(t *testing.T) {
+	resetCascadeDeps(t)
+	publishStubs(t, nil, nil, nil)
+	svcVersionBelongsTo = func(ctx context.Context, bundleID, versionID string) (bool, error) {
+		return false, nil
+	}
+
+	if _, err := RehearseMoveHolders(context.Background(),
+		MoveHoldersRequest{BundleID: "b1", VersionID: "v-other", UserIDs: []string{"u1"}}); err == nil {
+		t.Fatal("expected a version from another bundle to be refused before any plan is built")
+	}
+}
+
+// Nobody stands on a version the moment it is published, so inferring its
+// number from its holders yielded v0.
+func TestMoveHolders_TargetVersionComesFromTheVersionList(t *testing.T) {
+	resetCascadeDeps(t)
+	publishStubs(t, nil, []models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}},
+		[]models.BundleHolder{{UserID: "u1", VersionID: "v-old", Version: 2}})
+	svcGetDirectGrantsForUser = noDirects
+	svcGetUserBundleRolesGrouped = noBundleRoles
+	svcGetActiveMappingRules = noRules
+	svcVersionBelongsTo = func(ctx context.Context, bundleID, versionID string) (bool, error) {
+		return true, nil
+	}
+	svcListBundleVersions = func(ctx context.Context, id string) ([]models.BundleVersion, error) {
+		return []models.BundleVersion{
+			{ID: "v-new", BundleID: id, Version: 3},
+			{ID: "v-old", BundleID: id, Version: 2},
+		}, nil
+	}
+	svcGetRolesForVersion = func(ctx context.Context, id string) ([]models.BundleRole, error) {
+		return []models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}}, nil
+	}
+
+	plan, err := RehearseMoveHolders(context.Background(),
+		MoveHoldersRequest{BundleID: "b1", VersionID: "v-new", UserIDs: []string{"u1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Outcomes) != 1 {
+		t.Fatalf("expected one row, got %+v", plan.Outcomes)
+	}
+	if strings.Contains(plan.Outcomes[0].Detail, "v0") {
+		t.Fatalf("the target version was inferred from holders and came out as v0: %q", plan.Outcomes[0].Detail)
+	}
+	if !strings.Contains(plan.Outcomes[0].Detail, "v2 → v3") {
+		t.Fatalf("expected the move to name both versions, got %q", plan.Outcomes[0].Detail)
+	}
+}
+
+// The assignment must pin the version it PROJECTED, not whatever is latest when
+// the write transaction runs.
+//
+// Both reads used to resolve "latest" independently: the service read v2's
+// roles, then the transaction selected the latest version to pin. A publish
+// committing between them left the member pinned to v3 while the outbox carried
+// v2's roles — and afterwards neither row looks wrong on its own, so nothing
+// downstream can detect it. Passing the version id through is the only way the
+// two can be the same version by construction.
+func TestCascadeBundleAssigned_PinsTheVersionItProjected(t *testing.T) {
+	resetCascadeDeps(t)
+	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
+		return models.Bundle{ID: id, ConfirmationMode: "manual"}, nil
+	}
+	svcGetDirectGrantsForUser = noDirects
+	svcGetUserBundleRolesGrouped = noBundleRoles
+	svcGetActiveMappingRules = noRules
+	svcLatestVersionRoles = func(ctx context.Context, id string) (models.BundleVersion, []models.BundleRole, error) {
+		return models.BundleVersion{ID: "v2-id", BundleID: id, Version: 2},
+			[]models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}}, nil
+	}
+
+	var pinned string
+	var projected []db.EnqueueParams
+	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
+		pinned, projected = versionID, ps
+		return nil, true, nil
+	}
+
+	if _, err := CascadeBundleAssignedToUser(context.Background(), "admin", "u1", "b1"); err != nil {
+		t.Fatal(err)
+	}
+	if pinned != "v2-id" {
+		t.Fatalf("the pin must be the version whose roles were projected, got %q", pinned)
+	}
+	if len(projected) != 1 || projected[0].RoleKeys[0] != "r1" {
+		t.Fatalf("unexpected projection: %+v", projected)
+	}
+}
+
+// Re-assigning a bundle somebody already holds must change nothing.
+//
+// The insert conflicts on (user_id, bundle_id) and preserves their existing
+// pin — so a person on v1 stays on v1. The delta, though, was computed against
+// the LATEST version, and enqueuing it handed them v2's access while every
+// record still said v1: newer access than their pin, with nothing on any screen
+// able to show the discrepancy.
+//
+// Moving somebody forward is its own rehearsed action. It must not happen as a
+// side effect of an assign that was meant to be idempotent.
+func TestCascadeBundleAssigned_ExistingHolderIsANoOp(t *testing.T) {
+	resetCascadeDeps(t)
+	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
+		return models.Bundle{ID: id, ConfirmationMode: "auto"}, nil
+	}
+	svcGetDirectGrantsForUser = noDirects
+	svcGetActiveMappingRules = noRules
+	// They are on v1, which granted only r1.
+	svcGetUserBundleRolesGrouped = func(ctx context.Context, u string) (map[string][]models.BundleRole, error) {
+		return map[string][]models.BundleRole{"b1": {{ProjectID: "p1", RoleKey: "r1"}}}, nil
+	}
+	// The latest version is v2, which also grants r2.
+	svcLatestVersionRoles = func(ctx context.Context, id string) (models.BundleVersion, []models.BundleRole, error) {
+		return models.BundleVersion{ID: "v2-id", BundleID: id, Version: 2},
+			[]models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}, {ProjectID: "p1", RoleKey: "r2"}}, nil
+	}
+
+	// The transaction reports the conflict: nothing was inserted.
+	var offered []db.EnqueueParams
+	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
+		offered = ps
+		return nil, false, nil
+	}
+	drained := false
+	svcDrainBatch = func(ctx context.Context, ids []string) (propagation.DrainResult, error) {
+		drained = true
+		return propagation.DrainResult{}, nil
+	}
+
+	res, err := CascadeBundleAssignedToUser(context.Background(), "admin", "u1", "b1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The service still computes a delta — it cannot know about the conflict
+	// until the transaction answers — but nothing may be projected from it.
+	if len(offered) == 0 {
+		t.Fatal("expected the delta to have been computed and offered to the tx")
+	}
+	if res.Enqueued != 0 {
+		t.Fatalf("an existing holder must not be projected against: enqueued = %d", res.Enqueued)
+	}
+	if drained {
+		t.Fatal("nothing was written, so nothing may be drained")
 	}
 }

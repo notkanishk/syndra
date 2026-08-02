@@ -55,8 +55,12 @@ var (
 		}
 		return items[:n], nil
 	}
-	svcGetBundlesForUser      = db.GetBundlesForUser
-	svcGetRolesForBundle      = db.GetRolesForBundle
+	svcGetBundlesForUser = db.GetBundlesForUser
+	svcGetRolesForBundle = db.GetRolesForBundle
+	// What a bundle grants TODAY: the latest published version, which is what a
+	// new assignment pins to.
+	svcLatestVersionRoles     = db.LatestVersionRoles
+	svcVersionBelongsTo       = db.VersionBelongsTo
 	svcGetDirectGrantsForUser = db.GetDirectGrantsForUser
 	svcGetAllDirectGrants     = db.GetAllDirectGrants
 	// Direct-grant removal: ledger delete + audit + the caller-computed

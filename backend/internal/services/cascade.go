@@ -15,6 +15,13 @@ type CascadeResult struct {
 	Enqueued int                     `json:"enqueued"`
 	Mode     string                  `json:"mode"`
 	Drain    propagation.DrainResult `json:"drain"`
+
+	// NoOp means the mutation did not happen because it was already true —
+	// today, only "they already hold this bundle". Distinct from
+	// `Enqueued == 0`, which means the write DID happen and changed nobody's
+	// effective access. Reporting the two the same way is how an idempotent
+	// call gets read as a successful change.
+	NoOp bool `json:"no_op,omitempty"`
 }
 
 // --- injectable deps (swapped in cascade_test.go) ---
@@ -23,10 +30,21 @@ var (
 		return db.GetBundleByID(ctx, id)
 	}
 	svcCascGetRolesForBundle = db.GetRolesForBundle
-	svcGetUsersForBundle     = db.GetUsersForBundle
-	svcGetAllKnownUserIDs    = db.GetAllKnownUserIDs
-	svcGetMappingRuleByID    = db.GetMappingRuleByID
-	svcDrainBatch            = propagation.DrainBatch
+	// Version-aware: what each of a user's bundles grants THEM, resolved
+	// through the version they are pinned to rather than the bundle's current
+	// working copy. Every closure computation goes through this — asking what
+	// the bundle holds is what made an edit reach everybody.
+	svcGetUserBundleRolesGrouped = db.GetUserBundleRolesGrouped
+	svcGetRolesForVersion        = db.GetRolesForVersion
+	svcLatestVersion             = db.LatestVersion
+	svcGetBundleHoldersByVersion = db.GetBundleHoldersByVersion
+	svcListBundleVersions        = db.ListBundleVersions
+	svcPublishVersionAndEnqueue  = db.PublishVersionAndEnqueue
+	svcMoveHoldersAndEnqueue     = db.MoveHoldersAndEnqueue
+	svcGetUsersForBundle         = db.GetUsersForBundle
+	svcGetAllKnownUserIDs        = db.GetAllKnownUserIDs
+	svcGetMappingRuleByID        = db.GetMappingRuleByID
+	svcDrainBatch                = propagation.DrainBatch
 
 	// atomic mutation+enqueue (one tx each — see design pivot: cascades write no
 	// direct_role_grants row).
@@ -154,17 +172,13 @@ func userBaseHoldingsExcludingBundle(ctx context.Context, userID, excludeBundleI
 	for _, g := range directs {
 		base[roleKey{projectID: g.ProjectID, roleKey: g.RoleKey}] = true
 	}
-	bundles, err := svcGetBundlesForUser(ctx, userID)
+	byBundle, err := svcGetUserBundleRolesGrouped(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	for _, b := range bundles {
-		if b.ID == excludeBundleID {
+	for bundleID, roles := range byBundle {
+		if bundleID == excludeBundleID {
 			continue
-		}
-		roles, err := svcCascGetRolesForBundle(ctx, b.ID)
-		if err != nil {
-			return nil, err
 		}
 		for _, ro := range roles {
 			base[roleKey{projectID: ro.ProjectID, roleKey: ro.RoleKey}] = true
@@ -173,33 +187,25 @@ func userBaseHoldingsExcludingBundle(ctx context.Context, userID, excludeBundleI
 	return base, nil
 }
 
-// userBaseHoldingsRoleRemoved is userBaseHoldings but drops exactly one (project,role) grant
-// contributed by one bundle — used to simulate "after role R removed from bundle B" without
-// blinding the base to R if another bundle or a direct grant also grants it.
-func userBaseHoldingsRoleRemoved(ctx context.Context, userID, excludeBundleID, projectID, role string) (map[roleKey]bool, error) {
-	base := make(map[roleKey]bool)
-	directs, err := svcGetDirectGrantsForUser(ctx, userID, false)
+// userBaseHoldingsWithBundleAt is userBaseHoldings with ONE bundle's
+// contribution replaced by an explicit role set — "what would this person hold
+// if their pin on bundle B were moved to a version containing exactly these".
+//
+// This is how both publishing and moving a holder are simulated. It replaces
+// the old per-role add/remove simulations, which could only model one role
+// changing at a time; a version is a whole set moving at once, and a person can
+// gain and lose roles in the same step.
+func userBaseHoldingsWithBundleAt(
+	ctx context.Context,
+	userID, bundleID string,
+	roles []models.BundleRole,
+) (map[roleKey]bool, error) {
+	base, err := userBaseHoldingsExcludingBundle(ctx, userID, bundleID)
 	if err != nil {
 		return nil, err
 	}
-	for _, g := range directs {
-		base[roleKey{projectID: g.ProjectID, roleKey: g.RoleKey}] = true
-	}
-	bundles, err := svcGetBundlesForUser(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	for _, b := range bundles {
-		roles, err := svcCascGetRolesForBundle(ctx, b.ID)
-		if err != nil {
-			return nil, err
-		}
-		for _, ro := range roles {
-			if b.ID == excludeBundleID && ro.ProjectID == projectID && ro.RoleKey == role {
-				continue // this bundle's grant of exactly this role is being removed
-			}
-			base[roleKey{projectID: ro.ProjectID, roleKey: ro.RoleKey}] = true
-		}
+	for _, ro := range roles {
+		base[roleKey{projectID: ro.ProjectID, roleKey: ro.RoleKey}] = true
 	}
 	return base, nil
 }
@@ -234,7 +240,11 @@ func CascadeBundleAssignedToUser(ctx context.Context, actor, userID, bundleID st
 	if err != nil {
 		return CascadeResult{}, err
 	}
-	roles, err := svcCascGetRolesForBundle(ctx, bundleID)
+	// The LATEST PUBLISHED version, not the working copy. AssignBundleAndEnqueue
+	// pins the assignment to that version in the same transaction, so projecting
+	// from `bundle_roles` would push unpublished edits to somebody who is not
+	// pinned to them — a new member receiving a role nobody had published.
+	version, roles, err := svcLatestVersionRoles(ctx, bundleID)
 	if err != nil {
 		return CascadeResult{}, err
 	}
@@ -256,48 +266,34 @@ func CascadeBundleAssignedToUser(ctx context.Context, actor, userID, bundleID st
 	adds, revokes := closureDelta(effectiveClosure(before, rules), effectiveClosure(after, rules))
 	params := deltaParams(userID, adds, revokes, actor, "Bundle membership cascade", "bundle", bundleID)
 
-	ids, err := svcAssignBundleAndEnqueue(ctx, actor, userID, bundleID, params)
+	ids, assigned, err := svcAssignBundleAndEnqueue(ctx, actor, userID, bundleID, version.ID, params)
 	if err != nil {
 		return CascadeResult{}, err // enqueue+assign rolled back together → handler returns 500
+	}
+	if !assigned {
+		// They already hold it, on whichever version they were pinned to. The
+		// delta computed above was against the LATEST version, so enqueuing it
+		// would hand them newer access than their pin records — the exact
+		// mismatch versioning exists to prevent. Moving them forward is a
+		// separate, rehearsed action.
+		return CascadeResult{Mode: bundle.ConfirmationMode, NoOp: true}, nil
 	}
 	return applyMode(ctx, bundle.ConfirmationMode, ids)
 }
 
-// CascadeRoleAddedToBundle adds the role to the bundle AND enqueues each member's closure delta,
-// in one tx, then (auto) drains.
-func CascadeRoleAddedToBundle(ctx context.Context, actor, bundleID, projectID, roleKeyStr string) (CascadeResult, error) {
-	bundle, err := svcGetBundleByID(ctx, bundleID)
-	if err != nil {
-		return CascadeResult{}, err
+// EditBundleWorkingCopy adds or removes a role in the bundle's working copy.
+//
+// It cascades to nobody, and that is the change versioning makes. An edit used
+// to reach every holder the moment it was saved, which is why editing a bundle
+// fourteen people held was a decision nobody wanted to take in passing. Now the
+// edit is free and the consequence is a separate, rehearsed step: PublishBundle.
+func EditBundleWorkingCopy(ctx context.Context, actor, bundleID, projectID, roleKeyStr string, add bool) error {
+	if add {
+		_, err := svcAddRoleToBundleAndEnqueue(ctx, actor, bundleID, projectID, roleKeyStr, nil)
+		return err
 	}
-	users, err := svcGetUsersForBundle(ctx, bundleID)
-	if err != nil {
-		return CascadeResult{}, err
-	}
-	rules, err := svcGetActiveMappingRules(ctx)
-	if err != nil {
-		return CascadeResult{}, err
-	}
-	newKey := roleKey{projectID: projectID, roleKey: roleKeyStr}
-	var params []db.EnqueueParams
-	for _, u := range users {
-		before, err := userBaseHoldings(ctx, u)
-		if err != nil {
-			return CascadeResult{}, err
-		}
-		after := make(map[roleKey]bool, len(before)+1)
-		for k := range before {
-			after[k] = true
-		}
-		after[newKey] = true
-		adds, revokes := closureDelta(effectiveClosure(before, rules), effectiveClosure(after, rules))
-		params = append(params, deltaParams(u, adds, revokes, actor, "Bundle role-add cascade", "bundle", bundleID)...)
-	}
-	ids, err := svcAddRoleToBundleAndEnqueue(ctx, actor, bundleID, projectID, roleKeyStr, params)
-	if err != nil {
-		return CascadeResult{}, err
-	}
-	return applyMode(ctx, bundle.ConfirmationMode, ids)
+	_, err := svcRemoveRoleFromBundleAndEnqueue(ctx, actor, bundleID, projectID, roleKeyStr, nil)
+	return err
 }
 
 // CascadeRuleCreated creates the rule AND enqueues, for every known user, the closure delta caused
@@ -378,42 +374,6 @@ func CascadeBundleRemovedFromUser(ctx context.Context, actor, userID, bundleID s
 	return applyMode(ctx, bundle.ConfirmationMode, ids)
 }
 
-// CascadeRoleRemovedFromBundle revokes (projectID, roleKey) and any rule-derived roles it alone
-// supported, for each still-assigned member, atomically deleting the bundle_role + enqueuing the
-// delta. Same closure-subsumes-coverage reasoning as CascadeBundleRemovedFromUser.
-func CascadeRoleRemovedFromBundle(ctx context.Context, actor, bundleID, projectID, roleKeyStr string) (CascadeResult, error) {
-	bundle, err := svcGetBundleByID(ctx, bundleID)
-	if err != nil {
-		return CascadeResult{}, err
-	}
-	users, err := svcGetUsersForBundle(ctx, bundleID)
-	if err != nil {
-		return CascadeResult{}, err
-	}
-	rules, err := svcGetActiveMappingRules(ctx)
-	if err != nil {
-		return CascadeResult{}, err
-	}
-	var params []db.EnqueueParams
-	for _, u := range users {
-		before, err := userBaseHoldings(ctx, u)
-		if err != nil {
-			return CascadeResult{}, err
-		}
-		after, err := userBaseHoldingsRoleRemoved(ctx, u, bundleID, projectID, roleKeyStr)
-		if err != nil {
-			return CascadeResult{}, err
-		}
-		adds, revokes := closureDelta(effectiveClosure(before, rules), effectiveClosure(after, rules))
-		params = append(params, deltaParams(u, adds, revokes, actor, "Bundle role-removal cascade", "bundle", bundleID)...)
-	}
-	ids, err := svcRemoveRoleFromBundleAndEnqueue(ctx, actor, bundleID, projectID, roleKeyStr, params)
-	if err != nil {
-		return CascadeResult{}, err
-	}
-	return applyMode(ctx, bundle.ConfirmationMode, ids)
-}
-
 // CascadeRuleUpdated re-projects a rule whose matcher/target changed. `old` is the rule as it was
 // BEFORE the update (captured by the handler, since the updated fields don't tell us the old
 // target); sp/sr/tp/tr are the NEW fields. The update and the cascade commit atomically.
@@ -486,15 +446,11 @@ func userBaseHoldingsExcludingGrant(ctx context.Context, userID, excludeGrantID 
 		}
 		base[roleKey{projectID: g.ProjectID, roleKey: g.RoleKey}] = true
 	}
-	bundles, err := svcGetBundlesForUser(ctx, userID)
+	byBundle, err := svcGetUserBundleRolesGrouped(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	for _, b := range bundles {
-		roles, err := svcCascGetRolesForBundle(ctx, b.ID)
-		if err != nil {
-			return nil, err
-		}
+	for _, roles := range byBundle {
 		for _, ro := range roles {
 			base[roleKey{projectID: ro.ProjectID, roleKey: ro.RoleKey}] = true
 		}

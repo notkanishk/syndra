@@ -94,7 +94,7 @@ export default function PeoplePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debounced]);
 
-  const filterKey = `${filters.q}|${filters.project}|${filters.role}|${filters.bundle}|${filters.attention}`;
+  const filterKey = `${filters.q}|${filters.project}|${filters.role}|${filters.bundle}|${filters.version}|${filters.attention}`;
 
   // Changing what the filter matches while a selection is live would silently
   // re-aim the pending action at a different set of people. Drop it, and reset
@@ -218,7 +218,7 @@ export default function PeoplePage() {
         }
       />
 
-      {(filters.role || filters.bundle) && (
+      {(filters.role || filters.bundle || filters.version) && (
         <div className="flex flex-wrap items-center gap-2">
           {filters.role && (
             <FilterChip
@@ -227,9 +227,18 @@ export default function PeoplePage() {
             />
           )}
           {filters.bundle && (
+            // Two chips, not one, because they clear independently: dropping
+            // the version to see the whole bundle is the move an operator makes
+            // constantly once they have found the stragglers.
             <FilterChip
               label={`In the ${filters.bundle} bundle`}
-              onClear={() => setParams({ bundle: "" })}
+              onClear={() => setParams({ bundle: "", version: "" })}
+            />
+          )}
+          {filters.version && (
+            <FilterChip
+              label={`on v${filters.version}`}
+              onClear={() => setParams({ version: "" })}
             />
           )}
         </div>
@@ -413,11 +422,18 @@ function PersonRow({
 
       <span className="flex w-[220px] flex-wrap gap-1.5">
         {entry.bundle_names?.length ? (
-          entry.bundle_names.map((name) => (
-            <span key={name} className="rounded-pill bg-tint-2 px-2.5 py-1 text-[12.5px]">
-              {name}
-            </span>
-          ))
+          entry.bundle_names.map((name) => {
+            // The version rides on the chip. "Lab Tech" and "Lab Tech v2" are
+            // different facts about a person, and the row is where the
+            // difference between two people in the same bundle is visible.
+            const version = entry.bundle_versions?.[name];
+            return (
+              <span key={name} className="rounded-pill bg-tint-2 px-2.5 py-1 text-[12.5px]">
+                {name}
+                {version ? <span className="text-faint"> v{version}</span> : null}
+              </span>
+            );
+          })
         ) : (
           <span className="text-[13px] text-faint">none</span>
         )}

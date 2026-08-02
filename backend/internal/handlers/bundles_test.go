@@ -13,7 +13,6 @@ import (
 
 	"mkauth/internal/models"
 	"mkauth/internal/services"
-	"mkauth/internal/services/propagation"
 )
 
 // resetBundleDeps captures and restores all bundle-related injectable vars.
@@ -45,11 +44,16 @@ func resetBundleDeps(t *testing.T) {
 func resetCascadeHandlerDeps(t *testing.T) {
 	t.Helper()
 	origAssigned := svcCascadeBundleAssigned
-	origRoleAdded := svcCascadeRoleAdded
+	origEdit := svcEditBundleWorkingCopy
+	origDraft := svcBundleDraft
 	t.Cleanup(func() {
 		svcCascadeBundleAssigned = origAssigned
-		svcCascadeRoleAdded = origRoleAdded
+		svcEditBundleWorkingCopy = origEdit
+		svcBundleDraft = origDraft
 	})
+	svcBundleDraft = func(context.Context, string) (services.DraftDiff, error) {
+		return services.DraftDiff{LatestVersion: 2, NextVersion: 3}, nil
+	}
 }
 
 // --- handleCreateBundle ---
@@ -212,14 +216,18 @@ func TestHandleAddRoleToBundle_UnknownField(t *testing.T) {
 	}
 }
 
-func TestHandleAddRoleToBundle_HappyPath(t *testing.T) {
+// Adding a role writes the WORKING COPY and reaches nobody. The response says
+// so and hands back the draft, because the next question an operator has is
+// "what will publishing this do".
+func TestHandleAddRoleToBundle_EditsTheWorkingCopyAndCascadesToNobody(t *testing.T) {
 	resetBundleDeps(t)
 	resetCascadeHandlerDeps(t)
 
 	var gotBundleID, gotProjectID, gotRoleKey string
-	svcCascadeRoleAdded = func(ctx context.Context, actor, bundleID, projectID, roleKey string) (services.CascadeResult, error) {
-		gotBundleID, gotProjectID, gotRoleKey = bundleID, projectID, roleKey
-		return services.CascadeResult{Enqueued: 1, Mode: "auto", Drain: propagation.DrainResult{Applied: 1}}, nil
+	var gotAdd bool
+	svcEditBundleWorkingCopy = func(ctx context.Context, actor, bundleID, projectID, roleKey string, add bool) error {
+		gotBundleID, gotProjectID, gotRoleKey, gotAdd = bundleID, projectID, roleKey, add
+		return nil
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/bundles/b1/roles", strings.NewReader(`{"project_id":"p1","role_key":"member"}`))
@@ -230,27 +238,27 @@ func TestHandleAddRoleToBundle_HappyPath(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if gotBundleID != "b1" || gotProjectID != "p1" || gotRoleKey != "member" {
-		t.Fatalf("cascade called with bundleID=%q projectID=%q roleKey=%q", gotBundleID, gotProjectID, gotRoleKey)
+	if gotBundleID != "b1" || gotProjectID != "p1" || gotRoleKey != "member" || !gotAdd {
+		t.Fatalf("edit called with bundleID=%q projectID=%q roleKey=%q add=%v", gotBundleID, gotProjectID, gotRoleKey, gotAdd)
 	}
 	var resp map[string]any
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp["message"] != "Role added to bundle" {
-		t.Fatalf("unexpected message: %v", resp["message"])
+	if resp["cascade"] != nil {
+		t.Fatal("a working-copy edit must not report a cascade")
 	}
-	if resp["cascade"] == nil {
-		t.Fatal("expected a cascade field in the response")
+	if resp["draft"] == nil {
+		t.Fatal("expected the draft in the response")
 	}
 }
 
-func TestHandleAddRoleToBundle_CascadeError(t *testing.T) {
+func TestHandleAddRoleToBundle_WriteError(t *testing.T) {
 	resetBundleDeps(t)
 	resetCascadeHandlerDeps(t)
 
-	svcCascadeRoleAdded = func(ctx context.Context, actor, bundleID, projectID, roleKey string) (services.CascadeResult, error) {
-		return services.CascadeResult{}, errors.New("violates foreign key constraint")
+	svcEditBundleWorkingCopy = func(ctx context.Context, actor, bundleID, projectID, roleKey string, add bool) error {
+		return errors.New("violates foreign key constraint")
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/bundles/b1/roles", strings.NewReader(`{"project_id":"p1","role_key":"admin"}`))
@@ -265,8 +273,8 @@ func TestHandleAddRoleToBundle_CascadeError(t *testing.T) {
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp["error"] != "CASCADE_ERROR" {
-		t.Fatalf("expected CASCADE_ERROR, got %v", resp["error"])
+	if resp["error"] != "DB_ERROR" {
+		t.Fatalf("expected DB_ERROR, got %v", resp["error"])
 	}
 }
 

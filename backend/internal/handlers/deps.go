@@ -62,20 +62,35 @@ var (
 	// Add-side cascade injectables (sub-phase 3, Task 20): the cascade OWNS the source
 	// mutation (assign/add-role/create happen inside the atomic *AndEnqueue tx).
 	svcCascadeBundleAssigned = services.CascadeBundleAssignedToUser // (ctx, actor, userID, bundleID)
-	svcCascadeRoleAdded      = services.CascadeRoleAddedToBundle    // (ctx, actor, bundleID, projectID, roleKey)
-	svcCascadeRuleCreated    = services.CascadeRuleCreated          // (ctx, actor, sp, sr, tp, tr, mode) → (ruleID, res, err)
+	// Working-copy edits. These reach nobody — adding or removing a role
+	// changes what the bundle WILL grant when its next version is published,
+	// which is the whole point of versioning.
+	svcEditBundleWorkingCopy = services.EditBundleWorkingCopy // (ctx, actor, bundleID, projectID, roleKey, add)
+	svcCascadeRuleCreated    = services.CascadeRuleCreated    // (ctx, actor, sp, sr, tp, tr, mode) → (ruleID, res, err)
 
 	// Revoke-side + rule-update cascade injectables (sub-phase 3, Task 21): same ownership —
 	// remove/update happen inside the atomic *AndEnqueue tx, no separate dbRemove*/dbUpdate*
 	// injectable in the handler layer.
 	svcCascadeBundleRemoved = services.CascadeBundleRemovedFromUser // (ctx, actor, userID, bundleID)
-	svcCascadeRoleRemoved   = services.CascadeRoleRemovedFromBundle // (ctx, actor, bundleID, projectID, roleKey)
 	svcCascadeRuleUpdated   = services.CascadeRuleUpdated           // (ctx, actor, old, sp, sr, tp, tr)
 
 	// Rules handler injectables for the 6th trigger (Task 21f): read the pre-update rule, then
 	// validate the retarget against the graph WITHOUT the rule's own old edge.
 	dbGetMappingRuleByID  = db.GetMappingRuleByID
 	dbDetectCycleOnUpdate = db.DetectCycleOnUpdate
+
+	// Bundle versioning: the draft diff, the version list, and the two rehearsed
+	// applies (publish, move holders).
+	svcBundleDraft          = services.BundleDraft
+	svcListBundleVersions   = db.ListBundleVersions
+	svcGetRolesForVersion   = db.GetRolesForVersion
+	svcBundleHolders        = db.GetBundleHoldersByVersion
+	svcRehearsePublish      = services.RehearseBundlePublish
+	svcPublishBundleVersion = services.PublishBundleVersion
+	svcRehearseMoveHolders  = services.RehearseMoveHolders
+	svcMoveHolders          = services.MoveHolders
+	dbGetStaleHolderCounts  = db.GetStaleHolderCounts
+	dbGetUserBundleVersions = db.GetUserBundleVersions
 
 	cacheRebuildUser    = cache.RebuildUserCache
 	cacheInvalidateUser = cache.InvalidateUser

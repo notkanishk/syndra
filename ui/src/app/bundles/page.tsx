@@ -4,16 +4,18 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Select } from "@/components/ui/Select";
-import { ProjectName, UserName } from "@/components/names";
+import { AddRolesToBundle } from "@/components/bundles/AddRolesToBundle";
+import { BundleVersions } from "@/components/bundles/BundleVersions";
+import { PublishVersionDialog } from "@/components/bundles/PublishVersionDialog";
+import { RoleRef as RoleRefInline } from "@/components/names";
+import { draftChangeCount, useBundleDraft } from "@/lib/queries/useBundleVersions";
+import { RoleRef, UserName } from "@/components/names";
 import {
-  useAddBundleRole,
   useBundleImpact,
   useBundleRoles,
   useBundles,
@@ -23,13 +25,16 @@ import {
   type BundleRoleRow,
 } from "@/lib/queries/useBundles";
 import { useMappingRules } from "@/lib/queries/useMappingRules";
-import { useProjects } from "@/lib/queries/useProjects";
-import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
-import { humanizeKey } from "@/lib/format";
 
 /**
  * S1 · Bundles. Advanced, because this is the machine that acts on everyone:
- * a bundle edit cascades to every holder at once.
+ * publishing a version can change access for every holder at once.
+ *
+ * Editing does not. Since versioning, an edit changes the working copy and
+ * reaches nobody — the consequence belongs to Publish, which is rehearsed. Copy
+ * on this screen has to keep saying which of the two it is describing; the
+ * first cut of versioning left several sentences behind on the old behaviour,
+ * and a stale sentence here reads as a change that has already been applied.
  *
  * Assigning a bundle to one person is Basic and lives on their page. The rule
  * generalises: acting on one person is Basic; changing the thing that acts on
@@ -96,7 +101,21 @@ export default function BundlesPage() {
                     </span>
                   )}
                 </span>
-                <span className="text-[13.5px] text-faint">{bundle.holder_count ?? 0}</span>
+                <span className="flex shrink-0 items-center gap-1.5 text-[13.5px] text-faint">
+                  {/* Two facts the list has to carry: an edit nobody published,
+                      and holders an earlier publish left behind. Both are
+                      invisible from inside the bundle you happen to have open. */}
+                  {(bundle.unpublished_changes ?? 0) > 0 && (
+                    <span
+                      aria-label={`${bundle.unpublished_changes} unpublished changes`}
+                      className="h-1.5 w-1.5 rounded-pill bg-accent"
+                    />
+                  )}
+                  {(bundle.stale_holders ?? 0) > 0 && (
+                    <span className="text-warn-text">{bundle.stale_holders}&uarr;</span>
+                  )}
+                  {bundle.holder_count ?? 0}
+                </span>
               </button>
             ))}
           </ListStates>
@@ -135,6 +154,10 @@ function BundleWorkspace({
   const impact = useBundleImpact(bundleId);
   const setWelcome = useSetWelcomeBundle();
   const [pendingRemoval, setPendingRemoval] = useState<BundleRoleRow | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const draft = useBundleDraft(bundleId);
+  const pending = draftChangeCount(draft.data);
 
   const roleRows = roles.data ?? [];
 
@@ -145,13 +168,58 @@ function BundleWorkspace({
           title={name}
           note={`${roleRows.length} ${roleRows.length === 1 ? "role" : "roles"} · ${holders} ${
             holders === 1 ? "holder" : "holders"
-          }`}
+          }${draft.data ? ` · latest v${draft.data.latest_version}` : ""}`}
         />
 
         <div className="row-divider px-5 py-3 text-[13.5px] leading-[1.55] text-muted">
-          Adding or removing a role here changes access for all {holders} of them at the next
-          cascade. It is not a per-person action.
+          Editing here changes what the NEXT version will grant. Nobody&rsquo;s access moves until
+          you publish, and publishing asks whether the {holders}{" "}
+          {holders === 1 ? "person" : "people"} already holding it come along.
         </div>
+
+        {/*
+          The unpublished state is a strip on the card, not a badge somewhere
+          quieter. A bundle can sit edited-but-unpublished indefinitely and look
+          finished, and "I changed that weeks ago" is the failure this prevents.
+        */}
+        {pending > 0 && draft.data && (
+          <div className="accent-note row-divider flex flex-wrap items-start gap-3 px-5 py-3.5">
+            <div className="min-w-[260px] flex-1">
+              <div className="text-[14.5px] font-semibold">
+                {pending} unpublished {pending === 1 ? "change" : "changes"}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[13.5px]">
+                {draft.data.added.map((role) => (
+                  <span
+                    key={`+${role.zitadel_project_id}:${role.zitadel_role_key}`}
+                    className="flex items-baseline gap-1.5"
+                  >
+                    <span className="font-semibold text-accent-text">+</span>
+                    <RoleRefInline
+                      projectId={role.zitadel_project_id}
+                      roleKey={role.zitadel_role_key}
+                    />
+                  </span>
+                ))}
+                {draft.data.removed.map((role) => (
+                  <span
+                    key={`-${role.zitadel_project_id}:${role.zitadel_role_key}`}
+                    className="flex items-baseline gap-1.5"
+                  >
+                    <span className="font-semibold text-danger-text">&minus;</span>
+                    <RoleRefInline
+                      projectId={role.zitadel_project_id}
+                      roleKey={role.zitadel_role_key}
+                    />
+                  </span>
+                ))}
+              </div>
+            </div>
+            <Button variant="accent" onClick={() => setPublishing(true)}>
+              Publish v{draft.data.next_version}
+            </Button>
+          </div>
+        )}
 
         <ListStates
           isLoading={roles.isLoading}
@@ -163,7 +231,8 @@ function BundleWorkspace({
           empty={
             <EmptyState
               title="This bundle carries no roles yet."
-              guidance="Add one below. Until then, assigning it grants nothing."
+              guidance="Add some below. Until then, assigning it grants nothing."
+              action={{ label: "Add roles", onClick: () => setAdding(true) }}
             />
           }
         >
@@ -175,26 +244,31 @@ function BundleWorkspace({
               <div
                 key={`${role.zitadel_project_id}:${role.zitadel_role_key}`}
                 className={`row-divider flex items-center gap-3 px-5 py-3 text-[14.5px] ${
-                  selectedForRemoval ? "bg-danger-soft" : ""
+                  selectedForRemoval ? "bg-warn-soft" : ""
                 }`}
               >
                 <span className="min-w-0 flex-1 truncate">
-                  <ProjectName id={role.zitadel_project_id} /> /{" "}
-                  <Mono>{role.zitadel_role_key}</Mono>
+                  <RoleRef projectId={role.zitadel_project_id} roleKey={role.zitadel_role_key} />
                 </span>
                 <Button
-                  variant="danger"
                   size="sm"
                   onClick={() => setPendingRemoval(selectedForRemoval ? null : role)}
                 >
-                  Remove
+                  {selectedForRemoval ? "Keep it" : "Drop"}
                 </Button>
               </div>
             );
           })}
         </ListStates>
 
-        <AddRoleRow bundleId={bundleId} name={name} holders={holders} />
+        <div className="row-divider flex items-center gap-3 px-5 py-3.5">
+          <Button variant="accent" onClick={() => setAdding(true)}>
+            Add roles
+          </Button>
+          <span className="text-[13.5px] text-faint">
+            Search every project at once, tick what belongs here.
+          </span>
+        </div>
 
         <div className="row-divider flex flex-wrap items-center gap-3 px-5 py-4">
           <div className="min-w-[240px] flex-1">
@@ -231,21 +305,55 @@ function BundleWorkspace({
             onCancel={() => setPendingRemoval(null)}
           />
         ) : (
-          <HoldersPanel
-            name={name}
-            holders={impact.data?.users ?? []}
-            isLoading={impact.isLoading}
-          />
+          <div className="flex flex-col gap-5">
+            <HoldersPanel
+              name={name}
+              holders={impact.data?.users ?? []}
+              isLoading={impact.isLoading}
+            />
+            <BundleVersions bundleId={bundleId} name={name} />
+          </div>
         )}
       </div>
+
+      {publishing && draft.data && (
+        <PublishVersionDialog
+          bundleId={bundleId}
+          name={name}
+          draft={draft.data}
+          onClose={() => setPublishing(false)}
+        />
+      )}
+
+      {adding && (
+        <AddRolesToBundle
+          bundleId={bundleId}
+          name={name}
+          holders={holders}
+          onClose={() => setAdding(false)}
+        />
+      )}
     </div>
   );
 }
 
 /**
- * The impact panel replaces the space a confirmation dialog would have taken.
- * It names, before the click: who loses the role outright, who keeps it through
- * another source, and what cascades away with it.
+ * What dropping this role WOULD do, if the next version is published and the
+ * current holders are moved onto it.
+ *
+ * Every sentence here is conditional, and that is the correction versioning
+ * forced. The panel used to read "affects 14 people now" and "14 people lose
+ * it" beside a red confirm button — which was true when a removal cascaded on
+ * save, and became a lie the moment it stopped. An operator reading it would
+ * have taken the edit for a revocation already applied, and either believed a
+ * door was locked while it was open or gone looking for a change that had not
+ * happened.
+ *
+ * The content is unchanged and still worth showing: who loses the role, who
+ * keeps it through a rule, and what cascades away with it is exactly what you
+ * want before deciding whether to make the edit at all. Only the tense moved,
+ * and the tone with it — amber, because this is consequential and has not
+ * happened, rather than red, which is reserved for the click that does it.
  */
 function RemovalImpact({
   bundleId,
@@ -285,19 +393,24 @@ function RemovalImpact({
   );
 
   return (
-    <div className="rounded-card border border-danger-line bg-danger-soft p-5">
-      <div className="type-label mb-2.5 text-danger-text">
-        Removing <ProjectName id={role.zitadel_project_id} /> / {role.zitadel_role_key} affects{" "}
-        {holders.length} {holders.length === 1 ? "person" : "people"} now
+    <div className="rounded-card border border-warn-line bg-warn-soft p-5">
+      <div className="type-label mb-1 text-warn-text">
+        Dropping <RoleRef projectId={role.zitadel_project_id} roleKey={role.zitadel_role_key} />{" "}
+        from the working copy
       </div>
+      <p className="mb-2.5 max-w-[60ch] text-[13.5px] leading-[1.55] text-ink/[.78]">
+        Nobody loses anything today. This is what would happen to the{" "}
+        {holders.length} {holders.length === 1 ? "person" : "people"} holding{" "}
+        {bundleName} <em>if</em> you publish the next version and move them onto it.
+      </p>
 
       <ul className="mb-4 flex flex-col gap-2 text-[14px] leading-[1.5]">
         <li className="flex items-start gap-2.5">
           <span aria-hidden className="mt-[7px] h-2 w-2 flex-none rounded-pill bg-danger" />
           <span>
             <strong className="font-semibold">
-              {holders.length} {holders.length === 1 ? "person loses" : "people lose"} it through
-              this bundle
+              {holders.length} {holders.length === 1 ? "person would lose" : "people would lose"} it
+              through this bundle
             </strong>
             {coveringRule ? (
               <span className="text-muted"> — unless a rule also gives it to them</span>
@@ -314,8 +427,7 @@ function RemovalImpact({
               className="mt-[7px] h-2 w-2 flex-none rounded-pill bg-ink/30"
             />
             <span className="text-muted">
-              Anybody holding <ProjectName id={coveringRule.source_project} /> /{" "}
-              <Mono>{coveringRule.source_role}</Mono> keeps it — an automatic rule produces it
+              Anybody holding <RoleRef projectId={coveringRule.source_project} roleKey={coveringRule.source_role} /> would keep it — an automatic rule produces it
               independently.
             </span>
           </li>
@@ -328,16 +440,19 @@ function RemovalImpact({
               className="mt-[6px] h-2.5 w-2.5 flex-none rounded-pill border border-dashed border-ink/40"
             />
             <span className="text-muted">
-              They also lose <ProjectName id={rule.target_project} /> /{" "}
-              <Mono>{rule.target_role}</Mono> by cascade — this role is that rule&rsquo;s input.
+              They would also lose <RoleRef projectId={rule.target_project} roleKey={rule.target_role} /> by cascade — this role is that rule&rsquo;s input.
             </span>
           </li>
         ))}
       </ul>
 
       <div className="flex flex-wrap items-center gap-2.5">
+        {/* Not `dangerConfirm`. That treatment is for a click that takes
+            access away, and this one edits a draft — dressing it as the
+            destructive act is the same misreading the copy above used to
+            invite. The destructive confirm lives on Publish, where the
+            revocation actually happens. */}
         <Button
-          variant="dangerConfirm"
           isPending={remove.isPending}
           onClick={async () => {
             try {
@@ -345,14 +460,16 @@ function RemovalImpact({
                 projectId: role.zitadel_project_id,
                 roleKey: role.zitadel_role_key,
               });
-              toast.success(`Removed from ${bundleName}.`);
+              toast.success(`Dropped from ${bundleName}'s working copy.`, {
+                description: "Nobody loses it until you publish a version and move them onto it.",
+              });
               onCancel();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The removal didn't go through.");
+              toast.error(error instanceof Error ? error.message : "The edit didn't save.");
             }
           }}
         >
-          Remove role from bundle
+          Drop it from the working copy
         </Button>
         <Button onClick={onCancel}>Cancel</Button>
       </div>
@@ -391,79 +508,6 @@ function HoldersPanel({
         </div>
       )}
     </Card>
-  );
-}
-
-function AddRoleRow({
-  bundleId,
-  name,
-  holders,
-}: {
-  bundleId: string;
-  name: string;
-  holders: number;
-}) {
-  const addRole = useAddBundleRole(bundleId);
-  const projects = useProjects();
-  const catalog = useGlobalRoleCatalog();
-  const [projectId, setProjectId] = useState("");
-  const [roleKey, setRoleKey] = useState("");
-
-  const projectRoles = (catalog.data ?? []).filter((role) => role.project_id === projectId);
-
-  return (
-    <div className="row-divider flex flex-wrap items-end gap-2.5 px-5 py-4">
-      <div className="min-w-[160px] flex-1">
-        <FieldLabel htmlFor="bundle-project">Add a role — project</FieldLabel>
-        <Select
-          id="bundle-project"
-          value={projectId}
-          onChange={(event) => {
-            setProjectId(event.target.value);
-            setRoleKey("");
-          }}
-        >
-          <option value="">Choose…</option>
-          {(projects.data ?? []).map((entry) => (
-            <option key={entry.project.id} value={entry.project.id}>
-              {entry.project.name}
-            </option>
-          ))}
-        </Select>
-      </div>
-      <div className="min-w-[160px] flex-1">
-        <FieldLabel htmlFor="bundle-role">Role</FieldLabel>
-        <Select
-          id="bundle-role"
-          value={roleKey}
-          disabled={!projectId}
-          onChange={(event) => setRoleKey(event.target.value)}
-        >
-          <option value="">{projectId ? "Choose…" : "Pick a project"}</option>
-          {projectRoles.map((role) => (
-            <option key={role.role_key} value={role.role_key}>
-              {role.display_name || humanizeKey(role.role_key)}
-            </option>
-          ))}
-        </Select>
-      </div>
-      <Button
-        variant="accent"
-        disabled={!projectId || !roleKey}
-        isPending={addRole.isPending}
-        onClick={async () => {
-          try {
-            await addRole.mutateAsync({ project_id: projectId, role_key: roleKey });
-            toast.success(`Added to ${name}. ${holders} holders will get it.`);
-            setRoleKey("");
-          } catch (error) {
-            toast.error(error instanceof Error ? error.message : "That didn't save.");
-          }
-        }}
-      >
-        Add role
-      </Button>
-    </div>
   );
 }
 

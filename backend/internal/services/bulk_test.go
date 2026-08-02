@@ -30,12 +30,12 @@ func setupBulk(t *testing.T, fx bulkFixture) {
 	origCollect := collectUserRolesHook
 	origGrants := svcGetDirectGrantsForUser
 	origBundle := svcGetBundleByID
-	origRoles := svcCascGetRolesForBundle
+	origRoles := svcLatestVersionRoles
 	t.Cleanup(func() {
 		collectUserRolesHook = origCollect
 		svcGetDirectGrantsForUser = origGrants
 		svcGetBundleByID = origBundle
-		svcCascGetRolesForBundle = origRoles
+		svcLatestVersionRoles = origRoles
 	})
 
 	collectUserRolesHook = func(_ context.Context, uid string) (map[roleKey]*models.EffectiveRole, []models.Bundle, error) {
@@ -51,8 +51,8 @@ func setupBulk(t *testing.T, fx bulkFixture) {
 	svcGetBundleByID = func(_ context.Context, id string) (models.Bundle, error) {
 		return models.Bundle{ID: id, Name: "Safety"}, nil
 	}
-	svcCascGetRolesForBundle = func(context.Context, string) ([]models.BundleRole, error) {
-		return []models.BundleRole{{}, {}, {}}, nil
+	svcLatestVersionRoles = func(context.Context, string) (models.BundleVersion, []models.BundleRole, error) {
+		return models.BundleVersion{ID: "v-latest", Version: 2}, []models.BundleRole{{}, {}, {}}, nil
 	}
 }
 

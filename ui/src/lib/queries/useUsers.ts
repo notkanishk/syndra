@@ -18,6 +18,8 @@ export interface UserListEntry {
   };
   bundle_count: number;
   bundle_names: string[];
+  /** Bundle name → the version THIS person is pinned to. */
+  bundle_versions?: Record<string, number>;
   effective_role_count: number;
   project_count: number;
   /** Project display names — what the row and the filter dropdown show. */
@@ -55,7 +57,15 @@ export interface UserAccessProject {
 
 export interface UserAccessView {
   user: UserListEntry["user"];
-  bundles: Array<{ id: string; name: string; description: string }>;
+  bundles: Array<{
+    id: string;
+    name: string;
+    description: string;
+    /** The version of this bundle THEY hold. */
+    pinned_version?: number;
+    /** The bundle's highest published version, so a gap is visible on the row. */
+    latest_version?: number;
+  }>;
   projects: UserAccessProject[];
   cleanup_hints: string[];
 }

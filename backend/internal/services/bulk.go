@@ -342,7 +342,10 @@ func rehearseAssignBundle(
 		return out, nil
 	}
 
-	roles, err := svcCascGetRolesForBundle(ctx, req.BundleID)
+	// The rehearsal has to count what the assignment will actually pin — the
+	// latest published version. Counting the working copy would promise roles
+	// an unpublished edit added and the apply pass would never grant.
+	_, roles, err := svcLatestVersionRoles(ctx, req.BundleID)
 	if err != nil {
 		return BulkOutcome{}, err
 	}
