@@ -1,14 +1,13 @@
 "use client";
 
-import Link from "next/link";
-
+import { MemberCatalog } from "@/components/member/MemberCatalog";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { orderedSources, sourceQualifier, type RoleReason } from "@/components/access/AccessSource";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
-import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
+import { daysUntil, formatShortDate, humanizeKey, roleLabel } from "@/lib/format";
 
 /**
  * Member · My access. The landing route for members, and the one screen that
@@ -51,6 +50,15 @@ export function MemberAccess({ session }: { session: SessionUser }) {
     ? findRoleLabel(projects, expiringGrant.project_id, expiringGrant.role_key)
     : null;
 
+  // What they already hold, so the catalogue below can mark it rather than
+  // offering them a second copy of something they have.
+  const heldByProject = new Map(
+    projects.map((project) => [
+      project.project_id,
+      new Set([...project.source_roles, ...project.derived_roles].map((role) => role.role_key)),
+    ]),
+  );
+
   return (
     <div className="flex flex-col gap-[22px]">
       <div>
@@ -69,9 +77,9 @@ export function MemberAccess({ session }: { session: SessionUser }) {
               If there&rsquo;s a machine or a space you need, ask for it and a lab manager will
               decide.
             </p>
-            <Link href="/requests" className="mt-3 inline-block text-[13.5px] font-semibold text-accent-text">
-              Ask for access →
-            </Link>
+            <span className="mt-3 block text-[13.5px] text-faint">
+              Everything the makerspace offers is listed below.
+            </span>
           </div>
         </Card>
       ) : (
@@ -114,6 +122,8 @@ export function MemberAccess({ session }: { session: SessionUser }) {
           </ButtonLink>
         </div>
       )}
+
+      <MemberCatalog heldByProject={heldByProject} />
     </div>
   );
 }
@@ -175,8 +185,19 @@ function expiryFor(
   );
 }
 
+/**
+ * The role rows above live inside a card headed by their project, so they name
+ * the role alone. This label does not: the expiry warning sits outside every
+ * card, and a member holding "Operator" in three projects cannot tell from
+ * "Operator runs out on 12 Aug" which one they are about to lose.
+ */
 function findRoleLabel(
-  projects: Array<{ project_id: string; source_roles: Array<{ role_key: string }>; derived_roles: Array<{ role_key: string }> }>,
+  projects: Array<{
+    project_id: string;
+    project_name: string;
+    source_roles: Array<{ role_key: string }>;
+    derived_roles: Array<{ role_key: string }>;
+  }>,
   projectId: string,
   roleKey: string,
 ): string | null {
@@ -185,7 +206,7 @@ function findRoleLabel(
   const found = [...project.source_roles, ...project.derived_roles].find(
     (role) => role.role_key === roleKey,
   );
-  return found ? humanizeKey(found.role_key) : null;
+  return found ? roleLabel(project.project_name, found.role_key) : null;
 }
 
 function firstName(name: string): string {

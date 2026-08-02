@@ -1,11 +1,12 @@
 "use client";
 
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
-import { Badge, Mono } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
@@ -16,11 +17,11 @@ import {
   SelectionBar,
 } from "@/components/ui/SelectionBar";
 import { useRowSelection } from "@/lib/useRowSelection";
-import { FieldLabel, Input } from "@/components/ui/Input";
+import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { FilterPills, Select } from "@/components/ui/Select";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ProjectName, UserName } from "@/components/names";
+import { ProjectName, RoleRef, UserName } from "@/components/names";
 import { useApplyBulkDecision, useRehearseBulkDecision } from "@/lib/queries/useRequests";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
@@ -32,8 +33,12 @@ import {
   type AccessRequest,
 } from "@/lib/queries/useRequests";
 import { Relative } from "@/components/ui/Time";
+import { describeDuration, formatLongDate } from "@/lib/format";
+import { daysUntilTermEnd } from "@/lib/term";
 
 type StatusFilter = "pending" | "approved" | "rejected" | "all";
+/** What a member asks for, in the units a member thinks in. */
+type HowLong = "7" | "30" | "term";
 
 export function RequestsScreen({ isOperator, userId }: { isOperator: boolean; userId: string }) {
   return isOperator ? <OperatorQueue /> : <MemberRequests userId={userId} />;
@@ -153,7 +158,12 @@ function OperatorQueue() {
                 <UserName id={entry.requester_id} />
               </div>
               <div className="w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
-                <ProjectName id={entry.project_id} /> / <Mono>{entry.role_key}</Mono>
+                <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
+                {/* Half of the ask. A decision made without it is a decision
+                    about a different request. */}
+                <span className="block text-[12.5px] text-faint">
+                  {describeDuration(entry.duration_days)}
+                </span>
               </div>
               <div className="min-w-0 flex-1 truncate text-[14px] text-muted">
                 {entry.justification ? `“${entry.justification}”` : "No reason given"}
@@ -207,7 +217,23 @@ function OperatorQueue() {
 /** A member's own requests, plus the form to make one. No jargon. */
 function MemberRequests({ userId }: { userId: string }) {
   const requests = useRequestsMine();
-  const [open, setOpen] = useState(false);
+  const router = useRouter();
+  const params = useSearchParams();
+
+  /**
+   * "Ask for this" in the catalogue links here with the ask already chosen, so
+   * the dialog opens on arrival rather than making somebody re-find the thing
+   * they just clicked. The params are consumed as the dialog closes — a
+   * refresh after the request is sent should not reopen the form.
+   */
+  const linkedProject = params.get("project") ?? "";
+  const linkedRole = params.get("role") ?? "";
+  const [open, setOpen] = useState(Boolean(linkedProject));
+
+  function closeDialog() {
+    setOpen(false);
+    if (linkedProject) router.replace("/requests", { scroll: false });
+  }
 
   const mine = (requests.data ?? []).filter((entry) => entry.requester_id === userId);
 
@@ -247,6 +273,7 @@ function MemberRequests({ userId }: { userId: string }) {
                   <ProjectName id={entry.project_id} />
                 </div>
                 <div className="truncate text-[13.5px] text-faint">
+                  {describeDuration(entry.duration_days)} ·{" "}
                   {entry.justification || "No reason given"}
                 </div>
               </div>
@@ -273,21 +300,40 @@ function MemberRequests({ userId }: { userId: string }) {
         </ListStates>
       </Card>
 
-      <RequestDialog open={open} onClose={() => setOpen(false)} />
+      <RequestDialog
+        // Remounted per link so the prefill applies to whichever role was
+        // clicked, not only the first.
+        key={`${linkedProject}:${linkedRole}`}
+        open={open}
+        onClose={closeDialog}
+        initial={{ projectId: linkedProject, roleKey: linkedRole }}
+      />
     </div>
   );
 }
 
-function RequestDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+function RequestDialog({
+  open,
+  onClose,
+  initial,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Prefill from a "Ask for this" link in the catalogue. */
+  initial?: { projectId?: string; roleKey?: string };
+}) {
   const projects = useProjects();
   const roles = useGlobalRoleCatalog();
   const create = useCreateRequest();
 
-  const [projectId, setProjectId] = useState("");
-  const [roleKey, setRoleKey] = useState("");
+  const [projectId, setProjectId] = useState(initial?.projectId ?? "");
+  const [roleKey, setRoleKey] = useState(initial?.roleKey ?? "");
   const [why, setWhy] = useState("");
+  const [howLong, setHowLong] = useState<HowLong>("term");
 
   const projectRoles = (roles.data ?? []).filter((role) => role.project_id === projectId);
+  const days = howLong === "term" ? daysUntilTermEnd() : Number(howLong);
+  const until = new Date(Date.now() + days * 86_400_000).toISOString();
 
   if (!open) return null;
 
@@ -334,6 +380,44 @@ function RequestDialog({ open, onClose }: { open: boolean; onClose: () => void }
           </Select>
         </div>
         <div>
+          {/*
+            Every request used to be filed as ninety days regardless of what
+            was asked for, so a student who needed the laser for one week was
+            recorded as wanting it for a quarter — and the operator deciding it
+            had no way to know the difference.
+
+            Three options, no free-form number: a member thinks in weeks and
+            terms, not in days, and the resolved date underneath turns the
+            choice back into something concrete.
+          */}
+          <FieldLabel>How long do you need it?</FieldLabel>
+          <div className="mb-2 flex flex-wrap gap-2">
+            {(
+              [
+                ["7", "A week"],
+                ["30", "A month"],
+                ["term", "Until the end of term"],
+              ] as Array<[HowLong, string]>
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={howLong === value}
+                onClick={() => setHowLong(value)}
+                className={`rounded-pill px-3.5 py-[7px] text-[13px] font-semibold transition-colors ${
+                  howLong === value ? "bg-accent text-accent-ink" : "bg-tint-2 text-ink"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <FieldHint>
+            If it&rsquo;s approved, it runs to {formatLongDate(until)} and then stops. You can ask
+            again.
+          </FieldHint>
+        </div>
+        <div>
           <FieldLabel htmlFor="req-why">Why?</FieldLabel>
           <Input
             id="req-why"
@@ -354,7 +438,7 @@ function RequestDialog({ open, onClose }: { open: boolean; onClose: () => void }
                 project_id: projectId,
                 role_key: roleKey,
                 justification: why,
-                duration_days: 90,
+                duration_days: days,
               });
               toast.success("Asked. You'll see the answer here.");
               onClose();

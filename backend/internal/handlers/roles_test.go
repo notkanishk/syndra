@@ -169,9 +169,9 @@ func TestGetGlobalRoleCatalog_MergesSources(t *testing.T) {
 
 	svcGlobalRoleCatalog = func(_ context.Context) ([]models.CatalogRole, error) {
 		return []models.CatalogRole{
-			{ProjectID: "p1", RoleKey: "admin", Source: "mkauth", DisplayLabel: "P1: admin"},
-			{ProjectID: "p2", RoleKey: "member", Source: "demo", DisplayLabel: "P2: member"},
-			{ProjectID: "p3", RoleKey: "viewer", Source: "referenced", DisplayLabel: "P3: viewer"},
+			{ProjectID: "p1", RoleKey: "admin", Source: "mkauth"},
+			{ProjectID: "p2", RoleKey: "member", Source: "demo"},
+			{ProjectID: "p3", RoleKey: "viewer", Source: "referenced"},
 		}, nil
 	}
 

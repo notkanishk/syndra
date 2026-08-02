@@ -15,6 +15,7 @@ import {
   type WebhookEventRow,
 } from "@/lib/queries/useOperations";
 import { ClockTime, LogTime } from "@/components/ui/Time";
+import { outcomeOf, type EventOutcome } from "@/lib/event-outcome";
 
 type Source = "all" | "provider" | "onboarding";
 
@@ -33,20 +34,33 @@ type Source = "all" | "provider" | "onboarding";
  */
 export default function EventActivityPage() {
   const [source, setSource] = useState<Source>("all");
+  const [outcome, setOutcome] = useState<EventOutcome>("all");
   const events = useWebhookEvents();
   const triggers = useOnboardingTriggers();
   const [openPayload, setOpenPayload] = useState<string | null>(null);
 
-  const stream = useMemo(() => {
+  const all = useMemo(() => {
     const rows: StreamRow[] = [];
-    if (source !== "onboarding") {
-      for (const event of events.data ?? []) rows.push(fromWebhook(event));
-    }
-    if (source !== "provider") {
-      for (const trigger of triggers.data ?? []) rows.push(fromTrigger(trigger));
-    }
+    for (const event of events.data ?? []) rows.push(fromWebhook(event));
+    for (const trigger of triggers.data ?? []) rows.push(fromTrigger(trigger));
     return rows.sort((a, b) => (a.at < b.at ? 1 : -1));
-  }, [events.data, triggers.data, source]);
+  }, [events.data, triggers.data]);
+
+  // Both filters are applied here rather than in the query. The status filter
+  // the backend offers covers webhook events only and takes one exact status,
+  // so it can express neither "either table" nor a bucket that spans two words
+  // for the same thing — and this list polls every five seconds, so a
+  // server-side filter would drop the page into a loading state on every pill.
+  const stream = useMemo(
+    () =>
+      all.filter(
+        (row) =>
+          (source === "all" || row.source === source) &&
+          (outcome === "all" || row.outcome === outcome),
+      ),
+    [all, source, outcome],
+  );
+  const filtered = source !== "all" || outcome !== "all";
 
   const isLoading = events.isLoading || triggers.isLoading;
   const error = events.error ?? triggers.error;
@@ -57,16 +71,33 @@ export default function EventActivityPage() {
         title="Event activity"
         meta="What the identity provider told us, in the order it told us."
         actions={
-          <FilterPills<Source>
-            label="Filter by source"
-            value={source}
-            onChange={setSource}
-            options={[
-              { value: "all", label: "All sources" },
-              { value: "provider", label: "Identity provider" },
-              { value: "onboarding", label: "Onboarding" },
-            ]}
-          />
+          <>
+            <FilterPills<Source>
+              label="Filter by source"
+              value={source}
+              onChange={setSource}
+              options={[
+                { value: "all", label: "All sources" },
+                { value: "provider", label: "Identity provider" },
+                { value: "onboarding", label: "Onboarding" },
+              ]}
+            />
+            <FilterPills<EventOutcome>
+              label="Filter by outcome"
+              value={outcome}
+              onChange={setOutcome}
+              options={[
+                { value: "all", label: "Any outcome" },
+                { value: "done", label: "Done" },
+                { value: "waiting", label: "Waiting" },
+                { value: "failed", label: "Failed" },
+                // The reason this filter exists. `dropped_enrichment_incomplete`
+                // was invented so a deliberate non-action stops being silent;
+                // until now there was no way to ask the screen for one.
+                { value: "dropped", label: "Not acted on" },
+              ]}
+            />
+          </>
         }
       />
 
@@ -91,10 +122,26 @@ export default function EventActivityPage() {
           errorTitle="Couldn't load event activity."
           skeleton={<RowSkeleton rows={6} avatar={false} label="Loading events" />}
           empty={
-            <EmptyState
-              title="Nothing has happened yet."
-              guidance="Events arrive when somebody changes access in the identity provider, or when a new person is onboarded."
-            />
+            // An emptied filter and an empty log are different facts, and only
+            // one of them means nothing has happened.
+            filtered ? (
+              <EmptyState
+                title="No events match those filters."
+                guidance={`${all.length} ${all.length === 1 ? "event is" : "events are"} in the timeline.`}
+                action={{
+                  label: "Clear filters",
+                  onClick: () => {
+                    setSource("all");
+                    setOutcome("all");
+                  },
+                }}
+              />
+            ) : (
+              <EmptyState
+                title="Nothing has happened yet."
+                guidance="Events arrive when somebody changes access in the identity provider, or when a new person is onboarded."
+              />
+            )
           }
         >
           {stream.map((row) => (
@@ -148,16 +195,23 @@ interface StreamRow {
   at: string;
   type: string;
   sentence: React.ReactNode;
+  /** Which table it came from — what the source pills filter on. */
+  source: Exclude<Source, "all">;
+  /** See `outcomeOf`. */
+  outcome: string;
   failed: boolean;
   payload: unknown;
 }
 
 function fromWebhook(event: WebhookEventRow): StreamRow {
-  const failed = event.status === "failed";
+  const outcome = outcomeOf(event.status);
+  const failed = outcome === "failed";
   return {
     id: `w:${event.id}`,
     at: event.created_at,
     type: `provider.${event.event_type}`,
+    source: "provider",
+    outcome,
     failed,
     payload: event,
     sentence: failed ? (
@@ -174,7 +228,7 @@ function fromWebhook(event: WebhookEventRow): StreamRow {
             <Mono>{event.role_key}</Mono>
           </>
         ) : null}
-        {event.status.startsWith("dropped") ? (
+        {outcome === "dropped" ? (
           <span className="text-faint"> — received and deliberately not acted on</span>
         ) : (
           <span className="text-faint"> — processed</span>
@@ -185,11 +239,14 @@ function fromWebhook(event: WebhookEventRow): StreamRow {
 }
 
 function fromTrigger(trigger: OnboardingTriggerRow): StreamRow {
-  const failed = trigger.status === "failed";
+  const outcome = outcomeOf(trigger.status);
+  const failed = outcome === "failed";
   return {
     id: `t:${trigger.id}`,
     at: trigger.created_at,
     type: "onboarding.trigger",
+    source: "onboarding",
+    outcome,
     failed,
     payload: trigger,
     sentence: failed ? (

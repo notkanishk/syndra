@@ -1,19 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
+import { CreateRoleDialog } from "@/components/roles/CreateRoleDialog";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { Mono } from "@/components/ui/Badge";
+import { Badge, Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
-import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
-import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
-import { useProjects } from "@/lib/queries/useProjects";
-import { useCreateRole, useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
+import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
 import { humanizeKey } from "@/lib/format";
 
 /**
@@ -26,9 +24,16 @@ import { humanizeKey } from "@/lib/format";
  */
 export default function RolesPage() {
   const roles = useGlobalRoleCatalog();
+  const router = useRouter();
+  const params = useSearchParams();
   const [project, setProject] = useState("");
   const [group, setGroup] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // Unused lives in the URL, unlike the other two, because Today links straight
+  // here with "N roles nobody holds" — a link that until now landed on an
+  // unfiltered index and left the reader to find them.
+  const unusedOnly = params.get("unused") === "1";
 
   const all = useMemo(() => roles.data ?? [], [roles.data]);
 
@@ -44,8 +49,17 @@ export default function RolesPage() {
   const rows = all.filter(
     (role) =>
       (!project || (role.project_name || role.project_id) === project) &&
-      (!group || role.group === group),
+      (!group || role.group === group) &&
+      (!unusedOnly || role.is_unused),
   );
+  const unusedCount = all.filter((role) => role.is_unused).length;
+  const filtered = Boolean(project || group || unusedOnly);
+
+  function clearFilters() {
+    setProject("");
+    setGroup("");
+    if (unusedOnly) router.replace("/roles");
+  }
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -79,6 +93,17 @@ export default function RolesPage() {
                   {name}
                 </option>
               ))}
+            </Select>
+            <Select
+              value={unusedOnly ? "unused" : ""}
+              onChange={(event) =>
+                router.replace(event.target.value === "unused" ? "/roles?unused=1" : "/roles")
+              }
+              aria-label="Filter by usage"
+              className="w-[190px]"
+            >
+              <option value="">All roles</option>
+              <option value="unused">Unused only ({unusedCount})</option>
             </Select>
             <Button variant="accent" onClick={() => setCreating(true)}>
               New role
@@ -115,7 +140,8 @@ export default function RolesPage() {
         <CardColumns>
           <span className="w-[180px]">Project</span>
           <span className="flex-1">Role</span>
-          <span className="w-[150px]">Group</span>
+          <span className="w-[130px]">Group</span>
+          <span className="w-[150px]">Used by</span>
           <span className="w-[80px] text-right">Members</span>
         </CardColumns>
 
@@ -127,17 +153,23 @@ export default function RolesPage() {
           errorTitle="Couldn't load the role index."
           skeleton={<RowSkeleton rows={6} avatar={false} label="Loading roles" />}
           empty={
-            <EmptyState
-              title="No roles match those filters."
-              guidance="Clear a filter, or check the identity provider for roles MkAuth didn't create."
-              action={{
-                label: "Clear filters",
-                onClick: () => {
-                  setProject("");
-                  setGroup("");
-                },
-              }}
-            />
+            filtered ? (
+              <EmptyState
+                title={
+                  unusedOnly
+                    ? "Every role is referenced by something."
+                    : "No roles match those filters."
+                }
+                guidance="Clear a filter, or check the identity provider for roles MkAuth didn't create."
+                action={{ label: "Clear filters", onClick: clearFilters }}
+              />
+            ) : (
+              <EmptyState
+                title="No roles yet."
+                guidance="Create one here, or check the identity provider for roles MkAuth didn't create."
+                action={{ label: "Create a role", onClick: () => setCreating(true) }}
+              />
+            )
           }
         >
           {rows.map((role) => (
@@ -160,8 +192,20 @@ export default function RolesPage() {
                   </span>
                 )}
               </span>
-              <span className="w-[150px] truncate text-[13.5px] text-muted">
+              <span className="w-[130px] truncate text-[13.5px] text-muted">
                 {role.group || "—"}
+              </span>
+              {/*
+                What would break if this role went away. A role nobody holds may
+                still be the input to a mapping rule or a member of a bundle,
+                and "0 members" alone reads as safe to delete when it isn't.
+              */}
+              <span className="w-[150px] truncate text-[13.5px] text-muted">
+                {role.is_unused ? (
+                  <Badge tone="neutral">Unused</Badge>
+                ) : (
+                  usedBy(role) || <span className="text-faint">—</span>
+                )}
               </span>
               <span className="w-[80px] text-right text-[15px]">{role.assigned_user_count}</span>
             </Link>
@@ -174,171 +218,19 @@ export default function RolesPage() {
         never collapses.
       </p>
 
-      {creating && <CreateRoleDialog catalog={all} onClose={() => setCreating(false)} />}
+      {creating && <CreateRoleDialog onClose={() => setCreating(false)} />}
     </div>
   );
 }
 
-/**
- * Creating a role through MkAuth writes it locally AND upstream in one action,
- * rolling the local row back if the identity provider refuses. That is the
- * difference between this and creating one directly in the provider, where
- * MkAuth learns about it only when the drift sweep flags it as unexplained.
- *
- * Clone-from copies the display name and description of an existing role, and
- * records the provenance — "cloned from Metal Shop / trained" is what tells a
- * later reader the two are deliberately related.
- */
-function CreateRoleDialog({
-  catalog,
-  onClose,
-}: {
-  catalog: CatalogRole[];
-  onClose: () => void;
-}) {
-  const projects = useProjects();
-  const create = useCreateRole();
-
-  const [projectId, setProjectId] = useState("");
-  const [roleKey, setRoleKey] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [description, setDescription] = useState("");
-  const [group, setGroup] = useState("");
-  const [cloneFrom, setCloneFrom] = useState("");
-
-  const valid = /^[a-zA-Z0-9_-]+$/.test(roleKey);
-  const duplicate = catalog.some(
-    (role) => role.project_id === projectId && role.role_key === roleKey,
-  );
-
-  return (
-    <Modal open onClose={onClose} busy={create.isPending} size="md" labelledBy="new-role-title">
-      <ModalHeader
-        title="New role"
-        titleId="new-role-title"
-        lede="Created in MkAuth and in the identity provider together — if the provider refuses, nothing is left behind here."
-      />
-
-      <div className="flex flex-col gap-3.5 px-6">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <FieldLabel htmlFor="role-project">Project</FieldLabel>
-            <Select
-              id="role-project"
-              value={projectId}
-              onChange={(event) => setProjectId(event.target.value)}
-            >
-              <option value="">Choose…</option>
-              {(projects.data ?? []).map((entry) => (
-                <option key={entry.project.id} value={entry.project.id}>
-                  {entry.project.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <FieldLabel htmlFor="role-key">Role key</FieldLabel>
-            <Input
-              id="role-key"
-              value={roleKey}
-              onChange={(event) => setRoleKey(event.target.value)}
-              placeholder="trained"
-            />
-            <FieldHint>
-              {roleKey && !valid
-                ? "Letters, numbers, dashes and underscores only."
-                : duplicate
-                  ? "That key already exists in this project."
-                  : "This is what appears in a token. It cannot be changed later."}
-            </FieldHint>
-          </div>
-        </div>
-
-        <div>
-          <FieldLabel htmlFor="role-name">Display name</FieldLabel>
-          <Input
-            id="role-name"
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-            placeholder="Trained operator"
-          />
-        </div>
-
-        <div>
-          <FieldLabel htmlFor="role-description">What can somebody with it do?</FieldLabel>
-          <Input
-            id="role-description"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            placeholder="Can cut and engrave unsupervised."
-          />
-          <FieldHint>
-            Shown in full wherever this role is listed. &ldquo;Can cut unsupervised&rdquo; versus
-            &ldquo;may enter and watch&rdquo; is the entire decision an operator makes.
-          </FieldHint>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <FieldLabel htmlFor="role-group">Group</FieldLabel>
-            <Input
-              id="role-group"
-              value={group}
-              onChange={(event) => setGroup(event.target.value)}
-              placeholder="Safety-gated"
-            />
-          </div>
-          <div>
-            <FieldLabel htmlFor="role-clone">Clone from</FieldLabel>
-            <Select
-              id="role-clone"
-              value={cloneFrom}
-              onChange={(event) => setCloneFrom(event.target.value)}
-            >
-              <option value="">Nothing — start empty</option>
-              {catalog.map((role) => (
-                <option
-                  key={`${role.project_id}:${role.role_key}`}
-                  value={`${role.project_id}:${role.role_key}`}
-                >
-                  {role.project_name} / {role.role_key}
-                </option>
-              ))}
-            </Select>
-            <FieldHint>Copies the name and description, and records where it came from.</FieldHint>
-          </div>
-        </div>
-      </div>
-
-      <ModalFooter>
-        <Button
-          variant="accent"
-          disabled={!projectId || !roleKey || !valid || duplicate}
-          isPending={create.isPending}
-          onClick={async () => {
-            const [cloneProject, cloneRole] = cloneFrom.split(":");
-            try {
-              await create.mutateAsync({
-                project_id: projectId,
-                role_key: roleKey,
-                display_name: displayName,
-                description,
-                group,
-                clone_from: cloneFrom
-                  ? { project_id: cloneProject, role_key: cloneRole }
-                  : undefined,
-              });
-              toast.success(`${roleKey} created. Nobody holds it yet.`);
-              onClose();
-            } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The role wasn't created.");
-            }
-          }}
-        >
-          Create role
-        </Button>
-        <Button onClick={onClose}>Cancel</Button>
-      </ModalFooter>
-    </Modal>
-  );
+/** "2 bundles · 1 rule", and nothing at all when neither references it. */
+function usedBy(role: CatalogRole): string {
+  const parts: string[] = [];
+  if (role.bundle_count) {
+    parts.push(`${role.bundle_count} ${role.bundle_count === 1 ? "bundle" : "bundles"}`);
+  }
+  if (role.rule_count) {
+    parts.push(`${role.rule_count} ${role.rule_count === 1 ? "rule" : "rules"}`);
+  }
+  return parts.join(" · ");
 }

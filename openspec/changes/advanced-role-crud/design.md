@@ -46,7 +46,7 @@ Per-role computed fields:
 - `RuleCount`: rows in `mapping_rules` referencing this role as source or target.
 - `AssignedUserCount`: distinct users in `direct_role_grants` (non-expired).
 - `IsUnused`: `BundleCount + RuleCount == 0 && AssignedUserCount == 0`.
-- `DisplayLabel`: `"ProjectName: DisplayName"` (global disambiguation).
+- ~~`DisplayLabel`: `"ProjectName: DisplayName"` (global disambiguation).~~ Removed by `ui-capability-gap-closure`; the UI composes the pair via `<RoleRef>` / `roleLabel()`.
 
 Optional `?project_id=` query filter. Sorted by `(ProjectName, RoleKey)`.
 

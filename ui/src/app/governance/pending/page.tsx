@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProjectName, UserName } from "@/components/names";
+import { toastDrain } from "@/lib/drain-toast";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
 import {
   useDrainPropagations,
@@ -50,8 +51,7 @@ export default function PendingChangesPage() {
             isPending={drain.isPending}
             onClick={async () => {
               try {
-                const result = await drain.mutateAsync();
-                toast.success(`${result?.applied ?? 0} applied, ${result?.failed ?? 0} failed.`);
+                toastDrain(await drain.mutateAsync());
               } catch (error) {
                 toast.error(error instanceof Error ? error.message : "The drain didn't run.");
               }

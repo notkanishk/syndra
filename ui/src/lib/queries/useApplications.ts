@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 
@@ -72,22 +72,6 @@ export function useTokenSimulator(appId: string, userId: string) {
       );
     },
     enabled: Boolean(appId && userId),
-  });
-}
-
-/**
- * Imperative simulation runner — used when callers want a fresh fetch (e.g.
- * the compare-with panel that needs simulations for two distinct users without
- * disturbing the primary cache key). Prefer `useTokenSimulator` for declarative
- * use cases.
- */
-export function useSimulateMutation() {
-  return useMutation({
-    mutationFn: async ({ appId, userId }: { appId: string; userId: string }) => {
-      return await request<SimulationResponse>(
-        `/applications/${appId}/simulate?user_id=${encodeURIComponent(userId)}`,
-      );
-    },
   });
 }
 

@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { use, useMemo } from "react";
+import { use, useMemo, useState } from "react";
 
+import { CreateRoleDialog } from "@/components/roles/CreateRoleDialog";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
-import { ButtonLink } from "@/components/ui/Button";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useCrumb } from "@/lib/page-crumb";
@@ -36,6 +37,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     [roles.data, id],
   );
   const served = (apps.data ?? []).filter((entry) => entry.application.project_id === id);
+  const [creating, setCreating] = useState(false);
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -55,9 +57,23 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </span>
         }
         actions={
-          served.length > 0 ? (
-            <ButtonLink href={`/applications/${served[0].application.id}`}>Token format</ButtonLink>
-          ) : undefined
+          <>
+            {served.length > 0 && (
+              <ButtonLink href={`/applications/${served[0].application.id}`}>
+                Token format
+              </ButtonLink>
+            )}
+            {/*
+              The natural place to add a role to this project is this page. It
+              used to exist only on the cross-project index, so the closest
+              affordance here was "Check upstream" — which creates the role in
+              the identity provider with no local row, and it comes back as
+              unexplained access.
+            */}
+            <Button variant="accent" onClick={() => setCreating(true)}>
+              New role
+            </Button>
+          </>
         }
       />
 
@@ -78,8 +94,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           empty={
             <EmptyState
               title="No roles listed in this project."
-              guidance="Roles created directly in the identity provider may not be listed here yet."
-              action={{ label: "Check upstream", href: "/zitadel/projects" }}
+              guidance="Create one here, or check the identity provider — roles created directly there may not be listed yet."
+              action={{ label: "Create a role", onClick: () => setCreating(true) }}
             />
           }
         >
@@ -119,6 +135,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           ))}
         </ListStates>
       </Card>
+
+      {creating && <CreateRoleDialog pinnedProjectId={id} onClose={() => setCreating(false)} />}
     </div>
   );
 }

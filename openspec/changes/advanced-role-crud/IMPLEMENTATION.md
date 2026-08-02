@@ -8,7 +8,7 @@ Local role storage, Zitadel-propagated role creation with Snapshot & Fork clonin
 ### Capabilities
 - `POST /api/v1/roles` — create role with optional `clone_from`, Zitadel propagation, compensating rollback on failure
 - `GET /api/v1/roles` — global catalog merging 3 sources (local, demo, referenced) with usage counts and unused flagging
-- `DisplayLabel` format: `"ProjectName: DisplayName"` for global disambiguation
+- ~~`DisplayLabel` format: `"ProjectName: DisplayName"` for global disambiguation~~ — **superseded** by `ui-capability-gap-closure`: the field is removed and the composition moved to the UI, where it applies to every role reference rather than only catalog rows.
 - Graceful degradation to local-only when Zitadel credentials absent
 
 ### Key Design Choices

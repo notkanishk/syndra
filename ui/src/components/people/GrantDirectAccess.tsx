@@ -10,7 +10,8 @@ import { Select } from "@/components/ui/Select";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant } from "@/lib/queries/useUsers";
-import { daysUntil, formatLongDate, humanizeKey } from "@/lib/format";
+import { daysUntil, formatLongDate, humanizeKey, roleLabel } from "@/lib/format";
+import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
 
 /**
  * E5 · Grant direct access. Project → role → expiry.
@@ -53,6 +54,11 @@ export function GrantDirectAccess({
     [roles.data, projectId],
   );
   const selectedRole = projectRoles.find((role) => role.role_key === roleKey);
+  // Named as a pair, because that is what was written. The dialog holds the
+  // project in a select the operator is about to close; the toast outlives it.
+  const selectedLabel = selectedRole
+    ? roleLabel(selectedRole.project_name, selectedRole.role_key, selectedRole.display_name)
+    : roleKey;
 
   const resolved = resolveExpiry(preset, customDate);
 
@@ -200,7 +206,7 @@ export function GrantDirectAccess({
                 reason,
                 duration_days: resolved.days,
               });
-              toast.success(`${userName} now holds ${roleKey}.`);
+              toast.success(`${userName} now holds ${selectedLabel}.`);
               onClose();
             } catch (error) {
               toast.error(error instanceof Error ? error.message : "The grant didn't go through.");
@@ -233,14 +239,5 @@ function resolveExpiry(preset: Preset, custom: string): { date: string | null; d
     return { date: new Date(custom).toISOString(), days: Math.max(1, days) };
   }
   const endOfTerm = nextTermEnd(now);
-  return { date: endOfTerm.toISOString(), days: Math.max(1, daysUntil(endOfTerm.toISOString()) ?? 1) };
-}
-
-function nextTermEnd(now: Date): Date {
-  const year = now.getFullYear();
-  const december = new Date(year, 11, 18);
-  const may = new Date(year, 4, 18);
-  if (now < may) return may;
-  if (now < december) return december;
-  return new Date(year + 1, 4, 18);
+  return { date: endOfTerm.toISOString(), days: daysUntilTermEnd(now) };
 }

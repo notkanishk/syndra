@@ -1,33 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { describeExpiry, formatRoleRef, humanizeKey } from "@/lib/format";
+import { describeDuration, describeExpiry, humanizeKey, roleLabel } from "@/lib/format";
 
-const projects = [
-  {
-    id: "printing",
-    name: "3D Lab",
-    roles: [
-      { key: "member", label: "Member" },
-      { key: "calibrator", label: "Calibrator" },
-    ],
-  },
-  { id: "doors", name: "Door Access" },
-];
-
-describe("formatRoleRef", () => {
-  it("returns labeled and raw pair when both exist", () => {
-    const { label, raw } = formatRoleRef("printing", "member", projects);
-    expect(label).toBe("3D Lab · Member");
-    expect(raw).toBe("printing:member");
+describe("roleLabel", () => {
+  it("names a role as the pair it is", () => {
+    expect(roleLabel("3D Lab", "member", "Member")).toBe("3D Lab / Member");
   });
 
-  it("falls back to humanized role key when label is missing", () => {
-    const { label } = formatRoleRef("doors", "lab_pin", projects);
-    expect(label).toBe("Door Access · Lab Pin");
+  it("humanizes the key when the role has no display name", () => {
+    expect(roleLabel("Door Access", "lab_pin")).toBe("Door Access / Lab Pin");
+    expect(roleLabel("Door Access", "lab_pin", "")).toBe("Door Access / Lab Pin");
   });
 
-  it("falls back to project_id when project is unknown", () => {
-    const { label } = formatRoleRef("unknown", "member", projects);
-    expect(label).toBe("unknown · Member");
+  it("keeps the same key distinct across projects", () => {
+    expect(roleLabel("3D Lab", "admin", "Administrator")).not.toBe(
+      roleLabel("Metal Shop", "admin", "Administrator"),
+    );
   });
 });
 
@@ -72,5 +59,20 @@ describe("humanizeKey", () => {
   });
   it("returns empty for empty input", () => {
     expect(humanizeKey("")).toBe("");
+  });
+});
+
+describe("describeDuration", () => {
+  it("names the ask in days", () => {
+    expect(describeDuration(30)).toBe("for 30 days");
+    expect(describeDuration(1)).toBe("for 1 day");
+  });
+
+  // Zero is not "unspecified" — the backend reads it as a grant that never
+  // lapses, so it is the one value that must never render as blank.
+  it("says what an absent duration actually means", () => {
+    expect(describeDuration(0)).toBe("no end date");
+    expect(describeDuration(null)).toBe("no end date");
+    expect(describeDuration(undefined)).toBe("no end date");
   });
 });

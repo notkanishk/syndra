@@ -3,31 +3,21 @@
 // who recognize project names better than internal keys. This module
 // centralizes the human-readable formatting so every view does it the same way.
 
-interface ProjectInfo {
-  id: string;
-  name: string;
-  roles?: Array<{ key: string; label?: string }>;
-}
-
 /**
- * Format a project_id + role_key pair into a human label, with the raw pair
- * available as a secondary monospace tag for power users. Returns an object
- * so callers can render the parts independently — `label` typically reads
- * like "{Project Name} · {Role Label}" and `raw` is `{project_id}:{role_key}`.
+ * How a role reads in a SENTENCE — a toast, a dialog lede, a warning banner.
+ *
+ * A role is never named alone. `admin` in Printing Lab and `admin` in Metal
+ * Shop are two different roles, so a sentence that says "now holds admin" has
+ * not said which grant was written. The project is not decoration here; it is
+ * half of the identity.
+ *
+ * Prose gets the role's human name ("Trained operator"), not its key: a
+ * sentence is read, and `laser_trained` is not a word. Rows want the opposite
+ * — see <RoleRef/>, which shows the key in monospace because a table is
+ * scanned for identifiers rather than read.
  */
-export function formatRoleRef(
-  projectId: string,
-  roleKey: string,
-  projects: ProjectInfo[],
-): { label: string; raw: string } {
-  const project = projects.find((p) => p.id === projectId);
-  const projectLabel = project?.name ?? projectId;
-  const role = project?.roles?.find((r) => r.key === roleKey);
-  const roleLabel = role?.label ?? humanizeKey(roleKey);
-  return {
-    label: `${projectLabel} · ${roleLabel}`,
-    raw: `${projectId}:${roleKey}`,
-  };
+export function roleLabel(projectName: string, roleKey: string, roleDisplayName?: string): string {
+  return `${projectName} / ${roleDisplayName || humanizeKey(roleKey)}`;
 }
 
 /**
@@ -40,6 +30,21 @@ export function humanizeKey(key: string): string {
   return key
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * How long a request asked for, as the decider reads it.
+ *
+ * Deliberately says "for N days" rather than a date: the expiry is computed
+ * when the request is approved, not when it is made, so a date here would be
+ * wrong by however long the request sat in the queue.
+ *
+ * Absent or zero is not "unspecified" — the backend reads it as no expiry at
+ * all, so it is the one value that must never render as blank.
+ */
+export function describeDuration(days: number | null | undefined): string {
+  if (!days || days < 1) return "no end date";
+  return `for ${days} ${days === 1 ? "day" : "days"}`;
 }
 
 export type UrgencyTone = "critical" | "warning" | "neutral" | "expired";

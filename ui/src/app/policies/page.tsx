@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
@@ -11,7 +11,18 @@ import { FieldHint, FieldLabel } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Segmented, Select } from "@/components/ui/Select";
+import {
+  RowCheckbox,
+  SelectAllCheckbox,
+  SelectionAction,
+  SelectionBar,
+} from "@/components/ui/SelectionBar";
+import { useRowSelection } from "@/lib/useRowSelection";
 import { ProjectName } from "@/components/names";
+import {
+  useBulkSetConfirmationMode,
+  type ConfirmationMode,
+} from "@/lib/queries/useConfirmationMode";
 import {
   useCreateMappingRule,
   useMappingRules,
@@ -36,7 +47,44 @@ export default function AutomaticRulesPage() {
   const rules = useMappingRules();
   const [editing, setEditing] = useState<MappingRuleRow | "new" | null>(null);
 
-  const rows = rules.data ?? [];
+  const rows = useMemo(() => rules.data ?? [], [rules.data]);
+
+  /**
+   * Confirmation mode is the one rule setting that is routinely wrong in bulk:
+   * a batch created before the global default was decided, or a set of rules
+   * being moved to Immediate together once they've been watched for a term.
+   * Opening ten editors to flip ten switches is the errand this removes.
+   *
+   * The row click still opens the editor. Selection lives on the checkbox
+   * alone, deliberately — on the other queues a row click selects because the
+   * row's actions are on the row, and here the row's action is "open me".
+   */
+  const selection = useRowSelection(useMemo(() => rows.map((rule) => rule.id), [rows]));
+  const bulkMode = useBulkSetConfirmationMode();
+
+  const chosen = rows.filter((rule) => selection.selected.has(rule.id));
+  const immediate = chosen.filter((rule) => rule.confirmation_mode === "auto").length;
+  const composition =
+    chosen.length === 0
+      ? ""
+      : [
+          immediate > 0 ? `${immediate} immediate` : "",
+          chosen.length - immediate > 0 ? `${chosen.length - immediate} queued` : "",
+        ]
+          .filter(Boolean)
+          .join(" · ");
+
+  async function applyMode(mode: ConfirmationMode) {
+    const ids = chosen.map((rule) => rule.id);
+    const target = mode === "auto" ? "fire immediately" : "queue for confirmation";
+    try {
+      await bulkMode.mutateAsync({ kind: "rule", ids, mode });
+      toast.success(`${ids.length} ${ids.length === 1 ? "rule" : "rules"} now ${target}.`);
+      selection.clear();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Nothing was changed.");
+    }
+  }
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -52,12 +100,21 @@ export default function AutomaticRulesPage() {
 
       <Card>
         <CardColumns>
+          <span className="w-[18px]">
+            <SelectAllCheckbox
+              label={
+                selection.allSelected ? "Clear the selection" : `Select all ${rows.length} rules`
+              }
+              {...selection.headerCheckboxProps}
+            />
+          </span>
           <span className="w-[110px]">Rule</span>
           <span className="flex-1">If … then</span>
           <span className="w-[90px] text-right">Holders</span>
           <span className="w-[150px] text-right">On fire</span>
         </CardColumns>
 
+        <div data-selection-scope {...selection.containerProps}>
         <ListStates
           isLoading={rules.isLoading}
           error={rules.error}
@@ -74,42 +131,74 @@ export default function AutomaticRulesPage() {
           }
         >
           {rows.map((rule) => (
-            <button
+            <div
               key={rule.id}
-              type="button"
-              onClick={() => setEditing(rule)}
-              className="row-divider flex w-full flex-wrap items-center gap-[18px] px-5 py-3.5 text-left transition-colors hover:bg-[var(--hover)]"
+              className={`row-divider flex w-full items-center gap-[18px] px-5 ${
+                selection.isSelected(rule.id) ? "bg-accent-soft/30" : ""
+              }`}
             >
-              <Mono className="w-[110px] shrink-0 truncate text-faint">
-                {shortRuleId(rule.id)}
-              </Mono>
-
-              <span className="min-w-[320px] flex-1 text-[14.5px]">
-                <span className="text-muted">
-                  <ProjectName id={rule.source_project} /> / <Mono>{rule.source_role}</Mono>
-                </span>
-                <span className="mx-2.5 text-faint">⇒</span>
-                <span className="font-semibold">
-                  <ProjectName id={rule.target_project} /> / <Mono>{rule.target_role}</Mono>
-                </span>
+              <span className="w-[18px] shrink-0">
+                <RowCheckbox label="Select this rule" {...selection.checkboxProps(rule.id)} />
               </span>
+              <button
+                type="button"
+                onClick={() => setEditing(rule)}
+                className="flex min-w-0 flex-1 flex-wrap items-center gap-[18px] py-3.5 text-left transition-colors hover:bg-[var(--hover)]"
+              >
+                <Mono className="w-[110px] shrink-0 truncate text-faint">
+                  {shortRuleId(rule.id)}
+                </Mono>
 
-              <span className="w-[90px] text-right text-[15px]">{rule.holder_count ?? 0}</span>
+                <span className="min-w-[320px] flex-1 text-[14.5px]">
+                  <span className="text-muted">
+                    <ProjectName id={rule.source_project} /> / <Mono>{rule.source_role}</Mono>
+                  </span>
+                  <span className="mx-2.5 text-faint">⇒</span>
+                  <span className="font-semibold">
+                    <ProjectName id={rule.target_project} /> / <Mono>{rule.target_role}</Mono>
+                  </span>
+                </span>
 
-              <span className="flex w-[150px] justify-end">
-                {/*
-                  Amber for "Immediate": it is not an error, but it is the
-                  setting where a bad rule reaches every holder before anybody
-                  can look at it. Queue is the quiet default.
-                */}
-                <Badge tone={rule.confirmation_mode === "auto" ? "warn" : "neutral"}>
-                  {rule.confirmation_mode === "auto" ? "Immediate" : "Queue"}
-                </Badge>
-              </span>
-            </button>
+                <span className="w-[90px] text-right text-[15px]">{rule.holder_count ?? 0}</span>
+
+                <span className="flex w-[150px] justify-end">
+                  {/*
+                    Amber for "Immediate": it is not an error, but it is the
+                    setting where a bad rule reaches every holder before anybody
+                    can look at it. Queue is the quiet default.
+                  */}
+                  <Badge tone={rule.confirmation_mode === "auto" ? "warn" : "neutral"}>
+                    {rule.confirmation_mode === "auto" ? "Immediate" : "Queue"}
+                  </Badge>
+                </span>
+              </button>
+            </div>
           ))}
         </ListStates>
+        </div>
       </Card>
+
+      <SelectionBar
+        count={selection.count}
+        noun={["rule", "rules"]}
+        composition={composition}
+        onClear={selection.clear}
+      >
+        {/*
+          Immediate reads as the louder of the two because it is: a rule set to
+          fire immediately reaches every holder before anybody can look at it.
+        */}
+        <SelectionAction
+          tone="danger"
+          disabled={bulkMode.isPending}
+          onClick={() => applyMode("auto")}
+        >
+          Fire immediately
+        </SelectionAction>
+        <SelectionAction disabled={bulkMode.isPending} onClick={() => applyMode("manual")}>
+          Queue for confirmation
+        </SelectionAction>
+      </SelectionBar>
 
       <p className="max-w-[900px] text-[14px] leading-[1.55] text-faint">
         A rule that triggers another rule is the single most surprising thing this system does, so

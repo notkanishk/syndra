@@ -9,8 +9,7 @@ import { Makerspace } from "@/components/today/Makerspace";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
-import { Mono } from "@/components/ui/Badge";
-import { ProjectName, UserAvatar, UserName } from "@/components/names";
+import { RoleRef, UserAvatar, UserName } from "@/components/names";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
 import {
   useDecideRequest,
@@ -18,6 +17,7 @@ import {
   type AccessRequest,
 } from "@/lib/queries/useRequests";
 import { useDrainPropagations } from "@/lib/queries/usePropagation";
+import { toastDrain } from "@/lib/drain-toast";
 import { useCreateGrant } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
 import { useIsAdvanced } from "@/lib/ui-view";
@@ -179,7 +179,7 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
             <UserName id={entry.requester_id} />
           </div>
           <div className="w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
-            <ProjectName id={entry.project_id} /> / <Mono>{entry.role_key}</Mono>
+            <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
           </div>
           <div className="min-w-0 flex-1 truncate text-[14px] text-muted">
             {entry.justification ? `“${entry.justification}”` : "No reason given"}
@@ -246,7 +246,7 @@ function ExpiringRow({
         <UserName id={grant.user_id} />
       </div>
       <div className="w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
-        <ProjectName id={grant.project_id} /> / <Mono>{grant.role_key}</Mono>
+        <RoleRef projectId={grant.project_id} roleKey={grant.role_key} />
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <AccessSource kind="direct" />
@@ -298,8 +298,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           isPending={drain.isPending}
           onClick={async () => {
             try {
-              await drain.mutateAsync();
-              toast.success("Queued writes resumed.");
+              toastDrain(await drain.mutateAsync());
             } catch (error) {
               toast.error(error instanceof Error ? error.message : "The drain didn't start.");
             }

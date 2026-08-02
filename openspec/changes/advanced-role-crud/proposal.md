@@ -8,7 +8,7 @@ MkAuth had no local role storage, no role creation workflow, and no global role 
 * Extends `ZitadelClient` with `AddProjectRole`, `ListProjectRoles`, and `UpdateProjectRole` methods for Zitadel Management API v1 role endpoints.
 * Adds `POST /api/v1/roles` endpoint for role creation with optional `clone_from` parameter. When cloning, source role metadata (display name, description) is resolved from local DB or demo catalog and pre-populated into the new role. The role is propagated to Zitadel and persisted locally with provenance tracking.
 * Adds `GET /api/v1/roles` endpoint returning a global role catalog — a computed merge of three sources (local MkAuth roles, demo catalog, DB-referenced roles) with per-role usage counts (bundles, mapping rules, assigned users) and unused flagging.
-* Global disambiguation via `DisplayLabel` field (`"ProjectName: DisplayName"` format).
+* Global disambiguation via `DisplayLabel` field (`"ProjectName: DisplayName"` format). **Superseded** — see `ui-capability-gap-closure`.
 
 ## Capabilities
 
@@ -16,7 +16,7 @@ MkAuth had no local role storage, no role creation workflow, and no global role 
 * `role-creation`: Create roles in Zitadel projects via MkAuth with local metadata persistence.
 * `role-cloning`: Snapshot & Fork — clone existing role metadata when creating new roles.
 * `global-role-catalog`: Consolidated role inventory with usage metrics and unused detection.
-* `role-disambiguation`: Project-prefixed display labels in global views.
+* `role-disambiguation`: Project-prefixed display labels in global views. **Relocated to the UI** by `ui-capability-gap-closure` — a server-composed label only exists on catalog rows, so it could not reach the grant, audit and request surfaces where two same-key roles actually collide.
 
 ### Modified Capabilities
 * `role-management`: Not integrated -> Integrated in feature coverage.

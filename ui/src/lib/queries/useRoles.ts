@@ -24,7 +24,6 @@ export interface CatalogRole {
   assigned_user_count: number;
   is_unused: boolean;
   source: string;
-  display_label: string;
 }
 
 export interface CloneRef {
@@ -67,23 +66,6 @@ export function useGlobalRoleCatalog() {
       const data = await request<unknown>("/roles");
       return Array.isArray(data) ? (data as CatalogRole[]) : [];
     },
-  });
-}
-
-/**
- * Server-side filtered variant for project-scoped surfaces. Uses the
- * `?project_id=` query param the backend honors so the JSON payload is
- * smaller and the picker doesn't have to filter client-side.
- */
-export function useRolesByProject(projectId: string | null | undefined) {
-  return useQuery({
-    queryKey: projectId ? KEYS.catalogByProject(projectId) : ["roles", "catalog", "noop"],
-    queryFn: async (): Promise<CatalogRole[]> => {
-      if (!projectId) return [];
-      const data = await request<unknown>(`/roles?project_id=${encodeURIComponent(projectId)}`);
-      return Array.isArray(data) ? (data as CatalogRole[]) : [];
-    },
-    enabled: !!projectId,
   });
 }
 

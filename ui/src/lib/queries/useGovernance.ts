@@ -67,17 +67,4 @@ export function useGovernanceSummary() {
   });
 }
 
-/**
- * Watchlist view is just the watch-window grants from the governance summary.
- * Exposed as a dedicated hook so callers can subscribe to that slice without
- * reading the whole summary; both share the same React Query cache entry.
- */
-export function useWatchlist() {
-  const summary = useGovernanceSummary();
-  return {
-    ...summary,
-    data: summary.data?.expiring_grants ?? [],
-  };
-}
-
 export const governanceQueryKeys = KEYS;

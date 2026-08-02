@@ -42,7 +42,6 @@ export interface CascadeGroupRow {
 
 const KEYS = {
   globalDefault: ["config", "confirmation-mode-default"] as const,
-  recentCascades: ["propagations", "cascades"] as const,
   cascadeGroups: ["propagations", "cascade-groups"] as const,
 };
 
@@ -94,18 +93,8 @@ export function useBulkSetConfirmationMode() {
   });
 }
 
-/** Operator's "Recent cascades" feed — applied bundle/rule/lifecycle projections. */
-export function useRecentCascades() {
-  return useQuery({
-    queryKey: KEYS.recentCascades,
-    queryFn: async () =>
-      (await request<{ cascades: CascadeSummaryRow[] }>("/propagations/cascades")).cascades ?? [],
-  });
-}
-
 /**
- * Change history. Unlike the flat feed above this includes cascades whose
- * writes have NOT landed: a half-applied cascade is the thing that creates
+ * Change history. Includes cascades whose writes have NOT landed: a half-applied cascade is the thing that creates
  * unexplained access, and it has to be visible as one.
  */
 export function useCascadeGroups() {

@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { ProjectName } from "@/components/names";
+import { RoleRef } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Relative } from "@/components/ui/Time";
+import { describeDuration } from "@/lib/format";
 import {
   useDecideRequest,
   useRequestsAdmin,
@@ -136,7 +136,10 @@ function RequestRow({
   return (
     <div className="row-divider flex flex-wrap items-center gap-4 px-5 py-3.5">
       <span className="w-[250px] shrink-0 truncate text-[14.5px]">
-        <ProjectName id={entry.project_id} /> / <Mono>{entry.role_key}</Mono>
+        <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
+        <span className="block text-[12.5px] text-faint">
+          {describeDuration(entry.duration_days)}
+        </span>
       </span>
       <span className="min-w-[200px] flex-1 truncate text-[14px] text-muted">
         {entry.justification ? `“${entry.justification}”` : "No reason given"}

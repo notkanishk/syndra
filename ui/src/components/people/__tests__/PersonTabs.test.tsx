@@ -28,6 +28,13 @@ vi.mock("@/components/names", () => ({
     <span>{id === "u1" ? "Ada Lovelace" : id === "op" ? "Sam Patel" : (fallback ?? id)}</span>
   ),
   ProjectName: ({ id }: { id: string }) => <span>{id === "pLaser" ? "Laser Lab" : id}</span>,
+  // Mirrors the real component's shape: project name and role key are separate
+  // elements, so a test can assert on either half of the pair.
+  RoleRef: ({ projectId, roleKey }: { projectId: string; roleKey: string }) => (
+    <span>
+      <span>{projectId === "pLaser" ? "Laser Lab" : projectId}</span> / <span>{roleKey}</span>
+    </span>
+  ),
 }));
 
 function entry(overrides: Partial<AuditEntry> = {}): AuditEntry {

@@ -6,7 +6,7 @@ import { useMemo } from "react";
 import { UserName } from "@/components/names";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { describeAction, machineName } from "@/lib/audit-vocabulary";
-import { formatClock } from "@/lib/format";
+import { formatClock, humanizeKey } from "@/lib/format";
 import { peopleHref } from "@/lib/people-filters";
 import { useAuditEntries } from "@/lib/queries/useAudit";
 import { useBundles } from "@/lib/queries/useBundles";
@@ -234,8 +234,11 @@ function AccessShape() {
             <span className="w-[36px] shrink-0 font-display text-[18px] leading-none">
               {role.assigned_user_count}
             </span>
+            {/* The project is the trailing column, so the name slot carries the
+                role alone — the pair is established by the row, the same way
+                the roles index establishes it with a Project column. */}
             <span className="min-w-0 flex-1 truncate text-[14.5px]">
-              {role.display_label || role.role_key}
+              {role.display_name || humanizeKey(role.role_key)}
             </span>
             <span className="shrink-0 truncate text-[13px] text-faint">{role.project_name}</span>
           </Link>
@@ -250,7 +253,7 @@ function AccessShape() {
         ) : (
           <>
             {unused > 0 && (
-              <Link href="/roles" className="font-semibold text-accent-text">
+              <Link href="/roles?unused=1" className="font-semibold text-accent-text">
                 {unused} {unused === 1 ? "role" : "roles"} nobody holds
               </Link>
             )}

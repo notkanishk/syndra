@@ -148,28 +148,6 @@ func TestGlobalRoleCatalog_Deduplicates(t *testing.T) {
 	}
 }
 
-func TestGlobalRoleCatalog_DisplayLabel(t *testing.T) {
-	resetRoleDeps(t)
-	noopRoleDeps()
-
-	// Only demo roles, no local.
-	catalog, err := GlobalRoleCatalog(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	for _, cr := range catalog {
-		if cr.ProjectID == "platform" && cr.RoleKey == "admin" {
-			expected := "Platform Core: Administrator"
-			if cr.DisplayLabel != expected {
-				t.Errorf("expected display_label %q, got %q", expected, cr.DisplayLabel)
-			}
-			return
-		}
-	}
-	t.Error("platform:admin not found in catalog")
-}
-
 func TestCreateRole_ZitadelFailureRollsBackLocalRow(t *testing.T) {
 	resetRoleDeps(t)
 	noopRoleDeps()

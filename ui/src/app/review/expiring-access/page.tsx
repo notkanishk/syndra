@@ -6,7 +6,6 @@ import { toast } from "sonner";
 
 import { AccessSource } from "@/components/access/AccessSource";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { Card, CardColumns } from "@/components/ui/Card";
@@ -18,7 +17,7 @@ import {
 } from "@/components/ui/SelectionBar";
 import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ProjectName, UserAvatar, UserName } from "@/components/names";
+import { RoleRef, UserAvatar, UserName } from "@/components/names";
 import { useExpiringGrants, type ExpiringGrantRow } from "@/lib/queries/useExpiringAccess";
 import { useCreateGrant } from "@/lib/queries/useUsers";
 import { daysUntil, formatShortDate } from "@/lib/format";
@@ -191,7 +190,7 @@ function ExpiringRow({
       </span>
 
       <div className="w-[260px] shrink-0 truncate text-[14.5px] text-ink/80">
-        <ProjectName id={grant.project_id} /> / <Mono>{grant.role_key}</Mono>
+        <RoleRef projectId={grant.project_id} roleKey={grant.role_key} />
       </div>
 
       <div className="w-[180px] shrink-0 truncate text-[13.5px] text-faint">

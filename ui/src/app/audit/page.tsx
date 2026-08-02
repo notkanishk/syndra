@@ -18,7 +18,7 @@ import {
   machineName,
   shortTrace,
 } from "@/lib/audit-vocabulary";
-import { useAuditEntries, type AuditEntry } from "@/lib/queries/useAudit";
+import { useAuditPages, type AuditEntry } from "@/lib/queries/useAudit";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useDebounce } from "@/lib/useDebounce";
 import { formatShortDate } from "@/lib/format";
@@ -42,9 +42,9 @@ export default function AuditPage() {
   const router = useRouter();
   // `?user=` scopes the whole log to one person's involvement — actor OR
   // target — and it does so server-side. That distinction matters: the text
-  // filter below narrows the 200 rows already fetched, while this narrows the
-  // query, so a person's trail is complete rather than "complete within the
-  // most recent 200 events overall".
+  // filter below narrows the rows already loaded, while this narrows the
+  // query, so a person's trail is complete rather than "complete within
+  // whatever happened to be fetched".
   const scopedUser = params.get("user") ?? "";
 
   const [actor, setActor] = useState("");
@@ -52,9 +52,12 @@ export default function AuditPage() {
   const debounced = useDebounce(actor, 250).trim().toLowerCase();
   const resolver = useNameResolver();
 
-  const entries = useAuditEntries({ limit: 200, userId: scopedUser || undefined });
+  const entries = useAuditPages({ limit: 100, userId: scopedUser || undefined });
 
-  const all = useMemo(() => entries.data ?? [], [entries.data]);
+  const all = useMemo(
+    () => (entries.data?.pages ?? []).flat(),
+    [entries.data],
+  );
 
   const rows = useMemo(() => {
     const cutoff =
@@ -78,7 +81,9 @@ export default function AuditPage() {
         meta={
           scopedUser
             ? "Everything this person did, and everything done to them. Filtered at the source, so nothing is missing from the window."
-            : "Every mutation MkAuth made, and who asked for it. Showing the most recent 200 entries — the filters below narrow those, not the whole log."
+            : `Every mutation MkAuth made, and who asked for it. ${all.length} loaded${
+                entries.hasNextPage ? ", more further back" : " — that is the whole log"
+              } · the filters below narrow what is loaded.`
         }
         actions={
           <>
@@ -90,7 +95,7 @@ export default function AuditPage() {
             >
               <option value="7">Last 7 days</option>
               <option value="30">Last 30 days</option>
-              <option value="all">All 200 loaded</option>
+              <option value="all">Everything loaded</option>
             </Select>
             <Input
               value={actor}
@@ -148,8 +153,15 @@ export default function AuditPage() {
               }
               guidance={
                 debounced || window !== "all"
-                  ? "Older entries are not loaded — these filters search what is on screen."
+                  ? entries.hasNextPage
+                    ? "These filters search what is loaded. Load more to search further back."
+                    : "The whole log is loaded — nothing in it matches."
                   : "Grants, revokes and policy changes are written here as they happen."
+              }
+              action={
+                entries.hasNextPage
+                  ? { label: "Load more", onClick: () => entries.fetchNextPage() }
+                  : undefined
               }
             />
           }
@@ -182,6 +194,34 @@ export default function AuditPage() {
               </span>
             </div>
           ))}
+
+          {/*
+            The end of the log is stated, not implied by a button that stops
+            appearing. "Nothing older" and "there is more but you have to ask"
+            are different facts about a record you are consulting to answer a
+            question, and only one of them means you can stop looking.
+          */}
+          <div className="row-divider flex items-center gap-4 px-5 py-3.5">
+            {entries.hasNextPage ? (
+              <>
+                <Button
+                  size="sm"
+                  isPending={entries.isFetchingNextPage}
+                  onClick={() => entries.fetchNextPage()}
+                >
+                  Load more
+                </Button>
+                <span className="text-[13px] text-faint">
+                  {all.length} loaded — older entries are further back
+                </span>
+              </>
+            ) : (
+              <span className="text-[13px] text-faint">
+                That is the whole log — {all.length}{" "}
+                {all.length === 1 ? "entry" : "entries"}, nothing older.
+              </span>
+            )}
+          </div>
         </ListStates>
       </Card>
     </div>

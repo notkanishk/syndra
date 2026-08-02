@@ -59,7 +59,7 @@
 - [x] 8.12 `TestCreateRole_PropagatesCloneMetadata` — clone source populates fields
 - [x] 8.13 `TestCreateRole_SkipsZitadelWhenNilClient` — local-policy-only
 - [x] 8.14 `TestGlobalRoleCatalog_Deduplicates` — same role in demo + DB merged
-- [x] 8.15 `TestGlobalRoleCatalog_DisplayLabel` — format is "ProjectName: DisplayName"
+- [x] ~~8.15 `TestGlobalRoleCatalog_DisplayLabel` — format is "ProjectName: DisplayName"~~ — removed with the field by `ui-capability-gap-closure`
 - [x] 8.16 `TestAddProjectRole_HappyPath` — correct URL and body
 - [x] 8.17 `TestListProjectRoles_ParsesResponse` — correct parsing
 - [x] 8.18 `TestUpdateProjectRole_CorrectEndpoint` — PUT with correct path

@@ -10,6 +10,8 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { FilterPills, Select } from "@/components/ui/Select";
+import { useProjects } from "@/lib/queries/useProjects";
 import { ProjectName, UserAvatar, UserName } from "@/components/names";
 import {
   useAttributeDrift,
@@ -59,7 +61,25 @@ export function UnexplainedAccess() {
   const router = useRouter();
   const tab: Tab = params.get("tab") === "reconciliation" ? "reconciliation" : "triage";
 
-  const drift = useDriftItems();
+  /**
+   * Two filters, server-side, and deliberately not three.
+   *
+   * `source` is the one an operator asks for by name: a sweep-found row has no
+   * actor to attribute — the sweep compares grant sets and genuinely cannot know
+   * who — so "show me only what the sweep found" is "show me the ones I'll have
+   * to judge without evidence". `project_id` scopes a queue to the thing that
+   * went wrong, which is usually one project.
+   *
+   * `user_id` the backend also accepts, and this screen does NOT offer: "select
+   * everything else for this person" is already on every row, works from the row
+   * you are looking at, and doesn't ask anyone to find a name in a list of three
+   * hundred. A select there would be a worse version of a control that exists.
+   */
+  const [source, setSource] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const drift = useDriftItems({ source: source || undefined, project_id: projectId || undefined });
+  const projects = useProjects();
+  const filtered = Boolean(source || projectId);
   const reconcile = useReconcileNow();
 
   const [pending, setPending] = useState<{ item: DriftTriageItem; resolution: Resolution } | null>(
@@ -126,24 +146,49 @@ export function UnexplainedAccess() {
         meta={
           items.length > 0
             ? `${items.length} ${items.length === 1 ? "item" : "items"}${
-                oldest ? ` · oldest found ${formatRelative(oldest)}` : ""
-              }`
+                filtered ? " matching these filters" : ""
+              }${oldest ? ` · oldest found ${formatRelative(oldest)}` : ""}`
             : "Access that exists in the identity provider which MkAuth cannot explain."
         }
         actions={
-          <Button
-            isPending={reconcile.isPending}
-            onClick={async () => {
-              try {
-                await reconcile.mutateAsync();
-                toast.success("Scan finished.");
-              } catch (error) {
-                toast.error(error instanceof Error ? error.message : "The scan didn't run.");
-              }
-            }}
-          >
-            Compare again
-          </Button>
+          <>
+            <Select
+              value={projectId}
+              onChange={(event) => setProjectId(event.target.value)}
+              aria-label="Filter by project"
+              className="w-[180px]"
+            >
+              <option value="">All projects</option>
+              {(projects.data ?? []).map((entry) => (
+                <option key={entry.project.id} value={entry.project.id}>
+                  {entry.project.name}
+                </option>
+              ))}
+            </Select>
+            <FilterPills
+              label="Filter by how it was found"
+              value={source}
+              onChange={setSource}
+              options={[
+                { value: "", label: "Any source" },
+                { value: "webhook", label: "Caught live" },
+                { value: "reconciliation_sweep", label: "Found by sweep" },
+              ]}
+            />
+            <Button
+              isPending={reconcile.isPending}
+              onClick={async () => {
+                try {
+                  await reconcile.mutateAsync();
+                  toast.success("Scan finished.");
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "The scan didn't run.");
+                }
+              }}
+            >
+              Compare again
+            </Button>
+          </>
         }
       />
 
@@ -200,10 +245,27 @@ export function UnexplainedAccess() {
               errorTitle="Couldn't load the triage queue."
               skeleton={<RowSkeleton rows={5} label="Loading unexplained access" />}
               empty={
-                <EmptyState
-                  title="Everything is explained."
-                  guidance="Every grant in the identity provider traces back to something MkAuth did."
-                />
+                // "Nothing here" and "nothing here that matches" are different
+                // answers, and on this queue the difference is whether there is
+                // unexplained access somewhere else that nobody is looking at.
+                filtered ? (
+                  <EmptyState
+                    title="Nothing unexplained matches those filters."
+                    guidance="There may still be items under another project, or from the other detection source."
+                    action={{
+                      label: "Clear filters",
+                      onClick: () => {
+                        setSource("");
+                        setProjectId("");
+                      },
+                    }}
+                  />
+                ) : (
+                  <EmptyState
+                    title="Everything is explained."
+                    guidance="Every grant in the identity provider traces back to something MkAuth did."
+                  />
+                )
               }
             >
               {visible.map((item, index) => (

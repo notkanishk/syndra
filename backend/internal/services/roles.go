@@ -257,7 +257,6 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 			AssignedUserCount: assignedUsers,
 			IsUnused:          usage.BundleCount+usage.RuleCount == 0 && assignedUsers == 0,
 			Source:            entry.source,
-			DisplayLabel:      projectName + ": " + entry.displayName,
 		}
 		catalog = append(catalog, cr)
 	}
