@@ -22,6 +22,10 @@ const EFFECT_STYLE: Record<BulkEffect, { label: string; className: string }> = {
   no_change: { label: "No change", className: "bg-tint-2 text-muted" },
   blocked: { label: "Refused", className: "bg-warn-soft text-warn-text" },
   failed: { label: "Failed", className: "bg-danger-soft text-danger-text" },
+  // Not success and not failure: recorded here, not yet in Zitadel. It takes the
+  // warning tone rather than the accent one, because the operator has to know
+  // the change has not landed on the door yet.
+  queued: { label: "Queued", className: "bg-warn-soft text-warn-text" },
 };
 
 export function PlanReview({ plan }: { plan: BulkPlan | null }) {

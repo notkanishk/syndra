@@ -20,7 +20,7 @@ func resetDriftDeps(t *testing.T) {
 	t.Helper()
 	origGetItems := dbGetDriftItems
 	origGetItem := dbGetDriftItem
-	origAttribute := dbAttributeDriftAndEnqueue
+	origAttribute := dbAttributeDriftTx
 	origRevoke := dbRevokeDriftAndEnqueue
 	origMarkExternal := dbMarkDriftExternalTx
 	origSweep := svcDriftSweep
@@ -29,16 +29,16 @@ func resetDriftDeps(t *testing.T) {
 	t.Cleanup(func() {
 		dbGetDriftItems = origGetItems
 		dbGetDriftItem = origGetItem
-		dbAttributeDriftAndEnqueue = origAttribute
+		dbAttributeDriftTx = origAttribute
 		dbRevokeDriftAndEnqueue = origRevoke
 		dbMarkDriftExternalTx = origMarkExternal
 		svcDriftSweep = origSweep
 		svcDrainOne = origDrainOne
 		dbGetMappingRuleByID = origRuleByID
 	})
-	// Every triage action now drains its own outbox row — adoption as well as
-	// revocation — so the default has to be a no-op rather than the real drain
-	// reaching for a database that isn't there. Tests that care override it.
+	// Revocation drains its own outbox row, so the default has to be a no-op
+	// rather than the real drain reaching for a database that isn't there.
+	// Adoption enqueues nothing and must never reach this at all.
 	svcDrainOne = func(context.Context, string) (propagation.DrainResult, error) {
 		return propagation.DrainResult{Applied: 1}, nil
 	}
@@ -70,10 +70,10 @@ func attributeAttempt(t *testing.T, body string) (int, bool, db.EnqueueParams) {
 	var wrote bool
 	var params db.EnqueueParams
 	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) { return pendingDrift(), nil }
-	dbAttributeDriftAndEnqueue = func(_ context.Context, _ string, p db.EnqueueParams) (string, error) {
+	dbAttributeDriftTx = func(_ context.Context, _ string, p db.EnqueueParams) error {
 		wrote = true
 		params = p
-		return "ob-1", nil
+		return nil
 	}
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/attribute", strings.NewReader(body))
 	req.SetPathValue("id", "d1")
@@ -148,8 +148,14 @@ func TestAttributeDrift_ExternalBackfillRecordsADirectGrantWithNoRef(t *testing.
 	if params.SourceRef != "" {
 		t.Fatalf("recorded source_ref = %q, want empty", params.SourceRef)
 	}
+	// The op_type still says "add" — the ledger row it writes is an addition to
+	// what MkAuth knows. What must not follow is an outbox row carrying it back
+	// to Zitadel, which already has it.
 	if params.OpType != "add" {
-		t.Fatalf("adoption is an add that self-resolves upstream, got op %q", params.OpType)
+		t.Fatalf("adoption records an add against the ledger, got op %q", params.OpType)
+	}
+	if !params.NoPropagation {
+		t.Fatal("adoption must not queue a write back to Zitadel")
 	}
 }
 
@@ -209,21 +215,26 @@ func TestHandleRevokeDrift_EnqueuesRevokeAtomicallyThenDrains(t *testing.T) {
 	}
 }
 
-// Adoption is the operator saying "Zitadel is right, MkAuth was wrong". Leaving
-// its outbox row pending said the opposite: the governance queue listed every
-// adopted role as a change MkAuth still owed Zitadel, so accepting what Zitadel
-// already had produced a queue of writes back to Zitadel. The row must resolve
-// in the same request, exactly as the revoke path already did.
-func TestHandleAttributeDrift_ResolvesItsOwnOutboxRow(t *testing.T) {
+// Adoption must leave nothing behind that could later write to Zitadel.
+//
+// An outbox row is not a receipt, it is an instruction. Leaving one pending told
+// the operator MkAuth still owed Zitadel forty grants it did not owe; draining
+// it inline only narrowed the window, because a drain that cannot reach Zitadel
+// leaves the row for later. Either way an operator who adopts a role and then
+// removes it upstream by hand gets it re-created. So: no outbox row, and no
+// drain to make one safe.
+func TestHandleAttributeDrift_WritesNoPropagation(t *testing.T) {
 	resetDriftDeps(t)
 	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) { return pendingDrift(), nil }
-	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) {
-		return "ob_adopt", nil
+	var params db.EnqueueParams
+	dbAttributeDriftTx = func(_ context.Context, _ string, p db.EnqueueParams) error {
+		params = p
+		return nil
 	}
-	var drained string
-	svcDrainOne = func(_ context.Context, id string) (propagation.DrainResult, error) {
-		drained = id
-		return propagation.DrainResult{Applied: 1}, nil
+	drained := false
+	svcDrainOne = func(context.Context, string) (propagation.DrainResult, error) {
+		drained = true
+		return propagation.DrainResult{}, nil
 	}
 
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/attribute",
@@ -235,28 +246,35 @@ func TestHandleAttributeDrift_ResolvesItsOwnOutboxRow(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", w.Code, w.Body)
 	}
-	if drained != "ob_adopt" {
-		t.Fatalf("adoption must drain the row it enqueued, drained=%q", drained)
+	if !params.NoPropagation {
+		t.Error("adoption owes Zitadel nothing and must not leave an add instruction behind")
+	}
+	if drained {
+		t.Error("nothing was enqueued, so there is nothing to drain")
 	}
 }
 
-// The bulk path shares attributeOneDrift, so it inherits the drain — but it is
-// the path the operator actually used to adopt forty roles at once, and it is
-// worth pinning that forty adoptions leave forty resolved rows, not a queue.
-func TestHandleBulkAttributeDrift_ResolvesEveryOutboxRow(t *testing.T) {
+// The bulk path shares attributeOneDrift, so it inherits the property — but it
+// is the path the operator actually used to adopt forty roles at once, and forty
+// live `add` instructions is the shape the bug took in production.
+func TestHandleBulkAttributeDrift_WritesNoPropagation(t *testing.T) {
 	resetDriftDeps(t)
 	dbGetDriftItem = func(_ context.Context, id string) (models.DriftItem, error) {
 		item := pendingDrift()
 		item.ID = id
 		return item, nil
 	}
-	dbAttributeDriftAndEnqueue = func(_ context.Context, driftID string, _ db.EnqueueParams) (string, error) {
-		return "ob_" + driftID, nil
+	propagating := 0
+	dbAttributeDriftTx = func(_ context.Context, _ string, p db.EnqueueParams) error {
+		if !p.NoPropagation {
+			propagating++
+		}
+		return nil
 	}
-	var drained []string
-	svcDrainOne = func(_ context.Context, id string) (propagation.DrainResult, error) {
-		drained = append(drained, id)
-		return propagation.DrainResult{Applied: 1}, nil
+	drained := 0
+	svcDrainOne = func(context.Context, string) (propagation.DrainResult, error) {
+		drained++
+		return propagation.DrainResult{}, nil
 	}
 
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
@@ -264,32 +282,8 @@ func TestHandleBulkAttributeDrift_ResolvesEveryOutboxRow(t *testing.T) {
 	w := httptest.NewRecorder()
 	handleBulkAttributeDrift(w, req)
 
-	if len(drained) != 3 {
-		t.Fatalf("every adopted row must be projected, drained=%v", drained)
-	}
-}
-
-// A drain that cannot reach Zitadel is not an adoption failure. The drift is
-// resolved and the ledger records it; the outbox row stays pending because
-// MkAuth genuinely could not confirm, and the next drain reclaims it.
-func TestHandleAttributeDrift_DrainFailureStillAdopts(t *testing.T) {
-	resetDriftDeps(t)
-	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) { return pendingDrift(), nil }
-	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) {
-		return "ob_adopt", nil
-	}
-	svcDrainOne = func(context.Context, string) (propagation.DrainResult, error) {
-		return propagation.DrainResult{}, errors.New("zitadel unreachable")
-	}
-
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/attribute",
-		strings.NewReader(`{"source":"external_backfill"}`))
-	req.SetPathValue("id", "d1")
-	w := httptest.NewRecorder()
-	handleAttributeDrift(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("an unreachable Zitadel must not undo a committed adoption, got %d: %s", w.Code, w.Body)
+	if propagating != 0 || drained != 0 {
+		t.Fatalf("adopting in bulk must queue nothing upstream (propagating=%d drained=%d)", propagating, drained)
 	}
 }
 
@@ -378,9 +372,9 @@ func TestHandleBulkAttributeDrift_MissingSourceIs400(t *testing.T) {
 	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
 		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, Status: "pending_triage"}, nil
 	}
-	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) {
+	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) error {
 		attributed = true
-		return "ob-1", nil
+		return nil
 	}
 
 	// Source omitted → must 400 before the loop, never defaulting to "direct".
@@ -402,9 +396,9 @@ func TestHandleBulkAttributeDrift_ValidSourceAttributes(t *testing.T) {
 		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, Status: "pending_triage"}, nil
 	}
 	var gotSource string
-	dbAttributeDriftAndEnqueue = func(_ context.Context, _ string, p db.EnqueueParams) (string, error) {
+	dbAttributeDriftTx = func(_ context.Context, _ string, p db.EnqueueParams) error {
 		gotSource = p.Source
-		return "ob-1", nil
+		return nil
 	}
 
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true", strings.NewReader(`{"ids":["d1"],"source":"external_backfill"}`))
@@ -430,9 +424,9 @@ func TestBulkDrift_RehearsesByDefaultAndWritesNothing(t *testing.T) {
 		return item, nil
 	}
 	writes := 0
-	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) {
+	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) error {
 		writes++
-		return "ob-1", nil
+		return nil
 	}
 
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute",
@@ -475,9 +469,9 @@ func TestBulkDrift_ReportsRowsSomebodyElseAlreadyResolved(t *testing.T) {
 		return item, nil
 	}
 	writes := 0
-	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) {
+	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) error {
 		writes++
-		return "ob-1", nil
+		return nil
 	}
 
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
@@ -521,7 +515,7 @@ func TestBulkAttributeDrift_NamesTheIdsThatFailed(t *testing.T) {
 		item.ID = id
 		return item, nil
 	}
-	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) { return "ob-1", nil }
+	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) error { return nil }
 
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
 		strings.NewReader(`{"ids":["d1","d2","d3"],"source":"external_backfill"}`))
@@ -603,7 +597,7 @@ func TestBulkResolutions_AlwaysReturnARowPerRequestedID(t *testing.T) {
 		item.ID = id
 		return item, nil
 	}
-	dbAttributeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) { return "ob-1", nil }
+	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) error { return nil }
 
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
 		strings.NewReader(`{"ids":["d1","d1",""],"source":"external_backfill"}`))

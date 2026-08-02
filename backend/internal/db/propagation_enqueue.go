@@ -24,6 +24,14 @@ type EnqueueParams struct {
 	OpType         string // add | revoke | replace
 	ZitadelGrantID string
 	PayloadJSON    string
+	// NoPropagation records the ledger and audit rows without an outbox row,
+	// for the one case where MkAuth owes Zitadel nothing: adopting drift.
+	// external_backfill means Zitadel is already authoritative, so there is no
+	// mutation to project — and an outbox row is not a passive receipt, it is a
+	// live instruction. An `add` row that outlives its adoption re-creates the
+	// grant on the next drain, which is precisely what happens when an operator
+	// adopts a role and then removes it upstream by hand.
+	NoPropagation bool
 }
 
 // EnqueueResult is the operator-facing handle returned to the HTTP caller.
@@ -110,6 +118,13 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) 
 	action := "direct_grant." + opTypeAuditVerb(p.OpType)
 	if _, err := tx.Exec(ctx, insertAudit, p.GrantedBy, p.UserID, action, firstGrantID); err != nil {
 		return "", fmt.Errorf("insert audit: %w", err)
+	}
+
+	// No outbox row when nothing is owed upstream. The ledger row is the durable
+	// intent and the audit row is the durable trace; the outbox is the work
+	// queue, and adopting drift creates no work. See EnqueueParams.NoPropagation.
+	if p.NoPropagation {
+		return "", nil
 	}
 
 	const insertOutbox = `

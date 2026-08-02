@@ -91,7 +91,7 @@ func applyBulkPlan(r *http.Request, plan *services.BulkPlan, input services.Bulk
 			continue
 		}
 
-		outboxIDs, err := applyBulkOne(r, actor, input, *out)
+		outboxIDs, queued, err := applyBulkOne(r, actor, input, *out)
 		if err != nil {
 			out.Effect = services.EffectFailed
 			out.Detail = "Didn't go through: " + err.Error()
@@ -110,11 +110,22 @@ func applyBulkPlan(r *http.Request, plan *services.BulkPlan, input services.Bulk
 		// happened to visit the governance queue. Bulk removal was the sharp
 		// end — access reported as gone that was still live.
 		//
-		// Bundle ops are absent here on purpose: their cascade already drains
-		// according to the bundle's own confirmation mode, and overriding that
-		// from the bulk path would apply a bundle the owner marked manual.
-		for _, id := range outboxIDs {
-			_, _ = svcDrainPropagationRow(r.Context(), id)
+		// Bundle ops have already answered for themselves in `queued`: their
+		// cascade drains according to the bundle's own confirmation mode, and
+		// overriding that from the bulk path would apply a bundle the owner
+		// marked manual.
+		//
+		// The drain's answer is read, not discarded. Draining and then marking
+		// the row applied regardless is the same lie one step later: with Zitadel
+		// offline every row still reported success while a bulk revoke sat
+		// unexecuted in the outbox.
+		if queued == "" {
+			queued = projectUpstream(r.Context(), outboxIDs)
+		}
+		if queued != "" {
+			out.Effect = services.EffectQueued
+			out.Detail = "Recorded here, not yet in Zitadel — " + queued
+			continue
 		}
 		out.Effect = services.EffectApplied
 	}
@@ -122,41 +133,74 @@ func applyBulkPlan(r *http.Request, plan *services.BulkPlan, input services.Bulk
 	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
 }
 
-// applyBulkOne performs one person's share of the operation and returns the
-// outbox rows it created, for the caller to drain. Bundle ops return none: the
-// cascade decides for itself whether to drain, from the bundle's confirmation
-// mode.
-func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out services.BulkOutcome) ([]string, error) {
+// projectUpstream drains the rows one person's operation enqueued and returns
+// an empty string when every one of them reached Zitadel, or a short reason when
+// any did not.
+//
+// A drain reports failure two ways and only one of them is an error: an
+// unreachable Zitadel or a drain already in progress comes back as Halted with a
+// nil error, so checking `err` alone reads a halted batch as success. Anything
+// that is not a confirmed apply is treated as not-yet-applied, which is the
+// conservative direction — under-claiming sends an operator to a queue that
+// turns out to be empty, over-claiming tells them a door is locked when it is
+// open.
+func projectUpstream(ctx context.Context, outboxIDs []string) string {
+	for _, id := range outboxIDs {
+		res, err := svcDrainPropagationRow(ctx, id)
+		switch {
+		case err != nil:
+			return err.Error()
+		case res.Halted && res.Reason != "":
+			return res.Reason
+		case res.Applied == 0:
+			// Requeued, failed, or claimed by a concurrent drain. Either way this
+			// request did not watch it land.
+			return "still queued for propagation"
+		}
+	}
+	return ""
+}
+
+// applyBulkOne performs one person's share of the operation. It returns the
+// outbox rows the caller must drain, plus a reason when the work is already
+// known to be queued rather than applied.
+//
+// Bundle ops go down the second path: the cascade decides for itself whether to
+// drain, from the bundle's own confirmation mode, so it reports its verdict
+// instead of handing back rows. A bundle its owner set to manual is *meant* to
+// leave work queued — that is not a failure, but it is not "applied" either, and
+// the operator has to be told which one they got.
+func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out services.BulkOutcome) ([]string, string, error) {
 	ctx := r.Context()
 
 	switch input.Op {
 	case services.BulkOpAssignRole:
 		id, err := enqueueBulkGrant(ctx, actor, out.UserID, input.ProjectID, input.RoleKey, input.Reason, input.DurationDays)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		return []string{id}, nil
+		return []string{id}, "", nil
 
 	case services.BulkOpRemoveRole:
 		var ids []string
 		for _, grantID := range out.GrantIDs {
 			res, err := svcDeleteDirectGrant(ctx, out.UserID, grantID, actor)
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			// There may be none — every role the grant carried is still covered
 			// by another source, so nothing is queued and nothing is drained.
 			ids = append(ids, res.OutboxIDs...)
 		}
-		return ids, nil
+		return ids, "", nil
 
 	case services.BulkOpAssignBundle:
-		_, err := svcCascadeBundleAssigned(ctx, actor, out.UserID, input.BundleID)
-		return nil, err
+		res, err := svcCascadeBundleAssigned(ctx, actor, out.UserID, input.BundleID)
+		return nil, cascadeQueuedReason(res), err
 
 	case services.BulkOpRemoveBundle:
-		_, err := svcCascadeBundleRemoved(ctx, actor, out.UserID, input.BundleID)
-		return nil, err
+		res, err := svcCascadeBundleRemoved(ctx, actor, out.UserID, input.BundleID)
+		return nil, cascadeQueuedReason(res), err
 
 	case services.BulkOpExtend:
 		// The grant ledger upserts on (user, project, role), so re-enqueuing
@@ -165,7 +209,7 @@ func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out
 		// grants those are.
 		grants, err := svcUserDirectGrants(ctx, out.UserID)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		wanted := map[string]struct{}{}
 		for _, id := range out.GrantIDs {
@@ -178,14 +222,30 @@ func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out
 			}
 			id, err := enqueueBulkGrant(ctx, actor, out.UserID, g.ProjectID, g.RoleKey, input.Reason, input.DurationDays)
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			ids = append(ids, id)
 		}
-		return ids, nil
+		return ids, "", nil
 	}
 
-	return nil, nil
+	return nil, "", nil
+}
+
+// cascadeQueuedReason reports why a cascade's rows have not reached Zitadel, or
+// "" when they have (or when there were none to send).
+func cascadeQueuedReason(res services.CascadeResult) string {
+	switch {
+	case res.Enqueued == 0:
+		return "" // nothing to propagate; the closure was already correct
+	case res.Mode != "auto":
+		return "this bundle applies on confirmation"
+	case res.Drain.Halted && res.Drain.Reason != "":
+		return res.Drain.Reason
+	case res.Drain.Applied < res.Enqueued:
+		return "still queued for propagation"
+	}
+	return ""
 }
 
 // enqueueBulkGrant writes the ledger + audit + outbox row in one transaction,

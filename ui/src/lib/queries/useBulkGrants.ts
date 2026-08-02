@@ -38,8 +38,15 @@ export interface BulkGrantInput {
  *  - `no_change` — already in the target state
  *  - `blocked`   — refused, with a reason. Never silently dropped.
  *  - `failed`    — attempted and errored
+ *  - `queued`    — MkAuth recorded it; Zitadel has not confirmed it yet
+ *
+ * `applied` and `queued` are the distinction that matters after the fact.
+ * "Applied" means Zitadel confirmed the change; "queued" means the records here
+ * are updated and the change has not reached Zitadel — the drain was refused,
+ * halted, or the bundle applies on confirmation. Collapsing the two tells an
+ * operator a door is locked while it is open.
  */
-export type BulkEffect = "apply" | "applied" | "no_change" | "blocked" | "failed";
+export type BulkEffect = "apply" | "applied" | "no_change" | "blocked" | "failed" | "queued";
 
 export interface BulkOutcome {
   user_id: string;
@@ -59,6 +66,8 @@ export interface BulkSummary {
   blocked: number;
   failed: number;
   succeeded: number;
+  /** Recorded, not yet confirmed upstream. Never folded into `succeeded`. */
+  queued: number;
 }
 
 export interface BulkPlan {

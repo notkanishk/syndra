@@ -107,44 +107,38 @@ func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
 }
 
 // attributeOneDrift writes the ledger intent for a zitadel_only drift and marks
-// it attributed. The grant already exists in Zitadel, so it flows through the
-// outbox as an `add` that self-resolves (grant-index short-circuit / 409→applied)
-// — one code path, no special "skip Zitadel" branch.
+// it attributed. It enqueues nothing, and that is the whole point: adoption is
+// the operator saying "Zitadel is right, MkAuth was wrong", so there is no
+// mutation owed upstream and no outbox row to carry one.
 //
-// That self-resolution has to happen HERE, inline, exactly as handleRevokeDrift
-// drains its own row. Adoption is the operator saying "Zitadel is right, MkAuth
-// was wrong"; leaving its outbox row pending told them the opposite — the
-// governance queue listed forty adopted roles as changes MkAuth still owed
-// Zitadel, so accepting what Zitadel already had produced a queue of writes back
-// to Zitadel. Worse than the confusion: a pending `add` is a live instruction. An
-// operator who adopts a role and then removes it in Zitadel by hand gets it
-// re-created by the next drain.
-//
-// A drain failure is non-fatal and correct: the row stays pending only when
-// MkAuth could not reach Zitadel to confirm, which is a change genuinely still
-// owed, and the next drain reclaims it.
+// Two versions of this got it wrong. The first left an `add` row pending
+// forever, and the governance queue then listed every adopted role as a change
+// MkAuth still owed Zitadel — accepting what Zitadel already had produced a
+// queue of writes back to Zitadel. The second drained that row inline, which
+// only narrowed the window: an outbox row is a live instruction, and a drain
+// that cannot reach Zitadel leaves it behind. Either way, an operator who adopts
+// a role and then removes it upstream by hand gets it re-created by a later
+// drain. The row must not exist.
 //
 // The recorded source is always external_backfill and carries no source_ref:
 // there is no bundle or rule owning this access, and saying otherwise would be
 // a provenance the ledger cannot honour. See validAttributionSource.
 //
-// Atomicity: a SINGLE transaction (db.AttributeDriftAndEnqueue) guard-transitions
-// the drift row to 'attributed' AND writes the ledger+audit+outbox rows together.
-// A lost concurrent-triage race returns ErrDriftNotPending (→409) with the whole
-// tx rolled back; a write failure rolls back the resolution too — the drift never
-// leaves the triage queue without its durable outbox row.
+// Atomicity: a SINGLE transaction (db.AttributeDriftTx) guard-transitions the
+// drift row to 'attributed' AND writes the ledger+audit rows together. A lost
+// concurrent-triage race returns ErrDriftNotPending (→409) with the whole tx
+// rolled back; a write failure rolls back the resolution too — the drift never
+// leaves the triage queue without its durable ledger row.
 func attributeOneDrift(ctx context.Context, item models.DriftItem, req attributeRequest, actor string) error {
 	payload, _ := json.Marshal(req)
-	outboxID, err := dbAttributeDriftAndEnqueue(ctx, item.ID, db.EnqueueParams{
+	return dbAttributeDriftTx(ctx, item.ID, db.EnqueueParams{
 		UserID: item.UserID, ProjectID: item.ProjectID, RoleKeys: item.RoleKeys,
 		GrantedBy: actor, Reason: "drift attribution", Source: req.Source,
 		OpType: "add", ZitadelGrantID: item.ZitadelGrantID, PayloadJSON: string(payload),
+		// Stated here, where the intent is, and enforced again inside
+		// AttributeDriftTx, which must never propagate whoever calls it.
+		NoPropagation: true,
 	})
-	if err != nil {
-		return err
-	}
-	_, _ = svcDrainOne(ctx, outboxID)
-	return nil
 }
 
 func handleRevokeDrift(w http.ResponseWriter, r *http.Request) {

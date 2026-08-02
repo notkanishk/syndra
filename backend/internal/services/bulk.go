@@ -42,6 +42,7 @@ const (
 //   - EffectNoChange — nothing to do; already in the target state.
 //   - EffectBlocked  — refused, with a reason. Never silently skipped.
 //   - EffectFailed   — attempted during apply and errored.
+//   - EffectQueued   — recorded by MkAuth, not yet confirmed by Zitadel.
 const (
 	EffectApply    = "apply"
 	EffectNoChange = "no_change"
@@ -50,7 +51,17 @@ const (
 	// EffectApplied replaces EffectApply once the write has landed, so the
 	// result an operator reads after the fact is diffable against the plan they
 	// approved rather than a fresh document with no relationship to it.
+	//
+	// "Landed" means Zitadel confirmed it, not that MkAuth wrote it down. The
+	// two are not the same and the gap between them is where a bulk removal
+	// reads as done while the role is still live on the door.
 	EffectApplied = "applied"
+	// EffectQueued is that gap, named. MkAuth's records are updated and durable,
+	// but the change has not reached Zitadel — the drain was refused, halted, or
+	// could not confirm. Recoverable rather than wrong: the row stays in the
+	// outbox and the next drain re-drives it. It is not EffectFailed, which
+	// would claim nothing happened, and it must never be EffectApplied.
+	EffectQueued = "queued"
 )
 
 // BulkRequest is one operation aimed at a set of people.
@@ -101,6 +112,9 @@ type BulkSummary struct {
 	Blocked   int `json:"blocked"`
 	Failed    int `json:"failed"`
 	Succeeded int `json:"succeeded"`
+	// Queued counts rows MkAuth recorded but could not confirm upstream. Kept
+	// apart from Succeeded so the headline cannot round them into success.
+	Queued int `json:"queued"`
 }
 
 // ValidateBulkRequest reports the first structural problem with a request, or
@@ -521,7 +535,7 @@ func dedupeIDs(ids []string) []string {
 // then the no-ops. Within a group, by name — so a re-run of the same rehearsal
 // produces the same list in the same order.
 func sortOutcomes(outcomes []BulkOutcome) {
-	rank := map[string]int{EffectBlocked: 0, EffectFailed: 1, EffectApply: 2, EffectNoChange: 3}
+	rank := map[string]int{EffectBlocked: 0, EffectFailed: 1, EffectQueued: 2, EffectApply: 3, EffectNoChange: 4}
 	sort.SliceStable(outcomes, func(i, j int) bool {
 		if rank[outcomes[i].Effect] != rank[outcomes[j].Effect] {
 			return rank[outcomes[i].Effect] < rank[outcomes[j].Effect]
@@ -542,6 +556,8 @@ func SummarizeOutcomes(outcomes []BulkOutcome) BulkSummary {
 			s.Apply++
 		case EffectApplied:
 			s.Succeeded++
+		case EffectQueued:
+			s.Queued++
 		case EffectNoChange:
 			s.NoChange++
 		case EffectBlocked:

@@ -151,37 +151,42 @@ var (
 	ErrDriftNotPending = errors.New("drift item not pending")
 )
 
-// AttributeDriftAndEnqueue claims a pending drift (→attributed) and writes the
-// attribution's ledger+audit+outbox rows in ONE tx. p.OpType must be "add" (the
-// grant already exists in Zitadel; the outbox row self-resolves during drain via
-// the grant-index short-circuit / 409). p.PayloadJSON doubles as the resolution
-// payload. ErrDriftNotPending on a lost race (whole tx rolled back — no outbox row).
+// AttributeDriftTx claims a pending drift (→attributed) and writes the
+// attribution's ledger + audit rows in ONE tx. p.PayloadJSON doubles as the
+// resolution payload. ErrDriftNotPending on a lost race (whole tx rolled back).
 //
-// Returns the outbox id so the handler can drain it AFTER commit. That drain is
-// not an optimization: an adoption row left pending tells the operator MkAuth
-// owes Zitadel a grant it does not owe, and a stale one would re-create access
-// somebody removed by hand in the meantime. See attributeOneDrift.
-func AttributeDriftAndEnqueue(ctx context.Context, driftID string, p EnqueueParams) (string, error) {
+// No outbox row, and the name says so — this is MarkDriftExternalTx's sibling,
+// not EnqueueDirectGrantPropagation's. Adoption is MkAuth recording access
+// Zitadel already has; the outbox encodes one intent only, "make it so", and
+// there is no opcode for "confirm it is there". An `add` row that outlives the
+// adoption is a live instruction to re-create the grant, so an operator who
+// adopts a role and then removes it upstream by hand gets it back on the next
+// drain. Enqueuing one and draining it immediately only narrowed that window;
+// it did not close it, because a drain that cannot reach Zitadel leaves the row
+// behind.
+//
+// The verification that drain bought is not lost, only relocated: if the grant
+// vanished between detection and adoption, the ledger row is now the thing that
+// disagrees with Zitadel, the next reconcile raises it as mkauth_only drift, and
+// a human triages it. Surfacing that beats silently re-granting it.
+func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) error {
 	tx, err := PG.Begin(ctx)
 	if err != nil {
-		return "", fmt.Errorf("begin attribute tx: %w", err)
+		return fmt.Errorf("begin attribute tx: %w", err)
 	}
 	defer tx.Rollback(ctx) // no-op after Commit
 	if err := claimDriftTx(ctx, tx, driftID, "attributed", p.GrantedBy, p.PayloadJSON); err != nil {
-		return "", err
+		return err
 	}
+	p.NoPropagation = true
 	key, err := newOutboxIdempotencyKey()
 	if err != nil {
-		return "", err
+		return err
 	}
-	outboxID, err := enqueueWrites(ctx, tx, p, key)
-	if err != nil {
-		return "", fmt.Errorf("attribute enqueue writes: %w", err)
+	if _, err := enqueueWrites(ctx, tx, p, key); err != nil {
+		return fmt.Errorf("attribute ledger writes: %w", err)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return "", fmt.Errorf("commit attribute tx: %w", err)
-	}
-	return outboxID, nil
+	return tx.Commit(ctx)
 }
 
 // RevokeDriftAndEnqueue claims a pending drift (→revoked) and enqueues a revoke

@@ -43,9 +43,9 @@ var (
 	// (sub-phase 3, Task 20): the cascade OWNS the source mutation now — see
 	// svcCascadeRoleAdded/svcCascadeBundleAssigned below, which call the atomic
 	// db.AddRoleToBundleAndEnqueue/db.AssignBundleAndEnqueue instead.
-	dbCreateBundle      = db.CreateBundle
-	dbGetAllBundles     = db.GetAllBundles
-	dbGetRolesForBundle = db.GetRolesForBundle
+	dbCreateBundle          = db.CreateBundle
+	dbGetAllBundles         = db.GetAllBundles
+	dbGetRolesForBundle     = db.GetRolesForBundle
 	dbGetBundlesForUser     = db.GetBundlesForUser
 	dbSetWelcomeBundle      = db.SetWelcomeBundle
 	dbGetBundleHolderCounts = db.GetBundleHolderCounts
@@ -243,14 +243,14 @@ var (
 	// Drift triage injectable vars (B2). The three action helpers are atomic
 	// claim+side-effect transactions (db.*AndEnqueue / db.MarkDriftExternalTx) —
 	// the drift handlers never resolve a drift row outside that transaction.
-	dbGetDriftItems            = db.GetDriftItems
-	dbGetDriftItem             = db.GetDriftItem
-	dbAttributeDriftAndEnqueue = db.AttributeDriftAndEnqueue
-	dbRevokeDriftAndEnqueue    = db.RevokeDriftAndEnqueue
-	dbMarkDriftExternalTx      = db.MarkDriftExternalTx
-	svcDriftSweep              = drift.Sweep
-	svcDrainOne                = propagation.DrainOne
-	svcDriftTriageQueue        = services.DriftTriageQueue
+	dbGetDriftItems         = db.GetDriftItems
+	dbGetDriftItem          = db.GetDriftItem
+	dbAttributeDriftTx      = db.AttributeDriftTx
+	dbRevokeDriftAndEnqueue = db.RevokeDriftAndEnqueue
+	dbMarkDriftExternalTx   = db.MarkDriftExternalTx
+	svcDriftSweep           = drift.Sweep
+	svcDrainOne             = propagation.DrainOne
+	svcDriftTriageQueue     = services.DriftTriageQueue
 
 	// Confirmation-mode surfaces (Task 22): global default read/write, bulk toggle, and the
 	// recent-cascades feed.

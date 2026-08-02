@@ -316,36 +316,130 @@ func TestHandleBulkGrants_ApplyProjectsEachRowUpstream(t *testing.T) {
 	}
 }
 
-// A drain that cannot reach Zitadel leaves the row pending, which is the honest
-// state — but the ledger write already happened, so the row is applied, not
-// failed. Rolling it back would discard a durable intent over a transient
-// network problem.
-func TestHandleBulkGrants_DrainFailureLeavesTheRowApplied(t *testing.T) {
+// A drain that does not land must not be reported as applied. The ledger write
+// is committed and must stand — this is not a failure — but the role is still
+// whatever it was in Zitadel, and a bulk revoke reading "Applied" while the
+// access is live is the worst thing this screen can say.
+//
+// Both shapes of not-landing are covered. A drain returns an error OR comes back
+// Halted with a nil error, and reading only the error treats an unreachable
+// Zitadel as success.
+func TestHandleBulkGrants_UnconfirmedDrainReportsQueuedNotApplied(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		res  propagation.DrainResult
+		err  error
+		want string
+	}{
+		{"drain errors", propagation.DrainResult{}, errors.New("zitadel unreachable"), "zitadel unreachable"},
+		{"zitadel offline halts with no error", propagation.DrainResult{Halted: true, Reason: "zitadel_offline"}, nil, "zitadel_offline"},
+		{"another drain holds the lock", propagation.DrainResult{Halted: true, Reason: "drain_in_progress"}, nil, "drain_in_progress"},
+		{"requeued rather than applied", propagation.DrainResult{Requeued: 1}, nil, "still queued"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stubRehearsal(t, services.BulkPlan{
+				Op:       services.BulkOpAssignRole,
+				Outcomes: []services.BulkOutcome{{UserID: "u1", Effect: services.EffectApply}},
+			})
+
+			origEnqueue, origRebuild, origDrain := dbEnqueueDirectGrantPropagation, rebuildUserCacheDetachedFn, svcDrainPropagationRow
+			t.Cleanup(func() {
+				dbEnqueueDirectGrantPropagation = origEnqueue
+				rebuildUserCacheDetachedFn = origRebuild
+				svcDrainPropagationRow = origDrain
+			})
+			rebuildUserCacheDetachedFn = func(context.Context, string) {}
+			dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams) (db.EnqueueResult, error) {
+				return db.EnqueueResult{OutboxID: "ob_1", Status: "pending"}, nil
+			}
+			svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
+				return tc.res, tc.err
+			}
+
+			rr := httptest.NewRecorder()
+			handleBulkGrants(rr, bulkRequest(t, `{"op":"assign_role","user_ids":["u1"],"project_id":"p","role_key":"r","reason":"x"}`, true))
+
+			plan := decodePlan(t, rr)
+			if plan.Outcomes[0].Effect != services.EffectQueued {
+				t.Fatalf("effect = %q, want queued — the change has not reached Zitadel", plan.Outcomes[0].Effect)
+			}
+			if !strings.Contains(plan.Outcomes[0].Detail, tc.want) {
+				t.Errorf("the row must say why it is queued, got %q", plan.Outcomes[0].Detail)
+			}
+			// Counted apart from success, so the headline cannot round it up.
+			if plan.Summary.Queued != 1 || plan.Summary.Succeeded != 0 {
+				t.Errorf("queued=%d succeeded=%d, want 1 and 0", plan.Summary.Queued, plan.Summary.Succeeded)
+			}
+		})
+	}
+}
+
+// A bundle whose owner set it to manual confirmation is *meant* to leave work
+// queued. That is not a failure, and it is not "applied" either.
+func TestHandleBulkGrants_ManualBundleReportsQueued(t *testing.T) {
 	stubRehearsal(t, services.BulkPlan{
-		Op:       services.BulkOpAssignRole,
+		Op:       services.BulkOpAssignBundle,
 		Outcomes: []services.BulkOutcome{{UserID: "u1", Effect: services.EffectApply}},
 	})
 
-	origEnqueue, origRebuild, origDrain := dbEnqueueDirectGrantPropagation, rebuildUserCacheDetachedFn, svcDrainPropagationRow
+	origCascade, origRebuild := svcCascadeBundleAssigned, rebuildUserCacheDetachedFn
 	t.Cleanup(func() {
-		dbEnqueueDirectGrantPropagation = origEnqueue
+		svcCascadeBundleAssigned = origCascade
 		rebuildUserCacheDetachedFn = origRebuild
-		svcDrainPropagationRow = origDrain
 	})
 	rebuildUserCacheDetachedFn = func(context.Context, string) {}
-	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams) (db.EnqueueResult, error) {
-		return db.EnqueueResult{OutboxID: "ob_1", Status: "pending"}, nil
-	}
-	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
-		return propagation.DrainResult{}, errors.New("zitadel unreachable")
+	stubDrain(t)
+	svcCascadeBundleAssigned = func(context.Context, string, string, string) (services.CascadeResult, error) {
+		return services.CascadeResult{Enqueued: 3, Mode: "manual"}, nil
 	}
 
 	rr := httptest.NewRecorder()
-	handleBulkGrants(rr, bulkRequest(t, `{"op":"assign_role","user_ids":["u1"],"project_id":"p","role_key":"r","reason":"x"}`, true))
+	handleBulkGrants(rr, bulkRequest(t, `{"op":"assign_bundle","user_ids":["u1"],"bundle_id":"b1","reason":"x"}`, true))
 
 	plan := decodePlan(t, rr)
-	if plan.Outcomes[0].Effect != services.EffectApplied {
-		t.Errorf("a failed drain must not undo a committed ledger write, got %q", plan.Outcomes[0].Effect)
+	if plan.Outcomes[0].Effect != services.EffectQueued {
+		t.Fatalf("effect = %q, want queued for a confirmation-gated bundle", plan.Outcomes[0].Effect)
+	}
+	if !strings.Contains(plan.Outcomes[0].Detail, "applies on confirmation") {
+		t.Errorf("the row must name the bundle's own gate, got %q", plan.Outcomes[0].Detail)
+	}
+}
+
+// An auto bundle whose cascade drained everything is applied, and a cascade with
+// nothing to send is applied too — the closure was already correct.
+func TestHandleBulkGrants_DrainedCascadeIsApplied(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		res  services.CascadeResult
+	}{
+		{"auto bundle, fully drained", services.CascadeResult{Enqueued: 2, Mode: "auto", Drain: propagation.DrainResult{Applied: 2}}},
+		{"nothing to propagate", services.CascadeResult{Enqueued: 0, Mode: "manual"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stubRehearsal(t, services.BulkPlan{
+				Op:       services.BulkOpAssignBundle,
+				Outcomes: []services.BulkOutcome{{UserID: "u1", Effect: services.EffectApply}},
+			})
+
+			origCascade, origRebuild := svcCascadeBundleAssigned, rebuildUserCacheDetachedFn
+			t.Cleanup(func() {
+				svcCascadeBundleAssigned = origCascade
+				rebuildUserCacheDetachedFn = origRebuild
+			})
+			rebuildUserCacheDetachedFn = func(context.Context, string) {}
+			stubDrain(t)
+			svcCascadeBundleAssigned = func(context.Context, string, string, string) (services.CascadeResult, error) {
+				return tc.res, nil
+			}
+
+			rr := httptest.NewRecorder()
+			handleBulkGrants(rr, bulkRequest(t, `{"op":"assign_bundle","user_ids":["u1"],"bundle_id":"b1","reason":"x"}`, true))
+
+			plan := decodePlan(t, rr)
+			if plan.Outcomes[0].Effect != services.EffectApplied {
+				t.Fatalf("effect = %q, want applied", plan.Outcomes[0].Effect)
+			}
+		})
 	}
 }
 

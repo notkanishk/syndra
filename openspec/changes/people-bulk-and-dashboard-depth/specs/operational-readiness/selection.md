@@ -106,44 +106,74 @@ Zitadel and has not made yet. Two paths were putting rows into it that did not
 belong there, and both were read by the operator as the system contradicting
 itself.
 
-**Adoption MUST resolve its own outbox row.** Adopting drift is the operator
-saying "Zitadel is right, MkAuth was wrong" — there is no mutation owed
-upstream. The `add` row exists only so adoption shares one code path with every
-other ledger write, and it MUST be drained in the same request, exactly as
-revoke already was. Left pending it is not merely noise: forty adopted roles
-appear in the queue as forty writes MkAuth owes Zitadel, so accepting what
-Zitadel already had reads as a queue of writes back to Zitadel. And a pending
-`add` is a live instruction — an operator who adopts a role and then removes it
-in Zitadel by hand gets it re-created by the next drain.
+**Adoption MUST NOT create an outbox row at all.** Adopting drift is the
+operator saying "Zitadel is right, MkAuth was wrong" — there is no mutation owed
+upstream, and the outbox encodes one intent only, *make it so*. There is no
+opcode for "confirm it is there", so an `add` row is not a receipt of the
+adoption, it is a live instruction to perform it. Left pending it also reads as
+debt MkAuth owes: forty adopted roles appear in the queue as forty writes back
+to the system they were adopted from.
 
-**Applying a bulk operation MUST project each row upstream.** `?apply=true` is
-the operator authorising the write they just rehearsed; it MUST NOT mean "wrote
-it down". A bulk removal reported as applied while the roles were still live in
-Zitadel is the sharp end — the screen and the door disagree. The single-person
-handlers already drained on `?apply=true`; the bulk path MUST match them. Bundle
-operations are the one exception: their cascade drains according to the bundle's
-own confirmation mode, and the bulk path MUST NOT override an owner who set that
-bundle to manual.
+Draining that row in the same request is NOT sufficient and MUST NOT be treated
+as the fix. It narrows the window rather than closing it — a drain that cannot
+reach Zitadel leaves the row behind — and in that window an operator who adopts
+a role and then removes it upstream by hand gets it re-created. Adoption writes
+the ledger row and the audit row, which are the durable intent and the durable
+trace, and nothing else.
 
-A drain that fails MUST NOT undo the committed ledger write. The row stays
-pending, which is then the honest state — MkAuth could not reach Zitadel to
-confirm, so the change genuinely is still owed — and the next drain reclaims it.
+The verification a drain would have bought is relocated, not lost: if the grant
+vanished between detection and adoption, the ledger is what now disagrees with
+Zitadel, the next reconcile raises it as `mkauth_only` drift, and a human
+triages it. Surfacing that beats silently re-granting it.
+
+**Applying a bulk operation MUST project each row upstream, and MUST report
+whether it landed.** `?apply=true` is the operator authorising the write they
+just rehearsed; it MUST NOT mean "wrote it down". A bulk removal reported as
+applied while the roles were still live in Zitadel is the sharp end — the screen
+and the door disagree.
+
+Reporting is half the requirement. A row MUST be marked applied only when
+Zitadel confirmed it, and a row that was recorded but not confirmed MUST carry a
+distinct state saying so, with the reason. This state is neither success nor
+failure: nothing was lost, the outbox will re-drive it, and the operator needs
+to know the change has not taken effect yet. It MUST be counted apart from
+success so a headline cannot round it up, and the confirmation the operator
+reads MUST NOT announce success when it is non-zero.
+
+A drain reports not-landing two ways — an error, or a halt with no error — and
+both MUST be treated as not-yet-applied. Anything other than a confirmed apply
+MUST be reported conservatively: under-claiming sends an operator to a queue
+that turns out to be empty, over-claiming tells them a door is locked when it is
+open.
+
+Bundle operations MUST answer the same question through their own cascade, which
+drains according to the bundle's confirmation mode. The bulk path MUST NOT
+override an owner who set that bundle to manual — but a bundle that applies on
+confirmation MUST be reported as not-yet-applied rather than as applied.
+
+A drain that fails MUST NOT undo the committed ledger write.
 
 #### Scenario: Adopting unexplained access
 - **THEN** the drift is recorded as a direct grant
-- **AND** its outbox row is resolved in the same request
-- **AND** it does not appear in pending changes
+- **AND** no outbox row is written
+- **AND** nothing appears in pending changes
 
-#### Scenario: Adopting while Zitadel is unreachable
-- **THEN** the adoption still succeeds
-- **AND** the row stays pending, to be reclaimed by the next drain
+#### Scenario: A role adopted, then removed upstream by hand
+- **THEN** nothing re-creates it
+- **AND** the divergence surfaces as mkauth_only drift for triage
 
 #### Scenario: Applying a bulk role removal
 - **THEN** each removal's outbox rows are drained before the response
 - **AND** a row the rehearsal blocked drains nothing
 
+#### Scenario: Applying while Zitadel is unreachable
+- **THEN** the rows are reported as recorded but not yet in Zitadel, with the reason
+- **AND** they are counted apart from the applied rows
+- **AND** the confirmation does not announce success
+
 #### Scenario: Applying a bulk bundle assignment
 - **THEN** the cascade decides whether to drain, from the bundle's confirmation mode
+- **AND** a bundle that applies on confirmation is reported as not yet applied
 
 ### Requirement: Triage MUST offer selection by cluster
 

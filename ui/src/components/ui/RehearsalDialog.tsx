@@ -21,6 +21,31 @@ import type { BulkPlan } from "@/lib/queries/useBulkGrants";
  * one step that matters, which is the step that happens before the write.
  */
 
+/**
+ * The toast after an apply. It reports three populations, and the one that must
+ * never be folded into the others is `queued`: those rows are recorded here and
+ * have not reached Zitadel, so the access is still whatever it was. Announcing
+ * "12 people updated" after a bulk removal that never left the outbox tells an
+ * operator a door is locked while it is open.
+ */
+export function resultMessage(plan: BulkPlan, noun: [string, string]): string {
+  const { succeeded, failed, queued } = plan.summary;
+  const parts = [`${succeeded} applied`];
+  if (queued > 0) parts.push(`${queued} recorded but not yet in Zitadel`);
+  if (failed > 0) parts.push(`${failed} didn't go through`);
+  if (parts.length === 1) {
+    return `${succeeded} ${succeeded === 1 ? noun[0] : noun[1]} updated.`;
+  }
+  return `${parts.join(", ")}.`;
+}
+
+/** An error only when something actually failed; queued rows are a warning. */
+export function resultTone(plan: BulkPlan): "success" | "warning" | "error" {
+  if (plan.summary.failed > 0) return "error";
+  if (plan.summary.queued > 0) return "warning";
+  return "success";
+}
+
 interface RehearsalDialogProps {
   title: string;
   /** Shown on the compose step, or above the plan when there is no compose step. */
@@ -63,11 +88,7 @@ export function RehearsalDialog({
       const result = await fn();
       setPlan(result);
       setStep(next);
-      if (next === "result") {
-        const { succeeded, failed } = result.summary;
-        if (failed > 0) toast.error(`${succeeded} applied, ${failed} didn't go through.`);
-        else toast.success(`${succeeded} ${succeeded === 1 ? noun[0] : noun[1]} updated.`);
-      }
+      if (next === "result") toast[resultTone(result)](resultMessage(result, noun));
       return result;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "That didn't go through.");

@@ -63,13 +63,22 @@
 
 ## Track 6 — Applying means applied
 
-- [x] PBD-48 `AttributeDriftAndEnqueue` returns its outbox id and `attributeOneDrift` drains it, as `handleRevokeDrift` already did. Adoption owes Zitadel nothing; leaving the row pending listed forty adopted roles as writes MkAuth still owed Zitadel, so accepting Zitadel's state produced a queue of writes back to it. A stale pending `add` is also a live instruction — it would re-create a role the operator later removed by hand.
-- [x] PBD-49 `applyBulkPlan` drains the rows each person's operation enqueued. `?apply=true` meant "wrote it down": a bulk role removal reported every row applied while the roles stayed live in Zitadel. Bundle ops stay out of it — their cascade drains per the bundle's confirmation mode, and overriding that would apply a bundle its owner set to manual.
-- [x] PBD-50 A failed drain leaves the row applied and the outbox row pending. The ledger write is committed and durable; discarding it over an unreachable Zitadel would lose real intent, and pending is the honest state when MkAuth could not confirm.
+- [x] PBD-48 `EnqueueParams.NoPropagation` writes the ledger and audit rows without an outbox row; `AttributeDriftAndEnqueue` becomes `AttributeDriftTx`, `MarkDriftExternalTx`'s sibling. Adoption owes Zitadel nothing, and the queue listed forty adopted roles as writes MkAuth still owed it.
+- [x] PBD-49 `applyBulkPlan` drains the rows each person's operation enqueued. `?apply=true` meant "wrote it down": a bulk role removal reported every row applied while the roles stayed live in Zitadel.
+- [x] PBD-50 A failed drain does not undo the committed ledger write.
+
+## Review fixes — round 2
+
+Both findings were the same mistake twice: I stopped at "the row is no longer stranded" without asking what the row still *authorises*, and at "the drain ran" without asking what it *returned*.
+
+- [x] PBD-51 Adoption creates no outbox row at all, rather than creating one and draining it. Draining inline narrowed the window; it did not close it. A drain that cannot reach Zitadel leaves the `add` behind, and an `add` is a live instruction — adopt a role, remove it upstream by hand, and a later drain re-creates it. The verification the drain bought is relocated, not lost: a grant that vanished between detection and adoption now surfaces as `mkauth_only` drift for a human, which beats silently re-granting it.
+- [x] PBD-52 `projectUpstream` reads the drain's verdict instead of discarding it. `DrainOne` reports an unreachable Zitadel as `Halted` with a **nil error**, so the previous `_, _ =` marked every row applied while a bulk revoke sat unexecuted. Anything short of a confirmed apply is now reported conservatively — over-claiming tells an operator a door is locked when it is open.
+- [x] PBD-53 `EffectQueued` + `BulkSummary.Queued` name the state that had no name: recorded here, not confirmed upstream. Neither success nor failure, counted apart from both. Bundle ops report through it too, via `cascadeQueuedReason` — a bundle its owner set to manual is *meant* to leave work queued, and that is still not "applied".
+- [x] PBD-54 The apply toast reports all three populations and only says "updated" when everything landed. It read `succeeded` alone, so queued rows were absent from the sentence entirely — "12 people updated" after a removal that never left the outbox.
 
 ## Verification
 
 - [x] PBD-31 `go test ./... && go vet ./...` — backend green.
-- [x] PBD-32 `bun run test && bun run lint && bun run build` — UI green (245 tests).
+- [x] PBD-32 `bun run test && bun run lint && bun run build` — UI green (249 tests).
 - [ ] PBD-33 **Operator-gated:** sign in against the live Zitadel at `198.51.100.16` and confirm the header and Today greeting render the operator's name. This is the defect that started the change and it cannot be confirmed from a test — the fixture path never had the bug.
 - [ ] PBD-34 **Operator-gated:** run one bulk rehearsal against real data and confirm the per-person verdicts match what the individual screens say.
