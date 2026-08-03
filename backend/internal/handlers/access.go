@@ -145,8 +145,10 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 
 func handleGetAccessRequests(w http.ResponseWriter, r *http.Request) {
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
-	if status != "" && status != "pending" && status != "approved" && status != "rejected" {
-		jsonValidationErrorResponse(w, "status must be one of pending, approved, rejected", map[string]string{"status": "enum"})
+	switch status {
+	case "", "pending", "approved", "rejected", "withdrawn":
+	default:
+		jsonValidationErrorResponse(w, "status must be one of pending, approved, rejected, withdrawn", map[string]string{"status": "enum"})
 		return
 	}
 	requests, err := dbGetAccessRequests(r.Context(), status)
@@ -213,6 +215,50 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusCreated, map[string]string{"id": id})
 }
 
+// handleWithdrawAccessRequest lets the person who filed a request take it back.
+//
+// Self-only, and self-only for operators too. An operator withdrawing somebody else's ask is a
+// rejection with the reviewer's name left off — the decision endpoint exists for that, and it
+// records who took it.
+//
+// A withdrawn request grants nothing, so there is no cascade and nothing to drain; the only
+// state that changes is that it leaves the queue.
+// POST /api/v1/requests/{id}/withdraw
+func handleWithdrawAccessRequest(w http.ResponseWriter, r *http.Request) {
+	requestID := r.PathValue("id")
+	if !trimmedNonEmpty(requestID) {
+		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
+		return
+	}
+
+	request, err := dbGetAccessRequestByID(r.Context(), requestID)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "No such request — it may have been withdrawn.")
+		return
+	}
+
+	// Production: the authenticated subject must be the requester. Dev mode (API-key auth, no
+	// subject) falls through to the requester on the row, and db.WithdrawAccessRequest still
+	// scopes the UPDATE by it — the guard is in the statement, not only here.
+	actor := getAdminUserID(r.Context())
+	if actor != "" && actor != request.RequesterID {
+		jsonErrorResponse(w, http.StatusForbidden, "FORBIDDEN", "You can only withdraw your own requests")
+		return
+	}
+
+	switch err := dbWithdrawAccessRequest(r.Context(), requestID, request.RequesterID); {
+	case err == nil:
+		_ = dbInsertAuditLog(r.Context(), request.RequesterID, request.RequesterID, "access_request.withdrawn", requestID)
+		jsonResponse(w, http.StatusOK, map[string]string{"message": "Request withdrawn"})
+	case errors.Is(err, db.ErrRequestNotPending):
+		// Somebody decided it in the meantime, or it was already withdrawn. Either way the
+		// member's copy of this row is stale, and saying so beats reporting a failure.
+		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RESOLVED", "This request has already been decided.")
+	default:
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+	}
+}
+
 func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 	requestID := r.PathValue("id")
 	if !trimmedNonEmpty(requestID) {
@@ -268,7 +314,10 @@ func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, r
 		return fmt.Errorf("%w: %s", errRequestNotFound, err.Error())
 	}
 
-	if request.Status == "approved" || request.Status == "rejected" {
+	// Anything that is not pending is already settled — including 'withdrawn', which the
+	// member settled themselves. Enumerating the decided statuses instead would mean every new
+	// terminal state silently became decidable again.
+	if request.Status != "pending" {
 		return fmt.Errorf("%w (already %s)", errRequestAlreadyResolved, request.Status)
 	}
 

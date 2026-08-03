@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Badge, Mono } from "@/components/ui/Badge";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -18,14 +21,29 @@ import { Relative } from "@/components/ui/Time";
  * access, and hiding it until it settles is how it goes unnoticed.
  */
 export default function ChangeHistoryPage() {
-  const cascades = useCascadeGroups();
+  // Where an audit row's trace link lands. One cascade, named — the audit log reaches back
+  // further than this page's fifty, so the narrowing is done by the query, not by searching the
+  // glance list for a row that may not be in it.
+  const asked = useSearchParams().get("cascade")?.trim() ?? "";
+  const cascades = useCascadeGroups(asked || undefined);
   const rows = cascades.data ?? [];
 
   return (
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Change history"
-        meta="What a bundle or rule change actually did downstream — one entry per cascade, newest first."
+        meta={
+          asked
+            ? "One cascade, followed from the audit entry that caused it."
+            : "What a bundle or rule change actually did downstream — one entry per cascade, newest first."
+        }
+        actions={
+          asked ? (
+            <Link href="/operations/cascades" className="text-[13.5px] font-semibold text-accent-text">
+              Show all changes
+            </Link>
+          ) : undefined
+        }
       />
 
       <ListStates
@@ -41,16 +59,26 @@ export default function ChangeHistoryPage() {
         }
         empty={
           <Card>
-            <EmptyState
-              title="Nothing has cascaded yet."
-              guidance="Editing a bundle or a rule writes its downstream effect here."
-            />
+            {asked ? (
+              // Not "nothing has cascaded yet" — something did, or there would be no audit row
+              // pointing here. The writes it produced are no longer in the queue, and saying that
+              // plainly is the difference between a page that looks broken and one that answers.
+              <EmptyState
+                title="That cascade is no longer in the queue."
+                guidance="The writes it produced have been carried out and cleared. The audit entry that brought you here is still the record of what happened."
+              />
+            ) : (
+              <EmptyState
+                title="Nothing has cascaded yet."
+                guidance="Editing a bundle or a rule writes its downstream effect here."
+              />
+            )}
           </Card>
         }
       >
         <div className="flex flex-col gap-[18px]">
           {rows.map((group, index) => (
-            <CascadeCard key={group.cascade_id} group={group} newest={index === 0} />
+            <CascadeCard key={group.cascade_id} group={group} newest={!asked && index === 0} />
           ))}
         </div>
       </ListStates>

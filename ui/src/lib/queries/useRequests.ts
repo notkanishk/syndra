@@ -12,7 +12,7 @@ export interface AccessRequest {
   role_key: string;
   justification: string;
   duration_days?: number | null;
-  status: "pending" | "approved" | "rejected" | string;
+  status: "pending" | "approved" | "rejected" | "withdrawn" | string;
   reviewer_id?: string;
   review_note?: string;
   created_at: string;
@@ -91,6 +91,28 @@ export function useDecideRequest() {
         body: input,
       });
     },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["requests"] });
+      qc.invalidateQueries({ queryKey: ["governance"] });
+    },
+  });
+}
+
+/**
+ * Take back your own pending request.
+ *
+ * Not a rejection: nobody refused it, and a refusal in the log for something the person changed
+ * their mind about is a record of an event that did not happen. The backend binds this to the
+ * requester on the row, so there is no id to pass beyond the request's own.
+ *
+ * `governance` is invalidated alongside `requests` because the withdrawal leaves the operator's
+ * queue — the sidebar badge is counting it until it hears otherwise.
+ */
+export function useWithdrawRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      request<{ message: string }>(`/requests/${id}/withdraw`, { method: "POST" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["requests"] });
       qc.invalidateQueries({ queryKey: ["governance"] });

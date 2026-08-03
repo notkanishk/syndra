@@ -90,11 +90,84 @@ describe("proxy route admin/member boundary", () => {
     expect((forwarded?.body as { requester_id?: string })?.requester_id).toBe(MEMBER.id);
   });
 
-  it("blocks member mutations other than POST /requests", async () => {
+  it("blocks member mutations outside the routes a member owns", async () => {
     (getSession as Mock).mockResolvedValue(MEMBER);
     expect((await call(POST, "POST", ["bundles"], { body: {} })).status).toBe(403);
     expect((await call(PUT, "PUT", ["users", "x", "grants"], { body: {} })).status).toBe(403);
     expect((await call(DELETE, "DELETE", ["bundles", "b1"])).status).toBe(403);
+    expect(proxy.calls.length).toBe(0);
+  });
+
+  // Every route below is self-only in the backend as well. These cases exist because the proxy
+  // is the OUTER lock, and a route the backend guards correctly is still unreachable if this
+  // list has not been told about it — which is exactly how the vault and the withdraw route
+  // shipped dead.
+
+  it("lets a member withdraw their own request", async () => {
+    (getSession as Mock).mockResolvedValue(MEMBER);
+    proxy.register("POST", /\/api\/v1\/requests\/r1\/withdraw/, () => ({ message: "ok" }));
+    const res = await call(POST, "POST", ["requests", "r1", "withdraw"]);
+    expect(res.status).toBe(200);
+    expect(proxy.calls.length).toBe(1);
+  });
+
+  // The route carries no body, and the proxy must not invent one. It used to stamp requester_id
+  // onto every member write, which put an unknown field into a body the backend decodes strictly.
+  it("forwards the withdraw without inventing a body", async () => {
+    (getSession as Mock).mockResolvedValue(MEMBER);
+    proxy.register("POST", /\/api\/v1\/requests\/r1\/withdraw/, () => ({ message: "ok" }));
+    await call(POST, "POST", ["requests", "r1", "withdraw"]);
+    // Assert the call happened first — `calls[0]?.body` on an empty array is undefined too, and
+    // this test would otherwise pass for a route the proxy refused outright.
+    expect(proxy.calls.length).toBe(1);
+    expect(proxy.calls[0].body).toBeUndefined();
+  });
+
+  it("reaches the member's own shadow credential, in every method it needs", async () => {
+    (getSession as Mock).mockResolvedValue(MEMBER);
+    const base = ["users", MEMBER.id, "shadow-credential"];
+    proxy.register("GET", /shadow-credential\/status/, () => ({ has_credential: false }));
+    proxy.register("GET", /shadow-credential\/audit/, () => []);
+    proxy.register("PUT", /shadow-credential/, () => ({ message: "ok" }));
+    proxy.register("DELETE", /shadow-credential/, () => ({ message: "ok" }));
+
+    expect((await call(GET, "GET", [...base, "status"])).status).toBe(200);
+    expect((await call(GET, "GET", [...base, "audit"])).status).toBe(200);
+    expect((await call(PUT, "PUT", base, { body: { password: "Correct-horse1!" } })).status).toBe(200);
+    expect((await call(DELETE, "DELETE", base)).status).toBe(200);
+    expect(proxy.calls.length).toBe(4);
+  });
+
+  // decodeJSONStrict rejects unknown fields, so an injected requester_id here would 400 a
+  // password the member typed correctly.
+  it("forwards a password body untouched", async () => {
+    (getSession as Mock).mockResolvedValue(MEMBER);
+    proxy.register("PUT", /shadow-credential/, () => ({ message: "ok" }));
+    await call(PUT, "PUT", ["users", MEMBER.id, "shadow-credential"], {
+      body: { password: "Correct-horse1!" },
+    });
+    expect(proxy.calls[0]?.body).toEqual({ password: "Correct-horse1!" });
+  });
+
+  it("blocks a member from somebody else's shadow credential", async () => {
+    (getSession as Mock).mockResolvedValue(MEMBER);
+    expect((await call(GET, "GET", ["users", "other-9", "shadow-credential", "status"])).status).toBe(403);
+    expect(
+      (await call(PUT, "PUT", ["users", "other-9", "shadow-credential"], { body: { password: "x" } }))
+        .status,
+    ).toBe(403);
+    expect((await call(DELETE, "DELETE", ["users", "other-9", "shadow-credential"])).status).toBe(403);
+    expect(proxy.calls.length).toBe(0);
+  });
+
+  // The PUT/DELETE exception is the credential itself, not everything under /users/{self}.
+  it("does not let the credential exception widen to the rest of a member's own subtree", async () => {
+    (getSession as Mock).mockResolvedValue(MEMBER);
+    expect((await call(DELETE, "DELETE", ["users", MEMBER.id, "grants", "g1"])).status).toBe(403);
+    expect((await call(PUT, "PUT", ["users", MEMBER.id, "access"], { body: {} })).status).toBe(403);
+    expect(
+      (await call(DELETE, "DELETE", ["users", MEMBER.id, "shadow-credential", "audit"])).status,
+    ).toBe(403);
     expect(proxy.calls.length).toBe(0);
   });
 

@@ -97,12 +97,13 @@ export function useBulkSetConfirmationMode() {
  * Change history. Includes cascades whose writes have NOT landed: a half-applied cascade is the thing that creates
  * unexplained access, and it has to be visible as one.
  */
-export function useCascadeGroups() {
+export function useCascadeGroups(cascadeId?: string) {
+  const scope = cascadeId ? `?cascade=${encodeURIComponent(cascadeId)}` : "";
   return useQuery({
-    queryKey: KEYS.cascadeGroups,
+    queryKey: [...KEYS.cascadeGroups, cascadeId ?? ""] as const,
     queryFn: async () =>
-      (await request<{ cascades: CascadeGroupRow[] }>("/propagations/cascade-groups")).cascades ??
-      [],
+      (await request<{ cascades: CascadeGroupRow[] }>(`/propagations/cascade-groups${scope}`))
+        .cascades ?? [],
   });
 }
 

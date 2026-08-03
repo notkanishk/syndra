@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
+
 	"mkauth/internal/models"
 )
 
@@ -40,6 +42,61 @@ func CreateBundle(ctx context.Context, name string, description string, confirma
 		return "", err
 	}
 	return id, nil
+}
+
+// UpdateBundle renames a bundle and rewrites its description.
+//
+// It is deliberately not a cascade and deliberately not a version. A bundle's
+// name is what operators call it, not what it grants: nobody's access changes,
+// no holder falls behind, and publishing a version to fix a typo would put a
+// meaningless entry in a history that exists to answer "what changed for whom".
+func UpdateBundle(ctx context.Context, id, name, description string) error {
+	tag, err := PG.Exec(ctx,
+		`UPDATE bundles SET name = $2, description = $3 WHERE id = $1`, id, name, description)
+	if err != nil {
+		return fmt.Errorf("update bundle (id=%s): %w", id, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
+// DeleteBundleAndEnqueue deletes a bundle AND enqueues the caller-computed revokes for everyone
+// who held it, in ONE tx (mirrors RemoveBundleFromUserAndEnqueue, which is the same operation
+// for one person).
+//
+// The transaction is the point. Every table hanging off a bundle cascades on delete, so the
+// assignment rows vanish the moment the bundle does — and a holder whose assignment disappeared
+// without a revoke keeps the role in Zitadel with nothing in MkAuth left to explain it. That is
+// the definition of drift, and it would arrive with no actor, found weeks later by the sweep.
+//
+// params may be empty: a bundle nobody holds, or one whose every role each holder also gets
+// somewhere else, deletes cleanly and enqueues nothing.
+func DeleteBundleAndEnqueue(ctx context.Context, actor, bundleID string, params []EnqueueParams) ([]string, error) {
+	tx, err := PG.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	tag, err := tx.Exec(ctx, `DELETE FROM bundles WHERE id = $1`, bundleID)
+	if err != nil {
+		return nil, fmt.Errorf("delete bundle (id=%s): %w", bundleID, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, pgx.ErrNoRows
+	}
+	ids, err := enqueueCascadeRows(ctx, tx,
+		[]CascadeAudit{{Actor: actor, Action: "bundle.deleted", ResourceID: bundleID}},
+		params)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return ids, nil
 }
 
 func GetAllBundles(ctx context.Context) ([]models.Bundle, error) {

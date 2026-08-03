@@ -36,14 +36,18 @@ var (
 
 	dbCreateAccessRequest  = db.CreateAccessRequest
 	dbGetAccessRequestByID = db.GetAccessRequestByID
-	dbResolveAccessRequest = db.ResolveAccessRequest
-	dbInsertAuditLog       = db.InsertAuditLog
+	// Taking back your own ask. Scoped to the requester inside the statement, not just here.
+	dbWithdrawAccessRequest = db.WithdrawAccessRequest
+	dbResolveAccessRequest  = db.ResolveAccessRequest
+	dbInsertAuditLog        = db.InsertAuditLog
 
 	// Bundle handler injectable vars. dbAddRoleToBundle/dbAssignBundleToUser were removed
 	// (sub-phase 3, Task 20): the cascade OWNS the source mutation now — see
 	// svcCascadeRoleAdded/svcCascadeBundleAssigned below, which call the atomic
 	// db.AddRoleToBundleAndEnqueue/db.AssignBundleAndEnqueue instead.
 	dbCreateBundle          = db.CreateBundle
+	dbUpdateBundle          = db.UpdateBundle
+	dbGetBundleByID         = db.GetBundleByID
 	dbGetAllBundles         = db.GetAllBundles
 	dbGetRolesForBundle     = db.GetRolesForBundle
 	dbGetBundlesForUser     = db.GetBundlesForUser
@@ -72,7 +76,12 @@ var (
 	// remove/update happen inside the atomic *AndEnqueue tx, no separate dbRemove*/dbUpdate*
 	// injectable in the handler layer.
 	svcCascadeBundleRemoved = services.CascadeBundleRemovedFromUser // (ctx, actor, userID, bundleID)
-	svcCascadeRuleUpdated   = services.CascadeRuleUpdated           // (ctx, actor, old, sp, sr, tp, tr)
+	// Retiring the bundle itself: the same revoke, computed once per holder.
+	svcCascadeBundleDeleted = services.CascadeBundleDeleted // (ctx, actor, bundleID)
+	svcCascadeRuleUpdated   = services.CascadeRuleUpdated   // (ctx, actor, old, sp, sr, tp, tr)
+	// Retiring a rule is the revoke half of a retarget with no new edge: same closure diff,
+	// same one transaction, so the rule and the access it was granting leave together.
+	svcCascadeRuleDeleted = services.CascadeRuleDeleted // (ctx, actor, old)
 
 	// Rules handler injectables for the 6th trigger (Task 21f): read the pre-update rule, then
 	// validate the retarget against the graph WITHOUT the rule's own old edge.
@@ -267,13 +276,12 @@ var (
 	svcDrainOne             = propagation.DrainOne
 	svcDriftTriageQueue     = services.DriftTriageQueue
 
-	// Confirmation-mode surfaces (Task 22): global default read/write, bulk toggle, and the
-	// recent-cascades feed.
+	// Confirmation-mode surfaces (Task 22): global default read/write, bulk toggle, and
+	// Change history.
 	dbGetConfigSetting          = db.GetConfigSetting
 	dbSetConfigSetting          = db.SetConfigSetting
 	dbSetRuleConfirmationMode   = db.SetRuleConfirmationMode
 	dbSetBundleConfirmationMode = db.SetBundleConfirmationMode
-	dbGetRecentCascades         = db.GetRecentCascades
 	dbGetCascadeGroups          = db.GetCascadeGroups
 
 	// Bulk access changes. Rehearsal is its own injectable so the handler's

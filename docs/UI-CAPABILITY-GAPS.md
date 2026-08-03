@@ -19,10 +19,13 @@ Five buckets, ordered by how much they cost you today.
 - **D — Planned, never surfaced.** On the roadmap, no surface at all.
 - **E — Live deployment.** What the running instance shows that the console doesn't.
 
-**Bucket A is closed** — all twelve, 2026-08-02. Each item below carries what actually landed and,
-where re-verification changed the finding, what was wrong with it. Sharpest remaining: **C1**
-(unremovable mapping rules), **C2** (unrenamable, undeletable bundles), **B1** (a whole vault
-nobody can reach).
+**Bucket A is closed** — all twelve, 2026-08-02. **Buckets B and C's landable items are closed** —
+`B1`, `B2`, `C1`, `C2`, `C3`, 2026-08-03. Each item below carries what actually landed and, where
+re-verification changed the finding, what was wrong with it.
+
+What is left in C is left for a reason, and the reasons differ: **C6** is real and sized but
+unbuilt, **C7** is a product decision rather than an errand, **C9** is half-unbuildable, and
+**C4**, **C5**, **C8** are deferred by design.
 
 Work is tracked in [`openspec/changes/ui-capability-gap-closure/`](../openspec/changes/ui-capability-gap-closure/);
 its `tasks.md` is the live checklist and mirrors the item ids used here.
@@ -301,6 +304,27 @@ which pages identically), `useDashboardSummary` (→ `Makerspace`), `useRecentCa
 
 ### B1 · Shadow Password Vault — no UI, ever
 
+> **Fixed, and not where the brief filed it.** Design brief §S10 puts shadow credentials on
+> `System › Hardware sync`. That cannot work: all four endpoints are self-only, so an operator
+> standing on a System page could only ever set their own credential.
+> [`<ShadowCredential>`](../ui/src/components/member/ShadowCredential.tsx) lives on Member ·
+> My access, last on the page — that screen answers "what can I use and why", and a password
+> field above somebody's access would make it read as an account screen.
+>
+> Two sentences on the card are load-bearing and both say what it is *not*: not the institutional
+> login, and not read by anything yet. The second is the one the audit's "not blocked by LLDAP"
+> framing missed — the vault genuinely works without LLDAP, but nothing *consumes* it, so a member
+> who sets a password and tries a door would conclude the product is broken. Saying so costs one
+> sentence and means an early adopter is simply ready.
+>
+> The dialog does not re-implement the complexity rules. `ValidatePasswordComplexity` already
+> composes the failing requirements into a sentence, and that sentence is shown verbatim.
+>
+> **Caught in review:** the console proxy carries its own member allowlist, and the vault's four
+> routes were not on it — so the capability was still unreachable, and *invisible*, because the
+> card suppressed its own read error. Both fixed. The proxy is the outer of two locks and it
+> fails silently; see design Decision 11.
+
 Four user-facing endpoints, none with a caller anywhere in `ui/`:
 
 ```
@@ -320,6 +344,10 @@ read path (`GET /shadow-credentials/{uid}/hash`, API-key auth) is the part that 
 
 ### B2 · `GET /api/v1/propagations/cascades` — orphaned
 
+> **Deleted.** Endpoint, handler, `recentCascadesLimit`, `db.GetRecentCascades` and its three
+> handler tests. `models.CascadeSummary` stays — it is the per-write shape *inside* a
+> `CascadeGroup`, which is where a write is readable: as part of the event that produced it.
+
 The flat recent-cascade feed. `cascade-groups` replaced it on screen (correctly — one entry per
 cascade beats one row per write). The endpoint and `useRecentCascades` are now dead. Design brief
 §S4 still names `/cascades`.
@@ -334,6 +362,21 @@ These are not UI errands. The endpoint does not exist either.
 
 ### C1 · Mapping rules cannot be deleted
 
+> **Fixed, and it needed no new mechanism.** `DELETE /api/v1/rules/mapping/{id}`.
+> `CascadeRuleDeleted` is `CascadeRuleUpdated` with no replacement edge — `rulesAfter` is the
+> active set minus this rule — so the revokes fall out of the closure diff the product already
+> computes. There is deliberately no coverage check: a role still produced by a bundle, a direct
+> grant or another rule simply never leaves the `after` set.
+>
+> The deletion inherits the rule's own `confirmation_mode`, so a rule that queued its writes
+> queues the writes that undo it. On screen the confirmation takes over the editor rather than
+> stacking a second dialog on it — the thing you are about to remove is already on screen, and
+> the holder count is stated before the click.
+>
+> Found while verifying: `source_ref` on the outbox rows keeps the deleted rule's id. That column
+> is plain text with no foreign key, which is correct — it records what *caused* a write, and the
+> cause having since been deleted is exactly what a reader of the change history needs.
+
 No route, no repository function, no UI. `GET`, `POST`, `PUT /rules/mapping/{id}` and
 `POST /rules/mapping/validate` — that's the whole surface. A rule authored wrong can be retargeted
 forever but never removed.
@@ -343,6 +386,24 @@ That is stale: `PUT` is the edit path, and `DELETE` has never existed.
 
 ### C2 · Bundles cannot be deleted or renamed
 
+> **Fixed, and it turned up a foreign key that would have blocked it.** `PUT /bundles/{id}`
+> renames and re-describes — no cascade, no version, because a name is what operators call the
+> bundle, not what it grants. `DELETE /bundles/{id}` loops over holders and enqueues each one's
+> closure diff in the transaction that deletes the row, because coverage is a property of a
+> person: two people holding the same bundle can lose different roles by it going away.
+>
+> **`onboarding_triggers.bundle_id` referenced `bundles(id)` with no `ON DELETE` clause.** Every
+> bundle that had ever onboarded anybody would have been undeletable, and both obvious fixes
+> corrupt the log — `CASCADE` deletes evidence somebody was onboarded, `SET NULL` rewrites the row
+> to say they were given nothing. Migration `000021` drops the constraint and keeps the column,
+> matching `audit_logs.resource_id` and `source_ref`: a log records what happened, it does not
+> hold the past open. `<BundleName>` on the event log now reads "a bundle since deleted" there,
+> because the default em dash rendered "— assigned automatically".
+>
+> The welcome flag is reported, never guarded. Refusing to delete the welcome bundle is a rule an
+> operator cannot satisfy — the flag clears only by promoting another bundle, and a makerspace
+> with one bundle has nothing to promote.
+
 `POST /bundles` creates. Roles can be added and removed, and the welcome flag toggled. There is no
 `PUT /bundles/{id}` and no `DELETE /bundles/{id}` — no handler in
 [`bundles.go`](../backend/internal/handlers/bundles.go), no `UpdateBundle`/`DeleteBundle` in the
@@ -351,53 +412,151 @@ forever.
 
 ### C3 · Access requests cannot be withdrawn
 
+> **Fixed, and it closed two latent bugs on the way.** `POST /requests/{id}/withdraw`, user-gated
+> and self-only in the handler *and* in the `UPDATE`'s `WHERE` clause. Operators are not exempt:
+> taking back somebody else's ask is a rejection with the reviewer's name left off.
+>
+> `withdrawn` is a resolution without a decision — `resolved_at` set, `reviewer_user_id` NULL,
+> enforced by the CHECK constraint (migration `000022`) rather than by convention.
+>
+> The two bugs, both latent until a third terminal state existed:
+> - `resolveOneAccessRequest` enumerated the decided statuses (`approved || rejected`) instead of
+>   testing `!= "pending"`. A withdrawn request would have stayed decidable, resurrecting an ask
+>   its author had taken back.
+> - **Both request views read "settled and not approved" as a denial.** The first withdrawal would
+>   have shown a member's own retraction back to the operator as a refusal somebody made.
+>   `requestOutcome()` now gives one reading in two registers and echoes an unrecognised status
+>   back rather than bucketing it — same rule as `outcomeOf` (**A3**), same reason.
+
 No cancel endpoint. A member who asks for the wrong thing must wait for an operator to deny it.
 [`requests_bulk.go:82`](../backend/internal/handlers/requests_bulk.go) already writes the copy —
 "No such request — it may have been withdrawn." Nothing can withdraw one.
 
-### C4 · Expiring access has no acknowledged/deferred state
+### C4 · Expiring access has no acknowledged/deferred state — **deferred, with its question written down**
 
 Design brief §S7 called this out precisely: if operators need to record *"I've seen this and I'm
 deliberately letting it go"*, that is a genuine new capability with its own column and endpoint, and
 must **not** be faked client-side by hiding rows — a shared queue that diverges per operator is
 worse than no queue.
 
-Correctly absent today. Listed because it's the open question the brief asked to be flagged, not
-assumed.
+Correctly absent, and staying absent: nobody has been paged by this queue yet.
 
-### C5 · Claim profiles are unversioned
+What was settled is what has to be answered *before* anyone builds it, so the next person does not
+have to invent it under deadline. An acknowledgement is a server-backed, audited row carrying
+**who**, **when**, and an optional rationale — and the load-bearing question is **when it reopens**:
+
+- *When the grant changes* — the ack is of a specific expiry date, so moving the date or the
+  entitlement voids it. The operator agreed to something that no longer exists.
+- *On a timer* — silence for a fixed window, then the row returns regardless. Simple, but a changed
+  grant stays hidden until the timer runs out.
+- *Never, until cleared by hand* — easiest to write, and the most likely to bury a row somebody
+  should have seen again.
+
+Undecided. It is a decision about how much an operator's past attention is allowed to speak for a
+grant's present state, and it should be made when there is a queue big enough to have an opinion.
+
+### C5 · Claim profiles are unversioned — **deferred, with its trigger named**
 
 A claim profile edit takes effect on the next token. The audit row says who changed it, never what
-it was. An app that breaks after an edit cannot be diffed against the previous shape. Worth a
-`claim_profile_versions` table if it ever bites.
+it was. An app that breaks after an edit cannot be diffed against the previous shape.
 
-### C6 · The audit Trace column is an inference (ISC-44)
+The trigger is concrete: **the first production claim change that needs comparison or reversal.**
+When it arrives, the shape to build is an immutable snapshot tied to the application and the audit
+event — not a draft/publish lifecycle. Bundles earned theirs because a bundle edit reaches people;
+a claim profile edit reaches a token shape, and the question asked of it is "what was it before",
+which a snapshot answers and a workflow does not.
 
-It derives a trace from the action name — a guess wearing a link's clothes. A real trace needs the
-cascade id carried on every `INSERT INTO audit_logs`.
+### C6 · The audit Trace column is an inference (ISC-44) — **closed**
 
-### C7 · App ↔ project cardinality is unresolved (ISC-45)
+Confirmed against the code, then fixed. `isCascadeTrace` tested the action prefix and `shortTrace`
+rendered `c_XXXX` from `entry.resource_id` — the **bundle or rule id**, not a cascade id — linking
+to an unfiltered `/operations/cascades`. Two lies in one column: the identifier was not what its
+prefix claimed, and the link did not go to the entry it named.
 
-The design draws Badge Reader reading four projects. Zitadel puts an app inside exactly one, and
-`app_claim_overrides.application_id` is unique. Until this is settled the apps index warns per
-project rather than per app — the same failure, in the shape the data supports.
+The fix turned out to be inward rather than outward. `enqueueCascadeRows` already minted one cascade
+id per batch and **discarded it**, and all eleven `*AndEnqueue` functions wrote their audit row on
+the line immediately above calling it — two halves of one event, written a line apart, with the id
+tying them together known only to the second. The audit insert now lives *inside*
+`enqueueCascadeRows`: eleven pairs collapsed to eleven calls, the invariant became structural
+rather than remembered, and a source-coherence guard fails if a twelfth audit insert ever reappears
+in those files.
 
-### C8 · Sweep-detected drift cannot name an actor
+Then `audit_logs.cascade_id` (migration `000023`, nullable, no foreign key — the outbox is cleared
+and an audit row must outlive it), the field on `models.AuditEntry`, and `?cascade=` on Change
+history, answered in the query rather than by filtering the fifty-entry glance list.
 
-The reconciliation sweep compares grant sets, so it has no event to attribute. Closing it means
-reading Zitadel's event stream for the grant's creation event, at the cost of a second API path.
-Only worth it if operators routinely hit rows the webhook missed.
+**Old rows are not backfilled.** Timestamp proximity would be mostly right, and mostly right is the
+wrong standard here. They keep the object id they do carry, prefixed `b_` or `R_`, unlinked — the
+same identifier as before, minus the prefix that misdescribed it. See design Decisions 12 and 13.
 
-### C9 · The person page in Advanced is incomplete
+> **Caught in review — the first fix produced a new broken link.** The stamp was gated on "did this
+> event cause any writes", when the question is "will those writes appear on the screen this id
+> links to". `DeleteDirectGrantAndEnqueue` uses `enqueueCascadeRows` because its ledger delete,
+> audit row and outbox rows must commit together — not because it is a cascade — and its writes
+> carry `source='direct'`, which Change history excludes. So a direct removal got a trace link to a
+> page that filtered out the write it was about, and the empty state told the operator its
+> still-pending revoke had been carried out and cleared.
+>
+> The stamp and the query now read one `cascadeGroupSources` list, passed as a parameter rather
+> than spelled out twice inside the SQL. Asserted across the `services`/`db` boundary, because the
+> params are built in one and read in the other and the bug lived in the gap — testing either
+> package alone passed. Design Decision 16.
+>
+> **And six actions had no sentence.** `describeAction` falls back to the raw key, which is the
+> right failure mode and a silent one: `bundle.updated`, `bundle.deleted`, `mapping_rule.deleted`
+> and `access_request.withdrawn` arrived with this change, and `bundle.version_published` /
+> `bundle.holder_moved` had been rendering as machine keys since bundle versioning shipped. The map
+> is now checked against the Go sources in both directions — an action with no sentence, and copy
+> for an action nothing emits. Design Decision 17.
+
+### C7 · App ↔ project cardinality (ISC-45) — **settled: one app, one project**
+
+An application lives in exactly one project, matching Zitadel and the UNIQUE constraint
+`app_claim_overrides.application_id` already carries. The design diagram showing Badge Reader
+reading four projects was the only thing claiming otherwise, and the diagram is the cheaper of the
+two to correct.
+
+The alternative was a feature, not a relaxation: a join table, a rule for competing claim overrides
+across projects, a token-audience decision, and a deletion rule for when one of an app's projects is
+removed. None of those questions has a caller today.
+
+The apps index keeps warning per project — now correct rather than a workaround. **Reopens on** a
+real integration needing roles from two projects in one token. See design Decision 14.
+
+### C8 · Sweep-detected drift cannot name an actor — **deferred, and correct as it stands**
+
+The reconciliation sweep compares grant sets, so it has no event to attribute. "Unknown actor" is
+the honest rendering: the sweep is an automated *observation*, and attributing it to a person would
+be inventing one.
+
+Closing it means reading Zitadel's event stream for the grant's creation event, at the cost of a
+second API path. **The trigger is measured, not felt:** only worth it if operators routinely hit
+rows the webhook missed. Nothing counts that today, which is itself the first thing to build if
+this becomes a question.
+
+### C9 · The person page in Advanced — **half built, half still not buildable**
 
 Brief §E3: in System, the person page "gains raw grant ids, cascade lineage, hardware sync state —
 appended in place, same URL."
 
-Lineage is there ([`PersonAccess.tsx:370`](../ui/src/components/people/PersonAccess.tsx)). Raw grant
-ids and hardware sync state are not. Only two components read `useIsAdvanced` at all —
-`PersonAccess` and [`Today.tsx:53`](../ui/src/components/today/Today.tsx) (which swaps its work
-blocks and gates the propagation and drift cards). Everywhere else, Advanced only appends nav
-sections, so in-place reveal is a two-screen pattern that the brief assumes is general.
+**C9a · Raw grant ids — done.** The Advanced panel already showed `direct_role_grants.id`, which
+answers "what does MkAuth think" rather than "what does Zitadel hold". It now also shows Zitadel's
+own user-grant id, keyed by **project** because that is Zitadel's shape — one grant carries every
+role a person holds there, and repeating it per role row would imply otherwise. Operator-only and
+not fetched otherwise: this route also serves a member their own record, and the endpoint behind it
+is operator-gated. A project with no upstream grant says so and points at Reconciliation, rather
+than rendering a dash that reads as "not loaded". See design Decision 15.
+
+**C9b · Hardware sync state — still not buildable.** There is no per-user sync state to render
+while the bridge is parked, and a panel that invented one would be exactly the failure
+`/system/hardware-sync` was written to avoid. It needs the same contract E1 needs: desired version,
+last attempt, result, error, timestamp — per user and per device.
+
+Lineage was already there ([`PersonAccess.tsx`](../ui/src/components/people/PersonAccess.tsx)).
+Only two components read `useIsAdvanced` at all — `PersonAccess` and
+[`Today.tsx:53`](../ui/src/components/today/Today.tsx) (which swaps its work blocks and gates the
+propagation and drift cards). Everywhere else, Advanced only appends nav sections, so in-place
+reveal is a two-screen pattern that the brief assumes is general.
 
 ---
 

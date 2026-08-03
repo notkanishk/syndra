@@ -1,6 +1,7 @@
 "use client";
 
 import { MemberCatalog } from "@/components/member/MemberCatalog";
+import { ShadowCredential } from "@/components/member/ShadowCredential";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -124,6 +125,13 @@ export function MemberAccess({ session }: { session: SessionUser }) {
       )}
 
       <MemberCatalog heldByProject={heldByProject} />
+
+      {/*
+        Last, deliberately. This screen answers "what can I use and why"; the workshop password
+        is a setting, not an answer, and putting a password field above somebody's access would
+        make the page read as an account screen.
+      */}
+      <ShadowCredential userId={session.id} />
     </div>
   );
 }

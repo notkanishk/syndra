@@ -5,16 +5,10 @@ import { useMemo, useState } from "react";
 
 import { UserName } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { Mono } from "@/components/ui/Badge";
+
 import { Card } from "@/components/ui/Card";
-import {
-  actedOn,
-  describeAction,
-  groupByDay,
-  isCascadeTrace,
-  machineName,
-  shortTrace,
-} from "@/lib/audit-vocabulary";
+import { TraceCell } from "@/components/audit/TraceCell";
+import { actedOn, describeAction, groupByDay, machineName } from "@/lib/audit-vocabulary";
 import { formatClock, formatShortDate } from "@/lib/format";
 import { useAuditEntries, type AuditEntry } from "@/lib/queries/useAudit";
 
@@ -129,15 +123,7 @@ function ActivityRow({ entry, userId }: { entry: AuditEntry; userId: string }) {
         )}
       </span>
 
-      <span className="w-[86px] shrink-0 text-right">
-        {isCascadeTrace(entry) ? (
-          <Link href="/operations/cascades" className="text-[13px] font-semibold text-accent-text">
-            <Mono>{shortTrace(entry.resource_id)}</Mono>
-          </Link>
-        ) : (
-          <span className="text-[13px] text-faint">—</span>
-        )}
-      </span>
+      <TraceCell entry={entry} className="w-[86px] shrink-0 text-right" />
     </div>
   );
 }

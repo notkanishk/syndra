@@ -205,6 +205,45 @@ func TestDeleteDirectGrant_AttributesEveryQueuedRow(t *testing.T) {
 	}
 }
 
+// The other end of the same fact, and the P1 it caused.
+//
+// A direct removal's writes must not be cascade-group-visible. Its audit row is stamped with a
+// cascade id only when they are, and a stamp puts a trace link into the audit log — pointing at
+// Change history, which filters source='direct' out. A real pending revoke rendered as an empty
+// page saying its writes had been carried out and cleared.
+//
+// Asserted here, against db.IsCascadeGroupSource, rather than in either package alone: the params
+// are built in services and read in db, and the bug lived in the gap.
+//
+// This also covers the rule-derived revoke. Removing a direct grant CAN revoke a second role a
+// mapping rule derived from it, which is a cascade in every sense but the one that matters here —
+// all of it is attributed to the grant, and the grant is the operator's own write.
+func TestDeleteDirectGrant_QueuesNothingChangeHistoryWouldGroup(t *testing.T) {
+	captured := grantRemovalFixture(t,
+		[]models.DirectGrant{{ID: "g_88", UserID: "u1", ProjectID: "pStudio", RoleKey: "door"}},
+		nil, nil,
+		[]models.MappingRule{{
+			SourceProject: "pStudio", SourceRole: "door",
+			TargetProject: "pWiki", TargetRole: "wiki-read",
+		}},
+	)
+
+	if _, err := DeleteDirectGrant(context.Background(), "u1", "g_88", "priya"); err != nil {
+		t.Fatalf("DeleteDirectGrant: %v", err)
+	}
+	if len(*captured) == 0 {
+		t.Fatal("expected queued revokes, or this test proves nothing")
+	}
+
+	for _, p := range *captured {
+		if db.IsCascadeGroupSource(p.Source) {
+			t.Errorf("source %q appears in Change history, so this removal's audit row would be "+
+				"stamped with a cascade id and linked to a page that excludes the write: %#v",
+				p.Source, p)
+		}
+	}
+}
+
 // An expired grant is already out of the effective set, so deleting its row
 // changes nothing upstream — the sweep did the revoking.
 func TestDeleteDirectGrant_ExpiredGrant_EnqueuesNothing(t *testing.T) {

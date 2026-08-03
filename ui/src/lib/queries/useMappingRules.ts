@@ -81,6 +81,30 @@ export function useUpdateMappingRule() {
 }
 
 /**
+ * Retire a rule, and take back the access only it was granting.
+ *
+ * The revokes are computed and committed with the deletion, so this invalidates `users` for the
+ * same reason the retarget does: somebody's effective access just changed. What it cannot tell
+ * the caller in advance is *whose* — see `CascadeResult.enqueued` on the response, which is the
+ * number the confirmation reports afterwards.
+ */
+export function useDeleteMappingRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      request<{ message: string; cascade: { enqueued: number; mode: string } }>(
+        `/rules/mapping/${id}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.list });
+      qc.invalidateQueries({ queryKey: ["users"] });
+      qc.invalidateQueries({ queryKey: ["governance"] });
+    },
+  });
+}
+
+/**
  * Change when a rule's writes reach the identity provider. Uses the bulk
  * endpoint with a single id — there is no per-rule route, and inventing one
  * for a set of size one would be a second way to do the same thing.

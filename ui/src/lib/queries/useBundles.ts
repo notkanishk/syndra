@@ -42,6 +42,12 @@ export interface CreateBundleInput {
   confirmation_mode?: "auto" | "manual";
 }
 
+/** No confirmation_mode: that is changed on the index, alongside every other rule and bundle. */
+export interface UpdateBundleInput {
+  name: string;
+  description: string;
+}
+
 export interface AddBundleRoleInput {
   project_id: string;
   role_key: string;
@@ -143,6 +149,46 @@ export function useCreateBundle() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.list });
+    },
+  });
+}
+
+/**
+ * Rename a bundle and rewrite its description.
+ *
+ * Only the list is invalidated. A rename reaches nobody — no holder's access changes, no version
+ * is published — so refetching People or the draft after one would be claiming otherwise.
+ */
+export function useUpdateBundle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...input }: UpdateBundleInput & { id: string }) =>
+      request<{ message: string }>(`/bundles/${id}`, { method: "PUT", body: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.list });
+    },
+  });
+}
+
+/**
+ * Retire a bundle, revoking from each holder whatever only it was granting.
+ *
+ * `was_welcome` comes back because the flag lives on the row that just went: deleting the welcome
+ * bundle stops new members receiving anything, and that consequence has no other home once the
+ * bundle is gone.
+ */
+export function useDeleteBundle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      request<{ message: string; was_welcome: boolean; cascade: { enqueued: number; mode: string } }>(
+        `/bundles/${id}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.list });
+      qc.invalidateQueries({ queryKey: ["users"] });
+      qc.invalidateQueries({ queryKey: ["governance"] });
     },
   });
 }

@@ -99,6 +99,33 @@ func ResolveAccessRequest(ctx context.Context, id, status, reviewerID, reviewNot
 	return nil
 }
 
+// WithdrawAccessRequest resolves a request to 'withdrawn', conditional on it still being pending
+// AND on the caller being the person who filed it.
+//
+// Both conditions live in the WHERE clause rather than in a read-then-write. The pending guard
+// closes the same race ResolveAccessRequest closes — an operator deciding at the moment the
+// member takes it back — and the requester guard is here rather than only in the handler because
+// this is the statement that must never withdraw somebody else's ask, whatever route reaches it.
+//
+// reviewer_user_id is left NULL: a withdrawal is a resolution without a decision, and the row
+// already names who filed it.
+func WithdrawAccessRequest(ctx context.Context, id, requesterID string) error {
+	const query = `
+		UPDATE access_requests
+		SET status = 'withdrawn',
+			resolved_at = CURRENT_TIMESTAMP
+		WHERE id = $1 AND requester_user_id = $2 AND status = 'pending'`
+
+	tag, err := PG.Exec(ctx, query, id, requesterID)
+	if err != nil {
+		return fmt.Errorf("failed to withdraw access request: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrRequestNotPending
+	}
+	return nil
+}
+
 // ApproveRequestAndEnqueue resolves an access request to 'approved' AND enqueues
 // its direct grant (ledger + audit + outbox) in ONE transaction, conditional on
 // the request still being pending. Either both happen or neither: a failed

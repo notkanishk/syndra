@@ -159,7 +159,8 @@ func GetAuditLogsForUser(
 	var logs []models.AuditLog
 	for rows.Next() {
 		var l models.AuditLog
-		if err := rows.Scan(&l.ID, &l.ActorID, &l.TargetID, &l.Action, &l.ResourceID, &l.CreatedAt); err != nil {
+		if err := rows.Scan(&l.ID, &l.ActorID, &l.TargetID, &l.Action, &l.ResourceID, &l.CreatedAt,
+			&l.CascadeID); err != nil {
 			return nil, err
 		}
 		logs = append(logs, l)
@@ -173,7 +174,8 @@ func GetAuditLogsForUser(
 // arithmetic that fails silently — a mis-numbered LIMIT does not error, it
 // returns the wrong page.
 func buildAuditQuery(userID string, limit int, after *AuditCursor) (string, []any) {
-	const columns = `SELECT id, actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, created_at
+	const columns = `SELECT id, actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, created_at,
+	                        COALESCE(cascade_id::text,'')
 	                 FROM audit_logs`
 
 	var where []string

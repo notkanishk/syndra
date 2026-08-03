@@ -30,13 +30,42 @@ import {
   useDecideRequest,
   useRequestsAdmin,
   useRequestsMine,
+  useWithdrawRequest,
   type AccessRequest,
 } from "@/lib/queries/useRequests";
 import { Relative } from "@/components/ui/Time";
 import { describeDuration, formatLongDate } from "@/lib/format";
 import { daysUntilTermEnd } from "@/lib/term";
 
-type StatusFilter = "pending" | "approved" | "rejected" | "all";
+type StatusFilter = "pending" | "approved" | "rejected" | "withdrawn" | "all";
+
+/**
+ * One reading of a request's status, in both registers.
+ *
+ * It exists because the two views were free to disagree, and did: a settled row that was not
+ * `approved` used to render as "Denied", so the first withdrawal would have shown the member's
+ * own retraction back to the operator as a refusal somebody made. An unrecognised status returns
+ * itself rather than falling into either bucket — a status this file has not been taught about
+ * must never read as a decision.
+ */
+export function requestOutcome(status: string): {
+  tone: "accent" | "neutral" | "warn";
+  operator: string;
+  member: string;
+} {
+  switch (status) {
+    case "approved":
+      return { tone: "accent", operator: "Approved", member: "Approved" };
+    case "rejected":
+      return { tone: "neutral", operator: "Denied", member: "Not approved" };
+    case "withdrawn":
+      return { tone: "neutral", operator: "Withdrawn", member: "You withdrew this" };
+    case "pending":
+      return { tone: "warn", operator: "Open", member: "Waiting" };
+    default:
+      return { tone: "warn", operator: status, member: status };
+  }
+}
 /** What a member asks for, in the units a member thinks in. */
 type HowLong = "7" | "30" | "term";
 
@@ -90,6 +119,7 @@ function OperatorQueue() {
               { value: "pending", label: "Open" },
               { value: "approved", label: "Approved" },
               { value: "rejected", label: "Denied" },
+              { value: "withdrawn", label: "Withdrawn" },
               { value: "all", label: "All" },
             ]}
           />
@@ -181,8 +211,8 @@ function OperatorQueue() {
                   </Button>
                 </div>
               ) : (
-                <Badge tone={entry.status === "approved" ? "accent" : "neutral"}>
-                  {entry.status === "approved" ? "Approved" : "Denied"}
+                <Badge tone={requestOutcome(entry.status).tone}>
+                  {requestOutcome(entry.status).operator}
                 </Badge>
               )}
             </div>
@@ -217,6 +247,7 @@ function OperatorQueue() {
 /** A member's own requests, plus the form to make one. No jargon. */
 function MemberRequests({ userId }: { userId: string }) {
   const requests = useRequestsMine();
+  const withdraw = useWithdrawRequest();
   const router = useRouter();
   const params = useSearchParams();
 
@@ -280,20 +311,32 @@ function MemberRequests({ userId }: { userId: string }) {
               <div className="w-[110px] shrink-0 text-[13px] text-faint">
                 <Relative iso={entry.created_at} />
               </div>
-              <Badge
-                tone={
-                  entry.status === "approved"
-                    ? "accent"
-                    : entry.status === "rejected"
-                      ? "neutral"
-                      : "warn"
-                }
-              >
-                {entry.status === "approved"
-                  ? "Approved"
-                  : entry.status === "rejected"
-                    ? "Not approved"
-                    : "Waiting"}
+              {/*
+                Withdraw sits on the row rather than behind a dialog. Nothing is destroyed by it
+                and nobody else's access moves — it takes an ask out of somebody's queue, which
+                is the one thing here a member is entitled to do without being asked twice.
+              */}
+              {entry.status === "pending" && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={withdraw.isPending}
+                  onClick={async () => {
+                    try {
+                      await withdraw.mutateAsync(entry.id);
+                      toast.success("Withdrawn. Nobody will be asked to decide it.");
+                    } catch (error) {
+                      toast.error(
+                        error instanceof Error ? error.message : "It couldn't be withdrawn.",
+                      );
+                    }
+                  }}
+                >
+                  Withdraw
+                </Button>
+              )}
+              <Badge tone={requestOutcome(entry.status).tone}>
+                {requestOutcome(entry.status).member}
               </Badge>
             </div>
           ))}

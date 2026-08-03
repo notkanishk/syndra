@@ -309,14 +309,13 @@ func PublishVersionAndEnqueue(
 		}
 	}
 
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
-		 VALUES ($1,'-','bundle.version_published',$2)`,
-		actor, fmt.Sprintf("%s@v%d", bundleID, out.Version)); err != nil {
-		return out, nil, err
-	}
-
-	ids, err := enqueueCascadeRows(ctx, tx, params)
+	ids, err := enqueueCascadeRows(ctx, tx,
+		[]CascadeAudit{{
+			Actor:      actor,
+			Action:     "bundle.version_published",
+			ResourceID: fmt.Sprintf("%s@v%d", bundleID, out.Version),
+		}},
+		params)
 	if err != nil {
 		return out, nil, err
 	}
@@ -360,15 +359,16 @@ func MoveHoldersAndEnqueue(
 		return nil, fmt.Errorf("repin holders: %w", err)
 	}
 
+	// One audit row per person moved, all of them naming the same cascade — moving eight people
+	// onto a version is eight things that happened to eight people, and one thing that happened.
+	audits := make([]CascadeAudit, 0, len(userIDs))
 	for _, u := range userIDs {
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
-			 VALUES ($1,$2,'bundle.holder_moved',$3)`, actor, u, versionID); err != nil {
-			return nil, err
-		}
+		audits = append(audits, CascadeAudit{
+			Actor: actor, Target: u, Action: "bundle.holder_moved", ResourceID: versionID,
+		})
 	}
 
-	ids, err := enqueueCascadeRows(ctx, tx, params)
+	ids, err := enqueueCascadeRows(ctx, tx, audits, params)
 	if err != nil {
 		return nil, err
 	}

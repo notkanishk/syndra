@@ -25,6 +25,7 @@ import {
 } from "@/lib/queries/useConfirmationMode";
 import {
   useCreateMappingRule,
+  useDeleteMappingRule,
   useMappingRules,
   useSetRuleConfirmationMode,
   useUpdateMappingRule,
@@ -227,6 +228,12 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
   const update = useUpdateMappingRule();
   const setMode = useSetRuleConfirmationMode();
   const validate = useValidateMappingRule();
+  /**
+   * Retiring the rule takes over this same dialog rather than opening a second one on top of it.
+   * The thing you are about to remove is the thing already on screen, and a modal over a modal
+   * asks somebody to read a consequence through the form that produced it.
+   */
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const [sourceProject, setSourceProject] = useState(rule?.source_project ?? "");
   const [sourceRole, setSourceRole] = useState(rule?.source_role ?? "");
@@ -315,6 +322,17 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
 
     setValidated({ ok: true, notes });
     return true;
+  }
+
+  if (rule && confirmingDelete) {
+    return (
+      <DeleteRuleConfirm
+        rule={rule}
+        label={roleLabel(rule.target_project, rule.target_role)}
+        onCancel={() => setConfirmingDelete(false)}
+        onDeleted={onClose}
+      />
+    );
   }
 
   return (
@@ -497,6 +515,104 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
           {validated ? "Re-validate" : "Validate"}
         </Button>
         <Button onClick={onClose}>Cancel</Button>
+        {/*
+          Outline, and last. A rule is retired from the same place it is retargeted, because
+          those are the two things you come here to do — but a solid red button beside Save is
+          one slip away from revoking a term's worth of access.
+        */}
+        {rule && (
+          <Button variant="danger" disabled={busy} onClick={() => setConfirmingDelete(true)}>
+            Delete rule
+          </Button>
+        )}
+      </ModalFooter>
+    </Modal>
+  );
+}
+
+/**
+ * The consequence, before the click.
+ *
+ * The holder count is the number that matters and the one the index already shows: a rule with
+ * eleven holders is eleven people who may lose the target role. "May" is exact — anybody who
+ * also holds it via a bundle or a direct grant keeps it, and the backend works that out per
+ * person. Promising a precise number here would mean recomputing the closure in the browser and
+ * being wrong about it.
+ */
+function DeleteRuleConfirm({
+  rule,
+  label,
+  onCancel,
+  onDeleted,
+}: {
+  rule: MappingRuleRow;
+  label: string;
+  onCancel: () => void;
+  onDeleted: () => void;
+}) {
+  const remove = useDeleteMappingRule();
+  const holders = rule.holder_count ?? 0;
+
+  return (
+    <Modal
+      open
+      onClose={onCancel}
+      busy={remove.isPending}
+      size="md"
+      labelledBy="rule-delete-title"
+    >
+      <ModalHeader
+        title={`Delete ${shortRuleId(rule.id)}?`}
+        titleId="rule-delete-title"
+        lede={`This rule is the only reason some people hold ${label}.`}
+      />
+
+      <div className="px-6">
+        <div className="danger-note px-4 py-3.5 text-[14px] leading-[1.55]">
+          <div className="type-label mb-1 text-danger-text">What happens</div>
+          <ul className="flex flex-col gap-1 text-muted">
+            <li>The rule stops producing {label} for anybody.</li>
+            <li>
+              {holders === 0
+                ? "Nobody holds the role that triggers it, so nothing is taken back."
+                : `${holders} ${holders === 1 ? "person holds" : "people hold"} the role that triggers it, ` +
+                  `and lose ${label} unless a bundle or a direct grant also gives it to them.`}
+            </li>
+            <li>
+              {rule.confirmation_mode === "auto"
+                ? "The revokes reach the identity provider immediately."
+                : "The revokes wait under Pending changes until somebody confirms them."}
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <ModalFooter note="Retarget the rule instead if you only want it to produce something else.">
+        <Button
+          variant="dangerConfirm"
+          isPending={remove.isPending}
+          onClick={async () => {
+            try {
+              const result = await remove.mutateAsync(rule.id);
+              const n = result.cascade?.enqueued ?? 0;
+              toast.success(
+                n === 0
+                  ? `${shortRuleId(rule.id)} deleted. Nobody's access changed.`
+                  : result.cascade.mode === "auto"
+                    ? `${shortRuleId(rule.id)} deleted. ${n} ${n === 1 ? "change" : "changes"} applied.`
+                    : `${shortRuleId(rule.id)} deleted. ${n} ${n === 1 ? "change is" : "changes are"} waiting under Pending changes.`,
+              );
+              onDeleted();
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "The rule wasn't deleted.");
+            }
+          }}
+        >
+          Delete and revoke
+        </Button>
+        <Button disabled={remove.isPending} onClick={onCancel}>
+          Keep the rule
+        </Button>
       </ModalFooter>
     </Modal>
   );

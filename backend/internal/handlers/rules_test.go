@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"mkauth/internal/models"
@@ -26,6 +27,7 @@ func resetRulesDeps(t *testing.T) {
 	origGetRule := dbGetMappingRuleByID
 	origDetectUpdate := dbDetectCycleOnUpdate
 	origCascadeUpdate := svcCascadeRuleUpdated
+	origCascadeDelete := svcCascadeRuleDeleted
 	origGetConfig := dbGetConfigSetting
 	// Default: no configured global default (resolveConfirmationMode normalizes "" to "auto") —
 	// keeps every existing test that doesn't set confirmation_mode from hitting a real DB call.
@@ -38,6 +40,7 @@ func resetRulesDeps(t *testing.T) {
 		dbGetMappingRuleByID = origGetRule
 		dbDetectCycleOnUpdate = origDetectUpdate
 		svcCascadeRuleUpdated = origCascadeUpdate
+		svcCascadeRuleDeleted = origCascadeDelete
 		dbGetConfigSetting = origGetConfig
 	})
 }
@@ -454,5 +457,90 @@ func TestHandleUpdateMappingRule_CascadeErrorIs500(t *testing.T) {
 	}
 	if resp["error"] != "CASCADE_ERROR" {
 		t.Fatalf("expected CASCADE_ERROR, got %v", resp["error"])
+	}
+}
+
+// --- handleDeleteMappingRule ---
+
+func TestHandleDeleteMappingRule_UnknownIDIs404(t *testing.T) {
+	resetRulesDeps(t)
+
+	dbGetMappingRuleByID = func(ctx context.Context, id string) (models.MappingRule, error) {
+		return models.MappingRule{}, errors.New("no rows in result set")
+	}
+	svcCascadeRuleDeleted = func(ctx context.Context, actor string, old models.MappingRule) (services.CascadeResult, error) {
+		t.Fatal("must not cascade for a rule that does not exist")
+		return services.CascadeResult{}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/rules/mapping/nope", nil)
+	req.SetPathValue("id", "nope")
+	rr := httptest.NewRecorder()
+	handleDeleteMappingRule(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// The cascade gets the rule as it stands, not the id: the revoke set is computed from the edge
+// the rule contributes, and the id alone does not say what that was.
+func TestHandleDeleteMappingRule_PassesThePreDeleteRuleAndReportsTheCascade(t *testing.T) {
+	resetRulesDeps(t)
+
+	stored := models.MappingRule{ID: "rule-1", SourceProject: "sp", SourceRole: "sr",
+		TargetProject: "tp", TargetRole: "tr", ConfirmationMode: "manual"}
+	dbGetMappingRuleByID = func(ctx context.Context, id string) (models.MappingRule, error) {
+		return stored, nil
+	}
+	var gotRule models.MappingRule
+	svcCascadeRuleDeleted = func(ctx context.Context, actor string, old models.MappingRule) (services.CascadeResult, error) {
+		gotRule = old
+		return services.CascadeResult{Enqueued: 3, Mode: "manual"}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/rules/mapping/rule-1", nil)
+	req.SetPathValue("id", "rule-1")
+	rr := httptest.NewRecorder()
+	handleDeleteMappingRule(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if gotRule != stored {
+		t.Fatalf("cascade received %+v, want the pre-delete rule %+v", gotRule, stored)
+	}
+	var resp struct {
+		Cascade services.CascadeResult `json:"cascade"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	// The queued revokes are the whole consequence of the click; a response that omitted them
+	// would let the screen report a deletion as if nothing was waiting.
+	if resp.Cascade.Enqueued != 3 || resp.Cascade.Mode != "manual" {
+		t.Fatalf("cascade not reported: %+v", resp.Cascade)
+	}
+}
+
+// The row went between the read and the transaction: whoever won already enqueued its revokes,
+// so this is a 404, not a 500 the caller would retry into duplicate writes.
+func TestHandleDeleteMappingRule_ConcurrentDeleteIs404(t *testing.T) {
+	resetRulesDeps(t)
+
+	dbGetMappingRuleByID = func(ctx context.Context, id string) (models.MappingRule, error) {
+		return models.MappingRule{ID: id}, nil
+	}
+	svcCascadeRuleDeleted = func(ctx context.Context, actor string, old models.MappingRule) (services.CascadeResult, error) {
+		return services.CascadeResult{}, pgx.ErrNoRows
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/rules/mapping/rule-1", nil)
+	req.SetPathValue("id", "rule-1")
+	rr := httptest.NewRecorder()
+	handleDeleteMappingRule(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
 	}
 }

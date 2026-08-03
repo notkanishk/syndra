@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -12,12 +11,8 @@ import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
 import { UserName } from "@/components/names";
-import {
-  describeAction,
-  isCascadeTrace,
-  machineName,
-  shortTrace,
-} from "@/lib/audit-vocabulary";
+import { TraceCell } from "@/components/audit/TraceCell";
+import { describeAction, machineName } from "@/lib/audit-vocabulary";
 import { useAuditPages, type AuditEntry } from "@/lib/queries/useAudit";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useDebounce } from "@/lib/useDebounce";
@@ -180,18 +175,7 @@ export default function AuditPage() {
               <span className="min-w-[240px] flex-1 text-[14px] text-muted">
                 <Sentence entry={entry} />
               </span>
-              <span className="w-[80px] shrink-0 text-right">
-                {isCascadeTrace(entry) ? (
-                  <Link
-                    href="/operations/cascades"
-                    className="text-[13px] font-semibold text-accent-text"
-                  >
-                    <Mono>{shortTrace(entry.resource_id)}</Mono>
-                  </Link>
-                ) : (
-                  <span className="text-[13px] text-faint">—</span>
-                )}
-              </span>
+              <TraceCell entry={entry} className="w-[80px] shrink-0 text-right" />
             </div>
           ))}
 

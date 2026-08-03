@@ -17,6 +17,7 @@ import { Card } from "@/components/ui/Card";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
+import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
@@ -67,6 +68,19 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
   useCrumb(user?.name);
 
   const multiSource = useMemo(() => findMultiSource(access.data?.projects ?? []), [access.data]);
+
+  // Zitadel's own grant ids, in Advanced only, and only for an operator — the endpoint behind
+  // this is operator-gated, so asking as a member would be asking for a 403. Fetched lazily for
+  // the same reason: a member's own page must not fire a request that can only fail.
+  //
+  // Keyed by project, because that is Zitadel's own shape. One grant per (user, project) carries
+  // every role they hold there, so this id belongs on the project, not repeated onto each role
+  // row as though each had its own.
+  const upstreamGrants = useUpstreamUserGrants(advanced && isOperator ? userId : null);
+  const zitadelGrantByProject = useMemo(
+    () => new Map((upstreamGrants.data?.items ?? []).map((grant) => [grant.projectId, grant.id])),
+    [upstreamGrants.data],
+  );
 
   if (access.isLoading) {
     return (
@@ -236,6 +250,13 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                   {project.effective_role_keys.length}{" "}
                   {project.effective_role_keys.length === 1 ? "role" : "roles"}
                 </span>
+                {advanced && isOperator && (
+                  <ZitadelGrantId
+                    id={zitadelGrantByProject.get(project.project_id)}
+                    loading={upstreamGrants.isLoading}
+                    unreachable={Boolean(upstreamGrants.error)}
+                  />
+                )}
               </div>
 
               <RoleGroup
@@ -299,6 +320,46 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Zitadel's grant id for this project — the handle an operator needs to find the same grant in
+ * Zitadel's own console, or to quote it in a ticket. Advanced only: in Basic, a raw identifier
+ * next to a project name is noise around the thing that matters.
+ *
+ * Four states, and none of them guesses. An absent grant is stated as absent rather than shown
+ * as a dash: MkAuth listing roles for a project Zitadel has no grant for is a real condition,
+ * and naming it is not the same as interpreting it — Reconciliation is where that gets triaged.
+ */
+function ZitadelGrantId({
+  id,
+  loading,
+  unreachable,
+}: {
+  id: string | undefined;
+  loading: boolean;
+  unreachable: boolean;
+}) {
+  if (loading) return null;
+  if (unreachable) {
+    return (
+      <span className="text-[13px] text-faint" title="Zitadel could not be read just now">
+        Zitadel grant · unavailable
+      </span>
+    );
+  }
+  if (!id) {
+    return (
+      <span className="text-[13px] text-faint">
+        Zitadel grant · none — see Review › Reconciliation
+      </span>
+    );
+  }
+  return (
+    <span className="text-[13px] text-faint">
+      Zitadel grant · <Mono title="Zitadel user-grant id">{id}</Mono>
+    </span>
   );
 }
 

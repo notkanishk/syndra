@@ -107,33 +107,21 @@ func handleBulkSetConfirmationMode(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]any{"updated": len(req.IDs), "kind": req.Kind, "mode": req.Mode})
 }
 
-// recentCascadesLimit caps the "Recent cascades" feed — an operator-facing glance list, not a
-// paginated worklist.
-const recentCascadesLimit = 50
-
-// handleGetRecentCascades lists the most recently applied cascade-originated outbox rows, so
-// automated bundle/rule/lifecycle projections are never invisible to the operator.
-// GET /api/v1/propagations/cascades
-func handleGetRecentCascades(w http.ResponseWriter, r *http.Request) {
-	rows, err := dbGetRecentCascades(r.Context(), recentCascadesLimit)
-	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-	if rows == nil {
-		rows = []models.CascadeSummary{}
-	}
-	jsonResponse(w, http.StatusOK, map[string]any{"cascades": rows})
-}
+// cascadeGroupsLimit caps Change history — a glance list, not a paginated worklist.
+const cascadeGroupsLimit = 50
 
 // handleGetCascadeGroups is Change history: every cascade-originated write,
-// grouped by the event that produced it. Unlike the flat feed above it does NOT
-// filter to applied — a cascade with writes still waiting is exactly the entry
-// worth seeing, and "8 applied · 2 waiting" is the whole vocabulary of this
-// screen.
+// grouped by the event that produced it. It does NOT filter to applied — a
+// cascade with writes still waiting is exactly the entry worth seeing, and
+// "8 applied · 2 waiting" is the whole vocabulary of this screen.
+//
+// `?cascade=<id>` narrows to one, which is where an audit row's trace link
+// lands. Answered here rather than by filtering the glance list in the console,
+// because the audit tail reaches further back than the 50 most recent cascades.
 // GET /api/v1/propagations/cascade-groups
 func handleGetCascadeGroups(w http.ResponseWriter, r *http.Request) {
-	groups, err := dbGetCascadeGroups(r.Context(), recentCascadesLimit)
+	cascadeID := strings.TrimSpace(r.URL.Query().Get("cascade"))
+	groups, err := dbGetCascadeGroups(r.Context(), cascadeGroupsLimit, cascadeID)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return

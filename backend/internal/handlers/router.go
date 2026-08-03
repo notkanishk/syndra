@@ -23,6 +23,10 @@ func NewRouter() http.Handler {
 	// Bundle Routes
 	mux.HandleFunc("GET /api/v1/bundles", withCORS(withUserAuth(handleGetBundles)))
 	mux.HandleFunc("POST /api/v1/bundles", withCORS(withOperatorAuth(handleCreateBundle)))
+	// Renaming is not versioned and reaches nobody. Deleting revokes what only this bundle was
+	// granting, per holder, in the transaction that removes it.
+	mux.HandleFunc("PUT /api/v1/bundles/{id}", withCORS(withOperatorAuth(handleUpdateBundle)))
+	mux.HandleFunc("DELETE /api/v1/bundles/{id}", withCORS(withOperatorAuth(handleDeleteBundle)))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/roles", withCORS(withUserAuth(handleGetBundleRoles)))
 
 	// Bundle versioning. Editing a bundle changes its working copy and reaches
@@ -88,6 +92,9 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/rules/mapping", withCORS(withUserAuth(handleGetMappingRules)))
 	mux.HandleFunc("POST /api/v1/rules/mapping", withCORS(withOperatorAuth(handleCreateMappingRule)))
 	mux.HandleFunc("PUT /api/v1/rules/mapping/{id}", withCORS(withOperatorAuth(handleUpdateMappingRule)))
+	// Deleting a rule revokes what only that rule was granting, in the same transaction that
+	// removes it — so a retired rule never leaves access behind that nothing explains.
+	mux.HandleFunc("DELETE /api/v1/rules/mapping/{id}", withCORS(withOperatorAuth(handleDeleteMappingRule)))
 	mux.HandleFunc("POST /api/v1/rules/mapping/validate", withCORS(withUserAuth(handleValidateMappingRule)))
 
 	// Global confirmation-mode default (Task 22): every create-bundle/create-rule form reads this
@@ -108,6 +115,10 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/requests", withCORS(withUserAuth(handleGetAccessRequests)))
 	mux.HandleFunc("POST /api/v1/requests", withCORS(withUserAuth(handleCreateAccessRequest)))
 	mux.HandleFunc("POST /api/v1/requests/{id}/decision", withCORS(withOperatorAuth(handleResolveAccessRequest)))
+	// Withdrawing is the requester's own act, so it is user-gated and self-only (the handler
+	// binds it to the row's requester). An operator taking back somebody else's ask would be a
+	// rejection with no reviewer recorded — that is what the decision route is for.
+	mux.HandleFunc("POST /api/v1/requests/{id}/withdraw", withCORS(withUserAuth(handleWithdrawAccessRequest)))
 	// Bulk decisions. Rehearses by default, like every other bulk surface.
 	mux.HandleFunc("POST /api/v1/requests/bulk-decision", withCORS(withOperatorAuth(handleBulkDecideRequests)))
 	mux.HandleFunc("GET /api/v1/governance/summary", withCORS(withOperatorAuth(handleGetGovernanceSummary)))
@@ -187,9 +198,6 @@ func NewRouter() http.Handler {
 	// Zitadel mutations and the pending list exposes the grant inventory.
 	mux.HandleFunc("POST /api/v1/propagations/drain", withCORS(withOperatorAuth(handleDrainPropagations)))
 	mux.HandleFunc("GET /api/v1/propagations", withCORS(withOperatorAuth(handleListPendingPropagations)))
-	// Recent cascades feed (Task 22): applied bundle/rule/lifecycle projections, so automated
-	// cascades are never invisible. Operator-gated — same posture as the pending worklist.
-	mux.HandleFunc("GET /api/v1/propagations/cascades", withCORS(withOperatorAuth(handleGetRecentCascades)))
 	// Change history: the same rows grouped by the event that produced them,
 	// including the ones still waiting. A half-applied cascade has to be
 	// visible AS a half-applied cascade.

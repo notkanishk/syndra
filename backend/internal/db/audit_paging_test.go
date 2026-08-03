@@ -24,6 +24,17 @@ func TestBuildAuditQuery_NewestPage(t *testing.T) {
 	}
 }
 
+// C6 — the trace column reads this column, and it is selected as text so a NULL (every row
+// written before migration 000023, and every event that cascaded to nobody) arrives as "" rather
+// than making the scan fail.
+func TestBuildAuditQuery_SelectsTheCascadeID(t *testing.T) {
+	query, _ := buildAuditQuery("", 50, nil)
+
+	if !strings.Contains(query, "COALESCE(cascade_id::text,'')") {
+		t.Errorf("the audit page must read cascade_id, NULL-safe: %s", query)
+	}
+}
+
 func TestBuildAuditQuery_OrdersByTheWholeCursorKey(t *testing.T) {
 	query, _ := buildAuditQuery("", 50, nil)
 

@@ -11,6 +11,13 @@ export interface AuditEntry {
   action: string;
   resource_id: string;
   created_at: string;
+  /**
+   * The cascade this event set off, matching a Change history entry exactly.
+   * Absent when the event reached nobody, and for every row written before the
+   * backend started recording it — see `traceFor`, which is the only place that
+   * decides what the Trace column may claim.
+   */
+  cascade_id?: string;
 }
 
 export interface AuditFilter {

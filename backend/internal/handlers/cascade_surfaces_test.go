@@ -233,13 +233,11 @@ func resetConfirmationModeDeps(t *testing.T) {
 	origSetConfig := dbSetConfigSetting
 	origSetRuleMode := dbSetRuleConfirmationMode
 	origSetBundleMode := dbSetBundleConfirmationMode
-	origGetRecent := dbGetRecentCascades
 	t.Cleanup(func() {
 		dbGetConfigSetting = origGetConfig
 		dbSetConfigSetting = origSetConfig
 		dbSetRuleConfirmationMode = origSetRuleMode
 		dbSetBundleConfirmationMode = origSetBundleMode
-		dbGetRecentCascades = origGetRecent
 	})
 }
 
@@ -505,76 +503,6 @@ func TestHandleBulkSetConfirmationMode_DBErrorIs500(t *testing.T) {
 	}
 }
 
-// --- handleGetRecentCascades ---
-
-func TestHandleGetRecentCascades_ReturnsRows(t *testing.T) {
-	resetConfirmationModeDeps(t)
-
-	var gotLimit int
-	dbGetRecentCascades = func(ctx context.Context, limit int) ([]models.CascadeSummary, error) {
-		gotLimit = limit
-		return []models.CascadeSummary{
-			{ID: "c1", OpType: "add", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"role1"},
-				Source: "rule", SourceRef: "rule-1", Status: "applied"},
-		}, nil
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/propagations/cascades", nil)
-	rr := httptest.NewRecorder()
-	handleGetRecentCascades(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if gotLimit != recentCascadesLimit {
-		t.Fatalf("expected limit=%d, got %d", recentCascadesLimit, gotLimit)
-	}
-	var resp struct {
-		Cascades []models.CascadeSummary `json:"cascades"`
-	}
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if len(resp.Cascades) != 1 || resp.Cascades[0].ID != "c1" {
-		t.Fatalf("expected one cascade row with id=c1, got %v", resp.Cascades)
-	}
-}
-
-func TestHandleGetRecentCascades_NilRowsEncodeAsEmptyArray(t *testing.T) {
-	resetConfirmationModeDeps(t)
-
-	dbGetRecentCascades = func(ctx context.Context, limit int) ([]models.CascadeSummary, error) {
-		return nil, nil
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/propagations/cascades", nil)
-	rr := httptest.NewRecorder()
-	handleGetRecentCascades(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if !strings.Contains(rr.Body.String(), `"cascades":[]`) {
-		t.Fatalf("expected cascades:[] for nil rows, got %s", rr.Body.String())
-	}
-}
-
-func TestHandleGetRecentCascades_DBErrorIs500(t *testing.T) {
-	resetConfirmationModeDeps(t)
-
-	dbGetRecentCascades = func(ctx context.Context, limit int) ([]models.CascadeSummary, error) {
-		return nil, errors.New("db unreachable")
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/propagations/cascades", nil)
-	rr := httptest.NewRecorder()
-	handleGetRecentCascades(rr, req)
-
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
-	}
-}
-
 // --- resolveConfirmationMode ---
 
 func TestResolveConfirmationMode_OverridePreferredOverDefault(t *testing.T) {
@@ -625,5 +553,62 @@ func TestResolveConfirmationMode_FallsBackToGlobalDefault(t *testing.T) {
 	}
 	if mode != "manual" {
 		t.Fatalf("expected mode=manual from configured default, got %s", mode)
+	}
+}
+
+// --- handleGetCascadeGroups ---
+
+// C6 — an audit row's trace link lands here with `?cascade=<id>`. The filter has to be answered
+// by the query, not by trimming the glance list afterwards: the audit tail is walkable back to
+// the first day, so a trace from an event older than the 50 most recent cascades would otherwise
+// arrive at a page saying nothing happened.
+func TestHandleGetCascadeGroups_PassesTheCascadeFilterThrough(t *testing.T) {
+	orig := dbGetCascadeGroups
+	t.Cleanup(func() { dbGetCascadeGroups = orig })
+
+	var gotLimit int
+	var gotCascade string
+	dbGetCascadeGroups = func(_ context.Context, limit int, cascadeID string) ([]models.CascadeGroup, error) {
+		gotLimit, gotCascade = limit, cascadeID
+		return []models.CascadeGroup{{CascadeID: cascadeID, Applied: 3}}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/propagations/cascade-groups?cascade=%20c-9%20", nil)
+	rr := httptest.NewRecorder()
+	handleGetCascadeGroups(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if gotCascade != "c-9" {
+		t.Errorf("expected the trimmed cascade id to reach the query, got %q", gotCascade)
+	}
+	if gotLimit != cascadeGroupsLimit {
+		t.Errorf("expected limit %d, got %d", cascadeGroupsLimit, gotLimit)
+	}
+}
+
+// No parameter is the glance list, unchanged.
+func TestHandleGetCascadeGroups_UnfilteredByDefault(t *testing.T) {
+	orig := dbGetCascadeGroups
+	t.Cleanup(func() { dbGetCascadeGroups = orig })
+
+	var gotCascade = "sentinel"
+	dbGetCascadeGroups = func(_ context.Context, _ int, cascadeID string) ([]models.CascadeGroup, error) {
+		gotCascade = cascadeID
+		return nil, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/propagations/cascade-groups", nil)
+	rr := httptest.NewRecorder()
+	handleGetCascadeGroups(rr, req)
+
+	if gotCascade != "" {
+		t.Errorf("expected no cascade filter, got %q", gotCascade)
+	}
+	// nil groups must serialise as [] — a console rendering `null` as an error state would
+	// report "couldn't load" for an org that has simply never cascaded anything.
+	if !strings.Contains(rr.Body.String(), `"cascades":[]`) {
+		t.Errorf("expected an empty array, got %s", rr.Body.String())
 	}
 }

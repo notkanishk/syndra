@@ -20,8 +20,10 @@ import {
   useBundleRoles,
   useBundles,
   useCreateBundle,
+  useDeleteBundle,
   useRemoveBundleRole,
   useSetWelcomeBundle,
+  useUpdateBundle,
   type BundleRoleRow,
 } from "@/lib/queries/useBundles";
 import { useMappingRules } from "@/lib/queries/useMappingRules";
@@ -123,11 +125,16 @@ export default function BundlesPage() {
 
         {active ? (
           <BundleWorkspace
+            key={active.id}
             bundleId={active.id}
             name={active.name}
+            description={active.description ?? ""}
             isWelcome={active.is_welcome ?? false}
             holders={active.holder_count ?? 0}
             welcomeName={rows.find((bundle) => bundle.is_welcome)?.name}
+            // The deleted bundle is still `selected` until this clears it, and the list would
+            // otherwise fall back to showing the first bundle under the old id's heading.
+            onDeleted={() => setSelected(null)}
           />
         ) : null}
       </div>
@@ -140,15 +147,19 @@ export default function BundlesPage() {
 function BundleWorkspace({
   bundleId,
   name,
+  description,
   isWelcome,
   holders,
   welcomeName,
+  onDeleted,
 }: {
   bundleId: string;
   name: string;
+  description: string;
   isWelcome: boolean;
   holders: number;
   welcomeName?: string;
+  onDeleted: () => void;
 }) {
   const roles = useBundleRoles(bundleId);
   const impact = useBundleImpact(bundleId);
@@ -156,6 +167,8 @@ function BundleWorkspace({
   const [pendingRemoval, setPendingRemoval] = useState<BundleRoleRow | null>(null);
   const [adding, setAdding] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const draft = useBundleDraft(bundleId);
   const pending = draftChangeCount(draft.data);
 
@@ -169,6 +182,14 @@ function BundleWorkspace({
           note={`${roleRows.length} ${roleRows.length === 1 ? "role" : "roles"} · ${holders} ${
             holders === 1 ? "holder" : "holders"
           }${draft.data ? ` · latest v${draft.data.latest_version}` : ""}`}
+          // Rename sits on the title because that is what it changes. It is not an edit in the
+          // versioning sense — it reaches nobody and publishes nothing — so it deliberately does
+          // not join the working-copy controls further down.
+          action={
+            <Button size="sm" variant="ghost" onClick={() => setRenaming(true)}>
+              Rename
+            </Button>
+          }
         />
 
         <div className="row-divider px-5 py-3 text-[13.5px] leading-[1.55] text-muted">
@@ -294,6 +315,25 @@ function BundleWorkspace({
             {isWelcome ? "On" : `Set to ${name}`}
           </Button>
         </div>
+
+        {/*
+          Retiring the bundle is the last row on the card, under everything it does, because it
+          is the one action here that ends rather than changes. Outline red — the solid confirm
+          lives inside the dialog.
+        */}
+        <div className="flex flex-wrap items-center gap-3 px-5 py-4">
+          <div className="min-w-[240px] flex-1">
+            <div className="text-[14.5px] font-semibold">Retire this bundle</div>
+            <p className="mt-0.5 text-[13px] text-muted">
+              {holders === 0
+                ? "Nobody holds it, so nothing is taken away."
+                : `The ${holders} ${holders === 1 ? "person" : "people"} holding it lose whatever only this bundle gave them.`}
+            </p>
+          </div>
+          <Button variant="danger" onClick={() => setDeleting(true)}>
+            Delete bundle
+          </Button>
+        </div>
       </Card>
 
       <div className="min-w-[320px] flex-1">
@@ -333,7 +373,212 @@ function BundleWorkspace({
           onClose={() => setAdding(false)}
         />
       )}
+
+      {renaming && (
+        <RenameBundleDialog
+          bundleId={bundleId}
+          name={name}
+          description={description}
+          onClose={() => setRenaming(false)}
+        />
+      )}
+
+      {deleting && (
+        <DeleteBundleDialog
+          bundleId={bundleId}
+          name={name}
+          holders={holders}
+          isWelcome={isWelcome}
+          roleCount={roleRows.length}
+          onCancel={() => setDeleting(false)}
+          onDeleted={() => {
+            setDeleting(false);
+            onDeleted();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Rename and re-describe. No confirmation-mode field and no version note, because neither is
+ * what this changes: the name is what operators call the bundle, not what it grants.
+ */
+function RenameBundleDialog({
+  bundleId,
+  name,
+  description,
+  onClose,
+}: {
+  bundleId: string;
+  name: string;
+  description: string;
+  onClose: () => void;
+}) {
+  const update = useUpdateBundle();
+  const [nextName, setNextName] = useState(name);
+  const [nextDescription, setNextDescription] = useState(description);
+
+  const trimmed = nextName.trim();
+  const unchanged = trimmed === name && nextDescription === description;
+
+  return (
+    <Modal open onClose={onClose} busy={update.isPending} size="sm" labelledBy="rename-bundle">
+      <ModalHeader
+        title={`Rename ${name}`}
+        titleId="rename-bundle"
+        lede="Nobody's access changes. This is what the bundle is called, not what it grants."
+      />
+      <div className="flex flex-col gap-3.5 px-6">
+        <div>
+          <FieldLabel htmlFor="bundle-rename">Name</FieldLabel>
+          <Input
+            id="bundle-rename"
+            value={nextName}
+            onChange={(event) => setNextName(event.target.value)}
+          />
+        </div>
+        <div>
+          <FieldLabel htmlFor="bundle-redescribe">What it&rsquo;s for</FieldLabel>
+          <Input
+            id="bundle-redescribe"
+            value={nextDescription}
+            onChange={(event) => setNextDescription(event.target.value)}
+          />
+        </div>
+      </div>
+      <ModalFooter>
+        <Button
+          variant="accent"
+          disabled={!trimmed || unchanged}
+          isPending={update.isPending}
+          reason={!trimmed ? "A bundle needs a name." : unchanged ? "Nothing changed yet." : undefined}
+          onClick={async () => {
+            try {
+              await update.mutateAsync({
+                id: bundleId,
+                name: trimmed,
+                description: nextDescription,
+              });
+              toast.success(trimmed === name ? "Description saved." : `Now called ${trimmed}.`);
+              onClose();
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "That didn't save.");
+            }
+          }}
+        >
+          Save
+        </Button>
+        <Button disabled={update.isPending} onClick={onClose}>
+          Cancel
+        </Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
+/**
+ * The consequence, before the click.
+ *
+ * Two facts drive it. Holders lose whatever only this bundle gave them — "only" because anybody
+ * who also has the role by rule or direct grant keeps it, worked out per person by the backend.
+ * And if this is the welcome bundle, onboarding stops handing anything out, which has no other
+ * place to be said once the row is gone.
+ *
+ * The version history goes with it. That is worth stating plainly rather than discovering: it is
+ * the one part of a deletion nothing can restore.
+ */
+function DeleteBundleDialog({
+  bundleId,
+  name,
+  holders,
+  isWelcome,
+  roleCount,
+  onCancel,
+  onDeleted,
+}: {
+  bundleId: string;
+  name: string;
+  holders: number;
+  isWelcome: boolean;
+  roleCount: number;
+  onCancel: () => void;
+  onDeleted: () => void;
+}) {
+  const remove = useDeleteBundle();
+
+  return (
+    <Modal
+      open
+      onClose={onCancel}
+      busy={remove.isPending}
+      size="md"
+      labelledBy="delete-bundle"
+    >
+      <ModalHeader
+        title={`Delete ${name}?`}
+        titleId="delete-bundle"
+        lede={
+          holders === 0
+            ? "Nobody holds it. Deleting it takes nothing away from anybody."
+            : `${holders} ${holders === 1 ? "person holds" : "people hold"} it right now.`
+        }
+      />
+
+      <div className="px-6">
+        <div className="danger-note px-4 py-3.5 text-[14px] leading-[1.55]">
+          <div className="type-label mb-1 text-danger-text">What happens</div>
+          <ul className="flex flex-col gap-1 text-muted">
+            {holders > 0 && (
+              <li>
+                Each holder loses whichever of its {roleCount}{" "}
+                {roleCount === 1 ? "role" : "roles"} nothing else gives them — a rule or a direct
+                grant for the same role keeps it.
+              </li>
+            )}
+            {isWelcome && (
+              <li className="font-semibold text-danger-text">
+                This is the default for new members. Onboarding will stop handing anything out
+                until another bundle is set.
+              </li>
+            )}
+            <li>Its version history goes with it, and cannot be brought back.</li>
+          </ul>
+        </div>
+      </div>
+
+      <ModalFooter note="Emptying the bundle instead leaves it assignable and grants nothing.">
+        <Button
+          variant="dangerConfirm"
+          isPending={remove.isPending}
+          onClick={async () => {
+            try {
+              const result = await remove.mutateAsync(bundleId);
+              const n = result.cascade?.enqueued ?? 0;
+              toast.success(
+                n === 0
+                  ? `${name} deleted. Nobody's access changed.`
+                  : result.cascade.mode === "auto"
+                    ? `${name} deleted. ${n} ${n === 1 ? "change" : "changes"} applied.`
+                    : `${name} deleted. ${n} ${n === 1 ? "change is" : "changes are"} waiting under Pending changes.`,
+              );
+              if (result.was_welcome) {
+                toast.warning("New members no longer receive a bundle. Set another as the default.");
+              }
+              onDeleted();
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "The bundle wasn't deleted.");
+            }
+          }}
+        >
+          Delete and revoke
+        </Button>
+        <Button disabled={remove.isPending} onClick={onCancel}>
+          Keep it
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 

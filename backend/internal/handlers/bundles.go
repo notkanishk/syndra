@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+
+	"mkauth/internal/db"
 )
 
 type AddRoleToBundleRequest struct {
@@ -21,6 +23,14 @@ type CreateBundleRequest struct {
 	Name             string `json:"name"`
 	Description      string `json:"description"`
 	ConfirmationMode string `json:"confirmation_mode,omitempty"`
+}
+
+// UpdateBundleRequest carries no confirmation_mode: that is changed through
+// POST /policies/confirmation-mode, which is where every other rule and bundle changes it, and
+// a second way in would be a second thing to keep consistent.
+type UpdateBundleRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
 func handleGetBundles(w http.ResponseWriter, r *http.Request) {
@@ -90,6 +100,91 @@ func handleCreateBundle(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = dbInsertAuditLog(r.Context(), actor, "-", "bundle.created", id)
 	jsonResponse(w, http.StatusCreated, map[string]string{"id": id})
+}
+
+// handleUpdateBundle renames a bundle and rewrites its description. Nothing else: the roles are
+// the working copy's business and the holders are publish's, and folding either into a rename
+// would make correcting a typo a thing an operator has to think twice about.
+// PUT /api/v1/bundles/{id}
+func handleUpdateBundle(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !trimmedNonEmpty(id) {
+		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
+		return
+	}
+
+	var req UpdateBundleRequest
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		jsonValidationErrorResponse(w, "name is required", map[string]string{"name": "required"})
+		return
+	}
+
+	if err := dbUpdateBundle(r.Context(), id, req.Name, req.Description); err != nil {
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "Bundle not found")
+		case db.IsUniqueViolation(err):
+			jsonErrorResponse(w, http.StatusConflict, "CONFLICT", "Another bundle already has that name")
+		default:
+			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		}
+		return
+	}
+
+	actor := getAdminUserID(r.Context())
+	if actor == "" {
+		actor = "system"
+	}
+	_ = dbInsertAuditLog(r.Context(), actor, "-", "bundle.updated", id)
+	jsonResponse(w, http.StatusOK, map[string]string{"message": "Bundle updated"})
+}
+
+// handleDeleteBundle retires a bundle and revokes what only it was granting, in one transaction.
+//
+// The welcome flag is reported back rather than guarded against. Refusing to delete the welcome
+// bundle would be a rule an operator could not satisfy — the only way to clear the flag is to
+// promote a different bundle, which a makerspace with one bundle cannot do. So the deletion goes
+// through and the response says what else went with it, and the screen says it before the click.
+// DELETE /api/v1/bundles/{id}
+func handleDeleteBundle(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !trimmedNonEmpty(id) {
+		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
+		return
+	}
+
+	// Read before the delete: afterwards there is nothing left to ask whether it was the
+	// welcome bundle, and the caller needs to be told.
+	bundle, err := dbGetBundleByID(r.Context(), id)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "Bundle not found")
+		return
+	}
+
+	actor := getAdminUserID(r.Context())
+	if actor == "" {
+		actor = "system"
+	}
+	cascade, err := svcCascadeBundleDeleted(r.Context(), actor, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "Bundle not found")
+			return
+		}
+		jsonErrorResponse(w, http.StatusInternalServerError, "CASCADE_ERROR", err.Error())
+		return
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"message":     "Bundle deleted",
+		"was_welcome": bundle.IsWelcome,
+		"cascade":     cascade,
+	})
 }
 
 func handleGetBundleRoles(w http.ResponseWriter, r *http.Request) {

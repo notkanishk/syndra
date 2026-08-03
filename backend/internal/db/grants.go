@@ -241,14 +241,9 @@ func DeleteDirectGrantAndEnqueue(ctx context.Context, actor, userID, grantID str
 		return nil, fmt.Errorf("delete direct grant %s: %w", grantID, err)
 	}
 
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
-		 VALUES ($1,$2,'direct_grant.removed',$3)`,
-		actor, userID, projectID+"/"+roleKey); err != nil {
-		return nil, fmt.Errorf("insert audit for grant %s: %w", grantID, err)
-	}
-
-	ids, err := enqueueCascadeRows(ctx, tx, params)
+	ids, err := enqueueCascadeRows(ctx, tx,
+		[]CascadeAudit{{Actor: actor, Target: userID, Action: "direct_grant.removed", ResourceID: projectID + "/" + roleKey}},
+		params)
 	if err != nil {
 		return nil, err
 	}

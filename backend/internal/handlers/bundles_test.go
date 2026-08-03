@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"mkauth/internal/models"
 	"mkauth/internal/services"
@@ -23,6 +24,9 @@ func resetBundleDeps(t *testing.T) {
 	origGetRoles := dbGetRolesForBundle
 	origGetUserBundles := dbGetBundlesForUser
 	origSetWelcome := dbSetWelcomeBundle
+	origUpdate := dbUpdateBundle
+	origGetByID := dbGetBundleByID
+	origCascadeDelete := svcCascadeBundleDeleted
 	origAudit := dbInsertAuditLog
 	origGetConfig := dbGetConfigSetting
 	// Default: no configured global default (resolveConfirmationMode normalizes "" to "auto") —
@@ -34,6 +38,9 @@ func resetBundleDeps(t *testing.T) {
 		dbGetRolesForBundle = origGetRoles
 		dbGetBundlesForUser = origGetUserBundles
 		dbSetWelcomeBundle = origSetWelcome
+		dbUpdateBundle = origUpdate
+		dbGetBundleByID = origGetByID
+		svcCascadeBundleDeleted = origCascadeDelete
 		dbInsertAuditLog = origAudit
 		dbGetConfigSetting = origGetConfig
 	})
@@ -465,5 +472,178 @@ func TestHandleGetBundles_NilSafe(t *testing.T) {
 	body := rr.Body.String()
 	if strings.TrimSpace(body) == "null" {
 		t.Fatalf("expected [] not null for empty bundles")
+	}
+}
+
+// --- handleUpdateBundle ---
+
+func TestHandleUpdateBundle_BlankNameRejected(t *testing.T) {
+	resetBundleDeps(t)
+
+	dbUpdateBundle = func(ctx context.Context, id, name, description string) error {
+		t.Fatal("must not write a bundle with no name")
+		return nil
+	}
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/bundles/b1", strings.NewReader(`{"name":"   ","description":"x"}`))
+	req.SetPathValue("id", "b1")
+	rr := httptest.NewRecorder()
+	handleUpdateBundle(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// Bundle names are unique, and colliding with one is an ordinary thing an operator does — it
+// must read as "that name is taken", not as a server fault.
+func TestHandleUpdateBundle_DuplicateNameIs409(t *testing.T) {
+	resetBundleDeps(t)
+
+	dbUpdateBundle = func(ctx context.Context, id, name, description string) error {
+		return &pgconn.PgError{Code: "23505"}
+	}
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/bundles/b1", strings.NewReader(`{"name":"Lab Tech","description":""}`))
+	req.SetPathValue("id", "b1")
+	rr := httptest.NewRecorder()
+	handleUpdateBundle(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleUpdateBundle_UnknownIDIs404(t *testing.T) {
+	resetBundleDeps(t)
+
+	dbUpdateBundle = func(ctx context.Context, id, name, description string) error {
+		return pgx.ErrNoRows
+	}
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/bundles/nope", strings.NewReader(`{"name":"Lab Tech","description":""}`))
+	req.SetPathValue("id", "nope")
+	rr := httptest.NewRecorder()
+	handleUpdateBundle(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// A rename reaches nobody, so it must not run a cascade — and the trimmed name is what gets
+// written, not the raw field.
+func TestHandleUpdateBundle_TrimsAndDoesNotCascade(t *testing.T) {
+	resetBundleDeps(t)
+
+	var gotName, gotDesc string
+	dbUpdateBundle = func(ctx context.Context, id, name, description string) error {
+		gotName, gotDesc = name, description
+		return nil
+	}
+	svcCascadeBundleDeleted = func(ctx context.Context, actor, bundleID string) (services.CascadeResult, error) {
+		t.Fatal("a rename must not cascade")
+		return services.CascadeResult{}, nil
+	}
+	var auditAction string
+	dbInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error {
+		auditAction = action
+		return nil
+	}
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/bundles/b1", strings.NewReader(`{"name":"  Lab Tech  ","description":"Trained on the mill"}`))
+	req.SetPathValue("id", "b1")
+	rr := httptest.NewRecorder()
+	handleUpdateBundle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if gotName != "Lab Tech" || gotDesc != "Trained on the mill" {
+		t.Fatalf("wrote name=%q desc=%q", gotName, gotDesc)
+	}
+	if auditAction != "bundle.updated" {
+		t.Fatalf("audit action = %q, want bundle.updated", auditAction)
+	}
+}
+
+// --- handleDeleteBundle ---
+
+func TestHandleDeleteBundle_UnknownIDIs404(t *testing.T) {
+	resetBundleDeps(t)
+
+	dbGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
+		return models.Bundle{}, pgx.ErrNoRows
+	}
+	svcCascadeBundleDeleted = func(ctx context.Context, actor, bundleID string) (services.CascadeResult, error) {
+		t.Fatal("must not cascade for a bundle that does not exist")
+		return services.CascadeResult{}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bundles/nope", nil)
+	req.SetPathValue("id", "nope")
+	rr := httptest.NewRecorder()
+	handleDeleteBundle(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// Deleting the welcome bundle silently stops onboarding granting anything. The flag is read
+// before the row goes and reported back, because afterwards there is nothing left to ask.
+func TestHandleDeleteBundle_ReportsThatItWasTheWelcomeBundle(t *testing.T) {
+	resetBundleDeps(t)
+
+	dbGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
+		return models.Bundle{ID: id, Name: "Newcomer", IsWelcome: true}, nil
+	}
+	svcCascadeBundleDeleted = func(ctx context.Context, actor, bundleID string) (services.CascadeResult, error) {
+		return services.CascadeResult{Enqueued: 2, Mode: "auto"}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bundles/b1", nil)
+	req.SetPathValue("id", "b1")
+	rr := httptest.NewRecorder()
+	handleDeleteBundle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		WasWelcome bool                   `json:"was_welcome"`
+		Cascade    services.CascadeResult `json:"cascade"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if !resp.WasWelcome {
+		t.Fatal("was_welcome must be true — new members stop receiving a welcome bundle")
+	}
+	if resp.Cascade.Enqueued != 2 {
+		t.Fatalf("cascade not reported: %+v", resp.Cascade)
+	}
+}
+
+func TestHandleDeleteBundle_OrdinaryBundleIsNotFlaggedAsWelcome(t *testing.T) {
+	resetBundleDeps(t)
+
+	dbGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
+		return models.Bundle{ID: id, Name: "Lab Tech"}, nil
+	}
+	svcCascadeBundleDeleted = func(ctx context.Context, actor, bundleID string) (services.CascadeResult, error) {
+		return services.CascadeResult{}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bundles/b1", nil)
+	req.SetPathValue("id", "b1")
+	rr := httptest.NewRecorder()
+	handleDeleteBundle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if strings.Contains(rr.Body.String(), `"was_welcome":true`) {
+		t.Fatalf("must not claim an ordinary bundle was the welcome bundle: %s", rr.Body.String())
 	}
 }

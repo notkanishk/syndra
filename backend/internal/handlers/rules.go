@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 
 	"mkauth/internal/db"
 )
@@ -180,6 +183,50 @@ func handleUpdateMappingRule(w http.ResponseWriter, r *http.Request) {
 
 	jsonResponse(w, http.StatusOK, map[string]any{
 		"message": "Mapping rule updated",
+		"cascade": cascade,
+	})
+}
+
+// handleDeleteMappingRule retires a rule and takes back the access only it was granting.
+//
+// It reads the rule first for the same reason the update path does: the id alone does not say
+// what the rule reached, and the revoke set is computed from the closure the rule was part of.
+// There is no cycle check — removing an edge cannot create one — and no confirmation-mode
+// argument: a deletion inherits the mode the rule itself carried, so a rule that queued its
+// writes queues the writes that undo it.
+// DELETE /api/v1/rules/mapping/{id}
+func handleDeleteMappingRule(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !trimmedNonEmpty(id) {
+		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
+		return
+	}
+
+	old, err := dbGetMappingRuleByID(r.Context(), id)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "mapping rule not found")
+		return
+	}
+
+	actor := getAdminUserID(r.Context())
+	if actor == "" {
+		actor = "system"
+	}
+	cascade, err := svcCascadeRuleDeleted(r.Context(), actor, old)
+	if err != nil {
+		// A concurrent delete lands here: the row was gone by the time the tx ran, and its
+		// revokes were enqueued by whoever won. Reporting 500 would invite a retry of writes
+		// that already exist.
+		if errors.Is(err, pgx.ErrNoRows) {
+			jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "mapping rule not found")
+			return
+		}
+		jsonErrorResponse(w, http.StatusInternalServerError, "CASCADE_ERROR", err.Error())
+		return
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"message": "Mapping rule deleted",
 		"cascade": cascade,
 	})
 }

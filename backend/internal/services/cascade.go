@@ -54,8 +54,10 @@ var (
 
 	// Revoke-side atomic mutation+enqueue (Task 21).
 	svcRemoveBundleFromUserAndEnqueue = db.RemoveBundleFromUserAndEnqueue
+	svcDeleteBundleAndEnqueue         = db.DeleteBundleAndEnqueue
 	svcRemoveRoleFromBundleAndEnqueue = db.RemoveRoleFromBundleAndEnqueue
 	svcUpdateRuleAndEnqueue           = db.UpdateMappingRuleAndEnqueue
+	svcDeleteRuleAndEnqueue           = db.DeleteMappingRuleAndEnqueue
 
 	// The closure-diff helpers below (userBaseHoldings et al.) reuse the governance-layer
 	// injectables already declared in deps.go (svcGetDirectGrantsForUser, svcGetBundlesForUser,
@@ -374,6 +376,56 @@ func CascadeBundleRemovedFromUser(ctx context.Context, actor, userID, bundleID s
 	return applyMode(ctx, bundle.ConfirmationMode, ids)
 }
 
+// CascadeBundleDeleted retires a bundle and takes back what only it was granting.
+//
+// It is CascadeBundleRemovedFromUser run over every holder and committed with the deletion, and
+// it is written as a loop over holders rather than a single "revoke the bundle's roles" pass for
+// the same reason every other cascade here is: coverage is a property of a person, not of a
+// bundle. Two people can hold the same bundle and lose different roles by it going away, because
+// one of them also has a direct grant for one of those roles. The closure diff answers that per
+// person; a bundle-level role list could only guess.
+//
+// Holders are read via GetUsersForBundle — the assignment table — not the known-user list. A
+// bundle reaches exactly the people assigned to it, so widening the scan would be work with a
+// guaranteed empty delta.
+func CascadeBundleDeleted(ctx context.Context, actor, bundleID string) (CascadeResult, error) {
+	bundle, err := svcGetBundleByID(ctx, bundleID)
+	if err != nil {
+		return CascadeResult{}, err
+	}
+	rules, err := svcGetActiveMappingRules(ctx)
+	if err != nil {
+		return CascadeResult{}, err
+	}
+	holders, err := svcGetUsersForBundle(ctx, bundleID)
+	if err != nil {
+		return CascadeResult{}, err
+	}
+
+	var params []db.EnqueueParams
+	for _, u := range holders {
+		before, err := userBaseHoldings(ctx, u)
+		if err != nil {
+			return CascadeResult{}, err
+		}
+		after, err := userBaseHoldingsExcludingBundle(ctx, u, bundleID)
+		if err != nil {
+			return CascadeResult{}, err
+		}
+		adds, revokes := closureDelta(effectiveClosure(before, rules), effectiveClosure(after, rules))
+		if len(adds) == 0 && len(revokes) == 0 {
+			continue
+		}
+		params = append(params, deltaParams(u, adds, revokes, actor, "Bundle deletion cascade", "bundle", bundleID)...)
+	}
+
+	ids, err := svcDeleteBundleAndEnqueue(ctx, actor, bundleID, params)
+	if err != nil {
+		return CascadeResult{}, err
+	}
+	return applyMode(ctx, bundle.ConfirmationMode, ids)
+}
+
 // CascadeRuleUpdated re-projects a rule whose matcher/target changed. `old` is the rule as it was
 // BEFORE the update (captured by the handler, since the updated fields don't tell us the old
 // target); sp/sr/tp/tr are the NEW fields. The update and the cascade commit atomically.
@@ -421,6 +473,52 @@ func CascadeRuleUpdated(ctx context.Context, actor string, old models.MappingRul
 	}
 
 	ids, err := svcUpdateRuleAndEnqueue(ctx, actor, old.ID, sp, sr, tp, tr, params)
+	if err != nil {
+		return CascadeResult{}, err
+	}
+	return applyMode(ctx, old.ConfirmationMode, ids)
+}
+
+// CascadeRuleDeleted retires a rule and takes back what only it was granting. It is
+// CascadeRuleUpdated with no replacement edge: rulesAfter is the active set minus `old`, so the
+// per-user closure diff yields revokes for the targets this rule alone reached, and nothing at
+// all for anyone whose access to those targets survives via a bundle, a direct grant or another
+// rule. That coverage question is never asked separately — it falls out of the closure, which is
+// why deleting a rule cannot strip access somebody legitimately holds twice over.
+//
+// Adds are possible in principle and are enqueued if they occur: a rule can suppress nothing
+// today, but the diff is computed, not assumed, and a one-directional "revokes only" shortcut
+// would be a claim about the rule graph rather than a reading of it.
+func CascadeRuleDeleted(ctx context.Context, actor string, old models.MappingRule) (CascadeResult, error) {
+	users, err := svcGetAllKnownUserIDs(ctx)
+	if err != nil {
+		return CascadeResult{}, err
+	}
+	rulesBefore, err := svcGetActiveMappingRules(ctx)
+	if err != nil {
+		return CascadeResult{}, err
+	}
+	rulesAfter := make([]models.MappingRule, 0, len(rulesBefore))
+	for _, ru := range rulesBefore {
+		if ru.ID != old.ID {
+			rulesAfter = append(rulesAfter, ru)
+		}
+	}
+
+	var params []db.EnqueueParams
+	for _, u := range users {
+		base, err := userBaseHoldings(ctx, u)
+		if err != nil {
+			return CascadeResult{}, err
+		}
+		adds, revokes := closureDelta(effectiveClosure(base, rulesBefore), effectiveClosure(base, rulesAfter))
+		if len(adds) == 0 && len(revokes) == 0 {
+			continue
+		}
+		params = append(params, deltaParams(u, adds, revokes, actor, "Mapping-rule deletion cascade", "rule", old.ID)...)
+	}
+
+	ids, err := svcDeleteRuleAndEnqueue(ctx, actor, old.ID, params)
 	if err != nil {
 		return CascadeResult{}, err
 	}

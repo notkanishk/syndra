@@ -4,8 +4,21 @@ import { NextRequest, NextResponse } from "next/server";
 const BACKEND_URL = process.env.BACKEND_URL || "http://backend:8080";
 const API_KEY = process.env.MKAUTH_API_KEY || "";
 
+/**
+ * `/users/{self}/…` subtrees a member may reach.
+ *
+ * Matched on the segment after the id, so `shadow-credential` covers the vault's `/status` and
+ * `/audit` reads as well as the credential itself. Every one of those routes is self-only in the
+ * backend too — this is the outer of two locks, not the only one.
+ */
 function isSelfScoped(path: string[], userId: string) {
-  return path[0] === "users" && path[1] === userId && (path[2] === "access" || path[2] === "grants");
+  if (path[0] !== "users" || path[1] !== userId) return false;
+  return path[2] === "access" || path[2] === "grants" || path[2] === "shadow-credential";
+}
+
+/** The member's own shadow credential, exactly — not its `/status` or `/audit` children. */
+function isOwnShadowCredential(path: string[], userId: string) {
+  return path.length === 3 && isSelfScoped(path, userId) && path[2] === "shadow-credential";
 }
 
 function isMemberAllowed(method: "GET" | "POST" | "PUT" | "DELETE", path: string[], userId: string) {
@@ -16,11 +29,20 @@ function isMemberAllowed(method: "GET" | "POST" | "PUT" | "DELETE", path: string
     return isSelfScoped(path, userId);
   }
 
-  if (method === "POST" && path.length === 1 && path[0] === "requests") {
-    return true;
+  if (method === "POST") {
+    if (path.length === 1 && path[0] === "requests") return true;
+    // Taking your own ask back. The backend scopes the UPDATE by the row's requester, so this
+    // gate decides which route is reachable, never whose request is affected.
+    return path.length === 3 && path[0] === "requests" && path[2] === "withdraw";
   }
 
-  // Destructive methods are admin-only; non-admins always fall through to 403.
+  // PUT and DELETE are otherwise admin-only. The single exception is the shadow credential: it is
+  // the one object a member owns outright, and setting or clearing it changes nobody's access —
+  // routing it through an operator would be asking somebody else to type your password.
+  if (method === "PUT" || method === "DELETE") {
+    return isOwnShadowCredential(path, userId);
+  }
+
   return false;
 }
 
@@ -73,7 +95,15 @@ async function proxy(request: NextRequest, method: "GET" | "POST" | "PUT" | "DEL
     if (session.role !== "admin") {
       // Members can only create requests for themselves. Backend checks this
       // independently; the proxy enforces it here as defense-in-depth.
-      payload = { ...(body ?? {}), requester_id: session.id };
+      //
+      // Scoped to that ONE route, deliberately. This used to stamp requester_id onto every
+      // member POST/PUT body, which was harmless only while filing a request was the sole thing
+      // a member could write. It is not any more: the vault's `PUT {password}` would arrive
+      // carrying an unknown field, and decodeJSONStrict rejects those — a 400 on a route that
+      // was working, caused by the proxy adding something nobody asked for.
+      if (method === "POST" && path.length === 1 && path[0] === "requests") {
+        payload = { ...(body ?? {}), requester_id: session.id };
+      }
     } else if (session.sessionType === "demo") {
       // Demo-mode admins authenticate via the shared API key, so the backend
       // can't derive an authenticated principal from the request. Inject the

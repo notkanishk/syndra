@@ -188,3 +188,335 @@ say about a space.
 It sits under My access rather than behind a third nav item, because "what do I
 have" and "what else is there" are the same question asked twice, and the
 contrast between them is the point.
+
+## Decision 6 · A deletion is the revoke half of an edit, not a new mechanism
+
+Buckets B and C asked for three things nothing could undo: a mapping rule, a
+bundle, and a request a member had changed their mind about.
+
+The temptation with all three is to write a deletion path. None of them needed
+one. Every cascade in this product already projects an *effective-role closure
+delta* — what a person holds after the change, minus what they held before —
+and a deletion is that same computation with one edge removed:
+
+| Deleting | Is | Computed by |
+|---|---|---|
+| A mapping rule | `CascadeRuleUpdated` with no replacement edge | `rulesAfter = rulesBefore − old` |
+| A bundle | `CascadeBundleRemovedFromUser`, run over every holder | `userBaseHoldingsExcludingBundle` per holder |
+
+That is why neither needed a coverage check. "Does somebody keep this role
+anyway?" is not a question the delete asks — a role still produced by another
+bundle, rule or direct grant simply never leaves the `after` set. Writing the
+check explicitly would have been re-deriving, worse, something the closure
+already knows.
+
+The bundle case is a loop over holders rather than one pass over the bundle's
+role list, and that is load-bearing. Two people can hold the same bundle and
+lose different roles by it going away, because one of them also has a direct
+grant. Coverage is a property of a person.
+
+### Why deletion and revocation share a transaction
+
+Every table hanging off a bundle carries `ON DELETE CASCADE`, so the assignment
+rows vanish the instant the bundle does. A holder whose assignment disappeared
+without a revoke keeps the role in Zitadel with nothing in MkAuth left to
+explain it — which is not a gap, it is drift, and it would arrive with no actor
+and be found weeks later by the sweep. The same argument holds for a rule.
+
+So both go through the existing `*AndEnqueue` shape: mutation, audit row and
+outbox rows in one transaction, then `applyMode` on the source's own
+`confirmation_mode`. A rule whose writes queued for confirmation queues the
+writes that undo it.
+
+## Decision 7 · The welcome flag is reported, not guarded
+
+Deleting the welcome bundle stops onboarding granting anything. The obvious
+protection — refuse it — is a rule an operator cannot satisfy: the flag is
+cleared only by promoting a different bundle, and a makerspace with one bundle
+has nothing to promote. A refusal you cannot act on is a trap wearing a
+safeguard's clothes.
+
+So the deletion goes through, `DELETE` reads the flag *before* the row goes
+(afterwards there is nothing left to ask), the response carries `was_welcome`,
+and the dialog says so before the click. The console warns twice — once in the
+confirmation, once in a toast afterwards — because this is the one consequence
+with no other home once the bundle is gone.
+
+### The foreign key that had to go
+
+`onboarding_triggers.bundle_id` referenced `bundles(id)` with no `ON DELETE`
+clause, which would have made every bundle that ever onboarded anybody
+undeletable. Both obvious fixes corrupt the log:
+
+- `ON DELETE CASCADE` deletes evidence that somebody was onboarded.
+- `ON DELETE SET NULL` rewrites the row to say they were given nothing.
+
+The row's claim — "this person was onboarded, and this is the bundle they were
+given" — stays true after the bundle is retired. So migration `000021` drops the
+constraint and keeps the column, which is the shape this codebase already uses
+for history: `audit_logs.resource_id` and
+`pending_zitadel_propagations.source_ref` are both plain ids with no foreign
+key, for exactly this reason. A log records what happened; it does not hold the
+past open.
+
+`<BundleName>` on the event log renders `a bundle since deleted` rather than its
+default em dash there — "— assigned automatically" reads as nothing having been
+assigned.
+
+## Decision 8 · A withdrawal is a resolution, not a decision
+
+`withdrawn` sets `resolved_at` and leaves `reviewer_user_id` NULL, enforced by
+the CHECK constraint rather than by convention. Nobody reviewed it. The row
+already names who filed it, so recording them a second time as their own
+reviewer would state a fact the row states, in a column that means something
+else — and the operator queue, which reads `reviewer_user_id` as "who decided
+this", would then name a member as a decider.
+
+Two things fell out of adding a third terminal state, and both were latent bugs
+rather than new work:
+
+- **The decision path enumerated the decided statuses** (`approved || rejected`)
+  instead of testing `!= "pending"`. A withdrawn request would have stayed
+  decidable, resurrecting an ask its author had taken back. Fixed at the shared
+  guard, which is the only place every decision route passes through.
+- **Both request views rendered "settled and not approved" as a denial.** The
+  first withdrawal would have shown a member's own retraction back to the
+  operator as a refusal somebody made. `requestOutcome()` now gives one reading
+  in two registers, and echoes an unrecognised status back rather than bucketing
+  it — the same rule `outcomeOf` follows for event activity, and for the same
+  reason.
+
+## Decision 9 · The vault belongs to the person, not to the System page
+
+The design brief filed shadow credentials under `S10 · System › Hardware sync`.
+That cannot work: all four user-facing endpoints are self-only, so an operator
+standing on a System page can only ever set their own credential — which is not
+what anybody goes to a System page to do.
+
+The surface is on Member · My access, last on the page. That screen answers
+"what can I use, and why"; a password is a setting, not an answer, and putting a
+password field above somebody's access would make the page read as an account
+screen.
+
+Two sentences on that card are non-negotiable, and both are about what it is
+NOT. It is not the institutional login — a second password field with no
+explanation invites exactly one reading, and it is the wrong one. And nothing
+reads it yet: the hardware bridge is unbuilt, so a password set today is stored
+and waiting. Leaving the second out would be worse than leaving out the whole
+card — somebody sets one, tries a door, and concludes the product is broken.
+
+The dialog does not re-implement the complexity rules. `ValidatePasswordComplexity`
+already composes the failing requirements into one sentence, and that sentence
+is rendered verbatim. One authority on what counts as strong enough, and it is
+the one that decides.
+
+## Decision 10 · `/propagations/cascades` is deleted, not exposed
+
+The audit's B2 asked to expose it or delete it. Deleted.
+
+Change history replaced it correctly — one entry per cascade rather than one row
+per write — and a row per write is the same data with the causation removed.
+`models.CascadeSummary` survives as the per-write shape *inside* a
+`CascadeGroup`, which is where a write is readable: as part of the event that
+produced it.
+
+## Decision 11 · The console proxy is a second lock, and it fails silently
+
+Both new member-facing capabilities — `C3`'s withdraw and `B1`'s vault — shipped
+correct on the backend and dead in the browser. The console proxy carries its own
+member allowlist, and neither route was on it. Nothing failed loudly: the
+withdraw button 403'd, and the vault card simply *was not there*, because it
+suppressed its own read error to avoid a broken-looking box on somebody's home
+screen.
+
+Three consequences, all now closed:
+
+**The allowlist is where a member-facing route becomes real.** The backend's
+self-only enforcement is the inner lock and it was never the problem. A route
+guarded correctly on the inside is still unreachable if the outer list has not
+been told about it, and the symptom is indistinguishable from "not built".
+
+**A blanket rule stopped being safe the moment a second write existed.** The
+proxy stamped `requester_id` onto every member `POST`/`PUT` body. That was
+harmless only while filing a request was the sole thing a member could write —
+`decodeJSONStrict` rejects unknown fields, so the vault's `PUT {password}` would
+have arrived with a field nobody sent and returned 400 on a correct password.
+The injection is now scoped to the one route that carries a requester. Neither
+review finding named this; it was found by reading the proxy after they did.
+
+**Suppressing an error to keep a screen tidy hides faults.** `ShadowCredential`
+returned `null` on a failed status read. It now renders an unavailable state
+saying access is unaffected. A member cannot act on that message, but somebody
+they mention it to can — and an absent card reports nothing to anybody.
+
+The proxy's test file gained cases for each: they fail against the pre-fix
+route (verified by stashing it), and one of them had to be tightened first — an
+assertion on `calls[0]?.body` passes vacuously when the proxy refused the call
+and there is no `calls[0]`.
+
+## Decision 12 · The audit row's cascade id is stamped by the code that mints it
+
+C6 was described as a threading problem: carry a cascade id onto every
+`INSERT INTO audit_logs`. Reading the eleven call sites turned it into a smaller
+and better one.
+
+`enqueueCascadeRows` already minted one id per batch — that is how Change history
+groups the writes one event produced — and then **discarded** it. Every atomic
+`*AndEnqueue` function wrote its own audit row on the line immediately above its
+call to that function. So the two halves of one event were written a line apart,
+by two statements, with the identifier tying them together known only to the
+second.
+
+Threading the id outward would have made "the audit row names its cascade" a
+convention eleven functions had to keep, and a twelfth would not have known
+about. Moving the audit insert *inward* makes it structural: `enqueueCascadeRows`
+takes the audit rows as a parameter, mints the id once, and stamps both. Eleven
+pairs of statements collapsed to eleven calls, and a cascade added later cannot
+forget, because there is nowhere left to forget it.
+
+`MoveHoldersAndEnqueue` is why the parameter is a slice rather than one row:
+moving eight people onto a version is eight things that happened to eight
+people, and one thing that happened. All eight audit rows carry the same
+cascade id.
+
+**A cascade that reached nobody gets NULL.** Change history is built from the
+outbox, so an id with no rows behind it would render as a link to a page with
+nothing on it. "This change reached nobody" is better said by a blank.
+
+## Decision 13 · Old audit rows keep their object, and lose the lie
+
+Every row written before migration `000023` has no cascade id, and there is no
+honest way to give it one. Matching audit rows to outbox batches by timestamp
+proximity would be mostly right — a cascade writes its audit row and its outbox
+rows in one transaction, at one instant — and *mostly right* is the wrong
+standard for a lineage link on a record of who may operate a laser cutter.
+
+They keep what they do know. `traceFor` returns three shapes and the console
+renders each differently:
+
+- **cascade** — the real id, linked to that cascade and no other.
+- **object** — the bundle or rule the change was about, labelled `b_` or `R_`
+  (the same vocabulary Change history uses), with **no link**. This is the same
+  identifier the column showed before, minus the `c_` prefix that misdescribed
+  it and the link that went somewhere else.
+- **none** — a dash. `bundle.role_added` records its resource as
+  `project/role`, and the first four characters of that is a label that looks
+  like a handle and refers to nothing.
+
+The old column was one function of the *action name*; the new one is a function
+of what the row actually carries. Both audit surfaces render it through one
+component for the same reason they share an action vocabulary: an operator
+comparing two screens must not find one row tracing to two different things.
+
+`?cascade=` is answered by the query, not by filtering the fifty-entry glance
+list in the console. The audit tail is walkable back to the first day, so a
+trace from an event older than the fifty most recent cascades has to land on
+something — and when the outbox rows have been drained and cleared, the page
+says *that*, rather than "nothing has cascaded yet".
+
+## Decision 14 · An application lives in exactly one project
+
+C7 (ISC-45) is settled, and settled the way the schema already was. Zitadel puts
+an app inside one project; `app_claim_overrides.application_id` is UNIQUE. The
+design diagram showing one Badge Reader reading four projects was the only thing
+claiming otherwise, and a diagram is the cheaper of the two to correct.
+
+The alternative was a real feature, not a relaxation: a join table, a rule for
+competing claim overrides across projects, a token-audience decision, and a
+deletion rule for when one of an app's projects is removed. None of those
+questions has a caller. Building the data model to answer them in advance would
+be building it for a use nobody has.
+
+The apps index keeps warning per project, which is now correct rather than a
+workaround. **What would reopen this:** a real integration that needs roles from
+two projects in one token. That is the trigger, and it is a product event, not a
+refactor.
+
+## Decision 15 · Advanced shows Zitadel's grant id, not a second MkAuth one
+
+C9's buildable half. The Advanced panel already showed `direct_role_grants.id` —
+MkAuth's own row — which answers "what does MkAuth think" and not "what does
+Zitadel hold". The second is the one an operator needs when cross-checking the
+identity provider or quoting an id in a ticket.
+
+It is keyed by **project**, because that is Zitadel's shape: one user-grant
+carries every role the person holds in that project. Repeating it on each role
+row would imply each role has its own grant, which is the misreading this whole
+page exists to prevent.
+
+Operator-only and Advanced-only, and *not fetched* otherwise: the endpoint
+behind it is operator-gated, this route also serves a member their own record,
+and a member's page must not fire a request whose only outcome is a 403 (the
+same rule as the Activity tab).
+
+A project with no Zitadel grant says so, rather than showing a dash — MkAuth
+listing roles for a project Zitadel has no grant for is a real condition, and a
+dash reads as "not loaded". Naming it is not the same as interpreting it: the
+line points at Reconciliation, which is where that gets triaged, and makes no
+claim of its own.
+
+**C9's other half stays unbuilt.** There is no per-user hardware sync state to
+render while the bridge is parked, and a panel that invented one would be
+precisely the failure `/system/hardware-sync` was written to avoid.
+
+## Decision 16 · A cascade id is a handle into one screen, so only that screen's writes get one
+
+Caught in review. Decision 12 gated the audit stamp on `len(params) > 0`, which
+read as "did this event cause any writes". The right question is narrower: *will
+those writes appear on the screen this id links to.*
+
+`DeleteDirectGrantAndEnqueue` goes through `enqueueCascadeRows` because its
+ledger delete, audit row and outbox rows must commit together — not because it is
+a cascade. Its writes carry `source='direct'`, and `GetCascadeGroups` filters to
+`bundle | rule | lifecycle_cascade`. So a direct removal stamped an id, the audit
+column rendered it as a trace link, and the link opened a page whose query
+excluded the very write it was about. Worse than a dash, and worse than a blank
+page: the empty state I had written says *"that cascade is no longer in the
+queue — the writes it produced have been carried out and cleared"*, which is a
+confident false statement about a revoke that was still pending.
+
+The fix is that the stamp and the filter now read **one list**,
+`cascadeGroupSources`, passed to the query as a parameter instead of spelled out
+inside it — twice, as it had been. A source added to the cascade family updates
+the glance list, the `?cascade=` lookup and the audit stamp in one edit, and a
+guard fails if the query ever inlines its own copy again.
+
+Two consequences worth stating rather than leaving implicit:
+
+**A direct removal that fires a rule is still not a cascade.** Removing a direct
+grant can revoke a second role a mapping rule derived from it. `deltaParams`
+attributes the whole delta to the grant, because the grant is what an operator
+clicked, and Pending changes is where an operator's own writes are answered for.
+
+**The predicate is asserted across the package boundary.** The params are built
+in `services` and read in `db`, and the bug lived in the gap between them, so
+`db.IsCascadeGroupSource` is exported and `services`' direct-removal test asserts
+against it directly. Testing either package alone would have passed.
+
+## Decision 17 · The action vocabulary is checked against the backend, not against memory
+
+Also caught in review, and the same shape of failure: `describeAction` falls
+through to the raw action key for anything it does not recognise. That fallback is
+correct — a log that invents a description is worse than one admitting it does not
+know — and it is **silent**, so six actions had accumulated behind it:
+`bundle.updated`, `bundle.deleted`, `bundle.version_published`,
+`bundle.holder_moved`, `mapping_rule.deleted`, `access_request.withdrawn`. Four
+came from this change; two arrived with bundle versioning and had been rendering
+as `bundle.version_published` on screen ever since.
+
+A hand-maintained list in a test would have the same weakness as the map. The
+coverage test reads the Go sources instead, collecting dotted literals from lines
+that name an `Action:` field or mention audit at all, and fails naming the action
+plus the file and line that writes it. It asserts in both directions — an action
+with no sentence, and copy for an action nothing emits.
+
+It cannot see the two actions assembled by concatenation
+(`"access_request."+status`, `"direct_grant."+opTypeAuditVerb(...)`). Both
+families are covered, and a scanner that evaluated Go string arithmetic would be
+a worse thing to own than the comment saying so.
+
+The wording choices are deliberate in two places. `bundle.updated` is *"Changed a
+bundle's name or description"*, not *"Renamed"* — the endpoint rewrites both and
+the row records neither, and a specific falsehood is worse than a vague truth.
+`access_request.withdrawn` is *"Withdrew their request"*, never a refusal, for
+the same reason `requestOutcome` keeps that distinction on the request screens.

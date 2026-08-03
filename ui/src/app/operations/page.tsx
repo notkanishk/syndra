@@ -259,7 +259,13 @@ function fromTrigger(trigger: OnboardingTriggerRow): StreamRow {
         {trigger.bundle_id ? (
           <>
             {" — "}
-            <BundleName id={trigger.bundle_id} /> assigned automatically
+            {/*
+              Bundles are deletable, and this log outlives them: the trigger row keeps the id
+              of whatever was handed out at the time. The default em dash would render that as
+              "— assigned automatically", which reads as nothing having been assigned.
+            */}
+            <BundleName id={trigger.bundle_id} fallback="a bundle since deleted" /> assigned
+            automatically
           </>
         ) : (
           <span className="text-faint"> — no default bundle configured, nothing assigned</span>

@@ -35,7 +35,26 @@ clarity.
 
 Grouped by the audit's buckets; see `tasks.md` for the ticked state.
 
-**Bucket A has landed in full.** Twelve items: the twelve below.
+**Bucket A has landed in full.** Twelve items: the twelve below. **Buckets B and C's landable
+items have landed too** — `B1`, `B2`, `C1`, `C2`, `C3`.
+
+**Nothing MkAuth creates is permanent any more, and retiring it is the revoke half of an edit.**
+A mapping rule and a bundle could be authored and never removed. Neither needed a deletion
+mechanism: every cascade here projects an effective-role closure delta, and a deletion is that
+same computation with one edge gone — `CascadeRuleUpdated` with no replacement edge, and
+`CascadeBundleRemovedFromUser` run over every holder. Both commit the mutation and its revokes in
+one transaction, because an assignment that vanished without its revoke is not a gap, it is drift
+with no actor attached. A bundle can also be renamed, which runs no cascade and publishes no
+version: a name is what operators call it, not what it grants.
+
+**A member can take back their own ask.** Withdrawing is a resolution, not a decision — resolved,
+with no reviewer recorded, because nobody reviewed it. Adding a third terminal state exposed two
+latent bugs: the decision guard enumerated the decided statuses instead of testing "not pending",
+and both request views rendered "settled and not approved" as a denial.
+
+**The vault has a surface, and it says what it is not.** Four endpoints, Argon2id storage,
+twenty-three tests, and nothing that reached them. It belongs to the person rather than the
+System page the brief named, because every endpoint is self-only.
 
 **Role identity is composed in one place, and always as a pair.** `admin` in
 Printing Lab and `admin` in Metal Shop are two different roles. The product had
@@ -79,7 +98,26 @@ can be created from the project it belongs to.
 
 ## Out of scope
 
+- `C4` (acknowledged/deferred state on expiring access) — the design brief asks
+  for this to be *flagged*, not assumed. Still flagged, and its unanswered
+  question — **when an acknowledgement reopens** — is now written down rather
+  than left for whoever builds it to invent.
+- `C5` (claim profile versioning) and `C8` (an actor for sweep-found drift) — both
+  speculative in the audit's own words. Neither has bitten. Both now carry the
+  concrete trigger that would justify them.
+- `C9b` (hardware sync state on the person page) — not buildable. There is no
+  per-user sync state while the bridge is parked, and it needs the same contract
+  `E1` needs.
 - LLDAP end-to-end and the Google Workspace poller (`D10`, `D11`) — parked
   tracks with their own changes.
-- `C4` (acknowledged/deferred state on expiring access) — the design brief asks
-  for this to be *flagged*, not assumed. It stays flagged.
+
+## Closed since first draft
+
+- `C6` — the Trace column was an inference twice over: a bundle/rule id wearing a
+  `c_` prefix, linking to an unfiltered page. `enqueueCascadeRows` now owns the
+  audit insert it was already minting an id for, so the lineage is structural
+  rather than remembered.
+- `C7` — settled: an application lives in exactly one project, which is what the
+  schema already said. The design diagram was the thing that was wrong.
+- `C9a` — Advanced shows Zitadel's own grant id alongside MkAuth's, per project,
+  operator-only.

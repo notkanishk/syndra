@@ -257,6 +257,7 @@ func resetAccessDeps(t *testing.T) {
 	t.Helper()
 	origGetByID := dbGetAccessRequestByID
 	origResolve := dbResolveAccessRequest
+	origWithdraw := dbWithdrawAccessRequest
 	origUpsert := dbUpsertDirectGrant
 	origCreate := dbCreateAccessRequest
 	origAudit := dbInsertAuditLog
@@ -269,6 +270,7 @@ func resetAccessDeps(t *testing.T) {
 	t.Cleanup(func() {
 		dbGetAccessRequestByID = origGetByID
 		dbResolveAccessRequest = origResolve
+		dbWithdrawAccessRequest = origWithdraw
 		dbUpsertDirectGrant = origUpsert
 		dbCreateAccessRequest = origCreate
 		dbInsertAuditLog = origAudit
@@ -726,6 +728,7 @@ func TestHandleResolveAccessRequestRejectedDoesNotCreateGrant(t *testing.T) {
 			RequesterID: "u1",
 			ProjectID:   "p1",
 			RoleKey:     "admin",
+			Status:      "pending",
 		}, nil
 	}
 	dbResolveAccessRequest = func(ctx context.Context, id, status, reviewerID, reviewNote string) error {
@@ -775,5 +778,117 @@ func TestHandleResolveAccessRequestRejectedDoesNotCreateGrant(t *testing.T) {
 	}
 	if auditAction != "access_request.rejected" {
 		t.Fatalf("unexpected audit action %s", auditAction)
+	}
+}
+
+// --- handleWithdrawAccessRequest ---
+
+func TestHandleWithdrawAccessRequest_RequesterMayTakeTheirOwnBack(t *testing.T) {
+	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
+	resetAccessDeps(t)
+
+	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
+		return models.AccessRequest{ID: id, RequesterID: "member-1", Status: "pending"}, nil
+	}
+	var gotID, gotRequester string
+	dbWithdrawAccessRequest = func(ctx context.Context, id, requesterID string) error {
+		gotID, gotRequester = id, requesterID
+		return nil
+	}
+	var auditAction, auditActor string
+	dbInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error {
+		auditActor, auditAction = actorID, action
+		return nil
+	}
+
+	req := memberContext(httptest.NewRequest(http.MethodPost, "/api/v1/requests/r1/withdraw", nil), "member-1")
+	req.SetPathValue("id", "r1")
+	rr := httptest.NewRecorder()
+	handleWithdrawAccessRequest(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	// The requester is passed from the row, never from the request — the UPDATE is scoped by it.
+	if gotID != "r1" || gotRequester != "member-1" {
+		t.Fatalf("withdraw(%q, %q), want (r1, member-1)", gotID, gotRequester)
+	}
+	if auditAction != "access_request.withdrawn" || auditActor != "member-1" {
+		t.Fatalf("audit actor=%q action=%q", auditActor, auditAction)
+	}
+}
+
+// Withdrawing is the requester's own act. An operator taking back somebody else's ask would be a
+// rejection with the reviewer's name left off, so it is refused here too.
+func TestHandleWithdrawAccessRequest_SomebodyElsesIs403(t *testing.T) {
+	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
+	resetAccessDeps(t)
+
+	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
+		return models.AccessRequest{ID: id, RequesterID: "someone-else", Status: "pending"}, nil
+	}
+	dbWithdrawAccessRequest = func(ctx context.Context, id, requesterID string) error {
+		t.Fatal("must not withdraw a request filed by somebody else")
+		return nil
+	}
+
+	req := memberContext(httptest.NewRequest(http.MethodPost, "/api/v1/requests/r1/withdraw", nil), "member-1")
+	req.SetPathValue("id", "r1")
+	rr := httptest.NewRecorder()
+	handleWithdrawAccessRequest(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// An operator decided it in the window between the member's screen loading and their click.
+// Their copy of the row is stale; saying so beats reporting a failure.
+func TestHandleWithdrawAccessRequest_AlreadyDecidedIs409(t *testing.T) {
+	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
+	resetAccessDeps(t)
+
+	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
+		return models.AccessRequest{ID: id, RequesterID: "member-1", Status: "pending"}, nil
+	}
+	dbWithdrawAccessRequest = func(ctx context.Context, id, requesterID string) error {
+		return db.ErrRequestNotPending
+	}
+
+	req := memberContext(httptest.NewRequest(http.MethodPost, "/api/v1/requests/r1/withdraw", nil), "member-1")
+	req.SetPathValue("id", "r1")
+	rr := httptest.NewRecorder()
+	handleWithdrawAccessRequest(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// A withdrawn request is settled. Deciding one afterwards would resurrect an ask its author had
+// already taken back — the guard is "not pending", not a list of decided statuses.
+func TestHandleResolveAccessRequest_WithdrawnCannotBeDecided(t *testing.T) {
+	resetAccessDeps(t)
+
+	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
+		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin",
+			Status: "withdrawn"}, nil
+	}
+	dbResolveAccessRequest = func(ctx context.Context, id, status, reviewerID, reviewNote string) error {
+		t.Fatal("a withdrawn request must not be decidable")
+		return nil
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/r1/decision",
+		strings.NewReader(`{"status":"rejected","reviewer_id":"reviewer-1","review_note":"no"}`))
+	req.SetPathValue("id", "r1")
+	rr := httptest.NewRecorder()
+	handleResolveAccessRequest(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "already withdrawn") {
+		t.Fatalf("the conflict must name the state it is in: %s", rr.Body.String())
 	}
 }

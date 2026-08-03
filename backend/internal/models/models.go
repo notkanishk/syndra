@@ -123,6 +123,10 @@ type AuditLog struct {
 	Action     string    `json:"action"`
 	ResourceID string    `json:"resource_id"`
 	CreatedAt  time.Time `json:"created_at"`
+	// CascadeID names the cascade this event set off, matching CascadeGroup.CascadeID. Empty for
+	// events that cascaded to nobody and for every row written before migration 000023 — the
+	// console renders those without a lineage link rather than guessing one.
+	CascadeID string `json:"cascade_id,omitempty"`
 }
 
 type UserProfile struct {
@@ -331,11 +335,14 @@ type PendingPropagation struct {
 	CompletedAt    *time.Time `json:"completed_at,omitempty"`
 }
 
-// CascadeSummary is one applied cascade-originated outbox row, surfaced for the
-// operator's "Recent cascades" feed (Task 22). "Applied" here means the
-// projection reached Zitadel — not specifically that it drained automatically
-// (the outbox does not persist auto-vs-operator-resumed per row; see
-// db.GetRecentCascades doc comment).
+// CascadeSummary is one cascade-originated outbox write, as it appears inside
+// the CascadeGroup that Change history renders. `Status` is the row's own —
+// applied, waiting or failed — because a group is only readable as a group when
+// each write in it says which it was.
+//
+// It once backed a second, flat feed of its own (GET /propagations/cascades).
+// That endpoint is gone: one entry per cascade is the readable unit, and one
+// row per write was the same data with the causation removed.
 type CascadeSummary struct {
 	ID          string     `json:"id"`
 	OpType      string     `json:"op_type"` // add | revoke | replace

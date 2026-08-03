@@ -42,6 +42,8 @@ func resetCascadeDeps(t *testing.T) {
 	origRemoveBundleAndEnqueue := svcRemoveBundleFromUserAndEnqueue
 	origRemoveRoleAndEnqueue := svcRemoveRoleFromBundleAndEnqueue
 	origUpdateRuleAndEnqueue := svcUpdateRuleAndEnqueue
+	origDeleteRuleAndEnqueue := svcDeleteRuleAndEnqueue
+	origDeleteBundleAndEnqueue := svcDeleteBundleAndEnqueue
 	t.Cleanup(func() {
 		svcGetBundleByID = origGetBundle
 		svcCascGetRolesForBundle = origGetRoles
@@ -67,6 +69,8 @@ func resetCascadeDeps(t *testing.T) {
 		svcRemoveBundleFromUserAndEnqueue = origRemoveBundleAndEnqueue
 		svcRemoveRoleFromBundleAndEnqueue = origRemoveRoleAndEnqueue
 		svcUpdateRuleAndEnqueue = origUpdateRuleAndEnqueue
+		svcDeleteRuleAndEnqueue = origDeleteRuleAndEnqueue
+		svcDeleteBundleAndEnqueue = origDeleteBundleAndEnqueue
 	})
 
 	// Same default as the governance harness: closures resolve bundle roles
@@ -1143,5 +1147,208 @@ func TestCascadeBundleAssigned_ExistingHolderIsANoOp(t *testing.T) {
 	}
 	if drained {
 		t.Fatal("nothing was written, so nothing may be drained")
+	}
+}
+
+// --- CascadeRuleDeleted ---
+
+// A retired rule takes back what only it was granting: u1 holds the source directly, the rule is
+// the sole path to the target, so deleting it must revoke the target and nothing else.
+func TestCascadeRuleDeleted_RevokesTargetTheRuleAloneGranted(t *testing.T) {
+	resetCascadeDeps(t)
+	old := models.MappingRule{ID: "rule1", SourceProject: "sp", SourceRole: "sr",
+		TargetProject: "tp", TargetRole: "tr", ConfirmationMode: "auto"}
+	svcGetAllKnownUserIDs = func(ctx context.Context) ([]string, error) { return []string{"u1"}, nil }
+	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
+		return []models.MappingRule{old}, nil
+	}
+	svcGetDirectGrantsForUser = func(ctx context.Context, u string, inc bool) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{UserID: u, ProjectID: "sp", RoleKey: "sr"}}, nil
+	}
+	svcGetUserBundleRolesGrouped = noBundleRoles
+
+	var got []db.EnqueueParams
+	var gotID string
+	svcDeleteRuleAndEnqueue = func(ctx context.Context, actor, id string, ps []db.EnqueueParams) ([]string, error) {
+		gotID, got = id, ps
+		return []string{"o1"}, nil
+	}
+	svcDrainBatch = func(ctx context.Context, ids []string) (propagation.DrainResult, error) {
+		return propagation.DrainResult{}, nil
+	}
+
+	res, err := CascadeRuleDeleted(context.Background(), "admin", old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotID != "rule1" {
+		t.Fatalf("delete targeted %q, want rule1", gotID)
+	}
+	if len(got) != 1 {
+		t.Fatalf("want exactly one enqueue param, got %+v", got)
+	}
+	if got[0].OpType != "revoke" || got[0].RoleKeys[0] != "tr" {
+		t.Fatalf("want revoke of tr, got %+v", got[0])
+	}
+	// The source role itself is held directly and is untouched by the rule going away.
+	if got[0].ProjectID != "tp" {
+		t.Fatalf("revoke must target the rule's target project, got %+v", got[0])
+	}
+	if got[0].Source != "rule" || got[0].SourceRef != "rule1" {
+		t.Fatalf("bad source attribution: %+v", got[0])
+	}
+	if res.Enqueued != 1 {
+		t.Fatalf("Enqueued=%d, want 1", res.Enqueued)
+	}
+}
+
+// The target is also carried by a bundle, so it survives the rule's deletion — the closure still
+// contains it and nothing is revoked. This is the check that stops a rule cleanup from stripping
+// access somebody holds twice over.
+func TestCascadeRuleDeleted_TargetStillCoveredByBundle_NoRevoke(t *testing.T) {
+	resetCascadeDeps(t)
+	old := models.MappingRule{ID: "rule1", SourceProject: "sp", SourceRole: "sr",
+		TargetProject: "tp", TargetRole: "tr", ConfirmationMode: "auto"}
+	svcGetAllKnownUserIDs = func(ctx context.Context) ([]string, error) { return []string{"u1"}, nil }
+	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
+		return []models.MappingRule{old}, nil
+	}
+	svcGetDirectGrantsForUser = func(ctx context.Context, u string, inc bool) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{UserID: u, ProjectID: "sp", RoleKey: "sr"}}, nil
+	}
+	svcGetBundlesForUser = func(ctx context.Context, u string) ([]models.Bundle, error) {
+		return []models.Bundle{{ID: "b1"}}, nil
+	}
+	svcGetUserBundleRolesGrouped = func(ctx context.Context, u string) (map[string][]models.BundleRole, error) {
+		return map[string][]models.BundleRole{"b1": {{ProjectID: "tp", RoleKey: "tr"}}}, nil
+	}
+
+	var got []db.EnqueueParams
+	svcDeleteRuleAndEnqueue = func(ctx context.Context, actor, id string, ps []db.EnqueueParams) ([]string, error) {
+		got = ps
+		return nil, nil
+	}
+
+	if _, err := CascadeRuleDeleted(context.Background(), "admin", old); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("target still covered by a bundle — must enqueue nothing, got %+v", got)
+	}
+}
+
+// A manual rule's deletion queues its revokes rather than draining them, exactly as its other
+// writes were queued. A retirement that fired immediately when every prior write waited would be
+// the one irreversible thing the confirmation gate did not cover.
+func TestCascadeRuleDeleted_ManualModeDoesNotDrain(t *testing.T) {
+	resetCascadeDeps(t)
+	old := models.MappingRule{ID: "rule1", SourceProject: "sp", SourceRole: "sr",
+		TargetProject: "tp", TargetRole: "tr", ConfirmationMode: "manual"}
+	svcGetAllKnownUserIDs = func(ctx context.Context) ([]string, error) { return []string{"u1"}, nil }
+	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
+		return []models.MappingRule{old}, nil
+	}
+	svcGetDirectGrantsForUser = func(ctx context.Context, u string, inc bool) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{UserID: u, ProjectID: "sp", RoleKey: "sr"}}, nil
+	}
+	svcGetUserBundleRolesGrouped = noBundleRoles
+	svcDeleteRuleAndEnqueue = func(ctx context.Context, actor, id string, ps []db.EnqueueParams) ([]string, error) {
+		return []string{"o1"}, nil
+	}
+	drained := false
+	svcDrainBatch = func(ctx context.Context, ids []string) (propagation.DrainResult, error) {
+		drained = true
+		return propagation.DrainResult{}, nil
+	}
+
+	res, err := CascadeRuleDeleted(context.Background(), "admin", old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if drained {
+		t.Fatal("manual rule must not drain its own deletion")
+	}
+	if res.Mode != "manual" || res.Enqueued != 1 {
+		t.Fatalf("res=%+v, want manual/1", res)
+	}
+}
+
+// --- CascadeBundleDeleted ---
+
+// Two holders, the same bundle, different outcomes: u2 also holds the role directly, so only u1
+// loses it. Coverage is a property of the person, which is why the delete loops over holders
+// rather than revoking the bundle's role list wholesale.
+func TestCascadeBundleDeleted_RevokesPerHolderNotPerBundle(t *testing.T) {
+	resetCascadeDeps(t)
+	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
+		return models.Bundle{ID: "b1", ConfirmationMode: "auto"}, nil
+	}
+	svcGetActiveMappingRules = noRules
+	svcGetUsersForBundle = func(ctx context.Context, id string) ([]string, error) {
+		return []string{"u1", "u2"}, nil
+	}
+	svcGetBundlesForUser = func(ctx context.Context, u string) ([]models.Bundle, error) {
+		return []models.Bundle{{ID: "b1"}}, nil
+	}
+	svcGetUserBundleRolesGrouped = func(ctx context.Context, u string) (map[string][]models.BundleRole, error) {
+		return map[string][]models.BundleRole{"b1": {{ProjectID: "p1", RoleKey: "trained"}}}, nil
+	}
+	svcGetDirectGrantsForUser = func(ctx context.Context, u string, inc bool) ([]models.DirectGrant, error) {
+		if u == "u2" {
+			return []models.DirectGrant{{UserID: u, ProjectID: "p1", RoleKey: "trained"}}, nil
+		}
+		return nil, nil
+	}
+
+	var got []db.EnqueueParams
+	svcDeleteBundleAndEnqueue = func(ctx context.Context, actor, id string, ps []db.EnqueueParams) ([]string, error) {
+		got = ps
+		return []string{"o1"}, nil
+	}
+	svcDrainBatch = func(ctx context.Context, ids []string) (propagation.DrainResult, error) {
+		return propagation.DrainResult{}, nil
+	}
+
+	if _, err := CascadeBundleDeleted(context.Background(), "admin", "b1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("want one revoke (u1 only), got %+v", got)
+	}
+	if got[0].UserID != "u1" || got[0].OpType != "revoke" || got[0].RoleKeys[0] != "trained" {
+		t.Fatalf("want u1 revoke of trained, got %+v", got[0])
+	}
+	if got[0].Source != "bundle" || got[0].SourceRef != "b1" {
+		t.Fatalf("bad source attribution: %+v", got[0])
+	}
+}
+
+// A bundle nobody holds deletes cleanly and enqueues nothing — the mutation still has to happen.
+func TestCascadeBundleDeleted_NoHoldersStillDeletes(t *testing.T) {
+	resetCascadeDeps(t)
+	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
+		return models.Bundle{ID: "b1", ConfirmationMode: "auto"}, nil
+	}
+	svcGetActiveMappingRules = noRules
+	svcGetUsersForBundle = func(ctx context.Context, id string) ([]string, error) { return nil, nil }
+
+	called := false
+	svcDeleteBundleAndEnqueue = func(ctx context.Context, actor, id string, ps []db.EnqueueParams) ([]string, error) {
+		called = true
+		if len(ps) != 0 {
+			t.Fatalf("want no enqueue params, got %+v", ps)
+		}
+		return nil, nil
+	}
+
+	res, err := CascadeBundleDeleted(context.Background(), "admin", "b1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("the bundle must still be deleted when nobody holds it")
+	}
+	if res.Enqueued != 0 {
+		t.Fatalf("Enqueued=%d, want 0", res.Enqueued)
 	}
 }

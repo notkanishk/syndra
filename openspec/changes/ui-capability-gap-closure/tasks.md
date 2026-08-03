@@ -28,20 +28,61 @@ Item ids match [`docs/UI-CAPABILITY-GAPS.md`](../../../docs/UI-CAPABILITY-GAPS.m
 - [x] 2.10 **A11** Roles index gains a "Used by" column and an Unused filter; Today's "N roles nobody holds" now deep-links to it
 - [x] 2.11 **A12** Six superseded zero-consumer hooks deleted, with their orphaned types and query keys
 
-## 3. B — built, unreachable
+## 3. B — built, unreachable ✅
 
-- [ ] 3.1 **B1** Shadow password vault UI — four endpoints, Argon2id storage, 23 tests, no surface
-- [ ] 3.2 **B2** Decide `GET /propagations/cascades`: expose or delete
+- [x] 3.1 **B1** Shadow password vault UI — `<ShadowCredential>` on Member · My access (not the
+      System page the brief named; the endpoints are self-only — see design Decision 9). States
+      that it is not the institutional login, that nothing reads it yet, and that it cannot be
+      read back. Complexity is judged only by the backend, whose sentence is shown verbatim.
+      Proxy allowlist extended to the vault routes (self-only) — without it the card was
+      unreachable and, because it suppressed its own read error, invisible. See design Decision 11
+- [x] 3.2 **B2** **Deleted.** Endpoint, handler, `db.GetRecentCascades` and its three tests.
+      `models.CascadeSummary` stays as the per-write shape inside a `CascadeGroup` — see design
+      Decision 10
 
 ## 4. C — missing lifecycle (backend + UI)
 
-- [ ] 4.1 **C1** `DELETE /rules/mapping/{id}` — route, repository, UI. A rule authored wrong is currently permanent
-- [ ] 4.2 **C2** `PUT`/`DELETE /bundles/{id}` — a bundle cannot be renamed or retired
-- [ ] 4.3 **C3** Withdraw an access request. The copy for it is already written in `requests_bulk.go`
-- [ ] 4.4 **C6** Carry the cascade id on `audit_logs` so the Trace column stops being an inference
-- [ ] 4.5 **C7** Settle app ↔ project cardinality (ISC-45)
-- [ ] 4.6 **C9** Person page in Advanced: raw grant ids, hardware sync state
-- [ ] — **C4** stays flagged, not built. **C5**, **C8** are deferred by design; see the audit doc
+- [x] 4.1 **C1** `DELETE /rules/mapping/{id}` — `CascadeRuleDeleted` is `CascadeRuleUpdated` with
+      no replacement edge, committed with `DeleteMappingRuleAndEnqueue`. The confirmation takes
+      over the editor rather than stacking a dialog on it
+- [x] 4.2 **C2** `PUT`/`DELETE /bundles/{id}` — rename runs no cascade and publishes no version;
+      delete loops over holders because coverage is a property of a person. Migration `000021`
+      drops the `onboarding_triggers` foreign key that would have blocked it (design Decision 7)
+- [x] 4.3 **C3** `POST /requests/{id}/withdraw`, self-only in the handler AND in the statement.
+      Migration `000022`. Closed two latent bugs on the way: the decision guard enumerated
+      statuses instead of testing `!= pending`, and both views read "settled, not approved" as a
+      denial (design Decision 8). Proxy allowlist extended to the withdraw route, and its
+      blanket `requester_id` body injection scoped to `POST /requests` — see design Decision 11
+- [x] 4.4 **C6** `audit_logs.cascade_id` (migration `000023`), stamped inside
+      `enqueueCascadeRows` — which already minted the id and discarded it. Eleven audit inserts
+      moved inward, so the invariant is structural rather than remembered, and a source-coherence
+      guard fails if a twelfth reappears. `traceFor` gives the column three honest shapes; old
+      rows keep their object id, unlinked, and are NOT backfilled by timestamp (design Decisions
+      12 and 13). Change history answers `?cascade=` in the query, and says so when the writes
+      have been cleared.
+      **Caught in review:** the stamp was gated on "did this cause writes" rather than "will that
+      screen show them", so a direct grant's removal linked to a page whose query excludes
+      `source='direct'` — and the empty state confidently said its still-pending revoke had been
+      carried out. Stamp and filter now read one `cascadeGroupSources` list, asserted across the
+      `services`/`db` boundary where the bug lived (design Decision 16)
+- [x] 4.4b Every audit action has a sentence. `bundle.updated`, `bundle.deleted`,
+      `mapping_rule.deleted`, `access_request.withdrawn` — plus `bundle.version_published` and
+      `bundle.holder_moved`, which had been rendering as machine keys since bundle versioning
+      shipped. `describeAction`'s raw-key fallback is right and silent, so the map is now checked
+      against the Go sources in both directions (design Decision 17)
+- [x] 4.5 **C7** Settled: an application lives in exactly one project, matching Zitadel and the
+      UNIQUE constraint the schema already carries. The design diagram was the only thing claiming
+      otherwise. Reopens on a real integration needing roles from two projects in one token —
+      design Decision 14
+- [x] 4.6 **C9a** Advanced shows **Zitadel's** grant id per project (MkAuth's own row was already
+      there, and answers a different question). Operator-only and not fetched otherwise; a project
+      with no upstream grant says so rather than showing a dash — design Decision 15
+- [ ] 4.7 **C9b** Hardware sync state on the person page. **Not buildable:** there is no per-user
+      sync state while the bridge is parked, and a panel that invented one would be the failure
+      `/system/hardware-sync` exists to avoid. Blocked on the same contract as 5.1
+- [ ] — **C4** stays flagged, not built — and the reset semantics are now written down so
+      whoever builds it does not have to invent them. **C5**, **C8** deferred with their trigger
+      conditions recorded; see the audit doc
 
 ## 5. E — live deployment
 
@@ -49,7 +90,8 @@ Item ids match [`docs/UI-CAPABILITY-GAPS.md`](../../../docs/UI-CAPABILITY-GAPS.m
 
 ## 6. Doc drift found by the audit
 
-- [ ] 6.1 `feature-coverage.md` — "rule edits flow through DELETE+CREATE"; no `DELETE` exists
+- [x] 6.1 `feature-coverage.md` — "rule edits flow through DELETE+CREATE". `PUT` is the edit
+      path; `DELETE` now exists and is a retirement, not half of an edit
 - [ ] 6.2 `feature-coverage.md` — theme toggle / mode persistence "not evidenced"; both exist
 - [ ] 6.3 `feature-coverage.md` — audit actor "demo/static in UI flows"; resolved via the name resolver
 - [ ] 6.4 `ROADMAP.md` Phase 5 — Welcome Bundle Configuration listed open; it shipped

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -22,17 +23,80 @@ func IsUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
-// enqueueCascadeRows inserts one outbox row per param (with source/source_ref) on an EXISTING
-// tx and returns the outbox ids. It writes NO direct_role_grants row — cascade intent lives in
-// the bundle/rule tables (see design pivot in global-constraints.md). Each row still gets an
-// idempotency key, same as the direct-grant enqueue path.
+// cascadeGroupSources are the outbox sources Change history groups into cascades.
+//
+// The audit stamp and the GetCascadeGroups filter MUST read this one list. They diverged once and
+// the symptom was exactly what you would expect and would not think to look for: a direct grant's
+// removal stamped a cascade id on its audit row, the console rendered it as a trace link, and the
+// link landed on a page whose query excludes source='direct' — an empty history for a revoke that
+// was really pending.
+var cascadeGroupSources = []string{"bundle", "rule", "lifecycle_cascade"}
+
+// IsCascadeGroupSource reports whether an outbox row with this source appears in Change history.
+// Exported for the services package, which builds the params and must be able to assert what
+// screen its writes will show up on.
+func IsCascadeGroupSource(source string) bool {
+	return slices.Contains(cascadeGroupSources, source)
+}
+
+// outboxSource is the source an EnqueueParams will be stored with. Empty means direct — an
+// operator's own grant, which is the default because it is the only one nobody has to name.
+func outboxSource(p EnqueueParams) string {
+	if p.Source == "" {
+		return "direct"
+	}
+	return p.Source
+}
+
+// cascadeGroupVisible reports whether these writes will appear in Change history, which is the
+// only thing an audit row's cascade id is a handle for.
+//
+// A direct grant's removal is the case that matters. It goes through enqueueCascadeRows because
+// its ledger delete, audit row and outbox rows must commit together — but its writes carry
+// source='direct', and the surface for those is Pending changes. Stamping an id here would put a
+// trace link on the audit row pointing at a screen that filters the write out.
+func cascadeGroupVisible(params []EnqueueParams) bool {
+	for _, p := range params {
+		if IsCascadeGroupSource(outboxSource(p)) {
+			return true
+		}
+	}
+	return false
+}
+
+// CascadeAudit is one audit row a cascade writes about itself. Most cascades write exactly one
+// ("a rule was changed"); MoveHoldersAndEnqueue writes one per person moved, and all of them
+// belong to the same cascade.
+type CascadeAudit struct {
+	Actor      string
+	Target     string // "-" when the event is about an object rather than a person
+	Action     string
+	ResourceID string
+}
+
+// enqueueCascadeRows writes the cascade's audit rows and one outbox row per param (with
+// source/source_ref) on an EXISTING tx, and returns the outbox ids. It writes NO
+// direct_role_grants row — cascade intent lives in the bundle/rule tables (see design pivot in
+// global-constraints.md). Each outbox row still gets an idempotency key, same as the
+// direct-grant enqueue path.
+//
+// The audit insert lives HERE rather than in each caller, and that is the whole point of C6
+// (ISC-44). Every *AndEnqueue function used to write its audit row on the line immediately above
+// its call to this one, which made "the audit row names the cascade it caused" a convention
+// eleven functions had to remember. It is now structural: the id is minted, stamped on the audit
+// rows and stamped on the outbox rows in one place, and a cascade added later cannot forget.
+//
+// The cascade id is stamped only when the writes will actually appear in Change history — see
+// cascadeGroupVisible. It is a handle into that screen and nothing else, so a cascade that
+// produced no writes, or writes that screen does not group, gets NULL. "This change reached
+// nobody" is better said by an honest blank than by a dead link.
 //
 // A "revoke" param computed from a (user, project, role) triple (bundle/rule cascade revokes)
 // never arrives with ZitadelGrantID set — unlike drift/discovery revokes, which already know the
 // grant id from the triggering event or URL param. Resolve it here from the webhook-maintained
 // grant index before the insert; a cache miss leaves it empty (the drain then fails just that
 // row, non-fatally — see GetGrantIndexByUserProject).
-func enqueueCascadeRows(ctx context.Context, tx pgx.Tx, params []EnqueueParams) ([]string, error) {
+func enqueueCascadeRows(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, params []EnqueueParams) ([]string, error) {
 	const insertOutbox = `
 		INSERT INTO pending_zitadel_propagations
 			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json,
@@ -51,6 +115,27 @@ func enqueueCascadeRows(ctx context.Context, tx pgx.Tx, params []EnqueueParams) 
 		return nil, err
 	}
 
+	// NULL, not the empty string: the column is UUID, and "this event caused no cascade" is
+	// exactly what NULL means.
+	var auditCascadeID *string
+	if cascadeGroupVisible(params) {
+		auditCascadeID = &cascadeID
+	}
+	const insertAudit = `
+		INSERT INTO audit_logs
+			(actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, cascade_id)
+		VALUES ($1,$2,$3,$4,$5)`
+	for _, a := range audits {
+		target := a.Target
+		if target == "" {
+			target = "-"
+		}
+		if _, err := tx.Exec(ctx, insertAudit, a.Actor, target, a.Action, a.ResourceID,
+			auditCascadeID); err != nil {
+			return nil, err
+		}
+	}
+
 	ids := make([]string, 0, len(params))
 	for _, p := range params {
 		if p.OpType == "revoke" && p.ZitadelGrantID == "" {
@@ -64,13 +149,9 @@ func enqueueCascadeRows(ctx context.Context, tx pgx.Tx, params []EnqueueParams) 
 		if err != nil {
 			return nil, err
 		}
-		src := p.Source
-		if src == "" {
-			src = "direct"
-		}
 		var id string
 		if err := tx.QueryRow(ctx, insertOutbox, p.OpType, p.UserID, p.ProjectID, p.RoleKeys,
-			p.ZitadelGrantID, jsonOrEmpty(p.PayloadJSON), key, p.GrantedBy, src, p.SourceRef,
+			p.ZitadelGrantID, jsonOrEmpty(p.PayloadJSON), key, p.GrantedBy, outboxSource(p), p.SourceRef,
 			cascadeID).Scan(&id); err != nil {
 			return nil, err
 		}
@@ -167,12 +248,9 @@ func AssignBundleAndEnqueue(ctx context.Context, actor, userID, bundleID, versio
 		return nil, false, err
 	}
 
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
-		 VALUES ($1,$2,'bundle.assigned',$3)`, actor, userID, bundleID); err != nil {
-		return nil, false, err
-	}
-	ids, err = enqueueCascadeRows(ctx, tx, params)
+	ids, err = enqueueCascadeRows(ctx, tx,
+		[]CascadeAudit{{Actor: actor, Target: userID, Action: "bundle.assigned", ResourceID: bundleID}},
+		params)
 	if err != nil {
 		return nil, false, err
 	}
@@ -195,12 +273,9 @@ func AddRoleToBundleAndEnqueue(ctx context.Context, actor, bundleID, projectID, 
 		 ON CONFLICT DO NOTHING`, bundleID, projectID, roleKey); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
-		 VALUES ($1,$2,'bundle.role_added',$3)`, actor, bundleID, projectID+"/"+roleKey); err != nil {
-		return nil, err
-	}
-	ids, err := enqueueCascadeRows(ctx, tx, params)
+	ids, err := enqueueCascadeRows(ctx, tx,
+		[]CascadeAudit{{Actor: actor, Target: bundleID, Action: "bundle.role_added", ResourceID: projectID + "/" + roleKey}},
+		params)
 	if err != nil {
 		return nil, err
 	}
@@ -233,16 +308,12 @@ func CreateMappingRuleAndEnqueue(ctx context.Context, actor, sourceProject, sour
 		return "", nil, err
 	}
 
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
-		 VALUES ($1,$2,'mapping_rule.created',$3)`, actor, "-", ruleID); err != nil {
-		return "", nil, err
-	}
-
 	for i := range params {
 		params[i].SourceRef = ruleID
 	}
-	ids, err := enqueueCascadeRows(ctx, tx, params)
+	ids, err := enqueueCascadeRows(ctx, tx,
+		[]CascadeAudit{{Actor: actor, Action: "mapping_rule.created", ResourceID: ruleID}},
+		params)
 	if err != nil {
 		return "", nil, err
 	}
@@ -266,12 +337,9 @@ func RemoveBundleFromUserAndEnqueue(ctx context.Context, actor, userID, bundleID
 		`DELETE FROM user_bundle_assignments WHERE user_id=$1 AND bundle_id=$2`, userID, bundleID); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
-		 VALUES ($1,$2,'bundle.unassigned',$3)`, actor, userID, bundleID); err != nil {
-		return nil, err
-	}
-	ids, err := enqueueCascadeRows(ctx, tx, params)
+	ids, err := enqueueCascadeRows(ctx, tx,
+		[]CascadeAudit{{Actor: actor, Target: userID, Action: "bundle.unassigned", ResourceID: bundleID}},
+		params)
 	if err != nil {
 		return nil, err
 	}
@@ -295,12 +363,9 @@ func RemoveRoleFromBundleAndEnqueue(ctx context.Context, actor, bundleID, projec
 		bundleID, projectID, roleKey); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
-		 VALUES ($1,$2,'bundle.role_removed',$3)`, actor, bundleID, projectID+"/"+roleKey); err != nil {
-		return nil, err
-	}
-	ids, err := enqueueCascadeRows(ctx, tx, params)
+	ids, err := enqueueCascadeRows(ctx, tx,
+		[]CascadeAudit{{Actor: actor, Target: bundleID, Action: "bundle.role_removed", ResourceID: projectID + "/" + roleKey}},
+		params)
 	if err != nil {
 		return nil, err
 	}
@@ -328,67 +393,56 @@ func SetBundleConfirmationMode(ctx context.Context, ids []string, mode string) e
 	return err
 }
 
-// GetRecentCascades returns the most recently applied cascade-originated outbox rows (source ∈
-// {bundle, rule, lifecycle_cascade}), newest first. This is a superset of "automated" — the
-// outbox does not persist whether a row drained automatically or via an operator's "Resume now"
-// (the confirmation decision isn't recorded per row) — so this surfaces every cascade projection
-// that reached Zitadel, which is the right thing to show an operator (never invisible).
-func GetRecentCascades(ctx context.Context, limit int) ([]models.CascadeSummary, error) {
-	const q = `
-		SELECT id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
-		       COALESCE(cascade_id::text,''), status, completed_at
-		FROM pending_zitadel_propagations
-		WHERE source IN ('bundle','rule','lifecycle_cascade') AND status = 'applied'
-		ORDER BY completed_at DESC NULLS LAST LIMIT $1`
-	rows, err := PG.Query(ctx, q, limit)
-	if err != nil {
-		return nil, fmt.Errorf("get recent cascades: %w", err)
-	}
-	defer rows.Close()
-
-	var out []models.CascadeSummary
-	for rows.Next() {
-		var c models.CascadeSummary
-		if err := rows.Scan(&c.ID, &c.OpType, &c.UserID, &c.ProjectID, &c.RoleKeys,
-			&c.Source, &c.SourceRef, &c.CascadeID, &c.Status, &c.CompletedAt); err != nil {
-			return nil, fmt.Errorf("scan cascade summary: %w", err)
-		}
-		out = append(out, c)
-	}
-	return out, rows.Err()
-}
-
 // GetCascadeGroups is Change history's read: every cascade-originated write,
 // grouped by the event that produced it, newest first.
 //
-// Deliberately NOT filtered to status='applied' the way GetRecentCascades is.
-// A cascade with two writes still waiting is exactly the entry an operator
-// needs to see — "8 applied" and "2 writes waiting" are the same vocabulary,
-// and hiding the unfinished ones is how a half-applied cascade goes unnoticed
-// until it surfaces as unexplained access.
+// Deliberately NOT filtered to status='applied'. A cascade with two writes
+// still waiting is exactly the entry an operator needs to see — "8 applied" and
+// "2 writes waiting" are the same vocabulary, and hiding the unfinished ones is
+// how a half-applied cascade goes unnoticed until it surfaces as unexplained
+// access.
 //
 // Rows written before 000019 have no cascade_id; each falls back to its own
 // outbox id so history stays complete rather than silently dropping them.
-func GetCascadeGroups(ctx context.Context, limit int) ([]models.CascadeGroup, error) {
+func GetCascadeGroups(ctx context.Context, limit int, cascadeID string) ([]models.CascadeGroup, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	const q = `
+	// $1 is cascadeGroupSources throughout, in both the outer query and the subquery — the same
+	// list enqueueCascadeRows consults before stamping an audit row, passed rather than spelled
+	// out, so a source added to one is added to all three at once.
+	const columns = `
 		SELECT COALESCE(cascade_id::text, id::text) AS group_id,
 		       id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
 		       COALESCE(cascade_id::text,''), status, created_at, completed_at
 		FROM pending_zitadel_propagations
-		WHERE source IN ('bundle','rule','lifecycle_cascade')
+		WHERE source = ANY($1::text[])`
+
+	// The most recent N cascades — the glance list.
+	q := columns + `
 		  AND COALESCE(cascade_id::text, id::text) IN (
 		      SELECT COALESCE(cascade_id::text, id::text)
 		      FROM pending_zitadel_propagations
-		      WHERE source IN ('bundle','rule','lifecycle_cascade')
+		      WHERE source = ANY($1::text[])
 		      GROUP BY COALESCE(cascade_id::text, id::text)
 		      ORDER BY MAX(created_at) DESC
-		      LIMIT $1
+		      LIMIT $2
 		  )
 		ORDER BY created_at DESC`
-	rows, err := PG.Query(ctx, q, limit)
+	args := []any{cascadeGroupSources, limit}
+
+	// …or exactly one, named. This is what an audit row's trace link asks for, and it has to be
+	// answered here rather than by filtering the glance list in the console: the audit tail is
+	// walkable back to the first day, so a trace from a row older than the last 50 cascades
+	// would otherwise land on a page that says nothing happened.
+	if cascadeID != "" {
+		q = columns + `
+		  AND COALESCE(cascade_id::text, id::text) = $2
+		ORDER BY created_at DESC`
+		args = []any{cascadeGroupSources, cascadeID}
+	}
+
+	rows, err := PG.Query(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("get cascade groups: %w", err)
 	}
@@ -466,12 +520,46 @@ func UpdateMappingRuleAndEnqueue(ctx context.Context, actor, id, sp, sr, tp, tr 
 		 WHERE id=$1`, id, sp, sr, tp, tr); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
-		 VALUES ($1,'-','mapping_rule.updated',$2)`, actor, id); err != nil {
+	ids, err := enqueueCascadeRows(ctx, tx,
+		[]CascadeAudit{{Actor: actor, Action: "mapping_rule.updated", ResourceID: id}},
+		params)
+	if err != nil {
 		return nil, err
 	}
-	ids, err := enqueueCascadeRows(ctx, tx, params)
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// DeleteMappingRuleAndEnqueue deletes the rule AND enqueues the caller-computed revoke rows in
+// ONE tx (mirrors UpdateMappingRuleAndEnqueue). The two halves must commit together: a rule row
+// removed without its revokes leaves everyone it ever granted holding access in Zitadel that no
+// MkAuth source explains — which is not a gap, it is drift, and the sweep would find it later
+// with no actor to attribute it to.
+//
+// The outbox rows keep source_ref = the deleted rule's id. That column is plain text with no
+// foreign key, deliberately: it records what caused the write, and the cause having since been
+// deleted is exactly what a reader of the change history needs to know.
+func DeleteMappingRuleAndEnqueue(ctx context.Context, actor, id string, params []EnqueueParams) ([]string, error) {
+	tx, err := PG.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+	tag, err := tx.Exec(ctx, `DELETE FROM mapping_rules WHERE id=$1`, id)
+	if err != nil {
+		return nil, err
+	}
+	// Nobody deleted it out from under us in the window between the handler's read and here —
+	// or somebody did, and enqueueing revokes for a rule a concurrent caller already removed
+	// (and already revoked for) would double-write.
+	if tag.RowsAffected() == 0 {
+		return nil, pgx.ErrNoRows
+	}
+	ids, err := enqueueCascadeRows(ctx, tx,
+		[]CascadeAudit{{Actor: actor, Action: "mapping_rule.deleted", ResourceID: id}},
+		params)
 	if err != nil {
 		return nil, err
 	}

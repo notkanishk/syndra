@@ -26,13 +26,26 @@ export const AUDIT_ACTIONS: Record<string, { verb: string; destructive?: boolean
   "bundle.role_added": { verb: "Added a role to a bundle" },
   "bundle.role_removed": { verb: "Removed a role from a bundle", destructive: true },
   "bundle.welcome_set": { verb: "Set the default bundle for new members" },
+  // Not "Renamed": the endpoint rewrites name and description, and the row records neither.
+  // Claiming a rename for a description edit would be a specific falsehood in place of a vague
+  // truth.
+  "bundle.updated": { verb: "Changed a bundle's name or description" },
+  // Same word the console puts on the button. An operator looking for what they just did should
+  // find it under the verb they read.
+  "bundle.deleted": { verb: "Retired a bundle", destructive: true },
+  "bundle.version_published": { verb: "Published a bundle version" },
+  "bundle.holder_moved": { verb: "Moved somebody to a different bundle version" },
   welcome_bundle_assigned: { verb: "Assigned the default bundle to a new member" },
   "mapping_rule.created": { verb: "Created an automatic rule" },
   "mapping_rule.updated": { verb: "Changed an automatic rule" },
+  "mapping_rule.deleted": { verb: "Removed an automatic rule", destructive: true },
   "role.created": { verb: "Created a role" },
   "access_request.created": { verb: "Asked for access" },
   "access_request.approved": { verb: "Approved a request" },
   "access_request.rejected": { verb: "Declined a request" },
+  // Not destructive, and deliberately not phrased as a refusal — the person who filed it took it
+  // back. `requestOutcome` keeps the same distinction on the request screens.
+  "access_request.withdrawn": { verb: "Withdrew their request" },
   "claim_profile.updated": { verb: "Changed a project's token format" },
   "app_claim_override.updated": { verb: "Changed an app's token format" },
   "app_claim_override.deleted": { verb: "Removed an app's token override" },
@@ -56,20 +69,54 @@ export function machineName(id: string): string {
 }
 
 /**
- * The trace column links into Change history, which is the only place to see
- * what an entry actually did downstream. Only cascade-producing actions have
- * one; everything else shows an honest dash.
+ * What the Trace column can honestly say about one row.
+ *
+ * `cascade` — the backend recorded which cascade this event set off, so the id
+ * is real and the link goes to that cascade and no other.
+ *
+ * `object` — rows written before cascade lineage existed (migration 000023).
+ * They still name the bundle or rule the change was about, which is worth
+ * showing; they cannot name its downstream effect, so they do not link. This
+ * column previously rendered exactly this identifier with a `c_` prefix and a
+ * link to an unfiltered change history — an id that was not what its prefix
+ * claimed, pointing at a page that was not about it.
+ *
+ * `none` — nothing true to say. A dash.
  */
-export function isCascadeTrace(entry: AuditEntry): boolean {
-  return (
-    Boolean(entry.resource_id) &&
-    /^(mapping_rule|bundle)\./.test(entry.action) &&
-    entry.action !== "bundle.created"
-  );
+export type AuditTrace =
+  | { kind: "cascade"; label: string; href: string }
+  | { kind: "object"; label: string; title: string }
+  | { kind: "none" };
+
+const LEADING_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+/** Same short-id vocabulary as Change history: c_ for a cascade, R_ a rule, b_ a bundle. */
+function shortId(id: string, prefix: string): string {
+  return `${prefix}_${id.replace(/-/g, "").slice(0, 4)}`;
 }
 
-export function shortTrace(id: string): string {
-  return `c_${id.replace(/-/g, "").slice(0, 4)}`;
+export function traceFor(entry: AuditEntry): AuditTrace {
+  if (entry.cascade_id) {
+    return {
+      kind: "cascade",
+      label: shortId(entry.cascade_id, "c"),
+      href: `/operations/cascades?cascade=${encodeURIComponent(entry.cascade_id)}`,
+    };
+  }
+
+  // Only when the resource IS an id. `bundle.role_added` records its resource as
+  // `project/role`, and the first four characters of that are not an identifier of anything —
+  // shortening it would produce a label that looks like a handle and refers to nothing.
+  const id = entry.resource_id?.match(LEADING_UUID)?.[0];
+  if (!id) return { kind: "none" };
+
+  if (entry.action.startsWith("mapping_rule.")) {
+    return { kind: "object", label: shortId(id, "R"), title: `Rule ${id}` };
+  }
+  if (entry.action.startsWith("bundle.")) {
+    return { kind: "object", label: shortId(id, "b"), title: `Bundle ${id}` };
+  }
+  return { kind: "none" };
 }
 
 /**
