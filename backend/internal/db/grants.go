@@ -124,6 +124,141 @@ func GetExpiringDirectGrants(ctx context.Context, within time.Duration) ([]model
 	return grants, nil
 }
 
+// ErrGrantExpiryMoved means the caller acknowledged an expiry date the grant no longer carries —
+// somebody extended or re-granted it between the operator's page load and their click. The
+// acknowledgement is refused rather than stored against the stale date, because storing it would
+// silently do nothing: the read compares dates, so it would never apply.
+var ErrGrantExpiryMoved = errors.New("grant expiry has changed since it was read")
+
+// ErrAcknowledgementNotFound means there was nothing to take back.
+var ErrAcknowledgementNotFound = errors.New("grant expiry acknowledgement not found")
+
+// GetExpiringDirectGrantsWithAcknowledgements is the Review › Expiring access read: the same
+// window as GetExpiringDirectGrants, plus the acknowledgement that currently applies to each row.
+//
+// Deliberately a second function rather than a wider return on the first. Four service callers
+// (the governance summary, Today's queue, role members) ask "what is expiring" and have no use for
+// an acknowledgement; widening the shared read would push a type through all of them and their
+// tests to serve one screen.
+//
+// The join carries the reopen rule and is the whole of it: an acknowledgement is returned only
+// while `acknowledged_expires_at` still equals the grant's `expires_at`. Move the date and the row
+// comes back undecided, with nothing having had to notice.
+func GetExpiringDirectGrantsWithAcknowledgements(ctx context.Context, within time.Duration) ([]models.ExpiringGrant, error) {
+	const query = `
+		SELECT g.id, g.user_id, g.zitadel_project_id, g.zitadel_role_key, g.granted_by,
+		       COALESCE(g.reason, ''), g.expires_at, g.created_at, g.updated_at,
+		       a.acknowledged_by, a.acknowledged_at, COALESCE(a.note, '')
+		FROM direct_role_grants g
+		LEFT JOIN grant_expiry_acknowledgements a
+		       ON a.grant_id = g.id
+		      AND a.acknowledged_expires_at = g.expires_at
+		WHERE g.expires_at IS NOT NULL
+		  AND g.expires_at > NOW()
+		  AND g.expires_at <= NOW() + $1::interval
+		ORDER BY g.expires_at ASC`
+
+	rows, err := PG.Query(ctx, query, fmt.Sprintf("%f seconds", within.Seconds()))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []models.ExpiringGrant
+	for rows.Next() {
+		var grant models.ExpiringGrant
+		var by *string
+		var at *time.Time
+		var note string
+		if err := rows.Scan(&grant.ID, &grant.UserID, &grant.ProjectID, &grant.RoleKey,
+			&grant.GrantedBy, &grant.Reason, &grant.ExpiresAt, &grant.CreatedAt, &grant.UpdatedAt,
+			&by, &at, &note); err != nil {
+			return nil, err
+		}
+		if by != nil && at != nil {
+			grant.Acknowledged = &models.GrantExpiryAcknowledgement{By: *by, At: *at, Note: note}
+		}
+		out = append(out, grant)
+	}
+	return out, rows.Err()
+}
+
+// AcknowledgeGrantExpiry records that an operator has seen a grant's expiry and is letting it
+// lapse. Returns the grant's user id, which the caller needs for the audit row.
+//
+// expiresAt is what the operator was looking at, and it is checked against the row rather than
+// trusted. This is the same posture as the request-decision and withdraw endpoints: a stale page
+// gets told what changed, not a write that appears to succeed.
+//
+// One row per grant: acknowledging again replaces the previous one. The table holds the current
+// annotation; audit_logs holds every decision.
+func AcknowledgeGrantExpiry(ctx context.Context, grantID string, expiresAt time.Time, actor, note string) (string, error) {
+	tx, err := PG.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+
+	// Read the current date under the transaction, so the comparison the caller is relying on
+	// cannot be overtaken by an extension committing alongside it.
+	var userID string
+	var current *time.Time
+	switch err := tx.QueryRow(ctx,
+		`SELECT user_id, expires_at FROM direct_role_grants WHERE id = $1 FOR UPDATE`,
+		grantID).Scan(&userID, &current); {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", ErrGrantNotFound
+	case err != nil:
+		return "", err
+	}
+	// A grant with no expiry is not on this screen and has nothing to acknowledge — the same
+	// refusal as a moved date, because in both cases the date the operator read is not the date
+	// the grant has.
+	if current == nil || !current.Equal(expiresAt) {
+		return "", ErrGrantExpiryMoved
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO grant_expiry_acknowledgements
+			(grant_id, acknowledged_expires_at, acknowledged_by, note)
+		VALUES ($1, $2, $3, NULLIF($4, ''))
+		ON CONFLICT (grant_id) DO UPDATE
+		   SET acknowledged_expires_at = EXCLUDED.acknowledged_expires_at,
+		       acknowledged_by         = EXCLUDED.acknowledged_by,
+		       acknowledged_at         = CURRENT_TIMESTAMP,
+		       note                    = EXCLUDED.note`,
+		grantID, expiresAt, actor, note); err != nil {
+		return "", fmt.Errorf("acknowledge grant expiry %s: %w", grantID, err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	return userID, nil
+}
+
+// ClearGrantExpiryAcknowledgement takes an acknowledgement back. Returns the grant's user id for
+// the audit row.
+//
+// Any operator may clear any acknowledgement. The queue is shared and so is the decision — the
+// row names who made it, which is what makes it accountable; requiring the same person would
+// leave a decision unrevisable the moment they leave for the summer.
+func ClearGrantExpiryAcknowledgement(ctx context.Context, grantID string) (string, error) {
+	var userID string
+	err := PG.QueryRow(ctx, `
+		DELETE FROM grant_expiry_acknowledgements a
+		USING direct_role_grants g
+		WHERE a.grant_id = $1 AND g.id = a.grant_id
+		RETURNING g.user_id`, grantID).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrAcknowledgementNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("clear grant expiry acknowledgement %s: %w", grantID, err)
+	}
+	return userID, nil
+}
+
 // GetExpiredDirectGrants returns direct role grants whose expires_at is in the
 // past, ordered by expires_at ascending (oldest first). Used by the expiry
 // scheduler to sweep grants needing cleanup. limit caps the batch size.

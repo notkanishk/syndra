@@ -225,6 +225,105 @@ func TestRehearseBulk_ExtendIgnoresPermanentGrants(t *testing.T) {
 	}
 }
 
+// Review › Expiring access selects grant ROWS, and this is what makes that safe.
+//
+// The screen used to reduce its ticked rows to their user ids, which extended every expiring grant
+// each of those people held — including grants in other projects, and grants expiring months past
+// the 30-day window the screen is scoped to. The operator ticked one row and renewed access they
+// had never been shown.
+func TestRehearseBulk_ExtendHonoursTheSelectedGrants(t *testing.T) {
+	soon := time.Now().Add(48 * time.Hour)
+	// Outside the review window, and the reason this matters: the queue never rendered this row,
+	// so nothing on screen could have told the operator it was about to be renewed.
+	distant := time.Now().Add(200 * 24 * time.Hour)
+	setupBulk(t, bulkFixture{
+		users: []models.UserProfile{{ID: "u1", Name: "Ada", Status: "active"}},
+		grants: map[string][]models.DirectGrant{
+			"u1": {
+				{ID: "g_seen", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &soon},
+				{ID: "g_unseen", ProjectID: "pWood", RoleKey: "member", ExpiresAt: &distant},
+			},
+		},
+	})
+
+	plan, err := RehearseBulk(context.Background(), BulkRequest{
+		Op: BulkOpExtend, UserIDs: []string{"u1"}, DurationDays: 90,
+		GrantIDs: []string{"g_seen"},
+	})
+	if err != nil {
+		t.Fatalf("rehearse: %v", err)
+	}
+
+	out := outcomeFor(t, plan, "u1")
+	if len(out.GrantIDs) != 1 || out.GrantIDs[0] != "g_seen" {
+		t.Errorf("only the ticked grant may be extended, got %v", out.GrantIDs)
+	}
+}
+
+// Omitting the ids keeps the meaning the People screen needs: there, the operator selects PEOPLE,
+// and "extend their expiring access" is exactly the request.
+func TestRehearseBulk_ExtendWithoutIDsStillMeansEverythingExpiring(t *testing.T) {
+	soon := time.Now().Add(48 * time.Hour)
+	later := time.Now().Add(20 * 24 * time.Hour)
+	setupBulk(t, bulkFixture{
+		users: []models.UserProfile{{ID: "u1", Name: "Ada", Status: "active"}},
+		grants: map[string][]models.DirectGrant{
+			"u1": {
+				{ID: "g_a", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &soon},
+				{ID: "g_b", ProjectID: "pWood", RoleKey: "member", ExpiresAt: &later},
+			},
+		},
+	})
+
+	plan, err := RehearseBulk(context.Background(), BulkRequest{
+		Op: BulkOpExtend, UserIDs: []string{"u1"}, DurationDays: 90,
+	})
+	if err != nil {
+		t.Fatalf("rehearse: %v", err)
+	}
+	if got := len(outcomeFor(t, plan, "u1").GrantIDs); got != 2 {
+		t.Errorf("expected both expiring grants, got %d", got)
+	}
+}
+
+// A flat id set across several people must not let one person's tick reach another's access. A
+// grant id belongs to exactly one person, so the per-user pass is what enforces this — and if it
+// ever stopped, a selection of Ada's row would extend Sam's grant of the same role.
+func TestRehearseBulk_ExtendDoesNotCrossBetweenPeople(t *testing.T) {
+	soon := time.Now().Add(48 * time.Hour)
+	setupBulk(t, bulkFixture{
+		users: []models.UserProfile{
+			{ID: "u1", Name: "Ada", Status: "active"},
+			{ID: "u2", Name: "Sam", Status: "active"},
+		},
+		grants: map[string][]models.DirectGrant{
+			"u1": {{ID: "g_ada", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &soon}},
+			"u2": {{ID: "g_sam", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &soon}},
+		},
+	})
+
+	plan, err := RehearseBulk(context.Background(), BulkRequest{
+		Op: BulkOpExtend, UserIDs: []string{"u1", "u2"}, DurationDays: 90,
+		GrantIDs: []string{"g_ada"},
+	})
+	if err != nil {
+		t.Fatalf("rehearse: %v", err)
+	}
+
+	if ids := outcomeFor(t, plan, "u1").GrantIDs; len(ids) != 1 || ids[0] != "g_ada" {
+		t.Errorf("expected Ada's ticked grant, got %v", ids)
+	}
+	sam := outcomeFor(t, plan, "u2")
+	if sam.Effect != EffectNoChange || len(sam.GrantIDs) != 0 {
+		t.Errorf("Sam's grant was not selected and must not be extended: %+v", sam)
+	}
+	// And the plan must say why his row does nothing, so an operator reading it is not left to
+	// guess whether he has no expiring access at all.
+	if !strings.Contains(sam.Detail, "selected") {
+		t.Errorf("the plan must distinguish 'not selected' from 'nothing expiring': %q", sam.Detail)
+	}
+}
+
 // An id that resolves to nobody is blocked, not skipped. A silently dropped row
 // would make the result count disagree with the selection the operator made.
 func TestRehearseBulk_BlocksUnknownAccounts(t *testing.T) {
@@ -329,6 +428,12 @@ func TestValidateBulkRequest(t *testing.T) {
 		{"role op without project", BulkRequest{Op: BulkOpRemoveRole, UserIDs: []string{"u1"}, RoleKey: "r", Reason: "x"}, "project_id"},
 		{"bundle op without bundle", BulkRequest{Op: BulkOpAssignBundle, UserIDs: []string{"u1"}, Reason: "x"}, "bundle_id"},
 		{"extend by nothing", BulkRequest{Op: BulkOpExtend, UserIDs: []string{"u1"}, Reason: "x"}, "duration_days"},
+		// grant_ids narrows extend and nothing else. Accepted and ignored, it would let a caller
+		// believe they had scoped a bundle operation they had not.
+		{"grant ids on a bundle op", BulkRequest{
+			Op: BulkOpAssignBundle, UserIDs: []string{"u1"}, BundleID: "b1", Reason: "x",
+			GrantIDs: []string{"g1"},
+		}, "grant_ids"},
 		{"empty selection", BulkRequest{Op: BulkOpExtend, DurationDays: 30, Reason: "x"}, "user_ids"},
 		{"blank-only selection", BulkRequest{Op: BulkOpExtend, DurationDays: 30, UserIDs: []string{" ", ""}, Reason: "x"}, "user_ids"},
 		// One audit row per person, so an unexplained bulk change is an

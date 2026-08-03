@@ -294,4 +294,10 @@ var (
 	// governance summary, so a 30-day review and Today's 14-day queue can
 	// differ without either lying about the other.
 	dbGetExpiringDirectGrants = db.GetExpiringDirectGrants
+
+	// The same window, plus the acknowledgement that currently applies to each row. Separate from
+	// the read above because that one serves four callers with no use for one.
+	dbGetExpiringWithAcks             = db.GetExpiringDirectGrantsWithAcknowledgements
+	dbAcknowledgeGrantExpiry          = db.AcknowledgeGrantExpiry
+	dbClearGrantExpiryAcknowledgement = db.ClearGrantExpiryAcknowledgement
 )

@@ -29,12 +29,18 @@ interface BulkDialogProps {
   userIds: string[];
   /** Sentence describing where the selection came from, shown in the lede. */
   scope: string;
+  /**
+   * `extend` only: the grants the operator ticked. Pass this from any screen whose rows ARE
+   * grants — without it the backend extends everything those people hold that expires, which is
+   * a wider change than the one that was selected.
+   */
+  grantIds?: string[];
   /** Pre-armed target, e.g. when arriving from a role page. */
   initial?: { projectId?: string; roleKey?: string };
   onClose: () => void;
 }
 
-export function BulkDialog({ op, userIds, scope, initial, onClose }: BulkDialogProps) {
+export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: BulkDialogProps) {
   const [projectId, setProjectId] = useState(initial?.projectId ?? "");
   const [roleKey, setRoleKey] = useState(initial?.roleKey ?? "");
   const [bundleId, setBundleId] = useState("");
@@ -67,6 +73,7 @@ export function BulkDialog({ op, userIds, scope, initial, onClose }: BulkDialogP
     ...(needsBundle ? { bundle_id: bundleId } : {}),
     reason,
     ...(op === "assign_role" || op === "extend" ? { duration_days: durationDays } : {}),
+    ...(op === "extend" && grantIds?.length ? { grant_ids: grantIds } : {}),
   };
 
   const ready =

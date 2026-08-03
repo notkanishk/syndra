@@ -29,6 +29,14 @@ export interface BulkGrantInput {
   bundle_id?: string;
   reason: string;
   duration_days?: number;
+  /**
+   * Narrows `extend` to specific grants. Omit it to extend every expiring direct grant the named
+   * people hold — which is what a screen that selects PEOPLE means.
+   *
+   * Review › Expiring access selects grant ROWS, so it must pass them: reducing those rows to
+   * user ids renews grants the operator never saw, including ones outside that screen's window.
+   */
+  grant_ids?: string[];
 }
 
 /**
@@ -103,7 +111,18 @@ export function useApplyBulk() {
     mutationFn: (input: BulkGrantInput) =>
       request<BulkPlan>(bulkPath(true), { method: "POST", body: input }),
     onSuccess: () => {
-      for (const key of ["users", "roles", "bundles", "governance", "propagations", "audit"]) {
+      // `review` is here because `extend` rewrites expiry dates, and Review › Expiring access is
+      // built entirely from those — a bulk extend launched from that screen would otherwise leave
+      // every row it just renewed on screen with its old date.
+      for (const key of [
+        "users",
+        "roles",
+        "bundles",
+        "governance",
+        "propagations",
+        "audit",
+        "review",
+      ]) {
         qc.invalidateQueries({ queryKey: [key] });
       }
     },

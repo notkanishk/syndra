@@ -432,28 +432,66 @@ No cancel endpoint. A member who asks for the wrong thing must wait for an opera
 [`requests_bulk.go:82`](../backend/internal/handlers/requests_bulk.go) already writes the copy —
 "No such request — it may have been withdrawn." Nothing can withdraw one.
 
-### C4 · Expiring access has no acknowledged/deferred state — **deferred, with its question written down**
+### C4 · Expiring access has no acknowledged/deferred state — **closed, with the reopens-when-the-grant-changes rule**
 
 Design brief §S7 called this out precisely: if operators need to record *"I've seen this and I'm
 deliberately letting it go"*, that is a genuine new capability with its own column and endpoint, and
 must **not** be faked client-side by hiding rows — a shared queue that diverges per operator is
 worse than no queue.
 
-Correctly absent, and staying absent: nobody has been paged by this queue yet.
+Built as specified, on a decision: **an acknowledgement ends when the grant changes.** Of the three
+candidates (grant-changed / timer / manual-only), this is the one that keeps the record honest — an
+operator agreed to let a specific role lapse on a specific day, and moving the day means they agreed
+to something that no longer exists.
 
-What was settled is what has to be answered *before* anyone builds it, so the next person does not
-have to invent it under deadline. An acknowledgement is a server-backed, audited row carrying
-**who**, **when**, and an optional rationale — and the load-bearing question is **when it reopens**:
+The implementation is the interesting part. The obvious version is a boolean plus something that
+clears it — a trigger on `direct_role_grants`, or a check in every write path touching `expires_at`.
+Both put the rule somewhere other than where it is read, and both fail *silently*: miss one write
+path and an acknowledgement quietly becomes permanent, which is the rule we rejected.
 
-- *When the grant changes* — the ack is of a specific expiry date, so moving the date or the
-  entitlement voids it. The operator agreed to something that no longer exists.
-- *On a timer* — silence for a fixed window, then the row returns regardless. Simple, but a changed
-  grant stays hidden until the timer runs out.
-- *Never, until cleared by hand* — easiest to write, and the most likely to bury a row somebody
-  should have seen again.
+Instead the acknowledgement stores **what was acknowledged** — `acknowledged_expires_at` — and the
+read returns it only while that still equals the grant's current `expires_at`. One join condition
+*is* the rule. Nothing fires, nothing has to remember, and it is verifiable in a package with no
+live database. `direct_role_grants` is UNIQUE on `(user, project, role)` and upserts in place, so an
+extension keeps the grant id and moves the date — exactly what the comparison catches.
 
-Undecided. It is a decision about how much an operator's past attention is allowed to speak for a
-grant's present state, and it should be made when there is a queue big enough to have an opinion.
+The write is checked, not trusted: `expires_at` is required on the request and compared under
+`FOR UPDATE`, so a page loaded before somebody extended the grant gets `409` and is told to reload.
+Storing it anyway would be accepted, never apply, and leave the operator believing they had recorded
+something — the precise failure the old "no second button" copy existed to prevent.
+
+Two restraints worth naming, because they cut against the feature's own convenience:
+
+- **Never bulk.** The record's whole value is that a person read the row. "Acknowledge selected"
+  would produce the appearance of review and none of it. Bulk *extend* stays — that changes access,
+  and reviewing a dozen together is this screen's job.
+- **Grouped, not hidden.** Acknowledged rows sit under a counted heading, naming who decided and
+  why. Removing them would be the client-side dismissal §S7 forbade, and would hide a decision from
+  the person most likely to revise it. Extend stays on those rows; the checkbox does not, so a bulk
+  extend cannot undo a decision by accident.
+
+`ON DELETE CASCADE`, reversing the reasoning of `000021`/`000023`: those argued *against* foreign
+keys because audit rows are history and must outlive their subject. An acknowledgement is not
+history — it annotates a live row, and the grant being swept away on its date is the normal end of
+its life. Who decided what stays in `audit_logs`.
+
+See design Decisions 18 and 19.
+
+> **Caught in review — two faults in the extend path around it, both older than C4.**
+>
+> **The queue's rows are grants; the bulk contract was keyed on people.** The screen bridged that
+> by reducing ticked rows to user ids, so ticking "Ada / Laser Lab / trained" extended every
+> expiring grant Ada held — other projects, and dates months past the 30 days the screen is scoped
+> to. Rows the queue had never rendered. Fixed by carrying `grant_ids` on the contract rather than
+> by making the UI select people, which would have fixed the honesty and lost the capability: on a
+> per-grant queue, renewing one role and letting another lapse is the ordinary case. `grant_ids` is
+> refused on other ops rather than ignored. Design Decision 20.
+>
+> **Extending left the queue stale.** `POST /users/{id}/grants` upserts on `(user, project, role)`,
+> so it is both "grant" and "extend", and its invalidations covered the person but not the queue
+> the operator was standing in — the row kept its old date, and an acknowledged row kept showing an
+> acknowledgement the new date had already voided. `useApplyBulk` had the same hole, unreported:
+> every key root except the screen a bulk extend is launched from. Design Decision 21.
 
 ### C5 · Claim profiles are unversioned — **deferred, with its trigger named**
 

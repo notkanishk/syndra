@@ -520,3 +520,135 @@ bundle's name or description"*, not *"Renamed"* — the endpoint rewrites both a
 the row records neither, and a specific falsehood is worse than a vague truth.
 `access_request.withdrawn` is *"Withdrew their request"*, never a refusal, for
 the same reason `requestOutcome` keeps that distinction on the request screens.
+
+## Decision 18 · The reopen rule is a stored value and a comparison, not an invalidation
+
+C4 is built, with the rule you chose: an acknowledgement ends when the grant
+changes.
+
+The obvious implementation is a boolean plus something that clears it — a trigger
+on `direct_role_grants`, or a check in every write path that touches `expires_at`.
+Both are the same mistake in different clothes: the rule would live somewhere
+other than where it is read, and the failure mode is silence. Miss one write path
+and an acknowledgement quietly becomes permanent, which is precisely the rule we
+rejected.
+
+So the acknowledgement stores **what was acknowledged** —
+`acknowledged_expires_at` — and the read returns it only while it still equals the
+grant's current `expires_at`. That single join condition *is* the rule. Nothing
+fires, nothing has to remember, and there is no second copy of the truth to keep
+coherent. `direct_role_grants` is UNIQUE on `(user, project, role)` and upserts in
+place, so extending keeps the grant id and moves the date, which is exactly the
+case the comparison catches.
+
+It also makes the rule testable in a package with no live database. Two source
+guards — the column exists and is NOT NULL, and the join compares the dates — hold
+the whole behaviour. A trigger-based version would have been unverifiable here.
+
+**Consequence accepted:** stale acknowledgement rows are not deleted. They are
+inert, because validity is a comparison. If a date is moved and later moved back
+to the original day, the old acknowledgement applies again. That is defensible on
+its own terms — the operator agreed to "let this lapse on the 1st", and it lapses
+on the 1st — and the alternative is a sweep whose only job is tidiness.
+
+**The write is checked, not trusted.** `expires_at` is required on the request and
+compared to the row under `FOR UPDATE`. A stale page gets `409` and told to
+reload. Storing the acknowledgement anyway would be worse than refusing it: it
+would be accepted, never apply, and leave somebody believing they had recorded a
+decision — the exact failure the old "no second button" copy was written to
+prevent.
+
+**`ON DELETE CASCADE`, reversing the reasoning of 000021 and 000023.** Those
+argued against foreign keys because audit rows and onboarding triggers are
+*history* and must outlive their subject. An acknowledgement is not history; it is
+an annotation on a live row, meaningless once the grant is gone, and the grant
+being swept away on its date is the normal end of its life. The history of who
+decided what is in `audit_logs`, where it belongs and where it stays.
+
+## Decision 19 · Acknowledging is never bulk, and never hides a row
+
+Two restraints on a feature whose whole purpose is to reduce work.
+
+**Per-row only.** The record's entire value is that a person read the row. A
+checkbox and an "Acknowledge selected" would let twelve rows be silenced in one
+gesture, which produces the appearance of review and none of it. Bulk *extend*
+stays, because extending changes access and reviewing a dozen of those together is
+the work this screen was built for. Eight clicks for eight decisions is the
+correct price.
+
+**Grouped, not hidden.** Acknowledged rows move below a counted heading. Removing
+them would be the client-side dismissal §S7 forbade — and it would hide a decision
+from the person who made it, who is the one most likely to want to revise it. A
+heading is where the eye stops; a filter would be a control an operator has to
+remember to check.
+
+Three smaller calls in the same spirit:
+
+- **Extend stays on an acknowledged row**, and "Let it lapse" becomes "Undo".
+  Changing one's mind toward *keeping* somebody's access must never be harder than
+  the decision that lets it go.
+- **No checkbox on an acknowledged row**, so a bulk extend cannot reverse a
+  decision by accident.
+- **A dialog, not a click.** The note is what makes the record useful to the next
+  operator rather than to the one writing it, and the dialog is the only place to
+  say the two counter-intuitive things: that this does not keep the access, and
+  that it reopens if the grant changes. Neither is discoverable by trying it.
+
+The old copy explaining why there was no second button is deleted rather than
+softened. It said such a control "would submit nothing and change nothing", and
+that is now false — leaving it would have made the screen argue against itself.
+
+## Decision 20 · A bulk write is scoped by what the screen's rows ARE
+
+Caught in review, and older than C4 — the acknowledgement work only made it
+easier to see.
+
+Review › Expiring access has always put its checkbox on a **grant**. The bulk
+contract has always been keyed on **people**. The screen bridged the two by
+reducing its ticked rows to user ids, so ticking "Ada / Laser Lab / trained"
+extended every expiring direct grant Ada held: other projects, and dates months
+past the 30 days the screen is scoped to. Rows the queue had never rendered, on a
+record of who may operate machinery.
+
+Two remedies were available. Making the UI select *people* and disclose the full
+blast radius would fix the honesty and lose the capability — the operator would no
+longer be able to renew one role and let another lapse, which is the ordinary case
+on a per-grant queue. So instead the contract now carries what was ticked:
+`grant_ids` on `extend`, narrowing the write to exactly those.
+
+Omitting it keeps the other meaning, which is also correct. On People the rows are
+people, and "extend their expiring access" is precisely what selecting them asks
+for. **The rule is that a screen whose rows are grants must pass grant ids**, and
+`grant_ids` is refused on every other op rather than ignored — accepted silently,
+it would let a caller believe they had scoped an operation they had not.
+
+The id set is flat across the selection and applied per person. A grant id belongs
+to exactly one person, so one person's tick cannot reach another's access; a
+foreign id simply matches nothing. A person with nothing selected reports "none of
+the selected grants are theirs any more", which is a different fact from "no
+expiring direct grants" and the difference matters to somebody reading a plan
+before authorising it.
+
+## Decision 21 · Every write that moves an expiry must drop the queue built from expiries
+
+The other half of the same review, and one caller wider than reported.
+
+`POST /users/{id}/grants` upserts on `(user, project, role)`, which makes it both
+"grant access" and "extend access" — Review › Expiring access uses it for the
+second. Its invalidations covered the person and the user list, and not the queue
+the operator was standing in. After extending, the row stayed on screen with its
+old date; if it had been acknowledged, it also kept showing an acknowledgement the
+new date had already voided. The screen would have been contradicting the backend
+about who keeps access — and by exactly the mechanism the acknowledgement was
+designed to make trustworthy.
+
+`useApplyBulk` had the same hole, unreported: its key list named `users`, `roles`,
+`bundles`, `governance`, `propagations` and `audit` — every root except the one
+belonging to the screen a bulk extend is launched from. A blanket list is only
+blanket until somebody adds a surface.
+
+Both now invalidate `review`, and `useCreateGrant` also invalidates `governance`,
+because Today counts what is expiring and was wrong by one until the next refetch.
+Tested by asserting the key roots rather than the rendered result: the bug was in
+the mutation's contract, not in any one screen, and asserting it there is what
+makes it hold for the next screen too.

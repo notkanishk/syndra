@@ -160,6 +160,13 @@ export function useCreateGrant(userId: string) {
       qc.invalidateQueries({ queryKey: KEYS.access(userId) });
       qc.invalidateQueries({ queryKey: KEYS.grants(userId) });
       qc.invalidateQueries({ queryKey: ["users", "list"] });
+      // The expiring-access queue is built from expiry dates, and this endpoint upserts them.
+      // Without this, extending a row from Review › Expiring access leaves it on screen with its
+      // old date — and, if it had been acknowledged, still showing an acknowledgement that the
+      // new date has already voided. The screen would be contradicting the backend.
+      qc.invalidateQueries({ queryKey: ["review", "expiring-grants"] });
+      // Today counts what is expiring, so its queue is wrong by one until this lands too.
+      qc.invalidateQueries({ queryKey: ["governance"] });
     },
   });
 }

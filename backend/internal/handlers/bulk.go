@@ -24,6 +24,10 @@ type BulkGrantRequest struct {
 	BundleID     string   `json:"bundle_id,omitempty"`
 	Reason       string   `json:"reason"`
 	DurationDays int      `json:"duration_days,omitempty"`
+	// GrantIDs narrows `extend` to the grants the operator actually ticked. Omit it to extend
+	// every expiring direct grant the named people hold — which is what selecting PEOPLE means,
+	// and is not what selecting grant rows means.
+	GrantIDs []string `json:"grant_ids,omitempty"`
 }
 
 // handleBulkGrants rehearses a bulk access change and, on ?apply=true, executes
@@ -51,6 +55,7 @@ func handleBulkGrants(w http.ResponseWriter, r *http.Request) {
 		BundleID:     req.BundleID,
 		Reason:       req.Reason,
 		DurationDays: req.DurationDays,
+		GrantIDs:     req.GrantIDs,
 	}
 	if problems := services.ValidateBulkRequest(input); problems != nil {
 		jsonValidationErrorResponse(w, "Invalid bulk request", problems)

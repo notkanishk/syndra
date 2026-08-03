@@ -312,6 +312,28 @@ type DirectGrant struct {
 	SourceRef string     `json:"source_ref,omitempty"` // bundle_id / rule_id when source ∈ {bundle, rule}
 }
 
+// GrantExpiryAcknowledgement is an operator's recorded decision to let a grant lapse on its date.
+//
+// It changes nothing about the access: the expiry sweep still removes the grant when the date
+// arrives. What it changes is the queue — "nobody has looked at this" and "somebody looked and
+// decided" stop being indistinguishable.
+type GrantExpiryAcknowledgement struct {
+	By   string    `json:"by"`
+	At   time.Time `json:"at"`
+	Note string    `json:"note,omitempty"`
+}
+
+// ExpiringGrant is a direct grant approaching its expiry, with the acknowledgement that currently
+// applies to it, if any.
+type ExpiringGrant struct {
+	DirectGrant
+	// Acknowledged is set only while the acknowledgement is still ABOUT this grant — it was made
+	// against a specific expiry date, and a grant whose date has since moved is a different
+	// question that nobody has answered yet. Nothing invalidates the stored row; the read
+	// compares, so a stale acknowledgement simply stops being one.
+	Acknowledged *GrantExpiryAcknowledgement `json:"acknowledged,omitempty"`
+}
+
 // PendingPropagation is one buffered MkAuth-mediated Zitadel grant mutation.
 // `applied` is terminal success (synchronous 2xx); there is no `confirmed` state
 // (design Decision 1: the self-mutation guard drops MkAuth's own grant events,

@@ -129,6 +129,11 @@ func NewRouter() http.Handler {
 	// Review › Expiring access. Its own read with its own window — the screen is
 	// time-boxed work with a deadline, not a slice of Today's queue.
 	mux.HandleFunc("GET /api/v1/review/expiring-grants", withCORS(withOperatorAuth(handleGetExpiringGrants)))
+	// "Seen it, letting it lapse." Records a decision and changes no access — the expiry sweep
+	// still removes the grant on its date. The acknowledgement stops applying by itself if the
+	// grant's expiry moves, so there is no invalidation path to call.
+	mux.HandleFunc("POST /api/v1/review/expiring-grants/{grantId}/acknowledge", withCORS(withOperatorAuth(handleAcknowledgeGrantExpiry)))
+	mux.HandleFunc("DELETE /api/v1/review/expiring-grants/{grantId}/acknowledge", withCORS(withOperatorAuth(handleClearGrantExpiryAcknowledgement)))
 
 	// Role Management
 	mux.HandleFunc("POST /api/v1/roles", withCORS(withUserAuth(handleCreateRole)))

@@ -80,9 +80,22 @@ Item ids match [`docs/UI-CAPABILITY-GAPS.md`](../../../docs/UI-CAPABILITY-GAPS.m
 - [ ] 4.7 **C9b** Hardware sync state on the person page. **Not buildable:** there is no per-user
       sync state while the bridge is parked, and a panel that invented one would be the failure
       `/system/hardware-sync` exists to avoid. Blocked on the same contract as 5.1
-- [ ] — **C4** stays flagged, not built — and the reset semantics are now written down so
-      whoever builds it does not have to invent them. **C5**, **C8** deferred with their trigger
-      conditions recorded; see the audit doc
+- [x] 4.8 **C4** Expiry acknowledgement, with the **reopens-when-the-grant-changes** rule.
+      Migration `000024`. The rule is a stored `acknowledged_expires_at` and one join condition
+      comparing it to the grant's current date — no trigger, no sweep, nothing to forget, and
+      verifiable without a database (design Decision 18). The write is checked under `FOR UPDATE`
+      and a stale page gets `409` rather than a stored acknowledgement that would never apply.
+      Per-row only and grouped rather than hidden; Extend stays on an acknowledged row and its
+      checkbox does not (design Decision 19). The old "why there's no second button" copy is
+      deleted, not softened — it had become false
+- [x] 4.9 Bulk extend acts on the grants that were ticked. `grant_ids` on the bulk contract, and
+      refused on every other op. The queue's rows are grants and the contract was keyed on people,
+      so ticking one row renewed every expiring grant that person held — including dates months
+      outside the screen's window (design Decision 20)
+- [x] 4.10 Every write that moves an expiry drops the queue built from expiries. `useCreateGrant`
+      and `useApplyBulk` both now invalidate `review`; the second was unreported and had every key
+      root except the screen a bulk extend is launched from (design Decision 21)
+- [ ] — **C5**, **C8** deferred with their trigger conditions recorded; see the audit doc
 
 ## 5. E — live deployment
 

@@ -98,10 +98,6 @@ can be created from the project it belongs to.
 
 ## Out of scope
 
-- `C4` (acknowledged/deferred state on expiring access) — the design brief asks
-  for this to be *flagged*, not assumed. Still flagged, and its unanswered
-  question — **when an acknowledgement reopens** — is now written down rather
-  than left for whoever builds it to invent.
 - `C5` (claim profile versioning) and `C8` (an actor for sweep-found drift) — both
   speculative in the audit's own words. Neither has bitten. Both now carry the
   concrete trigger that would justify them.
@@ -121,3 +117,6 @@ can be created from the project it belongs to.
   schema already said. The design diagram was the thing that was wrong.
 - `C9a` — Advanced shows Zitadel's own grant id alongside MkAuth's, per project,
   operator-only.
+- `C4` — the expiring-access queue can record "seen, letting it lapse", with the
+  reopen rule set to **when the grant changes**. The rule is a stored date and a
+  comparison rather than an invalidation, so nothing can forget it silently.

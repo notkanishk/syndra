@@ -76,6 +76,16 @@ type BulkRequest struct {
 	// for extend. Zero means no expiry for assign_role; extend rejects zero,
 	// because "extend by nothing" is not an extension.
 	DurationDays int
+	// GrantIDs narrows `extend` to specific grants. Empty means every expiring
+	// direct grant the named people hold, which is what an operator who selected
+	// PEOPLE asked for.
+	//
+	// Review › Expiring access selects grant ROWS, and the difference is not
+	// cosmetic: reducing those rows to their user ids and extending everything
+	// those people hold renews grants the operator never saw — including ones
+	// outside the 30-day window the screen is scoped to. A bulk write must be
+	// able to say exactly what was ticked.
+	GrantIDs []string
 }
 
 // BulkOutcome is one person's row in the plan (before) or the result (after).
@@ -141,6 +151,12 @@ func ValidateBulkRequest(req BulkRequest) map[string]string {
 		}
 	default:
 		problems["op"] = "must be one of assign_role, remove_role, assign_bundle, remove_bundle, extend"
+	}
+
+	// grant_ids narrows `extend` and means nothing anywhere else. Accepted and ignored, it would
+	// let a caller believe they had scoped a bundle or role operation they had not.
+	if req.Op != BulkOpExtend && len(req.GrantIDs) > 0 {
+		problems["grant_ids"] = "only valid for extend"
 	}
 
 	// A bulk change writes one audit row per person. An unexplained one is a
@@ -373,12 +389,26 @@ func rehearseRemoveBundle(
 }
 
 func rehearseExtend(out BulkOutcome, req BulkRequest, grants []models.DirectGrant) BulkOutcome {
+	// When the caller named grants, those and nothing else. The set is flat across every selected
+	// person, and a grant id belongs to exactly one of them, so this per-user pass cannot let one
+	// person's selection reach another's access — an id that is not theirs simply matches nothing.
+	var selected map[string]bool
+	if len(req.GrantIDs) > 0 {
+		selected = make(map[string]bool, len(req.GrantIDs))
+		for _, id := range req.GrantIDs {
+			selected[id] = true
+		}
+	}
+
 	// Only direct grants that actually expire. A permanent grant has nothing to
 	// extend, and quietly stamping an expiry onto one would be the opposite of
 	// what the operator asked for.
 	var ids []string
 	for _, g := range grants {
 		if g.ExpiresAt == nil {
+			continue
+		}
+		if selected != nil && !selected[g.ID] {
 			continue
 		}
 		if req.ProjectID != "" && g.ProjectID != req.ProjectID {
@@ -392,7 +422,13 @@ func rehearseExtend(out BulkOutcome, req BulkRequest, grants []models.DirectGran
 
 	if len(ids) == 0 {
 		out.Effect = EffectNoChange
-		out.Detail = "No expiring direct grants."
+		// Two different facts, and an operator acting on a plan needs to know which. "None
+		// selected" after ticking a row means the grant moved or was removed underneath them.
+		if selected != nil {
+			out.Detail = "None of the selected grants are theirs any more."
+		} else {
+			out.Detail = "No expiring direct grants."
+		}
 		return out
 	}
 

@@ -46,6 +46,10 @@ export const AUDIT_ACTIONS: Record<string, { verb: string; destructive?: boolean
   // Not destructive, and deliberately not phrased as a refusal — the person who filed it took it
   // back. `requestOutcome` keeps the same distinction on the request screens.
   "access_request.withdrawn": { verb: "Withdrew their request" },
+  // Not destructive: the grant was already going to lapse. What was recorded is that somebody
+  // looked, which is the opposite of something being taken away unnoticed.
+  "grant_expiry.acknowledged": { verb: "Recorded that an expiry should be left to lapse" },
+  "grant_expiry.acknowledgement_cleared": { verb: "Put an expiring grant back in the queue" },
   "claim_profile.updated": { verb: "Changed a project's token format" },
   "app_claim_override.updated": { verb: "Changed an app's token format" },
   "app_claim_override.deleted": { verb: "Removed an app's token override" },
