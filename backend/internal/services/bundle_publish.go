@@ -75,7 +75,14 @@ func BundleDraft(ctx context.Context, bundleID string) (DraftDiff, error) {
 }
 
 // diffRoles reports what `next` adds relative to `prev`, and what it drops.
+//
+// Both are EMPTY, never nil. A Go nil slice marshals to JSON `null`, and these two travel straight
+// to the console on four routes — where `null` crashed the bundles screen outright: `added.length`
+// throws, and it throws for every bundle whose working copy matches its published version, which
+// is the normal resting state. Same convention the read handlers already apply to their own lists.
 func diffRoles(prev, next []models.BundleRole) (added, removed []models.BundleRole) {
+	added, removed = []models.BundleRole{}, []models.BundleRole{}
+
 	inPrev := map[roleKey]bool{}
 	for _, r := range prev {
 		inPrev[roleKey{projectID: r.ProjectID, roleKey: r.RoleKey}] = true

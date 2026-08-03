@@ -46,8 +46,16 @@ export interface BundleDraft {
   holder_count: number;
 }
 
+/**
+ * How many unpublished changes a draft carries.
+ *
+ * Every `?.` here is load-bearing, including the ones on the arrays. Optional chaining guards the
+ * PARENT only: `draft?.added.length` short-circuits when `draft` is absent, and then throws on the
+ * `.length` when `draft` is present but `added` is null — which is exactly what took the bundles
+ * page down, with `?? 0` sitting right there looking like it handled the case.
+ */
 export function draftChangeCount(draft: BundleDraft | undefined): number {
-  return (draft?.added.length ?? 0) + (draft?.removed.length ?? 0);
+  return (draft?.added?.length ?? 0) + (draft?.removed?.length ?? 0);
 }
 
 const KEYS = {
@@ -81,7 +89,19 @@ export function useBundleHolders(bundleId: string | null | undefined) {
 export function useBundleDraft(bundleId: string | null | undefined) {
   return useQuery({
     queryKey: KEYS.draft(bundleId ?? ""),
-    queryFn: () => request<BundleDraft>(`/bundles/${bundleId}/draft`),
+    // Normalised here so `BundleDraft`'s non-nullable arrays are TRUE for everything downstream.
+    // They were not: a Go nil slice marshals to `null`, five call sites called `.length` or `.map`
+    // on it, and the bundles page threw on render for any bundle with nothing unpublished. The
+    // backend no longer emits `null` either — but the type declared a guarantee this boundary was
+    // not enforcing, and that is what made every consumer wrong at once.
+    queryFn: async () => {
+      const draft = await request<BundleDraft>(`/bundles/${bundleId}/draft`);
+      return {
+        ...draft,
+        added: draft?.added ?? [],
+        removed: draft?.removed ?? [],
+      };
+    },
     enabled: Boolean(bundleId),
   });
 }
