@@ -7,6 +7,21 @@ name: deploy-prod
 #
 # Anyone who can push to main can run arbitrary commands in production through
 # this file. Keep branch protection on main.
+#
+# ┌─ DO NOT ADD A `pull_request` TRIGGER ─────────────────────────────────────┐
+# │ This repository is public and this job runs on a SELF-HOSTED runner that  │
+# │ lives inside the production LXC, with docker access, the deploy key, and  │
+# │ .env alongside the Zitadel service-account key.                           │
+# │                                                                           │
+# │ A `pull_request` trigger would let anyone on the internet open a PR from  │
+# │ a fork and execute its contents on that machine. The current triggers are │
+# │ safe precisely because neither can be reached by a fork: `push` fires     │
+# │ only after a commit lands on main, and `workflow_dispatch` requires write │
+# │ access.                                                                   │
+# │                                                                           │
+# │ If PR validation is wanted, run it on a GitHub-hosted runner in a         │
+# │ SEPARATE workflow file. Never widen the triggers on this one.             │
+# └───────────────────────────────────────────────────────────────────────────┘
 
 on:
   push:

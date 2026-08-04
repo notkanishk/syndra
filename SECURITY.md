@@ -68,6 +68,18 @@ report a way to *break* one.
   directly in Zitadel — it detects it as drift and surfaces it for triage. That
   is the intended behaviour.
 
+## A note on CI
+
+Deployment runs on a **self-hosted runner inside the production LXC**. That is
+safe only because the triggers cannot be reached from a fork: `deploy-prod.yml`
+fires on `push` to `main` (after a commit has landed) and on
+`workflow_dispatch` (write access required). There is deliberately no
+`pull_request` trigger, and adding one would let any fork execute code on the
+production host.
+
+If you are contributing a workflow change, please do not widen those triggers.
+Pull-request validation belongs in a separate file on a GitHub-hosted runner.
+
 ## What we do on our side
 
 - Secrets are generated per-deployment at mode 600 and never committed. The
