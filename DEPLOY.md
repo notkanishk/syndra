@@ -81,7 +81,7 @@ adduser --disabled-password --gecos "" runner
 usermod -aG docker runner
 install -d -o runner -g runner -m 755 /opt/syndra
 
-su - runner -c 'ssh-keygen -t ed25519 -N "" -C "syndra-syndra-deploy" -f ~/.ssh/id_ed25519'
+su - runner -c 'ssh-keygen -t ed25519 -N "" -C "syndra-prod-deploy" -f ~/.ssh/id_ed25519'
 su - runner -c 'ssh-keyscan -t ed25519 github.com > ~/.ssh/known_hosts'
 cat /home/runner/.ssh/id_ed25519.pub
 ```
@@ -207,6 +207,39 @@ user, or you will authenticate successfully and then see nothing.
 **e. Verify the IdP.** Google Workspace is the sole IdP and is configured at the
 instance level. Confirm it is active for the organization holding this project.
 
+**f. Permit the target address in Zitadel's outgoing-HTTP denylist.** Zitadel
+**v4.15.2** added a protected HTTP client and routes Actions v2 target calls
+through it. Its `HTTPClient.DenyList` defaults to every RFC1918 range, so target
+creation against any private address fails with:
+
+```
+Errors.Target.DeniedURL (COMMAND-NcJUKo)
+```
+
+This is deliberate SSRF hardening ([CVE-2026-55671]) and there is **no
+allowlist** to pair with it ([zitadel#12326]) — the only lever is narrowing the
+denylist. Targets created before the upgrade keep working, which is why an
+existing deployment can look fine while a new one cannot register at all.
+
+On the Zitadel host, override `HTTPClient.DenyList` (env:
+`ZITADEL_HTTPCLIENT_DENYLIST`, comma-separated) to carve out only what Zitadel
+must reach, then restart. Replacing `192.168.0.0/16` with its complement around
+the single `/24` that holds Caddy and Syndra keeps the rest of RFC1918 denied:
+
+```
+localhost,0.0.0.0/8,10.0.0.0/8,100.64.0.0/10,127.0.0.0/8,169.254.0.0/16,
+172.16.0.0/12,198.18.0.0/15,::/128,::1/128,fc00::/7,fe80::/10,
+<the complement of your own subnet —
+generate it programmatically>
+```
+
+That permits `192.0.2.0/24` and nothing else new. Widening it to all of
+192.168/16 also works and is what the upstream issue suggests, at the cost of
+letting a compromised Action target reach the whole LAN.
+
+[CVE-2026-55671]: https://github.com/advisories/GHSA-29jh-8cfq-rr8x
+[zitadel#12326]: https://github.com/zitadel/zitadel/issues/12326
+
 ### 5. Caddy
 
 On the Caddy box (`198.51.100.15`), add a site block:
@@ -229,19 +262,25 @@ Then `caddy reload`. No application change is needed for the reverse proxy:
 `ui/src/lib/oidc.ts:73-74` already derives the OIDC redirect URI from
 `x-forwarded-host` / `x-forwarded-proto`, which Caddy sets by default.
 
-### 6. First boot
+### 6. Build the images
 
 ```bash
 su - runner -c 'cd /opt/syndra && docker compose up -d --build'
-curl -fsS http://198.51.100.12:8080/healthz
 ```
 
-Migrations run automatically on backend start. Confirm live Zitadel mode in the
-logs — look for `[DIRECTORY] Source=zitadel`. If it says anything else, the
-machine key or `ZITADEL_DOMAIN` is wrong and the backend fell back to
-local-policy-only mode.
+Postgres, Redis, and the UI come up. **The backend will not**, and that is
+correct:
 
-Then log in at `https://syndra.example.org`.
+```
+[STARTUP] Production refusing to start: ZITADEL_DOMAIN is set but
+ZITADEL_EVENT_SIGNING_KEY, ZITADEL_ACTION_SIGNING_KEY is empty.
+```
+
+`backend/cmd/api/main.go:42` refuses to serve with a live Zitadel configured and
+no signing keys, because in that state `/api/action/inject` and
+`/api/webhooks/zitadel` accept unsigned requests from anyone. The keys do not
+exist until step 7 registers the targets, so the backend stays down across steps
+6 and 7 by design. Do not work around it by clearing `ZITADEL_DOMAIN`.
 
 ### 7. Register Zitadel Actions
 
@@ -249,8 +288,27 @@ Then log in at `https://syndra.example.org`.
 > pointed at the same Zitadel instance stops receiving claims and events at this
 > moment. That is expected — see the note in [Topology](#topology).
 
+**Prerequisites the script does not state.** `register.sh` needs bash 4+
+(associative arrays) and, to mint its own M2M token, a Go toolchain. The
+production LXC has bash 5 but no Go and no `make`; macOS has Go but ships bash
+3.2. Neither host satisfies both, so mint the token where Go lives and run the
+script where bash 4+ lives:
+
 ```bash
-su - runner -c 'cd /opt/syndra && set -a && . ./.env && set +a && make zitadel-actions-register'
+# on a workstation with Go and the service-account key
+cd backend && ZITADEL_DOMAIN=auth.example.org \
+  ZITADEL_MACHINE_KEY_PATH=/abs/path/zitadel-machine-key.json \
+  go run ./cmd/syndra-token > /tmp/m2m.token
+scp /tmp/m2m.token root@198.51.100.12:/tmp/ && rm /tmp/m2m.token
+```
+
+```bash
+# on the production LXC — call the script directly, there is no make here
+su - runner -s /bin/bash -c 'cd /opt/syndra && \
+  ZITADEL_DOMAIN=auth.example.org \
+  SYNDRA_EXTERNAL_URL=<the URL Zitadel will POST to> \
+  ZITADEL_M2M_TOKEN="$(cat /tmp/m2m.token)" \
+  ./zitadel/actions/register.sh; rm -f /tmp/m2m.token'
 ```
 
 This creates two targets (`syndra-claim-injector`, `syndra-event-listener`) and
@@ -277,8 +335,8 @@ warning. Do not leave a publicly routable production host in that state.
 Verify:
 
 ```bash
-make zitadel-actions-verify        BACKEND_URL=http://localhost:8080
-make zitadel-actions-verify-events BACKEND_URL=http://localhost:8080
+su - runner -s /bin/bash -c "cd /opt/syndra && ./scripts/smoke-test-action-v2.sh http://localhost:8080"
+su - runner -s /bin/bash -c "cd /opt/syndra && ./scripts/smoke-test-event-listener.sh http://localhost:8080"
 ```
 
 ### 8. Self-mutation loop guard
@@ -414,7 +472,10 @@ docker compose --profile sync up -d
 | Backend logs `Source=demo` / `Source=local` | `ZITADEL_DOMAIN` or the machine key path is wrong; backend fell back to local-policy-only mode. |
 | Login loops back to `/login` | Redirect URI mismatch. Zitadel's registered URI must be byte-identical to `https://syndra.example.org/auth/callback`. |
 | Logged in but the console is empty | Project role not granted to your user, or **Assert Roles on Authentication** is off. |
-| `make zitadel-actions-register` returns 403 | Service user has org roles but not the instance-level `action.*` permissions. |
+| `register.sh` returns 403 | Service user has org roles but not the instance-level `action.*` permissions. |
+| `register.sh` returns 400 `Errors.Target.DeniedURL` | Zitadel ≥ v4.15.2 denies RFC1918 target addresses by default. See step 4f. |
+| `register.sh`: "requires bash 4+" | macOS ships bash 3.2. Run it on the LXC (bash 5) with a pre-minted `ZITADEL_M2M_TOKEN`. See step 7. |
+| Backend restart-loops on `Production refusing to start` | Signing keys are not in `.env` yet. Expected between steps 6 and 7; not expected afterwards. |
 | Tokens carry no Syndra claims | Another deployment re-registered the instance's Actions targets and repointed them. Re-run step 7. |
 | Webhook endpoint returns 401 | `ZITADEL_EVENT_SIGNING_KEY` in `.env` no longer matches the target's key. Rotate or re-capture. |
 
