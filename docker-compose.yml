@@ -4,7 +4,11 @@ services:
     container_name: mkauth_postgres
     environment:
       POSTGRES_USER: mkauth
-      POSTGRES_PASSWORD: mkauth_secure_password # Change in production
+      # No default. A literal password here meant every deployment that forgot
+      # to override it shipped the same credential, and DB_DSN below silently
+      # agreed with it. Required now — compose refuses to start without it, so
+      # a missing value is a startup error instead of a shared secret.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required (see scripts/gen-prod-env.sh)}
       POSTGRES_DB: mkauthdb
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -29,7 +33,10 @@ services:
       dockerfile: Dockerfile
     container_name: mkauth_backend
     environment:
-      - DB_DSN=${DB_DSN:-postgres://mkauth:mkauth_secure_password@postgres:5432/mkauthdb?sslmode=disable}
+      # Default derives from POSTGRES_PASSWORD rather than repeating a literal,
+      # so the credential has exactly one definition. Override DB_DSN directly
+      # only when pointing at a database outside this compose file.
+      - DB_DSN=${DB_DSN:-postgres://mkauth:${POSTGRES_PASSWORD}@postgres:5432/mkauthdb?sslmode=disable}
       - REDIS_URL=${REDIS_URL:-redis:6379}
       - PORT=${PORT:-8080}
       - MKAUTH_API_KEY=${MKAUTH_API_KEY:-dev_auth_token_secret}
@@ -97,6 +104,11 @@ services:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080}
       - BACKEND_URL=${BACKEND_URL:-http://backend:8080}
       - MKAUTH_API_KEY=${MKAUTH_API_KEY:-dev_auth_token_secret}
+      # HMAC key for the session cookie. The UI falls back to MKAUTH_API_KEY
+      # when this is unset, which coupled cookie integrity to the backend API
+      # key — rotating one silently invalidated every session. Pass it through
+      # so a deployment can hold the two apart.
+      - SESSION_SECRET=${SESSION_SECRET:-}
       - ZITADEL_DOMAIN=${ZITADEL_DOMAIN:-}
       - ZITADEL_CLIENT_ID=${ZITADEL_CLIENT_ID:-}
       - ZITADEL_ADMIN_ROLE_KEY=${ZITADEL_ADMIN_ROLE_KEY:-admin}
@@ -107,6 +119,10 @@ services:
       context: ./sync
       dockerfile: Dockerfile
     container_name: mkauth_sync
+    # Opt-in. Without a reachable LLDAP the service crash-loops, and a restarting
+    # container in `docker ps` is noise that hides a real failure. Start it with
+    # `docker compose --profile sync up -d` once LLDAP_* are filled in.
+    profiles: ["sync"]
     environment:
       - BACKEND_URL=http://backend:8080
       - MKAUTH_API_KEY=${MKAUTH_API_KEY:-dev_auth_token_secret}
