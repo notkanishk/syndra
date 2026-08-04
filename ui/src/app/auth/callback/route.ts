@@ -11,26 +11,14 @@ import {
   resolveDisplayName,
   PKCE_COOKIE_NAME,
 } from "@/lib/oidc";
+import { buildRedirectUrl, isSecureRequest } from "@/lib/request-url";
 import { createOidcSessionValue, SESSION_COOKIE_NAME, type OidcSessionCookie } from "@/lib/session";
 
 function redirectToLogin(request: Request, error: string): Response {
-  const url = new URL(request.url);
-  url.pathname = "/login";
-  url.search = `?error=${encodeURIComponent(error)}`;
+  // Was built straight off request.url with no forwarded-host handling at all,
+  // so every failure path bounced the browser to the container's own address.
+  const url = buildRedirectUrl(request, "/login", `?error=${encodeURIComponent(error)}`);
   return NextResponse.redirect(url, { status: 307 });
-}
-
-function buildRedirectUrl(request: Request, path: string): URL {
-  const requestUrl = new URL(request.url);
-  const forwardedHost = request.headers.get("x-forwarded-host");
-  const forwardedProto = request.headers.get("x-forwarded-proto");
-
-  const url = new URL(request.url);
-  url.protocol = forwardedProto ? `${forwardedProto}:` : requestUrl.protocol;
-  url.host = forwardedHost || request.headers.get("host") || requestUrl.host;
-  url.pathname = path;
-  url.search = "";
-  return url;
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -66,9 +54,7 @@ export async function GET(request: Request): Promise<Response> {
   const pkce = decodePkce(pkceCookieRaw);
 
   // Immediately invalidate the PKCE cookie regardless of outcome
-  const requestUrl = new URL(request.url);
-  const isSecure = request.headers.get("x-forwarded-proto") === "https" ||
-    requestUrl.protocol === "https:";
+  const isSecure = isSecureRequest(request);
 
   cookieStore.set(PKCE_COOKIE_NAME, "", {
     httpOnly: true,

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { buildRedirectUrl } from "@/lib/request-url";
 
 // Must match SESSION_COOKIE_NAME in lib/session.ts. Declared locally because
 // this file runs on the Edge runtime and importing lib/session would pull
@@ -82,9 +83,11 @@ async function readSession(request: NextRequest): Promise<SessionState> {
 }
 
 function redirectTo(request: NextRequest, path: string, clearSession = false) {
-  const url = request.nextUrl.clone();
-  url.pathname = path;
-  url.search = "";
+  // nextUrl carries the address this process was reached on, not the one the
+  // browser used, so cloning it sent every unauthenticated request to the
+  // container's own host:port — the redirect the user hits on literally every
+  // click before signing in.
+  const url = buildRedirectUrl(request, path);
   const response = NextResponse.redirect(url, { status: 307 });
   if (clearSession) {
     // Expire immediately — the user lands on /login able to re-auth instead

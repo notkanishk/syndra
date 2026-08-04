@@ -10,15 +10,14 @@ import {
   generateState,
   PKCE_COOKIE_NAME,
 } from "@/lib/oidc";
+import { buildRedirectUrl, isSecureRequest } from "@/lib/request-url";
 
 export async function GET(request: Request): Promise<Response> {
   const domain = process.env.ZITADEL_DOMAIN;
   const clientId = process.env.ZITADEL_CLIENT_ID;
 
   if (!domain || !clientId) {
-    const url = new URL(request.url);
-    url.pathname = "/login";
-    url.search = "?error=misconfigured";
+    const url = buildRedirectUrl(request, "/login", "?error=misconfigured");
     return NextResponse.redirect(url, { status: 302 });
   }
 
@@ -35,9 +34,7 @@ export async function GET(request: Request): Promise<Response> {
     codeChallenge: challenge,
   });
 
-  const requestUrl = new URL(request.url);
-  const isSecure = request.headers.get("x-forwarded-proto") === "https" ||
-    requestUrl.protocol === "https:";
+  const isSecure = isSecureRequest(request);
 
   const cookieStore = await cookies();
   cookieStore.set(PKCE_COOKIE_NAME, encodePkce({ state, verifier, createdAt: Math.floor(Date.now() / 1000) }), {
