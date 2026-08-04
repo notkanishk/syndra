@@ -319,22 +319,43 @@ production LXC has bash 5 but no Go and no `make`; macOS has Go but ships bash
 3.2. Neither host satisfies both, so mint the token where Go lives and run the
 script where bash 4+ lives:
 
-```bash
-# on a workstation with Go and the service-account key
-cd backend && ZITADEL_DOMAIN=auth.example.org \
-  ZITADEL_MACHINE_KEY_PATH=/abs/path/zitadel-machine-key.json \
-  go run ./cmd/syndra-token > /tmp/m2m.token
-scp /tmp/m2m.token root@198.51.100.12:/tmp/ && rm /tmp/m2m.token
-```
+The token administers Actions v2 instance-wide, so it never touches disk on
+either machine — pipe it straight from the minting host into the script:
 
 ```bash
-# on the production LXC — call the script directly, there is no make here
-su - runner -s /bin/bash -c 'cd /opt/syndra && \
-  ZITADEL_DOMAIN=auth.example.org \
-  SYNDRA_EXTERNAL_URL=<the URL Zitadel will POST to> \
-  ZITADEL_M2M_TOKEN="$(cat /tmp/m2m.token)" \
-  ./zitadel/actions/register.sh; rm -f /tmp/m2m.token'
+# from a workstation with Go and the service-account key
+cd backend && ZITADEL_DOMAIN=auth.example.org \
+  ZITADEL_MACHINE_KEY_PATH=/abs/path/zitadel-machine-key.json \
+  go run ./cmd/syndra-token \
+| ssh root@198.51.100.12 'su - runner -s /bin/bash -c "cd /opt/syndra && \
+    ZITADEL_DOMAIN=auth.example.org \
+    SYNDRA_EXTERNAL_URL=<the URL Zitadel will POST to> \
+    ZITADEL_M2M_TOKEN=\$(cat) \
+    ./zitadel/actions/register.sh"'
 ```
+
+Do **not** stage it through `/tmp`. A redirect creates the file with the
+umask's default mode — world-readable on most systems — and anyone who reads it
+before you delete it can administer this Zitadel instance's Actions until the
+token expires. `/tmp` is shared, so on a multi-user workstation or a host with
+other service accounts that is a real window, not a theoretical one.
+
+If the pipeline is impractical (an interactive `ssh` prompt, say), keep the file
+out of shared directories and mode-restricted for its whole life:
+
+```bash
+umask 077   # 0600 on creation, not after
+install -d -m 700 ~/.syndra && : > ~/.syndra/m2m.token
+cd backend && ... go run ./cmd/syndra-token > ~/.syndra/m2m.token
+scp ~/.syndra/m2m.token root@198.51.100.12:/home/runner/.m2m.token
+ssh root@198.51.100.12 'chown runner:runner /home/runner/.m2m.token && chmod 600 $_'
+# ... run register.sh ... then, unconditionally:
+shred -u ~/.syndra/m2m.token
+ssh root@198.51.100.12 'shred -u /home/runner/.m2m.token'
+```
+
+Setting the mode *after* `>` creates the file is too late; the window is between
+those two commands.
 
 This creates two targets (`syndra-claim-injector`, `syndra-event-listener`) and
 binds nine executions, per `zitadel/actions/targets.json`. Zitadel returns each
@@ -354,8 +375,12 @@ cat zitadel/actions/.action-env.fragment >> .env
 docker compose up -d backend
 ```
 
-Until these keys are set, both endpoints accept **unsigned** requests and log a
-warning. Do not leave a publicly routable production host in that state.
+The backend has been down since step 6 and starts serving only once these are in
+`.env`. It cannot have accepted an unsigned request in the meantime:
+`requireProductionSigningKeys` (`backend/cmd/api/main.go`) returns early only
+when `ZITADEL_DOMAIN` is unset, so the signature-passthrough it mentions is
+reachable in local development alone — never in this flow, and never on a host
+configured against a live Zitadel.
 
 Verify:
 
