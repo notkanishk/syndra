@@ -383,3 +383,61 @@ docker compose --profile sync up -d
 | `make zitadel-actions-register` returns 403 | Service user has org roles but not the instance-level `action.*` permissions. |
 | Tokens carry no MkAuth claims | Another deployment re-registered the instance's Actions targets and repointed them. Re-run step 7. |
 | Webhook endpoint returns 401 | `ZITADEL_EVENT_SIGNING_KEY` in `.env` no longer matches the target's key. Rotate or re-capture. |
+
+---
+
+## Appendix: what the first deployment got wrong
+
+The original host (`mkauth-test`, `198.51.100.16`) grew by hand over several
+months. Everything below is a real defect found on it, and each one is the
+reason the corresponding decision above looks the way it does. Keep this list
+when rebuilding that box.
+
+**`MKAUTH_EXTERNAL_URL` drifted to a decommissioned IP.** The `.env` pointed at
+`198.51.100.14:8080`; the box had since moved to `.16`. Nothing failed loudly —
+Zitadel kept POSTing to a host that no longer answered, so the claim injector
+and event listener were silently dead. `CORS_ORIGIN` and `NEXT_PUBLIC_API_URL`
+carried the same stale address. *Prod counters this with the deploy-time check
+that the public Action target URL reaches the running deployment, and by using
+a hostname instead of an IP.*
+
+**Secrets were world-readable.** `.env` and `zitadel-machine-key.json` were both
+mode `644`, owned by root, in `/root`. A service-account private key that any
+account on the box can read is a credential, not a secret. *Prod runs as an
+unprivileged `runner` user with both files at mode 600.*
+
+**Everything ran as root**, including what a CI runner would drive. *Prod
+separates the deploy identity from the host's root account.*
+
+**Two sets of database volumes.** `mkauth_pgdata` and
+`makerspace-authority_pgdata` both exist. Compose derives its project name from
+the directory name, so renaming the checkout stranded the original volume while
+starting a fresh one. Neither is labelled; only the timestamps distinguish them.
+*Prod pins the checkout at `/opt/mkauth` and never moves it.*
+
+**Build cache reached 10.5 GB** — a quarter of the disk. `update.sh` prunes
+images but not the builder cache, which is the part that actually grows. *Prod's
+workflow prunes both, with a 4 GB cache floor so rebuilds stay fast.*
+
+**`ZITADEL_M2M_USER_ID` was never set**, leaving the self-mutation loop guard
+disabled for the entire life of the deployment. Backend-initiated grant changes
+echoed back through the event listener and re-triggered orchestration.
+*Prod treats it as a required bring-up step (step 8) rather than an optional
+tuning knob.*
+
+**`ZITADEL_WEBHOOK_SECRET` was still in `.env`** — a dead variable from a
+pre-Actions-v2 webhook design, referenced by no code. Dead config is
+indistinguishable from live config during an incident.
+
+**`sync` had been crash-looping for months.** Its `Restarting (1)` line was
+permanent furniture in `docker ps`, which is exactly how a real failure gets
+missed. *Prod gates it behind a compose profile.*
+
+**`postfix` runs on the host** — an unused MTA inherited from the template.
+Remove it: `apt purge postfix`.
+
+**No reproducible deploy path.** `install.sh`, `update.sh`, and
+`scripts/deploy-lxc.sh` all assume a human at an SSH prompt, and
+`deploy-lxc.sh` still targets `198.51.100.14` and `rm -rf`s the remote directory
+before extracting — which deletes `.env` and the Zitadel machine key along with
+it. Do not point that script at a host you care about until it is fixed.

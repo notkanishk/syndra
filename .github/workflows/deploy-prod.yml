@@ -34,6 +34,9 @@ jobs:
           cd /opt/mkauth
           docker compose up -d --build --remove-orphans
           docker image prune -f
+          # Build cache is the thing that actually eats the disk — it reached
+          # 10.5 GB on the long-lived dev box, where only images were pruned.
+          docker builder prune -f --keep-storage 4GB
 
       - name: Smoke test
         run: |
@@ -42,7 +45,28 @@ jobs:
             http://localhost:8080/healthz >/dev/null
           curl -fsS --retry 20 --retry-delay 3 --retry-all-errors \
             http://localhost:3000 >/dev/null
-          echo "backend and ui responding"
+          echo "backend and ui responding locally"
+
+      # Zitadel POSTs to MKAUTH_EXTERNAL_URL, not to localhost. On the dev box
+      # that URL drifted to a decommissioned IP and every Action silently
+      # posted into the void for months. Assert the public path resolves to
+      # this deployment: an unsigned POST must reach the handler and be
+      # rejected (4xx), not fail to connect.
+      - name: Verify the Action target URL reaches this deployment
+        run: |
+          set -euo pipefail
+          cd /opt/mkauth
+          url="$(grep -E '^MKAUTH_EXTERNAL_URL=' .env | cut -d= -f2-)"
+          [ -n "$url" ] || { echo "MKAUTH_EXTERNAL_URL unset in .env"; exit 1; }
+          code="$(curl -sS -o /dev/null -w '%{http_code}' -m 15 \
+            -X POST -H 'Content-Type: application/json' -d '{}' \
+            "${url}/api/action/inject")"
+          echo "${url}/api/action/inject -> HTTP ${code}"
+          case "$code" in
+            000) echo "unreachable — Caddy or DNS is not routing to this host"; exit 1 ;;
+            5*)  echo "reached, but the handler errored"; exit 1 ;;
+            *)   echo "reachable" ;;
+          esac
 
       - name: Report container state on failure
         if: failure()
