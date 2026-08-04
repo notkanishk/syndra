@@ -30,9 +30,9 @@
 - [x] 4.1 `runner` user, `docker` group, `/opt/syndra` ownership
 - [x] 4.2 Read-only deploy key generated, `github.com` host key pinned
 - [ ] 4.3 Add the deploy key to the repository *(blocked: GitHub UI)*
-- [ ] 4.4 Clone to `/opt/syndra` *(blocked on 4.3)*
-- [ ] 4.5 Run `gen-prod-env.sh`, fill `ZITADEL_CLIENT_ID` / `ZITADEL_AUDIENCE`
-- [ ] 4.6 Copy `zitadel-machine-key.json` to the host at mode 600
+- [ ] 4.4 Clone to `/opt/syndra` *(blocked on 4.3 and on the repository rename)*
+- [ ] 4.5 Run `gen-prod-env.sh`, fill `ZITADEL_CLIENT_ID` / `ZITADEL_AUDIENCE` *(blocked on 4.4)*
+- [x] 4.6 Copy `zitadel-machine-key.json` to the host at mode 600, owned by `runner`
 - [ ] 4.7 `docker compose up -d --build`; confirm `[DIRECTORY] Source=zitadel`
 
 ## 5. Zitadel
