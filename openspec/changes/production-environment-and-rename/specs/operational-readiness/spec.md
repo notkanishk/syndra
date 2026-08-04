@@ -107,3 +107,38 @@ code — the precise failure the guard exists to catch.
 - **AND** the Go layer writes one of the new values
 - **THEN** `TestDriftMigrationEnumsMatchCode` MUST pass
 - **AND** it MUST fail if the Go layer writes a value no migration permits
+
+### Requirement: Every browser-facing absolute URL MUST be derived from the forwarded origin
+
+Behind a reverse proxy the UI never observes the URL the browser requested.
+Next's standalone server builds `request.url` from the address it listens on, so
+every request arrives as `http://localhost:3000/...`. Any redirect target,
+OIDC `redirect_uri`, or cookie `secure` decision MUST therefore be derived from
+`x-forwarded-host` / `x-forwarded-proto`, falling back to `Host`, and MUST be
+built as a fresh origin rather than by mutating the incoming URL.
+
+Mutating it is not equivalent: the WHATWG `host` setter replaces the port only
+when the assigned value carries one, so a bare hostname assigned over a
+`:3000` request URL silently keeps the port.
+
+This logic MUST live in exactly one module. It previously existed as three
+byte-identical copies plus two variants that omitted the headers entirely, and
+fixing the copy named by an error message left the other five unfixed.
+
+#### Scenario: A proxied redirect does not carry the container's port
+
+- **WHEN** a request arrives with `request.url` of `http://localhost:3000/users` and `x-forwarded-host: syndra.example.org`, `x-forwarded-proto: https`
+- **THEN** any redirect issued MUST target `https://syndra.example.org/...`
+- **AND** MUST NOT contain the listening port
+
+#### Scenario: A forwarded port is preserved
+
+- **WHEN** `x-forwarded-host` is `syndra.internal:8443`
+- **THEN** the resolved origin MUST be `https://syndra.internal:8443`
+
+#### Scenario: Session cookies are Secure behind a TLS-terminating proxy
+
+- **WHEN** TLS terminates at the proxy and the request reaching the app is plain HTTP
+- **AND** `x-forwarded-proto` is `https`
+- **THEN** the session cookie MUST be set with `secure: true`
+- **AND** the app MUST NOT decide this from the protocol of the request it received
