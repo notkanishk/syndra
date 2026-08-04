@@ -159,9 +159,18 @@ Copy the resulting **Client ID** into *both* `ZITADEL_CLIENT_ID` and
 the token audience against it while the UI uses it to start the flow.
 
 **c. Service user (M2M).** Users → Service Users → New. Set Access Token Type to
-**JWT**. Note the user ID from its detail page — that is `ZITADEL_M2M_USER_ID`.
-Then Keys → New → type **JSON** → Download. Zitadel shows the key material once.
-Place it on the host:
+**JWT**. Then Keys → New → type **JSON** → Download. Zitadel shows the key
+material once.
+
+The downloaded file's `userId` field is `ZITADEL_M2M_USER_ID` — no need to go
+back to the console for it:
+
+```bash
+jq -r .userId zitadel-machine-key.json
+```
+
+Rename it to `zitadel-machine-key.json` (what `.env` and `.gitignore` both
+expect) and place it on the host:
 
 ```bash
 # from your workstation
