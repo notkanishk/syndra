@@ -61,7 +61,7 @@
 - [x] 7.5 `TestDriftMigrationEnumsMatchCode` reads every up-migration, not `000016` alone
 - [x] 7.6 Verify no dangling references to renamed paths
 - [x] 7.7 Rename the GitHub repository; update `origin`
-- [ ] 7.8 Rename the local working directory *(deferred: moves the session's cwd)*
+- [x] 7.8 Rename the local working directory to `.../Projects/Syndra`; re-key the tooling that indexes by absolute path (Claude project history, codebase-memory, local permission allowlists)
 
 ## 8. Verification
 
