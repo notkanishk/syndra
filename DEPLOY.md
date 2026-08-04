@@ -142,12 +142,26 @@ Under **Roles**, create at minimum `admin`. This must match
 Post-logout redirect is not needed — `/auth/logout` clears the local session
 cookie and redirects to `/login` without calling Zitadel's end-session endpoint.
 
+Then open the application's **Token Settings**. The defaults do not work:
+
+| Setting | Default | Required | Why |
+|---|---|---|---|
+| Auth Token Type | Bearer Token | **JWT** | `ui/src/app/auth/callback/route.ts:116` parses the access token as a JWT, and `backend/internal/auth/jwt.go` verifies its RS256 signature against the JWKS endpoint. An opaque bearer token fails both. |
+| Add user roles to the access token | off | **on** | `ui/src/lib/oidc.ts:201` reads `urn:zitadel:iam:org:project:roles` out of the *access* token. Without it every operator resolves to `role: "user"`. |
+| User roles inside ID Token | off | off | Nothing reads the ID token. |
+| User Info inside ID Token | off | off | Same. Display name and email come from `/me/profile`, which `extractSessionFields` is written to fall back to. |
+
+`ZITADEL_AUDIENCE` must equal this application's Client ID — with JWT access
+tokens Zitadel puts the client ID in `aud`, and the backend checks it.
+
 Copy the resulting **Client ID** into *both* `ZITADEL_CLIENT_ID` and
 `ZITADEL_AUDIENCE` in `.env`. They are the same value; the backend validates
 the token audience against it while the UI uses it to start the flow.
 
-**c. Service user (M2M).** Create a machine user, then generate and download a
-**JSON key**. Place it on the host:
+**c. Service user (M2M).** Users → Service Users → New. Set Access Token Type to
+**JWT**. Note the user ID from its detail page — that is `ZITADEL_M2M_USER_ID`.
+Then Keys → New → type **JSON** → Download. Zitadel shows the key material once.
+Place it on the host:
 
 ```bash
 # from your workstation
@@ -164,6 +178,16 @@ The service user needs permissions at two different scopes:
   `action.target.write`, `action.execution.write`. Org roles do **not** cover
   Actions v2 — without these, step 7 fails with HTTP 403. Add
   `action.target.delete` only if you intend to use `make zitadel-actions-purge`.
+
+  Assign these narrowest-first: a custom instance role holding exactly those
+  permissions (Default Settings → Roles) if your version supports it; otherwise
+  a prebuilt action-scoped role such as `IAM_ACTION_ADMIN`; otherwise
+  `IAM_OWNER`, which works everywhere but grants the whole instance.
+
+Only the registration and rotation scripts use the instance permissions —
+steady-state traffic is Zitadel calling MkAuth, which needs none. You may
+revoke them between runs, or issue a second machine key used only by the
+scripts, if you want the backend's everyday key to carry no instance authority.
 
 Full permission matrix: the "Service-Account Permissions" section of
 `zitadel/actions/README.md`.
@@ -250,9 +274,10 @@ make zitadel-actions-verify-events BACKEND_URL=http://localhost:8080
 
 ### 8. Self-mutation loop guard
 
-Trigger any grant change from the UI, then find the M2M service user's ID in the
-Zitadel event log (it appears as the `editorUserId` on the resulting event). Set
-it and restart:
+Take the service user's ID from its detail page in the Zitadel console (step 4c).
+If you did not record it, trigger any grant change from the UI and read the
+`editorUserId` off the resulting event in the Zitadel event log. Set it and
+restart:
 
 ```
 ZITADEL_M2M_USER_ID=<service user id>
