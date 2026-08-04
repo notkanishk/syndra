@@ -74,6 +74,7 @@ Every change directory has: `proposal.md` (why), `design.md` (how), `tasks.md` (
 | [July 2026 Audit Remediation](changes/july-2026-audit-remediation/) | 5.5 | Complete (sync items deferred) | [proposal](changes/july-2026-audit-remediation/proposal.md) / [tasks](changes/july-2026-audit-remediation/tasks.md) — backend authz at trust boundary, signed session cookie, stable webhook dedup, OE cuts; see AUDIT.md July addendum |
 | [UI Capability Gap Closure](changes/ui-capability-gap-closure/) | 5.5 | In progress (A, B and C complete incl. C4 expiry acknowledgement; C5/C8 deferred with triggers recorded, C9b blocked on the hardware bridge) | [proposal](changes/ui-capability-gap-closure/proposal.md) / [design](changes/ui-capability-gap-closure/design.md) / [tasks](changes/ui-capability-gap-closure/tasks.md) — closes [docs/UI-CAPABILITY-GAPS.md](../docs/UI-CAPABILITY-GAPS.md) |
 | [Bundle Versioning](changes/bundle-versioning/) | 5.5 | Implemented | [proposal](changes/bundle-versioning/proposal.md) / [design](changes/bundle-versioning/design.md) / [tasks](changes/bundle-versioning/tasks.md) — a bundle edit no longer cascades; publishing does, rehearsed |
+| [Production Environment & Rename to Syndra](changes/production-environment-and-rename/) | 5.5 | In progress (repo complete; host bring-up blocked on GitHub + Zitadel steps) | [proposal](changes/production-environment-and-rename/proposal.md) / [design](changes/production-environment-and-rename/design.md) / [tasks](changes/production-environment-and-rename/tasks.md) — see [DEPLOY.md](../DEPLOY.md); Actions v2 is instance-scoped, so dev needs its own Zitadel |
 
 ## Roadmap Phase -> Change Mapping
 
@@ -85,4 +86,5 @@ Every change directory has: `proposal.md` (why), `design.md` (how), `tasks.md` (
 | 4: Infrastructure Bridge | In Progress | provisioning-intents, shadow-vault, sync-service |
 | 5: Automation & Governance | In Progress | zitadel-actions-v2-deployment, grant-expiration-scheduler, live-zitadel-data-source, live-directory-identity-completeness, live-only-production-ui, dashboard-ux-elevation, zitadel-event-trigger-propagation; [remaining items](changes/syndra-core-architecture/ROADMAP.md) |
 | 5.5: Audit-Resolution Waves | In Progress | wave-1-production-trust-hardening, wave-2-part-1-frontend-palette-finalization, wave-2-part-2-backend-coherence, wave-2-part-3-operational-polish, wave-2-part-4-zitadel-state-projection-and-drift-control, wave-3-frontend-remainder-and-consolidation |
+| 5.5: Deployment | In Progress | production-environment-and-rename — production LXC `syndra`, generated secrets, runner-based deploy, MkAuth -> Syndra |
 | 6: IdP Lifecycle | Not Started | [see Roadmap](changes/syndra-core-architecture/ROADMAP.md) |
