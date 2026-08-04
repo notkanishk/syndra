@@ -68,7 +68,7 @@
 - [x] 8.2 `sync`: build, vet, test
 - [x] 8.3 `ui`: 349 tests, lint, production build
 - [ ] 8.4 Post-deploy: log in via Zitadel and confirm the `admin` role resolves
-- [ ] 8.5 Codebase-memory refresh (`detect_changes` + re-index) after the rename
+- [x] 8.5 Codebase-memory refresh after the rename — full re-index (6547 nodes, 14163 edges); the rename moved every Go module path, so an incremental pass would have left the graph pointing at symbols under the old module
 
 ## 9. Follow-ups (separate changes)
 
