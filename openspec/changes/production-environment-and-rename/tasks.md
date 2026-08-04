@@ -22,34 +22,35 @@
 - [x] 3.2 Local smoke test (`/healthz`, UI root)
 - [x] 3.3 Reachability assertion against `SYNDRA_EXTERNAL_URL`
 - [x] 3.4 Prune builder cache, not only images
-- [ ] 3.5 Install and start the runner service on `198.51.100.12` *(blocked: needs a registration token)*
-- [ ] 3.6 Confirm a push to `main` deploys end to end
+- [x] 3.5 Install and start the runner service on `198.51.100.12`
+- [x] 3.6 Confirm a push to `main` deploys end to end
 
 ## 4. Production host
 
 - [x] 4.1 `runner` user, `docker` group, `/opt/syndra` ownership
 - [x] 4.2 Read-only deploy key generated, `github.com` host key pinned
-- [ ] 4.3 Add the deploy key to the repository *(blocked: GitHub UI)*
-- [ ] 4.4 Clone to `/opt/syndra` *(blocked on 4.3 and on the repository rename)*
-- [ ] 4.5 Run `gen-prod-env.sh`, fill `ZITADEL_CLIENT_ID` / `ZITADEL_AUDIENCE` *(blocked on 4.4)*
+- [x] 4.3 Add the deploy key to the repository
+- [x] 4.4 Clone to `/opt/syndra`
+- [x] 4.5 Run `gen-prod-env.sh`, fill `ZITADEL_CLIENT_ID` / `ZITADEL_AUDIENCE`
 - [x] 4.6 Copy `zitadel-machine-key.json` to the host at mode 600, owned by `runner`
-- [ ] 4.7 `docker compose up -d --build`; confirm `[DIRECTORY] Source=zitadel`
+- [x] 4.7 `docker compose up -d --build`; confirm `[DIRECTORY] Source=zitadel`
 
 ## 5. Zitadel
 
 - [x] 5.1 Project `Syndra`, role `admin`, granted to the operator
 - [x] 5.2 Application `syndra`, PKCE, redirect URI `https://syndra.example.org/auth/callback`
-- [ ] 5.3 Token Settings: Auth Token Type → **JWT**, "Add user roles to the access token" → **on**
-- [ ] 5.4 Project setting: **Assert Roles on Authentication** → on
+- [x] 5.3 Token Settings: Auth Token Type → **JWT**, "Add user roles to the access token" → **on**
+- [x] 5.4 Project setting: **Assert Roles on Authentication** → on
 - [x] 5.5 Service user `syndra-service` with JSON key; org + instance permissions assigned
-- [ ] 5.6 `make zitadel-actions-register`; capture both signing keys into `.env`
-- [ ] 5.7 `make zitadel-actions-verify` and `zitadel-actions-verify-events`
-- [ ] 5.8 Set `ZITADEL_M2M_USER_ID` from the key file's `userId`
+- [x] 5.6 Register targets; both signing keys substituted into `.env` (no `make`/Go on the host — token minted off-host)
+- [x] 5.7 Both smoke tests pass; unsigned public POSTs return 401
+- [x] 5.8 Set `ZITADEL_M2M_USER_ID` from the key file's `userId`
 
-## 6. Caddy
+## 6. Caddy & Zitadel egress
 
-- [ ] 6.1 Site block on `198.51.100.15` splitting `/api/action/*` and `/api/webhooks/*` to `:8080`, rest to `:3000`
-- [ ] 6.2 Confirm certificate issues and the OIDC redirect URI resolves via `x-forwarded-*`
+- [x] 6.0 Zitadel `HTTPClient.DenyList` override — v4.15.2+ denies RFC1918, blocking Actions v2 target creation
+- [x] 6.1 Site block on `198.51.100.15` splitting `/api/action/*` and `/api/webhooks/*` to `:8080`, rest to `:3000`
+- [x] 6.2 Confirm certificate issues and the OIDC redirect URI resolves via `x-forwarded-*`
 
 ## 7. Rename
 
@@ -59,7 +60,7 @@
 - [x] 7.4 Migration `000025` for the stored `drift_type` value, with a matching down
 - [x] 7.5 `TestDriftMigrationEnumsMatchCode` reads every up-migration, not `000016` alone
 - [x] 7.6 Verify no dangling references to renamed paths
-- [ ] 7.7 Rename the GitHub repository; update `origin`
+- [x] 7.7 Rename the GitHub repository; update `origin`
 - [ ] 7.8 Rename the local working directory *(deferred: moves the session's cwd)*
 
 ## 8. Verification

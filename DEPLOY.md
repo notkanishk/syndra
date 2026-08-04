@@ -221,21 +221,46 @@ allowlist** to pair with it ([zitadel#12326]) — the only lever is narrowing th
 denylist. Targets created before the upgrade keep working, which is why an
 existing deployment can look fine while a new one cannot register at all.
 
-On the Zitadel host, override `HTTPClient.DenyList` (env:
-`ZITADEL_HTTPCLIENT_DENYLIST`, comma-separated) to carve out only what Zitadel
-must reach, then restart. Replacing `192.168.0.0/16` with its complement around
-the single `/24` that holds Caddy and Syndra keeps the rest of RFC1918 denied:
+On the Zitadel host, add an `HTTPClient.DenyList` override to
+`/opt/zitadel/config.yaml` — the stock list minus the range your deployment
+lives in — then restart. There is no config-validation subcommand and the unit
+is `Restart=always`, so validate the YAML off-host before writing it, and back
+up first:
 
-```
-localhost,0.0.0.0/8,10.0.0.0/8,100.64.0.0/10,127.0.0.0/8,169.254.0.0/16,
-172.16.0.0/12,198.18.0.0/15,::/128,::1/128,fc00::/7,fe80::/10,
-<the complement of your own subnet —
-generate it programmatically>
+```yaml
+HTTPClient:
+  DenyList:
+    - "localhost"
+    - "0.0.0.0/8"
+    - "10.0.0.0/8"
+    - "100.64.0.0/10"
+    - "127.0.0.0/8"
+    - "169.254.0.0/16"
+    - "172.16.0.0/12"
+    - "198.18.0.0/15"
+    - "::/128"
+    - "::1/128"
+    - "fc00::/7"
+    - "fe80::/10"
 ```
 
-That permits `192.0.2.0/24` and nothing else new. Widening it to all of
-192.168/16 also works and is what the upstream issue suggests, at the cost of
-letting a compromised Action target reach the whole LAN.
+`192.168.0.0/16` is omitted, which is what lets Zitadel POST to
+`syndra.example.org` (→ `198.51.100.15`). Loopback, link-local metadata,
+`10/8` and `172.16/12` stay denied.
+
+**This permits any 192.168.x.x target**, so Actions v2 target creation is now a
+privileged operation — an operator who can create a target can point Zitadel at
+anything on that network. If you want it tighter, replace `192.168.0.0/16` with
+its complement around the single address Zitadel must reach; generate the CIDR
+list programmatically rather than by hand.
+
+Restarting Zitadel is a brief authentication outage for every service behind it.
+Ours came back healthy in ~4s. Keep the rollback to hand:
+
+```bash
+cp -p /opt/zitadel/config.yaml.bak-<stamp> /opt/zitadel/config.yaml
+systemctl restart zitadel
+```
 
 [CVE-2026-55671]: https://github.com/advisories/GHSA-29jh-8cfq-rr8x
 [zitadel#12326]: https://github.com/zitadel/zitadel/issues/12326
