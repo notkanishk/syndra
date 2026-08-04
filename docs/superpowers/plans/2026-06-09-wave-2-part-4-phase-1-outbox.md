@@ -55,7 +55,7 @@ Goal: land the OpenSpec scaffolding + this plan before touching source, so subse
 
 Run:
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
+cd <repo>
 openspec validate wave-2-part-4-zitadel-state-projection-and-drift-control --strict
 ```
 Expected: `Change '…' is valid`.
@@ -1412,7 +1412,7 @@ mcp__codebase-memory-mcp__index_repository   # affected scope: backend/internal/
 - [ ] **Step 10.6: OpenSpec validate + tick the ledger**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
+cd <repo>
 openspec validate wave-2-part-4-zitadel-state-projection-and-drift-control --strict
 ```
 Then check off Sub-phase 1 Tasks 0–10 in `tasks.md` and commit:

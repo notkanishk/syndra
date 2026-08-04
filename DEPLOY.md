@@ -1,30 +1,46 @@
 # Deploying Syndra to Production
 
-Production runs on a Proxmox LXC named `syndra` (`198.51.100.12`), reachable at
-`https://syndra.example.org` through the shared Caddy box at `198.51.100.15`.
-Deploys happen automatically on every push to `main`, driven by a self-hosted
-GitHub Actions runner living inside the LXC.
+Production runs on a Proxmox LXC reachable at `https://syndra.example.org`
+through a shared Caddy box. Deploys happen automatically on every push to
+`main`, driven by a self-hosted GitHub Actions runner living inside the LXC.
 
 This document covers a **first-time bring-up** and the **steady-state** deploy
 loop. If the stack is already running, you almost certainly want
 [Routine deploys](#routine-deploys) or [Operations](#operations).
+
+### Placeholders
+
+This guide is written against placeholders rather than one installation's real
+addresses. Substitute your own throughout:
+
+| Placeholder | What it stands for |
+|---|---|
+| `<APP_HOST>` | The LXC running the Syndra compose stack |
+| `<PROXY_HOST>` | The reverse proxy terminating TLS (Caddy, in this guide) |
+| `<ZITADEL_HOST>` | The host running your Zitadel instance |
+| `<LEGACY_HOST>` | A previous deployment, referenced only in the appendix |
+| `syndra.example.org` | The public hostname Syndra is served on |
+| `auth.example.org` | Your Zitadel instance domain |
+
+Keep your real values in `DEPLOY.local.md` — it is gitignored for exactly this
+purpose.
 
 ---
 
 ## Topology
 
 ```
-                    ┌─────────────────────────────────────┐
-  browser  ───TLS──▶│ Caddy · 198.51.100.15                 │
-                    │  syndra.example.org            │
-                    │  auth.example.org  (Zitadel)   │
-                    └──────┬──────────────────────┬───────┘
-                           │                      │
-        /api/action/*      │                      │  everything else
-        /api/webhooks/*    │                      │
-                           ▼                      ▼
+                    ┌──────────────────────────────────────┐
+  browser  ───TLS──▶│ Caddy · <PROXY_HOST>                 │
+                    │   syndra.example.org                 │
+                    │   auth.example.org   (Zitadel)       │
+                    └──────┬───────────────────────┬───────┘
+                           │                       │
+        /api/action/*      │                       │  everything else
+        /api/webhooks/*    │                       │
+                           ▼                       ▼
                   ┌────────────────────────────────────────┐
-                  │ syndra · 198.51.100.12   (Docker LXC)   │
+                  │ syndra · <APP_HOST>    (Docker LXC)    │
                   │                                        │
                   │  backend :8080 ◀── ui :3000            │
                   │      │                                 │
@@ -54,8 +70,8 @@ second project.
 | LXC template | community-scripts `docker` (Debian 13, unprivileged) |
 | Resources | 4 CPU · 6144 MB RAM · 32 GB disk (`bun run build` peaks past 2 GB) |
 | Compose dir | `/opt/syndra`, owned by the `runner` user |
-| Repo | `github.com/notkanishk/syndra` — **private**, needs a deploy key |
-| DNS | `syndra.example.org` → `198.51.100.15` (the Caddy box) |
+| Repo | `github.com/notkanishk/syndra` (a deploy key is still the right call — it scopes the host to read-only on one repo) |
+| DNS | `syndra.example.org` → `<PROXY_HOST>` (the Caddy box) |
 
 Create the LXC on the Proxmox host with:
 
@@ -76,7 +92,7 @@ Everything runs as an unprivileged `runner` user that is a member of the
 `docker` group. The GitHub Actions runner must not run as root.
 
 ```bash
-ssh root@198.51.100.12
+ssh root@<APP_HOST>
 adduser --disabled-password --gecos "" runner
 usermod -aG docker runner
 install -d -o runner -g runner -m 755 /opt/syndra
@@ -104,8 +120,15 @@ password while keeping the database.
 ### 3. Generate secrets
 
 ```bash
-su - runner -c 'cd /opt/syndra && ./scripts/gen-prod-env.sh'
+su - runner -c 'cd /opt/syndra && \
+  EXTERNAL_URL=https://syndra.example.org \
+  ZITADEL_DOMAIN=auth.example.org \
+  ./scripts/gen-prod-env.sh'
 ```
+
+Both variables are required; the script exits if either is unset. `EXTERNAL_URL`
+is the address *Zitadel* will POST to, so it is the one value here that no local
+health check ever exercises — a wrong value fails silently and permanently.
 
 This writes `/opt/syndra/.env` at mode 600 with fresh random values for
 `POSTGRES_PASSWORD`, `SYNDRA_API_KEY`, and `SESSION_SECRET`. It refuses to
@@ -174,8 +197,8 @@ expect) and place it on the host:
 
 ```bash
 # from your workstation
-scp zitadel-machine-key.json root@198.51.100.12:/opt/syndra/
-ssh root@198.51.100.12 'chown runner:runner /opt/syndra/zitadel-machine-key.json && chmod 600 $_'
+scp zitadel-machine-key.json root@<APP_HOST>:/opt/syndra/
+ssh root@<APP_HOST> 'chown runner:runner /opt/syndra/zitadel-machine-key.json && chmod 600 $_'
 ```
 
 The service user needs permissions at two different scopes:
@@ -245,7 +268,7 @@ HTTPClient:
 ```
 
 `192.168.0.0/16` is omitted, which is what lets Zitadel POST to
-`syndra.example.org` (→ `198.51.100.15`). Loopback, link-local metadata,
+`syndra.example.org` (→ `<PROXY_HOST>`). Loopback, link-local metadata,
 `10/8` and `172.16/12` stay denied.
 
 **This permits any 192.168.x.x target**, so Actions v2 target creation is now a
@@ -267,18 +290,18 @@ systemctl restart zitadel
 
 ### 5. Caddy
 
-On the Caddy box (`198.51.100.15`), add a site block:
+On the Caddy box (`<PROXY_HOST>`), add a site block:
 
 ```caddyfile
 syndra.example.org {
 	handle /api/action/* {
-		reverse_proxy 198.51.100.12:8080
+		reverse_proxy <APP_HOST>:8080
 	}
 	handle /api/webhooks/* {
-		reverse_proxy 198.51.100.12:8080
+		reverse_proxy <APP_HOST>:8080
 	}
 	handle {
-		reverse_proxy 198.51.100.12:3000
+		reverse_proxy <APP_HOST>:3000
 	}
 }
 ```
@@ -327,7 +350,7 @@ either machine — pipe it straight from the minting host into the script:
 cd backend && ZITADEL_DOMAIN=auth.example.org \
   ZITADEL_MACHINE_KEY_PATH=/abs/path/zitadel-machine-key.json \
   go run ./cmd/syndra-token \
-| ssh root@198.51.100.12 'su - runner -s /bin/bash -c "cd /opt/syndra && \
+| ssh root@<APP_HOST> 'su - runner -s /bin/bash -c "cd /opt/syndra && \
     ZITADEL_DOMAIN=auth.example.org \
     SYNDRA_EXTERNAL_URL=<the URL Zitadel will POST to> \
     ZITADEL_M2M_TOKEN=\$(cat) \
@@ -347,11 +370,11 @@ out of shared directories and mode-restricted for its whole life:
 umask 077   # 0600 on creation, not after
 install -d -m 700 ~/.syndra && : > ~/.syndra/m2m.token
 cd backend && ... go run ./cmd/syndra-token > ~/.syndra/m2m.token
-scp ~/.syndra/m2m.token root@198.51.100.12:/home/runner/.m2m.token
-ssh root@198.51.100.12 'chown runner:runner /home/runner/.m2m.token && chmod 600 $_'
+scp ~/.syndra/m2m.token root@<APP_HOST>:/home/runner/.m2m.token
+ssh root@<APP_HOST> 'chown runner:runner /home/runner/.m2m.token && chmod 600 $_'
 # ... run register.sh ... then, unconditionally:
 shred -u ~/.syndra/m2m.token
-ssh root@198.51.100.12 'shred -u /home/runner/.m2m.token'
+ssh root@<APP_HOST> 'shred -u /home/runner/.m2m.token'
 ```
 
 Setting the mode *after* `>` creates the file is too late; the window is between
@@ -409,7 +432,7 @@ GitHub → repo **Settings → Actions → Runners → New self-hosted runner** 
 registration token, then:
 
 ```bash
-ssh root@198.51.100.12
+ssh root@<APP_HOST>
 su - runner
 mkdir -p ~/actions-runner && cd ~/actions-runner
 RUNNER_VERSION=2.336.0   # check github.com/actions/runner/releases for current
@@ -533,13 +556,13 @@ docker compose --profile sync up -d
 
 ## Appendix: what the first deployment got wrong
 
-The original host (`syndra-test`, `198.51.100.16`) grew by hand over several
+The original host (`syndra-test`, `<LEGACY_HOST>`) grew by hand over several
 months. Everything below is a real defect found on it, and each one is the
 reason the corresponding decision above looks the way it does. Keep this list
 when rebuilding that box.
 
 **`SYNDRA_EXTERNAL_URL` drifted to a decommissioned IP.** The `.env` pointed at
-`198.51.100.14:8080`; the box had since moved to `.16`. Nothing failed loudly —
+`<LEGACY_HOST_OLD>:8080`; the box had since moved to `.16`. Nothing failed loudly —
 Zitadel kept POSTing to a host that no longer answered, so the claim injector
 and event listener were silently dead. `CORS_ORIGIN` and `NEXT_PUBLIC_API_URL`
 carried the same stale address. *Prod counters this with the deploy-time check
@@ -581,8 +604,10 @@ missed. *Prod gates it behind a compose profile.*
 **`postfix` runs on the host** — an unused MTA inherited from the template.
 Remove it: `apt purge postfix`.
 
-**No reproducible deploy path.** `install.sh`, `update.sh`, and
-`scripts/deploy-lxc.sh` all assume a human at an SSH prompt, and
-`deploy-lxc.sh` still targets `198.51.100.14` and `rm -rf`s the remote directory
-before extracting — which deletes `.env` and the Zitadel machine key along with
-it. Do not point that script at a host you care about until it is fixed.
+**No reproducible deploy path.** `install.sh` and `update.sh` assume a human at
+an SSH prompt. A third script, `scripts/deploy-lxc.sh`, was worse: it targeted a
+host that had been decommissioned and `rm -rf`d the remote directory before
+extracting, which would have taken `.env` and the Zitadel machine key with it.
+It has been deleted rather than fixed — the runner in
+[Routine deploys](#routine-deploys) supersedes it, and a rsync-and-pray script
+pointed at a live identity system is not worth keeping around for nostalgia.

@@ -80,5 +80,5 @@ Both findings were the same mistake twice: I stopped at "the row is no longer st
 
 - [x] PBD-31 `go test ./... && go vet ./...` — backend green.
 - [x] PBD-32 `bun run test && bun run lint && bun run build` — UI green (249 tests).
-- [ ] PBD-33 **Operator-gated:** sign in against the live Zitadel at `198.51.100.16` and confirm the header and Today greeting render the operator's name. This is the defect that started the change and it cannot be confirmed from a test — the fixture path never had the bug.
+- [ ] PBD-33 **Operator-gated:** sign in against the live Zitadel at `<LEGACY_HOST>` and confirm the header and Today greeting render the operator's name. This is the defect that started the change and it cannot be confirmed from a test — the fixture path never had the bug.
 - [ ] PBD-34 **Operator-gated:** run one bulk rehearsal against real data and confirm the per-person verdicts match what the individual screens say.

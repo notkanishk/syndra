@@ -12,8 +12,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-EXTERNAL_URL="${EXTERNAL_URL:-https://syndra.example.org}"
-ZITADEL_DOMAIN="${ZITADEL_DOMAIN:-auth.example.org}"
+# Both are required with no default. A default here is a trap: it would be one
+# specific installation's hostname, so every other operator would generate a
+# .env that looks complete and points at someone else's infrastructure. The
+# external URL in particular fails silently when wrong — it is the address
+# *Zitadel* calls, so no local health check ever exercises it.
+: "${EXTERNAL_URL:?set EXTERNAL_URL to the public base URL Zitadel will POST to, e.g. https://syndra.example.org}"
+: "${ZITADEL_DOMAIN:?set ZITADEL_DOMAIN to your Zitadel instance domain, e.g. auth.example.org}"
 
 if [ -e .env ]; then
   echo "error: .env already exists in $(pwd)" >&2

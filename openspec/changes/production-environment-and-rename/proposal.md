@@ -6,16 +6,16 @@
 
 ## Why
 
-There has only ever been one deployment. `198.51.100.16` began as a test box and
+There has only ever been one deployment. `<LEGACY_HOST>` began as a test box and
 became the thing people use, growing by hand over several months. It is not a
 production environment and cannot be made into one in place: its secrets are
 world-readable, its Zitadel Action targets point at a decommissioned IP, and it
 holds two sets of Postgres volumes because the checkout directory was once
 renamed. A second environment built the same way would inherit all of it.
 
-Production therefore gets its own LXC (`syndra`, `198.51.100.12`), its own
+Production therefore gets its own LXC (`syndra`, `<APP_HOST>`), its own
 generated secrets, and a deploy path that does not involve a human at an SSH
-prompt. `198.51.100.16` stays as development and gets rebuilt afterwards.
+prompt. `<LEGACY_HOST>` stays as development and gets rebuilt afterwards.
 
 The compose file blocked this on its own. `POSTGRES_PASSWORD` was a literal, so
 every deployment that forgot to override it shared one credential. `SESSION_SECRET`
@@ -51,7 +51,7 @@ or organization. Development moves to its own instance in a follow-up change.
 
 ## Impact
 
-Development (`198.51.100.16`) breaks on next pull: compose now expects
+Development (`<LEGACY_HOST>`) breaks on next pull: compose now expects
 `POSTGRES_USER: syndra`, so `pg_isready -U syndra` fails against its
 `mkauth`-initialized volume and `backend` never passes `depends_on:
 service_healthy`. Its `.env` also still uses `MKAUTH_*`. Accepted — that host is

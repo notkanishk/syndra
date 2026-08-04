@@ -50,7 +50,7 @@ cd ui && bun run lint && bun run build
 
 Manual smoke test path (post-deploy against `auth.example.org`):
 
-1. Log in as an admin at `http://198.51.100.14/`
+1. Log in as an admin at `http://<LEGACY_HOST_OLD>/`
 2. Visit `/zitadel` via the sidebar → "Operations" → "Zitadel Diagnostics"
 3. Click **Check connection** — expect green "ok" badge with domain + latency + projects total
 4. Select a project in **Projects & Roles** — expect its roles to render; create/edit/delete a test role

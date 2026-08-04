@@ -1,0 +1,44 @@
+name: Feature request
+description: Propose a capability or a change in behaviour
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening: [`openspec/NEXT.md`](../../blob/main/openspec/NEXT.md)
+        lists what is already known to be missing, and
+        [`openspec/INDEX.md`](../../blob/main/openspec/INDEX.md) shows what each
+        capability currently covers.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: |
+        What are you actually trying to do, and where does Syndra get in the
+        way? Describe the situation rather than the solution — the use case is
+        the most useful part of this issue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+      description: Optional. A sketch is fine.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: |
+        Existing workarounds, and why they fall short. If an existing capability
+        nearly does this, say which.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This solves a problem I actually have, not one I anticipate
+          required: false

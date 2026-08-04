@@ -12,8 +12,13 @@ dev:
 test-backend:
 	cd backend && go test ./...
 
+# `bun run test` — NOT `bun test`. The latter is Bun's own test runner, which
+# picks up the same files but knows nothing about the vitest API they are
+# written against (`vi.hoisted`, the jsdom environment, the setup file), and
+# reports ~75 failures on a perfectly healthy tree. `bun run test` invokes the
+# "test" script in package.json, which is `vitest run`.
 test-ui:
-	cd ui && bun test
+	cd ui && bun run test
 
 test: test-backend test-ui
 

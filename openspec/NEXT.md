@@ -1,7 +1,7 @@
 # Syndra — Next Steps
 
 > Single pickup point. Everything open, in one place, as of **2026-07-31**.
-> Sources consolidated here: `ROADMAP.md` phases 4–6, `AUDIT.md` deferrals, open `changes/*/tasks.md`, and tooling debt.
+> Sources consolidated here: `ROADMAP.md` phases 4–6, `docs/AUDIT.md` deferrals, open `changes/*/tasks.md`, and tooling debt.
 > [< Index](INDEX.md) · [Architecture](changes/syndra-core-architecture/design.md) · [Roadmap](changes/syndra-core-architecture/ROADMAP.md)
 
 ## How to read this

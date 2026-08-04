@@ -1737,7 +1737,7 @@ This step uses the codebase-memory MCP tool, not bash. From within the Claude Co
 
 ```
 mcp__codebase-memory-mcp__detect_changes(
-  project="Users-notkanishk-Documents-Mkrspc-Projects-Syndra-backend",
+  project="<repo-project>-backend",
   base_branch="main"
 )
 ```
@@ -1746,7 +1746,7 @@ Then re-index if changes are detected:
 
 ```
 mcp__codebase-memory-mcp__index_repository(
-  repo_path="/Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend",
+  repo_path="<repo>/backend",
   mode="moderate"
 )
 ```

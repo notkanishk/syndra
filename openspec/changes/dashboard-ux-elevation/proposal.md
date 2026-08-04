@@ -1,6 +1,6 @@
 ## Why
 
-`live-only-production-ui` closed the demo-leak surface and added empty-state coverage, but the UX audit (recorded in `/Users/notkanishk/.claude/plans/using-the-mandatory-workflow-cuddly-hejlsberg.md`) showed the dashboard was still functionally-but-not-elegantly delivering on the `syndra-core-architecture/design.md` promises:
+`live-only-production-ui` closed the demo-leak surface and added empty-state coverage, but the UX audit (recorded in a local UX audit note) showed the dashboard was still functionally-but-not-elegantly delivering on the `syndra-core-architecture/design.md` promises:
 
 - **Access Lineage** rendered Source and Derived columns identically with no inheritance chain.
 - **Bundle preview** was missing — admins clicked "Assign" without seeing the role list.

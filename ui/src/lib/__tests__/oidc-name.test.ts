@@ -45,7 +45,7 @@ describe("extractSessionFields — name", () => {
 
 describe("nameFromEmail", () => {
   it("title-cases a dotted local part", () => {
-    expect(nameFromEmail("kanishk.singh@example.edu")).toBe("Kanishk Singh");
+    expect(nameFromEmail("priya.sharma@example.org")).toBe("Priya Sharma");
   });
 
   it("handles underscores and hyphens", () => {

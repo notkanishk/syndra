@@ -53,5 +53,23 @@ zitadel-machine-key.json
 *.swp
 *.swo
 
-# openlore analysis artifacts
+# Local assistant/index state.
+#
+# These are caches and machine-specific config, not project content: they are
+# rebuilt from the source tree on demand and are keyed to one checkout's
+# absolute path, so a committed copy is stale for everyone but its author.
+# The assistant *documentation* that is worth sharing — CLAUDE.md, AGENTS.md,
+# and the reusable workflows under .claude/ — stays tracked.
 .openlore/
+.serena/
+.codebase-memory/
+.codex/
+
+# Deployment values specific to one installation (host addresses, real
+# hostnames). DEPLOY.md is written against placeholders; this is where an
+# operator keeps the substitutions for their own network.
+DEPLOY.local.md
+
+# Design-tool exports. Large binaries that belong in the design handoff, not
+# in git history.
+*.zip

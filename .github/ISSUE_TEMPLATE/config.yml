@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/notkanishk/syndra/security/advisories/new
+    about: Report privately. Syndra sits in an access-control path — please do not open a public issue.
+  - name: Specifications
+    url: https://github.com/notkanishk/syndra/blob/main/openspec/INDEX.md
+    about: What each capability is meant to do, and its current status.
+  - name: Known gaps
+    url: https://github.com/notkanishk/syndra/blob/main/openspec/NEXT.md
+    about: Every open gap and known piece of debt, in one place. Check here before filing.

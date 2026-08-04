@@ -1,7 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-HOST="${1:-198.51.100.14}"
+# Required. The previous default pointed at a host that had been decommissioned,
+# so an argument-less run smoke-tested nothing and said so cheerfully.
+HOST="${1:?usage: smoke-test-lxc.sh <host>   (address of the deployment to check)}"
 
 echo "Checking UI availability..."
 curl -fsS "http://${HOST}:3000" >/dev/null

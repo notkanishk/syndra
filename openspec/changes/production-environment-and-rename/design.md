@@ -69,7 +69,7 @@ is a decision rather than an oversight.
 
 ### The reachability assertion
 
-The old host's `MKAUTH_EXTERNAL_URL` pointed at `198.51.100.14` long after the box
+The old host's `MKAUTH_EXTERNAL_URL` pointed at `<LEGACY_HOST_OLD>` long after the box
 moved to `.16`. Zitadel kept POSTing to an address that did not answer, so the
 claim injector and event listener were dead for months. The failure lived
 entirely on the caller's side of the wire — nothing in any Syndra log could have
@@ -121,8 +121,8 @@ production build succeeds.
 
 ## 6. Follow-ups
 
-- Second Zitadel instance for development; repoint `198.51.100.16`.
-- Rebuild `198.51.100.16` from `DEPLOY.md` rather than repairing it in place.
-- `scripts/deploy-lxc.sh` still targets `198.51.100.14` and `rm -rf`s the remote
+- Second Zitadel instance for development; repoint `<LEGACY_HOST>`.
+- Rebuild `<LEGACY_HOST>` from `DEPLOY.md` rather than repairing it in place.
+- `scripts/deploy-lxc.sh` still targets `<LEGACY_HOST_OLD>` and `rm -rf`s the remote
   directory before extracting, deleting `.env` and the machine key with it.
 - GitHub repository rename to `syndra`; update `origin` afterwards.

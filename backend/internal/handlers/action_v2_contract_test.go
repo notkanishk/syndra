@@ -45,7 +45,7 @@ const canonicalV2Payload = `{
   "org": {
     "id": "250124592953808001",
     "name": "Ashoka Makerspace",
-    "primary_domain": "makerspace.example.edu"
+    "primary_domain": "makerspace.example.org"
   },
   "user_grants": [
     {

@@ -31,7 +31,7 @@ Goal: land the OpenSpec scaffolding and the plan file before touching source. Su
 - [ ] **Step 0.1: Validate the OpenSpec change shape**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
+cd <repo>
 openspec validate wave-2-part-3-operational-polish --strict
 ```
 
@@ -127,7 +127,7 @@ New:
 - [ ] **Step 1.3: Run the sync test suite**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/sync
+cd <repo>/sync
 go test ./...
 go vet ./...
 ```
@@ -195,7 +195,7 @@ Expected: 2 hits (declaration line and loop usage at line 32). No other referenc
 - [ ] **Step 2.3: Run backend tests**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
+cd <repo>/backend
 go test ./internal/handlers/...
 go vet ./...
 ```
@@ -240,7 +240,7 @@ Expected:
 #!/bin/bash
 set -euo pipefail
 
-HOST="${1:-198.51.100.14}"
+HOST="${1:-<LEGACY_HOST_OLD>}"
 API_KEY="${SYNDRA_API_KEY:-dev_auth_token_secret}"
 
 echo "Checking UI availability..."
@@ -626,7 +626,7 @@ func TestNewGroupAddRequest_UsesBindDNAsPlaceholderMember(t *testing.T) {
 - [ ] **Step 7.2: Run the test to verify it fails**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/sync
+cd <repo>/sync
 go test ./internal/ldap/... -run TestNewGroupAddRequest_UsesBindDNAsPlaceholderMember -v
 ```
 
@@ -756,7 +756,7 @@ func TestWithConn_CancelledCtxFailsFast(t *testing.T) {
 - [ ] **Step 8.2: Run to verify it fails**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/sync
+cd <repo>/sync
 go test ./internal/ldap/... -run TestWithConn_CancelledCtxFailsFast -v
 ```
 
@@ -998,7 +998,7 @@ func TestLoad_InvalidRetryAttemptsReturnsError(t *testing.T) {
 - [ ] **Step 9.2: Run to verify it fails**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/sync
+cd <repo>/sync
 go test ./internal/config/... -v
 ```
 
@@ -1508,7 +1508,7 @@ The surrounding meta-map has other entries (`"source_role"`, `"target_role"`, et
 - [ ] **Step 11.E.1: Confirm no Go references to `UpdateMappingRule` / `dbUpdateMappingRule` / `handleUpdateMappingRule` remain**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
+cd <repo>
 grep -rn "UpdateMappingRule\b\|dbUpdateMappingRule\b\|handleUpdateMappingRule\b\|mapping_rule\.version_bumped\|rule\.Version\b" backend/ --include="*.go"
 ```
 
@@ -1649,7 +1649,7 @@ Expected: zero hits. Any hit is a stale reference.
 - [ ] **Step 11.F.5: Frontend build + tests**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 bun run lint
 bun run test
 bun run build
@@ -1662,7 +1662,7 @@ Expected: all green. TypeScript will catch any remaining `rule.version` referenc
 - [ ] **Step 11.G.1: Migration round-trip on a throwaway DB**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
+cd <repo>/backend
 # Substitute the project's actual migrate-CLI invocation. Most projects use
 # golang-migrate against DB_DSN from .env.
 go run ./cmd/migrate up         # apply 000014 → column dropped
@@ -1728,7 +1728,7 @@ Run every module's full suite, plus codebase-memory refresh and OpenSpec validat
 - [ ] **Step 12.1: Backend full suite**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
+cd <repo>/backend
 go test ./...
 go vet ./...
 ```
@@ -1738,7 +1738,7 @@ Expected: all green.
 - [ ] **Step 12.2: Sync full suite**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/sync
+cd <repo>/sync
 go test ./...
 go vet ./...
 ```
@@ -1748,7 +1748,7 @@ Expected: all green.
 - [ ] **Step 12.3: Frontend full suite**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 bun run lint
 bun run test
 bun run build
@@ -1759,7 +1759,7 @@ Expected: all green.
 - [ ] **Step 12.4: gofmt on the wave's touch set**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
+cd <repo>
 gofmt -d \
   backend/internal/handlers/zitadel_grant_lookup.go \
   backend/internal/handlers/rules.go \
@@ -1790,7 +1790,7 @@ Expected: indexer reflects the deletions (`UpdateMappingRule`, `version` field, 
 - [ ] **Step 12.6: OpenSpec validation**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
+cd <repo>
 openspec validate wave-2-part-3-operational-polish --strict
 ```
 
@@ -1846,7 +1846,7 @@ In `openspec/INDEX.md`, find the change-log / proposed-changes table and append:
 - [ ] **Step 13.4: Re-validate**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
+cd <repo>
 openspec validate wave-2-part-3-operational-polish --strict
 ```
 

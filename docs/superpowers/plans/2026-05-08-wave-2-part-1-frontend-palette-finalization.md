@@ -17,7 +17,7 @@ Run these once before starting. Confirm the tree is clean and the baseline tests
 - [ ] **Pre-flight 1: Working tree is clean and on a feature branch**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
+cd <repo>
 git status
 # Pick the branch prefix per your platform convention — `feat/` for Claude Code,
 # `codex/` for Codex, or whatever your team uses — then create the branch:
@@ -29,7 +29,7 @@ Expected: `nothing to commit, working tree clean`. New branch created.
 - [ ] **Pre-flight 2: Baseline UI tests are green**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 bun run test
 ```
 
@@ -38,7 +38,7 @@ Expected: all existing test files pass (per OCR-S4-12, baseline is 73/73 across 
 - [ ] **Pre-flight 3: Backend tests are green (regression backstop)**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
+cd <repo>/backend
 go vet ./... && go test ./...
 ```
 
@@ -70,7 +70,7 @@ Expected: `proposal.md  design.md  tasks.md  specs/`; `spec.md`; the plan file p
 - [ ] **Step 2: Validate the OpenSpec change**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
+cd <repo>
 openspec validate wave-2-part-1-frontend-palette-finalization --strict
 ```
 
@@ -142,7 +142,7 @@ These mappings expose the `text-on-success`, `bg-on-success`, `border-on-success
 - [ ] **Step 4: Verify the new declarations resolve**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 grep -nE 'on-success|on-warning|on-info' src/app/globals.css
 ```
 
@@ -206,7 +206,7 @@ Edit `ui/src/components/ui/Skeleton.tsx` line 25:
 - [ ] **Step 3: Verify no legacy tokens remain in this file**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 grep -nE 'bg-surfaceHover|bg-surface-hover|border-border|text-foreground|text-muted|bg-primary-hover|bg-primaryHover|bg-danger|text-danger' src/components/ui/Skeleton.tsx
 ```
 
@@ -245,7 +245,7 @@ Edit `ui/src/components/ui/CopyButton.tsx` line 33:
 - [ ] **Step 2: Verify**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 grep -nE 'bg-surfaceHover|bg-surface-hover|border-border|text-foreground|text-muted|bg-primary-hover|bg-primaryHover|bg-danger|text-danger' src/components/ui/CopyButton.tsx
 ```
 
@@ -318,7 +318,7 @@ Edit `ui/src/components/ui/SubmitButton.tsx` lines 49-52:
 - [ ] **Step 3: Verify**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 grep -nE 'bg-surfaceHover|bg-surface-hover|border-border|text-foreground|text-muted|bg-primary-hover|bg-primaryHover|bg-danger|text-danger|bg-red-500|bg-emerald-500' src/components/ui/SubmitButton.tsx
 ```
 
@@ -388,7 +388,7 @@ In `ui/src/components/ui/Button.tsx` line 73:
 - [ ] **Step 3: Verify**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 grep -nE 'bg-\[var\(--success|bg-\[var\(--warning|text-white' src/components/ui/Button.tsx
 ```
 
@@ -453,7 +453,7 @@ In `ui/src/components/ui/JsonView.tsx`, replace every occurrence of `differs ? "
 - [ ] **Step 5: Verify**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 grep -nE 'bg-surfaceHover|bg-surface-hover|border-border|text-foreground|text-muted|bg-primary-hover|bg-primaryHover|bg-danger|text-danger|text-amber-500|text-emerald-500|text-sky-500' src/components/ui/JsonView.tsx
 ```
 
@@ -495,7 +495,7 @@ Edit `ui/src/components/ThemeToggle.tsx` line 24:
 - [ ] **Step 2: Verify**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 grep -nE 'bg-surfaceHover|bg-surface-hover|border-border|text-foreground|text-muted|bg-primary-hover|bg-primaryHover|bg-danger|text-danger' src/components/ThemeToggle.tsx
 ```
 
@@ -550,7 +550,7 @@ Edit `ui/src/components/SidebarNav.tsx` lines 110-114:
 - [ ] **Step 3: Verify**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 grep -nE 'bg-surfaceHover|bg-surface-hover|border-border|text-foreground|text-muted|bg-primary-hover|bg-primaryHover|bg-danger|text-danger|bg-primary/[0-9]+' src/components/SidebarNav.tsx
 ```
 
@@ -670,7 +670,7 @@ Edit `ui/src/components/Sidebar.tsx` lines 38-41:
 - [ ] **Step 4: Verify**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 grep -nE 'bg-surfaceHover|bg-surface-hover|border-border|text-foreground|text-muted|bg-primary-hover|bg-primaryHover|bg-danger|text-danger|bg-emerald-500|hover:border-primary/' src/components/Sidebar.tsx
 ```
 
@@ -922,7 +922,7 @@ If the prop names differ (e.g. `isOpen`/`onDismiss`/`ariaLabelledBy`), adjust th
 - [ ] **Step 4: Verify**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 grep -nE 'bg-surfaceHover|bg-surface-hover|border-border|text-foreground|text-muted|bg-primary-hover|bg-primaryHover|bg-danger|text-danger|bg-primary/[0-9]+|hover:border-primary/' src/components/RequestAccessButton.tsx
 ```
 
@@ -1004,7 +1004,7 @@ Edit `ui/src/components/ErrorBoundary.tsx` lines 36-49:
 - [ ] **Step 2: Verify**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 grep -nE 'bg-surfaceHover|bg-surface-hover|border-border|text-foreground|text-muted|bg-primary-hover|bg-primaryHover|bg-danger|text-danger|bg-red-500|border-red-500' src/components/ErrorBoundary.tsx
 ```
 
@@ -1100,7 +1100,7 @@ Edit `ui/src/app/page.tsx` lines 93-101:
 - [ ] **Step 4: Verify**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 grep -nE 'bg-surfaceHover|bg-surface-hover|border-border|text-foreground|text-muted|bg-primary-hover|bg-primaryHover|bg-danger|text-danger' src/app/page.tsx
 ```
 
@@ -1167,7 +1167,7 @@ The `project` branch (line 46) stays unchanged — already MD3.
 - [ ] **Step 2: Verify**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 grep -nE 'sky-500|amber-500|emerald-500|sky-600|amber-600|emerald-600|sky-300|amber-300|emerald-300' src/app/graph/page.tsx
 ```
 
@@ -1217,7 +1217,7 @@ In `ui/src/app/zitadel/page.tsx`, replace every occurrence of `text-muted` with 
 Step 3 already replaces `text-foreground` substring; `hover:text-foreground` becomes `hover:text-on-surface`. Confirm with a grep:
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 grep -n 'hover:text-foreground\|hover:text-on-surface' src/app/zitadel/page.tsx
 ```
 
@@ -1262,7 +1262,7 @@ Replace every occurrence of `text-white` with `text-on-primary` in this file. Ex
 - [ ] **Step 10: Verify**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 grep -nE 'bg-surfaceHover|bg-surface-hover|border-border|text-foreground|text-muted|bg-primary-hover|bg-primaryHover|bg-danger|text-danger|text-red-400|text-emerald-400|text-white|border-red-500|hover:bg-red-500' src/app/zitadel/page.tsx
 ```
 
@@ -1428,7 +1428,7 @@ describe("no-legacy-tokens canary", () => {
 - [ ] **Step 2: Run the canary test (should still RED at the globals.css assertion until Step 3)**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 bun run test src/__tests__/no-legacy-tokens.test.ts
 ```
 
@@ -1560,7 +1560,7 @@ Append after line 143 (the existing OCR-S4-15 line):
 - [ ] **Step 3: Validate the OpenSpec change is still strict-clean**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
+cd <repo>
 openspec validate wave-2-part-1-frontend-palette-finalization --strict
 ```
 
@@ -1588,7 +1588,7 @@ End-to-end gates: lint, test, build, backend regression, codebase-memory graph r
 - [ ] **Step 1: UI lint**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 bun run lint
 ```
 
@@ -1613,7 +1613,7 @@ Expected: clean build. Bundle sizes for `/`, `/zitadel`, and `/login` may shrink
 - [ ] **Step 4: Backend regression backstop**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
+cd <repo>/backend
 go vet ./... && go test ./...
 ```
 
@@ -1623,7 +1623,7 @@ Expected: clean. This change touches no Go code; the run is a sanity check.
 
 ```bash
 # Run via the codebase-memory MCP tools, not bash:
-#   mcp__codebase-memory-mcp__detect_changes(project="Users-notkanishk-Documents-Mkrspc-Projects-Syndra")
+#   mcp__codebase-memory-mcp__detect_changes(project="<repo-project>")
 ```
 
 Expected: detect_changes acknowledges the modified frontend files. The migration is structural-token-level, so the graph (which indexes function/class structure, not Tailwind utility usage) should report only the small changes in `RequestAccessButton.tsx` (Modal composition) and `Sidebar.tsx` (new `Pulse` import). No symbol additions/removals elsewhere.
@@ -1631,7 +1631,7 @@ Expected: detect_changes acknowledges the modified frontend files. The migration
 - [ ] **Step 6: OpenSpec validate**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
+cd <repo>
 openspec validate wave-2-part-1-frontend-palette-finalization --strict
 ```
 
@@ -1642,7 +1642,7 @@ Expected: `Change 'wave-2-part-1-frontend-palette-finalization' is valid`.
 Start the dev server:
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
+cd <repo>/ui
 bun run dev
 ```
 

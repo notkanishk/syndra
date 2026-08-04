@@ -618,7 +618,7 @@ reveal is a two-screen pattern that the brief assumes is general.
 
 ## E. Live deployment
 
-Deployment at `198.51.100.16` runs `465bdb5` — current with `main`.
+Deployment at `<LEGACY_HOST>` runs `465bdb5` — current with `main`.
 
 **`syndra_sync` is crash-looping.** Restarts roughly every 60 seconds:
 

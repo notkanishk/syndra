@@ -1405,7 +1405,7 @@ The wire-format and enrichment changes added new functions and a new table — k
 
 ```bash
 # Via the codebase-memory-mcp:
-mcp__codebase-memory-mcp__detect_changes project=Users-notkanishk-Documents-Mkrspc-Projects-Syndra-backend since=HEAD
+mcp__codebase-memory-mcp__detect_changes project=<repo-project>-backend since=HEAD
 ```
 
 - [ ] **Step 2: If `impacted_symbols` is non-empty, re-index the affected scope**

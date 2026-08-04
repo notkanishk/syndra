@@ -1708,7 +1708,7 @@ Place it after the Lifecycle Event Propagation row (Phase 5).
 
 - [ ] **Step 10.6: Refresh the codebase memory graph**
 
-Run via the `mcp__codebase-memory-mcp__detect_changes` tool with the project name `Users-notkanishk-Documents-Mkrspc-Projects-Syndra`. Verify the diff includes the new symbols (`SetWelcomeBundle`, `ErrNoWelcomeBundleConfigured`, `handleSetWelcomeBundle`, `handleGetMyProfile`, `fetchProfileMetadata`, `useSetWelcomeBundle`) and that the deleted `cmd/test/main.go` no longer appears.
+Run via the `mcp__codebase-memory-mcp__detect_changes` tool with the project name `<repo-project>`. Verify the diff includes the new symbols (`SetWelcomeBundle`, `ErrNoWelcomeBundleConfigured`, `handleSetWelcomeBundle`, `handleGetMyProfile`, `fetchProfileMetadata`, `useSetWelcomeBundle`) and that the deleted `cmd/test/main.go` no longer appears.
 
 If `detect_changes` does not auto-reindex, follow up with `index_repository` for the same project.
 

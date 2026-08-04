@@ -22,7 +22,7 @@
 - [x] 3.2 Local smoke test (`/healthz`, UI root)
 - [x] 3.3 Reachability assertion against `SYNDRA_EXTERNAL_URL`
 - [x] 3.4 Prune builder cache, not only images
-- [x] 3.5 Install and start the runner service on `198.51.100.12`
+- [x] 3.5 Install and start the runner service on `<APP_HOST>`
 - [x] 3.6 Confirm a push to `main` deploys end to end
 
 ## 4. Production host
@@ -49,7 +49,7 @@
 ## 6. Caddy & Zitadel egress
 
 - [x] 6.0 Zitadel `HTTPClient.DenyList` override — v4.15.2+ denies RFC1918, blocking Actions v2 target creation
-- [x] 6.1 Site block on `198.51.100.15` splitting `/api/action/*` and `/api/webhooks/*` to `:8080`, rest to `:3000`
+- [x] 6.1 Site block on `<PROXY_HOST>` splitting `/api/action/*` and `/api/webhooks/*` to `:8080`, rest to `:3000`
 - [x] 6.2 Confirm certificate issues and the OIDC redirect URI resolves via `x-forwarded-*`
 
 ## 7. Rename
@@ -75,5 +75,5 @@
 ## 9. Follow-ups (separate changes)
 
 - [ ] 9.1 Second Zitadel instance for development
-- [ ] 9.2 Rebuild `198.51.100.16` from `DEPLOY.md`
-- [ ] 9.3 Fix `scripts/deploy-lxc.sh` (stale IP, `rm -rf` destroys `.env` and the machine key)
+- [ ] 9.2 Rebuild `<LEGACY_HOST>` from `DEPLOY.md`
+- [x] 9.3 ~~Fix~~ **delete** `scripts/deploy-lxc.sh` — the runner supersedes it, and a script that `rm -rf`s a remote directory holding `.env` and the machine key is not worth repairing

@@ -1,0 +1,64 @@
+name: Bug report
+description: Something behaves differently than it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Not for security vulnerabilities — please use
+        [private reporting](../../security/advisories/new) instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to /governance/drift
+        2. Click Reconcile now
+        3. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Which mode?
+      description: |
+        Syndra behaves deliberately differently in each. Check the startup log
+        for `[DIRECTORY] Source=demo` or `Source=zitadel`.
+      options:
+        - Local dev — demo catalog (ZITADEL_DOMAIN unset)
+        - Live Zitadel instance
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: area
+    attributes:
+      label: Where
+      description: Component or path, if you know it.
+      placeholder: backend/internal/claims, ui/src/app/governance, sync/
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        Backend or browser console output. Redact tokens, keys, and hostnames —
+        this is a public issue.
+      render: shell
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Version or commit, deployment shape, whatever seems relevant.

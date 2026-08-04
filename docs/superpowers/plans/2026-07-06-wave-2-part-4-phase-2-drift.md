@@ -2135,7 +2135,7 @@ mcp__codebase-memory-mcp__index_repository   # scope: backend/internal/{db,handl
 - [ ] **Step 18.10: OpenSpec validate + tick the ledger**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
+cd <repo>
 openspec validate wave-2-part-4-zitadel-state-projection-and-drift-control --strict
 ```
 Then check off Sub-phase 2 Tasks 11–18 in `tasks.md` (append per-task notes as sub-phase 1 did) and commit:
