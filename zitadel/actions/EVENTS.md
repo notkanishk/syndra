@@ -1,7 +1,7 @@
 # Zitadel Event-Listener Target
 
-The `mkauth-event-listener` Action target receives lifecycle events from Zitadel
-and POSTs them to MkAuth's `/api/webhooks/zitadel` endpoint, driving:
+The `syndra-event-listener` Action target receives lifecycle events from Zitadel
+and POSTs them to Syndra's `/api/webhooks/zitadel` endpoint, driving:
 
 - Welcome-bundle assignment on user creation (`user.human.added` →
   `processUserCreated` → `TriggerOnboarding` → `AssignBundleToUser`).
@@ -16,13 +16,13 @@ and POSTs them to MkAuth's `/api/webhooks/zitadel` endpoint, driving:
   invalid").
 
 The target is type `restAsync` (fire-and-forget) — Zitadel does not block on
-MkAuth latency. Companion target `mkauth-claim-injector` (type `restCall`,
+Syndra latency. Companion target `syndra-claim-injector` (type `restCall`,
 function triggers) handles claim shaping; both are registered by a single
 `make zitadel-actions-register` invocation.
 
 ## Subscribed events
 
-| Zitadel event | MkAuth `event_type` | Downstream effect |
+| Zitadel event | Syndra `event_type` | Downstream effect |
 |---|---|---|
 | `user.human.added` | `user_created` | Onboarding trigger → welcome bundle |
 | `user.human.selfregistered` | `user_created` | Same |
@@ -66,7 +66,7 @@ camelCase. Any tooling constructing test bodies must mirror this exactly.
 Per-event payload caveats — Zitadel only sends fields that are part of the
 aggregate's state at that event boundary:
 
-| Event | Fields present in `event_payload` | Fields enriched by MkAuth |
+| Event | Fields present in `event_payload` | Fields enriched by Syndra |
 |---|---|---|
 | `user.grant.added` | `userId`, `projectId`, `grantId`, `roleKeys` | none |
 | `user.grant.changed` | `userId`, `roleKeys` | `projectId` |
@@ -81,7 +81,7 @@ redeliver.
 
 ## Self-mutation guard
 
-When MkAuth's backend mutates Zitadel via the Management API (e.g.
+When Syndra's backend mutates Zitadel via the Management API (e.g.
 `RemoveUserGrant` from mapping-rule revocation), Zitadel emits the
 corresponding event back to the listener. Without filtering, you get an
 infinite loop. The translator drops events whose top-level `userID`
@@ -102,7 +102,7 @@ environment that accepts real Zitadel traffic).
 ## Signing key
 
 Captured at target creation by `register.sh` and written to
-`zitadel/actions/.action-signing-key.mkauth-event-listener` (mode 0600).
+`zitadel/actions/.action-signing-key.syndra-event-listener` (mode 0600).
 Apply to backend env via the env-fragment writer:
 
 ```bash
@@ -118,7 +118,7 @@ so a single redirect updates both halves of the deployment.
 Rotation:
 
 ```bash
-make zitadel-actions-rotate-key TARGET=mkauth-event-listener
+make zitadel-actions-rotate-key TARGET=syndra-event-listener
 ```
 
 Same rotation flow as the claim injector — see the "Signing Key Handling"
@@ -146,5 +146,5 @@ for remote checks.
 |---|---|---|
 | Welcome bundle never assigned on new user | Listener target not registered, or signing key mismatch | `make zitadel-actions-register`; check `webhook_events` table for failed rows |
 | Loop: same user grant mutated repeatedly | `ZITADEL_M2M_USER_ID` unset or wrong | Set the env var to the backend's M2M service-user ID |
-| `401 INVALID_SIGNATURE` in backend logs | Stale or wrong `ZITADEL_EVENT_SIGNING_KEY` | Rotate via `make zitadel-actions-rotate-key TARGET=mkauth-event-listener` |
-| Unknown-event log spam | Zitadel emitting events MkAuth doesn't subscribe to (unlikely if executions are pinned) | Check executions list in Zitadel console; remove unwanted bindings |
+| `401 INVALID_SIGNATURE` in backend logs | Stale or wrong `ZITADEL_EVENT_SIGNING_KEY` | Rotate via `make zitadel-actions-rotate-key TARGET=syndra-event-listener` |
+| Unknown-event log spam | Zitadel emitting events Syndra doesn't subscribe to (unlikely if executions are pinned) | Check executions list in Zitadel console; remove unwanted bindings |

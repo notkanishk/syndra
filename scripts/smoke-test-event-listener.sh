@@ -15,7 +15,7 @@
 #
 # Usage:
 #   scripts/smoke-test-event-listener.sh                       # hits local backend on :8080
-#   scripts/smoke-test-event-listener.sh http://mkauth:8080    # explicit host
+#   scripts/smoke-test-event-listener.sh http://syndra:8080    # explicit host
 #   BACKEND_URL=https://staging.example.com scripts/smoke-test-event-listener.sh
 #
 # Exit codes: 0 success; >0 failure (message on stderr).

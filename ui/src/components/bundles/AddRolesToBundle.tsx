@@ -171,7 +171,7 @@ export function AddRolesToBundle({
         {groups.length === 0 ? (
           <p className="py-6 text-[14px] text-muted">
             No role matches “{query}”. It may exist only in the identity provider — the catalogue
-            lists what MkAuth created plus what the directory reports.
+            lists what Syndra created plus what the directory reports.
           </p>
         ) : (
           groups.map((group) => (

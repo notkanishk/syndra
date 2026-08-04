@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 func resetIntentDeps(t *testing.T) {

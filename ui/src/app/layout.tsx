@@ -36,7 +36,7 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata = {
-  title: 'MkAuth',
+  title: 'Syndra',
   description: 'Access management for the makerspace',
 };
 
@@ -50,7 +50,7 @@ export default async function RootLayout({
 
   // Dark is the default; the stored preference is applied before paint so a
   // light-theme operator never sees a frame of the dark room.
-  const themeScript = `try{var t=localStorage.getItem('mkauth-theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark')}catch(e){document.documentElement.setAttribute('data-theme','dark')}`;
+  const themeScript = `try{var t=localStorage.getItem('syndra-theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark')}catch(e){document.documentElement.setAttribute('data-theme','dark')}`;
 
   return (
     <html lang="en" className={fontVars} data-theme="dark" suppressHydrationWarning>

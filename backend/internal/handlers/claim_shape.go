@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"strings"
 
-	"mkauth/internal/claims"
-	"mkauth/internal/directory"
-	"mkauth/internal/models"
-	"mkauth/internal/services"
+	"syndra/internal/claims"
+	"syndra/internal/directory"
+	"syndra/internal/models"
+	"syndra/internal/services"
 )
 
 // Claim shaping endpoints — the operator's control over what an application

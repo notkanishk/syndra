@@ -6,13 +6,13 @@
 
 **Architecture:** A thin cascade orchestrator (`services/cascade.go`) turns each operator action into a set of `(user, project, role)` add/revoke intents and commits the source mutation **and** its outbox rows in one atomic `db.*AndEnqueue` tx (mirroring sub-phase 1's `EnqueueDirectGrantPropagation`), so a committed bundle/rule change always has its projection rows. Cascades write **no** `direct_role_grants` rows — that table's `UNIQUE(user,project,role)` cannot represent multi-source grants, so attribution lives on the new outbox `source`/`source_ref` columns and access is computed from the bundle/rule tables (unchanged `collectUserRoles`). When the source is `confirmation_mode='auto'` the orchestrator drains only its own rows via a new targeted `propagation.DrainBatch` (one advisory lock + one reachability preflight for the whole batch, reusing `DrainOne`'s `processRow`); manual rows wait in the existing Pending tier. Adds rely on the drain's already-exists short-circuit (`409→applied`); revokes use an explicit **other-source check** (`OtherSourceCovers`) computed from the *other* sources. The 6th trigger (rule-matcher change) composes add-new-target + revoke-old-target using the handler-captured pre-update rule — no diff engine. Auto cascades surface in a new "Recent automated cascades" element so they are never invisible.
 
-**Tech Stack:** Go (module `mkauth`, `pgx/v5` pool, stdlib `testing`, injectable-deps pattern), PostgreSQL (golang-migrate). Next.js + TypeScript + React Query (Bun), Vitest + Testing-Library. Material (obsidian-clarity) tokens.
+**Tech Stack:** Go (module `syndra`, `pgx/v5` pool, stdlib `testing`, injectable-deps pattern), PostgreSQL (golang-migrate). Next.js + TypeScript + React Query (Bun), Vitest + Testing-Library. Material (obsidian-clarity) tokens.
 
 ## Global Constraints
 
 Every task's requirements implicitly include these. Values copied verbatim from the design/specs:
 
-- **Go module path:** `mkauth`. Imports are `mkauth/internal/...`.
+- **Go module path:** `syndra`. Imports are `syndra/internal/...`.
 - **Migrations dir:** `backend/db/migrations/`; highest is `000016_drift_queue`; **next is `000017`**. Paired `.up.sql`/`.down.sql`, `IF EXISTS`/`IF NOT EXISTS` guards, `DO $$` for constraint blocks, real down migrations that drop what up added. `uuid_generate_v4()` is available (used by `000015`/`000016`).
 - **The full `source` CHECK enum already exists** (`000015`): `('direct','bundle','rule','external_backfill','lifecycle_cascade')`. Sub-phase 3 writes `source='bundle'` and `source='rule'` — **no `ALTER` to that enum is needed.**
 - **`db` package has NO live-DB test harness.** It is covered only by *migration-coherence guards* (assert the SQL `CHECK` enums / column names match the Go string literals — see `backend/internal/db/propagations_migration_test.go` and `drift` equivalent). Behavioral coverage lives in **injectable service tests** (`services`, `services/propagation`) and **handler tests**, never live SQL.
@@ -40,9 +40,9 @@ Design §4.7 lists **six** trigger points. All six are implemented:
 - **Add pass** = re-run the rule's add projection (every user holding the *new* source gets the *new* target; the drain's `409→applied` no-ops those who already had it).
 - **Revoke pass** = every user holding the *old* source loses the *old* target (unless the triple is unchanged-and-re-added, or another source covers it). The old rule is captured by the handler before the update — needed because cascades keep no per-source ledger row to query.
 
-**Projected per-role, attributed per-source on the outbox.** Zitadel holds flat per-role `user_grants` (it has no bundle/rule concept); **MkAuth does NOT mirror them into `direct_role_grants`** — that table's `UNIQUE(user,project,role)` collapses multi-source grants to one last-writer row, so a ledger mirror would destroy source attribution and clobber operator grants. Bundle/rule intent already lives in `user_bundle_assignments`/`bundle_roles`/`mapping_rules` (which `collectUserRoles` reads for access). The *outbox* row carries `source`/`source_ref` for attribution (both threaded onto `models.PendingPropagation` and `CascadeSummary`), so the Pending worklist and Recent-cascades UIs name the originating bundle/rule by `source_ref`. The per-role breakout is a projection detail the operator never thinks in.
+**Projected per-role, attributed per-source on the outbox.** Zitadel holds flat per-role `user_grants` (it has no bundle/rule concept); **Syndra does NOT mirror them into `direct_role_grants`** — that table's `UNIQUE(user,project,role)` collapses multi-source grants to one last-writer row, so a ledger mirror would destroy source attribution and clobber operator grants. Bundle/rule intent already lives in `user_bundle_assignments`/`bundle_roles`/`mapping_rules` (which `collectUserRoles` reads for access). The *outbox* row carries `source`/`source_ref` for attribution (both threaded onto `models.PendingPropagation` and `CascadeSummary`), so the Pending worklist and Recent-cascades UIs name the originating bundle/rule by `source_ref`. The per-role breakout is a projection detail the operator never thinks in.
 
-**Why sub-phase 3 is required (not backstopped by phase 2):** the phase-2 sweep deliberately does **not** project bundle/rule grants — its own comment: *"Bundle/rule-derived expected roles absent from Zitadel are NOT drift in sub-phase 2 — cascade projection is sub-phase 3."* Its `mkauth_only` replay iterates `direct_role_grants` only. And because the Actions v2 data plane gates claim emission on the projects present in Zitadel `user_grants` (`dedupProjectIDs(req.UserGrants)` → zero grants ⇒ empty claims), a bundle/rule that is the **sole** source of a user's access to a project produces no claims until sub-phase 3 projects it. So the add-side is load-bearing for access, not cosmetic.
+**Why sub-phase 3 is required (not backstopped by phase 2):** the phase-2 sweep deliberately does **not** project bundle/rule grants — its own comment: *"Bundle/rule-derived expected roles absent from Zitadel are NOT drift in sub-phase 2 — cascade projection is sub-phase 3."* Its `syndra_only` replay iterates `direct_role_grants` only. And because the Actions v2 data plane gates claim emission on the projects present in Zitadel `user_grants` (`dedupProjectIDs(req.UserGrants)` → zero grants ⇒ empty claims), a bundle/rule that is the **sole** source of a user's access to a project produces no claims until sub-phase 3 projects it. So the add-side is load-bearing for access, not cosmetic.
 
 ---
 
@@ -687,9 +687,9 @@ import (
 	"context"
 	"log"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
-	"mkauth/internal/services/propagation"
+	"syndra/internal/db"
+	"syndra/internal/models"
+	"syndra/internal/services/propagation"
 )
 
 // CascadeResult reports what a cascade enqueued and (auto only) drained.
@@ -1234,7 +1234,7 @@ git commit -am "feat(cascade): revoke cascade + explicit other-source check + re
 Because cascades write no `direct_role_grants` rows, there is no per-source ledger to query for "who has the target via this rule" — and the *old* target is not in the updated rule. The correct composition therefore captures the **pre-update rule** in the handler and passes it in:
 
 - **Add pass** — every user holding the *new* source gets the *new* target (drain `409→applied` no-ops those who already had it).
-- **Revoke pass** — every user holding the *old* source (`GetUsersWithRole(old.Source…)`, stable across the MkAuth-side update since it reads the Zitadel grant index) should lose the *old* target, **unless** (a) the old target equals the new target and they are in the add set (re-added identically — skip), or (b) another source still covers the old target (`OtherSourceCovers(..., excludeRuleID=old.ID)`).
+- **Revoke pass** — every user holding the *old* source (`GetUsersWithRole(old.Source…)`, stable across the Syndra-side update since it reads the Zitadel grant index) should lose the *old* target, **unless** (a) the old target equals the new target and they are in the add set (re-added identically — skip), or (b) another source still covers the old target (`OtherSourceCovers(..., excludeRuleID=old.ID)`).
 
 This handles source-only, target-only, and both changes correctly — the earlier "revoke uses the updated rule's new target" plan (review P1a) would have orphaned the old target and kept-plus-re-added users; capturing the old rule fixes both.
 
@@ -1475,7 +1475,7 @@ git commit -am "feat(ui): confirmation-mode controls + global default + recent c
 - [ ] **Step 3: Migration `000017` up/down symmetry** confirmed statically (no throwaway Postgres in this sandbox, as sub-phases 1/2 did): up adds two columns + `config_settings` + seed; down drops the table + both columns; nothing orphaned.
 - [ ] **Step 4: `openspec validate wave-2-part-4-zitadel-state-projection-and-drift-control --strict`** from repo root — passes.
 - [ ] **Step 5: Tick Tasks 19–23 in `tasks.md`** with the same detailed post-hoc notes style as sub-phases 1/2 (deviations; the 6th trigger built as add-reproject + `source_ref`-targeted revoke; the `OtherSourceCovers`-vs-`collectUserRoles` correctness note; expiry/lifecycle verification result). Note the new `PUT /api/v1/rules/mapping/{id}` endpoint under Task 20's "rule create/update path". Also tick the stale Tasks 11–13 checkboxes flagged in the Task 14 note.
-- [ ] **Step 6: Task 24 cross-cutting docs** — adopt the doctrinal sentence in `CLAUDE.md` Key Conventions + `mkauth-core-architecture/design.md`; add the **Drift Control** row + flip the reconciliation note in `feature-coverage.md`; Phase 5.5 closure line in `ROADMAP.md`; this change's row in `INDEX.md`; ensure `.env.example` documents `DRIFT_RECONCILIATION_INTERVAL_HOURS`, `OUTBOX_MAX_RETRIES`, `OUTBOX_RETENTION_DAYS`.
+- [ ] **Step 6: Task 24 cross-cutting docs** — adopt the doctrinal sentence in `CLAUDE.md` Key Conventions + `syndra-core-architecture/design.md`; add the **Drift Control** row + flip the reconciliation note in `feature-coverage.md`; Phase 5.5 closure line in `ROADMAP.md`; this change's row in `INDEX.md`; ensure `.env.example` documents `DRIFT_RECONCILIATION_INTERVAL_HOURS`, `OUTBOX_MAX_RETRIES`, `OUTBOX_RETENTION_DAYS`.
 - [ ] **Step 7: codebase-memory refresh** — `mcp__codebase-memory-mcp__detect_changes` + reindex the affected scope (`services`, `services/propagation`, `db`, `handlers`).
 - [ ] **Step 8: Final commit.**
 ```bash

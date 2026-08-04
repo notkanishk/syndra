@@ -2,7 +2,7 @@
 
 > **Companion to:** [proposal.md](proposal.md) | [design.md](design.md) | [tasks.md](tasks.md) | [IMPLEMENTATION](IMPLEMENTATION.md)
 
-This is the operator-run procedure for registering the MkAuth claim-injection
+This is the operator-run procedure for registering the Syndra claim-injection
 Action against a live Zitadel instance. Assumes Phase 3 prerequisites are
 already in place (`ZITADEL_DOMAIN`, `ZITADEL_MACHINE_KEY_PATH` or a
 pre-minted M2M token, backend reachable from Zitadel).
@@ -18,11 +18,11 @@ without editing `.env`.
 * `ZITADEL_DOMAIN` — e.g. `auth.example.org`.
 * Either `ZITADEL_M2M_TOKEN` (pre-minted Bearer) or `ZITADEL_MACHINE_KEY_PATH`
   (service-user key file). When only the key path is set, the scripts shell
-  out to `backend/cmd/mkauth-token` (Go toolchain required on the host) to
+  out to `backend/cmd/syndra-token` (Go toolchain required on the host) to
   mint a fresh token via the JWT profile grant.
-* `MKAUTH_EXTERNAL_URL` — the public URL Zitadel will POST to. Must be
+* `SYNDRA_EXTERNAL_URL` — the public URL Zitadel will POST to. Must be
   reachable from Zitadel's egress. On the Proxmox LXC deploy this is typically
-  `https://mkauth.<your-domain>` — verify with `curl -I` from the Zitadel host
+  `https://syndra.<your-domain>` — verify with `curl -I` from the Zitadel host
   before running the installer.
 * Local tooling: `curl`, `jq`, `python3` (only for `smoke-test-action-v2.sh`
   signed variant).
@@ -57,12 +57,12 @@ Or, with values provided inline instead of via `.env`:
 
 ```bash
 ZITADEL_DOMAIN=auth.example.org \
-  MKAUTH_EXTERNAL_URL=https://auth.example.org \
+  SYNDRA_EXTERNAL_URL=https://syndra.example.org \
   ZITADEL_MACHINE_KEY_PATH=./zitadel-machine-key.json \
   make zitadel-actions-register
 ```
 
-On first run, this creates the `mkauth-claim-injector` target, binds
+On first run, this creates the `syndra-claim-injector` target, binds
 `preaccesstoken` and `preuserinfo` executions, and writes the one-time
 signing key to `zitadel/actions/.action-signing-key` (mode 0600).
 
@@ -95,7 +95,7 @@ lines. Apply it with one redirect (no copy-paste from the terminal):
 
 ```bash
 cat zitadel/actions/.action-env.fragment >> .env
-# or for systemd: sudo install -m 0600 zitadel/actions/.action-env.fragment /etc/mkauth/action-env
+# or for systemd: sudo install -m 0600 zitadel/actions/.action-env.fragment /etc/syndra/action-env
 docker compose up -d backend
 rm zitadel/actions/.action-env.fragment
 ```
@@ -104,7 +104,7 @@ If your `.env` already has values for these keys, remove the old lines
 before the redirect or use your deploy tool's standard env-overwrite path.
 
 If you deploy via systemd instead of Compose, add the same variable to the
-unit's `EnvironmentFile` and `systemctl restart mkauth-backend`.
+unit's `EnvironmentFile` and `systemctl restart syndra-backend`.
 
 **Verification:** once the backend restarts, `docker compose logs backend |
 grep '\[ACTION\]'` should NOT show the `signature verification disabled
@@ -123,9 +123,9 @@ envelope.` and a JSON body with an `append_claims` array.
 ## Step 4 — End-to-end validation against a real token
 
 Issue an access token via your normal user OIDC flow (`make dev` login path
-or production login), decode it, and confirm MkAuth-injected claims are
+or production login), decode it, and confirm Syndra-injected claims are
 present. For a single-project grant the claim keys are flat (e.g. `role`);
-for multi-project users the keys are namespaced `mkauth.<projectID>.<key>`.
+for multi-project users the keys are namespaced `syndra.<projectID>.<key>`.
 
 Example (replace `<token>`):
 
@@ -175,11 +175,11 @@ part of the delete.
   in that directory blocks it by default; do not override.
 * **Do not** enable `interruptOnError: true` in `targets.json` without
   confirming per-project `fail_closed` semantics apply to every downstream
-  app. The current posture uses `false` specifically so MkAuth unavailability
+  app. The current posture uses `false` specifically so Syndra unavailability
   does not block token issuance.
 * **Do not** change the target type from `restCall` to `restWebhook`.
   Webhook targets only inspect the HTTP status code; they discard the
-  response body — which is precisely where MkAuth returns the claim
+  response body — which is precisely where Syndra returns the claim
   envelope. A webhook-typed target makes the deployment a functional no-op.
 * **Do** rotate the signing key via `make zitadel-actions-rotate-key` (runs
   `zitadel/actions/rotate.sh`). The script calls

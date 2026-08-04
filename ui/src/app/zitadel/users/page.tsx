@@ -27,10 +27,10 @@ import { useDebounce } from "@/lib/useDebounce";
 /**
  * Users and their grants, as the identity provider holds them.
  *
- * MkAuth's own person page answers "what can this person get into, and why".
+ * Syndra's own person page answers "what can this person get into, and why".
  * This page answers a narrower and occasionally vital question: "what does the
  * provider actually have on file for them" — which is the only way to see a
- * grant MkAuth has no record of.
+ * grant Syndra has no record of.
  */
 export default function UpstreamUsersPage() {
   const users = useUpstreamUsers();
@@ -52,9 +52,9 @@ export default function UpstreamUsersPage() {
   return (
     <UpstreamShell
       title="Users"
-      lede="Read live from the identity provider, including accounts MkAuth has never seen."
-      mkauthHref="/users"
-      mkauthLabel="See the same people as MkAuth understands them"
+      lede="Read live from the identity provider, including accounts Syndra has never seen."
+      syndraHref="/users"
+      syndraLabel="See the same people as Syndra understands them"
     >
       <div className="flex flex-wrap items-start gap-5">
         <Card className="w-[320px] min-w-[260px] flex-none">
@@ -149,7 +149,7 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
       <div className="row-divider px-5 py-3 text-[13.5px] leading-[1.55] text-muted">
         Everything below is what the identity provider holds for this person.{" "}
         <Link href={`/users/${userId}`} className="font-semibold text-accent-text">
-          MkAuth&rsquo;s explanation of the same access →
+          Syndra&rsquo;s explanation of the same access →
         </Link>
       </div>
 
@@ -267,7 +267,7 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
             </p>
           )}
         </div>
-        <DirectWriteWarning what="MkAuth will see this as access it did not cause." />
+        <DirectWriteWarning what="Syndra will see this as access it did not cause." />
       </div>
       <ModalFooter>
         <Button
@@ -324,7 +324,7 @@ function EditRolesDialog({
             onChange={(event) => setKeys(event.target.value)}
           />
         </div>
-        <DirectWriteWarning what="Replacing a role set upstream can silently remove access MkAuth thinks it granted." />
+        <DirectWriteWarning what="Replacing a role set upstream can silently remove access Syndra thinks it granted." />
       </div>
       <ModalFooter>
         <Button

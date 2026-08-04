@@ -1,10 +1,10 @@
-// Package directory is the seam between MkAuth's business logic and the
+// Package directory is the seam between Syndra's business logic and the
 // identity-source of truth.
 //
 // When the Zitadel Management client is initialized (ZITADEL_DOMAIN +
 // ZITADEL_MACHINE_KEY_PATH), Default is backed by a live Zitadel source that
 // reads users, projects, and project roles from the Management API and
-// overlays MkAuth's claim_profiles table for application metadata. Otherwise
+// overlays Syndra's claim_profiles table for application metadata. Otherwise
 // it falls back to the demo catalog so local development stays usable
 // without a live Zitadel.
 //
@@ -16,12 +16,12 @@ import (
 	"context"
 	"log"
 
-	"mkauth/internal/models"
-	"mkauth/internal/zitadel"
+	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 // Source abstracts the directory-of-truth for users, projects, and applications.
-// Writes are not modeled here: MkAuth's local DB owns bundles, mapping rules,
+// Writes are not modeled here: Syndra's local DB owns bundles, mapping rules,
 // direct grants, and audit logs, and the Zitadel Management client handles
 // grant/role mutations directly.
 type Source interface {

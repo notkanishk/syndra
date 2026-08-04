@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // snapshotWith builds an accessSnapshot without a directory or database: the

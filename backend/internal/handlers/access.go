@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"mkauth/internal/db"
-	"mkauth/internal/directory"
-	"mkauth/internal/models"
-	"mkauth/internal/services"
+	"syndra/internal/db"
+	"syndra/internal/directory"
+	"syndra/internal/models"
+	"syndra/internal/services"
 )
 
 type UpsertDirectGrantRequest struct {
@@ -307,7 +307,7 @@ var (
 // implementation of it. The sequence below — conditional transaction, race
 // guard, cache rebuild, inline drain — is the part that must not diverge: a
 // second copy that drifted would leave requests approved but ungranted, which
-// re-surfaces later as mkauth_only drift and is diagnosed by nobody.
+// re-surfaces later as syndra_only drift and is diagnosed by nobody.
 func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, reviewNote string) error {
 	request, err := dbGetAccessRequestByID(ctx, requestID)
 	if err != nil {
@@ -331,7 +331,7 @@ func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, r
 		// endpoint, so it flows through the durable ledger+outbox (B4/D3 single
 		// mutation authority) rather than the bare upsert — otherwise the grant is
 		// invisible to the Pending UI, never projected to Zitadel, and later
-		// re-surfaces as mkauth_only drift. source_ref ties the grant to the
+		// re-surfaces as syndra_only drift. source_ref ties the grant to the
 		// originating request. Resolution + enqueue are ONE conditional
 		// transaction: either the request flips to approved AND the grant is
 		// enqueued, or neither happens (no approved-but-ungranted state), and the

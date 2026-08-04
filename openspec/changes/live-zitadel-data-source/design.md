@@ -8,7 +8,7 @@ Auth boundary is live (PKCE OIDC, RS256 JWT validation); **data boundary is not*
 
 - Frontend: **no changes**. Same endpoints, same DTOs.
 - Business logic: **minimal changes**. All `demo.*` direct calls become `directory.Default.*(ctx)`. Same return types.
-- New package is narrow — only the directory-of-truth reads move through it. MkAuth-owned writes (bundles, mapping rules, direct grants, audit logs) stay authoritative in the local DB.
+- New package is narrow — only the directory-of-truth reads move through it. Syndra-owned writes (bundles, mapping rules, direct grants, audit logs) stay authoritative in the local DB.
 
 ## Source interface
 
@@ -44,7 +44,7 @@ Wraps the existing `zitadel.ZitadelClient` interface (`backend/internal/zitadel/
 
 **Mapping**:
 
-| MkAuth model | Source | Notes |
+| Syndra model | Source | Notes |
 |---|---|---|
 | `UserProfile.ID` | `ZitadelUser.ID` | |
 | `UserProfile.Name` | `ZitadelUser.DisplayName` (fallback `Username`) | |
@@ -92,7 +92,7 @@ When a Zitadel call fails (timeout, 5xx, auth), the method returns the error up 
 
 ```go
 func demoEnabled() bool {
-    override := os.Getenv("MKAUTH_SEED_DEMO")
+    override := os.Getenv("SYNDRA_SEED_DEMO")
     if override != "" {
         return isTruthy(override)
     }
@@ -105,9 +105,9 @@ func liveZitadelConfigured() bool {
 }
 ```
 
-Log the decision: `[SEED] Live Zitadel detected; skipping demo seed (set MKAUTH_SEED_DEMO=true to override).`
+Log the decision: `[SEED] Live Zitadel detected; skipping demo seed (set SYNDRA_SEED_DEMO=true to override).`
 
-Operators can still force seed on in live mode (useful for local integration tests against a staging Zitadel) by setting `MKAUTH_SEED_DEMO=true` explicitly. The seed can still write bundles/rules/audit to the DB — those records reference Zitadel project IDs as strings, and if the operator's real Zitadel doesn't have a `"printing"` project, the seed rows become harmless dangling references (already handled by `Topology` via "placeholder nodes" behavior).
+Operators can still force seed on in live mode (useful for local integration tests against a staging Zitadel) by setting `SYNDRA_SEED_DEMO=true` explicitly. The seed can still write bundles/rules/audit to the DB — those records reference Zitadel project IDs as strings, and if the operator's real Zitadel doesn't have a `"printing"` project, the seed rows become harmless dangling references (already handled by `Topology` via "placeholder nodes" behavior).
 
 ## Threading `ctx`
 
@@ -144,5 +144,5 @@ Service tests in `views_test.go` and `roles_test.go` continue to work because `d
 
 1. Deploy the new backend.
 2. If `ZITADEL_DOMAIN` + `ZITADEL_MACHINE_KEY_PATH` are set: on next restart, the `[DIRECTORY] Source=zitadel` log appears; UI immediately shows the operator's real directory.
-3. If the operator previously ran with demo seed and wants a clean state: `DELETE FROM user_bundle_assignments` / `direct_role_grants` / `bundles` (or leave them — they stay as MkAuth local policy on top of the live directory).
+3. If the operator previously ran with demo seed and wants a clean state: `DELETE FROM user_bundle_assignments` / `direct_role_grants` / `bundles` (or leave them — they stay as Syndra local policy on top of the live directory).
 4. Reverting is a single env-var unset (`unset ZITADEL_MACHINE_KEY_PATH`) — the next restart goes back to demo source.

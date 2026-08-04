@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // -------------------------------------------------------------
@@ -68,7 +68,7 @@ func UpdateBundle(ctx context.Context, id, name, description string) error {
 //
 // The transaction is the point. Every table hanging off a bundle cascades on delete, so the
 // assignment rows vanish the moment the bundle does — and a holder whose assignment disappeared
-// without a revoke keeps the role in Zitadel with nothing in MkAuth left to explain it. That is
+// without a revoke keeps the role in Zitadel with nothing in Syndra left to explain it. That is
 // the definition of drift, and it would arrive with no actor, found weeks later by the sweep.
 //
 // params may be empty: a bundle nobody holds, or one whose every role each holder also gets

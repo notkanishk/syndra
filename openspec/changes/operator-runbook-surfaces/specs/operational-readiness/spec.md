@@ -10,7 +10,7 @@
 
 The demo-data banner MUST key off that count. It MUST NOT key off `seed_active`.
 
-`seed_active` answers "did this process seed?". Turning `MKAUTH_SEED_DEMO` off and restarting changes that answer to false and changes nothing an operator can see — every seeded row is still stored and still served. A banner reading that flag therefore disappears at exactly the moment the operator is checking whether their fix worked, and its disappearance reads as confirmation.
+`seed_active` answers "did this process seed?". Turning `SYNDRA_SEED_DEMO` off and restarting changes that answer to false and changes nothing an operator can see — every seeded row is still stored and still served. A banner reading that flag therefore disappears at exactly the moment the operator is checking whether their fix worked, and its disappearance reads as confirmation.
 
 The fixture id sets MUST come from the demo catalog itself, so adding a fixture widens the check rather than silently narrowing it.
 
@@ -19,7 +19,7 @@ A failed count MUST be logged and reported as zero. It MUST NOT fail the mode pr
 #### Scenario: Residue outlives the flag
 
 - **GIVEN** a deployment whose database holds seeded rows
-- **AND** `MKAUTH_SEED_DEMO` is false, so nothing seeded this process
+- **AND** `SYNDRA_SEED_DEMO` is false, so nothing seeded this process
 - **WHEN** the operator loads any screen
 - **THEN** the banner MUST still appear
 - **AND** it MUST state how many rows came from the seeder
@@ -41,11 +41,11 @@ A failed count MUST be logged and reported as zero. It MUST NOT fail the mode pr
 
 ### Requirement: Seeding MUST NOT be enabled by a default the operator never wrote
 
-Deployment manifests MUST NOT supply a default value for `MKAUTH_SEED_DEMO`. The backend already resolves it — seed when no live directory client came up, do not when one did — and a manifest-level default overrides that decision for every deployment whose environment file does not mention the variable.
+Deployment manifests MUST NOT supply a default value for `SYNDRA_SEED_DEMO`. The backend already resolves it — seed when no live directory client came up, do not when one did — and a manifest-level default overrides that decision for every deployment whose environment file does not mention the variable.
 
 #### Scenario: An unset variable leaves the decision with the backend
 
-- **GIVEN** `MKAUTH_SEED_DEMO` is absent from the environment file
+- **GIVEN** `SYNDRA_SEED_DEMO` is absent from the environment file
 - **AND** a live Zitadel management client initialises successfully
 - **WHEN** the backend starts
 - **THEN** it MUST NOT seed
@@ -56,7 +56,7 @@ Two states MUST be reachable, and they are not the same: removing only fixture-d
 
 Both MUST be dry-run by default, printing per-table counts and deleting nothing. Committing MUST require an explicit flag AND typed confirmation. The deletion MUST run in one transaction — a reset that removes bundle roles and leaves the bundle produces an empty bundle nobody can explain, which is worse than either end state. The derived claim cache MUST be flushed, or deleted grants keep being served until their entries expire.
 
-Neither mode MUST touch the identity provider. MkAuth's ledger records what MkAuth decided; clearing it revokes nothing upstream, and the next reconciliation sweep reports the surviving grants as unexplained access — which is how they get re-adopted deliberately rather than assumed.
+Neither mode MUST touch the identity provider. Syndra's ledger records what Syndra decided; clearing it revokes nothing upstream, and the next reconciliation sweep reports the surviving grants as unexplained access — which is how they get re-adopted deliberately rather than assumed.
 
 Fixture-only mode MUST name any non-fixture account that loses access because it holds a fixture bundle or a grant on a fixture project. Those rows cascade out with the fixture and do not appear in the per-table counts.
 
@@ -73,7 +73,7 @@ Fixture-only mode MUST name any non-fixture account that loses access because it
 - **GIVEN** a real user assigned to a bundle created by the seeder
 - **WHEN** fixture-only mode is run
 - **THEN** it MUST name that account
-- **AND** it MUST state that removing the fixture removes their access and that MkAuth will not re-grant it
+- **AND** it MUST state that removing the fixture removes their access and that Syndra will not re-grant it
 
 #### Scenario: Confirmation is typed, not defaulted
 

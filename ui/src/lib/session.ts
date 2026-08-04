@@ -49,7 +49,7 @@ interface LegacySessionCookie {
   role: SessionRole;
 }
 
-export const SESSION_COOKIE_NAME = "mkauth_session";
+export const SESSION_COOKIE_NAME = "syndra_session";
 
 // ---------------------------------------------------------------------------
 // Demo user catalog
@@ -153,10 +153,10 @@ function avatarSeed(name: string, email: string, userId: string): string {
 // httpOnly stops script reads but nothing stops a client minting its own
 // cookie — without the signature, a forged `role:"admin"` payload would walk
 // through middleware and every page-level gate (July 2026 audit SC4).
-// SESSION_SECRET is preferred; MKAUTH_API_KEY (already shared UI↔backend)
+// SESSION_SECRET is preferred; SYNDRA_API_KEY (already shared UI↔backend)
 // is the fallback so no new required env is introduced.
 function sessionSecret(): string {
-  return process.env.SESSION_SECRET || process.env.MKAUTH_API_KEY || "";
+  return process.env.SESSION_SECRET || process.env.SYNDRA_API_KEY || "";
 }
 
 function signPayload(body: string): string {
@@ -166,7 +166,7 @@ function signPayload(body: string): string {
 function encodeSession(payload: SessionCookiePayload): string {
   if (!sessionSecret()) {
     // Fail loudly at issue time — an unsigned session would be forgeable.
-    throw new Error("Cannot issue session: SESSION_SECRET or MKAUTH_API_KEY must be set");
+    throw new Error("Cannot issue session: SESSION_SECRET or SYNDRA_API_KEY must be set");
   }
   const body = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
   return `${body}.${signPayload(body)}`;

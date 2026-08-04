@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"mkauth/internal/models"
-	"mkauth/internal/services"
+	"syndra/internal/models"
+	"syndra/internal/services"
 )
 
 // resetBundleDeps captures and restores all bundle-related injectable vars.

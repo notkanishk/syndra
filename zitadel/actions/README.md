@@ -1,19 +1,19 @@
 # Zitadel Actions v2 Artifacts
 
-This directory holds the deployment assets for MkAuth's Zitadel Actions v2
+This directory holds the deployment assets for Syndra's Zitadel Actions v2
 claim-injection Action — the production claim-shaping boundary defined in
-[application-claims/spec.md](../../openspec/changes/mkauth-core-architecture/specs/application-claims/spec.md).
+[application-claims/spec.md](../../openspec/changes/syndra-core-architecture/specs/application-claims/spec.md).
 
 ## Why there is no JavaScript file here
 
 Zitadel has two generations of Actions. **v1** embedded JavaScript that ran
 inside the Zitadel process; that's what the legacy `SetCustomClaims` / `claims`
-namespace APIs referred to. **v2** — the only generation MkAuth supports —
+namespace APIs referred to. **v2** — the only generation Syndra supports —
 does not have an embedded runtime. Instead, Zitadel POSTs the function trigger
 payload to an HTTP target of your choice, and your handler returns a response
 envelope (`append_claims`, `append_log_claims`, `set_user_metadata`).
 
-So the "script" for MkAuth's v2 Action is a combination of:
+So the "script" for Syndra's v2 Action is a combination of:
 
 - `backend/internal/handlers/action.go` — the HTTP handler that receives the
   trigger payload and returns the claim envelope.
@@ -46,7 +46,7 @@ other things, "why does `HTTP 403` happen with `ORG_OWNER`?").
 # 1. Ensure backend M2M creds are configured (standard Phase 3 prereq).
 export ZITADEL_DOMAIN=your-instance.zitadel.cloud
 export ZITADEL_MACHINE_KEY_PATH=./zitadel-machine-key.json
-export MKAUTH_EXTERNAL_URL=https://mkauth.internal  # where Zitadel should POST
+export SYNDRA_EXTERNAL_URL=https://syndra.internal  # where Zitadel should POST
 
 # 2. Register the target and capture the signing key.
 make zitadel-actions-register
@@ -210,7 +210,7 @@ The service user only needs these permissions during:
   own — see [Signing Key Handling → Zitadel does not expire the signing
   key](#zitadel-does-not-expire-the-signing-key)).
 
-In steady state — Zitadel calling MkAuth's `/api/action/inject` — no
+In steady state — Zitadel calling Syndra's `/api/action/inject` — no
 outbound Actions admin call is made, so the role can be:
 
 - **Kept permanently assigned** (pragmatic, least operator toil).
@@ -249,12 +249,12 @@ recreate the target or rotate the key in place (see below).
 
 ### Two targets, two keys
 
-MkAuth's deployment registers two Actions v2 targets:
+Syndra's deployment registers two Actions v2 targets:
 
 | Target name | Type | Triggers | Backend env var |
 |---|---|---|---|
-| `mkauth-claim-injector` | `restCall` | `function.preaccesstoken`, `function.preuserinfo` | `ZITADEL_ACTION_SIGNING_KEY` |
-| `mkauth-event-listener` | `restAsync` | `condition.event` (user/grant lifecycle) | `ZITADEL_EVENT_SIGNING_KEY` |
+| `syndra-claim-injector` | `restCall` | `function.preaccesstoken`, `function.preuserinfo` | `ZITADEL_ACTION_SIGNING_KEY` |
+| `syndra-event-listener` | `restAsync` | `condition.event` (user/grant lifecycle) | `ZITADEL_EVENT_SIGNING_KEY` |
 
 The two keys are independent — rotation, leak-response, and storage all
 happen per target. Both follow the same lifecycle described below; substitute
@@ -272,7 +272,7 @@ are a stated roadmap item but not yet live.
 explicitly rotate it. Zitadel will never prompt you to rotate, never issue a
 "key expires in N days" warning, and never auto-rotate on its own.
 
-**So why rotate at all?** Because it's a MkAuth policy choice, not a Zitadel
+**So why rotate at all?** Because it's a Syndra policy choice, not a Zitadel
 requirement:
 
 - **Incident response** — credential suspected leaked, staff off-boarding,
@@ -281,7 +281,7 @@ requirement:
   shared credentials on a cadence (commonly 90 days).
 - **Defense in depth** — cap the blast radius of an undetected leak.
 
-None of these apply to Zitadel; they're operator policy. MkAuth ships the
+None of these apply to Zitadel; they're operator policy. Syndra ships the
 rotate command below but deliberately does **not** run it on a schedule —
 rotation frequency is a deployment-level decision, not a runtime one. If/when
 Zitadel enables longer graceful periods on `expiration_signing_key`, a
@@ -293,7 +293,7 @@ scheduled automation buys little and adds infrastructure.
 1. `zitadel/actions/register.sh` creates each target, extracts the `signingKey`
    field from the response, and writes it to
    `zitadel/actions/.action-signing-key.<target-name>` with mode `0600` — one
-   file per target (`mkauth-claim-injector`, `mkauth-event-listener`).
+   file per target (`syndra-claim-injector`, `syndra-event-listener`).
 2. The same run appends `ZITADEL_ACTION_SIGNING_KEY=...` and
    `ZITADEL_EVENT_SIGNING_KEY=...` (plus the `_ROTATED_AT` companions) to
    `zitadel/actions/.action-env.fragment`. The operator applies it to backend
@@ -316,7 +316,7 @@ Use the shipped command:
 
 ```bash
 make zitadel-actions-rotate-key                            # rotate every target
-make zitadel-actions-rotate-key TARGET=mkauth-event-listener  # rotate one
+make zitadel-actions-rotate-key TARGET=syndra-event-listener  # rotate one
 ```
 
 Under the hood this runs `zitadel/actions/rotate.sh`, which:
@@ -353,7 +353,7 @@ Apply the fragment with one of:
 ```bash
 cat zitadel/actions/.action-env.fragment >> .env
 # OR, for systemd EnvironmentFile deploys:
-sudo install -m 0600 zitadel/actions/.action-env.fragment /etc/mkauth/action-env
+sudo install -m 0600 zitadel/actions/.action-env.fragment /etc/syndra/action-env
 ```
 
 Then restart the backend and delete the fragment (`rm zitadel/actions/.action-env.fragment`).
@@ -370,17 +370,17 @@ curl -fsS -X POST "https://${ZITADEL_DOMAIN}/v2/actions/targets/${TARGET_ID}" \
 The response returns the new `signingKey`. Capture it immediately — it will
 not be returned again.
 
-Because MkAuth only accepts signatures that match the currently configured
+Because Syndra only accepts signatures that match the currently configured
 `ZITADEL_ACTION_SIGNING_KEY`, there is a brief window between Zitadel
-accepting the new key on outbound Action calls and MkAuth being restarted
+accepting the new key on outbound Action calls and Syndra being restarted
 with the new value. During that window, incoming Action requests fail
-signature verification, MkAuth returns `401`, and Zitadel proceeds to issue
+signature verification, Syndra returns `401`, and Zitadel proceeds to issue
 the token with stock claims (because `restCall.interruptOnError: false`).
 Users are never blocked; custom claims simply disappear for the gap. Keep it
 under a minute.
 
 `.action-signing-key.<target>.previous` is retained for audit / operator
-rollback but is **not read by the backend at runtime** — MkAuth trusts a
+rollback but is **not read by the backend at runtime** — Syndra trusts a
 single env var per target. If you need to roll back, copy the previous value
 into the matching env var (`ZITADEL_ACTION_SIGNING_KEY` or
 `ZITADEL_EVENT_SIGNING_KEY`) and restart.
@@ -447,7 +447,7 @@ Configure via two env vars on the backend:
   secret storage (LXC-bound volume or sops-encrypted file) rather than baking
   into images.
 - For the PoC deployment on Proxmox LXC, storing on the host at
-  `/etc/mkauth/.action-signing-key.<target>` (mode 0600, root:mkauth) is
+  `/etc/syndra/.action-signing-key.<target>` (mode 0600, root:syndra) is
   sufficient.
 
 ### Full target deletion (DELETE endpoint)

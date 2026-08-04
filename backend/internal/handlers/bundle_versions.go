@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"mkauth/internal/models"
-	"mkauth/internal/services"
+	"syndra/internal/models"
+	"syndra/internal/services"
 )
 
 // Bundle version surfaces.

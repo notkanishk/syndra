@@ -11,16 +11,16 @@ import (
 	"strconv"
 	"time"
 
-	"mkauth/internal/claims"
+	"syndra/internal/claims"
 )
 
-// ActionV2UserRef is the subset of the Zitadel Actions v2 user block MkAuth reads.
+// ActionV2UserRef is the subset of the Zitadel Actions v2 user block Syndra reads.
 type ActionV2UserRef struct {
 	ID string `json:"id"`
 }
 
 // ActionV2UserGrantRef is the subset of a Zitadel Actions v2 user grant row
-// MkAuth reads. Zitadel may emit one entry per role, so callers MUST
+// Syndra reads. Zitadel may emit one entry per role, so callers MUST
 // deduplicate by ProjectID before acting.
 type ActionV2UserGrantRef struct {
 	ProjectID string   `json:"projectId"`
@@ -29,7 +29,7 @@ type ActionV2UserGrantRef struct {
 
 // ActionV2Request is the acceptance shape for Zitadel Actions v2
 // `function/preaccesstoken` and `function/preuserinfo` trigger payloads.
-// Only the fields MkAuth needs are declared; all other fields Zitadel sends
+// Only the fields Syndra needs are declared; all other fields Zitadel sends
 // (org, userMetadata, userinfo, ...) are accepted and ignored via the
 // lenient decoder, since the v2 payload surface is owned by Zitadel and
 // expected to extend over time.
@@ -47,7 +47,7 @@ type ActionV2Claim struct {
 
 // ActionV2Response is the envelope Zitadel Actions v2 expects back from a
 // custom-claim-injection handler. Only append_claims (and optionally
-// append_log_claims) are emitted by MkAuth; set_user_metadata is intentionally
+// append_log_claims) are emitted by Syndra; set_user_metadata is intentionally
 // omitted until a spec requires it.
 type ActionV2Response struct {
 	AppendClaims    []ActionV2Claim `json:"append_claims"`
@@ -62,13 +62,13 @@ const redisTimeout = 50 * time.Millisecond
 
 // HandleActionInject is the DATA PLANE entrypoint for Zitadel Actions v2.
 // Zitadel POSTs the function trigger payload (preaccesstoken or preuserinfo);
-// MkAuth returns the pre-compiled per-project claim envelope.
+// Syndra returns the pre-compiled per-project claim envelope.
 //
 // Project resolution: every unique project in user_grants is shaped through
 // its own claim profiles and the results merged into one flat envelope. Keys
 // are operator-authored and validated unique across projects at save time, so
 // a multi-project token cannot collide with itself — the old
-// "mkauth.<projectID>." prefixing that guaranteed this is gone, along with the
+// "syndra.<projectID>." prefixing that guaranteed this is gone, along with the
 // unreadable keys it produced.
 //
 // Degraded behavior is resolved per-project via dbGetClaimFailureMode:
@@ -140,7 +140,7 @@ func mergeProjectClaims(projectIDs []string, perProject map[string][]ActionV2Cla
 			if owners[c.Key] > 1 {
 				log.Printf("[DATA PLANE] Claim key %q is claimed by %d projects; namespacing project=%s. "+
 					"Give each project a distinct claim name in Token format.", c.Key, owners[c.Key], pid)
-				c.Key = fmt.Sprintf("mkauth.%s.%s", pid, c.Key)
+				c.Key = fmt.Sprintf("syndra.%s.%s", pid, c.Key)
 			}
 			out = append(out, c)
 		}
@@ -160,7 +160,7 @@ func mergeProjectClaims(projectIDs []string, perProject map[string][]ActionV2Cla
 //
 // There is no key namespacing: claim keys are explicit, operator-owned, and
 // validated unique across projects at save time. The old
-// "mkauth.<projectID>.<claim>" prefixing existed to stop collisions between
+// "syndra.<projectID>.<claim>" prefixing existed to stop collisions between
 // per-project claim maps that all used the same generic key names — with
 // explicit keys the collision cannot arise, and the prefix only made the token
 // unreadable to the application that asked for a specific name.

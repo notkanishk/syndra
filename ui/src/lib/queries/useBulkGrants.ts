@@ -46,7 +46,7 @@ export interface BulkGrantInput {
  *  - `no_change` — already in the target state
  *  - `blocked`   — refused, with a reason. Never silently dropped.
  *  - `failed`    — attempted and errored
- *  - `queued`    — MkAuth recorded it; Zitadel has not confirmed it yet
+ *  - `queued`    — Syndra recorded it; Zitadel has not confirmed it yet
  *
  * `applied` and `queued` are the distinction that matters after the fact.
  * "Applied" means Zitadel confirmed the change; "queued" means the records here

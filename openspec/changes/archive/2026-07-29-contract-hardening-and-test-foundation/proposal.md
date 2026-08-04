@@ -1,6 +1,6 @@
 ## Why
 
-MkAuth's current backend and UI already prove the product shape, but the contract layer underneath them is still too permissive for a system that will ultimately govern identity, authorization, access lineage, and downstream claim issuance. The current codebase relies on a mix of descriptive structs, handwritten handler checks, UI-local TypeScript interfaces, and partial database invariants. That leaves avoidable room for malformed input, undocumented edge cases, contract drift between backend and frontend, and regressions that are especially dangerous in security-sensitive flows.
+Syndra's current backend and UI already prove the product shape, but the contract layer underneath them is still too permissive for a system that will ultimately govern identity, authorization, access lineage, and downstream claim issuance. The current codebase relies on a mix of descriptive structs, handwritten handler checks, UI-local TypeScript interfaces, and partial database invariants. That leaves avoidable room for malformed input, undocumented edge cases, contract drift between backend and frontend, and regressions that are especially dangerous in security-sensitive flows.
 
 The next immediate step must therefore be hardening and formalizing the application's types, schemas, validation rules, and test coverage before more feature work expands the surface area.
 

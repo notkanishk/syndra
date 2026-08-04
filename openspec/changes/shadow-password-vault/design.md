@@ -10,11 +10,11 @@ Key design choices:
 
 ## Research Conundrum
 
-The current MkAuth implementation assumes the sync service can retrieve a pre-hashed Argon2id shadow credential from MkAuth and propagate it directly into LLDAP during sync. That assumption is now under review.
+The current Syndra implementation assumes the sync service can retrieve a pre-hashed Argon2id shadow credential from Syndra and propagate it directly into LLDAP during sync. That assumption is now under review.
 
-At the time of writing, MkAuth has not yet proven that the target LLDAP deployment actually supports the intended password update semantics for pre-hashed credentials. This is especially important because the production target is an external LLDAP server running outside the MkAuth Compose stack, currently planned as a separately managed Proxmox LXC deployment.
+At the time of writing, Syndra has not yet proven that the target LLDAP deployment actually supports the intended password update semantics for pre-hashed credentials. This is especially important because the production target is an external LLDAP server running outside the Syndra Compose stack, currently planned as a separately managed Proxmox LXC deployment.
 
-Until that compatibility is confirmed, the Shadow Password Vault should be treated as an internal MkAuth capability that is implemented and auditable, but not yet fully validated for end-to-end LLDAP password propagation.
+Until that compatibility is confirmed, the Shadow Password Vault should be treated as an internal Syndra capability that is implemented and auditable, but not yet fully validated for end-to-end LLDAP password propagation.
 
 ## Technical Specification
 
@@ -123,7 +123,7 @@ Injectable deps added to `handlers/deps.go`. Routes registered in `router.go`.
 
 Password changes do NOT emit provisioning intents. The sync service currently checks `GET /shadow-credentials/{uid}/hash` when processing any provisioning intent for a user.
 
-However, the exact mechanism for propagating that credential into a real LLDAP deployment remains a research item. MkAuth must not treat the current assumption of direct pre-hashed password propagation as production-ready until LLDAP compatibility is verified against the actual target deployment.
+However, the exact mechanism for propagating that credential into a real LLDAP deployment remains a research item. Syndra must not treat the current assumption of direct pre-hashed password propagation as production-ready until LLDAP compatibility is verified against the actual target deployment.
 
 ## Verification
 

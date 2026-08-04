@@ -1,9 +1,9 @@
-# MkAuth Project Context — Codex Handover
+# Syndra Project Context — Codex Handover
 
-This document is specifically crafted for the **Codex agent** to provide a "Cold Start" understanding of the MkAuth Control and Data Plane implementation.
+This document is specifically crafted for the **Codex agent** to provide a "Cold Start" understanding of the Syndra Control and Data Plane implementation.
 
 ## 1. Core Architecture
-MkAuth follows a **dual-plane architecture** for identity orchestration:
+Syndra follows a **dual-plane architecture** for identity orchestration:
 - **Control Plane (Go + Postgres + Next.js)**: Management UI for defining roles, bundles, and mapping rules. Admin-facing.
 - **Data Plane (Go + Redis)**: Fast, claim-shaping API used by Zitadel Actions v2 to inject roles into JWTs. Application-facing.
 
@@ -11,19 +11,19 @@ MkAuth follows a **dual-plane architecture** for identity orchestration:
 The following features are now live and verified:
 
 ### 📦 Bundles & User Assignments
-Admins can define **Bundles** (aggregates of Zitadel roles) and assign them to **User IDs** in the MkAuth UI.
+Admins can define **Bundles** (aggregates of Zitadel roles) and assign them to **User IDs** in the Syndra UI.
 - **Table**: `user_bundle_assignments`
 - **Logic**: When a bundle is assigned to a user, all constituent roles are considered "initial" roles during the compilation phase.
 
 ### ⚡ Smart Cache Compiler (`internal/cache/compiler.go`)
 Resolves a user's total effective roles using a **Fixed-Point Iteration (Forward Pass)** algorithm:
-1.  **Fetch Initial Set**: Combine Zitadel's raw roles with roles assigned via MkAuth Bundles.
+1.  **Fetch Initial Set**: Combine Zitadel's raw roles with roles assigned via Syndra Bundles.
 2.  **Iterative Resolution**: Evaluate all **Mapping Rules** (`IF Role:A THEN ADD Role:B`). Repeat until no new roles are discovered.
 3.  **Redis Populate**: Store the final, flattened list of roles for each downstream application in Redis.
 
 ### 🛡️ Safety & Governance
 - **Cycle Detection**: The system implements a mandatory DFS (Depth-First Search) check during mapping rule creation (`internal/db/validation.go`). Circular dependencies (e.g., `A -> B -> A`) are blocked.
-- **Security Middleware**: ALL backend routes (Control & Data) now require an `Authorization: Bearer <MKAUTH_API_KEY>` header.
+- **Security Middleware**: ALL backend routes (Control & Data) now require an `Authorization: Bearer <SYNDRA_API_KEY>` header.
 
 ---
 

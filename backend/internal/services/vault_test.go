@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // ---------------------------------------------------------------------------

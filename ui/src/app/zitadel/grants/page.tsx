@@ -43,9 +43,9 @@ export default function UpstreamGrantsPage() {
   return (
     <UpstreamShell
       title="Grants"
-      lede="The complete grant inventory the identity provider holds, MkAuth-caused or not."
-      mkauthHref="/governance/drift?tab=reconciliation"
-      mkauthLabel="See where the two sides disagree"
+      lede="The complete grant inventory the identity provider holds, Syndra-caused or not."
+      syndraHref="/governance/drift?tab=reconciliation"
+      syndraLabel="See where the two sides disagree"
     >
       {grants.data?.truncated && (
         <div className="warn-note px-5 py-3.5 text-[14px] text-warn-text">

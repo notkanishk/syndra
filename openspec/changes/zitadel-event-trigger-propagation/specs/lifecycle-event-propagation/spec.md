@@ -2,11 +2,11 @@
 
 ### Requirement: Producer-Side Event Target Registration
 
-The Zitadel Actions v2 deployment MUST register a target named `mkauth-event-listener` of type `restAsync` with `payloadType = PAYLOAD_TYPE_JSON` pointing at `${MKAUTH_EXTERNAL_URL}/api/webhooks/zitadel`, bound to `condition.event` executions for at minimum: `user.human.added`, `user.deactivated`, `user.locked`, `user.grant.added`, `user.grant.changed`, `user.grant.removed`. Each event name MUST be a real Zitadel event type — Zitadel's `ExecutionEventCondition.Existing()` validator rejects unknown names with HTTP 404 + `COMMAND-74aaqj8fv9` "Execution condition is invalid". Deactivation and lock are user-aggregate events; `user.human.deactivated` / `user.human.locked` are NOT registered in Zitadel and MUST NOT be used. The deployment MUST be applicable in one operator command — `make zitadel-actions-register` MUST register both the `mkauth-claim-injector` (function triggers) and `mkauth-event-listener` (event triggers) targets in a single invocation and capture both signing keys.
+The Zitadel Actions v2 deployment MUST register a target named `syndra-event-listener` of type `restAsync` with `payloadType = PAYLOAD_TYPE_JSON` pointing at `${SYNDRA_EXTERNAL_URL}/api/webhooks/zitadel`, bound to `condition.event` executions for at minimum: `user.human.added`, `user.deactivated`, `user.locked`, `user.grant.added`, `user.grant.changed`, `user.grant.removed`. Each event name MUST be a real Zitadel event type — Zitadel's `ExecutionEventCondition.Existing()` validator rejects unknown names with HTTP 404 + `COMMAND-74aaqj8fv9` "Execution condition is invalid". Deactivation and lock are user-aggregate events; `user.human.deactivated` / `user.human.locked` are NOT registered in Zitadel and MUST NOT be used. The deployment MUST be applicable in one operator command — `make zitadel-actions-register` MUST register both the `syndra-claim-injector` (function triggers) and `syndra-event-listener` (event triggers) targets in a single invocation and capture both signing keys.
 
 #### Scenario: Default bundle on first user creation
 - **GIVEN** a welcome bundle is configured (`bundles.is_welcome = true` row exists)
-- **AND** Zitadel's `mkauth-event-listener` target is registered and reachable
+- **AND** Zitadel's `syndra-event-listener` target is registered and reachable
 - **WHEN** an operator creates a human user in Zitadel via the console
 - **THEN** `/api/webhooks/zitadel` MUST receive a `user.human.added` event with a valid signature
 - **AND** `processUserCreated` MUST insert an `onboarding_triggers` row with status=`completed`

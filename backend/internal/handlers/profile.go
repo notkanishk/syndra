@@ -3,9 +3,9 @@ package handlers
 import (
 	"net/http"
 
-	"mkauth/internal/demo"
-	"mkauth/internal/directory"
-	"mkauth/internal/zitadel"
+	"syndra/internal/demo"
+	"syndra/internal/directory"
+	"syndra/internal/zitadel"
 )
 
 // handleGetUserProfile returns a user's display name and email.

@@ -129,7 +129,7 @@ draft instead of a cascade result, and say so:
 > "Role added to the bundle's working copy. Publish a version to apply it."
 
 This is the single largest behavioural change in the product since the outbox
-landed, and it is deliberate: it converts the most dangerous edit in MkAuth into
+landed, and it is deliberate: it converts the most dangerous edit in Syndra into
 a free one, and puts the danger behind a rehearsal.
 
 ---

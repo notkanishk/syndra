@@ -2,7 +2,7 @@
 
 ## 1. Goal
 
-MkAuth needs a clean production gate for live orchestration. The system should not move from demo/local-policy mode into real Zitadel-backed mutation flows until it has one mutation authority, one trustworthy backend user-token authorization boundary for privileged actions, and one clearly documented degraded-behavior story for its production data plane.
+Syndra needs a clean production gate for live orchestration. The system should not move from demo/local-policy mode into real Zitadel-backed mutation flows until it has one mutation authority, one trustworthy backend user-token authorization boundary for privileged actions, and one clearly documented degraded-behavior story for its production data plane.
 
 This change defines that gate.
 
@@ -10,13 +10,13 @@ This change defines that gate.
 
 ### 2.1 Welcome-bundle mutation ownership
 
-Welcome-bundle assignment is a business mutation, not just an event reaction. Zitadel-compatible triggers may indicate that a new user exists, but MkAuth Backend must remain the single writer that decides whether, when, and how onboarding mutations occur.
+Welcome-bundle assignment is a business mutation, not just an event reaction. Zitadel-compatible triggers may indicate that a new user exists, but Syndra Backend must remain the single writer that decides whether, when, and how onboarding mutations occur.
 
 ```text
 Zitadel event / hook / action signal
               |
               v
-      MkAuth intake validation
+      Syndra intake validation
               |
               v
       policy + idempotency check
@@ -32,7 +32,7 @@ This keeps auditability, retries, idempotency, and policy evaluation in one plac
 
 ### 2.2 Production gate before broader live orchestration
 
-MkAuth should treat the following as a precondition for production-grade live Zitadel mutation flows:
+Syndra should treat the following as a precondition for production-grade live Zitadel mutation flows:
 
 * backend user-token authorization for privileged actions
 * authenticated and bounded action-injection/data-plane access
@@ -86,7 +86,7 @@ The data plane must stay Actions v2-compatible, but its production posture must 
 
 ### 4.3 Webhook authenticity boundary
 
-Webhook receipt is not enough. Before any cache invalidation, onboarding trigger, or downstream orchestration occurs, MkAuth must validate that the event is authentic, fresh enough, and structurally valid.
+Webhook receipt is not enough. Before any cache invalidation, onboarding trigger, or downstream orchestration occurs, Syndra must validate that the event is authentic, fresh enough, and structurally valid.
 
 ### 4.4 High-risk credential-bridge handling
 
@@ -107,7 +107,7 @@ Expected posture:
 
 ### 5.2 Claim-injection failures
 
-Applications need an explicit failure posture. MkAuth should support one of two documented models per application:
+Applications need an explicit failure posture. Syndra should support one of two documented models per application:
 
 * fail closed: deny or emit no effective claims
 * minimal safe fallback: emit a constrained documented claim set

@@ -56,7 +56,7 @@ The system MUST treat Zitadel Actions v2 as the canonical compatibility boundary
 The system MAY use self-defined structures for communication between the frontend UI, backend, and sync service, but those contracts MUST be explicit, authenticated, validated, and isolated from the Zitadel-facing boundary.
 
 #### Scenario: Internal sync payload introduced
-- **WHEN** MkAuth defines a Backend-to-Sync payload for provisioning work
+- **WHEN** Syndra defines a Backend-to-Sync payload for provisioning work
 - **THEN** that payload MAY use a purpose-built internal schema
 - **AND** it MUST NOT redefine or loosen the Zitadel Actions v2 compatibility requirements used at the external boundary
 
@@ -77,7 +77,7 @@ The system MUST treat production authorization and orchestration edges as explic
 The system MUST use a dedicated Zitadel service user account only for backend-owned management operations that require Management API access.
 
 #### Scenario: Admin action requires Zitadel mutation
-- **WHEN** an admin-triggered MkAuth workflow needs to create, update, or revoke state in Zitadel
+- **WHEN** an admin-triggered Syndra workflow needs to create, update, or revoke state in Zitadel
 - **THEN** the backend MAY use a dedicated service user account to call the Zitadel Management API
 - **AND** that credential MUST remain server-side, least-privileged, and independently auditable
 - **AND** the frontend MUST NOT use it directly

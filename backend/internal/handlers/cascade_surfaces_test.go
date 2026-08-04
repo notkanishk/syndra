@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"mkauth/internal/models"
-	"mkauth/internal/services"
-	"mkauth/internal/services/propagation"
+	"syndra/internal/models"
+	"syndra/internal/services"
+	"syndra/internal/services/propagation"
 )
 
 // resetRemoveCascadeDeps captures and restores the revoke-side cascade injectables (Task 21).

@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // -------------------------------------------------------------
@@ -63,7 +63,7 @@ func GetDirectGrantsForUser(ctx context.Context, userID string, includeExpired b
 	return grants, nil
 }
 
-// GetAllDirectGrants returns every MkAuth-direct grant in the system. When
+// GetAllDirectGrants returns every Syndra-direct grant in the system. When
 // includeExpired is false the result is filtered to active grants only
 // (expires_at NULL or in the future). Ordered by user/project/role for
 // deterministic pairing during reconciliation.
@@ -91,7 +91,7 @@ func GetAllDirectGrants(ctx context.Context, includeExpired bool) ([]models.Dire
 		grants = append(grants, grant)
 	}
 	// Surface mid-stream iteration errors so reconciliation never compares
-	// against a silently-truncated MkAuth inventory.
+	// against a silently-truncated Syndra inventory.
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -351,7 +351,7 @@ var ErrGrantNotFound = errors.New("direct grant not found")
 // deleted. Nothing reaches Zitadel here; the drain does that later, from rows
 // that are already durable.
 //
-// This is the MkAuth-side delete. The Zitadel-side grant delete
+// This is the Syndra-side delete. The Zitadel-side grant delete
 // (DELETE /zitadel/users/{id}/grants/{grantId}) removes a different object and
 // leaves this row behind, so the next cache compile would restore the access.
 func DeleteDirectGrantAndEnqueue(ctx context.Context, actor, userID, grantID string, params []EnqueueParams) ([]string, error) {

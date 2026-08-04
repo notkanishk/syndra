@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // GetExclusions returns all exclusion triples so the reconciliation sweep and

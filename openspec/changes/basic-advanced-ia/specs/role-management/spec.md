@@ -20,20 +20,20 @@ The members list MUST be an empty array rather than null when nobody holds the r
 
 #### Scenario: Role metadata is best-effort
 
-- **GIVEN** a role that exists in the identity provider but has no MkAuth-local row
+- **GIVEN** a role that exists in the identity provider but has no Syndra-local row
 - **WHEN** its members are fetched
 - **THEN** the request MUST succeed with the members listed and the display metadata absent
 
 ### Requirement: A partially-backed list MUST say so
 
-`GET /api/v1/roles` resolves through `GetAllLocalRoles`, which returns only roles created through MkAuth. The cross-project role index MUST carry an explicit scope notice stating that roles created directly in the identity provider are not listed, with a link to check upstream.
+`GET /api/v1/roles` resolves through `GetAllLocalRoles`, which returns only roles created through Syndra. The cross-project role index MUST carry an explicit scope notice stating that roles created directly in the identity provider are not listed, with a link to check upstream.
 
 Silently partial lists are how somebody concludes a role does not exist and creates a duplicate.
 
 #### Scenario: The scope is stated, not implied
 
 - **WHEN** the `/roles` index renders
-- **THEN** a notice MUST state that only MkAuth-managed roles are shown
+- **THEN** a notice MUST state that only Syndra-managed roles are shown
 
 ### Requirement: Project MUST be the first column of any cross-project role list
 

@@ -6,7 +6,7 @@ import "context"
 //
 // The seeder writes into eight tables and every row it creates points at a demo
 // project id or a demo user id. Counting those references answers the question
-// MKAUTH_SEED_DEMO cannot: not "did this process seed?" but "is seeded data
+// SYNDRA_SEED_DEMO cannot: not "did this process seed?" but "is seeded data
 // still being served?". Turning the flag off and restarting changes the first
 // answer and leaves the second one exactly as it was — which is how a live
 // deployment ends up showing three demo bundles and four demo rules with no

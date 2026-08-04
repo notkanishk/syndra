@@ -44,7 +44,7 @@ export type OperationsStatus =
   | "completed"
   | "in_flight"
   | "succeeded"
-  // An event MkAuth deliberately did not act on — the self-mutation guard
+  // An event Syndra deliberately did not act on — the self-mutation guard
   // dropping its own echo, or an enrichment that never completed. Filterable
   // because "we saw it and chose not to" is a different answer from "we never
   // received it", and only one of them is a bug.

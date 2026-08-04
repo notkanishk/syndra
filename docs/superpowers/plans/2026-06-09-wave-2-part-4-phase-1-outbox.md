@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make every MkAuth-mediated Zitadel grant mutation flow through a durable intent-ledger + outbox buffer that the operator drains explicitly — closing the B4/D3 "single mutation authority" contradiction without changing observable success semantics for the operator.
+**Goal:** Make every Syndra-mediated Zitadel grant mutation flow through a durable intent-ledger + outbox buffer that the operator drains explicitly — closing the B4/D3 "single mutation authority" contradiction without changing observable success semantics for the operator.
 
-**Architecture:** A new `pending_zitadel_propagations` outbox table (mirroring the existing `provisioning_intents` idempotency/claim pattern) plus `source`/`source_ref` columns on `direct_role_grants`. A transactional enqueue (`db.EnqueueDirectGrantPropagation`) writes ledger + audit + outbox atomically; an operator-triggered drain (`services/propagation`, mirroring `services/expiry`) calls Zitadel and classifies the ACK. `applied` (synchronous 2xx) is terminal success — there is no webhook `confirmed` state, because the existing self-mutation guard drops MkAuth's own grant events (see `design.md` Decision 1). Both `/api/v1/users/{id}/grants` and the legacy `/api/v1/zitadel/*` CRUD converge on this one path.
+**Architecture:** A new `pending_zitadel_propagations` outbox table (mirroring the existing `provisioning_intents` idempotency/claim pattern) plus `source`/`source_ref` columns on `direct_role_grants`. A transactional enqueue (`db.EnqueueDirectGrantPropagation`) writes ledger + audit + outbox atomically; an operator-triggered drain (`services/propagation`, mirroring `services/expiry`) calls Zitadel and classifies the ACK. `applied` (synchronous 2xx) is terminal success — there is no webhook `confirmed` state, because the existing self-mutation guard drops Syndra's own grant events (see `design.md` Decision 1). Both `/api/v1/users/{id}/grants` and the legacy `/api/v1/zitadel/*` CRUD converge on this one path.
 
 **Tech Stack:** Go (`pgx/v5` pool + transactions, stdlib `testing`), PostgreSQL (golang-migrate), Next.js + TypeScript + React Query (Bun). Material (obsidian-clarity) tokens for the amber Pending UI.
 
@@ -55,7 +55,7 @@ Goal: land the OpenSpec scaffolding + this plan before touching source, so subse
 
 Run:
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 openspec validate wave-2-part-4-zitadel-state-projection-and-drift-control --strict
 ```
 Expected: `Change '…' is valid`.
@@ -80,7 +80,7 @@ git commit -m "docs(openspec): scaffold wave-2-part-4 zitadel state projection &
 
 ```sql
 -- 000015_zitadel_propagation_outbox.up.sql
--- Wave 2 · Part 4 (B4/D3): the outbox buffer for MkAuth-mediated Zitadel grant
+-- Wave 2 · Part 4 (B4/D3): the outbox buffer for Syndra-mediated Zitadel grant
 -- mutations, plus source attribution on direct_role_grants. The full 5-value
 -- source enum is installed now so sub-phase 3 (cascade) needs no further ALTER.
 -- `applied` is terminal success; there is no `confirmed` state (design Decision 1).
@@ -158,7 +158,7 @@ git commit -m "feat(db): add zitadel propagation outbox + direct_role_grants sou
 
 Add near the other access structs in `models.go`:
 ```go
-// PendingPropagation is one buffered MkAuth-mediated Zitadel grant mutation.
+// PendingPropagation is one buffered Syndra-mediated Zitadel grant mutation.
 // `applied` is terminal success (synchronous 2xx); there is no `confirmed` state.
 type PendingPropagation struct {
 	ID             string     `json:"id"`
@@ -261,7 +261,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-	"mkauth/internal/models" // match the module path used elsewhere in db/*.go
+	"syndra/internal/models" // match the module path used elsewhere in db/*.go
 )
 
 // InsertPendingPropagation inserts one outbox row and returns its id. Used both
@@ -592,9 +592,9 @@ package propagation
 import (
 	"context"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
-	"mkauth/internal/zitadel"
+	"syndra/internal/db"
+	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 var (
@@ -694,8 +694,8 @@ import (
 	"context"
 	"testing"
 
-	"mkauth/internal/models"
-	"mkauth/internal/zitadel"
+	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 func swap[T any](dst *T, v T) func() { o := *dst; *dst = v; return func() { *dst = o } }
@@ -850,7 +850,7 @@ import (
 	"fmt"
 	"log"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 type DrainResult struct {
@@ -1004,7 +1004,7 @@ git commit -m "feat(propagation): operator-confirmed drain with ACK classificati
 	dbEnqueueDirectGrantPropagation = db.EnqueueDirectGrantPropagation
 	svcDrainPropagations            = propagation.Drain
 ```
-(import `mkauth/internal/services/propagation`.)
+(import `syndra/internal/services/propagation`.)
 
 - [ ] **Step 6.2: Write the failing handler test (202 + enqueue, no direct Zitadel call)**
 
@@ -1412,7 +1412,7 @@ mcp__codebase-memory-mcp__index_repository   # affected scope: backend/internal/
 - [ ] **Step 10.6: OpenSpec validate + tick the ledger**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 openspec validate wave-2-part-4-zitadel-state-projection-and-drift-control --strict
 ```
 Then check off Sub-phase 1 Tasks 0–10 in `tasks.md` and commit:
@@ -1425,7 +1425,7 @@ git commit -m "chore(openspec): tick wave-2-part-4 sub-phase 1 (outbox) tasks co
 
 ## Self-review checklist (run after implementation, before requesting review)
 
-1. **Doctrine honored:** every MkAuth-mediated mutation writes the ledger *before* any Zitadel call, in one transaction (Tasks 4, 6, 7). No handler calls `zitadelAddUserGrant`/`Update`/`Remove` directly anymore (Task 7).
+1. **Doctrine honored:** every Syndra-mediated mutation writes the ledger *before* any Zitadel call, in one transaction (Tasks 4, 6, 7). No handler calls `zitadelAddUserGrant`/`Update`/`Remove` directly anymore (Task 7).
 2. **No `confirmed` state anywhere** — outbox CHECK is `('pending','in_flight','applied','failed')`; pending count counts `pending`+`in_flight` only (Tasks 1, 3, 8). Design Decision 1.
 3. **Idempotency:** Zitadel's `409 AlreadyExists` is classified `applied` (Task 5), so a stale grant index in *either* direction is harmless — the already-exists check is a latency optimization, not a correctness gate. Crash-recovery replay and the `idempotency_key` UNIQUE constraint cover the rest (Tasks 3, 5).
 3a. **Transient ≠ terminal:** `429`/`408` requeue (never operator-triage), `5xx`/timeout requeue, other `4xx` fail. Classifier reads typed status, not error strings (Task 5; review finding C).

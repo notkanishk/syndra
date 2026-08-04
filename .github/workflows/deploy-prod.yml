@@ -2,7 +2,7 @@ name: deploy-prod
 
 # Deploys main to the production LXC (syndra) through a self-hosted runner
 # living inside that LXC. The runner drives the long-lived clone at
-# /opt/mkauth rather than its own workspace, because that directory holds
+# /opt/syndra rather than its own workspace, because that directory holds
 # .env, the Zitadel service-account key, and the named docker volumes' identity.
 #
 # Anyone who can push to main can run arbitrary commands in production through
@@ -19,19 +19,19 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, mkauth-prod]
+    runs-on: [self-hosted, syndra-prod]
     steps:
-      - name: Check out ${{ github.sha }} into /opt/mkauth
+      - name: Check out ${{ github.sha }} into /opt/syndra
         run: |
           set -euo pipefail
-          cd /opt/mkauth
+          cd /opt/syndra
           git fetch --prune origin
           git checkout --force "${{ github.sha }}"
 
       - name: Build and start
         run: |
           set -euo pipefail
-          cd /opt/mkauth
+          cd /opt/syndra
           docker compose up -d --build --remove-orphans
           docker image prune -f
           # Build cache is the thing that actually eats the disk — it reached
@@ -47,7 +47,7 @@ jobs:
             http://localhost:3000 >/dev/null
           echo "backend and ui responding locally"
 
-      # Zitadel POSTs to MKAUTH_EXTERNAL_URL, not to localhost. On the dev box
+      # Zitadel POSTs to SYNDRA_EXTERNAL_URL, not to localhost. On the dev box
       # that URL drifted to a decommissioned IP and every Action silently
       # posted into the void for months. Assert the public path resolves to
       # this deployment: an unsigned POST must reach the handler and be
@@ -55,9 +55,9 @@ jobs:
       - name: Verify the Action target URL reaches this deployment
         run: |
           set -euo pipefail
-          cd /opt/mkauth
-          url="$(grep -E '^MKAUTH_EXTERNAL_URL=' .env | cut -d= -f2-)"
-          [ -n "$url" ] || { echo "MKAUTH_EXTERNAL_URL unset in .env"; exit 1; }
+          cd /opt/syndra
+          url="$(grep -E '^SYNDRA_EXTERNAL_URL=' .env | cut -d= -f2-)"
+          [ -n "$url" ] || { echo "SYNDRA_EXTERNAL_URL unset in .env"; exit 1; }
           code="$(curl -sS -o /dev/null -w '%{http_code}' -m 15 \
             -X POST -H 'Content-Type: application/json' -d '{}' \
             "${url}/api/action/inject")"
@@ -71,6 +71,6 @@ jobs:
       - name: Report container state on failure
         if: failure()
         run: |
-          cd /opt/mkauth
+          cd /opt/syndra
           docker compose ps
           docker compose logs --tail=80

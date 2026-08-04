@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // IsUniqueViolation reports whether err is a Postgres unique-constraint violation
@@ -173,7 +173,7 @@ func GetUsersForBundle(ctx context.Context, bundleID string) ([]string, error) {
 	return scanUserIDs(ctx, `SELECT user_id FROM user_bundle_assignments WHERE bundle_id = $1`, bundleID)
 }
 
-// GetAllKnownUserIDs returns every user id MkAuth has any record of — the union of direct-grant
+// GetAllKnownUserIDs returns every user id Syndra has any record of — the union of direct-grant
 // holders, bundle-assignment holders, and Zitadel-grant-index holders. Rule create/update cascades
 // use this (not a single index) to discover which users' effective closures might change, since a
 // rule's source role can be held via any of the three tables.
@@ -535,7 +535,7 @@ func UpdateMappingRuleAndEnqueue(ctx context.Context, actor, id, sp, sr, tp, tr 
 // DeleteMappingRuleAndEnqueue deletes the rule AND enqueues the caller-computed revoke rows in
 // ONE tx (mirrors UpdateMappingRuleAndEnqueue). The two halves must commit together: a rule row
 // removed without its revokes leaves everyone it ever granted holding access in Zitadel that no
-// MkAuth source explains — which is not a gap, it is drift, and the sweep would find it later
+// Syndra source explains — which is not a gap, it is drift, and the sweep would find it later
 // with no actor to attribute it to.
 //
 // The outbox rows keep source_ref = the deleted rule's id. That column is plain text with no

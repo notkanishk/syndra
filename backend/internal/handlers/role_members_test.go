@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"mkauth/internal/db"
-	"mkauth/internal/services"
+	"syndra/internal/db"
+	"syndra/internal/services"
 )
 
 func TestHandleDeleteUserDirectGrant_DeletesAndQueuesRevoke(t *testing.T) {

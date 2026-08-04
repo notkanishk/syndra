@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"mkauth/internal/db"
+	"syndra/internal/db"
 )
 
 // resetOnboardingDeps restores all onboarding injectable vars after a test.

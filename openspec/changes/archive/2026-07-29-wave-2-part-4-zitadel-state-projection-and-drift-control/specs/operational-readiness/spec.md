@@ -1,4 +1,4 @@
-> **Status:** Wave 2 · Part 4 delta — Drift vs Pending urgency tiers (parent design §5) | [< Index](../../../../INDEX.md) | [Feature Coverage](../../../mkauth-core-architecture/specs/feature-coverage.md)
+> **Status:** Wave 2 · Part 4 delta — Drift vs Pending urgency tiers (parent design §5) | [< Index](../../../../INDEX.md) | [Feature Coverage](../../../syndra-core-architecture/specs/feature-coverage.md)
 
 # Requirement: Operational Readiness (delta)
 

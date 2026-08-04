@@ -1,4 +1,4 @@
-module mkauth
+module syndra
 
 go 1.25.0
 

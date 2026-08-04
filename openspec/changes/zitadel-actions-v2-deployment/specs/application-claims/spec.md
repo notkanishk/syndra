@@ -6,9 +6,9 @@ The data plane MUST be implemented as a **Zitadel Actions v2** target, invoked d
 
 Actions v2 is **not** a JavaScript runtime. Zitadel POSTs the function trigger payload (`user`, `user_grants`, `org`, `userinfo`, ...) to the configured HTTP target, and the target MUST respond with a typed envelope containing `append_claims` and (optionally) `append_log_claims` / `set_user_metadata`. Any earlier spec language referring to "`SetCustomClaims`", a "v2 `claims` namespace", or an in-repo JavaScript script was factually incorrect and has been removed.
 
-* **append_claims contract**: the target MUST emit each claim as a `{key, value}` object inside the `append_claims` array. Merging semantics are Zitadel's; MkAuth MUST NOT assume behavior beyond what Zitadel documents.
+* **append_claims contract**: the target MUST emit each claim as a `{key, value}` object inside the `append_claims` array. Merging semantics are Zitadel's; Syndra MUST NOT assume behavior beyond what Zitadel documents.
 * **Cache-backed source**: claim values are looked up in Redis using `mapping:<userID>:<projectID>` keys populated by the cache compiler; Redis miss and malformed cache data are handled by the project's configured degraded posture.
-* **Multi-project resolution**: when the trigger payload's `user_grants` names more than one project, the response MUST emit namespaced claim keys `mkauth.<projectID>.<claim>` so claims from different projects cannot collide in the issued token. When exactly one project is present, flat keys MUST be used so single-project applications receive the unprefixed payload they expect.
+* **Multi-project resolution**: when the trigger payload's `user_grants` names more than one project, the response MUST emit namespaced claim keys `syndra.<projectID>.<claim>` so claims from different projects cannot collide in the issued token. When exactly one project is present, flat keys MUST be used so single-project applications receive the unprefixed payload they expect.
 * **Per-project degraded posture preserved**: degraded responses MUST be decided per project. A cache miss on project A MUST NOT suppress claims from project B in the same response.
 * **Availability Rule**: the integration MUST define explicit behavior for cache miss, backend timeout, malformed cache data, and unavailable downstream dependencies.
 * **Safe Failure Rule**: failure behavior MUST be either `fail_closed` (empty `append_claims` for that project) or `minimal_safe` (configured minimal claim set for that project), depending on the application's documented security posture.
@@ -17,7 +17,7 @@ Actions v2 is **not** a JavaScript runtime. Zitadel POSTs the function trigger p
 
 #### Scenario: Cache miss during claim injection
 - **WHEN** the Actions v2 target request triggers a cache lookup and no compiled entry exists for that project
-- **THEN** MkAuth MUST return the documented safe fallback envelope for that application's configured posture
+- **THEN** Syndra MUST return the documented safe fallback envelope for that application's configured posture
 - **AND** other projects in the same multi-grant response MUST NOT be suppressed by this project's degradation
 - **AND** the outcome MUST be observable via the `[DATA PLANE]` log line.
 
@@ -39,7 +39,7 @@ Actions v2 is **not** a JavaScript runtime. Zitadel POSTs the function trigger p
 
 ### Requirement: Actions v2 Target Deployment
 
-The Zitadel Actions v2 target configuration and deployment assets MUST be maintained in the MkAuth repository.
+The Zitadel Actions v2 target configuration and deployment assets MUST be maintained in the Syndra repository.
 
 * **Target manifest**: `zitadel/actions/targets.json` MUST declare the target using the `restCall` type (NOT `restWebhook` or `restAsync`). Webhook targets only inspect the HTTP status code; call targets parse the response body and merge it into the issued token — which is required here because the claim envelope lives in the response body. The manifest layout MUST match the stable Zitadel v2 Target proto (`proto/zitadel/action/v2/target.proto`): `name`, `endpoint`, `timeout`, and `payloadType` live at the top level of the target; `interruptOnError` lives inside the `restCall` submessage. `payloadType` SHOULD be set explicitly to `PAYLOAD_TYPE_JSON`. The execution bindings MUST cover `function.name = "preaccesstoken"` and `function.name = "preuserinfo"`.
 * **Registration script**: `zitadel/actions/register.sh` MUST apply the manifest idempotently against the stable Zitadel v2 Actions REST API (`POST /v2/actions/targets` to create, `POST /v2/actions/targets/{id}` to update, `POST /v2/actions/targets/search` to look up by name using the `target_name_filter.target_name` field from `proto/zitadel/action/v2/query.proto`, `PUT /v2/actions/executions` to bind/unbind), capture the one-time signing key returned at target creation, and support a `--remove` path that unbinds executions (via `PUT /v2/actions/executions` with `targets: []`) without destroying the target. The `--remove` path MUST be idempotent — Zitadel returns HTTP 404 (`COMMAND-74aaqj8fv9` "Execution condition is invalid") from the unbind PUT when no execution row matches the condition (already-removed, partially-applied, or never-bound state), and the script MUST treat that response as success rather than aborting cleanup.
@@ -50,14 +50,14 @@ The Zitadel Actions v2 target configuration and deployment assets MUST be mainta
 * **Failure-mode validation**: a repository-resident smoke test MUST exercise the target endpoint and assert that the response conforms to the v2 envelope shape (`append_claims` array, each entry is `{key, value}`), optionally signing the test request when the key is available.
 
 #### Scenario: Target configuration is version-controlled
-- **WHEN** MkAuth is deployed against a Zitadel instance
+- **WHEN** Syndra is deployed against a Zitadel instance
 - **THEN** `zitadel/actions/targets.json`, `zitadel/actions/register.sh`, the operator DEPLOY.md, and the smoke-test script MUST be present in the repository
 - **AND** the target and executions MUST be creatable by running a single operator command against a live Zitadel.
 
 #### Scenario: Rolling back the target does not break token issuance
 - **WHEN** the operator runs `register.sh --remove`
 - **THEN** token issuance MUST continue with stock Zitadel claims (no user-facing outage)
-- **AND** the `restCall.interruptOnError: false` posture MUST be preserved so MkAuth outages are never user-visible through the token path.
+- **AND** the `restCall.interruptOnError: false` posture MUST be preserved so Syndra outages are never user-visible through the token path.
 
 #### Scenario: Removing already-absent executions succeeds
 - **WHEN** the operator runs `register.sh --remove` against an instance where one or more manifest executions were never bound or have already been unbound
@@ -72,17 +72,17 @@ The Zitadel Actions v2 target configuration and deployment assets MUST be mainta
 - **AND** print an operator-facing follow-up requiring `ZITADEL_ACTION_SIGNING_KEY` / `ZITADEL_EVENT_SIGNING_KEY` to be cleared from `.env` and the backend restarted before any subsequent `register.sh` invocation
 - **AND** treat HTTP 404 from the DELETE call as success so re-running `--purge` is idempotent.
 
-### Requirement: Strict Request Validation at the MkAuth Boundary
+### Requirement: Strict Request Validation at the Syndra Boundary
 
-The MkAuth boundary MUST treat the Zitadel-owned v2 payload schema as evolvable while still validating the fields MkAuth depends on.
+The Syndra boundary MUST treat the Zitadel-owned v2 payload schema as evolvable while still validating the fields Syndra depends on.
 
 * **Lenient field acceptance**: the `/api/action/inject` endpoint MUST use a lenient JSON decoder that silently ignores unknown top-level fields (so future Zitadel payload additions do not break verification).
 * **Required-field enforcement**: the endpoint MUST reject any request where `user.id` is empty with a `400 VALIDATION_FAILED` response carrying a `user.id` detail key.
 * **Trailing-token guard**: the endpoint MUST reject bodies containing more than one JSON value.
-* **Boundary preservation**: the lenient decoder MUST be scoped to this endpoint; all other MkAuth mutation endpoints MUST continue to use the strict decoder with `DisallowUnknownFields`.
+* **Boundary preservation**: the lenient decoder MUST be scoped to this endpoint; all other Syndra mutation endpoints MUST continue to use the strict decoder with `DisallowUnknownFields`.
 
 #### Scenario: Unknown Zitadel fields accepted
-- **WHEN** Zitadel sends a v2 payload containing fields MkAuth does not model (e.g. `org`, `user_metadata`, `userinfo`)
+- **WHEN** Zitadel sends a v2 payload containing fields Syndra does not model (e.g. `org`, `user_metadata`, `userinfo`)
 - **THEN** the handler MUST accept the request and act on the fields it does model
 - **AND** MUST NOT return `400` solely because of unknown fields.
 

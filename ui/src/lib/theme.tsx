@@ -12,7 +12,7 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
-const STORAGE_KEY = "mkauth-theme";
+const STORAGE_KEY = "syndra-theme";
 
 /**
  * ThemeProvider toggles a `data-theme="light"|"dark"` attribute on

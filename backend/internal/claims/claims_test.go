@@ -36,24 +36,24 @@ func TestFormatRoles(t *testing.T) {
 func TestEmit_RolesAttributesAndStatics(t *testing.T) {
 	p := Profile{
 		ProjectID:       "pLaser",
-		ClaimName:       "mkauth.laser.roles",
+		ClaimName:       "syndra.laser.roles",
 		FormatType:      FormatArray,
-		AttributeClaims: map[string]string{"mkauth.laser.email": AttrEmail, "mkauth.laser.count": AttrRoleCount},
-		StaticClaims:    map[string]any{"mkauth.tenant": "makerspace"},
+		AttributeClaims: map[string]string{"syndra.laser.email": AttrEmail, "syndra.laser.count": AttrRoleCount},
+		StaticClaims:    map[string]any{"syndra.tenant": "makerspace"},
 	}
 	got := p.Emit(Facts{Roles: []string{"trained"}, Email: "t@x.edu", UserID: "u1"})
 
-	if !reflect.DeepEqual(got["mkauth.laser.roles"], []string{"trained"}) {
-		t.Errorf("roles claim: got %#v", got["mkauth.laser.roles"])
+	if !reflect.DeepEqual(got["syndra.laser.roles"], []string{"trained"}) {
+		t.Errorf("roles claim: got %#v", got["syndra.laser.roles"])
 	}
-	if got["mkauth.laser.email"] != "t@x.edu" {
-		t.Errorf("attribute claim: got %v", got["mkauth.laser.email"])
+	if got["syndra.laser.email"] != "t@x.edu" {
+		t.Errorf("attribute claim: got %v", got["syndra.laser.email"])
 	}
-	if got["mkauth.laser.count"] != 1 {
-		t.Errorf("role_count attribute: got %v", got["mkauth.laser.count"])
+	if got["syndra.laser.count"] != 1 {
+		t.Errorf("role_count attribute: got %v", got["syndra.laser.count"])
 	}
-	if got["mkauth.tenant"] != "makerspace" {
-		t.Errorf("static claim: got %v", got["mkauth.tenant"])
+	if got["syndra.tenant"] != "makerspace" {
+		t.Errorf("static claim: got %v", got["syndra.tenant"])
 	}
 }
 
@@ -75,7 +75,7 @@ func TestEmit_MissingAttributeIsOmitted(t *testing.T) {
 func TestShape_DefaultPlusOverrides(t *testing.T) {
 	profiles := []Profile{
 		{ApplicationID: "app_badge", ClaimName: "badge.roles", FormatType: FormatCSV},
-		{ClaimName: "mkauth.laser.roles", FormatType: FormatArray},
+		{ClaimName: "syndra.laser.roles", FormatType: FormatArray},
 	}
 	got := Shape(profiles, Facts{Roles: []string{"trained", "maintainer"}})
 
@@ -85,13 +85,13 @@ func TestShape_DefaultPlusOverrides(t *testing.T) {
 	if got["badge.roles"] != "trained,maintainer" {
 		t.Errorf("override format not applied: %v", got["badge.roles"])
 	}
-	if !reflect.DeepEqual(got["mkauth.laser.roles"], []string{"trained", "maintainer"}) {
-		t.Errorf("default profile not applied: %v", got["mkauth.laser.roles"])
+	if !reflect.DeepEqual(got["syndra.laser.roles"], []string{"trained", "maintainer"}) {
+		t.Errorf("default profile not applied: %v", got["syndra.laser.roles"])
 	}
 }
 
 func TestValidateProfile(t *testing.T) {
-	valid := Profile{ClaimName: "mkauth.laser.roles", FormatType: FormatArray}
+	valid := Profile{ClaimName: "syndra.laser.roles", FormatType: FormatArray}
 	if err := ValidateProfile(valid); err != nil {
 		t.Fatalf("expected a dotted namespace key to validate, got %v", err)
 	}
@@ -99,8 +99,8 @@ func TestValidateProfile(t *testing.T) {
 	cases := map[string]Profile{
 		"empty claim name":  {ClaimName: "  ", FormatType: FormatArray},
 		"unknown format":    {ClaimName: "roles", FormatType: "yaml"},
-		"trailing dot":      {ClaimName: "mkauth.laser.", FormatType: FormatArray},
-		"illegal character": {ClaimName: "mkauth laser roles", FormatType: FormatArray},
+		"trailing dot":      {ClaimName: "syndra.laser.", FormatType: FormatArray},
+		"illegal character": {ClaimName: "syndra laser roles", FormatType: FormatArray},
 		"unknown attribute": {ClaimName: "roles", FormatType: FormatArray,
 			AttributeClaims: map[string]string{"x": "shoe_size"}},
 		"key used twice": {ClaimName: "roles", FormatType: FormatArray,
@@ -132,7 +132,7 @@ func TestConflicts(t *testing.T) {
 	}
 
 	clean := []Profile{
-		{ClaimName: "mkauth.laser.roles", FormatType: FormatArray},
+		{ClaimName: "syndra.laser.roles", FormatType: FormatArray},
 		{ApplicationID: "app_badge", ClaimName: "badge.roles", FormatType: FormatCSV},
 	}
 	if got := Conflicts(clean); len(got) != 0 {

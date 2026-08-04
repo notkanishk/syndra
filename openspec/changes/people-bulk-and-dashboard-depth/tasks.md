@@ -63,7 +63,7 @@
 
 ## Track 6 — Applying means applied
 
-- [x] PBD-48 `EnqueueParams.NoPropagation` writes the ledger and audit rows without an outbox row; `AttributeDriftAndEnqueue` becomes `AttributeDriftTx`, `MarkDriftExternalTx`'s sibling. Adoption owes Zitadel nothing, and the queue listed forty adopted roles as writes MkAuth still owed it.
+- [x] PBD-48 `EnqueueParams.NoPropagation` writes the ledger and audit rows without an outbox row; `AttributeDriftAndEnqueue` becomes `AttributeDriftTx`, `MarkDriftExternalTx`'s sibling. Adoption owes Zitadel nothing, and the queue listed forty adopted roles as writes Syndra still owed it.
 - [x] PBD-49 `applyBulkPlan` drains the rows each person's operation enqueued. `?apply=true` meant "wrote it down": a bulk role removal reported every row applied while the roles stayed live in Zitadel.
 - [x] PBD-50 A failed drain does not undo the committed ledger write.
 
@@ -71,7 +71,7 @@
 
 Both findings were the same mistake twice: I stopped at "the row is no longer stranded" without asking what the row still *authorises*, and at "the drain ran" without asking what it *returned*.
 
-- [x] PBD-51 Adoption creates no outbox row at all, rather than creating one and draining it. Draining inline narrowed the window; it did not close it. A drain that cannot reach Zitadel leaves the `add` behind, and an `add` is a live instruction — adopt a role, remove it upstream by hand, and a later drain re-creates it. The verification the drain bought is relocated, not lost: a grant that vanished between detection and adoption now surfaces as `mkauth_only` drift for a human, which beats silently re-granting it.
+- [x] PBD-51 Adoption creates no outbox row at all, rather than creating one and draining it. Draining inline narrowed the window; it did not close it. A drain that cannot reach Zitadel leaves the `add` behind, and an `add` is a live instruction — adopt a role, remove it upstream by hand, and a later drain re-creates it. The verification the drain bought is relocated, not lost: a grant that vanished between detection and adoption now surfaces as `syndra_only` drift for a human, which beats silently re-granting it.
 - [x] PBD-52 `projectUpstream` reads the drain's verdict instead of discarding it. `DrainOne` reports an unreachable Zitadel as `Halted` with a **nil error**, so the previous `_, _ =` marked every row applied while a bulk revoke sat unexecuted. Anything short of a confirmed apply is now reported conservatively — over-claiming tells an operator a door is locked when it is open.
 - [x] PBD-53 `EffectQueued` + `BulkSummary.Queued` name the state that had no name: recorded here, not confirmed upstream. Neither success nor failure, counted apart from both. Bundle ops report through it too, via `cascadeQueuedReason` — a bundle its owner set to manual is *meant* to leave work queued, and that is still not "applied".
 - [x] PBD-54 The apply toast reports all three populations and only says "updated" when everything landed. It read `succeeded` alone, so queued rows were absent from the sentence entirely — "12 people updated" after a removal that never left the outbox.

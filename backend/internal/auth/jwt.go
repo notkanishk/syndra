@@ -1,4 +1,4 @@
-// Package auth handles Zitadel-issued JWT validation for the MkAuth backend.
+// Package auth handles Zitadel-issued JWT validation for the Syndra backend.
 package auth
 
 import (

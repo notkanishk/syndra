@@ -2,36 +2,36 @@
   "_comment": "Multi-target manifest applied by register.sh. Each target is registered by name (idempotent upsert via /v2/actions/targets/search). Each execution binds by referencing the target's name (resolved to ID at registration time). Layouts match proto/zitadel/action/v2/{target,execution,query}.proto.",
   "targets": [
     {
-      "name": "mkauth-claim-injector",
-      "endpoint": "${MKAUTH_EXTERNAL_URL}/api/action/inject",
+      "name": "syndra-claim-injector",
+      "endpoint": "${SYNDRA_EXTERNAL_URL}/api/action/inject",
       "timeout": "3s",
       "payloadType": "PAYLOAD_TYPE_JSON",
       "restCall": {
         "interruptOnError": false,
-        "_note": "interruptOnError:false keeps token issuance unblocked if MkAuth is unreachable. Per-project fail_closed/minimal_safe is decided server-side."
+        "_note": "interruptOnError:false keeps token issuance unblocked if Syndra is unreachable. Per-project fail_closed/minimal_safe is decided server-side."
       },
       "_signing_key_env": "ZITADEL_ACTION_SIGNING_KEY"
     },
     {
-      "name": "mkauth-event-listener",
-      "endpoint": "${MKAUTH_EXTERNAL_URL}/api/webhooks/zitadel",
+      "name": "syndra-event-listener",
+      "endpoint": "${SYNDRA_EXTERNAL_URL}/api/webhooks/zitadel",
       "timeout": "5s",
       "payloadType": "PAYLOAD_TYPE_JSON",
       "restAsync": {
-        "_note": "Fire-and-forget. Zitadel does not parse the response body; failures retry per Zitadel's at-least-once delivery semantics. MkAuth's idempotency-key dedup catches replays."
+        "_note": "Fire-and-forget. Zitadel does not parse the response body; failures retry per Zitadel's at-least-once delivery semantics. Syndra's idempotency-key dedup catches replays."
       },
       "_signing_key_env": "ZITADEL_EVENT_SIGNING_KEY"
     }
   ],
   "executions": [
-    { "target": "mkauth-claim-injector", "condition": { "function": { "name": "preaccesstoken" } } },
-    { "target": "mkauth-claim-injector", "condition": { "function": { "name": "preuserinfo" } } },
-    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.human.added" } } },
-    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.human.selfregistered" } } },
-    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.deactivated" } } },
-    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.locked" } } },
-    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.grant.added" } } },
-    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.grant.changed" } } },
-    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.grant.removed" } } }
+    { "target": "syndra-claim-injector", "condition": { "function": { "name": "preaccesstoken" } } },
+    { "target": "syndra-claim-injector", "condition": { "function": { "name": "preuserinfo" } } },
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.human.added" } } },
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.human.selfregistered" } } },
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.deactivated" } } },
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.locked" } } },
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.grant.added" } } },
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.grant.changed" } } },
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.grant.removed" } } }
   ]
 }

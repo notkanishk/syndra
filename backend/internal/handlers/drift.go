@@ -13,8 +13,8 @@ import (
 	"io"
 	"net/http"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
+	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
 // handleListDrift serves the triage queue. Unfiltered, it returns the enriched
@@ -76,7 +76,7 @@ type attributeRequest struct {
 // the rule's input role, which is frequently safety-gated. Triage explains or
 // removes access that already exists. It must not be a way to grant more.
 //
-// So adoption means exactly what the screen says it means: MkAuth records a
+// So adoption means exactly what the screen says it means: Syndra records a
 // direct grant, the operator becomes granter of record, nothing changes
 // upstream. That is external_backfill, and it is the only honest option.
 func validAttributionSource(s string) bool {
@@ -108,12 +108,12 @@ func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
 
 // attributeOneDrift writes the ledger intent for a zitadel_only drift and marks
 // it attributed. It enqueues nothing, and that is the whole point: adoption is
-// the operator saying "Zitadel is right, MkAuth was wrong", so there is no
+// the operator saying "Zitadel is right, Syndra was wrong", so there is no
 // mutation owed upstream and no outbox row to carry one.
 //
 // Two versions of this got it wrong. The first left an `add` row pending
 // forever, and the governance queue then listed every adopted role as a change
-// MkAuth still owed Zitadel — accepting what Zitadel already had produced a
+// Syndra still owed Zitadel — accepting what Zitadel already had produced a
 // queue of writes back to Zitadel. The second drained that row inline, which
 // only narrowed the window: an outbox row is a live instruction, and a drain
 // that cannot reach Zitadel leaves it behind. Either way, an operator who adopts

@@ -80,7 +80,7 @@ for each well-known key in the metadata: write into the corresponding UserProfil
 
 - `InvalidateProject(projectID)` now drops `apps_by_project:<id>` in addition to `project_roles:<id>`, the global `projects` list, and `applications`. Follows the existing "drop anything that embeds project data" rule.
 - `InvalidateUsers()` drops the `users` list and every `user_metadata:<id>` entry. Without this, a newly-set metadata row would only appear after the 30s TTL expired — jarring for an admin who just set it.
-- `InvalidateApplications()` is not added as a separate Source method. No current handler mutates apps (MkAuth doesn't surface app CRUD). Forcing an app-specific refresh goes through `InvalidateProject(projectID)`, which is the natural seam since apps belong to projects.
+- `InvalidateApplications()` is not added as a separate Source method. No current handler mutates apps (Syndra doesn't surface app CRUD). Forcing an app-specific refresh goes through `InvalidateProject(projectID)`, which is the natural seam since apps belong to projects.
 
 ## Why not a new `type` field on ApplicationCatalog
 

@@ -5,23 +5,23 @@ import Link from "next/link";
 /**
  * The frame every upstream-inspection page shares.
  *
- * These pages read the identity provider directly rather than MkAuth's model
+ * These pages read the identity provider directly rather than Syndra's model
  * of it, which is the whole point of them and also the thing most likely to
  * confuse somebody who wandered in from Access. So each one says what it is
  * before it says anything else, and links back to where the same question is
- * answered in MkAuth's own terms.
+ * answered in Syndra's own terms.
  */
 export function UpstreamShell({
   title,
   lede,
-  mkauthHref,
-  mkauthLabel,
+  syndraHref,
+  syndraLabel,
   children,
 }: {
   title: string;
   lede: string;
-  mkauthHref: string;
-  mkauthLabel: string;
+  syndraHref: string;
+  syndraLabel: string;
   children: React.ReactNode;
 }) {
   return (
@@ -36,8 +36,8 @@ export function UpstreamShell({
         <h1 className="mt-2 type-page-title">{title}</h1>
         <p className="mt-2 max-w-[80ch] text-[14.5px] leading-[1.55] text-muted">
           {lede}{" "}
-          <Link href={mkauthHref} className="font-semibold text-accent-text">
-            {mkauthLabel} →
+          <Link href={syndraHref} className="font-semibold text-accent-text">
+            {syndraLabel} →
           </Link>
         </p>
       </div>
@@ -55,9 +55,9 @@ export function DirectWriteWarning({ what }: { what: string }) {
   return (
     <div className="danger-note px-4 py-3 text-[13.5px] leading-[1.55] text-muted">
       <strong className="font-semibold text-danger-text">This writes straight to the provider.</strong>{" "}
-      {what} MkAuth records nothing: no ledger row, no audit entry, no cascade. The next cache
+      {what} Syndra records nothing: no ledger row, no audit entry, no cascade. The next cache
       compile may overwrite it, and the drift sweep will report it as unexplained access. Use the
-      equivalent action inside MkAuth unless that is genuinely not an option.
+      equivalent action inside Syndra unless that is genuinely not an option.
     </div>
   );
 }

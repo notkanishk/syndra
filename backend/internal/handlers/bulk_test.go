@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"mkauth/internal/db"
-	"mkauth/internal/services"
-	"mkauth/internal/services/propagation"
+	"syndra/internal/db"
+	"syndra/internal/services"
+	"syndra/internal/services/propagation"
 )
 
 func bulkRequest(t *testing.T, body string, apply bool) *http.Request {

@@ -1,4 +1,4 @@
-> **Status:** ui-capability-gap-closure delta — nothing MkAuth creates is permanent | [< Index](../../../../INDEX.md)
+> **Status:** ui-capability-gap-closure delta — nothing Syndra creates is permanent | [< Index](../../../../INDEX.md)
 
 # Requirement: Lifecycle — Retiring What Was Created (delta)
 
@@ -46,7 +46,7 @@ bundle's is `409`, not `500`.
 closure diff computed with that bundle excluded — in one transaction with the
 delete. Every table hanging off a bundle cascades on delete, so an assignment
 row that vanished without its revoke would leave the role in Zitadel with
-nothing in MkAuth explaining it. That is drift, arriving with no actor.
+nothing in Syndra explaining it. That is drift, arriving with no actor.
 
 The welcome flag is REPORTED, never guarded against. Refusing to delete the
 welcome bundle would be a rule an operator could not satisfy — the flag is

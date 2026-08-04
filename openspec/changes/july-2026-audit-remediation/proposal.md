@@ -17,7 +17,7 @@ Security/correctness (backend):
 
 Security/correctness (ui):
 
-* The session cookie is now HMAC-SHA256 signed (`payload.signature`); tampered, forged, or legacy-unsigned cookies are rejected in both `lib/session.ts` (Node) and `middleware.ts` (Edge, Web Crypto). Secret: `SESSION_SECRET`, falling back to `MKAUTH_API_KEY` (SC4). Existing sessions are invalidated once — users re-login.
+* The session cookie is now HMAC-SHA256 signed (`payload.signature`); tampered, forged, or legacy-unsigned cookies are rejected in both `lib/session.ts` (Node) and `middleware.ts` (Edge, Web Crypto). Secret: `SESSION_SECRET`, falling back to `SYNDRA_API_KEY` (SC4). Existing sessions are invalidated once — users re-login.
 * `request<T>` redirects to `/login` on a 401 so an expired session mid-SPA recovers instead of surfacing endless error toasts (SC9).
 
 Over-engineering cuts (OE1–OE6, OE8, OE9, OE12; ~300 lines):

@@ -226,7 +226,7 @@ mcp__codebase-memory-mcp__index_repository (affected scope)
 And the OpenSpec validation (run from repo root — the CLI errors with `Unknown item …` when invoked from inside `openspec/`):
 
 ```bash
-cd /path/to/MkAuth     # repo root
+cd /path/to/Syndra     # repo root
 openspec validate wave-2-part-2-backend-coherence --strict
 ```
 

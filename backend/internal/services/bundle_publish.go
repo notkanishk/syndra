@@ -6,9 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	"mkauth/internal/db"
-	"mkauth/internal/directory"
-	"mkauth/internal/models"
+	"syndra/internal/db"
+	"syndra/internal/directory"
+	"syndra/internal/models"
 )
 
 // Publishing a bundle version, and moving holders between versions.

@@ -103,8 +103,8 @@ func TestHandleActionInject_CanonicalV2Payload_Accepted(t *testing.T) {
 	if len(got.AppendClaims) != 2 {
 		t.Fatalf("expected 2 append_claims (one per project), got %v", got.AppendClaims)
 	}
-	printing, okP := claimByKey(got.AppendClaims, "mkauth.pPrinting.roles")
-	doors, okD := claimByKey(got.AppendClaims, "mkauth.pDoors.roles")
+	printing, okP := claimByKey(got.AppendClaims, "syndra.pPrinting.roles")
+	doors, okD := claimByKey(got.AppendClaims, "syndra.pDoors.roles")
 	if !okP || !okD {
 		t.Fatalf("expected the colliding default key to be namespaced per project, got %v", got.AppendClaims)
 	}

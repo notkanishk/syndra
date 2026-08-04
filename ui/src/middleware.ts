@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 // Must match SESSION_COOKIE_NAME in lib/session.ts. Declared locally because
 // this file runs on the Edge runtime and importing lib/session would pull
 // node:crypto (used for cookie signing, SC4) into the Edge bundle.
-const SESSION_COOKIE_NAME = "mkauth_session";
+const SESSION_COOKIE_NAME = "syndra_session";
 
 /**
  * Members reach exactly two destinations. Everything else is not rendered and
@@ -32,7 +32,7 @@ function base64urlDecode(value: string): string {
 // cookie is `<payload>.<signature>`; an unsigned or tampered cookie must not
 // pass middleware. crypto.subtle.verify is constant-time.
 async function verifySignature(body: string, sig: string): Promise<boolean> {
-  const secret = process.env.SESSION_SECRET || process.env.MKAUTH_API_KEY || "";
+  const secret = process.env.SESSION_SECRET || process.env.SYNDRA_API_KEY || "";
   if (!secret) return false;
   const key = await crypto.subtle.importKey(
     "raw",

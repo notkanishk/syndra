@@ -18,7 +18,7 @@ import type { Audience, UiView } from "@/lib/nav";
  *   3. Basic is not Advanced-minus-features. It is a smaller job done whole.
  */
 
-const STORAGE_KEY = "mkauth_ui_view";
+const STORAGE_KEY = "syndra_ui_view";
 
 interface UiViewContextValue {
   view: UiView;

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"mkauth/internal/services"
+	"syndra/internal/services"
 )
 
 // Bulk request decisions, rehearsed — the third consumer of the one plan shape.
@@ -22,7 +22,7 @@ import (
 // does. That sequence — conditional transaction, race guard, cache rebuild,
 // inline drain — is the part that must not diverge: a second implementation
 // that drifted would leave requests approved but ungranted, which re-surfaces
-// later as mkauth_only drift and is diagnosed by nobody.
+// later as syndra_only drift and is diagnosed by nobody.
 
 type bulkDecisionRequest struct {
 	IDs        []string `json:"ids"`

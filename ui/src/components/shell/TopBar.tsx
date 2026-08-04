@@ -27,7 +27,7 @@ export function TopBar({ session }: { session: SessionUser }) {
     <header className="flex h-[66px] flex-none items-center gap-4 border-b border-line px-[26px]">
       <nav aria-label="Breadcrumb" className="min-w-0 truncate text-[14.5px]">
         {trail.length === 0 ? (
-          <span className="font-semibold text-ink">MkAuth</span>
+          <span className="font-semibold text-ink">Syndra</span>
         ) : (
           trail.map((entry, index) => {
             const last = index === trail.length - 1;

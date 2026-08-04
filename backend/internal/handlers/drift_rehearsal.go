@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"mkauth/internal/models"
-	"mkauth/internal/services"
+	"syndra/internal/models"
+	"syndra/internal/services"
 )
 
 // Bulk drift resolution, rehearsed — the same two-pass shape as bulk grants,
@@ -76,11 +76,11 @@ func rehearseOneDrift(ctx context.Context, id, op string) services.BulkOutcome {
 	out.Effect = services.EffectApply
 	switch op {
 	case driftOpAdopt:
-		out.Detail = fmt.Sprintf("Adopted into MkAuth (%s).", roleSummary(item.RoleKeys))
+		out.Detail = fmt.Sprintf("Adopted into Syndra (%s).", roleSummary(item.RoleKeys))
 		out.Consequence = "Records a direct grant, so the access stops being unexplained and starts being owned."
 	case driftOpExternal:
 		out.Detail = fmt.Sprintf("Marked as owned elsewhere (%s).", roleSummary(item.RoleKeys))
-		out.Consequence = "MkAuth stops reporting it. The access itself is left exactly as it is."
+		out.Consequence = "Syndra stops reporting it. The access itself is left exactly as it is."
 	}
 	return out
 }

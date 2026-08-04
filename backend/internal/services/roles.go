@@ -10,9 +10,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"mkauth/internal/directory"
-	"mkauth/internal/models"
-	"mkauth/internal/zitadel"
+	"syndra/internal/directory"
+	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 // CreateRoleRequest is the input for creating a new role.
@@ -38,7 +38,7 @@ var ErrCloneSourceNotFound = errors.New("clone source role not found")
 
 // CreateRole creates a new role, optionally cloning metadata from a source role.
 // Persists locally first, then propagates to Zitadel. If Zitadel propagation
-// fails, the local row is rolled back to avoid MkAuth tracking a role that
+// fails, the local row is rolled back to avoid Syndra tracking a role that
 // doesn't exist upstream.
 func CreateRole(ctx context.Context, req CreateRoleRequest, createdBy string) (models.Role, error) {
 	if !roleKeyPattern.MatchString(req.RoleKey) {
@@ -170,14 +170,14 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 			displayName: r.DisplayName, description: r.Description,
 			group:       r.Group,
 			clonedFromP: r.ClonedFromProject, clonedFromR: r.ClonedFromRole,
-			source: "mkauth",
+			source: "syndra",
 		}
 	}
 
 	// 2. Directory-source roles. Source tag is "zitadel" in live mode or "demo"
 	// when the directory is falling back to the local catalog — the UI
 	// distinguishes discovered directory roles from operator-created
-	// ("mkauth") ones and from persisted references.
+	// ("syndra") ones and from persisted references.
 	dirProjects, err := directory.Default.Projects(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load projects from directory: %w", err)

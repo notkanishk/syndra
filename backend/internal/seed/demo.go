@@ -8,10 +8,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"mkauth/internal/cache"
-	"mkauth/internal/db"
-	"mkauth/internal/demo"
-	"mkauth/internal/zitadel"
+	"syndra/internal/cache"
+	"syndra/internal/db"
+	"syndra/internal/demo"
+	"syndra/internal/zitadel"
 )
 
 // demoSeedActive records whether EnsureDemoData populated the demo fixtures
@@ -28,9 +28,9 @@ func DemoSeedActive() bool {
 func EnsureDemoData(ctx context.Context) error {
 	if !demoEnabled() {
 		if liveDirectoryActive() {
-			log.Println("[SEED] Live Zitadel directory active; skipping demo seed. Set MKAUTH_SEED_DEMO=true to force-enable.")
+			log.Println("[SEED] Live Zitadel directory active; skipping demo seed. Set SYNDRA_SEED_DEMO=true to force-enable.")
 		} else {
-			log.Println("[SEED] Demo seed disabled via MKAUTH_SEED_DEMO.")
+			log.Println("[SEED] Demo seed disabled via SYNDRA_SEED_DEMO.")
 		}
 		return nil
 	}
@@ -84,7 +84,7 @@ func EnsureDemoData(ctx context.Context) error {
 // falls back to demoSource — and the seed must also run so the app doesn't
 // end up serving the demo catalog on top of an empty DB.
 func demoEnabled() bool {
-	value := strings.ToLower(strings.TrimSpace(os.Getenv("MKAUTH_SEED_DEMO")))
+	value := strings.ToLower(strings.TrimSpace(os.Getenv("SYNDRA_SEED_DEMO")))
 	switch value {
 	case "1", "true", "yes":
 		return true

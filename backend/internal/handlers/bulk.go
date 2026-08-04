@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"mkauth/internal/db"
-	"mkauth/internal/services"
+	"syndra/internal/db"
+	"syndra/internal/services"
 )
 
 // BulkGrantRequest is one access operation aimed at a set of people.

@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"mkauth/internal/services"
+	"syndra/internal/services"
 )
 
 func handleGetCatalog(w http.ResponseWriter, r *http.Request) {

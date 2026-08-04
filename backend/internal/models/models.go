@@ -334,9 +334,9 @@ type ExpiringGrant struct {
 	Acknowledged *GrantExpiryAcknowledgement `json:"acknowledged,omitempty"`
 }
 
-// PendingPropagation is one buffered MkAuth-mediated Zitadel grant mutation.
+// PendingPropagation is one buffered Syndra-mediated Zitadel grant mutation.
 // `applied` is terminal success (synchronous 2xx); there is no `confirmed` state
-// (design Decision 1: the self-mutation guard drops MkAuth's own grant events,
+// (design Decision 1: the self-mutation guard drops Syndra's own grant events,
 // so no webhook round-trip can confirm a propagation).
 type PendingPropagation struct {
 	ID             string     `json:"id"`
@@ -396,7 +396,7 @@ type CascadeGroup struct {
 }
 
 // DriftItem is one out-of-band grant discrepancy awaiting operator triage.
-// zitadel_only: exists in Zitadel, no MkAuth intent. mkauth_only: MkAuth
+// zitadel_only: exists in Zitadel, no Syndra intent. syndra_only: Syndra
 // expects it (direct grant), Zitadel lacks it. No item resolves automatically.
 type DriftItem struct {
 	ID                string     `json:"id"`
@@ -406,7 +406,7 @@ type DriftItem struct {
 	ZitadelGrantID    string     `json:"zitadel_grant_id,omitempty"`
 	DetectedAt        time.Time  `json:"detected_at"`
 	DetectionSource   string     `json:"detection_source"` // webhook | reconciliation_sweep
-	DriftType         string     `json:"drift_type"`       // zitadel_only | mkauth_only
+	DriftType         string     `json:"drift_type"`       // zitadel_only | syndra_only
 	Status            string     `json:"status"`           // pending_triage | attributed | revoked | marked_external
 	ResolvedAt        *time.Time `json:"resolved_at,omitempty"`
 	ResolvedBy        string     `json:"resolved_by,omitempty"`
@@ -432,7 +432,7 @@ type DriftTriageItem struct {
 	// see RoleInCatalogue, which is its own kind of finding.
 	RoleGroup string `json:"role_group,omitempty"`
 
-	// RoleInCatalogue is false when the role no longer exists in MkAuth.
+	// RoleInCatalogue is false when the role no longer exists in Syndra.
 	// Adopting such a row would recreate a retired role, so the UI says so.
 	RoleInCatalogue bool `json:"role_in_catalogue"`
 
@@ -518,7 +518,7 @@ type TopologyGraph struct {
 	Edges []TopologyEdge `json:"edges"`
 }
 
-// Role represents a role created/managed through MkAuth, stored locally.
+// Role represents a role created/managed through Syndra, stored locally.
 type Role struct {
 	ID                string    `json:"id"`
 	ProjectID         string    `json:"project_id"`
@@ -586,7 +586,7 @@ type ShadowCredentialStatus struct {
 
 // CatalogRole is the computed view for the global role inventory.
 //
-// Group and the ClonedFrom pair come from the local roles table when MkAuth
+// Group and the ClonedFrom pair come from the local roles table when Syndra
 // created the role. Both are load-bearing on screen: Group is what separates
 // "Safety-gated" from "Open bench" at a glance, and clone provenance is how an
 // operator knows two similar roles are deliberately related rather than an
@@ -604,5 +604,5 @@ type CatalogRole struct {
 	RuleCount         int    `json:"rule_count"`
 	AssignedUserCount int    `json:"assigned_user_count"`
 	IsUnused          bool   `json:"is_unused"`
-	Source            string `json:"source"` // "mkauth" | "demo" | "referenced"
+	Source            string `json:"source"` // "syndra" | "demo" | "referenced"
 }

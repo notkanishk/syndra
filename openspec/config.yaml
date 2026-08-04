@@ -5,7 +5,7 @@ context: |
   Sync service: Go, go-ldap/v3, separate Docker container
   Deployment: Docker Compose in Proxmox LXC
   Domain: Identity & Access Management (IAM) for academic makerspace
-  IdP chain: Google Workspace -> Zitadel (OIDC) -> MkAuth (orchestration) -> LLDAP (legacy bridge)
+  IdP chain: Google Workspace -> Zitadel (OIDC) -> Syndra (orchestration) -> LLDAP (legacy bridge)
   External boundary: Zitadel Actions v2 is the only source-of-truth claim integration path
   Conventions: strict JSON decoding, injectable deps, backend-first testing, 200+ tests
   Navigation: see openspec/INDEX.md for the full spec graph

@@ -13,14 +13,14 @@ import (
 	"syscall"
 	"time"
 
-	"mkauth/internal/db"
-	"mkauth/internal/directory"
-	"mkauth/internal/handlers"
-	"mkauth/internal/seed"
-	"mkauth/internal/services/drift"
-	"mkauth/internal/services/expiry"
-	"mkauth/internal/services/periodic"
-	"mkauth/internal/zitadel"
+	"syndra/internal/db"
+	"syndra/internal/directory"
+	"syndra/internal/handlers"
+	"syndra/internal/seed"
+	"syndra/internal/services/drift"
+	"syndra/internal/services/expiry"
+	"syndra/internal/services/periodic"
+	"syndra/internal/zitadel"
 )
 
 // requireProductionSigningKeys aborts startup if ZITADEL_DOMAIN is set but
@@ -62,7 +62,7 @@ func warnIfWelcomeBundleMissing(ctx context.Context) {
 
 func main() {
 	requireProductionSigningKeys()
-	fmt.Println("MkAuth Backend Starting...")
+	fmt.Println("Syndra Backend Starting...")
 
 	// Initialize connections safely (They read ENVs and connect)
 	db.ConnectPostgres()
@@ -113,7 +113,7 @@ func main() {
 		log.Println("[SCHEDULER] Disabled via EXPIRY_SCHEDULER_ENABLED=false")
 	}
 
-	// Drift reconciliation scheduler: periodic Zitadel↔MkAuth sweep (B2/C6).
+	// Drift reconciliation scheduler: periodic Zitadel↔Syndra sweep (B2/C6).
 	var driftSched *periodic.Runner
 	if driftSchedulerEnabled() {
 		driftSched = periodic.New("DRIFT", driftInterval(), 6*time.Hour, func(ctx context.Context) error {

@@ -70,7 +70,7 @@ Conventions: each task creates its tests before its production code (TDD). Commi
 Run from the repo root (the `openspec` CLI discovers `./openspec/` relative to cwd and errors with `Unknown item …` when run from inside `openspec/`):
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 openspec validate wave-2-part-2-backend-coherence --strict
 ```
 Expected: `Change 'wave-2-part-2-backend-coherence' is valid`. If it does not, fix the spec deltas until it does — do not proceed.
@@ -78,7 +78,7 @@ Expected: `Change 'wave-2-part-2-backend-coherence' is valid`. If it does not, f
 - [ ] **Step 0.2: Stage and commit the scaffolding**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 git add openspec/changes/wave-2-part-2-backend-coherence/ docs/superpowers/plans/2026-05-12-wave-2-part-2-backend-coherence.md
 git status
 git commit -m "$(cat <<'EOF'
@@ -100,7 +100,7 @@ EOF
 The wave's final verification (Step 7.1) asserts zero gofmt diff in the files this wave creates or modifies. Several existing files in that touch set carry pre-existing drift (verified at plan-write time: `webhook.go`, `deps.go`, `action_test.go`, `views.go`, `repositories.go`). Normalising them once, before implementation, keeps every subsequent commit's diff focused on logic instead of incidental whitespace.
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 gofmt -l \
   backend/internal/auth/jwt.go \
   backend/internal/auth/jwt_test.go \
@@ -125,7 +125,7 @@ If `gofmt -l` printed any paths, normalise them and run the test suite to confir
 
 ```bash
 # Stage 1 — rewrite. From repo root.
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 gofmt -w \
   backend/internal/auth/jwt.go \
   backend/internal/auth/jwt_test.go \
@@ -144,7 +144,7 @@ gofmt -w \
   backend/internal/db/repositories.go
 
 # Stage 2 — verify nothing broke. From backend/ since go.mod lives there.
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/backend
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
 go test ./... -count=1
 go vet ./...
 
@@ -152,7 +152,7 @@ go vet ./...
 # Stage ONLY the touch-set files so unrelated dirty changes elsewhere
 # under backend/internal/ (in-flight work, scratch edits) cannot
 # accidentally ride along on the formatting commit.
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 git status                   # show worktree state; expect only touch-set drift
 git diff --stat
 git diff -- \
@@ -243,7 +243,7 @@ If the file does not already import `errors`, add it to the import block at the 
 - [ ] **Step 1.2: Run the test — confirm it fails (no `ErrComplexity` defined yet)**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/backend
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
 go test ./internal/services/ -run TestValidatePasswordComplexity_WrapsSentinel -v
 ```
 
@@ -301,7 +301,7 @@ with:
 		return fmt.Errorf("%w: must be at least 12 characters", services.ErrComplexity)
 ```
 
-If `services` is not already in the import block, add `"mkauth/internal/services"`.
+If `services` is not already in the import block, add `"syndra/internal/services"`.
 
 - [ ] **Step 1.6: Run handler tests — they should still pass (handler logic unchanged yet)**
 
@@ -315,7 +315,7 @@ Expected: PASS. The handler's `isComplexityError` prefix-sniff still matches the
 
 In `backend/internal/handlers/vault.go`:
 
-1. Add `"mkauth/internal/services"` to the import block (if not present).
+1. Add `"syndra/internal/services"` to the import block (if not present).
 2. Replace lines 72–76:
 
 ```go
@@ -349,7 +349,7 @@ Expected: every test PASSes. If any fails, the fixture or the swap is wrong — 
 - [ ] **Step 1.9: Commit**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 git add backend/internal/services/vault.go backend/internal/services/vault_test.go backend/internal/handlers/vault.go backend/internal/handlers/vault_test.go
 git commit -m "$(cat <<'EOF'
 refactor(vault): classify complexity errors via typed sentinel
@@ -406,7 +406,7 @@ If the file does not already define `setupNoopWebhookDeps` (it should — see th
 - [ ] **Step 2.2: Run the test — confirm it fails (current code silently defaults `event_type` to `grant_added`)**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/backend
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
 go test ./internal/handlers/ -run TestHandleZitadelWebhook_InternalMissingEventType_Returns400 -v
 ```
 
@@ -569,7 +569,7 @@ func zitadelGrantRemovedFixtureUnresolvable(t *testing.T, userID, grantID string
 }
 ```
 
-If the test file does not already import `time`, `bytes`, `encoding/json`, `context`, `github.com/jackc/pgx/v5`, `mkauth/internal/db`, or `mkauth/internal/zitadel`, add them.
+If the test file does not already import `time`, `bytes`, `encoding/json`, `context`, `github.com/jackc/pgx/v5`, `syndra/internal/db`, or `syndra/internal/zitadel`, add them.
 
 > **Why the fixture matters:** the previous draft used `eventType` / `aggregate.id` / `editorUser.id` — none of those are read by `translateZitadelEvent` (which probes for top-level `aggregateID` at `webhook_translate.go:61`). With the wrong shape, the decoder falls through to internal-shape strict decode and the test asserts a path that never runs. Verify the fixture by setting a breakpoint or `log.Printf` inside `mapGrantEvent` if anything looks off.
 
@@ -657,7 +657,7 @@ Expected: all PASS.
 - [ ] **Step 2.12: Commit**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 git add backend/internal/handlers/webhook.go backend/internal/handlers/webhook_test.go backend/internal/handlers/deps.go backend/internal/db/repositories.go
 git commit -m "$(cat <<'EOF'
 refactor(webhook): strict event_type + observable enrichment-incomplete drops
@@ -816,7 +816,7 @@ If the imports do not include `errors`, `strings`, or `github.com/redis/go-redis
 - [ ] **Step 3.2: Run the tests — confirm they fail**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/backend
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
 go test ./internal/handlers/ -run TestClaimFailureModeRead -v
 ```
 
@@ -959,7 +959,7 @@ Expected: every test PASSes. (`-count=1` defeats Go's test cache and forces re-e
 - [ ] **Step 3.8: Commit**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 git add backend/internal/handlers/action.go backend/internal/handlers/deps.go backend/internal/handlers/action_test.go
 git commit -m "$(cat <<'EOF'
 feat(action): cache claim_failure_mode in Redis with DB-error fallback
@@ -1000,7 +1000,7 @@ EOF
 - [ ] **Step 4.1: Locate `withAdminUserID` and `getAdminUserID`**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/backend
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
 grep -rn "withAdminUserID\|getAdminUserID" internal/handlers/ --include='*.go' | grep -v "_test.go"
 ```
 
@@ -1161,7 +1161,7 @@ func getAdminUserID(ctx context.Context) string {
 
 Remove the previous `withAdminUserID` if it remained as a thin wrapper — single-caller, no longer useful. (If something else calls it, leave it as a wrapper that calls `withPrincipal`.)
 
-If the file does not already import `"mkauth/internal/auth"` or `"context"`, add them.
+If the file does not already import `"syndra/internal/auth"` or `"context"`, add them.
 
 - [ ] **Step 4.7: Add the test seam for JWT validation, then rewrite `withUserAuth`**
 
@@ -1177,7 +1177,7 @@ In `backend/internal/handlers/deps.go`, inside the existing `var (` block, add:
 	jwtValidate = auth.Validate
 ```
 
-Add `"mkauth/internal/auth"` to `deps.go`'s import block if not already present.
+Add `"syndra/internal/auth"` to `deps.go`'s import block if not already present.
 
 Now replace `backend/internal/handlers/router.go:153-189` (`withUserAuth`):
 
@@ -1192,7 +1192,7 @@ Now replace `backend/internal/handlers/router.go:153-189` (`withUserAuth`):
 // re-parsing.
 //
 // Local-dev mode (ZITADEL_DOMAIN unset): falls back to shared API key
-// (MKAUTH_API_KEY). No principal is stashed; getAdminUserID returns "".
+// (SYNDRA_API_KEY). No principal is stashed; getAdminUserID returns "".
 func withUserAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		domain := os.Getenv("ZITADEL_DOMAIN")
@@ -1229,7 +1229,7 @@ func withUserAuth(next http.HandlerFunc) http.HandlerFunc {
 }
 ```
 
-After this rewrite `router.go` no longer references `auth.X` directly — `jwtValidate` is the typed indirection in `deps.go`, and `principalFromContext` (defined in the file with `withAdminUserID`/`getAdminUserID` per Step 4.6) returns the `*auth.Principal` for downstream readers. If a prior edit left `"mkauth/internal/auth"` in `router.go`'s import block, **remove it** — Go will otherwise fail to compile with `imported and not used`. The package stays imported in `deps.go` (for `jwtValidate` and the `*auth.Principal` type) and in the context-helper file (for `withPrincipal` / `principalFromContext`).
+After this rewrite `router.go` no longer references `auth.X` directly — `jwtValidate` is the typed indirection in `deps.go`, and `principalFromContext` (defined in the file with `withAdminUserID`/`getAdminUserID` per Step 4.6) returns the `*auth.Principal` for downstream readers. If a prior edit left `"syndra/internal/auth"` in `router.go`'s import block, **remove it** — Go will otherwise fail to compile with `imported and not used`. The package stays imported in `deps.go` (for `jwtValidate` and the `*auth.Principal` type) and in the context-helper file (for `withPrincipal` / `principalFromContext`).
 
 - [ ] **Step 4.8: Rewrite `withOperatorAuth` in `router.go`**
 
@@ -1289,7 +1289,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"mkauth/internal/auth"
+	"syndra/internal/auth"
 )
 
 // TestWithOperatorAuth_ParsesJWTExactlyOnce asserts the C4 contract by
@@ -1426,7 +1426,7 @@ Expected: clean. If `encoding/base64`, `encoding/json`, or `strings` linger as u
 - [ ] **Step 4.12: Commit**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 # Stage ONLY this task's explicit touch set. Do NOT use a directory or glob
 # add — unrelated dirty work under backend/internal/handlers/ would ride
 # along otherwise.
@@ -1498,7 +1498,7 @@ EOF
 - [ ] **Step 5.1: Take a snapshot of `repositories.go` for diff verification**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/backend
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
 cp internal/db/repositories.go /tmp/repositories.go.pre-split
 ```
 
@@ -1586,14 +1586,14 @@ Create `backend/internal/db/vault.go` with the shadow credentials section (`repo
 Use `git rm` so the deletion is recorded in the index immediately — Step 5.20's commit can then stage only the 11 new files without worrying about how the deletion gets captured.
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 git rm backend/internal/db/repositories.go
 ```
 
 - [ ] **Step 5.15: Compile the `db` package**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/backend
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
 go build ./internal/db/
 ```
 
@@ -1637,7 +1637,7 @@ Expected: clean.
 - [ ] **Step 5.20: Commit**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 # Stage ONLY the split's touch set — the 11 new files. The deletion of
 # repositories.go was already staged in Step 5.14 via `git rm`. Do NOT
 # use 'git add backend/internal/db/' (would also stage any unrelated
@@ -1734,7 +1734,7 @@ func TestListApplications_CollectsUserRolesExactlyOncePerUser(t *testing.T) {
 - [ ] **Step 6.2: Run the test — confirm it fails**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/backend
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
 go test ./internal/services/ -run TestListApplications_CollectsUserRolesExactlyOncePerUser -v
 ```
 
@@ -2378,7 +2378,7 @@ Expected: all PASS.
 - [ ] **Step 6.14: Commit**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 git add backend/internal/services/views.go backend/internal/services/views_test.go
 git commit -m "$(cat <<'EOF'
 refactor(views): request-scoped accessSnapshot collapses N*M role lookups
@@ -2421,11 +2421,11 @@ EOF
 Run `go test`/`go vet` from inside `backend/` (catches regressions across the whole tree). The gofmt gate is **scoped to this wave's touch set** — files Wave 2 · Part 2 creates or modifies. Pre-existing drift in untouched files (e.g. `db/postgres.go`, `models/models.go`) is real but out of scope; Step 0.3 already normalised the touched-but-pre-existing files into a baseline commit, so any drift here is drift this wave introduced.
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/backend
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
 go test ./... -count=1
 go vet ./...
 
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 gofmt -d \
   backend/internal/auth/jwt.go \
   backend/internal/auth/jwt_test.go \
@@ -2462,7 +2462,7 @@ Expected: all tests PASS; vet clean; gofmt zero diff against the scoped list. If
 - [ ] **Step 7.2: Refresh codebase-memory graph**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 ```
 
 Then in the Claude Code session, invoke:
@@ -2474,7 +2474,7 @@ Then in the Claude Code session, invoke:
 Run from the repo root (the CLI errors out when invoked from inside `openspec/`):
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 openspec validate wave-2-part-2-backend-coherence --strict
 ```
 
@@ -2510,7 +2510,7 @@ Also update the "Phase Mapping" table row for Phase 5.5:
 
 - [ ] **Step 8.2: Add the feature-coverage row**
 
-In `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md`, add or update rows for the three observable changes from this wave:
+In `openspec/changes/syndra-core-architecture/specs/feature-coverage.md`, add or update rows for the three observable changes from this wave:
 
 - **Cached degraded-mode resolution** — Integrated (C5): `claim_failure_mode` survives transient DB outages via Redis read-through cache.
 - **Single-parse JWT principal in request context** — Integrated (C4): operator routes no longer double-parse the bearer token.
@@ -2521,8 +2521,8 @@ In `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md`, add or
 - [ ] **Step 8.3: Commit INDEX + feature-coverage updates**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
-git add openspec/INDEX.md openspec/changes/mkauth-core-architecture/specs/feature-coverage.md openspec/changes/wave-2-part-2-backend-coherence/tasks.md
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
+git add openspec/INDEX.md openspec/changes/syndra-core-architecture/specs/feature-coverage.md openspec/changes/wave-2-part-2-backend-coherence/tasks.md
 # tick all checkboxes in tasks.md from [ ] to [x] before commit
 git commit -m "$(cat <<'EOF'
 docs(openspec): record Wave 2 · Part 2 in INDEX and feature-coverage

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // DrainResult summarizes one operator-triggered drain pass.

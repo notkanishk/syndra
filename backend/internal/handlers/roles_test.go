@@ -8,9 +8,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
-	"mkauth/internal/services"
+	"syndra/internal/db"
+	"syndra/internal/models"
+	"syndra/internal/services"
 )
 
 func resetRoleDeps(t *testing.T) {
@@ -169,7 +169,7 @@ func TestGetGlobalRoleCatalog_MergesSources(t *testing.T) {
 
 	svcGlobalRoleCatalog = func(_ context.Context) ([]models.CatalogRole, error) {
 		return []models.CatalogRole{
-			{ProjectID: "p1", RoleKey: "admin", Source: "mkauth"},
+			{ProjectID: "p1", RoleKey: "admin", Source: "syndra"},
 			{ProjectID: "p2", RoleKey: "member", Source: "demo"},
 			{ProjectID: "p3", RoleKey: "viewer", Source: "referenced"},
 		}, nil
@@ -191,7 +191,7 @@ func TestGetGlobalRoleCatalog_MergesSources(t *testing.T) {
 	for _, cr := range catalog {
 		sources[cr.Source] = true
 	}
-	if !sources["mkauth"] || !sources["demo"] || !sources["referenced"] {
+	if !sources["syndra"] || !sources["demo"] || !sources["referenced"] {
 		t.Errorf("expected all three sources, got %v", sources)
 	}
 }

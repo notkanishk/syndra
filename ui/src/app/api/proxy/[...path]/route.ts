@@ -2,7 +2,7 @@ import { getSession } from "@/lib/session";
 import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://backend:8080";
-const API_KEY = process.env.MKAUTH_API_KEY || "";
+const API_KEY = process.env.SYNDRA_API_KEY || "";
 
 /**
  * `/users/{self}/…` subtrees a member may reach.

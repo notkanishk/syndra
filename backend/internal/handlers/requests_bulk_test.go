@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"mkauth/internal/auth"
-	"mkauth/internal/db"
-	"mkauth/internal/models"
-	"mkauth/internal/services"
-	"mkauth/internal/services/propagation"
+	"syndra/internal/auth"
+	"syndra/internal/db"
+	"syndra/internal/models"
+	"syndra/internal/services"
+	"syndra/internal/services/propagation"
 )
 
 func bulkDecisionReq(t *testing.T, body string, apply bool) *http.Request {

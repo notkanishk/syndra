@@ -5,7 +5,7 @@ import (
 	"errors"
 	"log"
 
-	"mkauth/internal/db"
+	"syndra/internal/db"
 )
 
 // enrichGrantPayload fills in the projectId (and roleKeys for grant_removed)

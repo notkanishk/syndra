@@ -6,9 +6,9 @@ import (
 	"sort"
 	"time"
 
-	"mkauth/internal/models"
-	"mkauth/internal/services"
-	"mkauth/internal/zitadel"
+	"syndra/internal/models"
+	"syndra/internal/services"
+	"syndra/internal/zitadel"
 )
 
 // reconciliationPageSize is the per-page limit on the Zitadel ListAllGrants
@@ -21,7 +21,7 @@ var reconciliationPageSize = 500
 
 // reconciliationSafetyCap stops the pagination loop after this many grants so
 // a pathologically large org cannot cause an unbounded fetch. Past this point
-// the response sets Truncated=true and the diff is best-effort — only_in_mkauth
+// the response sets Truncated=true and the diff is best-effort — only_in_syndra
 // and drift may contain false positives because un-fetched Zitadel pages were
 // not compared. Sized for roughly 20× the largest expected makerspace tenant.
 //
@@ -30,14 +30,14 @@ var reconciliationPageSize = 500
 var reconciliationSafetyCap = 2_000 // B2: right-sized for the single-LXC ~200-user makerspace (~10× headroom)
 
 // ReconciliationGrant is one (user, project, role-set) pair on either the
-// MkAuth or Zitadel side of the diff. Roles are sorted ascending so equality
+// Syndra or Zitadel side of the diff. Roles are sorted ascending so equality
 // checks and rendering are stable.
 type ReconciliationGrant struct {
 	UserID    string   `json:"user_id"`
 	ProjectID string   `json:"project_id"`
 	RoleKeys  []string `json:"role_keys"`
 	// GrantID is populated for Zitadel-side entries so the UI can drill into
-	// the exact grant record. Empty on the MkAuth side (each row is keyed by
+	// the exact grant record. Empty on the Syndra side (each row is keyed by
 	// (user_id, project_id, role_key) without a corresponding Zitadel grant).
 	GrantID string `json:"grant_id,omitempty"`
 }
@@ -48,9 +48,9 @@ type ReconciliationGrant struct {
 type ReconciliationDrift struct {
 	UserID        string   `json:"user_id"`
 	ProjectID     string   `json:"project_id"`
-	MkAuthRoles   []string `json:"mkauth_roles"`
+	SyndraRoles   []string `json:"syndra_roles"`
 	ZitadelRoles  []string `json:"zitadel_roles"`
-	OnlyInMkAuth  []string `json:"only_in_mkauth"`
+	OnlyInSyndra  []string `json:"only_in_syndra"`
 	OnlyInZitadel []string `json:"only_in_zitadel"`
 	GrantID       string   `json:"grant_id,omitempty"`
 }
@@ -61,7 +61,7 @@ type ReconciliationDrift struct {
 // Truncated is false, the diff is authoritative — both buckets and drift
 // reflect the complete state at GeneratedAt.
 type ReconciliationDiff struct {
-	OnlyInMkAuth  []ReconciliationGrant `json:"only_in_mkauth"`
+	OnlyInSyndra  []ReconciliationGrant `json:"only_in_syndra"`
 	OnlyInZitadel []ReconciliationGrant `json:"only_in_zitadel"`
 	Drift         []ReconciliationDrift `json:"drift"`
 	GeneratedAt   time.Time             `json:"generated_at"`
@@ -69,15 +69,15 @@ type ReconciliationDiff struct {
 }
 
 // handleGetReconciliationDiff is read-only: it surfaces the symmetric
-// difference between MkAuth-direct grants and Zitadel-side user grants so
+// difference between Syndra-direct grants and Zitadel-side user grants so
 // operators can spot drift before it widens. No remediation is performed —
 // the surface is visibility-only per the obsidian-clarity-redesign spec.
 //
 // Drift categories:
-//   - only_in_mkauth: (user, project) pairs in the MkAuth direct-grants table
+//   - only_in_syndra: (user, project) pairs in the Syndra direct-grants table
 //     but absent from Zitadel. Usually a Zitadel-side revocation that wasn't
 //     reflected back, or a pending sync.
-//   - only_in_zitadel: (user, project) pairs Zitadel surfaces but MkAuth doesn't
+//   - only_in_zitadel: (user, project) pairs Zitadel surfaces but Syndra doesn't
 //     directly track. Includes derived grants from mapping rules (expected) and
 //     historical/manual grants (operator action needed).
 //   - drift: same (user, project) on both sides but role sets diverge. The
@@ -85,7 +85,7 @@ type ReconciliationDiff struct {
 func handleGetReconciliationDiff(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	mkauthGrants, err := svcAllDirectGrants(ctx)
+	syndraGrants, err := svcAllDirectGrants(ctx)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -97,7 +97,7 @@ func handleGetReconciliationDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	diff := computeReconciliationDiff(mkauthGrants, allZitadel)
+	diff := computeReconciliationDiff(syndraGrants, allZitadel)
 	diff.Truncated = truncated
 	diff.GeneratedAt = time.Now().UTC()
 
@@ -113,7 +113,7 @@ func handleGetReconciliationDiff(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	holder := services.BuildHolderSet(mkauthGrants, allZitadel)
+	holder := services.BuildHolderSet(syndraGrants, allZitadel)
 	diff.OnlyInZitadel = filterExplained(diff.OnlyInZitadel, holder, rules, exclusions)
 
 	jsonResponse(w, http.StatusOK, diff)
@@ -146,8 +146,8 @@ func filterExplained(in []ReconciliationGrant, holder map[services.HolderKey]boo
 // every grant is fetched or reconciliationSafetyCap is hit. Returns the full
 // slice, a truncated flag (true only when the cap halted iteration), and any
 // transport error from a paged call. Iterating to completion is critical for
-// reconciliation correctness — comparing MkAuth's full grant table against
-// only the first Zitadel page produces false positives in only_in_mkauth and
+// reconciliation correctness — comparing Syndra's full grant table against
+// only the first Zitadel page produces false positives in only_in_syndra and
 // drift for any grant that lives on a later page.
 func fetchAllZitadelGrants(ctx context.Context) ([]zitadel.UserGrant, bool, error) {
 	var all []zitadel.UserGrant
@@ -179,20 +179,20 @@ func fetchAllZitadelGrants(ctx context.Context) ([]zitadel.UserGrant, bool, erro
 // computeReconciliationDiff is the pure comparison core. Extracted so tests
 // can exercise it without spinning up an HTTP handler.
 func computeReconciliationDiff(
-	mkauthGrants []models.DirectGrant,
+	syndraGrants []models.DirectGrant,
 	zitadelGrants []zitadel.UserGrant,
 ) ReconciliationDiff {
 	type pairKey struct{ userID, projectID string }
 
-	// Build a (user, project) → role-set view of MkAuth direct grants. Multiple
+	// Build a (user, project) → role-set view of Syndra direct grants. Multiple
 	// rows for the same pair (one row per role) collapse into a single set.
-	mkauthByPair := make(map[pairKey]map[string]struct{})
-	for _, g := range mkauthGrants {
+	syndraByPair := make(map[pairKey]map[string]struct{})
+	for _, g := range syndraGrants {
 		k := pairKey{userID: g.UserID, projectID: g.ProjectID}
-		if mkauthByPair[k] == nil {
-			mkauthByPair[k] = make(map[string]struct{})
+		if syndraByPair[k] == nil {
+			syndraByPair[k] = make(map[string]struct{})
 		}
-		mkauthByPair[k][g.RoleKey] = struct{}{}
+		syndraByPair[k][g.RoleKey] = struct{}{}
 	}
 
 	// Same for Zitadel side. UserGrant is already (user, project, []roleKeys),
@@ -214,16 +214,16 @@ func computeReconciliationDiff(
 	}
 
 	out := ReconciliationDiff{
-		OnlyInMkAuth:  []ReconciliationGrant{},
+		OnlyInSyndra:  []ReconciliationGrant{},
 		OnlyInZitadel: []ReconciliationGrant{},
 		Drift:         []ReconciliationDrift{},
 	}
 
-	// Walk MkAuth-side pairs first: emit only_in_mkauth or drift entries.
-	for k, mkRoles := range mkauthByPair {
+	// Walk Syndra-side pairs first: emit only_in_syndra or drift entries.
+	for k, mkRoles := range syndraByPair {
 		zRoles, hasZ := zitadelByPair[k]
 		if !hasZ {
-			out.OnlyInMkAuth = append(out.OnlyInMkAuth, ReconciliationGrant{
+			out.OnlyInSyndra = append(out.OnlyInSyndra, ReconciliationGrant{
 				UserID:    k.userID,
 				ProjectID: k.projectID,
 				RoleKeys:  sortedKeys(mkRoles),
@@ -232,17 +232,17 @@ func computeReconciliationDiff(
 		}
 
 		// Same pair on both sides — diff the role sets.
-		onlyInMkAuth := setDifference(mkRoles, zRoles)
+		onlyInSyndra := setDifference(mkRoles, zRoles)
 		onlyInZitadel := setDifference(zRoles, mkRoles)
-		if len(onlyInMkAuth) == 0 && len(onlyInZitadel) == 0 {
+		if len(onlyInSyndra) == 0 && len(onlyInZitadel) == 0 {
 			continue // sets agree → no drift to report
 		}
 		out.Drift = append(out.Drift, ReconciliationDrift{
 			UserID:        k.userID,
 			ProjectID:     k.projectID,
-			MkAuthRoles:   sortedKeys(mkRoles),
+			SyndraRoles:   sortedKeys(mkRoles),
 			ZitadelRoles:  sortedKeys(zRoles),
-			OnlyInMkAuth:  onlyInMkAuth,
+			OnlyInSyndra:  onlyInSyndra,
 			OnlyInZitadel: onlyInZitadel,
 			GrantID:       zitadelGrantID[k],
 		})
@@ -250,7 +250,7 @@ func computeReconciliationDiff(
 
 	// Pairs only in Zitadel (mapping-rule derivatives or pre-existing manual).
 	for k, zRoles := range zitadelByPair {
-		if _, hasMk := mkauthByPair[k]; hasMk {
+		if _, hasMk := syndraByPair[k]; hasMk {
 			continue
 		}
 		out.OnlyInZitadel = append(out.OnlyInZitadel, ReconciliationGrant{
@@ -262,7 +262,7 @@ func computeReconciliationDiff(
 	}
 
 	// Stable ordering for deterministic responses (eases UI rendering and tests).
-	sort.Slice(out.OnlyInMkAuth, func(i, j int) bool { return reconciliationLess(out.OnlyInMkAuth[i], out.OnlyInMkAuth[j]) })
+	sort.Slice(out.OnlyInSyndra, func(i, j int) bool { return reconciliationLess(out.OnlyInSyndra[i], out.OnlyInSyndra[j]) })
 	sort.Slice(out.OnlyInZitadel, func(i, j int) bool { return reconciliationLess(out.OnlyInZitadel[i], out.OnlyInZitadel[j]) })
 	sort.Slice(out.Drift, func(i, j int) bool {
 		if out.Drift[i].UserID != out.Drift[j].UserID {

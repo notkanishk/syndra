@@ -74,7 +74,7 @@ Item ids match [`docs/UI-CAPABILITY-GAPS.md`](../../../docs/UI-CAPABILITY-GAPS.m
       UNIQUE constraint the schema already carries. The design diagram was the only thing claiming
       otherwise. Reopens on a real integration needing roles from two projects in one token —
       design Decision 14
-- [x] 4.6 **C9a** Advanced shows **Zitadel's** grant id per project (MkAuth's own row was already
+- [x] 4.6 **C9a** Advanced shows **Zitadel's** grant id per project (Syndra's own row was already
       there, and answers a different question). Operator-only and not fetched otherwise; a project
       with no upstream grant says so rather than showing a dash — design Decision 15
 - [ ] 4.7 **C9b** Hardware sync state on the person page. **Not buildable:** there is no per-user

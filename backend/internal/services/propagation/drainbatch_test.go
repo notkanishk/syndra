@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // TestDrainBatch_ProcessesOnlyGivenIDs asserts DrainBatch takes the advisory lock once,

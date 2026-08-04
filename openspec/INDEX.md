@@ -1,9 +1,9 @@
-# MkAuth OpenSpec Index
+# Syndra OpenSpec Index
 
 > **Looking for something specific?**
-> - What's built vs not? → [Feature Coverage](changes/mkauth-core-architecture/specs/feature-coverage.md)
-> - What's the architecture? → [Core Design](changes/mkauth-core-architecture/design.md)
-> - What's next? → **[NEXT.md](NEXT.md)** — every open gap in one place. Long-range framing: [Roadmap](changes/mkauth-core-architecture/ROADMAP.md) (Phase 5-6)
+> - What's built vs not? → [Feature Coverage](changes/syndra-core-architecture/specs/feature-coverage.md)
+> - What's the architecture? → [Core Design](changes/syndra-core-architecture/design.md)
+> - What's next? → **[NEXT.md](NEXT.md)** — every open gap in one place. Long-range framing: [Roadmap](changes/syndra-core-architecture/ROADMAP.md) (Phase 5-6)
 > - How was X decided? → Change Log below, then the relevant proposal
 
 ## Capability Specs
@@ -12,17 +12,17 @@ Each capability has one canonical spec. **Status** lets you skip specs that aren
 
 | Capability | Status | Spec | Origin |
 |-----------|--------|------|--------|
-| Role Management | Integrated, cross-project index + role → members with access sources | [spec](changes/mkauth-core-architecture/specs/role-management/spec.md) | core-architecture + advanced-role-crud + dashboard-ux-elevation |
-| User Management | Integrated, person detail + direct-grant removal + member surface | [spec](changes/mkauth-core-architecture/specs/user-management/spec.md) | core-architecture + live-zitadel-data-source + live-directory-identity-completeness + live-only-production-ui + dashboard-ux-elevation |
-| Access Governance | Integrated, Basic/Advanced IA + indicators endpoint + source-specific removal (bulk ops deferred P5) | [spec](changes/mkauth-core-architecture/specs/access-governance/spec.md) | core-architecture + contract-hardening + grant-expiration-scheduler + dashboard-ux-elevation |
-| Application Claims | Integrated, **operator-editable token shape applied to real tokens** (shared shaper, per-app overrides) | [spec](changes/mkauth-core-architecture/specs/application-claims/spec.md) | core-architecture + backend-onboarding + actions-v2-deployment + live-directory-identity-completeness + live-only-production-ui + dashboard-ux-elevation |
-| Service Catalog | Integrated, inline modal Request Access flow (service-to-bundle mapping deferred P5) | [spec](changes/mkauth-core-architecture/specs/service-catalog/spec.md) | core-architecture + live-zitadel-data-source + live-directory-identity-completeness + live-only-production-ui + dashboard-ux-elevation |
-| Automation Policies | Integrated, mapping-rule live preview + cycle warning (welcome bundle config UI deferred P5) | [spec](changes/mkauth-core-architecture/specs/automation-policies/spec.md) | core-architecture + backend-onboarding + dashboard-ux-elevation |
-| LDAP Sync | Partial (reconciliation deferred P5, password compat unresolved) | [spec](changes/mkauth-core-architecture/specs/ldap-sync/spec.md) | core-architecture |
-| Provisioning | Partial (reconciliation, compensating revocations deferred P5) | [spec](changes/mkauth-core-architecture/specs/provisioning/spec.md) | core-architecture |
-| Demo Catalog | Integrated (local-dev fallback; bypassed when live Zitadel is configured; UI MUST NOT serialize demo entities in production) | [spec](changes/mkauth-core-architecture/specs/demo-catalog/spec.md) | core-architecture + live-zitadel-data-source + live-only-production-ui |
-| Topology Graph | Integrated, pan/zoom + node deeplinks | [spec](changes/mkauth-core-architecture/specs/topology-graph/spec.md) | core-architecture + dashboard-ux-elevation |
-| Operational Readiness | Integrated, toast + ConfirmModal + ErrorBoundary + theme toggle + sidebar activity badges + system/mode (LXC observability deferred P5) | [spec](changes/mkauth-core-architecture/specs/operational-readiness/spec.md) | core-architecture + live-only-production-ui + dashboard-ux-elevation |
+| Role Management | Integrated, cross-project index + role → members with access sources | [spec](changes/syndra-core-architecture/specs/role-management/spec.md) | core-architecture + advanced-role-crud + dashboard-ux-elevation |
+| User Management | Integrated, person detail + direct-grant removal + member surface | [spec](changes/syndra-core-architecture/specs/user-management/spec.md) | core-architecture + live-zitadel-data-source + live-directory-identity-completeness + live-only-production-ui + dashboard-ux-elevation |
+| Access Governance | Integrated, Basic/Advanced IA + indicators endpoint + source-specific removal (bulk ops deferred P5) | [spec](changes/syndra-core-architecture/specs/access-governance/spec.md) | core-architecture + contract-hardening + grant-expiration-scheduler + dashboard-ux-elevation |
+| Application Claims | Integrated, **operator-editable token shape applied to real tokens** (shared shaper, per-app overrides) | [spec](changes/syndra-core-architecture/specs/application-claims/spec.md) | core-architecture + backend-onboarding + actions-v2-deployment + live-directory-identity-completeness + live-only-production-ui + dashboard-ux-elevation |
+| Service Catalog | Integrated, inline modal Request Access flow (service-to-bundle mapping deferred P5) | [spec](changes/syndra-core-architecture/specs/service-catalog/spec.md) | core-architecture + live-zitadel-data-source + live-directory-identity-completeness + live-only-production-ui + dashboard-ux-elevation |
+| Automation Policies | Integrated, mapping-rule live preview + cycle warning (welcome bundle config UI deferred P5) | [spec](changes/syndra-core-architecture/specs/automation-policies/spec.md) | core-architecture + backend-onboarding + dashboard-ux-elevation |
+| LDAP Sync | Partial (reconciliation deferred P5, password compat unresolved) | [spec](changes/syndra-core-architecture/specs/ldap-sync/spec.md) | core-architecture |
+| Provisioning | Partial (reconciliation, compensating revocations deferred P5) | [spec](changes/syndra-core-architecture/specs/provisioning/spec.md) | core-architecture |
+| Demo Catalog | Integrated (local-dev fallback; bypassed when live Zitadel is configured; UI MUST NOT serialize demo entities in production) | [spec](changes/syndra-core-architecture/specs/demo-catalog/spec.md) | core-architecture + live-zitadel-data-source + live-only-production-ui |
+| Topology Graph | Integrated, pan/zoom + node deeplinks | [spec](changes/syndra-core-architecture/specs/topology-graph/spec.md) | core-architecture + dashboard-ux-elevation |
+| Operational Readiness | Integrated, toast + ConfirmModal + ErrorBoundary + theme toggle + sidebar activity badges + system/mode (LXC observability deferred P5) | [spec](changes/syndra-core-architecture/specs/operational-readiness/spec.md) | core-architecture + live-only-production-ui + dashboard-ux-elevation |
 | Contract Quality | Integrated | [spec](specs/contract-quality/spec.md) | contract-hardening + backend-onboarding |
 | Backend API Testing | Integrated | [spec](specs/backend-api-testing/spec.md) | contract-hardening + backend-onboarding |
 | Production Security | Integrated | [spec](specs/production-security-boundary/spec.md) | backend-onboarding |
@@ -32,9 +32,9 @@ Each capability has one canonical spec. **Status** lets you skip specs that aren
 
 | Document | When to read |
 |----------|-------------|
-| [Core Design](changes/mkauth-core-architecture/design.md) | Understanding the system — planes, philosophy, Zitadel matrix, IdP chain |
-| [Roadmap](changes/mkauth-core-architecture/ROADMAP.md) | Understanding what's done and what's ahead — phase timeline with cross-refs |
-| [Feature Coverage](changes/mkauth-core-architecture/specs/feature-coverage.md) | Auditing spec vs reality — planned vs integrated matrix |
+| [Core Design](changes/syndra-core-architecture/design.md) | Understanding the system — planes, philosophy, Zitadel matrix, IdP chain |
+| [Roadmap](changes/syndra-core-architecture/ROADMAP.md) | Understanding what's done and what's ahead — phase timeline with cross-refs |
+| [Feature Coverage](changes/syndra-core-architecture/specs/feature-coverage.md) | Auditing spec vs reality — planned vs integrated matrix |
 
 ## Change Log
 
@@ -42,7 +42,7 @@ Every change directory has: `proposal.md` (why), `design.md` (how), `tasks.md` (
 
 | Change | Phase | Status | Links |
 |--------|-------|--------|-------|
-| [Core Architecture](changes/mkauth-core-architecture/) | 1 | Complete | [proposal](changes/mkauth-core-architecture/proposal.md) / [design](changes/mkauth-core-architecture/design.md) / [impl](changes/mkauth-core-architecture/IMPLEMENTATION.md) |
+| [Core Architecture](changes/syndra-core-architecture/) | 1 | Complete | [proposal](changes/syndra-core-architecture/proposal.md) / [design](changes/syndra-core-architecture/design.md) / [impl](changes/syndra-core-architecture/IMPLEMENTATION.md) |
 | [Bun Migration](changes/bun-native-migration/) | 1 | Archived | [proposal](changes/bun-native-migration/proposal.md) / [impl](changes/bun-native-migration/IMPLEMENTATION.md) |
 | [Contract Hardening](changes/archive/2026-07-29-contract-hardening-and-test-foundation/) | 2 | Archived | [proposal](changes/archive/2026-07-29-contract-hardening-and-test-foundation/proposal.md) / [design](changes/archive/2026-07-29-contract-hardening-and-test-foundation/design.md) / [impl](changes/archive/2026-07-29-contract-hardening-and-test-foundation/IMPLEMENTATION.md) |
 | [Backend Onboarding & Security](changes/archive/2026-07-29-backend-owned-onboarding-and-security-boundary/) | 3 | Archived | [proposal](changes/archive/2026-07-29-backend-owned-onboarding-and-security-boundary/proposal.md) / [design](changes/archive/2026-07-29-backend-owned-onboarding-and-security-boundary/design.md) / [impl](changes/archive/2026-07-29-backend-owned-onboarding-and-security-boundary/IMPLEMENTATION.md) |
@@ -83,6 +83,6 @@ Every change directory has: `proposal.md` (why), `design.md` (how), `tasks.md` (
 | 2: Contract Hardening | Complete | contract-hardening |
 | 3: Security Boundary | Complete | backend-onboarding, codebase-audit, zitadel-mgmt-client, webhook-listener, role-crud |
 | 4: Infrastructure Bridge | In Progress | provisioning-intents, shadow-vault, sync-service |
-| 5: Automation & Governance | In Progress | zitadel-actions-v2-deployment, grant-expiration-scheduler, live-zitadel-data-source, live-directory-identity-completeness, live-only-production-ui, dashboard-ux-elevation, zitadel-event-trigger-propagation; [remaining items](changes/mkauth-core-architecture/ROADMAP.md) |
+| 5: Automation & Governance | In Progress | zitadel-actions-v2-deployment, grant-expiration-scheduler, live-zitadel-data-source, live-directory-identity-completeness, live-only-production-ui, dashboard-ux-elevation, zitadel-event-trigger-propagation; [remaining items](changes/syndra-core-architecture/ROADMAP.md) |
 | 5.5: Audit-Resolution Waves | In Progress | wave-1-production-trust-hardening, wave-2-part-1-frontend-palette-finalization, wave-2-part-2-backend-coherence, wave-2-part-3-operational-polish, wave-2-part-4-zitadel-state-projection-and-drift-control, wave-3-frontend-remainder-and-consolidation |
-| 6: IdP Lifecycle | Not Started | [see Roadmap](changes/mkauth-core-architecture/ROADMAP.md) |
+| 6: IdP Lifecycle | Not Started | [see Roadmap](changes/syndra-core-architecture/ROADMAP.md) |

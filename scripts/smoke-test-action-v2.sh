@@ -12,7 +12,7 @@
 #
 # Usage:
 #   scripts/smoke-test-action-v2.sh                          # hits local backend on :8080
-#   scripts/smoke-test-action-v2.sh http://mkauth:8080       # explicit host
+#   scripts/smoke-test-action-v2.sh http://syndra:8080       # explicit host
 #
 # Exit codes: 0 success; >0 failure (message on stderr).
 

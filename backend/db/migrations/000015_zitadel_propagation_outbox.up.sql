@@ -1,5 +1,5 @@
 -- 000015_zitadel_propagation_outbox.up.sql
--- Wave 2 · Part 4 (B4/D3): the outbox buffer for MkAuth-mediated Zitadel grant
+-- Wave 2 · Part 4 (B4/D3): the outbox buffer for Syndra-mediated Zitadel grant
 -- mutations, plus source attribution on direct_role_grants. The full 5-value
 -- source enum is installed now so sub-phase 3 (cascade) needs no further ALTER.
 -- `applied` is terminal success; there is no `confirmed` state (design Decision 1).

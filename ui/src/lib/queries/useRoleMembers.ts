@@ -41,7 +41,7 @@ export function useRoleMembers(projectId: string, roleKey: string) {
 }
 
 /**
- * Removes one direct grant: the MkAuth ledger row goes away and the Zitadel
+ * Removes one direct grant: the Syndra ledger row goes away and the Zitadel
  * revoke is queued in the same transaction.
  *
  * Deliberately not the Zitadel-side grant delete — that removes a different

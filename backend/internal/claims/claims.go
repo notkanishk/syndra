@@ -217,7 +217,7 @@ func (p Profile) Keys() []string {
 }
 
 // validClaimKey allows the dotted namespaces the design uses
-// ("mkauth.laser.roles") plus the plain snake/kebab keys apps tend to expect.
+// ("syndra.laser.roles") plus the plain snake/kebab keys apps tend to expect.
 // Rejecting the rest early keeps a malformed key out of a signed token, where
 // it would be an application-side parse failure nobody can trace back here.
 func validClaimKey(key string) bool {

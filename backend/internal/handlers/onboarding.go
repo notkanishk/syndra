@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"mkauth/internal/db"
+	"syndra/internal/db"
 )
 
 // handleGetOnboardingTriggers returns the full onboarding trigger log for operator

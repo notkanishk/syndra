@@ -18,14 +18,14 @@ RUN go get github.com/golang-migrate/migrate/v4/source/file
 RUN go mod tidy
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -o mkauth ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux go build -o syndra ./cmd/api
 
 # Final Stage (Minimal)
 FROM alpine:latest
 
 WORKDIR /app
-COPY --from=builder /app/mkauth .
+COPY --from=builder /app/syndra .
 COPY --from=builder /app/db ./db
 
 EXPOSE 8080
-CMD ["./mkauth"]
+CMD ["./syndra"]

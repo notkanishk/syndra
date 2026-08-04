@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // resetCacheDeps saves and restores all injectable vars for test isolation.

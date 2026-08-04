@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"mkauth/internal/directory"
-	"mkauth/internal/models"
+	"syndra/internal/directory"
+	"syndra/internal/models"
 )
 
 // stubSource is a minimal directory.Source implementation that returns a fixed Tag.

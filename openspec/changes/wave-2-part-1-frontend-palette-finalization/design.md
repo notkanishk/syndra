@@ -174,7 +174,7 @@ The plan documents the exact dev-server commands and the surfaces to inspect.
 | `openspec/changes/wave-2-part-1-frontend-palette-finalization/specs/operational-readiness/spec.md` | New delta: `Requirement: Frontend MUST NOT carry legacy palette aliases` with two scenarios. Already wired by this change directory. |
 | `openspec/changes/obsidian-clarity-redesign/tasks.md` | Append a "Stage 5 — palette finalization" pointer block under OCR-S4-15: `[x] OCR-S5-01 Palette finalization handed to wave-2-part-1-frontend-palette-finalization (see that change for completion).` Tracks the audit's "Move corresponding tasks ... to a Stage-2 list and check them off here" instruction without duplicating progress. |
 | `openspec/INDEX.md` | New change-log row for `wave-2-part-1-frontend-palette-finalization` under Phase 5.5; status `In progress` while implementing, `Complete` after archive. |
-| `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md` | Optional: add a one-line note under the Operational Readiness row that the palette migration is finalized. Skip if it would duplicate the existing "Integrated, … theme toggle …" note. |
+| `openspec/changes/syndra-core-architecture/specs/feature-coverage.md` | Optional: add a one-line note under the Operational Readiness row that the palette migration is finalized. Skip if it would duplicate the existing "Integrated, … theme toggle …" note. |
 
 ---
 

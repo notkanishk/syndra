@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"mkauth/internal/directory"
-	"mkauth/internal/models"
+	"syndra/internal/directory"
+	"syndra/internal/models"
 )
 
 // Bulk access changes, rehearsed before they are applied.
@@ -42,7 +42,7 @@ const (
 //   - EffectNoChange — nothing to do; already in the target state.
 //   - EffectBlocked  — refused, with a reason. Never silently skipped.
 //   - EffectFailed   — attempted during apply and errored.
-//   - EffectQueued   — recorded by MkAuth, not yet confirmed by Zitadel.
+//   - EffectQueued   — recorded by Syndra, not yet confirmed by Zitadel.
 const (
 	EffectApply    = "apply"
 	EffectNoChange = "no_change"
@@ -52,11 +52,11 @@ const (
 	// result an operator reads after the fact is diffable against the plan they
 	// approved rather than a fresh document with no relationship to it.
 	//
-	// "Landed" means Zitadel confirmed it, not that MkAuth wrote it down. The
+	// "Landed" means Zitadel confirmed it, not that Syndra wrote it down. The
 	// two are not the same and the gap between them is where a bulk removal
 	// reads as done while the role is still live on the door.
 	EffectApplied = "applied"
-	// EffectQueued is that gap, named. MkAuth's records are updated and durable,
+	// EffectQueued is that gap, named. Syndra's records are updated and durable,
 	// but the change has not reached Zitadel — the drain was refused, halted, or
 	// could not confirm. Recoverable rather than wrong: the row stays in the
 	// outbox and the next drain re-drives it. It is not EffectFailed, which
@@ -122,7 +122,7 @@ type BulkSummary struct {
 	Blocked   int `json:"blocked"`
 	Failed    int `json:"failed"`
 	Succeeded int `json:"succeeded"`
-	// Queued counts rows MkAuth recorded but could not confirm upstream. Kept
+	// Queued counts rows Syndra recorded but could not confirm upstream. Kept
 	// apart from Succeeded so the headline cannot round them into success.
 	Queued int `json:"queued"`
 }

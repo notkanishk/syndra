@@ -3,7 +3,7 @@
 #
 # Zitadel does not expire the Action target signing key (CreateTargetRequest
 # has no expiration field; see proto/zitadel/action/v2/target.proto). The
-# first key works indefinitely. Rotation is a MkAuth *policy* choice —
+# first key works indefinitely. Rotation is a Syndra *policy* choice —
 # incident response, compliance hygiene, credential suspicion, operator
 # handoff — not a Zitadel requirement.
 #
@@ -16,7 +16,7 @@
 #   - existing .action-signing-key  -> .action-signing-key.previous  (backup, mode 0600)
 #   - new key                       -> .action-signing-key           (mode 0600)
 #
-# MkAuth does NOT ship dual-key acceptance today — the backend trusts a
+# Syndra does NOT ship dual-key acceptance today — the backend trusts a
 # single ZITADEL_ACTION_SIGNING_KEY env var. After this script succeeds the
 # operator must swap the env var and restart the backend. During the swap
 # window, inbound Action requests fail 401 INVALID_SIGNATURE and Zitadel
@@ -90,14 +90,14 @@ elif [[ -n "${ZITADEL_MACHINE_KEY_PATH:-}" ]]; then
   export ZITADEL_MACHINE_KEY_PATH="$_abs_key"
   unset _abs_key
 
-  echo "Minting M2M token via backend/cmd/mkauth-token..." >&2
+  echo "Minting M2M token via backend/cmd/syndra-token..." >&2
   BACKEND_DIR="${REPO_ROOT}/backend"
-  if ! TOKEN="$(cd "$BACKEND_DIR" && go run ./cmd/mkauth-token)"; then
-    echo "error: could not mint M2M token from ZITADEL_MACHINE_KEY_PATH — see mkauth-token stderr above, or provide ZITADEL_M2M_TOKEN directly" >&2
+  if ! TOKEN="$(cd "$BACKEND_DIR" && go run ./cmd/syndra-token)"; then
+    echo "error: could not mint M2M token from ZITADEL_MACHINE_KEY_PATH — see syndra-token stderr above, or provide ZITADEL_M2M_TOKEN directly" >&2
     exit 3
   fi
   if [[ -z "$TOKEN" ]]; then
-    echo "error: mkauth-token returned an empty token" >&2
+    echo "error: syndra-token returned an empty token" >&2
     exit 3
   fi
 else
@@ -186,10 +186,10 @@ rotate_target() {
 }
 
 # ---- Render manifest (strip _comment/_note annotations, preserve _signing_key_env) ----
-RENDERED_MANIFEST="$(jq --arg url "${MKAUTH_EXTERNAL_URL:-}" '
+RENDERED_MANIFEST="$(jq --arg url "${SYNDRA_EXTERNAL_URL:-}" '
   walk(
-    if type == "string" and test("\\$\\{MKAUTH_EXTERNAL_URL\\}")
-    then sub("\\$\\{MKAUTH_EXTERNAL_URL\\}"; $url)
+    if type == "string" and test("\\$\\{SYNDRA_EXTERNAL_URL\\}")
+    then sub("\\$\\{SYNDRA_EXTERNAL_URL\\}"; $url)
     else . end
   )
   | walk(
@@ -238,7 +238,7 @@ Rotation complete. Apply the new values to your backend env:
 
     cat "${FRAGMENT_FILE}" >> .env
     # OR, for systemd EnvironmentFile deploys:
-    sudo install -m 0600 "${FRAGMENT_FILE}" /etc/mkauth/action-env
+    sudo install -m 0600 "${FRAGMENT_FILE}" /etc/syndra/action-env
 
 Then restart the backend and verify:
 
@@ -255,7 +255,7 @@ claims simply disappear for the gap. Keep the restart under a minute.
 
 Per-target backups in .action-signing-key.<name>.previous are retained for
 audit/rollback. Rotation timestamps are mirrored to
-.action-signing-key.<name>.rotated_at for local audit; MkAuth itself reads
+.action-signing-key.<name>.rotated_at for local audit; Syndra itself reads
 the *_ROTATED_AT env vars at runtime, not these files.
 
 Delete ${FRAGMENT_FILE} once the values are applied.

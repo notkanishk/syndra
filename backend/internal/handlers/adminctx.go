@@ -3,7 +3,7 @@ package handlers
 import (
 	"context"
 
-	"mkauth/internal/auth"
+	"syndra/internal/auth"
 )
 
 // contextKey is an unexported type for context keys scoped to this package,

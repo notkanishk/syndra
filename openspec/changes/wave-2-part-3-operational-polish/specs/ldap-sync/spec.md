@@ -6,7 +6,7 @@
 
 ### Requirement: New LLDAP groups MUST be bootstrapped with the bind DN as the placeholder member, not an empty string
 
-`groupOfNames` is the structural objectClass MkAuth uses for sync-managed LLDAP groups, which requires at least one `member` attribute at creation time. The current `sync/internal/ldap/client.go:EnsureGroup` implementation supplies `member: [""]` — an empty distinguished name — which LLDAP's permissive schema check accepts but a strict OpenLDAP deployment would reject. The sync service MUST instead supply the configured bind DN (`p.cfg.BindDN`) as the placeholder member, because the bind DN is by construction a valid DN known to the directory. The placeholder MUST NOT be the empty string. This preserves the "create with one member; real users join alongside" pattern without depending on a specific LDAP server's tolerance for empty DNs.
+`groupOfNames` is the structural objectClass Syndra uses for sync-managed LLDAP groups, which requires at least one `member` attribute at creation time. The current `sync/internal/ldap/client.go:EnsureGroup` implementation supplies `member: [""]` — an empty distinguished name — which LLDAP's permissive schema check accepts but a strict OpenLDAP deployment would reject. The sync service MUST instead supply the configured bind DN (`p.cfg.BindDN`) as the placeholder member, because the bind DN is by construction a valid DN known to the directory. The placeholder MUST NOT be the empty string. This preserves the "create with one member; real users join alongside" pattern without depending on a specific LDAP server's tolerance for empty DNs.
 
 #### Scenario: New group is created with the bind DN as placeholder member
 

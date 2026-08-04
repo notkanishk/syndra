@@ -3,20 +3,36 @@ package db
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
 
 // The db package is tested only via migration-coherence guards (no live DB).
 // This asserts every drift_type / detection_source / status literal the Go
-// layer writes is permitted by the 000016 CHECK constraints, and vice-versa.
+// layer writes is permitted by the CHECK constraints, and vice-versa.
+//
+// Reads every up-migration rather than 000016 alone. A constraint does not stay
+// in the migration that introduced it — the MkAuth -> Syndra rename moved the
+// drift_type values in 000025 — so pinning to one file asserts what the schema
+// used to be, and passes while the running database disagrees.
 func TestDriftMigrationEnumsMatchCode(t *testing.T) {
 	dir := findMigrationsDir(t)
-	up, err := os.ReadFile(filepath.Join(dir, "000016_drift_queue.up.sql"))
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
+	ups, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
+	if err != nil || len(ups) == 0 {
+		t.Fatalf("glob migrations: %v (found %d)", err, len(ups))
 	}
-	sql := string(up)
+	sort.Strings(ups)
+	var b strings.Builder
+	for _, p := range ups {
+		content, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatalf("read migration %s: %v", filepath.Base(p), err)
+		}
+		b.Write(content)
+		b.WriteString("\n")
+	}
+	sql := b.String()
 
 	// Values the Go code actually writes (UpsertDriftItem, the *AndEnqueue triage
 	// helpers, sweep, webhook).
@@ -25,7 +41,7 @@ func TestDriftMigrationEnumsMatchCode(t *testing.T) {
 			t.Errorf("detection_source %s written by code but missing from 000016 CHECK", v)
 		}
 	}
-	for _, v := range []string{"'zitadel_only'", "'mkauth_only'"} {
+	for _, v := range []string{"'zitadel_only'", "'syndra_only'"} {
 		if !strings.Contains(sql, v) {
 			t.Errorf("drift_type %s written by code but missing from 000016 CHECK", v)
 		}

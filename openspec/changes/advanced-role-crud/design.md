@@ -1,12 +1,12 @@
 ## Rationale
 
-The spec defines four capabilities: role creation with Zitadel propagation, snapshot & fork cloning, global role catalog with usage metrics, and project-prefixed disambiguation. The design stores only MkAuth-created roles locally (not a full Zitadel sync) and builds the global catalog as a computed merge at query time.
+The spec defines four capabilities: role creation with Zitadel propagation, snapshot & fork cloning, global role catalog with usage metrics, and project-prefixed disambiguation. The design stores only Syndra-created roles locally (not a full Zitadel sync) and builds the global catalog as a computed merge at query time.
 
 ## Technical Specification
 
 ### 1. Local Role Storage
 
-`roles` table stores MkAuth-managed role metadata. The `UNIQUE(zitadel_project_id, role_key)` constraint mirrors Zitadel's natural key. `cloned_from_project` and `cloned_from_role` are nullable provenance columns — informational only, no cascading relationship.
+`roles` table stores Syndra-managed role metadata. The `UNIQUE(zitadel_project_id, role_key)` constraint mirrors Zitadel's natural key. `cloned_from_project` and `cloned_from_role` are nullable provenance columns — informational only, no cascading relationship.
 
 Roles created through other channels (Zitadel console, demo catalog) are NOT synced here. The global catalog merges sources at query time.
 
@@ -29,7 +29,7 @@ When `MgmtClient` is nil (local-policy-only mode), Zitadel propagation is skippe
 4. Propagate to Zitadel (if client available). If Zitadel fails, compensating rollback deletes the local row.
 5. Audit log: `role.created`.
 
-The local-first-then-Zitadel ordering ensures MkAuth never tracks a role that doesn't exist upstream (P1 fix). The clone source lookup distinguishes "row not found" from actual DB errors to avoid masking backend faults as 404 (P2 fix).
+The local-first-then-Zitadel ordering ensures Syndra never tracks a role that doesn't exist upstream (P1 fix). The clone source lookup distinguishes "row not found" from actual DB errors to avoid masking backend faults as 404 (P2 fix).
 
 The clone is a creation-time convenience. No ongoing sync between source and fork.
 
@@ -37,7 +37,7 @@ The clone is a creation-time convenience. No ongoing sync between source and for
 
 `GET /api/v1/roles` merges three sources into a deduplicated map keyed by `(projectID, roleKey)`:
 
-1. **Local roles** (source = "mkauth") — highest priority for metadata.
+1. **Local roles** (source = "syndra") — highest priority for metadata.
 2. **Demo catalog** (source = "demo") — from `demo.Projects()`.
 3. **Referenced roles** (source = "referenced") — any `(projectID, roleKey)` pair in `bundle_roles`, `mapping_rules`, or `direct_role_grants` not already in sources 1 or 2.
 

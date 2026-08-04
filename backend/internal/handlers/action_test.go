@@ -12,7 +12,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"mkauth/internal/claims"
+	"syndra/internal/claims"
 )
 
 // resetActionDeps restores the injectable vars used by HandleActionInject and
@@ -252,10 +252,10 @@ func TestHandleActionInject_EmitsAttributeAndStaticClaims(t *testing.T) {
 	dbResolveClaimProfiles = func(_ context.Context, projectID string) ([]claims.Profile, error) {
 		return []claims.Profile{{
 			ProjectID:       projectID,
-			ClaimName:       "mkauth.laser.roles",
+			ClaimName:       "syndra.laser.roles",
 			FormatType:      claims.FormatArray,
-			AttributeClaims: map[string]string{"mkauth.laser.team": claims.AttrTeam},
-			StaticClaims:    map[string]any{"mkauth.tenant": "makerspace"},
+			AttributeClaims: map[string]string{"syndra.laser.team": claims.AttrTeam},
+			StaticClaims:    map[string]any{"syndra.tenant": "makerspace"},
 		}}, nil
 	}
 
@@ -265,9 +265,9 @@ func TestHandleActionInject_EmitsAttributeAndStaticClaims(t *testing.T) {
 	HandleActionInject(rr, req)
 
 	got := decodeActionResponse(t, rr)
-	roles, okRoles := claimByKey(got.AppendClaims, "mkauth.laser.roles")
-	team, okTeam := claimByKey(got.AppendClaims, "mkauth.laser.team")
-	tenant, okTenant := claimByKey(got.AppendClaims, "mkauth.tenant")
+	roles, okRoles := claimByKey(got.AppendClaims, "syndra.laser.roles")
+	team, okTeam := claimByKey(got.AppendClaims, "syndra.laser.team")
+	tenant, okTenant := claimByKey(got.AppendClaims, "syndra.tenant")
 	if !okRoles || !okTeam || !okTenant {
 		t.Fatalf("expected roles, attribute and static claims, got %v", got.AppendClaims)
 	}
@@ -295,7 +295,7 @@ func TestHandleActionInject_EmitsProjectDefaultAndAppOverrides(t *testing.T) {
 	}
 	dbResolveClaimProfiles = func(_ context.Context, projectID string) ([]claims.Profile, error) {
 		return []claims.Profile{
-			{ProjectID: projectID, ClaimName: "mkauth.laser.roles", FormatType: claims.FormatArray},
+			{ProjectID: projectID, ClaimName: "syndra.laser.roles", FormatType: claims.FormatArray},
 			{ProjectID: projectID, ApplicationID: "app_badge", ClaimName: "badge.roles", FormatType: claims.FormatCSV},
 		}, nil
 	}
@@ -320,7 +320,7 @@ func TestHandleActionInject_MultiProject_KeepsEachProjectsOwnKeys(t *testing.T) 
 	resetActionDeps(t, origRedis, origMode)
 
 	// Two distinct projects, both hit Redis. Each keeps the claim key its
-	// operator configured — no "mkauth.<projectID>." prefix, because keys are
+	// operator configured — no "syndra.<projectID>." prefix, because keys are
 	// validated unique across projects at save time and an application that
 	// asked for "printing.roles" must receive exactly that.
 	redisGetClaims = func(ctx context.Context, key string) (string, error) {
@@ -437,7 +437,7 @@ func TestHandleActionInject_NoGrants_EmptyClaims(t *testing.T) {
 
 func TestHandleActionInject_DuplicateProjectGrants_DedupedToFlatKeys(t *testing.T) {
 	// Zitadel emits one grant row per role. Two rows with the same projectId
-	// but different roles MUST dedupe to a single project in MkAuth's view,
+	// but different roles MUST dedupe to a single project in Syndra's view,
 	// keeping the response on the single-project fast path (flat keys).
 	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
 	resetActionDeps(t, origRedis, origMode)

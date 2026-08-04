@@ -6,10 +6,10 @@ import (
 	"sort"
 	"strings"
 
-	"mkauth/internal/claims"
-	"mkauth/internal/db"
-	"mkauth/internal/directory"
-	"mkauth/internal/models"
+	"syndra/internal/claims"
+	"syndra/internal/db"
+	"syndra/internal/directory"
+	"syndra/internal/models"
 )
 
 // Claim shaping — the operator's control over what an application receives.

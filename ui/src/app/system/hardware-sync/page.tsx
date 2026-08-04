@@ -47,7 +47,7 @@ export default function HardwareSyncPage() {
         </p>
         <p className="mt-3 max-w-[68ch] text-[15px] leading-[1.6] text-muted">
           The LLDAP integration isn&rsquo;t built. Nothing is queued, nothing is pending, and no
-          hardware is currently reading from MkAuth. When it lands, this page gains an intents
+          hardware is currently reading from Syndra. When it lands, this page gains an intents
           queue and a per-person credential panel on the person detail.
         </p>
 
@@ -76,7 +76,7 @@ export default function HardwareSyncPage() {
         />
         <div className="flex flex-col gap-4 px-5 py-4">
           <p className="max-w-[84ch] text-[14.5px] leading-[1.6]">
-            <Mono>mkauth_sync</Mono> exits at startup unless <Mono>LLDAP_BIND_DN</Mono> and{" "}
+            <Mono>syndra_sync</Mono> exits at startup unless <Mono>LLDAP_BIND_DN</Mono> and{" "}
             <Mono>LLDAP_BIND_PASSWORD</Mono> are both set, and Compose restarts it on a loop.
             Nothing queues up and nothing is lost while it is down — the intents ledger is written
             by the backend, and the sync service only reads from it.
@@ -114,7 +114,7 @@ export default function HardwareSyncPage() {
           <CardHeader
             title="Intents already recorded"
             count={rows.length}
-            note="Written by MkAuth, consumed by nothing yet."
+            note="Written by Syndra, consumed by nothing yet."
           />
           {rows.map((intent) => (
             <div key={intent.id} className="row-divider flex flex-wrap items-center gap-4 px-5 py-3">

@@ -18,7 +18,7 @@ interface SystemMode {
   /**
    * How many stored rows still reference a demo fixture, whichever process
    * wrote them. This is the number that matters: `seed_active` goes false the
-   * moment MKAUTH_SEED_DEMO is unset and the backend restarts, while every row
+   * moment SYNDRA_SEED_DEMO is unset and the backend restarts, while every row
    * the seeder already wrote stays in the database and keeps being served.
    */
   seed_residue?: number;
@@ -57,7 +57,7 @@ export function DegradedBanner() {
   //
   // That second case keys off `seed_residue`, not `seed_active`, and the
   // difference is the whole point. `seed_active` reports whether THIS process
-  // seeded. An operator who notices demo data, sets MKAUTH_SEED_DEMO=false and
+  // seeded. An operator who notices demo data, sets SYNDRA_SEED_DEMO=false and
   // restarts gets a backend that stops seeding, keeps serving every row it
   // already seeded, and now reports itself as clean — the banner disappearing
   // reads as confirmation that the fix worked. Counting the rows is the only
@@ -83,7 +83,7 @@ export function DegradedBanner() {
           <>
             <div className="font-display text-[19px] font-bold">These numbers are not real.</div>
             <p className="max-w-[70ch] text-[14px] font-medium">
-              The identity provider is configured but unreachable, so MkAuth is serving demo data.
+              The identity provider is configured but unreachable, so Syndra is serving demo data.
               Don&rsquo;t grant or revoke anything until this clears.
               {data.reason ? ` (${data.reason})` : ""}
             </p>
@@ -97,7 +97,7 @@ export function DegradedBanner() {
               People and projects are real. Some bundles, rules, grants and audit entries are
               fixtures, and nothing else on screen tells them apart.{" "}
               {data?.seed_active
-                ? "Seeding is still switched on, so a restart would put back anything you delete — set MKAUTH_SEED_DEMO=false first."
+                ? "Seeding is still switched on, so a restart would put back anything you delete — set SYNDRA_SEED_DEMO=false first."
                 : "Seeding is already off, so these are leftovers from an earlier run; turning the flag off never removed the rows it had already written."}
             </p>
             <div className="mt-3 max-w-[86ch]">

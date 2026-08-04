@@ -6,14 +6,14 @@ import (
 	"os/signal"
 	"syscall"
 
-	"mkauth-sync/internal/backend"
-	"mkauth-sync/internal/config"
-	ldapclient "mkauth-sync/internal/ldap"
-	"mkauth-sync/internal/worker"
+	"syndra-sync/internal/backend"
+	"syndra-sync/internal/config"
+	ldapclient "syndra-sync/internal/ldap"
+	"syndra-sync/internal/worker"
 )
 
 func main() {
-	log.Println("[SYNC] MkAuth Sync Service starting...")
+	log.Println("[SYNC] Syndra Sync Service starting...")
 
 	cfg, err := config.Load()
 	if err != nil {

@@ -1,6 +1,6 @@
 -- 000016_drift_queue.up.sql
 -- Wave 2 · Part 4 sub-phase 2 (B2/C6): the drift triage queue for out-of-band
--- Zitadel grants MkAuth has no intent record for, plus the operator's
+-- Zitadel grants Syndra has no intent record for, plus the operator's
 -- "this is legitimately external, stop flagging it" exclusion list.
 -- No drift item resolves automatically (design §8): every row needs explicit
 -- Attribute / Revoke / Mark-external triage.

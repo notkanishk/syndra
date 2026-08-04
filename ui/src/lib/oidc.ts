@@ -2,7 +2,7 @@
 // PKCE cookie — bridges /auth/zitadel → /auth/callback
 // ---------------------------------------------------------------------------
 
-export const PKCE_COOKIE_NAME = "mkauth_pkce";
+export const PKCE_COOKIE_NAME = "syndra_pkce";
 
 interface PkceCookie {
   state: string;

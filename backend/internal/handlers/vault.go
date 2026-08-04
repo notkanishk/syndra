@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"mkauth/internal/services"
+	"syndra/internal/services"
 )
 
 // enforceSelfOnly verifies that the acting user matches the target {uid}.

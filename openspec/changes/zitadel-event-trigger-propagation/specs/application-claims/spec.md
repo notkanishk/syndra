@@ -2,26 +2,26 @@
 
 ### Requirement: Actions v2 Target Deployment
 
-The Zitadel Actions v2 target configuration and deployment assets MUST be maintained in the MkAuth repository, and MUST cover **both** the function-trigger claim integration target (`mkauth-claim-injector`) AND the event-trigger lifecycle listener target (`mkauth-event-listener`).
+The Zitadel Actions v2 target configuration and deployment assets MUST be maintained in the Syndra repository, and MUST cover **both** the function-trigger claim integration target (`syndra-claim-injector`) AND the event-trigger lifecycle listener target (`syndra-event-listener`).
 
-* **Multi-target manifest**: `zitadel/actions/targets.json` MUST declare a `targets[]` array (not a single target object) so multiple Action targets can coexist. Each entry MUST include `name`, `endpoint`, `timeout`, `payloadType`, and exactly one of the `restCall` or `restAsync` submessages. The manifest MUST declare an `executions[]` array whose entries reference targets by **name** (`target: "mkauth-claim-injector"`, `target: "mkauth-event-listener"`); `register.sh` MUST resolve names to captured target IDs before issuing the SetExecution PUT.
-* **Function-trigger target (`mkauth-claim-injector`)**: type MUST be `restCall` (parses response body for `append_claims`); executions MUST cover `function.preaccesstoken` and `function.preuserinfo`.
-* **Event-trigger target (`mkauth-event-listener`)**: type MUST be `restAsync` (fire-and-forget — Zitadel does not block the originating actor on MkAuth latency); endpoint MUST be `${MKAUTH_EXTERNAL_URL}/api/webhooks/zitadel`; executions MUST cover `condition.event` for at minimum `user.human.added`, `user.deactivated`, `user.locked`, `user.grant.added`, `user.grant.changed`, `user.grant.removed`. Self-registration (`user.human.selfregistered`) MAY also be bound when self-service signup is enabled. Event names MUST match Zitadel's registered event types exactly (`internal/repository/user/`, `internal/repository/usergrant/`); `register.sh` calls SetExecution which validates the condition against `EventExisting()` and rejects unknown names with HTTP 404 + `COMMAND-74aaqj8fv9`. In particular, deactivation and lock are user-aggregate events (`userEventTypePrefix + "deactivated"` / `+ "locked"`), NOT human-aggregate — `user.human.deactivated` and `user.human.locked` do not exist in Zitadel and MUST NOT appear in the manifest.
+* **Multi-target manifest**: `zitadel/actions/targets.json` MUST declare a `targets[]` array (not a single target object) so multiple Action targets can coexist. Each entry MUST include `name`, `endpoint`, `timeout`, `payloadType`, and exactly one of the `restCall` or `restAsync` submessages. The manifest MUST declare an `executions[]` array whose entries reference targets by **name** (`target: "syndra-claim-injector"`, `target: "syndra-event-listener"`); `register.sh` MUST resolve names to captured target IDs before issuing the SetExecution PUT.
+* **Function-trigger target (`syndra-claim-injector`)**: type MUST be `restCall` (parses response body for `append_claims`); executions MUST cover `function.preaccesstoken` and `function.preuserinfo`.
+* **Event-trigger target (`syndra-event-listener`)**: type MUST be `restAsync` (fire-and-forget — Zitadel does not block the originating actor on Syndra latency); endpoint MUST be `${SYNDRA_EXTERNAL_URL}/api/webhooks/zitadel`; executions MUST cover `condition.event` for at minimum `user.human.added`, `user.deactivated`, `user.locked`, `user.grant.added`, `user.grant.changed`, `user.grant.removed`. Self-registration (`user.human.selfregistered`) MAY also be bound when self-service signup is enabled. Event names MUST match Zitadel's registered event types exactly (`internal/repository/user/`, `internal/repository/usergrant/`); `register.sh` calls SetExecution which validates the condition against `EventExisting()` and rejects unknown names with HTTP 404 + `COMMAND-74aaqj8fv9`. In particular, deactivation and lock are user-aggregate events (`userEventTypePrefix + "deactivated"` / `+ "locked"`), NOT human-aggregate — `user.human.deactivated` and `user.human.locked` do not exist in Zitadel and MUST NOT appear in the manifest.
 * **Single operator command**: `make zitadel-actions-register` MUST register both targets in a single invocation, capture both signing keys to per-target `.action-signing-key.<name>` files (mode `0600`), and emit the corresponding env-var pairs (`ZITADEL_ACTION_SIGNING_KEY=...`, `ZITADEL_EVENT_SIGNING_KEY=...`, plus their `_ROTATED_AT` companions) into a single `.action-env.fragment` apply file.
 * **Per-target rotation**: `zitadel/actions/rotate.sh` MUST accept a `--target NAME` flag to rotate one target's signing key in place; calling without the flag MUST rotate every target in the manifest. Per-target `.action-signing-key.<name>{,.previous,.rotated_at}` files isolate the rotation surface so a leak or operator handoff for one target does not force rotation of the other.
 
 #### Scenario: Both targets registered in a single operator command
 - **WHEN** an operator runs `make zitadel-actions-register` against a fresh Zitadel instance
-- **THEN** the script MUST create both `mkauth-claim-injector` and `mkauth-event-listener` targets via `POST /v2/actions/targets`
+- **THEN** the script MUST create both `syndra-claim-injector` and `syndra-event-listener` targets via `POST /v2/actions/targets`
 - **AND** MUST capture each target's `signingKey` to `.action-signing-key.<name>` (mode `0600`)
 - **AND** MUST bind every execution in `targets.json` to the correct target ID via a single `PUT /v2/actions/executions`
 - **AND** MUST emit `ZITADEL_ACTION_SIGNING_KEY=...` and `ZITADEL_EVENT_SIGNING_KEY=...` lines (plus their `_ROTATED_AT` companions) to `.action-env.fragment` for one-shot env-var application.
 
 #### Scenario: Per-target signing key rotation
-- **WHEN** an operator runs `make zitadel-actions-rotate-key TARGET=mkauth-event-listener`
-- **THEN** the script MUST rotate only the `mkauth-event-listener` target via `POST /v2/actions/targets/{id}` with `{"expirationSigningKey":"0s"}`
-- **AND** MUST overwrite `.action-signing-key.mkauth-event-listener` with the new key, preserving the prior key at `.action-signing-key.mkauth-event-listener.previous`
-- **AND** MUST NOT rotate the `mkauth-claim-injector` target's signing key.
+- **WHEN** an operator runs `make zitadel-actions-rotate-key TARGET=syndra-event-listener`
+- **THEN** the script MUST rotate only the `syndra-event-listener` target via `POST /v2/actions/targets/{id}` with `{"expirationSigningKey":"0s"}`
+- **AND** MUST overwrite `.action-signing-key.syndra-event-listener` with the new key, preserving the prior key at `.action-signing-key.syndra-event-listener.previous`
+- **AND** MUST NOT rotate the `syndra-claim-injector` target's signing key.
 
 ### Requirement: Event-Trigger Authentication and Translation
 
@@ -70,7 +70,7 @@ The `/api/webhooks/zitadel` endpoint MUST authenticate Zitadel-origin event POST
 
 ### Requirement: Self-Mutation Loop Suppression
 
-When the MkAuth backend mutates Zitadel via the Management API (e.g. `RemoveUserGrant` from `RevokeMappingRules`), Zitadel emits the corresponding event back to the listener. The handler MUST detect and suppress these self-mutation echoes before dispatch.
+When the Syndra backend mutates Zitadel via the Management API (e.g. `RemoveUserGrant` from `RevokeMappingRules`), Zitadel emits the corresponding event back to the listener. The handler MUST detect and suppress these self-mutation echoes before dispatch.
 
 * **Editor-based detection**: events whose top-level `userID` (Zitadel's `ContextInfoEvent` carries the editor in this field, NOT the subject) matches the configured `ZITADEL_M2M_USER_ID` (the backend's own service-user ID) MUST be dropped before any downstream processor runs.
 * **Observable suppression**: dropped events MUST emit a `[WEBHOOK] dropped self-mutation` log line carrying enough context (event type, aggregate ID, editor ID) for operator debugging.

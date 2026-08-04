@@ -20,7 +20,7 @@ bin/
 # accidental artifacts, not intentional outputs.
 /backend/api
 /backend/test
-/backend/mkauth-token
+/backend/syndra-token
 
 # Node/Next.js
 /ui/node_modules/

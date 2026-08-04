@@ -10,10 +10,10 @@
 package expiry
 
 import (
-	"mkauth/internal/cache"
-	"mkauth/internal/db"
-	"mkauth/internal/services"
-	"mkauth/internal/zitadel"
+	"syndra/internal/cache"
+	"syndra/internal/db"
+	"syndra/internal/services"
+	"syndra/internal/zitadel"
 )
 
 // Injectable dependencies. Mirrors the save-swap-restore pattern used across

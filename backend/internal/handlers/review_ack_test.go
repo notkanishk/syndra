@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
+	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
 func resetAckDeps(t *testing.T) {

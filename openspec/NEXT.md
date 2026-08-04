@@ -1,8 +1,8 @@
-# MkAuth — Next Steps
+# Syndra — Next Steps
 
 > Single pickup point. Everything open, in one place, as of **2026-07-31**.
 > Sources consolidated here: `ROADMAP.md` phases 4–6, `AUDIT.md` deferrals, open `changes/*/tasks.md`, and tooling debt.
-> [< Index](INDEX.md) · [Architecture](changes/mkauth-core-architecture/design.md) · [Roadmap](changes/mkauth-core-architecture/ROADMAP.md)
+> [< Index](INDEX.md) · [Architecture](changes/syndra-core-architecture/design.md) · [Roadmap](changes/syndra-core-architecture/ROADMAP.md)
 
 ## How to read this
 
@@ -25,7 +25,7 @@ Paused pending research on real LLDAP password-propagation and credential semant
 - **SC6** — per-UID worker routing (same-UID ordering guarantee).
 - **SC7** — fresh bounded context for drain-time backend calls.
 - **LLDAP Integration** — end-to-end wiring against the real external LLDAP (separate Proxmox LXC), production connectivity validation.
-- **LLDAP Reconciliation** — periodic full sync comparing MkAuth provisioning state to LLDAP group membership, overwriting drift per the one-way authority rule.
+- **LLDAP Reconciliation** — periodic full sync comparing Syndra provisioning state to LLDAP group membership, overwriting drift per the one-way authority rule.
 - **OE7 / OE13 / OE14** — cosmetic sync cleanups; do them while you're in there, not as their own errand.
 
 ### Basic / Advanced IA — what the redesign left open
@@ -63,7 +63,7 @@ Paused pending research on real LLDAP password-propagation and credential semant
 
 ### Phase 6 — IdP Lifecycle (the big one)
 
-- **Google Workspace Account Poller.** Nothing built yet. Separate container, monthly Admin SDK Directory API poll, verifies every Zitadel user still has an active Google account, deactivates suspended/deleted ones via the Management API. The deactivation then cascades through the existing webhook pipeline (`user_deactivated` → cache invalidation → LLDAP membership revocation via provisioning intents), so the downstream half is already built and tested. Design: `changes/mkauth-core-architecture/design.md` §10.
+- **Google Workspace Account Poller.** Nothing built yet. Separate container, monthly Admin SDK Directory API poll, verifies every Zitadel user still has an active Google account, deactivates suspended/deleted ones via the Management API. The deactivation then cascades through the existing webhook pipeline (`user_deactivated` → cache invalidation → LLDAP membership revocation via provisioning intents), so the downstream half is already built and tested. Design: `changes/syndra-core-architecture/design.md` §10.
 - **⌘K command palette** — optional, struck from spec in the May 2026 audit. Only if operator navigation demand shows up.
 
 ---
@@ -110,7 +110,7 @@ Archiving them with `--skip-specs` would clear `changes/` but permanently lose t
 
 **Stale roadmap entry.** `ROADMAP.md` Phase 5 lists **Welcome Bundle Configuration** as open, describing `GetWelcomeBundle` as convention-based name matching to be replaced. It shipped: migration `000012_welcome_bundle_flag`, `is_welcome` column, operator-gated `PUT /api/v1/bundles/{id}/welcome`, UI on the bundles page. Tick it.
 
-**Do not archive `mkauth-core-architecture`.** Its `tasks.md` is empty, so it looks archivable, but it's the living architecture and roadmap hub — `CLAUDE.md` links directly into it and Phases 5–6 are still open.
+**Do not archive `syndra-core-architecture`.** Its `tasks.md` is empty, so it looks archivable, but it's the living architecture and roadmap hub — `CLAUDE.md` links directly into it and Phases 5–6 are still open.
 
 ---
 

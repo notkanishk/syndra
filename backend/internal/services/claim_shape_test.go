@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"mkauth/internal/claims"
-	"mkauth/internal/db"
-	"mkauth/internal/models"
+	"syndra/internal/claims"
+	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
 // stubClaimShapeDeps neutralises every claim-shaping injectable and returns a
@@ -63,7 +63,7 @@ func TestResolveClaimProfiles_DefaultThenOverridesForThisProjectOnly(t *testing.
 	stubClaimShapeDeps(t)
 
 	svcGetClaimProfile = func(_ context.Context, projectID string) (db.ClaimProfileRow, bool, error) {
-		return db.ClaimProfileRow{ProjectID: projectID, ClaimName: "mkauth.laser.roles", FormatType: claims.FormatArray}, true, nil
+		return db.ClaimProfileRow{ProjectID: projectID, ClaimName: "syndra.laser.roles", FormatType: claims.FormatArray}, true, nil
 	}
 	svcListAppClaimOverrides = func(context.Context) ([]db.AppClaimOverrideRow, error) {
 		return []db.AppClaimOverrideRow{
@@ -79,7 +79,7 @@ func TestResolveClaimProfiles_DefaultThenOverridesForThisProjectOnly(t *testing.
 	if len(got) != 2 {
 		t.Fatalf("expected the default plus this project's one override, got %#v", got)
 	}
-	if got[0].ApplicationID != "" || got[0].ClaimName != "mkauth.laser.roles" {
+	if got[0].ApplicationID != "" || got[0].ClaimName != "syndra.laser.roles" {
 		t.Errorf("the project default must come first, got %#v", got[0])
 	}
 	if got[1].ApplicationID != "app_badge" {
@@ -116,12 +116,12 @@ func TestSaveProjectClaimProfile_AllowsReSaveOfOwnKey(t *testing.T) {
 
 	svcListClaimProfiles = func(context.Context) ([]db.ClaimProfileRow, error) {
 		return []db.ClaimProfileRow{
-			{ProjectID: "pLaser", ClaimName: "mkauth.laser.roles", FormatType: claims.FormatArray},
+			{ProjectID: "pLaser", ClaimName: "syndra.laser.roles", FormatType: claims.FormatArray},
 		}, nil
 	}
 
 	err := SaveProjectClaimProfile(context.Background(), "pLaser", claims.Profile{
-		ClaimName: "mkauth.laser.roles", FormatType: claims.FormatCSV,
+		ClaimName: "syndra.laser.roles", FormatType: claims.FormatCSV,
 	})
 	if err != nil {
 		t.Fatalf("re-saving the same project's own key must be allowed, got %v", err)
@@ -135,7 +135,7 @@ func TestSaveProjectClaimProfile_RejectsInvalidProfile(t *testing.T) {
 	stubClaimShapeDeps(t)
 
 	err := SaveProjectClaimProfile(context.Background(), "pLaser", claims.Profile{
-		ClaimName: "mkauth laser roles", FormatType: claims.FormatArray,
+		ClaimName: "syndra laser roles", FormatType: claims.FormatArray,
 	})
 	if err == nil {
 		t.Fatal("expected an invalid claim key to be rejected before it reaches a signed token")
@@ -184,8 +184,8 @@ func TestProjectClaimShape_AttributesEveryEmittedKey(t *testing.T) {
 
 	svcGetClaimProfile = func(_ context.Context, projectID string) (db.ClaimProfileRow, bool, error) {
 		return db.ClaimProfileRow{
-			ProjectID: projectID, ClaimName: "mkauth.p0.roles", FormatType: claims.FormatArray,
-			AttributeClaims: map[string]string{"mkauth.p0.email": claims.AttrEmail},
+			ProjectID: projectID, ClaimName: "syndra.p0.roles", FormatType: claims.FormatArray,
+			AttributeClaims: map[string]string{"syndra.p0.email": claims.AttrEmail},
 		}, true, nil
 	}
 	svcListAppClaimOverrides = func(context.Context) ([]db.AppClaimOverrideRow, error) {
@@ -212,10 +212,10 @@ func TestProjectClaimShape_AttributesEveryEmittedKey(t *testing.T) {
 	if owners["badge.roles"].ApplicationID != "a0" || owners["badge.roles"].OwnerLabel != "App 0" {
 		t.Errorf("override key must name its application, got %#v", owners["badge.roles"])
 	}
-	if owners["mkauth.p0.email"].Kind != "attribute" || owners["mkauth.p0.email"].Source != claims.AttrEmail {
-		t.Errorf("attribute key must name its source, got %#v", owners["mkauth.p0.email"])
+	if owners["syndra.p0.email"].Kind != "attribute" || owners["syndra.p0.email"].Source != claims.AttrEmail {
+		t.Errorf("attribute key must name its source, got %#v", owners["syndra.p0.email"])
 	}
-	if owners["mkauth.p0.roles"].OwnerLabel != "Project default" {
-		t.Errorf("default key must be labelled as the project default, got %#v", owners["mkauth.p0.roles"])
+	if owners["syndra.p0.roles"].OwnerLabel != "Project default" {
+		t.Errorf("default key must be labelled as the project default, got %#v", owners["syndra.p0.roles"])
 	}
 }

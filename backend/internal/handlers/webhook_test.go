@@ -12,13 +12,13 @@ import (
 	"testing"
 	"time"
 
-	"mkauth/internal/db"
-	"mkauth/internal/zitadel"
+	"syndra/internal/db"
+	"syndra/internal/zitadel"
 )
 
 func TestWebhookRoute_RejectsInvalidActionsV2Signature(t *testing.T) {
 	t.Setenv("ZITADEL_EVENT_SIGNING_KEY", "test-key")
-	t.Setenv("MKAUTH_API_KEY", "irrelevant-for-webhook-route")
+	t.Setenv("SYNDRA_API_KEY", "irrelevant-for-webhook-route")
 
 	body := []byte(`{"event_type":"user_created","user_id":"u1","source_project":"p1"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/webhooks/zitadel", bytes.NewReader(body))
@@ -867,7 +867,7 @@ func TestProcessGrantAdded_UnexplainedGrantCreatesDrift(t *testing.T) {
 
 func TestProcessGrantAdded_ExpectedGrantNoDrift(t *testing.T) {
 	setupNoopWebhookDeps(t)
-	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return true, nil } // MkAuth expects it
+	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return true, nil } // Syndra expects it
 	called := false
 	dbUpsertDriftItemWithEvidence = func(context.Context, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
 		called = true
@@ -879,6 +879,6 @@ func TestProcessGrantAdded_ExpectedGrantNoDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 	if called {
-		t.Fatal("a grant MkAuth already expects must not be flagged as drift")
+		t.Fatal("a grant Syndra already expects must not be flagged as drift")
 	}
 }

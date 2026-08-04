@@ -23,5 +23,5 @@
 
 ## OpenSpec Workflow
 - Changes documented in `openspec/changes/<change-name>/` with `proposal.md`, `design.md`, `tasks.md`.
-- Feature coverage tracked in `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md`.
-- Roadmap in `openspec/changes/mkauth-core-architecture/ROADMAP.md`.
+- Feature coverage tracked in `openspec/changes/syndra-core-architecture/specs/feature-coverage.md`.
+- Roadmap in `openspec/changes/syndra-core-architecture/ROADMAP.md`.

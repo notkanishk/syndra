@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"mkauth/internal/db"
+	"syndra/internal/db"
 )
 
 // maxAuditPage bounds one page, not the readable history. Before keyset paging

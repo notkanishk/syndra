@@ -1,4 +1,4 @@
-module mkauth-sync
+module syndra-sync
 
 go 1.25.0
 

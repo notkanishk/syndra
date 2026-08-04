@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Client communicates with the MkAuth backend API.
+// Client communicates with the Syndra backend API.
 type Client struct {
 	baseURL    string
 	apiKey     string

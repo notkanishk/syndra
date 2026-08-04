@@ -31,9 +31,9 @@ const shape: ClaimShape = {
   project_name: "Laser Lab",
   default: {
     project_id: "pLaser",
-    claim_name: "mkauth.laser.roles",
+    claim_name: "syndra.laser.roles",
     format_type: "array",
-    attribute_claims: { "mkauth.laser.email": "email" },
+    attribute_claims: { "syndra.laser.email": "email" },
     static_claims: {},
   },
   overrides: [
@@ -49,12 +49,12 @@ const shape: ClaimShape = {
   emitted_keys: [
     { key: "badge.roles", owner_label: "Badge Reader", application_id: "app_badge", kind: "roles" },
     {
-      key: "mkauth.laser.email",
+      key: "syndra.laser.email",
       owner_label: "Project default",
       kind: "attribute",
       source: "email",
     },
-    { key: "mkauth.laser.roles", owner_label: "Project default", kind: "roles" },
+    { key: "syndra.laser.roles", owner_label: "Project default", kind: "roles" },
   ],
   conflicts: [],
 };
@@ -95,7 +95,7 @@ describe("token format editor", () => {
   it("saves the claim name and format an operator actually typed", async () => {
     renderEditor("app_bookings");
 
-    const claimName = screen.getByPlaceholderText("mkauth.laser.roles");
+    const claimName = screen.getByPlaceholderText("syndra.laser.roles");
     fireEvent.change(claimName, { target: { value: "laser.roles.v2" } });
     fireEvent.click(screen.getByRole("radio", { name: "csv" }));
     fireEvent.click(screen.getByRole("button", { name: "Save token format" }));
@@ -114,16 +114,16 @@ describe("token format editor", () => {
     renderEditor("app_bookings");
 
     // The existing attribute claim is rendered as an editable row…
-    expect(screen.getByDisplayValue("mkauth.laser.email")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("syndra.laser.email")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText("mkauth.laser.roles"), {
+    fireEvent.change(screen.getByPlaceholderText("syndra.laser.roles"), {
       target: { value: "laser.roles" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save token format" }));
 
     // …and survives a save that was about something else entirely.
     expect(saveProject).toHaveBeenCalledWith(
-      expect.objectContaining({ attribute_claims: { "mkauth.laser.email": "email" } }),
+      expect.objectContaining({ attribute_claims: { "syndra.laser.email": "email" } }),
     );
   });
 
@@ -134,7 +134,7 @@ describe("token format editor", () => {
     expect(screen.getByText("badge.roles")).toBeInTheDocument();
     // A sibling's key is present and attributed — an operator should learn
     // that here, not by decoding a production token.
-    expect(screen.getByText("mkauth.laser.roles")).toBeInTheDocument();
+    expect(screen.getByText("syndra.laser.roles")).toBeInTheDocument();
     expect(screen.getAllByText("Project default").length).toBeGreaterThan(0);
   });
 

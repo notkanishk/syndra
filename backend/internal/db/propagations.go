@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // drainAdvisoryLockKey is the stable, arbitrary key for the session-level
@@ -64,7 +64,7 @@ func GetPropagationStatus(ctx context.Context, id string) (string, error) {
 // ZITADEL PROPAGATION OUTBOX
 // -------------------------------------------------------------
 //
-// pending_zitadel_propagations buffers every MkAuth-mediated Zitadel grant
+// pending_zitadel_propagations buffers every Syndra-mediated Zitadel grant
 // mutation so the operator drains them explicitly (services/propagation).
 // It mirrors the provisioning_intents claim-and-process pattern: rows move
 // pending -> in_flight -> applied|failed. `applied` is terminal success; there
@@ -108,7 +108,7 @@ func InsertPendingPropagation(ctx context.Context, opType, userID, projectID str
 }
 
 // PendingOutboxAddExists reports whether an undrained add is already queued for
-// the (user, project, role) triple, so the drift sweep's mkauth_only replay does
+// the (user, project, role) triple, so the drift sweep's syndra_only replay does
 // not pile a fresh duplicate every tick for a grant that stays missing in Zitadel.
 func PendingOutboxAddExists(ctx context.Context, userID, projectID, roleKey string) (bool, error) {
 	const q = `SELECT EXISTS(

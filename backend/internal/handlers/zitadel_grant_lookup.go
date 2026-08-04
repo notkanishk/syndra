@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"mkauth/internal/zitadel"
+	"syndra/internal/zitadel"
 )
 
 // grantLookupMaxPages bounds the pagination loop in the fallback enrichment

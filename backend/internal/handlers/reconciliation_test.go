@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"mkauth/internal/models"
-	"mkauth/internal/zitadel"
+	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 // withReconciliationDeps swaps in deterministic stub data for the two
@@ -19,7 +19,7 @@ import (
 // when the test returns. Keeps tests isolated from the real DB and Zitadel.
 func withReconciliationDeps(
 	t *testing.T,
-	mkauth []models.DirectGrant,
+	syndra []models.DirectGrant,
 	zitadelGrants []zitadel.UserGrant,
 	zitadelTotal int,
 	zitadelErr error,
@@ -32,7 +32,7 @@ func withReconciliationDeps(
 	origExclusions := svcGetExclusions
 
 	svcAllDirectGrants = func(_ context.Context) ([]models.DirectGrant, error) {
-		return mkauth, nil
+		return syndra, nil
 	}
 	// Default to no rules/exclusions so existing tests (which don't care about
 	// expected-set filtering) see the pre-B2 diff shape unchanged.
@@ -102,10 +102,10 @@ func decodeReconciliation(t *testing.T, rr *httptest.ResponseRecorder) Reconcili
 	return got
 }
 
-// TestReconciliation_OnlyInMkAuth: a (user, project) pair exists on the
-// MkAuth side but Zitadel has no grant for it. Should land in only_in_mkauth
+// TestReconciliation_OnlyInSyndra: a (user, project) pair exists on the
+// Syndra side but Zitadel has no grant for it. Should land in only_in_syndra
 // with all roles aggregated, no drift, no only_in_zitadel entry.
-func TestReconciliation_OnlyInMkAuth(t *testing.T) {
+func TestReconciliation_OnlyInSyndra(t *testing.T) {
 	withReconciliationDeps(t,
 		[]models.DirectGrant{
 			directGrant("u-1", "p-1", "viewer"),
@@ -120,10 +120,10 @@ func TestReconciliation_OnlyInMkAuth(t *testing.T) {
 	}
 	got := decodeReconciliation(t, rr)
 
-	if len(got.OnlyInMkAuth) != 1 || len(got.OnlyInZitadel) != 0 || len(got.Drift) != 0 {
-		t.Fatalf("expected 1 only-in-mkauth and nothing else, got %+v", got)
+	if len(got.OnlyInSyndra) != 1 || len(got.OnlyInZitadel) != 0 || len(got.Drift) != 0 {
+		t.Fatalf("expected 1 only-in-syndra and nothing else, got %+v", got)
 	}
-	entry := got.OnlyInMkAuth[0]
+	entry := got.OnlyInSyndra[0]
 	if entry.UserID != "u-1" || entry.ProjectID != "p-1" {
 		t.Fatalf("unexpected pair: %+v", entry)
 	}
@@ -135,7 +135,7 @@ func TestReconciliation_OnlyInMkAuth(t *testing.T) {
 	}
 }
 
-// TestReconciliation_OnlyInZitadel: a Zitadel grant has no MkAuth counterpart.
+// TestReconciliation_OnlyInZitadel: a Zitadel grant has no Syndra counterpart.
 // Most often a derived (mapping rule) grant or pre-existing manual grant.
 func TestReconciliation_OnlyInZitadel(t *testing.T) {
 	withReconciliationDeps(t,
@@ -148,7 +148,7 @@ func TestReconciliation_OnlyInZitadel(t *testing.T) {
 	rr := getReconciliation(t)
 	got := decodeReconciliation(t, rr)
 
-	if len(got.OnlyInZitadel) != 1 || len(got.OnlyInMkAuth) != 0 || len(got.Drift) != 0 {
+	if len(got.OnlyInZitadel) != 1 || len(got.OnlyInSyndra) != 0 || len(got.Drift) != 0 {
 		t.Fatalf("expected only_in_zitadel=1, got %+v", got)
 	}
 	entry := got.OnlyInZitadel[0]
@@ -176,15 +176,15 @@ func TestReconciliation_RoleMismatch(t *testing.T) {
 
 	got := decodeReconciliation(t, getReconciliation(t))
 
-	if len(got.OnlyInMkAuth) != 0 || len(got.OnlyInZitadel) != 0 {
+	if len(got.OnlyInSyndra) != 0 || len(got.OnlyInZitadel) != 0 {
 		t.Fatalf("expected drift only, got %+v", got)
 	}
 	if len(got.Drift) != 1 {
 		t.Fatalf("expected one drift entry, got %d", len(got.Drift))
 	}
 	d := got.Drift[0]
-	if !reflect.DeepEqual(d.OnlyInMkAuth, []string{"editor"}) {
-		t.Fatalf("expected only-in-mkauth=[editor], got %+v", d.OnlyInMkAuth)
+	if !reflect.DeepEqual(d.OnlyInSyndra, []string{"editor"}) {
+		t.Fatalf("expected only-in-syndra=[editor], got %+v", d.OnlyInSyndra)
 	}
 	if !reflect.DeepEqual(d.OnlyInZitadel, []string{"admin"}) {
 		t.Fatalf("expected only-in-zitadel=[admin], got %+v", d.OnlyInZitadel)
@@ -192,16 +192,16 @@ func TestReconciliation_RoleMismatch(t *testing.T) {
 	if d.GrantID != "g-1" {
 		t.Fatalf("expected GrantID=g-1 for drill-in, got %q", d.GrantID)
 	}
-	if !reflect.DeepEqual(d.MkAuthRoles, []string{"editor", "viewer"}) {
-		t.Fatalf("MkAuthRoles not sorted asc, got %+v", d.MkAuthRoles)
+	if !reflect.DeepEqual(d.SyndraRoles, []string{"editor", "viewer"}) {
+		t.Fatalf("SyndraRoles not sorted asc, got %+v", d.SyndraRoles)
 	}
 	if !reflect.DeepEqual(d.ZitadelRoles, []string{"admin", "viewer"}) {
 		t.Fatalf("ZitadelRoles not sorted asc, got %+v", d.ZitadelRoles)
 	}
 }
 
-// TestReconciliation_RoleSuperset: MkAuth has a role that Zitadel is missing.
-// Reported as drift (not only_in_mkauth), because the (user, project) pair
+// TestReconciliation_RoleSuperset: Syndra has a role that Zitadel is missing.
+// Reported as drift (not only_in_syndra), because the (user, project) pair
 // itself is present on both sides — only the role set differs.
 func TestReconciliation_RoleSuperset(t *testing.T) {
 	withReconciliationDeps(t,
@@ -215,11 +215,11 @@ func TestReconciliation_RoleSuperset(t *testing.T) {
 	)
 
 	got := decodeReconciliation(t, getReconciliation(t))
-	if len(got.Drift) != 1 || len(got.OnlyInMkAuth) != 0 {
+	if len(got.Drift) != 1 || len(got.OnlyInSyndra) != 0 {
 		t.Fatalf("expected drift-only superset, got %+v", got)
 	}
 	d := got.Drift[0]
-	if !reflect.DeepEqual(d.OnlyInMkAuth, []string{"editor"}) || len(d.OnlyInZitadel) != 0 {
+	if !reflect.DeepEqual(d.OnlyInSyndra, []string{"editor"}) || len(d.OnlyInZitadel) != 0 {
 		t.Fatalf("unexpected drift shape: %+v", d)
 	}
 }
@@ -237,7 +237,7 @@ func TestReconciliation_Aligned(t *testing.T) {
 		}, 0, nil,
 	)
 	got := decodeReconciliation(t, getReconciliation(t))
-	if len(got.OnlyInMkAuth) != 0 || len(got.OnlyInZitadel) != 0 || len(got.Drift) != 0 {
+	if len(got.OnlyInSyndra) != 0 || len(got.OnlyInZitadel) != 0 || len(got.Drift) != 0 {
 		t.Fatalf("expected all-empty diff, got %+v", got)
 	}
 	if got.GeneratedAt.IsZero() {
@@ -278,8 +278,8 @@ func TestReconciliation_TruncationFlag(t *testing.T) {
 
 // TestReconciliation_PaginatesUntilTotalReached: with a per-page size smaller
 // than the Zitadel inventory, the handler MUST iterate every page so the
-// diff is authoritative. Comparing MkAuth's full inventory against only the
-// first page would false-positive grants on later pages into only_in_mkauth.
+// diff is authoritative. Comparing Syndra's full inventory against only the
+// first page would false-positive grants on later pages into only_in_syndra.
 func TestReconciliation_PaginatesUntilTotalReached(t *testing.T) {
 	origPageSize := reconciliationPageSize
 	reconciliationPageSize = 2
@@ -292,22 +292,22 @@ func TestReconciliation_PaginatesUntilTotalReached(t *testing.T) {
 		{ID: "g-4", UserID: "u-4", ProjectID: "p-1", RoleKeys: []string{"r"}},
 		{ID: "g-5", UserID: "u-5", ProjectID: "p-1", RoleKeys: []string{"r"}},
 	}
-	// MkAuth side mirrors u-3..u-5 — these would false-positive into
-	// only_in_mkauth if the loop stopped after page 1 (which only contains
+	// Syndra side mirrors u-3..u-5 — these would false-positive into
+	// only_in_syndra if the loop stopped after page 1 (which only contains
 	// u-1 and u-2 at page size 2).
-	mkauthGrants := []models.DirectGrant{
+	syndraGrants := []models.DirectGrant{
 		directGrant("u-3", "p-1", "r"),
 		directGrant("u-4", "p-1", "r"),
 		directGrant("u-5", "p-1", "r"),
 	}
-	withReconciliationDeps(t, mkauthGrants, zitadelGrants, 0, nil)
+	withReconciliationDeps(t, syndraGrants, zitadelGrants, 0, nil)
 
 	got := decodeReconciliation(t, getReconciliation(t))
 	if got.Truncated {
 		t.Fatalf("did not expect truncation under the cap")
 	}
-	if len(got.OnlyInMkAuth) != 0 {
-		t.Fatalf("pagination should have matched u-3..u-5 against later Zitadel pages, got only_in_mkauth=%+v", got.OnlyInMkAuth)
+	if len(got.OnlyInSyndra) != 0 {
+		t.Fatalf("pagination should have matched u-3..u-5 against later Zitadel pages, got only_in_syndra=%+v", got.OnlyInSyndra)
 	}
 	if len(got.Drift) != 0 {
 		t.Fatalf("u-3..u-5 role sets agree on both sides, expected no drift, got %+v", got.Drift)
@@ -316,7 +316,7 @@ func TestReconciliation_PaginatesUntilTotalReached(t *testing.T) {
 
 // TestReconciliation_ZitadelFailure: the handler must surface a 502 when
 // Zitadel is unreachable rather than returning a misleading "all aligned"
-// snapshot from the MkAuth side alone.
+// snapshot from the Syndra side alone.
 func TestReconciliation_ZitadelFailure(t *testing.T) {
 	withReconciliationDeps(t, nil, nil, 0, errors.New("upstream unavailable"))
 
@@ -340,14 +340,14 @@ func TestReconciliation_MultipleUsersStableOrder(t *testing.T) {
 	)
 
 	got := decodeReconciliation(t, getReconciliation(t))
-	if len(got.OnlyInMkAuth) != 3 {
-		t.Fatalf("expected 3 only_in_mkauth entries, got %d", len(got.OnlyInMkAuth))
+	if len(got.OnlyInSyndra) != 3 {
+		t.Fatalf("expected 3 only_in_syndra entries, got %d", len(got.OnlyInSyndra))
 	}
 	want := []struct{ u, p string }{{"u-1", "p-1"}, {"u-1", "p-2"}, {"u-2", "p-1"}}
 	for i, w := range want {
-		if got.OnlyInMkAuth[i].UserID != w.u || got.OnlyInMkAuth[i].ProjectID != w.p {
+		if got.OnlyInSyndra[i].UserID != w.u || got.OnlyInSyndra[i].ProjectID != w.p {
 			t.Fatalf("idx %d expected %s/%s, got %s/%s", i, w.u, w.p,
-				got.OnlyInMkAuth[i].UserID, got.OnlyInMkAuth[i].ProjectID)
+				got.OnlyInSyndra[i].UserID, got.OnlyInSyndra[i].ProjectID)
 		}
 	}
 }
@@ -356,7 +356,7 @@ func TestReconciliation_MultipleUsersStableOrder(t *testing.T) {
 // target of an active mapping rule the user qualifies for (holds the source)
 // is expected, not drift — it must not appear in only_in_zitadel.
 func TestReconciliation_RuleDerivedNotOnlyInZitadel(t *testing.T) {
-	// MkAuth has the source grant; Zitadel has source + rule-derived target.
+	// Syndra has the source grant; Zitadel has source + rule-derived target.
 	withReconciliationDeps(t,
 		[]models.DirectGrant{directGrant("u-1", "p1", "member")},
 		[]zitadel.UserGrant{

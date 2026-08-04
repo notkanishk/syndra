@@ -22,7 +22,7 @@ Targets **Phase 5** (operator experience). Follows `basic-advanced-ia`.
 
 **Control plane.** `GET /review/expiring-grants?within_days=` (its own window, so a 30-day review and Today's 14-day queue can differ without either lying), `GET /propagations/cascade-groups` (Change history's unit, including cascades whose writes have not landed), and `POST /governance/drift/bulk-mark-external` (the symmetric second bulk resolution; bulk revoke stays deliberately absent). `GET /governance/drift` returns an enriched triage view — risk group, whether the role is still in the catalogue, holder status, and how many other pending items the same person has — ordered by risk then age. `GET /users` gains the "needs attention" trio plus bundle names and project count, and its search now matches role keys. `ProjectRole.Group` becomes its own field instead of being smuggled through `Description`, which is why every upstream role rendered its group where its description belonged.
 
-**Screens.** Every screen the revised handoff draws is brought to it, and every deleted capability is restored — including the upstream console, whose write half is collapsed behind a disclosure that names all three consequences of bypassing MkAuth before it shows a button.
+**Screens.** Every screen the revised handoff draws is brought to it, and every deleted capability is restored — including the upstream console, whose write half is collapsed behind a disclosure that names all three consequences of bypassing Syndra before it shows a button.
 
 **Access map.** Opens on a browsable root — every node grouped by kind, ordered by connectedness — with a breadcrumb back to it from any focused node. Search becomes a shortcut rather than the only door.
 

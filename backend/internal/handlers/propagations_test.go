@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"mkauth/internal/models"
-	"mkauth/internal/services/propagation"
+	"syndra/internal/models"
+	"syndra/internal/services/propagation"
 )
 
 func resetPropagationDeps(t *testing.T) {

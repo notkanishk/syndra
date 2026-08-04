@@ -5,7 +5,7 @@
 ### The problem, stated precisely
 
 `(project_id, role_key)` is the identity of a role. `role_key` alone is not.
-Every screen in MkAuth knew this and none of them agreed on how to say it.
+Every screen in Syndra knew this and none of them agreed on how to say it.
 
 Two abstractions existed for it and neither was reachable:
 
@@ -139,9 +139,9 @@ difference is whether unexplained access exists somewhere nobody is looking.
 The two that were missing are the two that mean *do this again*:
 
 - `requeued` — a transient error; the row will be retried on the next pass.
-- `errored` — the Zitadel outcome was decided but MkAuth could not write it
+- `errored` — the Zitadel outcome was decided but Syndra could not write it
   down. The row stays `in_flight` and the next drain reclaims it. The write may
-  well have landed; MkAuth does not know that it did.
+  well have landed; Syndra does not know that it did.
 
 Reporting only the terminal pair turns both into silence on an HTTP 200. An
 operator who resumes a queue of eight and reads "0 applied, 0 failed" concludes
@@ -219,7 +219,7 @@ grant. Coverage is a property of a person.
 
 Every table hanging off a bundle carries `ON DELETE CASCADE`, so the assignment
 rows vanish the instant the bundle does. A holder whose assignment disappeared
-without a revoke keeps the role in Zitadel with nothing in MkAuth left to
+without a revoke keeps the role in Zitadel with nothing in Syndra left to
 explain it — which is not a gap, it is drift, and it would arrive with no actor
 and be found weeks later by the sweep. The same argument holds for a rule.
 
@@ -432,10 +432,10 @@ workaround. **What would reopen this:** a real integration that needs roles from
 two projects in one token. That is the trigger, and it is a product event, not a
 refactor.
 
-## Decision 15 · Advanced shows Zitadel's grant id, not a second MkAuth one
+## Decision 15 · Advanced shows Zitadel's grant id, not a second Syndra one
 
 C9's buildable half. The Advanced panel already showed `direct_role_grants.id` —
-MkAuth's own row — which answers "what does MkAuth think" and not "what does
+Syndra's own row — which answers "what does Syndra think" and not "what does
 Zitadel hold". The second is the one an operator needs when cross-checking the
 identity provider or quoting an id in a ticket.
 
@@ -449,7 +449,7 @@ behind it is operator-gated, this route also serves a member their own record,
 and a member's page must not fire a request whose only outcome is a 403 (the
 same rule as the Activity tab).
 
-A project with no Zitadel grant says so, rather than showing a dash — MkAuth
+A project with no Zitadel grant says so, rather than showing a dash — Syndra
 listing roles for a project Zitadel has no grant for is a real condition, and a
 dash reads as "not loaded". Naming it is not the same as interpreting it: the
 line points at Reconciliation, which is where that gets triaged, and makes no

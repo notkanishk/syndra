@@ -17,5 +17,5 @@ The backend MUST be the final authorization authority for privileged administrat
 
 #### Scenario: Development-mode cmdline probe
 - **WHEN** `ZITADEL_DOMAIN` is unset (local development mode)
-- **THEN** the `/api/v1/zitadel/health` endpoint MUST continue to accept `MKAUTH_API_KEY` via the `withUserAuth` fallback
+- **THEN** the `/api/v1/zitadel/health` endpoint MUST continue to accept `SYNDRA_API_KEY` via the `withUserAuth` fallback
 - **AND** no production deployment MUST rely on this fallback

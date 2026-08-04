@@ -9,7 +9,7 @@
 - [x] Replace `ActionRequest` / `ActionResponse` with `ActionV2Request` / `ActionV2Response` in `backend/internal/handlers/action.go`.
 - [x] `ActionV2Request` accepts Zitadel's function payload: `{function, user{id}, user_grants[{projectId, roles}]}` via `decodeJSONLenient`.
 - [x] Multi-grant dedup by `projectId` preserving first-seen order.
-- [x] Project-selection logic: 0 projects → empty `append_claims`; 1 project → flat claim keys; 2+ projects → namespaced `mkauth.<projectID>.<key>`.
+- [x] Project-selection logic: 0 projects → empty `append_claims`; 1 project → flat claim keys; 2+ projects → namespaced `syndra.<projectID>.<key>`.
 - [x] `degradedResponse(ctx, projectID, namespace)` wraps `fail_closed` / `minimal_safe` output in `append_claims` envelope; DB outage defaults to fail_closed.
 - [x] Per-project degradation does not suppress sibling projects in a multi-grant response.
 - [x] Introduce helpers `dedupProjectIDs`, `claimsForProject`, `claimsToEnvelope`.
@@ -51,9 +51,9 @@
 - [x] Create `openspec/changes/zitadel-actions-v2-deployment/{proposal,design,tasks,IMPLEMENTATION,DEPLOY}.md`.
 - [x] Create `openspec/changes/zitadel-actions-v2-deployment/specs/application-claims/spec.md` with MODIFIED requirements capturing: (a) v1 → v2 envelope wording correction, (b) Actions v2 target deployment completed, (c) Status flip to Complete.
 - [x] Add the change to `openspec/INDEX.md` Change Log table under Phase 5.
-- [x] Tick Phase 5 > Operations > Actions v2 Deployment box in `openspec/changes/mkauth-core-architecture/ROADMAP.md`.
-- [x] Flip Status header of `openspec/changes/mkauth-core-architecture/specs/application-claims/spec.md` from Partial to Integrated; remove the trailing "Deferred to Phase 5" paragraph; replace v1 wording in §Implementation with the v2 envelope.
-- [x] Flip `application-claims` row in `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md` from Partial → Integrated; bump `Last updated` to 2026-04-23.
+- [x] Tick Phase 5 > Operations > Actions v2 Deployment box in `openspec/changes/syndra-core-architecture/ROADMAP.md`.
+- [x] Flip Status header of `openspec/changes/syndra-core-architecture/specs/application-claims/spec.md` from Partial to Integrated; remove the trailing "Deferred to Phase 5" paragraph; replace v1 wording in §Implementation with the v2 envelope.
+- [x] Flip `application-claims` row in `openspec/changes/syndra-core-architecture/specs/feature-coverage.md` from Partial → Integrated; bump `Last updated` to 2026-04-23.
 
 ### Codebase memory
 
@@ -68,14 +68,14 @@
 
 ### Rotate-command follow-up (2026-04-24)
 
-Zitadel does not expire the Action target signing key (`CreateTargetRequest` has no expiration field; `UpdateTargetRequest.expiration_signing_key` is a rotation trigger, currently `"0s"` only). Rotation is a MkAuth policy choice — not scheduled, runs on demand.
+Zitadel does not expire the Action target signing key (`CreateTargetRequest` has no expiration field; `UpdateTargetRequest.expiration_signing_key` is a rotation trigger, currently `"0s"` only). Rotation is a Syndra policy choice — not scheduled, runs on demand.
 
 - [x] Create `zitadel/actions/rotate.sh`: M2M token resolution, target lookup by name, `POST /v2/actions/targets/{id}` with `{"expirationSigningKey":"0s"}`, capture new key, back up previous key to `.action-signing-key.previous`, write new key, print operator env-swap + restart guidance.
 - [x] Add `zitadel-actions-rotate-key` to `Makefile` `.PHONY` and as a target wrapping the script.
 - [x] Extend `zitadel/actions/.gitignore` to exclude `.action-signing-key.previous` alongside `.action-signing-key`.
 - [x] `SIGNING_KEY.md`: add "Zitadel does not expire the signing key" subsection with proto citation; rewrite the Rotation section to point at `make zitadel-actions-rotate-key`; keep raw curl as a deep-dive fallback; describe `.action-signing-key.previous` as audit-only (backend reads a single env var, not this file).
 - [x] `DEPLOY.md`: rotation bullet in operator warnings now points at the make target; add an explicit "do not schedule" bullet.
-- [x] Amend living `openspec/changes/mkauth-core-architecture/specs/application-claims/spec.md` §Actions v2 Target Deployment with a paragraph recording the no-expiry fact and the on-demand-only rotation posture.
+- [x] Amend living `openspec/changes/syndra-core-architecture/specs/application-claims/spec.md` §Actions v2 Target Deployment with a paragraph recording the no-expiry fact and the on-demand-only rotation posture.
 - [x] `IMPLEMENTATION.md`: new "Rotate-command follow-up (2026-04-24)" subsection enumerating what was built, what was deliberately scoped out, and why.
 - [x] `bash -n zitadel/actions/rotate.sh` — syntax clean.
 - [x] `openspec validate zitadel-actions-v2-deployment --strict` — still passes after the addendum.
@@ -95,7 +95,7 @@ Observability for the rotate command: operators need to see key age at a glance 
 - [x] `ui/src/app/zitadel/page.tsx`: new `RotationStatusSection` card between Health and Projects. Badge (ok/warn/stale/unknown), last-rotated timestamp, age, threshold, contextual guidance text, read-only copyable `make zitadel-actions-rotate-key` snippet. Explicit no-click-rotate design with rationale commented inline.
 - [x] `SIGNING_KEY.md`: new "Rotation observability (the Status panel)" section documenting the endpoint, status ladder, and the two env vars.
 - [x] `DEPLOY.md`: Step 2 seeds `ROTATED_AT` on first install with `date -u` fallback; two new troubleshooting rows for `unknown` and `warn`/`stale` states.
-- [x] `openspec/changes/mkauth-core-architecture/specs/application-claims/spec.md`: new requirement "Rotation status MUST be observable to operators" with scenarios for each status state and the no-click-rotate safety property.
+- [x] `openspec/changes/syndra-core-architecture/specs/application-claims/spec.md`: new requirement "Rotation status MUST be observable to operators" with scenarios for each status state and the no-click-rotate safety property.
 - [x] `cd backend && go test ./internal/handlers/ -run TestHandleActionRotationStatus` — 11 pass.
 - [x] `cd ui && bun run lint && bun run build` — clean (zitadel page grew from 4.19 → 4.84 kB).
 - [x] `openspec validate zitadel-actions-v2-deployment --strict` — passes after the addendum.
@@ -110,7 +110,7 @@ Review surfaced P2 (status didn't consider whether the signing key was actually 
 - [x] Drop the negative-clamp from `ageInDays`; function is now a pure signed-delta helper. Handler owns the "is this age meaningful?" question.
 - [x] Rotation-status tests: new `TestHandleActionRotationStatus_KeyUnset_Disabled` and `TestHandleActionRotationStatus_FutureRotatedAt_Unknown`; existing tests wrapped in a new `withKeyInstalled(t)` helper so they don't collapse into `disabled`; updated `TestAgeInDays_ReturnsSignedDelta` to document the non-clamped semantics. 13 rotation tests (up from 11).
 - [x] `ui/src/app/zitadel/page.tsx`: `RotationStatus` interface gains `key_installed: boolean`; union includes `"disabled"`. Badge renders `disabled` destructive; contextual text explains verification is off and points at `ZITADEL_ACTION_SIGNING_KEY`.
-- [x] Living `openspec/changes/mkauth-core-architecture/specs/application-claims/spec.md`: rollback scenario now says `restCall.interruptOnError: false` (was `restWebhook.…`). Status ladder section expanded to describe precedence (disabled → unknown → ok/warn/stale), and two new scenarios cover future-timestamp and key-unset cases.
+- [x] Living `openspec/changes/syndra-core-architecture/specs/application-claims/spec.md`: rollback scenario now says `restCall.interruptOnError: false` (was `restWebhook.…`). Status ladder section expanded to describe precedence (disabled → unknown → ok/warn/stale), and two new scenarios cover future-timestamp and key-unset cases.
 - [x] `openspec/changes/zitadel-actions-v2-deployment/specs/application-claims/spec.md`: same `restWebhook` → `restCall` correction at line 59 of the MODIFIED delta.
 - [x] `SIGNING_KEY.md` status ladder documents `disabled` as highest precedence + `key_installed` field.
 - [x] `go test ./internal/handlers/ -run TestHandleActionRotationStatus` — 10 pass; full backend suite 223 pass; `go vet` clean.
@@ -135,7 +135,7 @@ P3 review flagged two stale references to the superseded paste flow that the fra
 
 - [x] `zitadel/actions/SIGNING_KEY.md` "Rotation observability" env-var description rewritten around the fragment redirect.
 - [x] `openspec/changes/zitadel-actions-v2-deployment/DEPLOY.md` Troubleshooting table: `unknown` and `warn`/`stale` rows now reference the fragment; added a third row for the `disabled` status (P2 follow-up).
-- [x] `openspec/changes/mkauth-core-architecture/specs/application-claims/spec.md` env-var description updated.
+- [x] `openspec/changes/syndra-core-architecture/specs/application-claims/spec.md` env-var description updated.
 - [x] `.env.example` `ROTATED_AT` header updated.
 - [x] Grep audit confirms remaining "paste" references are contrastive ("never by copy-paste") or historical review notes in this change-dir.
 
@@ -160,12 +160,12 @@ Operator-asked: scripts didn't read `.env` from the repo root, forcing a `set -a
 Review found the machine-key mint path in register.sh/rotate.sh was shelling out to a non-existent helper (`go run ./backend/cmd/test -action=mint-m2m-token` — backend/cmd/test is the DB/Redis regression harness, not a token helper). Operators relying on `ZITADEL_MACHINE_KEY_PATH` hit a silent failure with stderr swallowed.
 
 - [x] `backend/internal/zitadel/token.go`: new exported `MintM2MToken(ctx, domain, keyPath) (string, error)` — one-shot JWT-profile grant; wraps LoadServiceAccountKey + newTokenManager.Token.
-- [x] `backend/cmd/mkauth-token/main.go`: new CLI that reads ZITADEL_DOMAIN + ZITADEL_MACHINE_KEY_PATH from env, calls MintM2MToken, prints Bearer token to stdout. Clear errors on every failure class.
-- [x] `zitadel/actions/register.sh`: machine-key branch now runs `(cd backend && go run ./cmd/mkauth-token)` so module resolution works. No stderr silencing — operator sees the real error from the helper.
+- [x] `backend/cmd/syndra-token/main.go`: new CLI that reads ZITADEL_DOMAIN + ZITADEL_MACHINE_KEY_PATH from env, calls MintM2MToken, prints Bearer token to stdout. Clear errors on every failure class.
+- [x] `zitadel/actions/register.sh`: machine-key branch now runs `(cd backend && go run ./cmd/syndra-token)` so module resolution works. No stderr silencing — operator sees the real error from the helper.
 - [x] `zitadel/actions/rotate.sh`: same fix.
 - [x] 3 new unit tests in `backend/internal/zitadel/mint_m2m_token_test.go` covering empty domain / empty keyPath / nonexistent file rejection paths.
-- [x] `DEPLOY.md` Prerequisites note that the machine-key path requires Go toolchain on the host (because it invokes `go run ./cmd/mkauth-token`).
-- [x] `bash -n` clean on both scripts; `go build ./cmd/mkauth-token` clean; `go test ./...` 226 pass (up from 223); `go vet ./...` clean.
+- [x] `DEPLOY.md` Prerequisites note that the machine-key path requires Go toolchain on the host (because it invokes `go run ./cmd/syndra-token`).
+- [x] `bash -n` clean on both scripts; `go build ./cmd/syndra-token` clean; `go test ./...` 226 pass (up from 223); `go vet ./...` clean.
 - [x] `openspec validate zitadel-actions-v2-deployment --strict` — passes.
 - [x] `mcp__codebase-memory-mcp__detect_changes` + `index_repository` refresh.
 - [x] **Relative-path follow-up:** resolve `ZITADEL_MACHINE_KEY_PATH` to an absolute path (anchored to `REPO_ROOT`) before the `cd backend`. `.env.example` documents relative paths as resolving against the repo root / docker-compose directory; `cd backend` had silently reinterpreted them against `backend/` and would have broken the documented `./zitadel-machine-key.json` style path. POSIX `case` covers absolute, `./...`, bare, `../...`, and `~/...` inputs. Verified with a 6-case bash harness. Both scripts updated identically.

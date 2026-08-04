@@ -33,7 +33,7 @@ export default function Sidebar() {
         <span className="flex h-7 w-7 items-center justify-center rounded-[9px] bg-accent font-display text-[15px] font-bold text-accent-ink">
           m
         </span>
-        <span className="font-display text-[18px] font-semibold tracking-[-0.01em]">MkAuth</span>
+        <span className="font-display text-[18px] font-semibold tracking-[-0.01em]">Syndra</span>
         <span className="flex-1" />
         <span className="rounded-pill border border-line-strong px-2 py-0.5 text-[11px] text-faint">
           {viewLabel}

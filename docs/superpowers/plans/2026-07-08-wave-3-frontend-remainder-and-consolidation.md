@@ -38,7 +38,7 @@ git commit -m "docs(openspec): scaffold wave-3 frontend remainder & consolidatio
 
 ### Task 1: ⌘K roadmap stub (D2)
 
-**Files:** Modify `openspec/changes/mkauth-core-architecture/ROADMAP.md` (Phase 6, after the Google Workspace poller bullet ~line 81).
+**Files:** Modify `openspec/changes/syndra-core-architecture/ROADMAP.md` (Phase 6, after the Google Workspace poller bullet ~line 81).
 
 - [ ] **Step 1:** Add the bullet immediately after the Google Workspace poller line:
 
@@ -49,7 +49,7 @@ git commit -m "docs(openspec): scaffold wave-3 frontend remainder & consolidatio
 - [ ] **Step 2:** Commit.
 
 ```bash
-git add openspec/changes/mkauth-core-architecture/ROADMAP.md
+git add openspec/changes/syndra-core-architecture/ROADMAP.md
 git commit -m "docs(roadmap): stub ⌘K command palette in Phase 6 (D2)"
 ```
 
@@ -454,7 +454,7 @@ git commit -m "feat(ui): inline 'Awaiting Zitadel' pending tag on grants (R2, §
 
 **Files (backend):** `models/models.go:69`, `directory/zitadel.go:197-198,491`, `demo/catalog.go:10-14`, `handlers/profile.go`, `directory/directory_test.go:492-493`, `handlers/profile_test.go:46,63`.
 **Files (frontend):** `lib/types.ts:44`, `lib/session.ts` (:14,:40, demo :68/80/92/104/116, :165, :223), `lib/oidc.ts:227,242,253`, `app/auth/callback/route.ts:139`, `app/page.tsx:56`, `app/login/page.tsx:127`, `lib/__tests__/session.test.ts`.
-**Files (specs):** `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md:24`, `openspec/changes/live-directory-identity-completeness/{proposal,design,tasks}.md`.
+**Files (specs):** `openspec/changes/syndra-core-architecture/specs/feature-coverage.md:24`, `openspec/changes/live-directory-identity-completeness/{proposal,design,tasks}.md`.
 
 - [ ] **Step 1 (backend TDD):** Update `directory_test.go` and `profile_test.go` first — remove `Location` assertions / fixtures so they encode the new truth; run `cd backend && go test ./internal/directory/... ./internal/handlers/...` — Expected: FAIL to compile (Location field still referenced in prod).
 
@@ -471,7 +471,7 @@ git commit -m "feat(ui): inline 'Awaiting Zitadel' pending tag on grants (R2, §
 - [ ] **Step 7: Commit.**
 
 ```bash
-git add backend/internal/models/models.go backend/internal/directory backend/internal/demo/catalog.go backend/internal/handlers/profile.go backend/internal/handlers/profile_test.go ui/src/lib ui/src/app/auth/callback/route.ts ui/src/app/page.tsx ui/src/app/login/page.tsx openspec/changes/mkauth-core-architecture/specs/feature-coverage.md openspec/changes/live-directory-identity-completeness
+git add backend/internal/models/models.go backend/internal/directory backend/internal/demo/catalog.go backend/internal/handlers/profile.go backend/internal/handlers/profile_test.go ui/src/lib ui/src/app/auth/callback/route.ts ui/src/app/page.tsx ui/src/app/login/page.tsx openspec/changes/syndra-core-architecture/specs/feature-coverage.md openspec/changes/live-directory-identity-completeness
 git commit -m "refactor: drop location field end-to-end, keep title/team (D6)"
 ```
 
@@ -490,15 +490,15 @@ git commit -m "refactor: drop location field end-to-end, keep title/team (D6)"
 
 ### Task 12: Consolidation pass (§7)
 
-**Files:** `openspec/INDEX.md`, `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md`, `ROADMAP.md`/`design.md` (confirm only).
+**Files:** `openspec/INDEX.md`, `openspec/changes/syndra-core-architecture/specs/feature-coverage.md`, `ROADMAP.md`/`design.md` (confirm only).
 
 - [ ] **Step 1:** Append a Wave 3 change-log row to `INDEX.md` (mirror the Wave 2 Part rows' format; Phase 5.5).
 - [ ] **Step 2:** Confirm `feature-coverage.md` reflects: `location` dropped (Task 10 did the row), Drift Control Integrated (already there), versioned-policies Removed (already there). Fix any residual `location` mention.
-- [ ] **Step 3:** Read `ROADMAP.md` Phase 5.5 + Phase 6 and `mkauth-core-architecture/design.md §5` — confirm ⌘K stub present (Task 1), no live ⌘K claim, two-layer doctrine intact. No edits unless a drift is found.
+- [ ] **Step 3:** Read `ROADMAP.md` Phase 5.5 + Phase 6 and `syndra-core-architecture/design.md §5` — confirm ⌘K stub present (Task 1), no live ⌘K claim, two-layer doctrine intact. No edits unless a drift is found.
 - [ ] **Step 4:** Commit.
 
 ```bash
-git add openspec/INDEX.md openspec/changes/mkauth-core-architecture/specs/feature-coverage.md
+git add openspec/INDEX.md openspec/changes/syndra-core-architecture/specs/feature-coverage.md
 git commit -m "docs(openspec): wave-3 consolidation — INDEX row, feature-coverage trued to shipped reality (§7)"
 ```
 

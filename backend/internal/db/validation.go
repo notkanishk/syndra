@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // DetectCycleOnInsert checks whether adding a new mapping rule would create

@@ -26,7 +26,7 @@ present such a pass as a success.
 #### Scenario: A write whose outcome could not be recorded is named as such
 
 - **GIVEN** a drain returns `errored: 1`
-- **THEN** the operator MUST be told the write reached the identity provider but MkAuth could not record the outcome, and that resuming settles it
+- **THEN** the operator MUST be told the write reached the identity provider but Syndra could not record the outcome, and that resuming settles it
 
 #### Scenario: Each halt reason is a different sentence
 

@@ -17,7 +17,7 @@ Independent Go binary (separate Docker container) polling backend intents and ex
 LLDAP password propagation (`SetUserPassword` with pre-hashed Argon2id) is unverified against real LLDAP. Group membership mutations are expected to work; password sync is paused.
 
 ### Configuration
-- `BACKEND_URL`, `MKAUTH_API_KEY` — backend connection
+- `BACKEND_URL`, `SYNDRA_API_KEY` — backend connection
 - `LLDAP_URL`, `LLDAP_BIND_DN`, `LLDAP_BIND_PASSWORD`, `LLDAP_BASE_DN` — LLDAP connection
 - `SYNC_POLL_INTERVAL` (10s), `SYNC_WORKER_COUNT` (5), `SYNC_INTENT_LIMIT` (50)
 

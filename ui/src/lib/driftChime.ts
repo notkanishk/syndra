@@ -1,11 +1,11 @@
 "use client";
 
-const STORAGE_KEY = "mkauth-drift-chime";
-const SEEN_KEY = "mkauth-drift-chime-seen";
+const STORAGE_KEY = "syndra-drift-chime";
+const SEEN_KEY = "syndra-drift-chime-seen";
 /** Fired on `window` the first time the chime actually plays, so ChimeToggle
  * can surface a one-time explanatory tooltip. ponytail: a CustomEvent is the
  * whole "pub/sub" needed for one listener — no context/store required. */
-export const CHIME_FIRST_PLAY_EVENT = "mkauth-drift-chime-first-play";
+export const CHIME_FIRST_PLAY_EVENT = "syndra-drift-chime-first-play";
 
 /** Whether the drift chime is enabled. Default on; mirrors theme.tsx's localStorage idiom. */
 export function isChimeEnabled(): boolean {

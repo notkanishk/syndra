@@ -11,7 +11,7 @@
   * Types: `ActionV2Request`, `ActionV2UserRef`, `ActionV2UserGrantRef`, `ActionV2Response`, `ActionV2Claim`.
   * `HandleActionInject` now reads `{function, user.id, user_grants[{projectId, roles}]}` via the lenient decoder and responds with `{append_claims:[{key,value}], append_log_claims?}`.
   * Helpers: `dedupProjectIDs`, `claimsForProject`, `claimsToEnvelope`.
-  * Project selection: 0 → empty claims; 1 → flat keys; 2+ → `mkauth.<projectID>.<key>` namespaced keys.
+  * Project selection: 0 → empty claims; 1 → flat keys; 2+ → `syndra.<projectID>.<key>` namespaced keys.
   * `degradedResponse` preserves per-project `fail_closed` / `minimal_safe` semantics; returns empty envelope on DB outage.
 * `backend/internal/handlers/zitadel_action_auth.go` — new HMAC-SHA256 middleware `withZitadelActionSignature`. Algorithm mirrors `github.com/zitadel/zitadel-go/v3/pkg/actions/signing.go` (confirmed 2026-04-23): header `ZITADEL-Signature` with `t=<unix>,v1=<hex>` pairs; hash input `<unix>.<body>`; 300 s tolerance; multiple `v1=` entries accepted for key rotation.
 * `backend/internal/handlers/router.go:110` — `/api/action/inject` wrapped `withCORS(withZitadelActionSignature("ZITADEL_ACTION_SIGNING_KEY", HandleActionInject))`.
@@ -81,7 +81,7 @@ a decisive fact: **Zitadel does not expire the Action target signing key.**
 Verified against `CreateTargetRequest` in `proto/zitadel/action/v2/target.proto`
 (no expiration field) and `UpdateTargetRequest.expiration_signing_key` which
 is a rotation trigger (currently `"0s"` only) and not a TTL. The first key
-works indefinitely; rotation is a MkAuth *policy* choice, not a Zitadel
+works indefinitely; rotation is a Syndra *policy* choice, not a Zitadel
 requirement.
 
 Given that premise the following were considered and explicitly scoped out:
@@ -163,7 +163,7 @@ click-to-rotate footgun.
   Status panel)" section. `DEPLOY.md` Step 2 now seeds `ROTATED_AT` on
   first install (using `date -u` as the fallback when the `.rotated_at`
   file doesn't yet exist) and includes two new troubleshooting rows.
-* **Living spec** — `openspec/changes/mkauth-core-architecture/specs/application-claims/spec.md`
+* **Living spec** — `openspec/changes/syndra-core-architecture/specs/application-claims/spec.md`
   gained a "Rotation status MUST be observable to operators" requirement
   with scenarios covering each status state and the no-click-rotate
   safety property.
@@ -239,7 +239,7 @@ flow that the env-fragment change failed to migrate at the same time:
   Troubleshooting table — two rows (`unknown`, `warn`/`stale`) still told
   operators to paste lines that `rotate.sh` no longer emits. Added a
   third row for the `disabled` status at the same time.
-* `openspec/changes/mkauth-core-architecture/specs/application-claims/spec.md`
+* `openspec/changes/syndra-core-architecture/specs/application-claims/spec.md`
   — the living-spec env-var description mirrored the stale SIGNING_KEY.md
   wording.
 * `.env.example` — the commented `ROTATED_AT` header said "paste the line
@@ -254,7 +254,7 @@ guidance.
 
 Operator question surfaced a real gap: `register.sh`, `rotate.sh`, and
 `scripts/smoke-test-action-v2.sh` all relied on the process environment
-for `ZITADEL_DOMAIN`, `MKAUTH_EXTERNAL_URL`, `ZITADEL_M2M_TOKEN` /
+for `ZITADEL_DOMAIN`, `SYNDRA_EXTERNAL_URL`, `ZITADEL_M2M_TOKEN` /
 `ZITADEL_MACHINE_KEY_PATH`, etc. — with no layer sourcing `.env`. So
 `make zitadel-actions-register` would fail `${ZITADEL_DOMAIN:?required}`
 even with a fully-populated `.env` at the repo root, forcing operators
@@ -297,7 +297,7 @@ Also rejected:
   (Make keeps the quotes in the exported value), and would only cover
   make-invoked runs. Inline script loader covers both `make …` and
   `bash zitadel/actions/rotate.sh` with one mechanism.
-* `.env.local` / multi-file override support — MkAuth doesn't use these;
+* `.env.local` / multi-file override support — Syndra doesn't use these;
   adding now is speculative.
 
 #### M2M token CLI (2026-04-24)
@@ -321,13 +321,13 @@ Fixed by shipping a real helper:
   `LoadServiceAccountKey` + `newTokenManager` path to do a one-shot JWT
   profile grant (RFC 7523) against the Zitadel token endpoint. No caching,
   no DB/Redis side effects — safe to call from a CLI context.
-* New `backend/cmd/mkauth-token/main.go` — thin CLI that reads
+* New `backend/cmd/syndra-token/main.go` — thin CLI that reads
   `ZITADEL_DOMAIN` + `ZITADEL_MACHINE_KEY_PATH` from the env (auto-loaded
   from `.env` via the script loader already in place), calls
   `MintM2MToken`, prints the Bearer token to stdout. Clear stderr
   messages + non-zero exit on every error class (missing env, key load
   fail, assertion build, token exchange).
-* `register.sh` / `rotate.sh` now `cd backend && go run ./cmd/mkauth-token`
+* `register.sh` / `rotate.sh` now `cd backend && go run ./cmd/syndra-token`
   — module resolution works because the `go run` is inside the module
   root. Stderr from the helper flows through to the operator verbatim
   instead of being silenced, so a bad key file produces "key file is
@@ -337,7 +337,7 @@ Fixed by shipping a real helper:
   keyPath`, `nonexistent key file`). Full backend suite: 226 passing (up
   from 223).
 
-No cross-module coupling beyond the existing `mkauth/internal/zitadel`
+No cross-module coupling beyond the existing `syndra/internal/zitadel`
 import the backend already uses. Operators who can't install Go on the
 mint host can still use `ZITADEL_M2M_TOKEN` — the preference order
 preserves that.
@@ -345,12 +345,12 @@ preserves that.
 ##### Relative-path follow-up (same day)
 
 Review caught a P1 regression immediately after the CLI landed: the
-`cd backend && go run ./cmd/mkauth-token` pattern broke relative
+`cd backend && go run ./cmd/syndra-token` pattern broke relative
 `ZITADEL_MACHINE_KEY_PATH` values. `.env.example` documents these as
 resolving against the repo root (the docker-compose directory), so a
 value like `./zitadel-machine-key.json` should find the file at
 `<repo>/zitadel-machine-key.json` — but after `cd backend`, Go's
-`os.ReadFile` inside `mkauth-token` resolved it against `<repo>/backend/`
+`os.ReadFile` inside `syndra-token` resolved it against `<repo>/backend/`
 instead, silently looking for a file in the wrong directory.
 
 Fix: resolve `ZITADEL_MACHINE_KEY_PATH` to an absolute path (anchored to
@@ -395,9 +395,9 @@ the documented shapes exactly.
 
 * This change directory with `proposal.md`, `design.md`, `tasks.md`, this file, `DEPLOY.md`, and `specs/application-claims/spec.md` MODIFIED delta.
 * `openspec/INDEX.md` — added to Change Log as Phase 5 Complete.
-* `openspec/changes/mkauth-core-architecture/ROADMAP.md` — Phase 5 > Operations > Actions v2 Deployment ticked.
-* `openspec/changes/mkauth-core-architecture/specs/application-claims/spec.md` — Status flipped to Integrated; §Implementation wording corrected from v1 (`SetCustomClaims`) to v2 envelope (`append_claims[]`); trailing deferral paragraph removed.
-* `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md` — `application-claims` row flipped Partial → Integrated; `Last updated` bumped to 2026-04-23.
+* `openspec/changes/syndra-core-architecture/ROADMAP.md` — Phase 5 > Operations > Actions v2 Deployment ticked.
+* `openspec/changes/syndra-core-architecture/specs/application-claims/spec.md` — Status flipped to Integrated; §Implementation wording corrected from v1 (`SetCustomClaims`) to v2 envelope (`append_claims[]`); trailing deferral paragraph removed.
+* `openspec/changes/syndra-core-architecture/specs/feature-coverage.md` — `application-claims` row flipped Partial → Integrated; `Last updated` bumped to 2026-04-23.
 
 ## What did NOT change
 

@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
-	"mkauth/internal/services"
-	"mkauth/internal/services/drift"
-	"mkauth/internal/services/propagation"
+	"syndra/internal/db"
+	"syndra/internal/models"
+	"syndra/internal/services"
+	"syndra/internal/services/drift"
+	"syndra/internal/services/propagation"
 )
 
 func resetDriftDeps(t *testing.T) {
@@ -149,7 +149,7 @@ func TestAttributeDrift_ExternalBackfillRecordsADirectGrantWithNoRef(t *testing.
 		t.Fatalf("recorded source_ref = %q, want empty", params.SourceRef)
 	}
 	// The op_type still says "add" — the ledger row it writes is an addition to
-	// what MkAuth knows. What must not follow is an outbox row carrying it back
+	// what Syndra knows. What must not follow is an outbox row carrying it back
 	// to Zitadel, which already has it.
 	if params.OpType != "add" {
 		t.Fatalf("adoption records an add against the ledger, got op %q", params.OpType)
@@ -218,7 +218,7 @@ func TestHandleRevokeDrift_EnqueuesRevokeAtomicallyThenDrains(t *testing.T) {
 // Adoption must leave nothing behind that could later write to Zitadel.
 //
 // An outbox row is not a receipt, it is an instruction. Leaving one pending told
-// the operator MkAuth still owed Zitadel forty grants it did not owe; draining
+// the operator Syndra still owed Zitadel forty grants it did not owe; draining
 // it inline only narrowed the window, because a drain that cannot reach Zitadel
 // leaves the row for later. Either way an operator who adopts a role and then
 // removes it upstream by hand gets it re-created. So: no outbox row, and no

@@ -10,7 +10,7 @@
 
 The two answer different questions — "Safety-gated" versus "can cut and engrave unsupervised" — and folding one into the other made every upstream role render its group where its description belonged, which is exactly the line an operator reads to make a decision.
 
-The role catalogue MUST expose `group` and, where MkAuth created the role, its clone provenance.
+The role catalogue MUST expose `group` and, where Syndra created the role, its clone provenance.
 
 #### Scenario: An upstream role shows its group and no invented description
 
@@ -21,7 +21,7 @@ The role catalogue MUST expose `group` and, where MkAuth created the role, its c
 
 ### Requirement: Creating a role MUST be reachable from the roles index
 
-`POST /api/v1/roles` MUST have an affordance. Creating a role through MkAuth writes it locally and upstream in one action and rolls the local row back if the provider refuses; creating one directly in the provider is invisible to MkAuth until the drift sweep flags it.
+`POST /api/v1/roles` MUST have an affordance. Creating a role through Syndra writes it locally and upstream in one action and rolls the local row back if the provider refuses; creating one directly in the provider is invisible to Syndra until the drift sweep flags it.
 
 Clone-from MUST be offered, and MUST record provenance so a later reader can tell two similar roles are deliberately related rather than an accidental duplicate.
 

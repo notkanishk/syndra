@@ -1,6 +1,6 @@
 ## Why
 
-MkAuth bridges Zitadel (OIDC) identity to legacy makerspace infrastructure — Samba file shares, UniFi network equipment, and other systems that authenticate via LLDAP. These systems require an LDAP-compatible password, but users authenticate to Zitadel with their own OIDC credentials that MkAuth never sees.
+Syndra bridges Zitadel (OIDC) identity to legacy makerspace infrastructure — Samba file shares, UniFi network equipment, and other systems that authenticate via LLDAP. These systems require an LDAP-compatible password, but users authenticate to Zitadel with their own OIDC credentials that Syndra never sees.
 
 The Shadow Password Vault provides a **secondary, infrastructure-only credential** so that OIDC users can access Samba/LLDAP services without exposing or sharing their primary Zitadel password. This credential is narrowly scoped, independently auditable, and isolated from primary identity flows.
 

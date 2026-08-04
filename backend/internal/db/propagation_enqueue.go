@@ -25,7 +25,7 @@ type EnqueueParams struct {
 	ZitadelGrantID string
 	PayloadJSON    string
 	// NoPropagation records the ledger and audit rows without an outbox row,
-	// for the one case where MkAuth owes Zitadel nothing: adopting drift.
+	// for the one case where Syndra owes Zitadel nothing: adopting drift.
 	// external_backfill means Zitadel is already authoritative, so there is no
 	// mutation to project — and an outbox row is not a passive receipt, it is a
 	// live instruction. An `add` row that outlives its adoption re-creates the

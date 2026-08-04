@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"mkauth/internal/db"
-	"mkauth/internal/services"
+	"syndra/internal/db"
+	"syndra/internal/services"
 )
 
 func handleCreateRole(w http.ResponseWriter, r *http.Request) {

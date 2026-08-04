@@ -3,10 +3,10 @@ package services
 import (
 	"context"
 
-	"mkauth/internal/db"
-	"mkauth/internal/directory"
-	"mkauth/internal/models"
-	"mkauth/internal/zitadel"
+	"syndra/internal/db"
+	"syndra/internal/directory"
+	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 // Injectable function vars — tests swap these to exercise services without a

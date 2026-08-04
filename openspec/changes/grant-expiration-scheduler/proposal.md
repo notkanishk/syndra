@@ -1,10 +1,10 @@
 ## Why
 
-MkAuth's `direct_role_grants.expires_at` can be set (e.g. semester-bound access), but nothing enforces expiry. Expired grants silently persist: rows stay in the DB, LLDAP group memberships remain, and any Zitadel derived grants that the direct grant produced linger. There is no audit trail recording the lapse.
+Syndra's `direct_role_grants.expires_at` can be set (e.g. semester-bound access), but nothing enforces expiry. Expired grants silently persist: rows stay in the DB, LLDAP group memberships remain, and any Zitadel derived grants that the direct grant produced linger. There is no audit trail recording the lapse.
 
 Effective access at query time is already correct — `GetDirectGrantsForUser(..., includeExpired=false)` filters expired rows out of views and the cache compiler. The gap is the **cleanup side-effects**: LLDAP membership removal via provisioning intents, Zitadel derived-grant cascade, Redis cache invalidation, audit trail, and hard-deleting the row (per existing convention — `direct_role_grants` has no status column).
 
-This change closes Phase 5's **Grant Expiration Scheduler** item ([ROADMAP.md](../mkauth-core-architecture/ROADMAP.md) line 55). It is also MkAuth's first backend-side background worker, establishing a pattern future periodic jobs (access-request expiry, token-rotation reminders) should follow.
+This change closes Phase 5's **Grant Expiration Scheduler** item ([ROADMAP.md](../syndra-core-architecture/ROADMAP.md) line 55). It is also Syndra's first backend-side background worker, establishing a pattern future periodic jobs (access-request expiry, token-rotation reminders) should follow.
 
 ## What Changes
 
@@ -25,7 +25,7 @@ This change closes Phase 5's **Grant Expiration Scheduler** item ([ROADMAP.md](.
 - **No migration required** — `direct_role_grants` already has `expires_at` and the `idx_direct_role_grants_expiry` index.
 - Modifies: `backend/internal/db/repositories.go`, `backend/internal/services/provisioning.go`, `backend/cmd/api/main.go`, `.env.example`.
 - Creates: `backend/internal/services/expiry/{scheduler,sweep,deps}.go` and companion tests.
-- Living docs updated: `openspec/INDEX.md`, `openspec/changes/mkauth-core-architecture/ROADMAP.md`, `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md`, `openspec/changes/mkauth-core-architecture/specs/access-governance/spec.md`.
+- Living docs updated: `openspec/INDEX.md`, `openspec/changes/syndra-core-architecture/ROADMAP.md`, `openspec/changes/syndra-core-architecture/specs/feature-coverage.md`, `openspec/changes/syndra-core-architecture/specs/access-governance/spec.md`.
 - 14 new tests (9 sweep + 5 scheduler lifecycle).
 - Zero new Go-module dependencies.
 - **Known limitation inherited from Phase 5 "Partial Failure Rollback"**: Zitadel cascade is best-effort. If Zitadel is unreachable during a sweep, derived-grant orphans may remain and will be surfaced for the future reconciler to clean up.

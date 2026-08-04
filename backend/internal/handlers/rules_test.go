@@ -12,9 +12,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"mkauth/internal/models"
-	"mkauth/internal/services"
-	"mkauth/internal/services/propagation"
+	"syndra/internal/models"
+	"syndra/internal/services"
+	"syndra/internal/services/propagation"
 )
 
 // resetRulesDeps captures and restores all rules-related injectable vars.

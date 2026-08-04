@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
+	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
 func withTriageDeps(t *testing.T, items []models.DriftItem, users map[string]models.UserProfile) {
@@ -88,7 +88,7 @@ func TestDriftTriageQueue_OldestFirstWithinTier(t *testing.T) {
 	}
 }
 
-// A role MkAuth no longer knows about outranks routine drift: adopting it would
+// A role Syndra no longer knows about outranks routine drift: adopting it would
 // recreate something somebody deliberately retired.
 func TestDriftTriageQueue_UncataloguedRoleOutranksKnownRoutineRole(t *testing.T) {
 	same := time.Now().Add(-3 * 24 * time.Hour)

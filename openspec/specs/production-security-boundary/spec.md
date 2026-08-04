@@ -46,7 +46,7 @@ Every admin page MUST be gated by exactly one of two mechanisms: the `middleware
 - **THEN** the server guard redirects to `/` before the diagnostics surface hydrates (previously it rendered, protected only by proxy 403s on its data calls)
 
 ### Requirement: Production trust boundary gate
-MkAuth MUST satisfy explicit trust-boundary controls before live Zitadel-backed orchestration is treated as production-ready.
+Syndra MUST satisfy explicit trust-boundary controls before live Zitadel-backed orchestration is treated as production-ready.
 
 #### Scenario: Production rollout readiness review
 - **WHEN** the project is evaluated for live orchestration readiness
@@ -70,14 +70,14 @@ The backend MUST be the final authorization authority for privileged administrat
 
 #### Scenario: Development-mode cmdline probe
 - **WHEN** `ZITADEL_DOMAIN` is unset (local development mode)
-- **THEN** the `/api/v1/zitadel/health` endpoint MUST continue to accept `MKAUTH_API_KEY` via the `withUserAuth` fallback
+- **THEN** the `/api/v1/zitadel/health` endpoint MUST continue to accept `SYNDRA_API_KEY` via the `withUserAuth` fallback
 - **AND** no production deployment MUST rely on this fallback
 
 ### Requirement: Webhook authenticity is verified before orchestration
 The system MUST verify webhook authenticity and freshness before allowing cache invalidation, onboarding triggers, or downstream mutation work to proceed.
 
 #### Scenario: Unverified webhook received
-- **WHEN** MkAuth receives a structurally valid but unverified webhook payload
+- **WHEN** Syndra receives a structurally valid but unverified webhook payload
 - **THEN** the system MUST reject it as non-authoritative for orchestration
 - **AND** no downstream mutation or cache invalidation MUST occur
 
@@ -93,7 +93,7 @@ The claim-injection path MUST be bounded, observable, and operate with a documen
 The system MUST leave an auditable trail for onboarding and other high-risk orchestration outcomes.
 
 #### Scenario: Welcome-bundle assignment fails
-- **WHEN** MkAuth cannot complete a backend-owned onboarding mutation
+- **WHEN** Syndra cannot complete a backend-owned onboarding mutation
 - **THEN** the failed attempt MUST be visible through audit or operator-facing diagnostics
 - **AND** the retry path MUST avoid duplicate grants
 

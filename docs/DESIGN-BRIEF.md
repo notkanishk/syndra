@@ -1,4 +1,4 @@
-# MkAuth — Design Brief
+# Syndra — Design Brief
 
 > **Historical.** This is the brief as written, kept for the reasoning behind each
 > decision. Two things changed after it: the views shipped as **Basic / Advanced**
@@ -6,10 +6,10 @@
 > claim editor rather than a preview.
 >
 > What actually shipped: [`openspec/changes/basic-advanced-ia/`](../openspec/changes/basic-advanced-ia/design.md).
-> The handoff that superseded the naming: [`design_handoff_mkauth_ia/README.md`](../design_handoff_mkauth_ia/README.md).
+> The handoff that superseded the naming: [`design_handoff_syndra_ia/README.md`](../design_handoff_syndra_ia/README.md).
 
 **For:** Claude Design
-**Product:** MkAuth — access management for an academic makerspace
+**Product:** Syndra — access management for an academic makerspace
 **Date:** 2026-07-30
 **Ask:** Fix the information architecture and specify every view, split across two views of the product — an everyday surface and a system surface.
 
@@ -53,8 +53,8 @@ Every term below is fixed. Left column is what users see; right column is what i
 | **Access source** | `RoleReason` | Why a person holds a role — see §6 |
 | **Token format** | `ClaimProfile` | Claim name + format (`csv` / `array`) per project |
 | **Preview token** | `ApplicationSimulation` | Dry run of exactly what claims an app would receive |
-| **Unexplained access** | `DriftItem`, "drift" | Access in Zitadel that MkAuth never caused |
-| **Adopt in MkAuth** | `attribute` → status `attributed` | Claim unexplained access as legitimate and take ownership |
+| **Unexplained access** | `DriftItem`, "drift" | Access in Zitadel that Syndra never caused |
+| **Adopt in Syndra** | `attribute` → status `attributed` | Claim unexplained access as legitimate and take ownership |
 | **Revoke** | `revoke` → status `revoked` | Remove it |
 | **Owned elsewhere** | `mark-external` → `marked_external` | A known integration owns this — stop flagging it |
 | **Pending changes** | `PendingPropagation` | Queued Zitadel writes awaiting confirmation |
@@ -196,7 +196,7 @@ Any route with `—` in the Member column is **not rendered and not reachable** 
 **`/grants` ceases to exist as a destination.** It is the one route in the matrix that doesn't map cleanly, because it currently hosts two tabs doing unrelated jobs. Resolution:
 
 - *All grants* (every user/project/role across sources) — **removed**. It is redundant with People and role membership, which answer the same question with the Access source attached. Nothing to redirect; the capability is absorbed.
-- *Reconciliation* (the MkAuth ↔ Zitadel diff, for spotting drift before it widens) — **relocated** to Review › Unexplained access as a second tab.
+- *Reconciliation* (the Syndra ↔ Zitadel diff, for spotting drift before it widens) — **relocated** to Review › Unexplained access as a second tab.
 - Legacy `/grants` issues a **301 to `/governance/drift?tab=reconciliation`**. Reconciliation is the only part with no other home, so it is the correct landing target; anyone arriving from an old bookmark for the all-grants view lands somewhere adjacent and legible rather than on a 404.
 
 After this, "every route has exactly one home" holds with no exceptions.
@@ -318,8 +318,8 @@ Visual graph of projects, roles, bundles, rules. Currently the least legible scr
 
 #### S6 · Review › Unexplained access
 The highest-stakes screen in the product. Two tabs:
-1. **Triage queue** — each item is access found in Zitadel that MkAuth cannot explain. Three resolutions: **Adopt in MkAuth**, **Revoke**, **Owned elsewhere**. Bulk adopt and manual reconcile supported.
-2. **Reconciliation** — the MkAuth ↔ Zitadel diff (relocated from `/grants`), for spotting drift before it widens.
+1. **Triage queue** — each item is access found in Zitadel that Syndra cannot explain. Three resolutions: **Adopt in Syndra**, **Revoke**, **Owned elsewhere**. Bulk adopt and manual reconcile supported.
+2. **Reconciliation** — the Syndra ↔ Zitadel diff (relocated from `/grants`), for spotting drift before it widens.
 
 Each row must make "what is this, and what happens if I revoke it" answerable in about two seconds. If one screen gets extra scrutiny, it's this one.
 
@@ -365,8 +365,8 @@ No summary counts, no tiles, no roll-ups. Today already owns actionable summary 
 ## 5. Gaps to design around
 
 1. **Role → members has no endpoint** (E2). `POST /api/v1/lookup` is only an id→display-name resolver; `GET /api/v1/bundles/{id}/impact` covers bundles only. There is no reverse role→members query anywhere in `services/views.go`. Design the view; engineering adds the endpoint. Assume a response shaped like `BundleImpact` — role identifier plus users with their access sources.
-2. **The `/roles` cross-project index is only partially backed.** `GET /api/v1/roles` calls `GetAllLocalRoles`, which returns *only roles created through MkAuth*. Roles that exist in Zitadel but were not created here are invisible to it. Complete coverage needs either a new aggregate endpoint or per-project fan-out over `GET /api/v1/zitadel/projects/{id}/roles`. Until then the index is honestly incomplete — **design an explicit "MkAuth-managed roles" scope indicator** rather than implying the list is exhaustive. Silently partial lists are how people conclude a role doesn't exist and create a duplicate.
-3. **Removing a direct grant has no endpoint.** `/api/v1/users/{id}/grants` supports only `GET` and `POST` (upsert). MkAuth's `direct_grants` rows are otherwise deleted only by the expiry sweep. The `DELETE /api/v1/zitadel/users/{id}/grants/{grantId}` that does exist removes the **Zitadel-side** grant, which is a different object — using it would leave the MkAuth row behind and the next cache compile would put the access back.
+2. **The `/roles` cross-project index is only partially backed.** `GET /api/v1/roles` calls `GetAllLocalRoles`, which returns *only roles created through Syndra*. Roles that exist in Zitadel but were not created here are invisible to it. Complete coverage needs either a new aggregate endpoint or per-project fan-out over `GET /api/v1/zitadel/projects/{id}/roles`. Until then the index is honestly incomplete — **design an explicit "Syndra-managed roles" scope indicator** rather than implying the list is exhaustive. Silently partial lists are how people conclude a role doesn't exist and create a duplicate.
+3. **Removing a direct grant has no endpoint.** `/api/v1/users/{id}/grants` supports only `GET` and `POST` (upsert). Syndra's `direct_grants` rows are otherwise deleted only by the expiry sweep. The `DELETE /api/v1/zitadel/users/{id}/grants/{grantId}` that does exist removes the **Zitadel-side** grant, which is a different object — using it would leave the Syndra row behind and the next cache compile would put the access back.
 
    This blocks **Remove direct access** in E2 and E3. Design the flow; engineering adds `DELETE /api/v1/users/{id}/grants/{grantId}`. Until it exists, the action must not be rendered — a revoke button that silently doesn't revoke is worse than no button on a screen about who can operate a laser cutter.
 4. **No compact indicators endpoint.** The sidebar needs four integers; the only source today is the full `governance/summary` payload. Engineering should add `GET /api/v1/governance/indicators` (§3). Design can assume it exists.
@@ -418,4 +418,4 @@ Consistency is the whole point: the same three labels, same colors, same order, 
 7. Empty / loading / error / degraded for every list view.
 8. Member surface (§3) as a first-class audience, not a leftover.
 
-**In-repo reference:** `openspec/INDEX.md` (capability specs) · `openspec/NEXT.md` (open work) · `openspec/changes/mkauth-core-architecture/design.md` (architecture) · `backend/internal/models/models.go` (every response shape named here).
+**In-repo reference:** `openspec/INDEX.md` (capability specs) · `openspec/NEXT.md` (open work) · `openspec/changes/syndra-core-architecture/design.md` (architecture) · `backend/internal/models/models.go` (every response shape named here).

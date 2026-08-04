@@ -22,7 +22,7 @@ Four direction-setting questions are answered upfront because they shape everyth
 
 | Ref | Question | Decision |
 |---|---|---|
-| B4 + D3 | What does "Backend is the single mutation authority" mean in a system where Zitadel is source of truth? | **Two-layer model.** Zitadel mirrors current state for every grant. MkAuth holds the intent ledger (reason, expires_at, granted_by, source). MkAuth-mediated mutations (any path that goes through MkAuth backend) write the intent ledger before the Zitadel API call. Direct-Zitadel mutations (Zitadel admin UI, external tools) are detected as drift and acquire their intent record through operator attribution. Every grant ends with an intent record; the timing differs by origin. |
+| B4 + D3 | What does "Backend is the single mutation authority" mean in a system where Zitadel is source of truth? | **Two-layer model.** Zitadel mirrors current state for every grant. Syndra holds the intent ledger (reason, expires_at, granted_by, source). Syndra-mediated mutations (any path that goes through Syndra backend) write the intent ledger before the Zitadel API call. Direct-Zitadel mutations (Zitadel admin UI, external tools) are detected as drift and acquire their intent record through operator attribution. Every grant ends with an intent record; the timing differs by origin. |
 | D1 | `GetWelcomeBundle` behaviour when no name matches | **Error explicitly.** Drop the "first bundle by `created_at`" fallback. Onboarding fails loudly when no welcome bundle is configured. Operator must mark a bundle as the welcome bundle deliberately. |
 | D2 | ⌘K command palette is in `design.md` §5 but unimplemented | **Strike from current spec; add Phase 6 roadmap stub.** Honest about the gap. |
 | D4 | `mapping_rules.version` increments without rollback machinery | **Drop versioning.** Rely on `audit_logs` for replay. The `version` column and increment logic are removed. |
@@ -96,12 +96,12 @@ Install/dev experience + tiny doc/script consolidations + small sync/LDAP fixes.
 | Audit ref | Item |
 |---|---|
 | D4 | Drop versioning. Migration removes `mapping_rules.version` column. `UpdateMappingRule` no longer increments. UI surfaces audit log entries instead of a version number |
-| D7 | Document sync-service env surface. `.env.example` gains a `--- Sync Service / LLDAP ---` block with `BACKEND_URL`, `MKAUTH_API_KEY`, `LLDAP_URL`, `LLDAP_BIND_DN`, `LLDAP_BIND_PASSWORD`, `LLDAP_BASE_DN`, `LLDAP_INSECURE_SKIP_VERIFY`, `SYNC_POLL_INTERVAL`, `SYNC_WORKER_COUNT`, `SYNC_INTENT_LIMIT`, `SYNC_RETRY_ATTEMPTS`, `SYNC_RETRY_BACKOFF` (the latter two newly wired by S4). The backend-side block in `.env.example` also adds `MKAUTH_EXTERNAL_URL` and `ZITADEL_M2M_TOKEN`, which are required at runtime but missing from the template today. Each entry includes a default-value comment and a one-line description |
+| D7 | Document sync-service env surface. `.env.example` gains a `--- Sync Service / LLDAP ---` block with `BACKEND_URL`, `SYNDRA_API_KEY`, `LLDAP_URL`, `LLDAP_BIND_DN`, `LLDAP_BIND_PASSWORD`, `LLDAP_BASE_DN`, `LLDAP_INSECURE_SKIP_VERIFY`, `SYNC_POLL_INTERVAL`, `SYNC_WORKER_COUNT`, `SYNC_INTENT_LIMIT`, `SYNC_RETRY_ATTEMPTS`, `SYNC_RETRY_BACKOFF` (the latter two newly wired by S4). The backend-side block in `.env.example` also adds `SYNDRA_EXTERNAL_URL` and `ZITADEL_M2M_TOKEN`, which are required at runtime but missing from the template today. Each entry includes a default-value comment and a one-line description |
 | D9 | Drop "N>1 replicas" framing for `EXPIRY_SCHEDULER_*` in `.env.example:27-30`. Single-LXC deployment doesn't have multi-replica |
 | S1 + S2 | Extract `scripts/lib/load-env.sh` (`_ENV_FILE` loader) and `scripts/lib/zitadel-api.sh` (`zitadel_api()` helper with PERMISSIONS hint). Source from `register.sh`, `rotate.sh`, `smoke-test-action-v2.sh`, `smoke-test-event-listener.sh`. ~120 lines of duplicate bash deleted |
 | S3 | Fold `zitadel/actions/{PERMISSIONS,SIGNING_KEY}.md` into `README.md`. 4 docs → 2 (README + EVENTS) |
 | S4 | Wire `SYNC_RETRY_ATTEMPTS` and `SYNC_RETRY_BACKOFF` env vars in `sync/internal/config/config.go:42-43`, OR remove the fields and inline constants. Decision: **wire env vars** for consistency with the rest of the sync config surface |
-| C7 | Sync LDAP: replace `member: [""]` placeholder in `groupOfNames` with the bind DN. Survives strict OpenLDAP if MkAuth ever migrates from LLDAP |
+| C7 | Sync LDAP: replace `member: [""]` placeholder in `groupOfNames` with the bind DN. Survives strict OpenLDAP if Syndra ever migrates from LLDAP |
 | C8 | Plumb context through `withConn` in `sync/internal/ldap/client.go:185`. Worker shutdown propagates cancellation to in-flight LDAP ops |
 | C9 | `scripts/smoke-test-lxc.sh:11-13` probes `/healthz` instead of `/api/v1/bundles`. Works on real OIDC LXC deployments |
 | C10 | Shadow-password zero buffer (`worker.go:190-194`): drop the `defer zero(hashBytes)` line; the comment at the deletion site documents the limitation (Go GC immutability of the underlying string) |
@@ -129,9 +129,9 @@ Bugs:       C1 → T1   C2 → T1   C3 → T1   C4 → T3   C5 → T3   C6 → T
 
 **Zitadel = current-state mirror.** Every grant — regardless of origin (operator point mutation, bundle expansion, mapping rule output, lifecycle cascade, drift back-fill) — exists as a `user_grant` row in Zitadel. The Zitadel admin UI shows the complete picture.
 
-**MkAuth = intent ledger.** For every grant in Zitadel, MkAuth stores rich context: `reason`, `expires_at`, `granted_by`, `source` (one of: `direct`, `bundle`, `rule`, `external_backfill`, `lifecycle_cascade`), `source_ref` (UUID pointing to the originating bundle or rule when `source ∈ {bundle, rule}`; NULL otherwise), `idempotency_key`, audit chain. Apps that need richer-than-Zitadel data ask MkAuth.
+**Syndra = intent ledger.** For every grant in Zitadel, Syndra stores rich context: `reason`, `expires_at`, `granted_by`, `source` (one of: `direct`, `bundle`, `rule`, `external_backfill`, `lifecycle_cascade`), `source_ref` (UUID pointing to the originating bundle or rule when `source ∈ {bundle, rule}`; NULL otherwise), `idempotency_key`, audit chain. Apps that need richer-than-Zitadel data ask Syndra.
 
-The contract — **every grant in Zitadel ends with a corresponding MkAuth intent record.** For MkAuth-mediated mutations (any operator action through MkAuth UI, any bundle/rule cascade, any lifecycle propagation), the record is written before the Zitadel API call within the same database transaction. For direct-Zitadel mutations (Zitadel admin UI, external tools, scripted bypasses), the record is written post-hoc via the drift triage flow (Sections 4.5–4.6). The /api/v1/zitadel/* CRUD routes that today bypass this contract are rewired to honor the MkAuth-mediated timing.
+The contract — **every grant in Zitadel ends with a corresponding Syndra intent record.** For Syndra-mediated mutations (any operator action through Syndra UI, any bundle/rule cascade, any lifecycle propagation), the record is written before the Zitadel API call within the same database transaction. For direct-Zitadel mutations (Zitadel admin UI, external tools, scripted bypasses), the record is written post-hoc via the drift triage flow (Sections 4.5–4.6). The /api/v1/zitadel/* CRUD routes that today bypass this contract are rewired to honor the Syndra-mediated timing.
 
 ### 4.2 Data model additions
 
@@ -161,10 +161,10 @@ CREATE TABLE drift_items (
     user_id           TEXT NOT NULL,
     project_id        TEXT NOT NULL,
     role_keys         TEXT[] NOT NULL,
-    zitadel_grant_id  TEXT,                 -- nullable for revoke-drift (grant existed in MkAuth, missing in Zitadel)
+    zitadel_grant_id  TEXT,                 -- nullable for revoke-drift (grant existed in Syndra, missing in Zitadel)
     detected_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     detection_source  TEXT NOT NULL CHECK (detection_source IN ('webhook', 'reconciliation_sweep')),
-    drift_type        TEXT NOT NULL CHECK (drift_type IN ('zitadel_only', 'mkauth_only')),
+    drift_type        TEXT NOT NULL CHECK (drift_type IN ('zitadel_only', 'syndra_only')),
     status            TEXT NOT NULL DEFAULT 'pending_triage' CHECK (status IN ('pending_triage', 'attributed', 'revoked', 'marked_external')),
     resolved_at       TIMESTAMPTZ,
     resolved_by       TEXT,
@@ -284,10 +284,10 @@ look up matching outbox row by idempotency_key
 
 ```
 list Zitadel user_grants  (paginated, cap 2000 not 10000)
-list MkAuth expected set  = direct_role_grants ∪ bundle_expansions ∪ rule_outputs ∪ exclusions
+list Syndra expected set  = direct_role_grants ∪ bundle_expansions ∪ rule_outputs ∪ exclusions
 diff:
   zitadel ∖ expected → drift_items.upsert (drift_type='zitadel_only', detection_source='reconciliation_sweep')
-  expected ∖ zitadel → re-enqueue outbox row (status='pending', drift_type='mkauth_only')
+  expected ∖ zitadel → re-enqueue outbox row (status='pending', drift_type='syndra_only')
                        (the webhook for our original mutation was missed — replay it)
 ```
 
@@ -362,7 +362,7 @@ Two distinct surfaces — **Pending Propagation** and **Drift** — represent fu
 
 | | Pending Propagation | Drift |
 |---|---|---|
-| **What it is** | Operator-initiated change buffered in MkAuth, awaiting Zitadel send | Grant exists in Zitadel that MkAuth has no context for |
+| **What it is** | Operator-initiated change buffered in Syndra, awaiting Zitadel send | Grant exists in Zitadel that Syndra has no context for |
 | **Caused by** | The operator, just now, intentionally | Unknown — admin emergency, missed webhook, unauthorized actor |
 | **Risk** | None. Workflow state | Possibly a security incident or system fault |
 | **Resolution** | Operator resumes propagation | Operator triages: Attribute / Revoke / Mark external |
@@ -391,7 +391,7 @@ Two distinct surfaces — **Pending Propagation** and **Drift** — represent fu
 | Sidebar | Dedicated top-level nav item `⚠ Drift`. Persistent red dot when count > 0. Sits above `/governance/*` |
 | Dashboard banner | Full-width callout above stat grid. NOT dismissible. Shows count and top-3 preview with `Triage all →` link |
 | Cross-page banner | Sticky top of content area on ALL admin pages. NOT dismissible. `⚠ N drift items detected — out-of-band changes need triage [Review →]` |
-| Inline (user grants page) | Bordered alert above grants table: `⚠ This grant has no MkAuth context [Attribute] [Revoke] [Mark external]`. NOT dismissible without action |
+| Inline (user grants page) | Bordered alert above grants table: `⚠ This grant has no Syndra context [Attribute] [Revoke] [Mark external]`. NOT dismissible without action |
 | Motion | Pulse on sidebar item when count transitions 0→N or N→N+1 (3 pulses, ~1.2s each). Sticky banner slide-in (200ms ease-out) on first appearance. Count-up animation on numeric badge. New drift-queue rows brief-highlight on arrival (2s fade). All respect `prefers-reduced-motion` |
 | Audio | One soft chime (~400ms single tone) on count increase per session. User-settings toggle "Drift alert sound" (default on). First chime preceded by one-time tooltip explaining the cue |
 | Persistence | Each item persists until explicitly resolved (Attribute / Revoke / Mark external) |
@@ -512,15 +512,15 @@ Most spec updates live inside their themed change directory under `openspec/chan
 
 | Document | Change | Owning theme |
 |---|---|---|
-| `openspec/changes/mkauth-core-architecture/design.md` | Replace single-mutation-authority section with two-layer model. Add Hybrid Project-to-Zitadel architecture, outbox pattern, drift triage. Add per-rule confirmation-mode doctrine | Theme 2 |
+| `openspec/changes/syndra-core-architecture/design.md` | Replace single-mutation-authority section with two-layer model. Add Hybrid Project-to-Zitadel architecture, outbox pattern, drift triage. Add per-rule confirmation-mode doctrine | Theme 2 |
 | `CLAUDE.md` | Replace "Backend is single mutation authority" line in Key Conventions with the new doctrine sentence (Section 7.1 below). Three-line edit | Theme 2 |
-| `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md` | Add Drift Control capability row (Integrated, post-cleanup). Update Welcome Bundle row ("convention-based" → "explicit; errors when not configured"). Update Versioned Policies row ("Partial; version column" → "Removed; rely on audit_logs"). Update LDAP Sync row for S4 env wiring | Theme 2 (Drift Control row) + Theme 5 (welcome bundle, versioning, LDAP) |
-| `openspec/changes/mkauth-core-architecture/ROADMAP.md` | Add Phase 5.5: Audit Resolution. Add Phase 6 stub for ⌘K. Move "reconciliation deferred P5" line to Phase 5.5 closure | Theme 5 |
+| `openspec/changes/syndra-core-architecture/specs/feature-coverage.md` | Add Drift Control capability row (Integrated, post-cleanup). Update Welcome Bundle row ("convention-based" → "explicit; errors when not configured"). Update Versioned Policies row ("Partial; version column" → "Removed; rely on audit_logs"). Update LDAP Sync row for S4 env wiring | Theme 2 (Drift Control row) + Theme 5 (welcome bundle, versioning, LDAP) |
+| `openspec/changes/syndra-core-architecture/ROADMAP.md` | Add Phase 5.5: Audit Resolution. Add Phase 6 stub for ⌘K. Move "reconciliation deferred P5" line to Phase 5.5 closure | Theme 5 |
 | `openspec/INDEX.md` | Add 5 new change rows. Add Drift Control capability row. Update Phase mapping for 5.5 | Theme 5 |
 | `.env.example` | Add `--- Sync Service / LLDAP ---` block. Drop "N>1 replicas" framing. Add Theme 2 vars (`DRIFT_RECONCILIATION_INTERVAL_HOURS`, `OUTBOX_MAX_RETRIES`) | Theme 5 |
-| `openspec/changes/mkauth-core-architecture/specs/access-governance/spec.md` | Add Drift Triage workflow: detection sources, three actions, source remap, bulk attribution | Theme 2 |
-| `openspec/changes/mkauth-core-architecture/specs/automation-policies/spec.md` | Per-rule confirmation_mode flag. Global default. Bulk toggle UX. Welcome bundle errors when not configured. Drop versioning | Theme 2 (rule confirmation) + Theme 1 (welcome bundle) + Theme 5 (versioning) |
-| `openspec/changes/mkauth-core-architecture/specs/operational-readiness/spec.md` | Visual urgency tiers (drift > pending > steady). Motion/audio cues. Dismissibility rules | Theme 2 |
+| `openspec/changes/syndra-core-architecture/specs/access-governance/spec.md` | Add Drift Triage workflow: detection sources, three actions, source remap, bulk attribution | Theme 2 |
+| `openspec/changes/syndra-core-architecture/specs/automation-policies/spec.md` | Per-rule confirmation_mode flag. Global default. Bulk toggle UX. Welcome bundle errors when not configured. Drop versioning | Theme 2 (rule confirmation) + Theme 1 (welcome bundle) + Theme 5 (versioning) |
+| `openspec/changes/syndra-core-architecture/specs/operational-readiness/spec.md` | Visual urgency tiers (drift > pending > steady). Motion/audio cues. Dismissibility rules | Theme 2 |
 
 ### 7.1 The single load-bearing doctrinal sentence
 
@@ -528,7 +528,7 @@ Current `design.md`: *"Backend is the single mutation authority — frontend and
 
 After this cleanup:
 
-> **Backend is the single mutation authority for Zitadel state. Every Zitadel grant — whether issued via MkAuth UI, derived from a bundle/rule, or detected as drift and back-filled — ends with a MkAuth-side intent record (reason, expires_at, granted_by, source). MkAuth-mediated mutations write the intent ledger before the Zitadel API call. Direct-Zitadel mutations are detected as drift and acquire their intent record through operator attribution. Operator point mutations require fresh confirmation before propagation; rule firings and expiry sweeps treat their authoring as pre-authorization. Drift detection is real-time via webhook with reconciliation as backstop; drift items are triaged via Attribute / Revoke / Mark external.**
+> **Backend is the single mutation authority for Zitadel state. Every Zitadel grant — whether issued via Syndra UI, derived from a bundle/rule, or detected as drift and back-filled — ends with a Syndra-side intent record (reason, expires_at, granted_by, source). Syndra-mediated mutations write the intent ledger before the Zitadel API call. Direct-Zitadel mutations are detected as drift and acquire their intent record through operator attribution. Operator point mutations require fresh confirmation before propagation; rule firings and expiry sweeps treat their authoring as pre-authorization. Drift detection is real-time via webhook with reconciliation as backstop; drift items are triaged via Attribute / Revoke / Mark external.**
 
 That paragraph is the doctrinal change. Everything else in this plan implements it.
 
@@ -557,7 +557,7 @@ These are decisions the writing-plans skill will need to resolve when producing 
 3. **Outbox UI: per-row vs aggregate view.** Pending callout shows count; should the operator be able to expand to see per-row detail before clicking Resume? Recommendation: yes — `Resume now` opens a confirmation modal listing each pending row.
 4. **Bundle-removal cascade other-source check.** When a user is removed from a bundle, the cascade revoke checks for other sources before enqueueing. The check window: real-time at enqueue, or deferred to drain? Recommendation: real-time at enqueue for accuracy; tolerate a small race window resolved by reconciliation.
 5. **Drift queue ordering.** Default sort by `detected_at DESC`. Should there be filters (by user, project, source)? Recommendation: yes for `/governance/drift` filtering; not needed inline.
-6. **Source-remap constraint validation.** When operator attributes drift to bundle X, should MkAuth verify the bundle's roles include the drift role-key? Recommendation: yes — modal disables incompatible bundles and shows why.
+6. **Source-remap constraint validation.** When operator attributes drift to bundle X, should Syndra verify the bundle's roles include the drift role-key? Recommendation: yes — modal disables incompatible bundles and shows why.
 7. **Theme 2 sub-phase split.** Should Theme 2 ship as one OpenSpec change with internal phases, or three sequential change directories? Recommendation: one change with phased tasks.md; archive together.
 8. **U7 test scope.** Should middleware/proxy tests exercise stale demo cookies in production mode (with `ZITADEL_DOMAIN` set)? Recommendation: yes — that's the regression we're guarding against.
 9. **User-settings infrastructure for the drift audio toggle.** No user-settings page exists today. Three options: (a) introduce a minimal `/settings` page in this cleanup with the audio toggle as its first row; (b) put the toggle in localStorage only with a small preferences popover from the avatar menu; (c) defer the toggle to Phase 6 and ship audio with no kill switch. Recommendation: (b) — localStorage + popover is the minimum viable kill switch, and a real settings page can land later without redesigning anything.

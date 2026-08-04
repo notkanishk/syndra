@@ -5,28 +5,28 @@ import (
 	"fmt"
 	"log"
 
-	"mkauth/internal/services"
-	"mkauth/internal/zitadel"
+	"syndra/internal/services"
+	"syndra/internal/zitadel"
 )
 
 // DriftResult summarizes one sweep for logs + the [Reconcile now] response.
 type DriftResult struct {
 	ZitadelGrants     int    `json:"zitadel_grants"`
 	DriftItemsCreated int    `json:"drift_items_created"` // zitadel_only, deduped
-	ReEnqueued        int    `json:"re_enqueued"`         // mkauth_only replays
+	ReEnqueued        int    `json:"re_enqueued"`         // syndra_only replays
 	Truncated         bool   `json:"truncated"`
 	Halted            bool   `json:"halted"`
 	Reason            string `json:"reason,omitempty"`
 }
 
-// Sweep reconciles Zitadel grants against MkAuth's expected set. Callable by the
+// Sweep reconciles Zitadel grants against Syndra's expected set. Callable by the
 // scheduler and by the operator's [Reconcile now]. Two outcomes per role:
 //   - zitadel_only  (in Zitadel, unexplained by direct/rule/exclusion) → drift_items
-//   - mkauth_only   (direct grant MkAuth expects, absent from Zitadel)  → outbox re-enqueue
+//   - syndra_only   (direct grant Syndra expects, absent from Zitadel)  → outbox re-enqueue
 //
 // Bundle/rule-derived expected roles that are ABSENT from Zitadel are NOT drift
 // in sub-phase 2 — cascade projection is sub-phase 3, so they are legitimately
-// unprojected. Only source-mediated direct grants can be mkauth_only here.
+// unprojected. Only source-mediated direct grants can be syndra_only here.
 func Sweep(ctx context.Context) (DriftResult, error) {
 	if !zitadelReachable(ctx) {
 		return DriftResult{Halted: true, Reason: "zitadel_offline"}, nil
@@ -56,12 +56,12 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	res := DriftResult{ZitadelGrants: len(zit), Truncated: truncated}
 
 	// --- zitadel_only: unexplained live grants → drift_items ---
-	directSet := buildHolderSet(direct, nil) // MkAuth's own direct intent
+	directSet := buildHolderSet(direct, nil) // Syndra's own direct intent
 	for _, g := range zit {
 		for _, rk := range g.RoleKeys {
 			k := services.HolderKey{UserID: g.UserID, ProjectID: g.ProjectID, RoleKey: rk}
 			if directSet[k] {
-				continue // MkAuth has a direct intent for this — not drift
+				continue // Syndra has a direct intent for this — not drift
 			}
 			if expectedViaRule(holder, rules, g.UserID, g.ProjectID, rk) {
 				continue // expected_via_rule — not drift
@@ -78,7 +78,7 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 		}
 	}
 
-	// --- mkauth_only: direct grants MkAuth expects but Zitadel lacks → re-enqueue ---
+	// --- syndra_only: direct grants Syndra expects but Zitadel lacks → re-enqueue ---
 	zitSet := buildHolderSet(nil, zit)
 	for _, dg := range direct {
 		k := services.HolderKey{UserID: dg.UserID, ProjectID: dg.ProjectID, RoleKey: dg.RoleKey}
@@ -101,7 +101,7 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 		}
 		if _, err := insertPending(ctx, "add", dg.UserID, dg.ProjectID, []string{dg.RoleKey},
 			"", "{}", key, "system:drift-sweep"); err != nil {
-			log.Printf("[DRIFT] re-enqueue mkauth_only failed user=%s project=%s role=%s: %v", dg.UserID, dg.ProjectID, dg.RoleKey, err)
+			log.Printf("[DRIFT] re-enqueue syndra_only failed user=%s project=%s role=%s: %v", dg.UserID, dg.ProjectID, dg.RoleKey, err)
 		} else {
 			res.ReEnqueued++
 		}

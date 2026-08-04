@@ -51,14 +51,14 @@ The earlier read of "zero callers" was wrong — it was based on a `grep "Update
 
 `.env.example` is the deployment template. Operators copy it to `.env` and edit. The block is therefore documentation in `# comment` form, not a runnable file — every variable is presented with:
 - A one-line description (what it is and when it matters)
-- The canonical default from `sync/internal/config/config.go` (or `# required, no default` for `MKAUTH_API_KEY`, `LLDAP_BIND_DN`, `LLDAP_BIND_PASSWORD`)
+- The canonical default from `sync/internal/config/config.go` (or `# required, no default` for `SYNDRA_API_KEY`, `LLDAP_BIND_DN`, `LLDAP_BIND_PASSWORD`)
 - The variable name commented out when a default exists, uncommented (with a placeholder) when required
 
 This matches the convention already used by the backend block (compare `EXPIRY_SCHEDULER_*` at lines 21-30 — commented because defaults exist).
 
 Two backend-block additions surface variables that today are read from env at runtime but undocumented in the template:
 
-- `MKAUTH_EXTERNAL_URL` — read by `handlers/onboarding.go` (welcome-link generation); required when `ZITADEL_DOMAIN != ""`.
+- `SYNDRA_EXTERNAL_URL` — read by `handlers/onboarding.go` (welcome-link generation); required when `ZITADEL_DOMAIN != ""`.
 - `ZITADEL_M2M_TOKEN` — direct token-injection alternative to `ZITADEL_MACHINE_KEY_PATH`. The codebase reads whichever is set; the template only documented the keypath path.
 
 ### Decision 3 — `withConn` ctx-cancellation is fail-fast, not cooperative-mid-op
@@ -235,7 +235,7 @@ mcp__codebase-memory-mcp__index_repository (affected scope)
 And the OpenSpec validation (run from repo root):
 
 ```bash
-cd /path/to/MkAuth
+cd /path/to/Syndra
 openspec validate wave-2-part-3-operational-polish --strict
 ```
 
@@ -260,7 +260,7 @@ go run ./cmd/migrate up       # re-applies 000014
 - **No EXPIRY_SCHEDULER toggle removal.** Only the comment framing changes.
 - **No reconciliation-cap change.** That is Theme 2's scope (B2 → 2000-grant cap in `backend/internal/handlers/reconciliation.go`).
 - **No new Redis keys.** This wave introduces no caching.
-- **No `OpenSpec mkauth-core-architecture/design.md` edits.** Cross-cutting docs (CLAUDE.md, ROADMAP.md, INDEX.md) are owned by Theme 2 per the audit-resolution design §7 table.
+- **No `OpenSpec syndra-core-architecture/design.md` edits.** Cross-cutting docs (CLAUDE.md, ROADMAP.md, INDEX.md) are owned by Theme 2 per the audit-resolution design §7 table.
 
 ---
 

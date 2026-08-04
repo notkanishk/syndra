@@ -12,9 +12,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"mkauth/internal/auth"
-	"mkauth/internal/models"
-	"mkauth/internal/services"
+	"syndra/internal/auth"
+	"syndra/internal/models"
+	"syndra/internal/services"
 )
 
 // ---------------------------------------------------------------------------

@@ -75,7 +75,7 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
       tone: "warning",
       message: `${counts} — resume again.`,
       detail: errored
-        ? "A write reached the identity provider but MkAuth couldn't record the outcome. Resuming settles it."
+        ? "A write reached the identity provider but Syndra couldn't record the outcome. Resuming settles it."
         : "Those writes hit a transient error and will be retried.",
     };
   }

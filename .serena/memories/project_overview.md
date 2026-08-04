@@ -1,6 +1,6 @@
-# MkAuth — Project Overview
+# Syndra — Project Overview
 
-MkAuth is an IAM (Identity Access Management) orchestration platform built on top of Zitadel.
+Syndra is an IAM (Identity Access Management) orchestration platform built on top of Zitadel.
 
 ## Purpose
 Manages role bundles, mapping rules, claim compilation, access request governance, and topology visualization for downstream applications. Acts as an orchestration layer between Zitadel (identity provider) and downstream services.

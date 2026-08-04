@@ -1,5 +1,5 @@
 // Package drift contains the backend-side scheduler that periodically
-// reconciles Zitadel grants against MkAuth's expected set (direct grants +
+// reconciles Zitadel grants against Syndra's expected set (direct grants +
 // rule-derived expectations + operator exclusions), flagging unexplained
 // Zitadel grants as drift and replaying missed direct-grant propagations.
 package drift
@@ -7,10 +7,10 @@ package drift
 import (
 	"context"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
-	"mkauth/internal/services"
-	"mkauth/internal/zitadel"
+	"syndra/internal/db"
+	"syndra/internal/models"
+	"syndra/internal/services"
+	"syndra/internal/zitadel"
 )
 
 // driftSafetyCap is the same right-sized cap as the on-demand reconciliation
@@ -30,8 +30,8 @@ var (
 		return db.GetExclusions(ctx)
 	}
 	upsertDriftItem        = db.UpsertDriftItem          // (ctx,user,project,roleKeys,grantID,source,type) (id,inserted,err)
-	pendingOutboxAddExists = db.PendingOutboxAddExists   // (ctx,user,project,role) (bool,err) — dedupes mkauth_only replay
-	insertPending          = db.InsertPendingPropagation // re-enqueue path (mkauth_only)
+	pendingOutboxAddExists = db.PendingOutboxAddExists   // (ctx,user,project,role) (bool,err) — dedupes syndra_only replay
+	insertPending          = db.InsertPendingPropagation // re-enqueue path (syndra_only)
 
 	// Reachability + paginated grant listing. A nil MgmtClient means offline.
 	zitadelReachable     = func(ctx context.Context) bool { return zitadel.MgmtClient != nil }

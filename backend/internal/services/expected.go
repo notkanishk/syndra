@@ -3,12 +3,12 @@ package services
 import (
 	"context"
 
-	"mkauth/internal/models"
-	"mkauth/internal/zitadel"
+	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 // HolderKey is one (user, project, role) tuple a user actually holds — union of
-// MkAuth direct grants and live Zitadel grants. It is the input to rule
+// Syndra direct grants and live Zitadel grants. It is the input to rule
 // derivation: a mapping rule's target is "expected" only for users who hold the
 // rule's source.
 type HolderKey struct {
@@ -17,7 +17,7 @@ type HolderKey struct {
 	RoleKey   string
 }
 
-// BuildHolderSet unions MkAuth direct grants and Zitadel grants into the set of
+// BuildHolderSet unions Syndra direct grants and Zitadel grants into the set of
 // tuples each user currently holds.
 func BuildHolderSet(direct []models.DirectGrant, zit []zitadel.UserGrant) map[HolderKey]bool {
 	h := make(map[HolderKey]bool)
@@ -48,7 +48,7 @@ func ExpectedViaRule(holder map[HolderKey]bool, rules []models.MappingRule, user
 	return false
 }
 
-// UserExpectsRole reports whether MkAuth's effective-role computation already
+// UserExpectsRole reports whether Syndra's effective-role computation already
 // includes (projectID, roleKey) for the user (direct | bundle | rule). Used by
 // the webhook to decide whether a surviving external grant event is drift.
 func UserExpectsRole(ctx context.Context, userID, projectID, role string) (bool, error) {

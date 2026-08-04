@@ -31,7 +31,7 @@ Goal: land the OpenSpec scaffolding and the plan file before touching source. Su
 - [ ] **Step 0.1: Validate the OpenSpec change shape**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 openspec validate wave-2-part-3-operational-polish --strict
 ```
 
@@ -127,7 +127,7 @@ New:
 - [ ] **Step 1.3: Run the sync test suite**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/sync
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/sync
 go test ./...
 go vet ./...
 ```
@@ -195,7 +195,7 @@ Expected: 2 hits (declaration line and loop usage at line 32). No other referenc
 - [ ] **Step 2.3: Run backend tests**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/backend
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
 go test ./internal/handlers/...
 go vet ./...
 ```
@@ -241,7 +241,7 @@ Expected:
 set -euo pipefail
 
 HOST="${1:-198.51.100.14}"
-API_KEY="${MKAUTH_API_KEY:-dev_auth_token_secret}"
+API_KEY="${SYNDRA_API_KEY:-dev_auth_token_secret}"
 
 echo "Checking UI availability..."
 curl -fsS "http://${HOST}:3000" >/dev/null
@@ -257,7 +257,7 @@ curl -fsS \
 Old (lines 5, 10-13):
 
 ```bash
-API_KEY="${MKAUTH_API_KEY:-dev_auth_token_secret}"
+API_KEY="${SYNDRA_API_KEY:-dev_auth_token_secret}"
 
 echo "Checking UI availability..."
 curl -fsS "http://${HOST}:3000" >/dev/null
@@ -373,21 +373,21 @@ EOF
 
 ## Task 5 — `.env.example` Sync block + missing backend vars (D7)
 
-Append a `--- Sync Service / LLDAP ---` block documenting every env var in `sync/internal/config/config.go`. Insert `MKAUTH_EXTERNAL_URL` and `ZITADEL_M2M_TOKEN` into the appropriate backend / Zitadel sections; both are required at runtime by `zitadel/actions/{register,rotate}.sh` but undocumented in the template today.
+Append a `--- Sync Service / LLDAP ---` block documenting every env var in `sync/internal/config/config.go`. Insert `SYNDRA_EXTERNAL_URL` and `ZITADEL_M2M_TOKEN` into the appropriate backend / Zitadel sections; both are required at runtime by `zitadel/actions/{register,rotate}.sh` but undocumented in the template today.
 
 **Files:**
 - Modify: `.env.example` (insertions + append)
 
-- [ ] **Step 5.1: Insert `MKAUTH_EXTERNAL_URL` into the backend block**
+- [ ] **Step 5.1: Insert `SYNDRA_EXTERNAL_URL` into the backend block**
 
 After the `CORS_ORIGIN=http://localhost:3000` line (currently line 17), insert:
 
 ```
-# Base URL that Zitadel uses to POST to MkAuth (Actions v2 target + event
+# Base URL that Zitadel uses to POST to Syndra (Actions v2 target + event
 # listener target). Read by zitadel/actions/{register,rotate}.sh when
 # rendering the targets manifest. Required when running the registration
 # or rotation scripts; not consumed at backend runtime.
-# MKAUTH_EXTERNAL_URL=https://mkauth.internal
+# SYNDRA_EXTERNAL_URL=https://syndra.internal
 ```
 
 - [ ] **Step 5.2: Insert `ZITADEL_M2M_TOKEN` into the Zitadel M2M block**
@@ -398,7 +398,7 @@ Find the `# --- Zitadel M2M / Management API ---` block (around line 47) and bel
 # Alternative to ZITADEL_MACHINE_KEY_PATH: a pre-minted M2M access token.
 # Useful for CI runs where the key file is inconvenient to mount. The
 # action-registration scripts prefer this when set; otherwise they mint a
-# token from the key file via `go run ./backend/cmd/mkauth-token`. The Go
+# token from the key file via `go run ./backend/cmd/syndra-token`. The Go
 # backend itself does NOT read this env var — it always mints from the key
 # path via the zitadel package.
 # ZITADEL_M2M_TOKEN=
@@ -415,14 +415,14 @@ At the end of `.env.example`, append:
 # state into LLDAP for legacy protocols (Samba, UniFi). See sync/internal/
 # config/config.go for the canonical definitions of each variable.
 
-# URL the sync service uses to reach the MkAuth backend. In docker-compose
+# URL the sync service uses to reach the Syndra backend. In docker-compose
 # this is the service name; on the LXC it is the backend's internal address.
 # Default: http://backend:8080
 # BACKEND_URL=http://backend:8080
 
-# Shared secret for sync→backend API auth. Must match MKAUTH_API_KEY in the
+# Shared secret for sync→backend API auth. Must match SYNDRA_API_KEY in the
 # backend block above. Required, no default.
-# MKAUTH_API_KEY=dev_auth_token_secret
+# SYNDRA_API_KEY=dev_auth_token_secret
 
 # LLDAP server URL. Use ldaps:// for TLS; ldap:// for cleartext (dev only).
 # Default: ldaps://lldap:636
@@ -476,7 +476,7 @@ docs(env): document sync-service vars and two missing backend vars
 
 Adds --- Sync Service / LLDAP --- block covering all 12 env vars
 read by sync/internal/config/config.go (with canonical defaults
-inline). Backend block gains MKAUTH_EXTERNAL_URL and ZITADEL_M2M_TOKEN,
+inline). Backend block gains SYNDRA_EXTERNAL_URL and ZITADEL_M2M_TOKEN,
 both required by the action-registration scripts but undocumented.
 
 Audit ref: D7
@@ -626,7 +626,7 @@ func TestNewGroupAddRequest_UsesBindDNAsPlaceholderMember(t *testing.T) {
 - [ ] **Step 7.2: Run the test to verify it fails**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/sync
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/sync
 go test ./internal/ldap/... -run TestNewGroupAddRequest_UsesBindDNAsPlaceholderMember -v
 ```
 
@@ -756,7 +756,7 @@ func TestWithConn_CancelledCtxFailsFast(t *testing.T) {
 - [ ] **Step 8.2: Run to verify it fails**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/sync
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/sync
 go test ./internal/ldap/... -run TestWithConn_CancelledCtxFailsFast -v
 ```
 
@@ -943,7 +943,7 @@ import (
 
 func TestLoad_RetryAttemptsAndBackoffFromEnv(t *testing.T) {
 	// Required vars (LoadConfig errors without them).
-	t.Setenv("MKAUTH_API_KEY", "test-key")
+	t.Setenv("SYNDRA_API_KEY", "test-key")
 	t.Setenv("LLDAP_BIND_DN", "uid=admin,dc=example,dc=com")
 	t.Setenv("LLDAP_BIND_PASSWORD", "test-pw")
 
@@ -963,7 +963,7 @@ func TestLoad_RetryAttemptsAndBackoffFromEnv(t *testing.T) {
 }
 
 func TestLoad_RetryDefaultsWhenEnvAbsent(t *testing.T) {
-	t.Setenv("MKAUTH_API_KEY", "test-key")
+	t.Setenv("SYNDRA_API_KEY", "test-key")
 	t.Setenv("LLDAP_BIND_DN", "uid=admin,dc=example,dc=com")
 	t.Setenv("LLDAP_BIND_PASSWORD", "test-pw")
 	// Explicitly clear in case the host env has them.
@@ -983,7 +983,7 @@ func TestLoad_RetryDefaultsWhenEnvAbsent(t *testing.T) {
 }
 
 func TestLoad_InvalidRetryAttemptsReturnsError(t *testing.T) {
-	t.Setenv("MKAUTH_API_KEY", "test-key")
+	t.Setenv("SYNDRA_API_KEY", "test-key")
 	t.Setenv("LLDAP_BIND_DN", "uid=admin,dc=example,dc=com")
 	t.Setenv("LLDAP_BIND_PASSWORD", "test-pw")
 	t.Setenv("SYNC_RETRY_ATTEMPTS", "not-a-number")
@@ -998,7 +998,7 @@ func TestLoad_InvalidRetryAttemptsReturnsError(t *testing.T) {
 - [ ] **Step 9.2: Run to verify it fails**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/sync
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/sync
 go test ./internal/config/... -v
 ```
 
@@ -1014,7 +1014,7 @@ Old (lines 33-60):
 func Load() (Config, error) {
 	cfg := Config{
 		BackendURL:             envOrDefault("BACKEND_URL", "http://backend:8080"),
-		APIKey:                 os.Getenv("MKAUTH_API_KEY"),
+		APIKey:                 os.Getenv("SYNDRA_API_KEY"),
 		LDAPURL:                envOrDefault("LLDAP_URL", "ldaps://lldap:636"),
 		LDAPBindDN:             os.Getenv("LLDAP_BIND_DN"),
 		LDAPBindPassword:       os.Getenv("LLDAP_BIND_PASSWORD"),
@@ -1047,7 +1047,7 @@ New (replace the literal `RetryAttempts: 3,` and `RetryBackoff: 1 * time.Second,
 func Load() (Config, error) {
 	cfg := Config{
 		BackendURL:             envOrDefault("BACKEND_URL", "http://backend:8080"),
-		APIKey:                 os.Getenv("MKAUTH_API_KEY"),
+		APIKey:                 os.Getenv("SYNDRA_API_KEY"),
 		LDAPURL:                envOrDefault("LLDAP_URL", "ldaps://lldap:636"),
 		LDAPBindDN:             os.Getenv("LLDAP_BIND_DN"),
 		LDAPBindPassword:       os.Getenv("LLDAP_BIND_PASSWORD"),
@@ -1179,7 +1179,7 @@ chmod +x scripts/lib/load-env.sh
 In `zitadel/actions/register.sh`, lines 74-95 currently contain the inline loader. Replace with:
 
 ```bash
-# Load .env if present so MKAUTH_EXTERNAL_URL / ZITADEL_M2M_TOKEN / etc. are
+# Load .env if present so SYNDRA_EXTERNAL_URL / ZITADEL_M2M_TOKEN / etc. are
 # available when this script runs from a fresh shell. Existing exports win.
 _ENV_FILE="$(cd "${SCRIPT_DIR}/../.." && pwd)/.env"
 # shellcheck source=../../scripts/lib/load-env.sh
@@ -1508,7 +1508,7 @@ The surrounding meta-map has other entries (`"source_role"`, `"target_role"`, et
 - [ ] **Step 11.E.1: Confirm no Go references to `UpdateMappingRule` / `dbUpdateMappingRule` / `handleUpdateMappingRule` remain**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 grep -rn "UpdateMappingRule\b\|dbUpdateMappingRule\b\|handleUpdateMappingRule\b\|mapping_rule\.version_bumped\|rule\.Version\b" backend/ --include="*.go"
 ```
 
@@ -1649,7 +1649,7 @@ Expected: zero hits. Any hit is a stale reference.
 - [ ] **Step 11.F.5: Frontend build + tests**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/ui
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
 bun run lint
 bun run test
 bun run build
@@ -1662,7 +1662,7 @@ Expected: all green. TypeScript will catch any remaining `rule.version` referenc
 - [ ] **Step 11.G.1: Migration round-trip on a throwaway DB**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/backend
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
 # Substitute the project's actual migrate-CLI invocation. Most projects use
 # golang-migrate against DB_DSN from .env.
 go run ./cmd/migrate up         # apply 000014 → column dropped
@@ -1728,7 +1728,7 @@ Run every module's full suite, plus codebase-memory refresh and OpenSpec validat
 - [ ] **Step 12.1: Backend full suite**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/backend
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend
 go test ./...
 go vet ./...
 ```
@@ -1738,7 +1738,7 @@ Expected: all green.
 - [ ] **Step 12.2: Sync full suite**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/sync
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/sync
 go test ./...
 go vet ./...
 ```
@@ -1748,7 +1748,7 @@ Expected: all green.
 - [ ] **Step 12.3: Frontend full suite**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/ui
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra/ui
 bun run lint
 bun run test
 bun run build
@@ -1759,7 +1759,7 @@ Expected: all green.
 - [ ] **Step 12.4: gofmt on the wave's touch set**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 gofmt -d \
   backend/internal/handlers/zitadel_grant_lookup.go \
   backend/internal/handlers/rules.go \
@@ -1790,7 +1790,7 @@ Expected: indexer reflects the deletions (`UpdateMappingRule`, `version` field, 
 - [ ] **Step 12.6: OpenSpec validation**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 openspec validate wave-2-part-3-operational-polish --strict
 ```
 
@@ -1805,13 +1805,13 @@ Expected: `validation passed`.
 `feature-coverage.md` has two rows that this wave changes; INDEX.md gets one new change-log row.
 
 **Files:**
-- Modify: `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md:45` (Versioned policies row)
-- Modify: `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md` (LDAP Sync row)
+- Modify: `openspec/changes/syndra-core-architecture/specs/feature-coverage.md:45` (Versioned policies row)
+- Modify: `openspec/changes/syndra-core-architecture/specs/feature-coverage.md` (LDAP Sync row)
 - Modify: `openspec/INDEX.md`
 
 - [ ] **Step 13.1: Update the Versioned policies row**
 
-In `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md` line 45, replace:
+In `openspec/changes/syndra-core-architecture/specs/feature-coverage.md` line 45, replace:
 
 ```
 | **Versioned policies** | Explicit versioning with rollbacks. | **Partial** | `backend/db/migrations/000001_init_schema.up.sql` (`mapping_rules.version`) | Version column exists, but repo does not show multi-version history, policy snapshots, or rollback primitives. |
@@ -1828,7 +1828,7 @@ With:
 Search:
 
 ```bash
-grep -n "retry\|RetryAttempts\|RetryBackoff" openspec/changes/mkauth-core-architecture/specs/feature-coverage.md
+grep -n "retry\|RetryAttempts\|RetryBackoff" openspec/changes/syndra-core-architecture/specs/feature-coverage.md
 ```
 
 If a row mentions retry behavior, update it to note that `SYNC_RETRY_ATTEMPTS` and `SYNC_RETRY_BACKOFF` are now env-configurable. If no such row exists today, do not invent one — feature-coverage.md is intentionally sparse.
@@ -1846,7 +1846,7 @@ In `openspec/INDEX.md`, find the change-log / proposed-changes table and append:
 - [ ] **Step 13.4: Re-validate**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 openspec validate wave-2-part-3-operational-polish --strict
 ```
 
@@ -1860,7 +1860,7 @@ In `openspec/changes/wave-2-part-3-operational-polish/tasks.md`, change every `-
 
 ```bash
 git add openspec/INDEX.md \
-        openspec/changes/mkauth-core-architecture/specs/feature-coverage.md \
+        openspec/changes/syndra-core-architecture/specs/feature-coverage.md \
         openspec/changes/wave-2-part-3-operational-polish/tasks.md
 git commit -m "$(cat <<'EOF'
 docs(openspec): wave-2-part-3 INDEX + feature-coverage updates
@@ -1889,7 +1889,7 @@ EOF
 | B8 | Task 2 | Constant 100 → 10 + rationale |
 | C9 | Task 3 | `/healthz` probe; bearer header removed |
 | D9 | Task 4 | EXPIRY_SCHEDULER comment block rewritten |
-| D7 | Task 5 | Sync block + MKAUTH_EXTERNAL_URL + ZITADEL_M2M_TOKEN |
+| D7 | Task 5 | Sync block + SYNDRA_EXTERNAL_URL + ZITADEL_M2M_TOKEN |
 | S3 | Task 6 | PERMISSIONS + SIGNING_KEY folded into README |
 | C7 | Task 7 | member=[bindDN] via newGroupAddRequest helper |
 | C8 | Task 8 | withConn(ctx, fn) + fail-fast |

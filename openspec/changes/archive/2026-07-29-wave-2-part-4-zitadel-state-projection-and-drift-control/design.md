@@ -8,7 +8,7 @@
 
 ## 1. Aim
 
-Make the two-layer model (parent design §2, §4.1) real: every Zitadel grant ends with a MkAuth intent record. MkAuth-mediated mutations write the ledger before the Zitadel call; direct-Zitadel mutations are detected as drift and triaged. This wave is the only one that introduces the new doctrine (parent design §6.4, §7.1).
+Make the two-layer model (parent design §2, §4.1) real: every Zitadel grant ends with a Syndra intent record. Syndra-mediated mutations write the ledger before the Zitadel call; direct-Zitadel mutations are detected as drift and triaged. This wave is the only one that introduces the new doctrine (parent design §6.4, §7.1).
 
 The wave is **three independently-shippable sub-phases**, one OpenSpec change, one phased `tasks.md`. The detailed step-by-step plan for **Sub-phase 1** lives at [`docs/superpowers/plans/2026-06-09-wave-2-part-4-phase-1-outbox.md`](../../../docs/superpowers/plans/2026-06-09-wave-2-part-4-phase-1-outbox.md). Sub-phases 2 and 3 are task-level ledgers here until their own writing-plans pass.
 
@@ -21,7 +21,7 @@ The exploration that preceded this design found four existing structures that th
 | Existing structure | Where | How this wave reuses it |
 |---|---|---|
 | **Intent-ledger pattern** | `db/intents.go` — `provisioning_intents` with `idempotency_key`, `ClaimPendingIntents` (`FOR UPDATE SKIP LOCKED`), `status` transitions | The outbox table copies this shape. Same claim-and-process idiom, same idempotency-key dedup. |
-| **Reconciliation diff** | `handlers/reconciliation.go` — on-demand `GET /api/v1/reconciliation/grants`, already buckets `OnlyInMkAuth`/`OnlyInZitadel`/`Drift` | Sub-phase 2 lowers its cap (B2), schedules it, and wires its buckets to `drift_items` + outbox re-enqueue. The pure `computeReconciliationDiff` function is kept. |
+| **Reconciliation diff** | `handlers/reconciliation.go` — on-demand `GET /api/v1/reconciliation/grants`, already buckets `OnlyInSyndra`/`OnlyInZitadel`/`Drift` | Sub-phase 2 lowers its cap (B2), schedules it, and wires its buckets to `drift_items` + outbox re-enqueue. The pure `computeReconciliationDiff` function is kept. |
 | **Background scheduler** | `services/expiry/{scheduler,sweep,deps}.go` — ticker + immediate-sweep-on-boot + graceful `Done()` shutdown, injectable deps | The drift sweep and (if ever backgrounded) the drain mirror this package structure exactly. `main.go` wires it beside `sched` with `DRIFT_*` env vars. |
 | **Webhook-derived grant index** | `db/webhooks.go` — `zitadel_grants_index` keyed by `grant_id`, `Upsert/Get/DeleteGrantIndex` | The drain's already-exists check and the drift confirmation both read this index instead of hammering `ListUserGrants`. |
 
@@ -35,10 +35,10 @@ The exploration that preceded this design found four existing structures that th
 
 **This is the load-bearing decision and a deliberate deviation from parent design §4.3 step 7.**
 
-Parent design §4.3 sketches a loop where MkAuth calls Zitadel, then a `user.grant.added` webhook returns and flips the outbox row `applied → confirmed`. That loop cannot exist in this codebase, because `webhook_translate.go` already contains a **self-mutation guard**:
+Parent design §4.3 sketches a loop where Syndra calls Zitadel, then a `user.grant.added` webhook returns and flips the outbox row `applied → confirmed`. That loop cannot exist in this codebase, because `webhook_translate.go` already contains a **self-mutation guard**:
 
 ```go
-// webhook_translate.go — events authored by MkAuth's own M2M account are dropped
+// webhook_translate.go — events authored by Syndra's own M2M account are dropped
 m2mID := os.Getenv("ZITADEL_M2M_USER_ID")
 ...
 } else if editor := ev.editorID(); editor == m2mID {
@@ -47,17 +47,17 @@ m2mID := os.Getenv("ZITADEL_M2M_USER_ID")
 }
 ```
 
-The drain calls the Management API as that same M2M account. So **every grant MkAuth makes is dropped at the translator boundary** — by design, to prevent orchestration loops (a grant we made re-triggering mapping-rule enforcement). A webhook "return-trip confirmation" would therefore never fire for MkAuth-originated grants, and the pending count would never decrement.
+The drain calls the Management API as that same M2M account. So **every grant Syndra makes is dropped at the translator boundary** — by design, to prevent orchestration loops (a grant we made re-triggering mapping-rule enforcement). A webhook "return-trip confirmation" would therefore never fire for Syndra-originated grants, and the pending count would never decrement.
 
 The resolution is simpler than the parent sketch, not more complex:
 
-- **The synchronous `2xx` from the Management API is the confirmation.** MkAuth made the call; MkAuth knows it succeeded. The outbox lifecycle is `pending → in_flight → applied` (success) | `failed` (4xx) | back to `pending` (5xx/timeout, retry). There is **no `confirmed` state**.
+- **The synchronous `2xx` from the Management API is the confirmation.** Syndra made the call; Syndra knows it succeeded. The outbox lifecycle is `pending → in_flight → applied` (success) | `failed` (4xx) | back to `pending` (5xx/timeout, retry). There is **no `confirmed` state**.
 - **Pending Propagation count** = rows in `('pending','in_flight')`.
 - **The webhook path is reserved for drift** (sub-phase 2). The self-mutation guard is exactly what makes drift detection clean: the only grant events that survive translation are externally-originated ones — which are precisely the drift candidates. We get drift detection "for free" from a guard that already exists.
 
 The outbox `status` CHECK is therefore `('pending','in_flight','applied','failed')`. The parent design's `confirmed` value is dropped. This deviation is logged here, surfaced in the spec delta, and is strictly *less* machinery than the sketch.
 
-> **Consequence for the idempotency key:** because there is no Zitadel round-trip, the `idempotency_key` is **not** stamped into Zitadel call metadata (parent design §4.3 said `metadata={idempotency_key}`). It is purely MkAuth's own outbox dedup token (UNIQUE constraint + already-exists check guard double-drain). We do not depend on Zitadel echoing custom grant metadata — a capability we cannot guarantee. Rejected alternative documented in Decision 6.
+> **Consequence for the idempotency key:** because there is no Zitadel round-trip, the `idempotency_key` is **not** stamped into Zitadel call metadata (parent design §4.3 said `metadata={idempotency_key}`). It is purely Syndra's own outbox dedup token (UNIQUE constraint + already-exists check guard double-drain). We do not depend on Zitadel echoing custom grant metadata — a capability we cannot guarantee. Rejected alternative documented in Decision 6.
 
 ### Decision 2 — One migration per sub-phase; full enum installed up front
 
@@ -160,7 +160,7 @@ applyRow(ctx, row):
   MarkApplied(ctx, row.id)
 ```
 
-**Ledger reconciliation on applied revoke/replace (review-hardened).** The transactional enqueue writes/keeps `direct_role_grants` rows for `add`/`replace` but cannot know, at enqueue time, which *old* rows a `revoke` or a narrowing `replace` supersedes — that is only settled once the Zitadel mutation applies. Without a cleanup path a `revoke` would leave the revoked role in the ledger (still counted as an expected grant by the access-decision compiler, and later re-added as `mkauth_only` drift by sub-phase 2), and a `replace` would leave superseded roles behind. `applyRow` closes this: on an applied `revoke`/`replace` — including the already-exists short-circuit — it prunes `direct_role_grants` to match the desired state. The reconcile runs before the terminal `MarkApplied`, so a persistence failure leaves the row `in_flight` and the next drain retries it.
+**Ledger reconciliation on applied revoke/replace (review-hardened).** The transactional enqueue writes/keeps `direct_role_grants` rows for `add`/`replace` but cannot know, at enqueue time, which *old* rows a `revoke` or a narrowing `replace` supersedes — that is only settled once the Zitadel mutation applies. Without a cleanup path a `revoke` would leave the revoked role in the ledger (still counted as an expected grant by the access-decision compiler, and later re-added as `syndra_only` drift by sub-phase 2), and a `replace` would leave superseded roles behind. `applyRow` closes this: on an applied `revoke`/`replace` — including the already-exists short-circuit — it prunes `direct_role_grants` to match the desired state. The reconcile runs before the terminal `MarkApplied`, so a persistence failure leaves the row `in_flight` and the next drain retries it.
 
 **Crash recovery via in_flight reclaim, made safe by serialized drains.** `ClaimPendingPropagations` claims `status IN ('pending','in_flight')` — the same set the pending worklist/count report. A drain that dies after claiming but before recording a terminal state leaves `in_flight` rows; the next drain re-claims them and the idempotent already-exists check (409→applied) resolves any operation that actually reached Zitadel. Because a row leaves `in_flight` only by a *persisted* terminal/requeue transition, a state-write failure is counted as `errored` (never `applied`/`failed`) and the row stays reclaimable.
 
@@ -205,17 +205,17 @@ Each is half of the contract. This wave merges them: both call `EnqueueDirectGra
 
 The `/zitadel/*` URLs are kept as **backward-compatible aliases** (operator bookmarks, the diagnostics page). One mutation pathway in code, two URL-space entry points. The `update`/`remove` handlers resolve `grantId → (user_id, project_id, role_keys)` through `db.GetGrantIndex` (falling back to a live `ListUserGrants` on index miss) so the canonical `(user, project, role)`-shaped path can enqueue. The frontend caller (`app/zitadel/page.tsx`) is updated for the new response shape — folded in here since it changes anyway in Theme 4's U5 split.
 
-**Access-request approval is the third entry point (review-hardened).** `access.go:handleResolveAccessRequest` (`status=approved`) also creates a direct grant, and originally took the bare `UpsertDirectGrant` shortcut — writing the ledger row but no outbox row. That left the approved grant invisible to the Pending UI, unprojected to Zitadel, and destined to re-surface as `mkauth_only` drift in sub-phase 2 (the ledger says "expected", Zitadel says "absent"). It now flows through the outbox exactly like the operator endpoint (`op_type='add'`, `source='direct'`, `source_ref=<request id>`), then applies inline (the approval *is* the operator's confirmation).
+**Access-request approval is the third entry point (review-hardened).** `access.go:handleResolveAccessRequest` (`status=approved`) also creates a direct grant, and originally took the bare `UpsertDirectGrant` shortcut — writing the ledger row but no outbox row. That left the approved grant invisible to the Pending UI, unprojected to Zitadel, and destined to re-surface as `syndra_only` drift in sub-phase 2 (the ledger says "expected", Zitadel says "absent"). It now flows through the outbox exactly like the operator endpoint (`op_type='add'`, `source='direct'`, `source_ref=<request id>`), then applies inline (the approval *is* the operator's confirmation).
 
 Two follow-on hardenings: (1) **Resolution and enqueue are one conditional transaction** (`db.ApproveRequestAndEnqueue` → `UPDATE access_requests … WHERE id=$1 AND status='pending'` then `enqueueWrites` on the same `pgx.Tx`). Previously the handler resolved the request in one call and enqueued in a separate transaction, so a failed enqueue stranded an approved-but-ungranted request and a retry hit `ALREADY_RESOLVED`; the `WHERE status='pending'` guard (also added to the reject path's `ResolveAccessRequest`) closes the concurrent approve/reject race, returning `ErrRequestNotPending` → `409`. (2) The inline apply drains **only this row** (`DrainOne`), not the global batch — see the inline-apply decision below. The inline drain is best-effort/non-fatal: access is already effective the moment the ledger row commits (the claim compiler reads `direct_role_grants`), so a drain failure just leaves the row pending in the worklist. The request-resolution audit (`access_request.approved`) and the grant audit (`direct_grant.upserted`, written inside the same tx) are both recorded.
 
 ### Decision 5 — Drift detection reuses `computeReconciliationDiff`; the sweep gets scheduled and wired to tables (sub-phase 2)
 
-`handlers/reconciliation.go` already contains a pure, tested `computeReconciliationDiff(mkauth, zitadel)` returning `OnlyInMkAuth`/`OnlyInZitadel`/`Drift`. Sub-phase 2 keeps that function and changes three things around it:
+`handlers/reconciliation.go` already contains a pure, tested `computeReconciliationDiff(syndra, zitadel)` returning `OnlyInSyndra`/`OnlyInZitadel`/`Drift`. Sub-phase 2 keeps that function and changes three things around it:
 
 1. **Cap 10 000 → 2 000** (B2). One-line change to `reconciliationSafetyCap`; right-sized for a 200-user makerspace (~10× headroom).
 2. **`expected` set widened to include rule outputs** so a mapping-rule-derived grant lands as `expected_via_rule`, not `OnlyInZitadel` (parent design §4.5). The expected set becomes `direct_role_grants ∪ bundle_expansions ∪ rule_outputs ∪ external_grant_exclusions` — all computable from existing `services/views.go` helpers.
-3. **Outputs wired to durable state.** A new scheduled sweep (`services/drift/{scheduler,sweep,deps}.go`, mirroring `expiry/`) runs every `DRIFT_RECONCILIATION_INTERVAL_HOURS` (default 6) — and on operator demand via a `[Reconcile now]` button (parent design §9 Q2) — calling the diff then: `zitadel_only → drift_items.upsert(detection_source='reconciliation_sweep')`; `mkauth_only → re-enqueue outbox row` (the missed-webhook replay, parent design §4.5).
+3. **Outputs wired to durable state.** A new scheduled sweep (`services/drift/{scheduler,sweep,deps}.go`, mirroring `expiry/`) runs every `DRIFT_RECONCILIATION_INTERVAL_HOURS` (default 6) — and on operator demand via a `[Reconcile now]` button (parent design §9 Q2) — calling the diff then: `zitadel_only → drift_items.upsert(detection_source='reconciliation_sweep')`; `syndra_only → re-enqueue outbox row` (the missed-webhook replay, parent design §4.5).
 
 Real-time drift comes from the webhook: a surviving (non-self) `grant_added`/`grant_removed` that matches no `external_grant_exclusions` and no expected grant inserts `drift_items(detection_source='webhook')`. The **C6** overlay-cache partial-result gap is closed by this same backstop — a grant that slipped past a partial overlay surfaces at the next sweep; documented, not separately engineered.
 
@@ -242,7 +242,7 @@ CREATE TABLE IF NOT EXISTS drift_items (
     zitadel_grant_id  TEXT,
     detected_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     detection_source  TEXT NOT NULL CHECK (detection_source IN ('webhook', 'reconciliation_sweep')),
-    drift_type        TEXT NOT NULL CHECK (drift_type IN ('zitadel_only', 'mkauth_only')),
+    drift_type        TEXT NOT NULL CHECK (drift_type IN ('zitadel_only', 'syndra_only')),
     status            TEXT NOT NULL DEFAULT 'pending_triage'
                           CHECK (status IN ('pending_triage', 'attributed', 'revoked', 'marked_external')),
     resolved_at       TIMESTAMPTZ,

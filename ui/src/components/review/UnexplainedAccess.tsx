@@ -104,7 +104,7 @@ export function UnexplainedAccess() {
 
   /**
    * Drift arrives in clusters — one misconfigured rule, one person onboarded by
-   * hand, one project nobody told MkAuth about. Selecting the cluster is the
+   * hand, one project nobody told Syndra about. Selecting the cluster is the
    * actual shape of the work, and no amount of shift-clicking finds it as
    * reliably as asking for it.
    */
@@ -148,7 +148,7 @@ export function UnexplainedAccess() {
             ? `${items.length} ${items.length === 1 ? "item" : "items"}${
                 filtered ? " matching these filters" : ""
               }${oldest ? ` · oldest found ${formatRelative(oldest)}` : ""}`
-            : "Access that exists in the identity provider which MkAuth cannot explain."
+            : "Access that exists in the identity provider which Syndra cannot explain."
         }
         actions={
           <>
@@ -231,7 +231,7 @@ export function UnexplainedAccess() {
               </span>
               <span className="w-[186px]">Who</span>
               <span className="w-[250px]">What they can get into</span>
-              <span className="flex-1">Why MkAuth can&rsquo;t explain it</span>
+              <span className="flex-1">Why Syndra can&rsquo;t explain it</span>
               <span className="w-[96px]">Found</span>
               <span className="w-[300px] text-right">Resolve</span>
             </CardColumns>
@@ -263,7 +263,7 @@ export function UnexplainedAccess() {
                 ) : (
                   <EmptyState
                     title="Everything is explained."
-                    guidance="Every grant in the identity provider traces back to something MkAuth did."
+                    guidance="Every grant in the identity provider traces back to something Syndra did."
                   />
                 )
               }
@@ -308,7 +308,7 @@ export function UnexplainedAccess() {
             composition={composition}
             onClear={selection.clear}
           >
-            <SelectionAction onClick={() => setBulkOp("adopt")}>Adopt in MkAuth</SelectionAction>
+            <SelectionAction onClick={() => setBulkOp("adopt")}>Adopt in Syndra</SelectionAction>
             <SelectionAction onClick={() => setBulkOp("external")}>
               Mark as owned elsewhere
             </SelectionAction>
@@ -375,7 +375,7 @@ function TriageRow({
 }) {
   const role = item.role_keys[0] ?? "";
   // A machine account is not a person: an integration that provisions itself
-  // on every deploy will re-create this tomorrow whatever MkAuth records, so
+  // on every deploy will re-create this tomorrow whatever Syndra records, so
   // adopting is the wrong verb and is neutralised rather than hidden.
   const adoptPointless = item.user_is_service_account;
 
@@ -504,7 +504,7 @@ function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
       <div>
         <div className="type-label mb-1.5">If you adopt</div>
         <p className="text-[13.5px] leading-[1.55] text-muted">
-          MkAuth records the grant, you become the granter of record, and it stops appearing here.
+          Syndra records the grant, you become the granter of record, and it stops appearing here.
           Nothing changes upstream.
         </p>
       </div>
@@ -547,9 +547,9 @@ function ResolutionDialog({
 
   const copy = {
     attribute: {
-      title: "Adopt this access in MkAuth?",
-      lede: "MkAuth takes ownership of it. The access stays exactly as it is; from now on MkAuth explains it and manages its lifecycle.",
-      confirm: "Adopt in MkAuth",
+      title: "Adopt this access in Syndra?",
+      lede: "Syndra takes ownership of it. The access stays exactly as it is; from now on Syndra explains it and manages its lifecycle.",
+      confirm: "Adopt in Syndra",
       variant: "accent" as const,
     },
     external: {
@@ -560,7 +560,7 @@ function ResolutionDialog({
     },
     revoke: {
       title: "Take this access away?",
-      lede: "This removes the grant in the identity provider AND records the decision in MkAuth, so the sweep won't surface it again.",
+      lede: "This removes the grant in the identity provider AND records the decision in Syndra, so the sweep won't surface it again.",
       confirm: "Revoke access",
       variant: "dangerConfirm" as const,
     },
@@ -638,8 +638,8 @@ function ResolutionDialog({
  * naming a plausible culprit.
  */
 function explainDrift(item: DriftTriageItem): string {
-  if (item.drift_type === "mkauth_only") {
-    return "MkAuth expects this grant but the identity provider doesn't have it — usually a queued write that never landed.";
+  if (item.drift_type === "syndra_only") {
+    return "Syndra expects this grant but the identity provider doesn't have it — usually a queued write that never landed.";
   }
   const when = item.upstream_created_at ? ` on ${formatLongDate(item.upstream_created_at)}` : "";
   const who = item.upstream_actor ? ` by ${item.upstream_actor}` : "";
@@ -657,7 +657,7 @@ function describeHolder(item: DriftTriageItem): string {
 }
 
 /**
- * Reconciliation — the MkAuth ↔ provider diff, relocated here from the retired
+ * Reconciliation — the Syndra ↔ provider diff, relocated here from the retired
  * /grants route. Two directions of drift, named differently: extra upstream
  * grants go to triage, missing downstream writes get re-pushed.
  */
@@ -667,7 +667,7 @@ function Reconciliation() {
 
   const empty =
     !data ||
-    (data.only_in_mkauth.length === 0 &&
+    (data.only_in_syndra.length === 0 &&
       data.only_in_zitadel.length === 0 &&
       data.drift.length === 0);
 
@@ -682,7 +682,7 @@ function Reconciliation() {
 
       <Card>
         <CardHeader
-          title="MkAuth ↔ identity provider"
+          title="Syndra ↔ identity provider"
           note={
             data?.generated_at ? (
               <>
@@ -701,13 +701,13 @@ function Reconciliation() {
           empty={
             <EmptyState
               title="The two sides agree."
-              guidance="Every grant MkAuth expects exists upstream, and nothing upstream is unaccounted for."
+              guidance="Every grant Syndra expects exists upstream, and nothing upstream is unaccounted for."
             />
           }
         >
           <DiffSection
             label="Extra upstream"
-            hint="These exist in the identity provider with nothing in MkAuth explaining them."
+            hint="These exist in the identity provider with nothing in Syndra explaining them."
             tone="danger"
             action={{ label: "See in triage →", href: "?" }}
             rows={(data?.only_in_zitadel ?? []).map((row) => ({
@@ -718,10 +718,10 @@ function Reconciliation() {
           />
           <DiffSection
             label="Missing downstream"
-            hint="MkAuth expects these and the identity provider doesn't have them — a write that never landed."
+            hint="Syndra expects these and the identity provider doesn't have them — a write that never landed."
             tone="warn"
             action={{ label: "Re-push →", href: "/governance/pending" }}
-            rows={(data?.only_in_mkauth ?? []).map((row) => ({
+            rows={(data?.only_in_syndra ?? []).map((row) => ({
               userId: row.user_id,
               projectId: row.project_id,
               roles: row.role_keys,
@@ -734,7 +734,7 @@ function Reconciliation() {
             rows={(data?.drift ?? []).map((row) => ({
               userId: row.user_id,
               projectId: row.project_id,
-              roles: row.only_in_zitadel.length > 0 ? row.only_in_zitadel : row.only_in_mkauth,
+              roles: row.only_in_zitadel.length > 0 ? row.only_in_zitadel : row.only_in_syndra,
             }))}
           />
 
@@ -843,7 +843,7 @@ function BulkResolutionDialog({
 
   return (
     <RehearsalDialog
-      title={op === "adopt" ? "Adopt in MkAuth" : "Mark as owned elsewhere"}
+      title={op === "adopt" ? "Adopt in Syndra" : "Mark as owned elsewhere"}
       lede={composition}
       noun={["item", "items"]}
       onRehearse={() =>

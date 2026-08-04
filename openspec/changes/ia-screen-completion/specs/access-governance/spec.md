@@ -73,7 +73,7 @@ The UI MUST NOT re-sort the result. The row layout MUST NOT change with risk; on
 
 ### Requirement: Adoption MUST record only the provenance it can create
 
-Adopting drift writes a `direct_role_grants` row: MkAuth records the grant, the operator becomes granter of record, and nothing changes upstream. That is the whole of what the action does, and the recorded source MUST say only that.
+Adopting drift writes a `direct_role_grants` row: Syndra records the grant, the operator becomes granter of record, and nothing changes upstream. That is the whole of what the action does, and the recorded source MUST say only that.
 
 `external_backfill` MUST be the only accepted attribution source. `bundle` and `rule` MUST be rejected with 400, and the rejection MUST explain why. The request MUST NOT carry a `source_ref`.
 
@@ -165,7 +165,7 @@ Every such control MUST carry the destructive tone regardless of the verb, and e
 
 ### Requirement: Provider health MUST be reported as a sentence with a cause
 
-Health MUST be rendered as a sentence carrying a cause and, where the provider is unreachable, what MkAuth is doing in the meantime. A coloured dot alone is not sufficient: it says something is wrong and nothing else.
+Health MUST be rendered as a sentence carrying a cause and, where the provider is unreachable, what Syndra is doing in the meantime. A coloured dot alone is not sufficient: it says something is wrong and nothing else.
 
 #### Scenario: An unreachable provider explains itself
 

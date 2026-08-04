@@ -33,7 +33,7 @@ type Config struct {
 func Load() (Config, error) {
 	cfg := Config{
 		BackendURL:             envOrDefault("BACKEND_URL", "http://backend:8080"),
-		APIKey:                 os.Getenv("MKAUTH_API_KEY"),
+		APIKey:                 os.Getenv("SYNDRA_API_KEY"),
 		LDAPURL:                envOrDefault("LLDAP_URL", "ldaps://lldap:636"),
 		LDAPBindDN:             os.Getenv("LLDAP_BIND_DN"),
 		LDAPBindPassword:       os.Getenv("LLDAP_BIND_PASSWORD"),
@@ -75,7 +75,7 @@ func Load() (Config, error) {
 
 	// Validate required fields.
 	if cfg.APIKey == "" {
-		return cfg, fmt.Errorf("MKAUTH_API_KEY is required")
+		return cfg, fmt.Errorf("SYNDRA_API_KEY is required")
 	}
 	if cfg.LDAPBindDN == "" {
 		return cfg, fmt.Errorf("LLDAP_BIND_DN is required")

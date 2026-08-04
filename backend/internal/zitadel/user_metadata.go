@@ -10,7 +10,7 @@ import (
 )
 
 // UserMetadata is a key/value pair an admin has attached to a Zitadel user.
-// Zitadel stores arbitrary metadata per user as an opaque K/V store; MkAuth
+// Zitadel stores arbitrary metadata per user as an opaque K/V store; Syndra
 // reads well-known keys (title/team) to populate UserProfile fields
 // that Zitadel's first-class schema doesn't model.
 type UserMetadata struct {

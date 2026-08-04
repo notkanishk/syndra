@@ -1,7 +1,7 @@
 # Design: Bun-Native Architecture
 
 ## Rationale
-Bun provides an all-in-one toolkit (runtime, package manager, and bundler) for the MkAuth ecosystem. By adopting Bun, we eliminate the legacy Node.js/npm dependencies, significantly reducing container image sizes and accelerating cold start times.
+Bun provides an all-in-one toolkit (runtime, package manager, and bundler) for the Syndra ecosystem. By adopting Bun, we eliminate the legacy Node.js/npm dependencies, significantly reducing container image sizes and accelerating cold start times.
 
 ## Technical Specification
 

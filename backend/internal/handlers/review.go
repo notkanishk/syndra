@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
+	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
 // reviewWindowDefaultDays matches the copy on Review › Expiring access:

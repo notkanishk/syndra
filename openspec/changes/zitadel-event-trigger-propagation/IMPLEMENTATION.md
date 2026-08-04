@@ -18,7 +18,7 @@
 ### Deployment (`zitadel/actions/`)
 
 - `targets.json` reshaped from a single-target object to a multi-target manifest: `targets[]` (each with `name`, type-specific submessage, and `_signing_key_env` annotation) plus `executions[]` whose entries reference targets by name.
-- Two targets defined: `mkauth-claim-injector` (type `restCall`, 3s timeout, function triggers `preaccesstoken`/`preuserinfo`) and `mkauth-event-listener` (type `restAsync`, 5s timeout, condition.event triggers for the lifecycle events listed above).
+- Two targets defined: `syndra-claim-injector` (type `restCall`, 3s timeout, function triggers `preaccesstoken`/`preuserinfo`) and `syndra-event-listener` (type `restAsync`, 5s timeout, condition.event triggers for the lifecycle events listed above).
 - `register.sh` iterates `targets[]`, captures each target's signing key into `.action-signing-key.<name>` (mode 0600), maps `executions[].target` (name) → captured target IDs in one pass, and writes a multi-pair `.action-env.fragment` with `ZITADEL_ACTION_SIGNING_KEY=...` + `ZITADEL_EVENT_SIGNING_KEY=...` + their `_ROTATED_AT` companions. `--remove` unbinds every execution; missing-target lookup is gated to the non-remove path so partially-deleted targets do not block cleanup. The unbind PUT in `--remove` mode runs with `ZITADEL_API_TOLERATE_404=1` so HTTP 404 responses (`COMMAND-74aaqj8fv9` "Execution condition is invalid", emitted by Zitadel when no execution row matches the condition) are treated as success — `make zitadel-actions-remove` is therefore safe to run against partially-applied or already-clean instances.
 - `rotate.sh --target NAME` rotates one target; default rotates every target. Per-target file isolation (`.action-signing-key.<name>{,.previous,.rotated_at}`) lets one signing key be rotated without touching the other.
 - `Makefile` recipes: `zitadel-actions-register` registers both targets in one shot; `zitadel-actions-rotate-key TARGET=...` (optional) rotates one or all; `zitadel-actions-verify-events` runs the new smoke test.
@@ -35,8 +35,8 @@
 - New capability spec `lifecycle-event-propagation/spec.md` (this change directory).
 - MODIFIED delta on `application-claims/spec.md`: new requirements for multi-target deployment, event-trigger authentication + translation, and self-mutation loop suppression.
 - `openspec/INDEX.md` — change row flipped to "Complete" with impl link; capability row promoted from "Pending — see change" to "Integrated".
-- `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md` — `Webhook invalidation` row Notes column updated to record the producer wiring; `Last updated` bumped.
-- `openspec/changes/mkauth-core-architecture/ROADMAP.md` — Phase 5 Operations gains a ticked "Event-Trigger Propagation" entry alongside the existing Actions v2 Deployment item.
+- `openspec/changes/syndra-core-architecture/specs/feature-coverage.md` — `Webhook invalidation` row Notes column updated to record the producer wiring; `Last updated` bumped.
+- `openspec/changes/syndra-core-architecture/ROADMAP.md` — Phase 5 Operations gains a ticked "Event-Trigger Propagation" entry alongside the existing Actions v2 Deployment item.
 
 ## Verification performed
 

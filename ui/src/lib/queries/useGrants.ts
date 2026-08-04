@@ -18,8 +18,8 @@ export interface ZitadelGrantRow {
 
 /**
  * Reconciliation diff shape mirrors `handlers.ReconciliationDiff`.
- *  - only_in_mkauth — direct grants with no Zitadel counterpart
- *  - only_in_zitadel — Zitadel grants not tracked by MkAuth (mapping-rule
+ *  - only_in_syndra — direct grants with no Zitadel counterpart
+ *  - only_in_zitadel — Zitadel grants not tracked by Syndra (mapping-rule
  *    derivatives or pre-existing manual grants)
  *  - drift — same (user, project) on both sides but role sets disagree
  */
@@ -33,15 +33,15 @@ export interface ReconciliationGrant {
 export interface ReconciliationDriftEntry {
   user_id: string;
   project_id: string;
-  mkauth_roles: string[];
+  syndra_roles: string[];
   zitadel_roles: string[];
-  only_in_mkauth: string[];
+  only_in_syndra: string[];
   only_in_zitadel: string[];
   grant_id?: string;
 }
 
 export interface ReconciliationDiff {
-  only_in_mkauth: ReconciliationGrant[];
+  only_in_syndra: ReconciliationGrant[];
   only_in_zitadel: ReconciliationGrant[];
   drift: ReconciliationDriftEntry[];
   generated_at: string;
@@ -63,7 +63,7 @@ export function useReconciliationDiff() {
     queryFn: async (): Promise<ReconciliationDiff> => {
       const data = await request<ReconciliationDiff>("/reconciliation/grants");
       return {
-        only_in_mkauth: Array.isArray(data?.only_in_mkauth) ? data.only_in_mkauth : [],
+        only_in_syndra: Array.isArray(data?.only_in_syndra) ? data.only_in_syndra : [],
         only_in_zitadel: Array.isArray(data?.only_in_zitadel) ? data.only_in_zitadel : [],
         drift: Array.isArray(data?.drift) ? data.drift : [],
         generated_at: data?.generated_at ?? "",

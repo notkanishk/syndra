@@ -33,6 +33,6 @@ This wave is the cleanup pass that hands Theme 2 a coherent backend. The audit's
 - **Theme 4 (Wave 2 Part 1 + Wave 3)** — frontend. Part 1 (palette finalization) has shipped; the remainder (useNameResolver trim, `lib/api.ts` dead exports, `app/zitadel/page.tsx` split, ⌘K strike, `location` drop, middleware/proxy tests) is Wave 3.
 - **Behavior change in `degradedResponse`.** The cache is a fallback path on DB error only — the steady-state DB read is unchanged. `fail_closed` remains the safe default when no cache and no DB row exist.
 - **Webhook redelivery semantics.** The 200-ack at line 104-109 stays; only its observability changes. This deviation from a literal reading of the audit's "returns 400" wording is documented in `design.md` Decision 5.
-- **OpenSpec `mkauth-core-architecture` design.md edits.** Cross-cutting docs (CLAUDE.md, ROADMAP.md, INDEX.md) are owned by Theme 2 per the audit-resolution design's §7 table; Theme 3 touches only its own scope.
+- **OpenSpec `syndra-core-architecture` design.md edits.** Cross-cutting docs (CLAUDE.md, ROADMAP.md, INDEX.md) are owned by Theme 2 per the audit-resolution design's §7 table; Theme 3 touches only its own scope.
 
 (Audit refs: B3, B5, B6, B7, C4, C5, C11, D8)

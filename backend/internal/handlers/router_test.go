@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"mkauth/internal/auth"
+	"syndra/internal/auth"
 )
 
 // TestWithOperatorAuth_ParsesJWTExactlyOnce asserts the C4 contract by

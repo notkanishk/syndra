@@ -3,7 +3,7 @@ package db
 import (
 	"context"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // -------------------------------------------------------------

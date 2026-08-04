@@ -19,7 +19,7 @@
 ┌── Users & Grants ──────────────────────────┐
 │ User: [search / dropdown]   total: 12       │
 │ Grants:                                      │
-│   mkauth:admin  [Edit][Revoke]              │
+│   syndra:admin  [Edit][Revoke]              │
 │   lab-3d:member [Edit][Revoke]              │
 │   + assign grant  project [_] roles [_]    │
 └────────────────────────────────────────────┘
@@ -33,7 +33,7 @@ All inline forms are small — one row of inputs per action. Success/error shows
 
 ### API client
 
-All calls go through the existing `/api/proxy/*` — no direct access to `BACKEND_URL` from the browser. The proxy reads the session, attaches the Zitadel JWT (OIDC) or `MKAUTH_API_KEY` (demo), and forwards.
+All calls go through the existing `/api/proxy/*` — no direct access to `BACKEND_URL` from the browser. The proxy reads the session, attaches the Zitadel JWT (OIDC) or `SYNDRA_API_KEY` (demo), and forwards.
 
 Concrete paths:
 
@@ -76,7 +76,7 @@ Only existing primitives:
 
 ### What is intentionally NOT built
 
-* User create / update / delete — Zitadel has its own user-management console; MkAuth doesn't own that surface.
+* User create / update / delete — Zitadel has its own user-management console; Syndra doesn't own that surface.
 * Project create / update / delete — same reason.
 * Pagination controls — defer until scale demands it.
 * Search / filter UI beyond the project / user dropdown.

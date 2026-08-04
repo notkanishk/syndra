@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"mkauth/internal/directory"
-	"mkauth/internal/models"
+	"syndra/internal/directory"
+	"syndra/internal/models"
 )
 
 // RoleMembers answers "who can currently use the laser cutter?" — the reverse
@@ -220,7 +220,7 @@ type DirectGrantRemoval struct {
 	Status   string   `json:"status"`
 }
 
-// DeleteDirectGrant removes one MkAuth direct grant and enqueues only the
+// DeleteDirectGrant removes one Syndra direct grant and enqueues only the
 // access the person actually loses.
 //
 // The delta is computed the same way every other cascade computes it: the
@@ -235,7 +235,7 @@ type DirectGrantRemoval struct {
 // dialog and taking the role away until the next compile restored it.
 //
 // This is deliberately NOT the Zitadel-side grant delete: that removes a
-// different object and leaves the MkAuth row behind, so the next cache compile
+// different object and leaves the Syndra row behind, so the next cache compile
 // puts the access straight back. Deleting the ledger row is what actually ends
 // the access; the outbox rows are what carry it upstream.
 func DeleteDirectGrant(ctx context.Context, userID, grantID, actor string) (DirectGrantRemoval, error) {

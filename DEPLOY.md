@@ -1,4 +1,4 @@
-# Deploying MkAuth to Production
+# Deploying Syndra to Production
 
 Production runs on a Proxmox LXC named `syndra` (`198.51.100.12`), reachable at
 `https://syndra.example.org` through the shared Caddy box at `198.51.100.15`.
@@ -39,8 +39,8 @@ exactly one route under `/api` (`/api/proxy/[...path]`), so the path split above
 has no collisions.
 
 **Zitadel Actions v2 is instance-scoped.** Targets and executions belong to the
-whole Zitadel instance, not to an organization or project. Only one MkAuth
-deployment can own the `mkauth-claim-injector` and `mkauth-event-listener`
+whole Zitadel instance, not to an organization or project. Only one Syndra
+deployment can own the `syndra-claim-injector` and `syndra-event-listener`
 targets on a given instance — registering a second one silently repoints the
 first. A second environment therefore needs a *second Zitadel instance*, not a
 second project.
@@ -53,8 +53,8 @@ second project.
 |---|---|
 | LXC template | community-scripts `docker` (Debian 13, unprivileged) |
 | Resources | 4 CPU · 6144 MB RAM · 32 GB disk (`bun run build` peaks past 2 GB) |
-| Compose dir | `/opt/mkauth`, owned by the `runner` user |
-| Repo | `github.com/notkanishk/makerspace-authority` — **private**, needs a deploy key |
+| Compose dir | `/opt/syndra`, owned by the `runner` user |
+| Repo | `github.com/notkanishk/syndra` — **private**, needs a deploy key |
 | DNS | `syndra.example.org` → `198.51.100.15` (the Caddy box) |
 
 Create the LXC on the Proxmox host with:
@@ -79,9 +79,9 @@ Everything runs as an unprivileged `runner` user that is a member of the
 ssh root@198.51.100.12
 adduser --disabled-password --gecos "" runner
 usermod -aG docker runner
-install -d -o runner -g runner -m 755 /opt/mkauth
+install -d -o runner -g runner -m 755 /opt/syndra
 
-su - runner -c 'ssh-keygen -t ed25519 -N "" -C "syndra-mkauth-deploy" -f ~/.ssh/id_ed25519'
+su - runner -c 'ssh-keygen -t ed25519 -N "" -C "syndra-syndra-deploy" -f ~/.ssh/id_ed25519'
 su - runner -c 'ssh-keyscan -t ed25519 github.com > ~/.ssh/known_hosts'
 cat /home/runner/.ssh/id_ed25519.pub
 ```
@@ -92,10 +92,10 @@ Leave *Allow write access* **unchecked** — production only ever reads.
 ### 2. Clone
 
 ```bash
-su - runner -c 'git clone git@github.com:notkanishk/makerspace-authority.git /opt/mkauth'
+su - runner -c 'git clone git@github.com:notkanishk/syndra.git /opt/syndra'
 ```
 
-`/opt/mkauth` is a long-lived clone. The Actions runner checks out into it
+`/opt/syndra` is a long-lived clone. The Actions runner checks out into it
 directly rather than into its own workspace, because this directory also holds
 `.env`, the Zitadel service-account key, and the identity of the named Docker
 volumes. Do not delete and re-clone it — that is how you lose the database
@@ -104,11 +104,11 @@ password while keeping the database.
 ### 3. Generate secrets
 
 ```bash
-su - runner -c 'cd /opt/mkauth && ./scripts/gen-prod-env.sh'
+su - runner -c 'cd /opt/syndra && ./scripts/gen-prod-env.sh'
 ```
 
-This writes `/opt/mkauth/.env` at mode 600 with fresh random values for
-`POSTGRES_PASSWORD`, `MKAUTH_API_KEY`, and `SESSION_SECRET`. It refuses to
+This writes `/opt/syndra/.env` at mode 600 with fresh random values for
+`POSTGRES_PASSWORD`, `SYNDRA_API_KEY`, and `SESSION_SECRET`. It refuses to
 overwrite an existing `.env`, because a regenerated `POSTGRES_PASSWORD` no
 longer matches an already-initialized database volume.
 
@@ -121,7 +121,7 @@ must not be hand-adapted for production; its secrets are shared literals.
 
 All of this happens in the Zitadel console at `https://auth.example.org`.
 
-**a. Project.** Create a project (e.g. `MkAuth Production`). In its settings,
+**a. Project.** Create a project (e.g. `Syndra Production`). In its settings,
 enable **Assert Roles on Authentication** — without it Zitadel omits the
 `urn:zitadel:iam:org:project:roles` claim, and the UI has no way to tell an
 operator from anyone else (`ui/src/lib/oidc.ts:201` reads exactly that claim).
@@ -165,8 +165,8 @@ Place it on the host:
 
 ```bash
 # from your workstation
-scp zitadel-machine-key.json root@198.51.100.12:/opt/mkauth/
-ssh root@198.51.100.12 'chown runner:runner /opt/mkauth/zitadel-machine-key.json && chmod 600 $_'
+scp zitadel-machine-key.json root@198.51.100.12:/opt/syndra/
+ssh root@198.51.100.12 'chown runner:runner /opt/syndra/zitadel-machine-key.json && chmod 600 $_'
 ```
 
 The service user needs permissions at two different scopes:
@@ -185,7 +185,7 @@ The service user needs permissions at two different scopes:
   `IAM_OWNER`, which works everywhere but grants the whole instance.
 
 Only the registration and rotation scripts use the instance permissions —
-steady-state traffic is Zitadel calling MkAuth, which needs none. You may
+steady-state traffic is Zitadel calling Syndra, which needs none. You may
 revoke them between runs, or issue a second machine key used only by the
 scripts, if you want the backend's everyday key to carry no instance authority.
 
@@ -223,7 +223,7 @@ Then `caddy reload`. No application change is needed for the reverse proxy:
 ### 6. First boot
 
 ```bash
-su - runner -c 'cd /opt/mkauth && docker compose up -d --build'
+su - runner -c 'cd /opt/syndra && docker compose up -d --build'
 curl -fsS http://198.51.100.12:8080/healthz
 ```
 
@@ -236,21 +236,21 @@ Then log in at `https://syndra.example.org`.
 
 ### 7. Register Zitadel Actions
 
-> This takes over the instance's Actions targets. Any other MkAuth deployment
+> This takes over the instance's Actions targets. Any other Syndra deployment
 > pointed at the same Zitadel instance stops receiving claims and events at this
 > moment. That is expected — see the note in [Topology](#topology).
 
 ```bash
-su - runner -c 'cd /opt/mkauth && set -a && . ./.env && set +a && make zitadel-actions-register'
+su - runner -c 'cd /opt/syndra && set -a && . ./.env && set +a && make zitadel-actions-register'
 ```
 
-This creates two targets (`mkauth-claim-injector`, `mkauth-event-listener`) and
+This creates two targets (`syndra-claim-injector`, `syndra-event-listener`) and
 binds nine executions, per `zitadel/actions/targets.json`. Zitadel returns each
 target's signing key **once, at creation**. Capture both into `.env`:
 
 ```
-ZITADEL_ACTION_SIGNING_KEY=<from mkauth-claim-injector>
-ZITADEL_EVENT_SIGNING_KEY=<from mkauth-event-listener>
+ZITADEL_ACTION_SIGNING_KEY=<from syndra-claim-injector>
+ZITADEL_EVENT_SIGNING_KEY=<from syndra-event-listener>
 ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT=<current time, RFC3339 UTC>
 ```
 
@@ -283,7 +283,7 @@ restart:
 ZITADEL_M2M_USER_ID=<service user id>
 ```
 
-Without this, MkAuth's own writes echo back through the event listener and
+Without this, Syndra's own writes echo back through the event listener and
 re-trigger orchestration. It is disabled when unset — dev-mode behavior only.
 
 ### 9. Install the Actions runner
@@ -300,10 +300,10 @@ curl -fsSL -o runner.tar.gz \
   "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
 tar xzf runner.tar.gz
 ./config.sh --unattended \
-  --url https://github.com/notkanishk/makerspace-authority \
+  --url https://github.com/notkanishk/syndra \
   --token <REGISTRATION_TOKEN> \
   --name syndra \
-  --labels mkauth-prod \
+  --labels syndra-prod \
   --work _work
 exit
 
@@ -311,7 +311,7 @@ cd /home/runner/actions-runner && ./svc.sh install runner && ./svc.sh start
 ./svc.sh status
 ```
 
-The label `mkauth-prod` is what `.github/workflows/deploy-prod.yml` targets.
+The label `syndra-prod` is what `.github/workflows/deploy-prod.yml` targets.
 
 > **Security.** Anyone who can push to `main` can execute arbitrary commands in
 > production through the workflow file, because the workflow is itself part of
@@ -324,7 +324,7 @@ The label `mkauth-prod` is what `.github/workflows/deploy-prod.yml` targets.
 Push to `main`. That is the whole procedure.
 
 The workflow (`.github/workflows/deploy-prod.yml`) checks the pushed SHA out
-into `/opt/mkauth`, runs `docker compose up -d --build --remove-orphans`, prunes
+into `/opt/syndra`, runs `docker compose up -d --build --remove-orphans`, prunes
 dangling images, and smoke-tests `/healthz` and the UI root. Concurrency is
 serialized, so overlapping pushes queue instead of racing.
 
@@ -337,14 +337,14 @@ Manual run of the same path, without a push:
 Deploying by hand on the box, when the runner is down:
 
 ```bash
-su - runner -c 'cd /opt/mkauth && git fetch --prune origin && git checkout --force origin/main && docker compose up -d --build'
+su - runner -c 'cd /opt/syndra && git fetch --prune origin && git checkout --force origin/main && docker compose up -d --build'
 ```
 
 ### Rollback
 
 ```bash
 su - runner
-cd /opt/mkauth
+cd /opt/syndra
 git log --oneline -10
 git checkout --force <good-sha>
 docker compose up -d --build
@@ -367,14 +367,14 @@ docker compose logs --tail=200 ui
 docker compose up -d backend
 
 # database shell
-docker compose exec postgres psql -U mkauth mkauthdb
+docker compose exec postgres psql -U syndra syndradb
 ```
 
-All commands run from `/opt/mkauth` as the `runner` user.
+All commands run from `/opt/syndra` as the `runner` user.
 
 ### Secret rotation
 
-- **`MKAUTH_API_KEY`** — edit `.env`, `docker compose up -d backend ui sync`.
+- **`SYNDRA_API_KEY`** — edit `.env`, `docker compose up -d backend ui sync`.
   Because `SESSION_SECRET` is set independently, live sessions survive.
 - **`SESSION_SECRET`** — edit `.env`, `docker compose up -d ui`. Every operator
   is logged out.
@@ -382,7 +382,7 @@ All commands run from `/opt/mkauth` as the `runner` user.
   emitted `.action-env.fragment` and restart the backend. Zitadel does not
   expire these on its own; rotate on incident, policy, or operator handoff.
 - **`POSTGRES_PASSWORD`** — requires changing it inside Postgres first (`ALTER
-  ROLE mkauth WITH PASSWORD ...`) and then in `.env`. Editing only `.env` locks
+  ROLE syndra WITH PASSWORD ...`) and then in `.env`. Editing only `.env` locks
   the backend out of its own data.
 
 ### The sync service
@@ -406,19 +406,19 @@ docker compose --profile sync up -d
 | Login loops back to `/login` | Redirect URI mismatch. Zitadel's registered URI must be byte-identical to `https://syndra.example.org/auth/callback`. |
 | Logged in but the console is empty | Project role not granted to your user, or **Assert Roles on Authentication** is off. |
 | `make zitadel-actions-register` returns 403 | Service user has org roles but not the instance-level `action.*` permissions. |
-| Tokens carry no MkAuth claims | Another deployment re-registered the instance's Actions targets and repointed them. Re-run step 7. |
+| Tokens carry no Syndra claims | Another deployment re-registered the instance's Actions targets and repointed them. Re-run step 7. |
 | Webhook endpoint returns 401 | `ZITADEL_EVENT_SIGNING_KEY` in `.env` no longer matches the target's key. Rotate or re-capture. |
 
 ---
 
 ## Appendix: what the first deployment got wrong
 
-The original host (`mkauth-test`, `198.51.100.16`) grew by hand over several
+The original host (`syndra-test`, `198.51.100.16`) grew by hand over several
 months. Everything below is a real defect found on it, and each one is the
 reason the corresponding decision above looks the way it does. Keep this list
 when rebuilding that box.
 
-**`MKAUTH_EXTERNAL_URL` drifted to a decommissioned IP.** The `.env` pointed at
+**`SYNDRA_EXTERNAL_URL` drifted to a decommissioned IP.** The `.env` pointed at
 `198.51.100.14:8080`; the box had since moved to `.16`. Nothing failed loudly —
 Zitadel kept POSTing to a host that no longer answered, so the claim injector
 and event listener were silently dead. `CORS_ORIGIN` and `NEXT_PUBLIC_API_URL`
@@ -434,11 +434,11 @@ unprivileged `runner` user with both files at mode 600.*
 **Everything ran as root**, including what a CI runner would drive. *Prod
 separates the deploy identity from the host's root account.*
 
-**Two sets of database volumes.** `mkauth_pgdata` and
+**Two sets of database volumes.** `syndra_pgdata` and
 `makerspace-authority_pgdata` both exist. Compose derives its project name from
 the directory name, so renaming the checkout stranded the original volume while
 starting a fresh one. Neither is labelled; only the timestamps distinguish them.
-*Prod pins the checkout at `/opt/mkauth` and never moves it.*
+*Prod pins the checkout at `/opt/syndra` and never moves it.*
 
 **Build cache reached 10.5 GB** — a quarter of the disk. `update.sh` prunes
 images but not the builder cache, which is the part that actually grows. *Prod's

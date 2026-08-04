@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"mkauth/internal/models"
-	"mkauth/internal/zitadel"
+	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 // swap sets *dst to v and returns a restore closure.

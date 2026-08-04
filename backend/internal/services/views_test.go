@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"mkauth/internal/directory"
-	"mkauth/internal/models"
+	"syndra/internal/directory"
+	"syndra/internal/models"
 )
 
 // resetGovernanceDeps captures and restores all governance/lineage injectable vars.

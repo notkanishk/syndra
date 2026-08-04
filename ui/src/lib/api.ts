@@ -4,7 +4,7 @@ import type { ApplicationView } from "@/lib/types";
 // Server-side fetches go directly to the backend container
 const SERVER_API = `${process.env.BACKEND_URL || "http://backend:8080"}/api/v1`;
 
-const API_KEY = process.env.MKAUTH_API_KEY || "";
+const API_KEY = process.env.SYNDRA_API_KEY || "";
 const OIDC_MODE = Boolean(process.env.ZITADEL_DOMAIN);
 
 /**

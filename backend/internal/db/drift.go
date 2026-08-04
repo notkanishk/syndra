@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // DriftFilter narrows a drift listing. Empty fields are ignored.
@@ -156,7 +156,7 @@ var (
 // resolution payload. ErrDriftNotPending on a lost race (whole tx rolled back).
 //
 // No outbox row, and the name says so — this is MarkDriftExternalTx's sibling,
-// not EnqueueDirectGrantPropagation's. Adoption is MkAuth recording access
+// not EnqueueDirectGrantPropagation's. Adoption is Syndra recording access
 // Zitadel already has; the outbox encodes one intent only, "make it so", and
 // there is no opcode for "confirm it is there". An `add` row that outlives the
 // adoption is a live instruction to re-create the grant, so an operator who
@@ -167,7 +167,7 @@ var (
 //
 // The verification that drain bought is not lost, only relocated: if the grant
 // vanished between detection and adoption, the ledger row is now the thing that
-// disagrees with Zitadel, the next reconcile raises it as mkauth_only drift, and
+// disagrees with Zitadel, the next reconcile raises it as syndra_only drift, and
 // a human triages it. Surfacing that beats silently re-granting it.
 func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) error {
 	tx, err := PG.Begin(ctx)

@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"mkauth/internal/db"
+	"syndra/internal/db"
 )
 
 type CreateMappingRuleRequest struct {

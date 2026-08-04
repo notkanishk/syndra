@@ -42,7 +42,7 @@ func injectKey(t *testing.T, kid string, key *rsa.PrivateKey) {
 
 const (
 	testDomain   = "auth.example.com"
-	testAudience = "mkauth-backend"
+	testAudience = "syndra-backend"
 	testSubject  = "user-abc-123"
 )
 

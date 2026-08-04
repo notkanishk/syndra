@@ -6,7 +6,7 @@
 
 ### Requirement: Claim failure mode MUST survive transient database outages via a per-project Redis read-through cache
 
-The data plane MUST NOT silently default to `fail_closed` when a transient PostgreSQL fault prevents `db.GetClaimFailureMode(ctx, projectID)` from returning the configured mode. The MkAuth backend MUST maintain a per-project read-through cache in Redis at key `claim_mode:<projectID>` (a sibling of the existing `mapping:<userID>:<projectID>` payload key) so the last-known mode survives transient database faults. On a transient DB error, the cached value MUST be returned in preference to silently degrading to `fail_closed` — `fail_closed` remains the safe default only when both the cache and the DB row are unavailable.
+The data plane MUST NOT silently default to `fail_closed` when a transient PostgreSQL fault prevents `db.GetClaimFailureMode(ctx, projectID)` from returning the configured mode. The Syndra backend MUST maintain a per-project read-through cache in Redis at key `claim_mode:<projectID>` (a sibling of the existing `mapping:<userID>:<projectID>` payload key) so the last-known mode survives transient database faults. On a transient DB error, the cached value MUST be returned in preference to silently degrading to `fail_closed` — `fail_closed` remains the safe default only when both the cache and the DB row are unavailable.
 
 #### Scenario: Cache miss, DB succeeds — DB result returned and cached
 

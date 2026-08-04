@@ -3,8 +3,8 @@ package services
 import (
 	"testing"
 
-	"mkauth/internal/models"
-	"mkauth/internal/zitadel"
+	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 func TestExpectedViaRule_UserHoldingSourceMakesTargetExpected(t *testing.T) {

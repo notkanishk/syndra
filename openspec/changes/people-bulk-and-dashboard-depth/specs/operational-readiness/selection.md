@@ -84,7 +84,7 @@ Applying a batch of request decisions MUST run the same code path a single
 decision runs. That sequence — conditional transaction, race guard, cache
 rebuild, inline drain — is the part that must not diverge: a second
 implementation that drifted would leave requests approved but ungranted, which
-re-surfaces later as `mkauth_only` drift.
+re-surfaces later as `syndra_only` drift.
 
 Bulk revoke of drift remains deliberately absent. Adopting and marking-external
 are reversible bookkeeping; revoking removes real access from real machines, and
@@ -99,19 +99,19 @@ reading twelve consequences at once is not something anyone actually does.
 - **THEN** the plan states that each approval mints a direct grant
 - **AND** an approval without an attributable reviewer is refused for the whole batch
 
-### Requirement: Applying MUST reach Zitadel, and the queue MUST hold only work MkAuth owes
+### Requirement: Applying MUST reach Zitadel, and the queue MUST hold only work Syndra owes
 
-The pending-changes queue means one thing: mutations MkAuth intends to make to
+The pending-changes queue means one thing: mutations Syndra intends to make to
 Zitadel and has not made yet. Two paths were putting rows into it that did not
 belong there, and both were read by the operator as the system contradicting
 itself.
 
 **Adoption MUST NOT create an outbox row at all.** Adopting drift is the
-operator saying "Zitadel is right, MkAuth was wrong" — there is no mutation owed
+operator saying "Zitadel is right, Syndra was wrong" — there is no mutation owed
 upstream, and the outbox encodes one intent only, *make it so*. There is no
 opcode for "confirm it is there", so an `add` row is not a receipt of the
 adoption, it is a live instruction to perform it. Left pending it also reads as
-debt MkAuth owes: forty adopted roles appear in the queue as forty writes back
+debt Syndra owes: forty adopted roles appear in the queue as forty writes back
 to the system they were adopted from.
 
 Draining that row in the same request is NOT sufficient and MUST NOT be treated
@@ -123,7 +123,7 @@ trace, and nothing else.
 
 The verification a drain would have bought is relocated, not lost: if the grant
 vanished between detection and adoption, the ledger is what now disagrees with
-Zitadel, the next reconcile raises it as `mkauth_only` drift, and a human
+Zitadel, the next reconcile raises it as `syndra_only` drift, and a human
 triages it. Surfacing that beats silently re-granting it.
 
 **Applying a bulk operation MUST project each row upstream, and MUST report
@@ -160,7 +160,7 @@ A drain that fails MUST NOT undo the committed ledger write.
 
 #### Scenario: A role adopted, then removed upstream by hand
 - **THEN** nothing re-creates it
-- **AND** the divergence surfaces as mkauth_only drift for triage
+- **AND** the divergence surfaces as syndra_only drift for triage
 
 #### Scenario: Applying a bulk role removal
 - **THEN** each removal's outbox rows are drained before the response
@@ -178,7 +178,7 @@ A drain that fails MUST NOT undo the committed ledger write.
 ### Requirement: Triage MUST offer selection by cluster
 
 Drift arrives in clusters — one misconfigured rule, one person onboarded by
-hand, one project nobody told MkAuth about. Each row MUST offer to select the
+hand, one project nobody told Syndra about. Each row MUST offer to select the
 rows related to it, because no range gesture finds a cluster as reliably as
 asking for one.
 

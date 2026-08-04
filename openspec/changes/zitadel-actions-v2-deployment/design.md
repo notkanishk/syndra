@@ -4,7 +4,7 @@
 
 ## Context
 
-The MkAuth data plane was designed around Zitadel **Actions v2** as the sole
+The Syndra data plane was designed around Zitadel **Actions v2** as the sole
 claim-shaping boundary, but the Zitadel side was never wired. Implementation
 planning surfaced that the existing `HandleActionInject` was built against a
 **v1** mental model (embedded JS, `SetCustomClaims`, `{user_id, project_id}` →
@@ -41,7 +41,7 @@ semantics differ:
   merging its contents back into the token/userinfo pipeline.
 * **`restAsync`** — fire-and-forget; no waiting, no response processing.
 
-Claim injection requires `restCall`: MkAuth returns the
+Claim injection requires `restCall`: Syndra returns the
 `{append_claims:[...]}` envelope in the response body and that body IS the
 payload Zitadel merges into the issued token. A webhook target would make the
 deployment a functional no-op — the HTTP 200 would come back but Zitadel
@@ -52,7 +52,7 @@ must use:
 
 ```json
 {
-  "name": "mkauth-claim-injector",
+  "name": "syndra-claim-injector",
   "endpoint": "...",
   "timeout": "3s",
   "restCall": { "interruptOnError": false }
@@ -70,7 +70,7 @@ vs `minimal_safe`). Zitadel v2 targets configure `restCall.interruptOnError`
 **per target, not per project** — meaning one choice applies to every project
 the target serves.
 
-Chosen workaround: a single target with `interruptOnError: false`. MkAuth's
+Chosen workaround: a single target with `interruptOnError: false`. Syndra's
 backend is authoritative; the handler reads `claim_failure_mode` from the DB
 per `projectId` and emits either empty `append_claims` (fail_closed) or the
 configured minimal claim set (minimal_safe). The target-level setting becomes
@@ -92,7 +92,7 @@ Resolution:
 * **0 projects:** emit empty `append_claims`. No DB lookup. Observable via log.
 * **1 project:** flat claim keys (no namespace). Preserves the single-project
   spec scenario literally.
-* **2+ projects:** namespaced keys `mkauth.<projectID>.<key>`. Deterministic,
+* **2+ projects:** namespaced keys `syndra.<projectID>.<key>`. Deterministic,
   collision-free, machine-parseable by consumers.
 
 Degraded paths are resolved per-project. A cache miss on project A does not
@@ -126,7 +126,7 @@ The v2 payload is Zitadel-owned and will extend over time. `decodeJSONStrict`
 as a 400. Instead, we add `decodeJSONLenient` alongside the strict variant,
 used **exclusively** by `HandleActionInject`. Other mutation endpoints keep
 strict decoding — the spec's "unsupported format blocked" scenarios still
-apply to MkAuth-owned payloads.
+apply to Syndra-owned payloads.
 
 ### D7. Dev-mode pass-through matches existing security-boundary philosophy
 
@@ -137,12 +137,12 @@ with a warning log. This keeps local `go run ./cmd/api` workable without
 spinning up a real Zitadel instance or fake-signing every smoke-test payload.
 Never relied on in any environment that accepts real Zitadel traffic.
 
-### D8. `interruptOnError: false` keeps MkAuth outages off the user path
+### D8. `interruptOnError: false` keeps Syndra outages off the user path
 
-If MkAuth is unreachable or returns 500, Zitadel with
+If Syndra is unreachable or returns 500, Zitadel with
 `interruptOnError: false` issues the token with stock Zitadel claims only.
-Users see a graceful degradation; custom claims simply disappear until MkAuth
-returns. Because MkAuth already handles fail_closed vs minimal_safe
+Users see a graceful degradation; custom claims simply disappear until Syndra
+returns. Because Syndra already handles fail_closed vs minimal_safe
 server-side, this settings choice is purely a transport-layer safety net —
 rollback via `register.sh --remove` uses the same property.
 

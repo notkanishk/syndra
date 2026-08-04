@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"mkauth/internal/db"
+	"syndra/internal/db"
 )
 
 // WebhookPayload represents our interpretation of a Zitadel event payload.
@@ -272,12 +272,12 @@ func processGrantAdded(ctx context.Context, event WebhookPayload, eventID string
 	}
 
 	// Real-time drift: a surviving (non-self, per the self-mutation guard)
-	// grant event that MkAuth neither expects nor has excluded is out-of-band.
+	// grant event that Syndra neither expects nor has excluded is out-of-band.
 	detectWebhookDrift(ctx, event)
 	return nil
 }
 
-// detectWebhookDrift flags roles on a surviving grant event that MkAuth has no
+// detectWebhookDrift flags roles on a surviving grant event that Syndra has no
 // intent for. Best-effort and non-fatal: a detection failure must never bounce
 // a 4xx back to Zitadel (redelivery storm) — the sweep is the backstop.
 func detectWebhookDrift(ctx context.Context, event WebhookPayload) {

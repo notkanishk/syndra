@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"mkauth/internal/claims"
+	"syndra/internal/claims"
 )
 
 // The claim-shaping tables are the operator's control over what a token

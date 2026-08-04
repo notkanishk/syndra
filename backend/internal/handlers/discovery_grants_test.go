@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"mkauth/internal/db"
-	"mkauth/internal/zitadel"
+	"syndra/internal/db"
+	"syndra/internal/zitadel"
 )
 
 // resetDiscoveryGrantDeps captures/restores the injectables the rewired

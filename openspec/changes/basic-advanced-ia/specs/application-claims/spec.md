@@ -12,9 +12,9 @@ A preview computed by different code from the token it claims to preview is a pr
 
 #### Scenario: A format change is visible in the preview and in the token
 
-- **GIVEN** project `pLaser` has a claim profile with `claim_name = "mkauth.laser.roles"` and `format_type = "array"`
+- **GIVEN** project `pLaser` has a claim profile with `claim_name = "syndra.laser.roles"` and `format_type = "array"`
 - **WHEN** an operator changes `format_type` to `csv` and saves
-- **THEN** `GET /applications/{id}/simulate` MUST return `"mkauth.laser.roles": "trained,maintainer"`
+- **THEN** `GET /applications/{id}/simulate` MUST return `"syndra.laser.roles": "trained,maintainer"`
 - **AND** the next `POST /api/action/inject` for a user in that project MUST append the identical key and value
 
 #### Scenario: The preview never invents an envelope
@@ -53,14 +53,14 @@ An attribute the facts cannot supply MUST be omitted, never emitted as null: a c
 
 #### Scenario: An attribute claim rides along with the roles
 
-- **GIVEN** a profile with `attribute_claims = {"mkauth.laser.team": "team"}`
+- **GIVEN** a profile with `attribute_claims = {"syndra.laser.team": "team"}`
 - **WHEN** a token is issued for a user whose cached facts carry `team = "Fabrication"`
-- **THEN** the envelope MUST contain `mkauth.laser.team = "Fabrication"`
+- **THEN** the envelope MUST contain `syndra.laser.team = "Fabrication"`
 
 #### Scenario: An unresolvable attribute is omitted
 
 - **GIVEN** the same profile and a user whose cached facts carry no team
-- **THEN** the envelope MUST NOT contain the `mkauth.laser.team` key at all
+- **THEN** the envelope MUST NOT contain the `syndra.laser.team` key at all
 
 ### Requirement: An application override MUST be additive, and the token MUST carry every key on the project
 
@@ -70,16 +70,16 @@ This is forced by the wire contract: the Zitadel Actions v2 function payload car
 
 #### Scenario: Both keys are present in one token
 
-- **GIVEN** `pLaser` has a default claim `mkauth.laser.roles` (array) and application `app_badge` overrides it with `badge.roles` (csv)
+- **GIVEN** `pLaser` has a default claim `syndra.laser.roles` (array) and application `app_badge` overrides it with `badge.roles` (csv)
 - **WHEN** a token is issued for a user holding `trained` and `maintainer` in `pLaser`
-- **THEN** the envelope MUST contain `mkauth.laser.roles = ["trained","maintainer"]`
+- **THEN** the envelope MUST contain `syndra.laser.roles = ["trained","maintainer"]`
 - **AND** MUST contain `badge.roles = "trained,maintainer"`
 
 #### Scenario: The simulation says which keys this application actually reads
 
 - **WHEN** the simulation is run for `app_badge`
 - **THEN** `owned_claims` MUST list only `badge.roles`
-- **AND** `claim_owners` MUST attribute `mkauth.laser.roles` to the project default
+- **AND** `claim_owners` MUST attribute `syndra.laser.roles` to the project default
 
 ### Requirement: Claim keys MUST be unique across every project
 
@@ -96,13 +96,13 @@ A JWT is flat and holds one value per name, and a user with grants in several pr
 
 #### Scenario: Re-saving a project's own key is not a collision
 
-- **GIVEN** `pLaser` already emits `mkauth.laser.roles`
+- **GIVEN** `pLaser` already emits `syndra.laser.roles`
 - **WHEN** an operator saves `pLaser` again with the same claim name and a different format
 - **THEN** the save MUST succeed
 
 ### Requirement: Multi-project tokens MUST NOT namespace configured keys
 
-Keys are operator-authored and validated unique, so the previous unconditional `mkauth.<projectID>.<claim>` prefixing on multi-project tokens MUST NOT be applied to configured keys — it guaranteed no application ever received the key it asked for.
+Keys are operator-authored and validated unique, so the previous unconditional `syndra.<projectID>.<claim>` prefixing on multi-project tokens MUST NOT be applied to configured keys — it guaranteed no application ever received the key it asked for.
 
 Where two projects nonetheless emit the same key — which in practice means two projects nobody has configured, both falling back to the built-in default — the merge step MUST namespace the colliding keys per project and log the collision, so both role sets survive rather than one silently overwriting the other.
 
@@ -116,5 +116,5 @@ Where two projects nonetheless emit the same key — which in practice means two
 
 - **GIVEN** neither `pPrinting` nor `pDoors` has a claim profile, so both default to `roles`
 - **WHEN** a token is issued for a user holding roles in both
-- **THEN** the envelope MUST contain `mkauth.pPrinting.roles` and `mkauth.pDoors.roles`
+- **THEN** the envelope MUST contain `syndra.pPrinting.roles` and `syndra.pDoors.roles`
 - **AND** both role sets MUST be present

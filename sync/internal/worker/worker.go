@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"mkauth-sync/internal/backend"
-	ldapclient "mkauth-sync/internal/ldap"
+	"syndra-sync/internal/backend"
+	ldapclient "syndra-sync/internal/ldap"
 )
 
 // BackendClient defines the backend API surface used by the worker.

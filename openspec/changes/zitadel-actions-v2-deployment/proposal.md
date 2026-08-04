@@ -1,6 +1,6 @@
 ## Why
 
-`design.md §Data Plane` and `application-claims/spec.md §Compatibility Boundary` designate **Zitadel Actions v2** as the sole source-of-truth-facing claim-injection path for MkAuth. Phases 1–4 built the receiving end: `POST /api/action/inject`, per-project degraded posture (`fail_closed` | `minimal_safe`), a 50 ms Redis timeout budget, and handler-level tests. What never existed was the Zitadel side of the contract — no target, no execution binding, no signature verification. Until that gap closes, every grant, bundle, mapping rule, webhook, and sync intent emits into a cache that nothing consumes.
+`design.md §Data Plane` and `application-claims/spec.md §Compatibility Boundary` designate **Zitadel Actions v2** as the sole source-of-truth-facing claim-injection path for Syndra. Phases 1–4 built the receiving end: `POST /api/action/inject`, per-project degraded posture (`fail_closed` | `minimal_safe`), a 50 ms Redis timeout budget, and handler-level tests. What never existed was the Zitadel side of the contract — no target, no execution binding, no signature verification. Until that gap closes, every grant, bundle, mapping rule, webhook, and sync intent emits into a cache that nothing consumes.
 
 While planning the deployment we surfaced a factual error baked into the existing spec and handler:
 
@@ -15,7 +15,7 @@ This change ships the real production claim-injection path and corrects the spec
 
 * Replace `ActionRequest`/`ActionResponse` with `ActionV2Request`/`ActionV2Response` matching the documented v2 contract.
 * Accept Zitadel's large, evolving function payload via a new `decodeJSONLenient` helper scoped to this endpoint. All other endpoints continue to use `decodeJSONStrict`.
-* Multi-grant project resolution: for a single `projectId` in `user_grants`, emit flat claim keys (preserves the "Printing Portal only gets Printing roles" scenario); for multiple projects, emit `mkauth.<projectID>.<key>` namespaced keys so claims cannot collide across project scopes.
+* Multi-grant project resolution: for a single `projectId` in `user_grants`, emit flat claim keys (preserves the "Printing Portal only gets Printing roles" scenario); for multiple projects, emit `syndra.<projectID>.<key>` namespaced keys so claims cannot collide across project scopes.
 * Preserve `fail_closed` / `minimal_safe` per-project degraded semantics, wrapped in the v2 envelope. Per-project degradation MUST NOT block sibling projects in a multi-grant response.
 
 **HMAC signature middleware** (new: `backend/internal/handlers/zitadel_action_auth.go`)
@@ -50,7 +50,7 @@ This change ships the real production claim-injection path and corrects the spec
 ## Impact
 
 * **New files:** `backend/internal/handlers/zitadel_action_auth.go` + `_test.go`, `backend/internal/handlers/action_v2_contract_test.go`, `zitadel/actions/{README.md,targets.json,register.sh,SIGNING_KEY.md,.gitignore}`, `scripts/smoke-test-action-v2.sh`, `openspec/changes/zitadel-actions-v2-deployment/*`.
-* **Modified files:** `backend/internal/handlers/{contracts.go,action.go,action_test.go,contracts_test.go,router.go}`, `Makefile`, `.env.example`, `docker-compose.yml`, `openspec/INDEX.md`, `openspec/changes/mkauth-core-architecture/{ROADMAP.md,specs/application-claims/spec.md,specs/feature-coverage.md}`.
+* **Modified files:** `backend/internal/handlers/{contracts.go,action.go,action_test.go,contracts_test.go,router.go}`, `Makefile`, `.env.example`, `docker-compose.yml`, `openspec/INDEX.md`, `openspec/changes/syndra-core-architecture/{ROADMAP.md,specs/application-claims/spec.md,specs/feature-coverage.md}`.
 * **Dependencies:** zero new Go modules. zero new npm packages. `register.sh` needs `curl` + `jq` on the operator host (already assumed).
 * **Runtime:** production backend needs `ZITADEL_ACTION_SIGNING_KEY` set after the first `register.sh` run. Until set, the middleware runs in dev pass-through (unchanged behavior).
 * **Risk:** correcting the spec's v1-era wording is a documentation-facing change, not a behavioral change. The backend reshape is a breaking wire-format change, but `/api/action/inject` has never been called by a live Zitadel (no target existed), so there is no upstream consumer to migrate.

@@ -56,11 +56,11 @@ describe("Degraded banner", () => {
     };
     renderBanner();
     expect(await screen.findByText("12 rows here came from the demo seeder.")).toBeInTheDocument();
-    expect(screen.getByText(/set MKAUTH_SEED_DEMO=false first/)).toBeInTheDocument();
+    expect(screen.getByText(/set SYNDRA_SEED_DEMO=false first/)).toBeInTheDocument();
   });
 
   // The regression this whole field exists for. An operator sees demo data,
-  // sets MKAUTH_SEED_DEMO=false, restarts — and the old banner keyed off
+  // sets SYNDRA_SEED_DEMO=false, restarts — and the old banner keyed off
   // seed_active vanished, reading as confirmation the fix worked, while every
   // seeded row was still on screen.
   it("keeps warning after seeding is switched off but the rows remain", async () => {

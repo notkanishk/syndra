@@ -116,7 +116,7 @@ func warnSelfMutationGuardDisabled() {
 	})
 }
 
-var errSelfMutation = sentinelError("zitadel event triggered by MkAuth's own M2M user — dropped")
+var errSelfMutation = sentinelError("zitadel event triggered by Syndra's own M2M user — dropped")
 
 type sentinelError string
 

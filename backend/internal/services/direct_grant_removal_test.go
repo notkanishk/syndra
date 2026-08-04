@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
+	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
 // Removing a direct grant must enqueue the EFFECTIVE-ACCESS delta, not an

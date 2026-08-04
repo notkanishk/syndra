@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"mkauth/internal/claims"
+	"syndra/internal/claims"
 )
 
 const cacheTTL = 24 * time.Hour

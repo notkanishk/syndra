@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"mkauth/internal/db"
+	"syndra/internal/db"
 )
 
 func handleHealthCheck(w http.ResponseWriter, r *http.Request) {

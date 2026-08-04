@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"mkauth/internal/directory"
-	"mkauth/internal/models"
+	"syndra/internal/directory"
+	"syndra/internal/models"
 )
 
 // lookupStubSource is a directory.Source with configurable users + projects.

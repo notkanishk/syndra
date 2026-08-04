@@ -5,7 +5,7 @@
 - [x] ORS-01 `demo.ProjectIDs()` / `demo.UserIDs()` expose the seeder's fingerprint from the catalog, so adding a fixture widens every check that reads them.
 - [x] ORS-02 `db.CountDemoResidue` — one query across the eight tables the seeder writes.
 - [x] ORS-03 `GET /system/mode` reports `seed_residue` and `reset_command`. A failed count logs and reports zero; it never fails the probe and never reports a positive it did not measure.
-- [x] ORS-04 `docker-compose.yml` drops `MKAUTH_SEED_DEMO=${MKAUTH_SEED_DEMO:-true}`; the backend's auto-detection governs again. `.env.example` says why leaving it unset is correct.
+- [x] ORS-04 `docker-compose.yml` drops `SYNDRA_SEED_DEMO=${SYNDRA_SEED_DEMO:-true}`; the backend's auto-detection governs again. `.env.example` says why leaving it unset is correct.
 - [x] ORS-05 Degraded banner keys off `seed_residue`, states the count, and distinguishes "seeding still on" from "leftovers from an earlier run".
 
 ## Track 2 — Reset

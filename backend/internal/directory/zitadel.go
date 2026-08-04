@@ -11,9 +11,9 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
-	"mkauth/internal/zitadel"
+	"syndra/internal/db"
+	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 // CacheTTL bounds how long list queries against Zitadel are reused. 30s keeps
@@ -469,7 +469,7 @@ func (z *zitadelSource) InvalidateUsers() {
 
 // --- Mapping helpers --------------------------------------------------------
 
-// toUserProfile maps a Zitadel user search result to MkAuth's UserProfile.
+// toUserProfile maps a Zitadel user search result to Syndra's UserProfile.
 // Title/Team are empty in live mode — Zitadel doesn't model them.
 // Sync service only reads DisplayName + Email (see sync/internal/worker),
 // so the empty fields are presentational-only.
@@ -493,7 +493,7 @@ func toUserProfile(u zitadel.ZitadelUser) models.UserProfile {
 }
 
 // normalizeUserState maps Zitadel's USER_STATE_* enum onto the lowercase tags
-// MkAuth's UI uses: "active" | "inactive" | "initial" | "locked" | "deleted".
+// Syndra's UI uses: "active" | "inactive" | "initial" | "locked" | "deleted".
 // Unknown values pass through unchanged for operator visibility.
 func normalizeUserState(state string) string {
 	s := strings.ToLower(strings.TrimPrefix(state, "USER_STATE_"))

@@ -53,7 +53,7 @@ func NewRouter() http.Handler {
 	// any role (July 2026 audit SC1/SC3).
 	mux.HandleFunc("GET /api/v1/users/{id}/grants", withCORS(withSelfOrOperatorAuth(handleGetUserDirectGrants)))
 	mux.HandleFunc("POST /api/v1/users/{id}/grants", withCORS(withOperatorAuth(handleUpsertUserDirectGrant)))
-	// Removing a direct grant deletes the MkAuth ledger row and queues the
+	// Removing a direct grant deletes the Syndra ledger row and queues the
 	// Zitadel revoke in one transaction. NOT the same object as
 	// DELETE /zitadel/users/{id}/grants/{grantId}, which removes the Zitadel-side
 	// grant and would leave this row to restore the access on the next compile.
@@ -192,13 +192,13 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/zitadel/projects/{id}/roles/{key}", withCORS(withOperatorAuth(handleDeleteZitadelProjectRole)))
 	mux.HandleFunc("GET /api/v1/zitadel/grants", withCORS(withOperatorAuth(handleListAllZitadelGrants)))
 
-	// Reconciliation: visibility-only diff between MkAuth-direct grants and
+	// Reconciliation: visibility-only diff between Syndra-direct grants and
 	// Zitadel grants. Read-only — remediation is explicitly out of scope per
 	// obsidian-clarity-redesign. Operator-gated because drift data exposes
 	// the full grant inventory.
 	mux.HandleFunc("GET /api/v1/reconciliation/grants", withCORS(withOperatorAuth(handleGetReconciliationDiff)))
 
-	// Zitadel propagation outbox: operator drains the buffered MkAuth-mediated
+	// Zitadel propagation outbox: operator drains the buffered Syndra-mediated
 	// grant mutations explicitly (B4/D3). Operator-gated — draining issues real
 	// Zitadel mutations and the pending list exposes the grant inventory.
 	mux.HandleFunc("POST /api/v1/propagations/drain", withCORS(withOperatorAuth(handleDrainPropagations)))
@@ -242,7 +242,7 @@ func NewRouter() http.Handler {
 // Stores the extracted admin user ID in the request context for audit attribution.
 //
 // Local-dev mode (ZITADEL_DOMAIN unset): falls back to shared API key
-// (MKAUTH_API_KEY) so existing tooling continues to work without a live Zitadel
+// (SYNDRA_API_KEY) so existing tooling continues to work without a live Zitadel
 // instance. The shared key is never sufficient in production.
 func withUserAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -327,12 +327,12 @@ func withSelfOrOperatorAuth(next http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
-// withAPIKeyAuth verifies the MKAUTH_API_KEY shared secret.
+// withAPIKeyAuth verifies the SYNDRA_API_KEY shared secret.
 // Used as the auth mechanism in local-dev mode and as defense-in-depth for
 // data-plane routes that have their own verification (HMAC, Redis).
 func withAPIKeyAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		expectedKey := os.Getenv("MKAUTH_API_KEY")
+		expectedKey := os.Getenv("SYNDRA_API_KEY")
 		if expectedKey == "" {
 			jsonErrorResponse(w, http.StatusInternalServerError, "SERVER_ERROR", "Server missing auth configuration")
 			return

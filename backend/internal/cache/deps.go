@@ -5,9 +5,9 @@ import (
 	"log"
 	"time"
 
-	"mkauth/internal/db"
-	"mkauth/internal/directory"
-	"mkauth/internal/models"
+	"syndra/internal/db"
+	"syndra/internal/directory"
+	"syndra/internal/models"
 )
 
 var (

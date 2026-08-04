@@ -113,9 +113,9 @@ export default function RolesPage() {
       />
 
       {/*
-        Required scope notice. GET /api/v1/roles returns roles MkAuth created
+        Required scope notice. GET /api/v1/roles returns roles Syndra created
         plus whatever the directory reports; a role made directly upstream in a
-        project MkAuth cannot currently read is still missing. Stating that is
+        project Syndra cannot currently read is still missing. Stating that is
         not pedantry — a silently partial list is how somebody concludes a role
         doesn't exist and creates a duplicate.
       */}
@@ -128,8 +128,8 @@ export default function RolesPage() {
         </span>
         <div className="text-[14px] leading-[1.55] text-ink/[.78]">
           <strong className="font-semibold text-ink">This list may be partial.</strong> It covers
-          roles MkAuth created and roles the directory reports; anything created directly in the
-          identity provider on a project MkAuth cannot read is not here.{" "}
+          roles Syndra created and roles the directory reports; anything created directly in the
+          identity provider on a project Syndra cannot read is not here.{" "}
           <Link href="/zitadel/projects" className="font-semibold text-accent-text">
             Check a project&rsquo;s roles upstream →
           </Link>
@@ -160,13 +160,13 @@ export default function RolesPage() {
                     ? "Every role is referenced by something."
                     : "No roles match those filters."
                 }
-                guidance="Clear a filter, or check the identity provider for roles MkAuth didn't create."
+                guidance="Clear a filter, or check the identity provider for roles Syndra didn't create."
                 action={{ label: "Clear filters", onClick: clearFilters }}
               />
             ) : (
               <EmptyState
                 title="No roles yet."
-                guidance="Create one here, or check the identity provider for roles MkAuth didn't create."
+                guidance="Create one here, or check the identity provider for roles Syndra didn't create."
                 action={{ label: "Create a role", onClick: () => setCreating(true) }}
               />
             )

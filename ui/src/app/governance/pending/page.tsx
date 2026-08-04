@@ -43,7 +43,7 @@ export default function PendingChangesPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Pending changes"
-        meta="Writes MkAuth has decided on and the identity provider hasn't received yet."
+        meta="Writes Syndra has decided on and the identity provider hasn't received yet."
         actions={
           <Button
             variant="accent"
@@ -105,7 +105,7 @@ export default function PendingChangesPage() {
           empty={
             <EmptyState
               title="Nothing is waiting."
-              guidance="Every decision MkAuth has made has reached the identity provider."
+              guidance="Every decision Syndra has made has reached the identity provider."
             />
           }
         >

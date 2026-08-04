@@ -2,9 +2,9 @@
 set -euo pipefail
 
 REMOTE_HOST="${REMOTE_HOST:-root@198.51.100.14}"
-REMOTE_DIR="${REMOTE_DIR:-/opt/mkauth}"
-TMP_DIR="/tmp/mkauth-deploy"
-ARCHIVE_NAME="mkauth-deploy.tar.gz"
+REMOTE_DIR="${REMOTE_DIR:-/opt/syndra}"
+TMP_DIR="/tmp/syndra-deploy"
+ARCHIVE_NAME="syndra-deploy.tar.gz"
 
 echo "Preparing deployment archive from local workspace..."
 COPYFILE_DISABLE=1 COPY_EXTENDED_ATTRIBUTES_DISABLE=1 tar \

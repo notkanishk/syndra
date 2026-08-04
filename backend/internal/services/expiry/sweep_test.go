@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // resetSweepDeps saves and restores all injectable function vars so tests

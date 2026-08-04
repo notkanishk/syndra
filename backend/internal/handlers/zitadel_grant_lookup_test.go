@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"mkauth/internal/zitadel"
+	"syndra/internal/zitadel"
 )
 
 // stubListUserGrants installs a deterministic listUserGrants seam for tests

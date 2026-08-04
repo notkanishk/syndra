@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"mkauth/internal/db"
-	"mkauth/internal/zitadel"
+	"syndra/internal/db"
+	"syndra/internal/zitadel"
 )
 
 func setupEnrichDeps(t *testing.T) {

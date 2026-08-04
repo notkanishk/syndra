@@ -5,9 +5,9 @@
 
 ### Context
 
-The `mkauth-event-listener` Action target subscribes to Zitadel lifecycle events
+The `syndra-event-listener` Action target subscribes to Zitadel lifecycle events
 (user.human.added, user.deactivated, user.locked, user.grant.{added,changed,removed}).
-The translator must decode the event payload into MkAuth's internal `WebhookPayload`
+The translator must decode the event payload into Syndra's internal `WebhookPayload`
 shape before dispatch. Two design problems emerged:
 
 1. **Wire-format guess vs. reality.** The original `zitadelEventPayload` struct

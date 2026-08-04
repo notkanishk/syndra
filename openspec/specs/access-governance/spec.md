@@ -3,9 +3,9 @@
 ## Purpose
 TBD - created by archiving change wave-2-part-4-zitadel-state-projection-and-drift-control. Update Purpose after archive.
 ## Requirements
-### Requirement: Every MkAuth-mediated Zitadel grant mutation MUST be recorded in the intent ledger before the Zitadel API call, within one transaction
+### Requirement: Every Syndra-mediated Zitadel grant mutation MUST be recorded in the intent ledger before the Zitadel API call, within one transaction
 
-The backend MUST NOT mutate a Zitadel `user_grant` through any MkAuth-mediated path without first durably recording the corresponding intent (`direct_role_grants` row with `source`, `source_ref`, `granted_by`, `reason`, `expires_at`), the audit entry, and an outbox row (`pending_zitadel_propagations`) in a single database transaction. The Zitadel call happens during the drain, after the intent is committed. Every path that creates a direct grant resolves to this one enqueue: `POST /api/v1/users/{id}/grants`, the `POST /api/v1/zitadel/users/{id}/grants` alias, AND the access-request approval path (`POST /api/v1/requests/{id}/decision` with `status=approved`). Approvals MUST NOT take the bare `UpsertDirectGrant` shortcut, because a ledger row with no matching outbox row is invisible to the Pending UI, never projected to Zitadel, and re-surfaces as `mkauth_only` drift in reconciliation.
+The backend MUST NOT mutate a Zitadel `user_grant` through any Syndra-mediated path without first durably recording the corresponding intent (`direct_role_grants` row with `source`, `source_ref`, `granted_by`, `reason`, `expires_at`), the audit entry, and an outbox row (`pending_zitadel_propagations`) in a single database transaction. The Zitadel call happens during the drain, after the intent is committed. Every path that creates a direct grant resolves to this one enqueue: `POST /api/v1/users/{id}/grants`, the `POST /api/v1/zitadel/users/{id}/grants` alias, AND the access-request approval path (`POST /api/v1/requests/{id}/decision` with `status=approved`). Approvals MUST NOT take the bare `UpsertDirectGrant` shortcut, because a ledger row with no matching outbox row is invisible to the Pending UI, never projected to Zitadel, and re-surfaces as `syndra_only` drift in reconciliation.
 
 #### Scenario: Operator point mutation enqueues atomically
 
@@ -37,9 +37,9 @@ The backend MUST NOT mutate a Zitadel `user_grant` through any MkAuth-mediated p
 
 ### Requirement: Buffered propagations MUST drain only on explicit operator action, and `applied` MUST be the terminal success state
 
-The drain MUST be triggered by the operator (`POST /api/v1/propagations/drain`), MUST pre-flight Zitadel reachability, and MUST treat a `2xx` Management API response as terminal confirmation (`status='applied'`). There MUST be no dependence on a webhook return-trip to confirm a MkAuth-originated grant, because such events are dropped by the self-mutation guard.
+The drain MUST be triggered by the operator (`POST /api/v1/propagations/drain`), MUST pre-flight Zitadel reachability, and MUST treat a `2xx` Management API response as terminal confirmation (`status='applied'`). There MUST be no dependence on a webhook return-trip to confirm a Syndra-originated grant, because such events are dropped by the self-mutation guard.
 
-The claim step MUST select both `pending` AND `in_flight` rows (the pending worklist and count report the same set), so a drain that crashed after claiming but before recording a terminal state leaves no orphaned `in_flight` row that is visible yet never re-driven. Because claiming `in_flight` rows would otherwise let a second drain re-dispatch a row the first drain is still processing, drains MUST be serialized by a session-level advisory lock: a drain that cannot acquire the lock MUST halt with reason `drain_in_progress` and MUST NOT claim or dispatch any row. Serialization guarantees the only `in_flight` rows a claiming drain ever sees are those orphaned by a crashed drain (whose session, and therefore lock, is gone). Marking a row terminal (`applied`/`failed`) or requeuing it MUST be the sole way a row leaves `in_flight`: the drain MUST NOT report a row as `applied`/`failed`/`requeued` unless that state was actually persisted, so a state-write failure never masquerades as success. An `applied` `revoke` or `replace` MUST reconcile the intent ledger (`direct_role_grants`) so MkAuth stops treating removed roles as expected grants.
+The claim step MUST select both `pending` AND `in_flight` rows (the pending worklist and count report the same set), so a drain that crashed after claiming but before recording a terminal state leaves no orphaned `in_flight` row that is visible yet never re-driven. Because claiming `in_flight` rows would otherwise let a second drain re-dispatch a row the first drain is still processing, drains MUST be serialized by a session-level advisory lock: a drain that cannot acquire the lock MUST halt with reason `drain_in_progress` and MUST NOT claim or dispatch any row. Serialization guarantees the only `in_flight` rows a claiming drain ever sees are those orphaned by a crashed drain (whose session, and therefore lock, is gone). Marking a row terminal (`applied`/`failed`) or requeuing it MUST be the sole way a row leaves `in_flight`: the drain MUST NOT report a row as `applied`/`failed`/`requeued` unless that state was actually persisted, so a state-write failure never masquerades as success. An `applied` `revoke` or `replace` MUST reconcile the intent ledger (`direct_role_grants`) so Syndra stops treating removed roles as expected grants.
 
 #### Scenario: Drain halts cleanly when Zitadel is unreachable
 
@@ -90,11 +90,11 @@ The claim step MUST select both `pending` AND `in_flight` rows (the pending work
 
 ### Requirement: Out-of-band Zitadel grants MUST be detected as drift and surfaced for operator triage
 
-A grant that exists in Zitadel with no matching MkAuth expected record and no `external_grant_exclusions` entry MUST be recorded as a `drift_items` row and surfaced on `/governance/drift`. Detection is real-time via webhook with a scheduled reconciliation sweep (cap 2 000) as backstop. Triage offers exactly Attribute / Revoke / Mark external. No drift item resolves automatically.
+A grant that exists in Zitadel with no matching Syndra expected record and no `external_grant_exclusions` entry MUST be recorded as a `drift_items` row and surfaced on `/governance/drift`. Detection is real-time via webhook with a scheduled reconciliation sweep (cap 2 000) as backstop. Triage offers exactly Attribute / Revoke / Mark external. No drift item resolves automatically.
 
 #### Scenario: Webhook detects an externally-authored grant
 
-- **WHEN** the webhook processes a `grant_added` event that survives the self-mutation guard, matches no `external_grant_exclusions` row, and matches no MkAuth expected grant
+- **WHEN** the webhook processes a `grant_added` event that survives the self-mutation guard, matches no `external_grant_exclusions` row, and matches no Syndra expected grant
 - **THEN** the backend MUST insert a `drift_items` row (`detection_source='webhook'`, `drift_type='zitadel_only'`, `status='pending_triage'`)
 - **AND** a duplicate detection for the same `(user_id, project_id, drift_type)` while still `pending_triage` MUST NOT create a second row
 
@@ -102,7 +102,7 @@ A grant that exists in Zitadel with no matching MkAuth expected record and no `e
 
 - **WHEN** the reconciliation sweep compares Zitadel grants against the expected set (`direct_role_grants ∪ bundle_expansions ∪ rule_outputs ∪ external_grant_exclusions`)
 - **THEN** a Zitadel grant produced by an active mapping rule MUST be classified `expected_via_rule` and MUST NOT produce a `drift_items` row
-- **AND** a grant present in MkAuth's expected set but absent from Zitadel (`mkauth_only`) MUST re-enqueue an outbox row rather than create a drift item
+- **AND** a grant present in Syndra's expected set but absent from Zitadel (`syndra_only`) MUST re-enqueue an outbox row rather than create a drift item
 
 #### Scenario: Mark external suppresses future detections
 

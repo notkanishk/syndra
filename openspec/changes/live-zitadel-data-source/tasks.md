@@ -21,9 +21,9 @@
 
 ## 4. Seed + main wiring
 
-- [x] 4.1 `seed/demo.go` — `demoEnabled()` defaults to `false` when `ZITADEL_DOMAIN + ZITADEL_MACHINE_KEY_PATH` are set; `MKAUTH_SEED_DEMO` env var is the explicit override (both directions). Log explains the decision.
+- [x] 4.1 `seed/demo.go` — `demoEnabled()` defaults to `false` when `ZITADEL_DOMAIN + ZITADEL_MACHINE_KEY_PATH` are set; `SYNDRA_SEED_DEMO` env var is the explicit override (both directions). Log explains the decision.
 - [x] 4.2 `cmd/api/main.go` — reordered: `zitadel.InitClient()` runs before the seed, then `directory.Init()` selects the source and emits `[DIRECTORY] Source=...`, then seed runs (and skips itself in live mode).
-- [x] 4.3 `.env.example` — documents `MKAUTH_SEED_DEMO` behavior change and the live-mode directory switch.
+- [x] 4.3 `.env.example` — documents `SYNDRA_SEED_DEMO` behavior change and the live-mode directory switch.
 
 ## 5. Tests
 
@@ -41,8 +41,8 @@
 
 - [x] 6.1 Created `openspec/changes/live-zitadel-data-source/` with `proposal.md`, `design.md`, `tasks.md`.
 - [x] 6.2 Updated `openspec/INDEX.md` — added Change Log row, bumped `user-management` / `service-catalog` / `demo-catalog` capability status to note the live-Zitadel source, added `live-zitadel-data-source` to Phase 5 column.
-- [x] 6.3 Updated `openspec/changes/mkauth-core-architecture/ROADMAP.md` — added completed Phase 5 bullet.
-- [x] 6.4 Updated `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md` — `demo-catalog`, `user-management`, `service-catalog` rows reflect directory-based source; implementing-changes map extended.
+- [x] 6.3 Updated `openspec/changes/syndra-core-architecture/ROADMAP.md` — added completed Phase 5 bullet.
+- [x] 6.4 Updated `openspec/changes/syndra-core-architecture/specs/feature-coverage.md` — `demo-catalog`, `user-management`, `service-catalog` rows reflect directory-based source; implementing-changes map extended.
 
 ## 7. Verification
 

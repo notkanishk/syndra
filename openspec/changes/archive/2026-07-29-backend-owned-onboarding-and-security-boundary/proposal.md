@@ -1,8 +1,8 @@
-> **Spec consolidation note:** The 4 modified capability specs originally in this change have been merged into their canonical locations. See [automation-policies](../mkauth-core-architecture/specs/automation-policies/spec.md), [application-claims](../mkauth-core-architecture/specs/application-claims/spec.md), [contract-quality](../contract-hardening-and-test-foundation/specs/contract-quality/spec.md), [backend-api-testing](../contract-hardening-and-test-foundation/specs/backend-api-testing/spec.md). Implementation details are in [IMPLEMENTATION.md](IMPLEMENTATION.md). The only spec unique to this change is [production-security-boundary](specs/production-security-boundary/spec.md).
+> **Spec consolidation note:** The 4 modified capability specs originally in this change have been merged into their canonical locations. See [automation-policies](../syndra-core-architecture/specs/automation-policies/spec.md), [application-claims](../syndra-core-architecture/specs/application-claims/spec.md), [contract-quality](../contract-hardening-and-test-foundation/specs/contract-quality/spec.md), [backend-api-testing](../contract-hardening-and-test-foundation/specs/backend-api-testing/spec.md). Implementation details are in [IMPLEMENTATION.md](IMPLEMENTATION.md). The only spec unique to this change is [production-security-boundary](specs/production-security-boundary/spec.md).
 
 ## Why
 
-MkAuth's architecture now clearly says two important things:
+Syndra's architecture now clearly says two important things:
 
 * onboarding mutations such as Welcome Bundle assignment should be backend-owned, auditable, and retry-safe rather than split across Zitadel-hosted logic and backend control-plane logic
 * production rollout must be gated on closing the trust boundary around per-admin authorization, action-injection security, webhook authenticity, and other high-risk orchestration edges
@@ -19,7 +19,7 @@ Those decisions are reflected in the architecture and roadmap docs, but they do 
 ## Capabilities
 
 ### New Capabilities
-* `production-security-boundary`: Requirements for the minimum trust-boundary controls MkAuth must satisfy before live orchestration is treated as production-ready.
+* `production-security-boundary`: Requirements for the minimum trust-boundary controls Syndra must satisfy before live orchestration is treated as production-ready.
 
 ### Modified Capabilities
 * `automation-policies`: Welcome-bundle automation becomes explicitly backend-owned after validated event intake.

@@ -106,7 +106,7 @@ type ZitadelClient interface {
 
 13 HTTP endpoints under `/api/v1/zitadel/` provide live state introspection and cross-project role management:
 
-| MkAuth Endpoint | HTTP | Zitadel Call | Auth |
+| Syndra Endpoint | HTTP | Zitadel Call | Auth |
 |-----------------|------|-------------|------|
 | `/api/v1/zitadel/users` | GET | `ListUsers` | `withOperatorAuth` |
 | `/api/v1/zitadel/users/{id}` | GET | `GetUser` | `withOperatorAuth` |

@@ -38,7 +38,7 @@ Grouped by the audit's buckets; see `tasks.md` for the ticked state.
 **Bucket A has landed in full.** Twelve items: the twelve below. **Buckets B and C's landable
 items have landed too** — `B1`, `B2`, `C1`, `C2`, `C3`.
 
-**Nothing MkAuth creates is permanent any more, and retiring it is the revoke half of an edit.**
+**Nothing Syndra creates is permanent any more, and retiring it is the revoke half of an edit.**
 A mapping rule and a bundle could be authored and never removed. Neither needed a deletion
 mechanism: every cascade here projects an effective-role closure delta, and a deletion is that
 same computation with one edge gone — `CascadeRuleUpdated` with no replacement edge, and
@@ -115,7 +115,7 @@ can be created from the project it belongs to.
   rather than remembered.
 - `C7` — settled: an application lives in exactly one project, which is what the
   schema already said. The design diagram was the thing that was wrong.
-- `C9a` — Advanced shows Zitadel's own grant id alongside MkAuth's, per project,
+- `C9a` — Advanced shows Zitadel's own grant id alongside Syndra's, per project,
   operator-only.
 - `C4` — the expiring-access queue can record "seen, letting it lapse", with the
   reopen rule set to **when the grant changes**. The rule is a stored date and a

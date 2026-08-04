@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"os"
 
-	"mkauth/internal/db"
-	"mkauth/internal/demo"
-	"mkauth/internal/directory"
-	"mkauth/internal/seed"
+	"syndra/internal/db"
+	"syndra/internal/demo"
+	"syndra/internal/directory"
+	"syndra/internal/seed"
 )
 
 // SystemModeResponse describes which directory backend is currently active and
@@ -34,7 +34,7 @@ type SystemModeResponse struct {
 	// SeedResidue counts operator rows still referencing a demo fixture,
 	// regardless of which process wrote them or whether seeding is currently
 	// enabled. SeedActive goes false the moment an operator sets
-	// MKAUTH_SEED_DEMO=false and restarts; the rows it already wrote stay in
+	// SYNDRA_SEED_DEMO=false and restarts; the rows it already wrote stay in
 	// the database and keep being served. This is the number that says so.
 	//
 	// Negative is impossible; zero means clean. The count is not exposed as a

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"mkauth/internal/db"
+	"syndra/internal/db"
 )
 
 // Injectable vars for testing. Production code uses real implementations.

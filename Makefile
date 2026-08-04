@@ -33,7 +33,7 @@ lint: lint-backend lint-ui
 #   make reset-demo-data APPLY=1   # remove only rows referencing demo fixtures
 #   make reset-all-data APPLY=1    # truncate every operator table — blank slate
 #
-# Neither touches Zitadel. Clearing MkAuth's ledger does not revoke anything
+# Neither touches Zitadel. Clearing Syndra's ledger does not revoke anything
 # upstream; the next reconciliation sweep re-detects those grants as
 # unexplained access, which is how they get re-adopted deliberately.
 reset-demo-data:
@@ -43,7 +43,7 @@ reset-all-data:
 	@scripts/reset-data.sh all $(if $(APPLY),--apply)
 
 # --- Zitadel Actions v2 deployment (see zitadel/actions/README.md) ---
-# Requires env: ZITADEL_DOMAIN, MKAUTH_EXTERNAL_URL, and either
+# Requires env: ZITADEL_DOMAIN, SYNDRA_EXTERNAL_URL, and either
 # ZITADEL_M2M_TOKEN or ZITADEL_MACHINE_KEY_PATH.
 zitadel-actions-register:
 	@zitadel/actions/register.sh
@@ -69,7 +69,7 @@ zitadel-actions-purge:
 #
 # Usage:
 #   make zitadel-actions-rotate-key                          # rotate every target
-#   make zitadel-actions-rotate-key TARGET=mkauth-claim-injector  # rotate one
+#   make zitadel-actions-rotate-key TARGET=syndra-claim-injector  # rotate one
 zitadel-actions-rotate-key:
 ifdef TARGET
 	@zitadel/actions/rotate.sh --target "$(TARGET)"

@@ -96,11 +96,11 @@ The backend MUST expose `POST /api/v1/lookup` returning a partial-tolerant name 
 
 ### Requirement: GET /api/v1/reconciliation/grants endpoint MUST exist for visibility
 
-The backend MUST expose `GET /api/v1/reconciliation/grants` returning the diff between MkAuth direct grants and Zitadel grants. The endpoint is read-only; remediation is explicitly deferred.
+The backend MUST expose `GET /api/v1/reconciliation/grants` returning the diff between Syndra direct grants and Zitadel grants. The endpoint is read-only; remediation is explicitly deferred.
 
 #### Scenario: Drift cases are categorized
 - **WHEN** an admin requests reconciliation
-- **THEN** the response MUST contain three arrays: `only_in_mkauth`, `only_in_zitadel`, and `drift` (entries with role-set mismatches)
+- **THEN** the response MUST contain three arrays: `only_in_syndra`, `only_in_zitadel`, and `drift` (entries with role-set mismatches)
 - **AND** each entry MUST include the user_id, project_id, and the role keys observed on each side
 
 #### Scenario: Operator-level auth required
@@ -255,9 +255,9 @@ The new `/grants` route MUST render two tabs: **All grants** (a unioned ledger s
 
 #### Scenario: All grants source pills
 - **WHEN** the All grants tab renders
-- **THEN** every row MUST carry a Source pill ("MkAuth + Zitadel", "Zitadel only", "Derived from rule", or "MkAuth only (sync gap)")
-- **AND** "Derived from rule" MUST be assigned when a mapping rule's target equals the row's `(project_id, role_key)` and the same pair is absent from MkAuth direct grants
-- **AND** "MkAuth only (sync gap)" MUST be assigned when the (user, project, role) is present in the MkAuth `direct_role_grants` table but absent from the Zitadel-side grant
+- **THEN** every row MUST carry a Source pill ("Syndra + Zitadel", "Zitadel only", "Derived from rule", or "Syndra only (sync gap)")
+- **AND** "Derived from rule" MUST be assigned when a mapping rule's target equals the row's `(project_id, role_key)` and the same pair is absent from Syndra direct grants
+- **AND** "Syndra only (sync gap)" MUST be assigned when the (user, project, role) is present in the Syndra `direct_role_grants` table but absent from the Zitadel-side grant
 
 #### Scenario: All grants filter rail
 - **WHEN** the All grants tab renders
@@ -267,14 +267,14 @@ The new `/grants` route MUST render two tabs: **All grants** (a unioned ledger s
 
 #### Scenario: Reconciliation drift summary
 - **WHEN** the Reconciliation tab renders
-- **THEN** three count cards MUST display Role mismatch, Only in MkAuth, and Only in Zitadel
+- **THEN** three count cards MUST display Role mismatch, Only in Syndra, and Only in Zitadel
 - **AND** clicking a card MUST scope the table below to that drift category
 - **AND** a green "in sync" message MUST replace the lists when all three counts are zero
 
 #### Scenario: Reconciliation drawer drill-in
 - **WHEN** an admin clicks a drift row
 - **THEN** a `<Drawer size="lg"/>` MUST slide in from the right
-- **AND** for role-mismatch entries the Drawer MUST render the MkAuth-side and Zitadel-side records side-by-side via `<JsonView/>`
+- **AND** for role-mismatch entries the Drawer MUST render the Syndra-side and Zitadel-side records side-by-side via `<JsonView/>`
 - **AND** the Drawer MUST follow the same focus-trap, Esc, and click-outside semantics as `<Modal/>`
 
 #### Scenario: No remediation actions present

@@ -1,4 +1,4 @@
-# MkAuth
+# Syndra
 
 Identity & Access Management orchestration layer for an academic makerspace. Companion to Zitadel with Google Workspace as sole IdP.
 
@@ -6,9 +6,9 @@ Identity & Access Management orchestration layer for an academic makerspace. Com
 
 - **Next steps:** `openspec/NEXT.md` — single pickup point: every open gap, operator-gated check, and spec/tooling debt in one place
 - **Spec index:** `openspec/INDEX.md` — master hub for all specs, capabilities, and changes
-- **Architecture:** `openspec/changes/mkauth-core-architecture/design.md` — three-plane design, Zitadel interaction matrix, IdP chain
-- **Roadmap:** `openspec/changes/mkauth-core-architecture/ROADMAP.md` — phase timeline (1-4 complete, 5-6 ahead)
-- **Reality check:** `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md` — planned vs integrated
+- **Architecture:** `openspec/changes/syndra-core-architecture/design.md` — three-plane design, Zitadel interaction matrix, IdP chain
+- **Roadmap:** `openspec/changes/syndra-core-architecture/ROADMAP.md` — phase timeline (1-4 complete, 5-6 ahead)
+- **Reality check:** `openspec/changes/syndra-core-architecture/specs/feature-coverage.md` — planned vs integrated
 - **UI design system + IA:** `openspec/changes/basic-advanced-ia/design.md` — Basic/Advanced views, the navigation contract, and where the token shape lives
 
 ## Tech Stack
@@ -35,7 +35,7 @@ cd sync && go test ./... && go vet ./...
 - Zitadel Actions v2 is the only source-of-truth claim integration path
 - Backend is the single mutation authority — frontend and triggers signal, backend decides
 - Internal contracts (FE->BE, BE->Sync) are self-defined but isolated from Zitadel-facing boundary
-- MkAuth-mediated Zitadel mutations always leave a trace before the Management API call (intent ledger for direct grants, outbox for bundle/rule cascades) — a Zitadel-side change with no such trace is never silently trusted, it is detected as drift and triaged (Wave 2 · Part 4)
+- Syndra-mediated Zitadel mutations always leave a trace before the Management API call (intent ledger for direct grants, outbox for bundle/rule cascades) — a Zitadel-side change with no such trace is never silently trusted, it is detected as drift and triaged (Wave 2 · Part 4)
 
 ## Mandatory Workflow
 

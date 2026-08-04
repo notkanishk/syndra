@@ -142,7 +142,7 @@ func (tm *tokenManager) buildAssertion(now time.Time) (string, error) {
 
 // MintM2MToken mints a one-shot Zitadel M2M access token via the JWT profile
 // grant from the service-account key at keyPath. Intended for CLI use
-// (`backend/cmd/mkauth-token`) — no caching, no ambient singleton state.
+// (`backend/cmd/syndra-token`) — no caching, no ambient singleton state.
 // Each call performs a fresh LoadServiceAccountKey + token exchange.
 //
 // This is the exported entry point the shell scripts use for the

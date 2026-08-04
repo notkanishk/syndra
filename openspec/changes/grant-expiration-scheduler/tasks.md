@@ -44,9 +44,9 @@
 ## 6. OpenSpec deltas
 
 - [x] 6.1 Create `openspec/changes/grant-expiration-scheduler/` with `proposal.md`, `design.md`, `tasks.md`, and `specs/access-governance/spec.md` delta.
-- [x] 6.2 Update `openspec/changes/mkauth-core-architecture/specs/access-governance/spec.md`: drop "expiry enforcement deferred P5" from status header; replace the *Grant expiration enforcement* status note with an Integrated description; add two scenarios (retry on transient failure, Zitadel cascade best-effort).
-- [x] 6.3 Tick `Grant Expiration Scheduler` item in `openspec/changes/mkauth-core-architecture/ROADMAP.md`.
-- [x] 6.4 Update `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md` — bump last-updated date; flip "Temporary roles auto-expire" row to Integrated.
+- [x] 6.2 Update `openspec/changes/syndra-core-architecture/specs/access-governance/spec.md`: drop "expiry enforcement deferred P5" from status header; replace the *Grant expiration enforcement* status note with an Integrated description; add two scenarios (retry on transient failure, Zitadel cascade best-effort).
+- [x] 6.3 Tick `Grant Expiration Scheduler` item in `openspec/changes/syndra-core-architecture/ROADMAP.md`.
+- [x] 6.4 Update `openspec/changes/syndra-core-architecture/specs/feature-coverage.md` — bump last-updated date; flip "Temporary roles auto-expire" row to Integrated.
 - [x] 6.5 Add this change to `openspec/INDEX.md` Change Log and update `access-governance` capability status.
 
 ## 7. Verification

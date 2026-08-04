@@ -2,7 +2,7 @@
 
 These notes document what was built to satisfy the requirements in this change. They were previously embedded in the spec files and have been extracted here to keep specs focused on testable requirements.
 
-> **Requirements live in:** [production-security-boundary spec](specs/production-security-boundary/spec.md), and the consolidated canonical specs for [automation-policies](../mkauth-core-architecture/specs/automation-policies/spec.md), [application-claims](../mkauth-core-architecture/specs/application-claims/spec.md), [contract-quality](../contract-hardening-and-test-foundation/specs/contract-quality/spec.md), [backend-api-testing](../contract-hardening-and-test-foundation/specs/backend-api-testing/spec.md).
+> **Requirements live in:** [production-security-boundary spec](specs/production-security-boundary/spec.md), and the consolidated canonical specs for [automation-policies](../syndra-core-architecture/specs/automation-policies/spec.md), [application-claims](../syndra-core-architecture/specs/application-claims/spec.md), [contract-quality](../contract-hardening-and-test-foundation/specs/contract-quality/spec.md), [backend-api-testing](../contract-hardening-and-test-foundation/specs/backend-api-testing/spec.md).
 
 ---
 
@@ -11,12 +11,12 @@ These notes document what was built to satisfy the requirements in this change. 
 ### Frontend PKCE Authorization Code Flow
 
 - `ui/src/lib/oidc.ts` — PKCE crypto (`generateCodeVerifier`, `generateCodeChallenge`, `generateState`), token exchange (`exchangeCodeForToken`), and claim parsing (`parseJwtClaims`, `extractSessionFields`); no external auth library
-- `ui/src/app/auth/zitadel/route.ts` — generates PKCE verifier/challenge/state; sets a short-lived `mkauth_pkce` HttpOnly cookie scoped to `/auth/callback`; redirects to Zitadel `/oauth/v2/authorize`
-- `ui/src/app/auth/callback/route.ts` — validates `state` (CSRF) and PKCE TTL; exchanges code for token; parses Zitadel claims to extract `sub`, display name, email, and admin role; stores raw access token in `mkauth_session` cookie
+- `ui/src/app/auth/zitadel/route.ts` — generates PKCE verifier/challenge/state; sets a short-lived `syndra_pkce` HttpOnly cookie scoped to `/auth/callback`; redirects to Zitadel `/oauth/v2/authorize`
+- `ui/src/app/auth/callback/route.ts` — validates `state` (CSRF) and PKCE TTL; exchanges code for token; parses Zitadel claims to extract `sub`, display name, email, and admin role; stores raw access token in `syndra_session` cookie
 
 ### Session and Token Forwarding
 
-- `ui/src/lib/session.ts` — `mkauth_session` cookie uses a discriminated union (`type: "demo" | "oidc"`); OIDC sessions carry `accessToken` (raw JWT) and `expiresAt`; `getSession()` rejects expired OIDC tokens before they reach the backend
+- `ui/src/lib/session.ts` — `syndra_session` cookie uses a discriminated union (`type: "demo" | "oidc"`); OIDC sessions carry `accessToken` (raw JWT) and `expiresAt`; `getSession()` rejects expired OIDC tokens before they reach the backend
 - `ui/src/app/api/proxy/[...path]/route.ts` — forwards `session.accessToken` as `Authorization: Bearer <token>` for OIDC sessions
 - `ui/src/lib/api.ts` — all SSR server-component fetchers accept an optional `token` parameter; when `ZITADEL_DOMAIN` is set every backend call carries the user's JWT; fallback to shared API key only in demo/local-dev mode
 
@@ -33,7 +33,7 @@ These notes document what was built to satisfy the requirements in this change. 
 ### Backend User-Token Authorization
 
 - `backend/internal/auth/jwt.go` — RS256 JWT validation via `golang-jwt/jwt/v5`; JWKS fetched from `https://{ZITADEL_DOMAIN}/oauth/v2/keys` with 1-hour cache; validates issuer, audience, expiry, and signing method
-- `backend/internal/handlers/router.go` — `withUserAuth`: production (ZITADEL_DOMAIN set) requires a Zitadel-issued bearer token; local-dev falls back to shared API key (MKAUTH_API_KEY)
+- `backend/internal/handlers/router.go` — `withUserAuth`: production (ZITADEL_DOMAIN set) requires a Zitadel-issued bearer token; local-dev falls back to shared API key (SYNDRA_API_KEY)
 - `backend/internal/handlers/adminctx.go` — typed context key propagates acting admin user ID; mutation handlers use it for audit attribution
 - Required env vars: `ZITADEL_DOMAIN`, `ZITADEL_AUDIENCE`
 

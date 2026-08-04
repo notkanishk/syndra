@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // ErrRequestNotPending is returned when a resolve targets an access request that

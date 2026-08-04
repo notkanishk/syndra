@@ -12,10 +12,10 @@ import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateRole, useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
 
 /**
- * Creating a role through MkAuth writes it locally AND upstream in one action,
+ * Creating a role through Syndra writes it locally AND upstream in one action,
  * rolling the local row back if the identity provider refuses. That is the
  * difference between this and creating one directly in the provider, where
- * MkAuth learns about it only when the drift sweep flags it as unexplained.
+ * Syndra learns about it only when the drift sweep flags it as unexplained.
  *
  * Clone-from copies the display name and description of an existing role, and
  * records the provenance — "cloned from Metal Shop / trained" is what tells a
@@ -57,7 +57,7 @@ export function CreateRoleDialog({
       <ModalHeader
         title="New role"
         titleId="new-role-title"
-        lede="Created in MkAuth and in the identity provider together — if the provider refuses, nothing is left behind here."
+        lede="Created in Syndra and in the identity provider together — if the provider refuses, nothing is left behind here."
       />
 
       <div className="flex flex-col gap-3.5 px-6">

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make Zitadel push lifecycle events (user added/deactivated/locked, grant added/changed/removed) to MkAuth via Actions v2 so welcome-bundle assignment, mapping-rule cascade, cache invalidation, and LLDAP provisioning fire automatically when state changes outside the MkAuth UI — and bundle the event-target setup into a single `make zitadel-actions-register` invocation alongside the existing claim-injector target.
+**Goal:** Make Zitadel push lifecycle events (user added/deactivated/locked, grant added/changed/removed) to Syndra via Actions v2 so welcome-bundle assignment, mapping-rule cascade, cache invalidation, and LLDAP provisioning fire automatically when state changes outside the Syndra UI — and bundle the event-target setup into a single `make zitadel-actions-register` invocation alongside the existing claim-injector target.
 
-**Architecture:** Add a second Zitadel Actions v2 target named `mkauth-event-listener` (type `restAsync`, fire-and-forget) bound to `condition.event` triggers, alongside the existing `mkauth-claim-injector` (type `restCall`, function triggers). Reshape `zitadel/actions/targets.json` from a single-target manifest to a multi-target one and extend `register.sh`/`rotate.sh` to iterate. On the backend, retire the legacy `ZITADEL_WEBHOOK_SECRET` HMAC scheme on `/api/webhooks/zitadel` and reuse the existing `withZitadelActionSignature` middleware with a new env var `ZITADEL_EVENT_SIGNING_KEY` (the second target produces its own signing key). Add a payload translator (`webhook_translate.go`) that maps Zitadel-native event JSON into the existing internal `WebhookPayload`, extend `WebhookPayload` with `role_keys[]` to carry multi-role grants, and add a self-mutation loop guard via `editorUserId` (skip events whose editor is MkAuth's own M2M user). The welcome-bundle path is **already wired** end-to-end (`processUserCreated` → `webhookTriggerOnboarding` → `services.onboarding.TriggerOnboarding` → `GetWelcomeBundle` → `AssignBundleToUser`) — it requires no new code.
+**Architecture:** Add a second Zitadel Actions v2 target named `syndra-event-listener` (type `restAsync`, fire-and-forget) bound to `condition.event` triggers, alongside the existing `syndra-claim-injector` (type `restCall`, function triggers). Reshape `zitadel/actions/targets.json` from a single-target manifest to a multi-target one and extend `register.sh`/`rotate.sh` to iterate. On the backend, retire the legacy `ZITADEL_WEBHOOK_SECRET` HMAC scheme on `/api/webhooks/zitadel` and reuse the existing `withZitadelActionSignature` middleware with a new env var `ZITADEL_EVENT_SIGNING_KEY` (the second target produces its own signing key). Add a payload translator (`webhook_translate.go`) that maps Zitadel-native event JSON into the existing internal `WebhookPayload`, extend `WebhookPayload` with `role_keys[]` to carry multi-role grants, and add a self-mutation loop guard via `editorUserId` (skip events whose editor is Syndra's own M2M user). The welcome-bundle path is **already wired** end-to-end (`processUserCreated` → `webhookTriggerOnboarding` → `services.onboarding.TriggerOnboarding` → `GetWelcomeBundle` → `AssignBundleToUser`) — it requires no new code.
 
 **Tech Stack:** Go 1.22 stdlib (handlers, HMAC), Bash + jq + curl (deployment scripts), Zitadel Actions v2 REST API at `/v2/actions/*` (verified 2026-04-24 against `proto/zitadel/action/v2/{target,execution,query}.proto`), PostgreSQL (`webhook_events` idempotency, `onboarding_triggers`).
 
@@ -55,13 +55,13 @@ mkdir -p openspec/changes/zitadel-event-trigger-propagation/specs/lifecycle-even
 ```markdown
 ## Why
 
-The `zitadel-actions-v2-deployment` change wired Actions v2 for **claim injection only** (`function.preaccesstoken`, `function.preuserinfo`). The companion event-driven path — `/api/webhooks/zitadel` and the `live-webhook-listener` change — has handler code, HMAC verification, idempotency, and full downstream dispatch (cache invalidation, mapping-rule cascade, LLDAP provisioning intents, welcome-bundle onboarding), but **no Zitadel-side producer**. As a result, lifecycle changes that originate outside the MkAuth UI (operator click in the Zitadel console, future Google Workspace deprovisioning per design.md L106) never propagate.
+The `zitadel-actions-v2-deployment` change wired Actions v2 for **claim injection only** (`function.preaccesstoken`, `function.preuserinfo`). The companion event-driven path — `/api/webhooks/zitadel` and the `live-webhook-listener` change — has handler code, HMAC verification, idempotency, and full downstream dispatch (cache invalidation, mapping-rule cascade, LLDAP provisioning intents, welcome-bundle onboarding), but **no Zitadel-side producer**. As a result, lifecycle changes that originate outside the Syndra UI (operator click in the Zitadel console, future Google Workspace deprovisioning per design.md L106) never propagate.
 
 The legacy verifier on `/api/webhooks/zitadel` also speaks a different HMAC dialect (`X-Zitadel-Signature`, `HMAC(secret, ts + "\n" + body)`) than what Zitadel actually sends for Actions v2 (`ZITADEL-Signature: t=<unix>,v1=<hex>` over `<unix>.<body>` per `zitadel-go@main/pkg/actions/signing.go`). Two HMAC schemes for one Zitadel boundary is a maintenance burden with no producer behind the legacy one.
 
 ## What Changes
 
-* Adds a second Zitadel Actions v2 target `mkauth-event-listener` (type `restAsync`, endpoint `/api/webhooks/zitadel`) bound to `condition.event` triggers for `user.human.added`, `user.human.deactivated`, `user.human.locked`, `user.grant.added`, `user.grant.changed`, `user.grant.removed`.
+* Adds a second Zitadel Actions v2 target `syndra-event-listener` (type `restAsync`, endpoint `/api/webhooks/zitadel`) bound to `condition.event` triggers for `user.human.added`, `user.human.deactivated`, `user.human.locked`, `user.grant.added`, `user.grant.changed`, `user.grant.removed`.
 * Reshapes `zitadel/actions/targets.json` from a single-target schema to a multi-target schema (`targets[]`, `executions[]` with explicit `target` reference). Extends `register.sh` and `rotate.sh` to iterate targets, capture per-target signing keys to `.action-signing-key.<target>` files, and bind executions to the correct target ID.
 * Retires the legacy `ZITADEL_WEBHOOK_SECRET` env var and the bespoke `verifyWebhookSignature` / `verifyWebhookFreshness` helpers. Replaces them on `/api/webhooks/zitadel` with the existing `withZitadelActionSignature` middleware keyed off a new `ZITADEL_EVENT_SIGNING_KEY` env var.
 * Adds a payload translator (`backend/internal/handlers/webhook_translate.go`) that maps Zitadel-native event JSON into the existing internal `WebhookPayload`. Detection is by shape (`aggregate` field present → Zitadel; `event_type` field present → internal). Existing internal-shape callers (operator curl, contracts tests) continue to work.
@@ -71,7 +71,7 @@ The legacy verifier on `/api/webhooks/zitadel` also speaks a different HMAC dial
 ## Capabilities
 
 ### New Capabilities
-* `lifecycle-event-propagation`: Zitadel Actions v2 event-trigger executions fan out to the `/api/webhooks/zitadel` listener, bringing out-of-band Zitadel mutations into MkAuth's orchestration plane.
+* `lifecycle-event-propagation`: Zitadel Actions v2 event-trigger executions fan out to the `/api/webhooks/zitadel` listener, bringing out-of-band Zitadel mutations into Syndra's orchestration plane.
 
 ### Modified Capabilities
 * `webhook-invalidation`: Producer-side gap closed. The endpoint is no longer producer-less; it is the documented Actions v2 event sink.
@@ -107,13 +107,13 @@ git commit -m "openspec: propose zitadel-event-trigger-propagation"
 
 ## Context
 
-`zitadel-actions-v2-deployment` shipped function-trigger Actions v2 for claim injection. The webhook listener at `/api/webhooks/zitadel` (from `live-webhook-listener`) was producer-less — its HMAC scheme and payload contract were MkAuth-internal, never reachable from Zitadel without a translator. This change closes that loop by registering a second Actions v2 target with `condition.event` executions and converging the two webhook authentication paths onto the canonical Zitadel-Signature scheme already used by `/api/action/inject`.
+`zitadel-actions-v2-deployment` shipped function-trigger Actions v2 for claim injection. The webhook listener at `/api/webhooks/zitadel` (from `live-webhook-listener`) was producer-less — its HMAC scheme and payload contract were Syndra-internal, never reachable from Zitadel without a translator. This change closes that loop by registering a second Actions v2 target with `condition.event` executions and converging the two webhook authentication paths onto the canonical Zitadel-Signature scheme already used by `/api/action/inject`.
 
 ## Decisions
 
 ### D1. Two targets, not one
 
-Function triggers (claim injection) need `restCall` so Zitadel parses the response body. Event triggers need `restAsync` so Zitadel does not block the actor's request on MkAuth latency. Mixing both on one target is impossible — `target_type` is a oneof. Conclusion: two distinct targets, each with its own signing key, bound to disjoint trigger sets.
+Function triggers (claim injection) need `restCall` so Zitadel parses the response body. Event triggers need `restAsync` so Zitadel does not block the actor's request on Syndra latency. Mixing both on one target is impossible — `target_type` is a oneof. Conclusion: two distinct targets, each with its own signing key, bound to disjoint trigger sets.
 
 ### D2. Reuse `withZitadelActionSignature`, retire the legacy verifier
 
@@ -121,7 +121,7 @@ Function triggers (claim injection) need `restCall` so Zitadel parses the respon
 
 ### D3. Translator keyed off shape, not Content-Type
 
-Zitadel's event payload has top-level `aggregate` (with `id`, `type`, `resourceOwner`) and `event` fields. MkAuth's internal `WebhookPayload` has `event_type` at the top level. The two are unambiguously distinguishable. `HandleZitadelWebhook` peeks at the parsed JSON, picks the path, and produces a `WebhookPayload` in either case. No Content-Type sniffing.
+Zitadel's event payload has top-level `aggregate` (with `id`, `type`, `resourceOwner`) and `event` fields. Syndra's internal `WebhookPayload` has `event_type` at the top level. The two are unambiguously distinguishable. `HandleZitadelWebhook` peeks at the parsed JSON, picks the path, and produces a `WebhookPayload` in either case. No Content-Type sniffing.
 
 ### D4. `role_keys[]` plural in WebhookPayload, not fan-out in translator
 
@@ -137,7 +137,7 @@ When the backend calls Zitadel's Management API (e.g. `RemoveUserGrant` from `Re
 - Editor check: drop events where `aggregate.editorUserId == ZITADEL_M2M_USER_ID`.
 - Idempotency safety net: existing `webhook_events.idempotency_key` dedup.
 
-Editor check is the primary defense; idempotency is the backup. The env var is the service-user ID Zitadel returns when MkAuth authenticates with the M2M JWT-profile flow — captured manually on first deploy. Unset env var disables the guard with a startup log warning (acceptable for local-dev).
+Editor check is the primary defense; idempotency is the backup. The env var is the service-user ID Zitadel returns when Syndra authenticates with the M2M JWT-profile flow — captured manually on first deploy. Unset env var disables the guard with a startup log warning (acceptable for local-dev).
 
 ### D6. Welcome-bundle assignment requires no new code
 
@@ -154,7 +154,7 @@ Zitadel's exact event-type strings for grants (`user.user.grant.added` vs `user.
 ## Rejected alternatives
 
 - **Keep both HMAC schemes (legacy + Actions v2).** No producer for the legacy scheme exists; carrying both is dead code with no upside.
-- **Single target with both function and event triggers.** Zitadel's `target_type` oneof forbids this; even if it didn't, `restCall` blocks on MkAuth latency, which is unacceptable for token issuance and irrelevant for events.
+- **Single target with both function and event triggers.** Zitadel's `target_type` oneof forbids this; even if it didn't, `restCall` blocks on Syndra latency, which is unacceptable for token issuance and irrelevant for events.
 - **Fan-out role_keys at translator time** (D4 alternative).
 - **Inline event-name regex matching against `event.eventType` strings.** Brittle. Explicit map in the translator is testable and auditable.
 
@@ -215,7 +215,7 @@ git commit -m "openspec: design zitadel-event-trigger-propagation"
 
 ## 4. Deployment: multi-target manifest
 - [ ] 4.1 Reshape `targets.json` to `targets[]` + `executions[]` with named `target` reference
-- [ ] 4.2 Add `mkauth-event-listener` target (`restAsync`, 5s timeout)
+- [ ] 4.2 Add `syndra-event-listener` target (`restAsync`, 5s timeout)
 - [ ] 4.3 Add 6 `condition.event` executions for the lifecycle event names
 
 ## 5. Deployment: register.sh + rotate.sh
@@ -264,14 +264,14 @@ git commit -m "openspec: tasks for zitadel-event-trigger-propagation"
 
 ## Purpose
 
-Lifecycle changes that originate in Zitadel (operator console, SCIM, or future external IdP triggers) MUST reach MkAuth's orchestration plane within the Actions v2 retry window so welcome-bundle assignment, mapping-rule cascade, cache invalidation, and LLDAP provisioning intents fire automatically.
+Lifecycle changes that originate in Zitadel (operator console, SCIM, or future external IdP triggers) MUST reach Syndra's orchestration plane within the Actions v2 retry window so welcome-bundle assignment, mapping-rule cascade, cache invalidation, and LLDAP provisioning intents fire automatically.
 
 ## Requirements
 
 ### Producer
-- The Zitadel Actions v2 deployment MUST register a target named `mkauth-event-listener` of type `restAsync` with `payloadType = PAYLOAD_TYPE_JSON` pointing at `${MKAUTH_EXTERNAL_URL}/api/webhooks/zitadel`.
+- The Zitadel Actions v2 deployment MUST register a target named `syndra-event-listener` of type `restAsync` with `payloadType = PAYLOAD_TYPE_JSON` pointing at `${SYNDRA_EXTERNAL_URL}/api/webhooks/zitadel`.
 - The deployment MUST bind executions for at minimum: `user.human.added`, `user.human.deactivated`, `user.human.locked`, `user.grant.added`, `user.grant.changed`, `user.grant.removed`.
-- The deployment MUST be applicable in one operator command. `make zitadel-actions-register` MUST register both the `mkauth-claim-injector` (function triggers) and `mkauth-event-listener` (event triggers) targets in a single invocation and capture both signing keys.
+- The deployment MUST be applicable in one operator command. `make zitadel-actions-register` MUST register both the `syndra-claim-injector` (function triggers) and `syndra-event-listener` (event triggers) targets in a single invocation and capture both signing keys.
 
 ### Consumer
 - `/api/webhooks/zitadel` MUST verify request signatures via the canonical Zitadel `ZITADEL-Signature` header scheme using `ZITADEL_EVENT_SIGNING_KEY`. The legacy `X-Zitadel-Signature` / `ZITADEL_WEBHOOK_SECRET` scheme MUST be removed.
@@ -283,7 +283,7 @@ Lifecycle changes that originate in Zitadel (operator console, SCIM, or future e
 
 ### Scenario: Default bundle on first user creation
 - **GIVEN** a welcome bundle is configured (`bundles.is_welcome = true` row exists)
-- **AND** Zitadel's `mkauth-event-listener` target is registered and reachable
+- **AND** Zitadel's `syndra-event-listener` target is registered and reachable
 - **WHEN** an operator creates a human user in Zitadel via the console
 - **THEN** `/api/webhooks/zitadel` MUST receive a `user.human.added` event with a valid signature
 - **AND** `processUserCreated` MUST insert an `onboarding_triggers` row with status=`completed`
@@ -821,7 +821,7 @@ func translateZitadelEvent(body []byte) (WebhookPayload, bool, error) {
 	return mapped, true, nil
 }
 
-var errSelfMutation = sentinelError("zitadel event triggered by MkAuth's own M2M user — dropped")
+var errSelfMutation = sentinelError("zitadel event triggered by Syndra's own M2M user — dropped")
 
 type sentinelError string
 
@@ -1102,37 +1102,37 @@ Overwrite `zitadel/actions/targets.json`:
   "_comment": "Multi-target manifest applied by register.sh. Each target is registered by name (idempotent upsert via /v2/actions/targets/search). Each execution binds by referencing the target's name (resolved to ID at registration time). Layouts match proto/zitadel/action/v2/{target,execution,query}.proto.",
   "targets": [
     {
-      "name": "mkauth-claim-injector",
-      "endpoint": "${MKAUTH_EXTERNAL_URL}/api/action/inject",
+      "name": "syndra-claim-injector",
+      "endpoint": "${SYNDRA_EXTERNAL_URL}/api/action/inject",
       "timeout": "3s",
       "payloadType": "PAYLOAD_TYPE_JSON",
       "restCall": {
         "interruptOnError": false,
-        "_note": "interruptOnError:false keeps token issuance unblocked if MkAuth is unreachable. Per-project fail_closed/minimal_safe is decided server-side."
+        "_note": "interruptOnError:false keeps token issuance unblocked if Syndra is unreachable. Per-project fail_closed/minimal_safe is decided server-side."
       },
       "_signing_key_env": "ZITADEL_ACTION_SIGNING_KEY"
     },
     {
-      "name": "mkauth-event-listener",
-      "endpoint": "${MKAUTH_EXTERNAL_URL}/api/webhooks/zitadel",
+      "name": "syndra-event-listener",
+      "endpoint": "${SYNDRA_EXTERNAL_URL}/api/webhooks/zitadel",
       "timeout": "5s",
       "payloadType": "PAYLOAD_TYPE_JSON",
       "restAsync": {
-        "_note": "Fire-and-forget. Zitadel does not parse the response body; failures retry per Zitadel's at-least-once delivery semantics. MkAuth's idempotency-key dedup catches replays."
+        "_note": "Fire-and-forget. Zitadel does not parse the response body; failures retry per Zitadel's at-least-once delivery semantics. Syndra's idempotency-key dedup catches replays."
       },
       "_signing_key_env": "ZITADEL_EVENT_SIGNING_KEY"
     }
   ],
   "executions": [
-    { "target": "mkauth-claim-injector", "condition": { "function": { "name": "preaccesstoken" } } },
-    { "target": "mkauth-claim-injector", "condition": { "function": { "name": "preuserinfo" } } },
-    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.human.added" } } },
-    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.human.selfregistered" } } },
-    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.human.deactivated" } } },
-    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.human.locked" } } },
-    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.grant.added" } } },
-    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.grant.changed" } } },
-    { "target": "mkauth-event-listener", "condition": { "event":    { "event": "user.grant.removed" } } }
+    { "target": "syndra-claim-injector", "condition": { "function": { "name": "preaccesstoken" } } },
+    { "target": "syndra-claim-injector", "condition": { "function": { "name": "preuserinfo" } } },
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.human.added" } } },
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.human.selfregistered" } } },
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.human.deactivated" } } },
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.human.locked" } } },
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.grant.added" } } },
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.grant.changed" } } },
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.grant.removed" } } }
   ]
 }
 ```
@@ -1275,10 +1275,10 @@ fi
 Find the `RENDERED_MANIFEST="$(jq …` block and ensure it walks BOTH targets[] entries (the existing walk already does — `walk(if type == "string" …)` — so no change needed). But verify by running:
 
 ```bash
-ZITADEL_DOMAIN=example.com MKAUTH_EXTERNAL_URL=https://x.example.com \
+ZITADEL_DOMAIN=example.com SYNDRA_EXTERNAL_URL=https://x.example.com \
   bash -c '_RENDERED_MANIFEST="$(jq --arg url "https://x.example.com" "
-    walk(if type == \"string\" and test(\"\\\\\\\$\\\\{MKAUTH_EXTERNAL_URL\\\\}\")
-         then sub(\"\\\\\\\$\\\\{MKAUTH_EXTERNAL_URL\\\\}\"; \$url) else . end)
+    walk(if type == \"string\" and test(\"\\\\\\\$\\\\{SYNDRA_EXTERNAL_URL\\\\}\")
+         then sub(\"\\\\\\\$\\\\{SYNDRA_EXTERNAL_URL\\\\}\"; \$url) else . end)
     | walk(if type == \"object\" then with_entries(select(.key | startswith(\"_\") | not)) else . end)
   " zitadel/actions/targets.json)"; echo "$_RENDERED_MANIFEST" | jq ".targets[].endpoint"'
 ```
@@ -1308,7 +1308,7 @@ git commit -m "feat(zitadel): register.sh handles multi-target manifest"
 
 - [ ] **Step 1: Add `--target NAME` flag handling**
 
-Open `zitadel/actions/rotate.sh`. The current script rotates the single target. Modify to accept an optional first arg `--target <NAME>` (default `mkauth-claim-injector` for back-compat). When unset and multiple targets exist, iterate over all.
+Open `zitadel/actions/rotate.sh`. The current script rotates the single target. Modify to accept an optional first arg `--target <NAME>` (default `syndra-claim-injector` for back-compat). When unset and multiple targets exist, iterate over all.
 
 Add near the top, after env-loading and before the target lookup:
 
@@ -1322,9 +1322,9 @@ esac
 Replace the single-target lookup with:
 
 ```bash
-RENDERED_MANIFEST="$(jq --arg url "$MKAUTH_EXTERNAL_URL" '
-  walk(if type == "string" and test("\\$\\{MKAUTH_EXTERNAL_URL\\}")
-       then sub("\\$\\{MKAUTH_EXTERNAL_URL\\}"; $url) else . end)
+RENDERED_MANIFEST="$(jq --arg url "$SYNDRA_EXTERNAL_URL" '
+  walk(if type == "string" and test("\\$\\{SYNDRA_EXTERNAL_URL\\}")
+       then sub("\\$\\{SYNDRA_EXTERNAL_URL\\}"; $url) else . end)
   | walk(if type == "object" then with_entries(select(.key | startswith("_") | not)) else . end)
 ' "$MANIFEST")"
 
@@ -1426,7 +1426,7 @@ git commit -m "build: parameterize rotate-key make target; add verify-events"
 ```markdown
 # Zitadel Event-Listener Target
 
-The `mkauth-event-listener` Action target receives lifecycle events from Zitadel and POSTs them to MkAuth's `/api/webhooks/zitadel` endpoint, driving:
+The `syndra-event-listener` Action target receives lifecycle events from Zitadel and POSTs them to Syndra's `/api/webhooks/zitadel` endpoint, driving:
 
 - Welcome-bundle assignment on user creation (`user.human.added` → `processUserCreated` → `TriggerOnboarding` → `AssignBundleToUser`).
 - Mapping-rule cascade on grant additions (`user.grant.added` → `EnforceMappingRules`).
@@ -1435,7 +1435,7 @@ The `mkauth-event-listener` Action target receives lifecycle events from Zitadel
 
 ## Subscribed events
 
-| Zitadel event | MkAuth `event_type` | Downstream effect |
+| Zitadel event | Syndra `event_type` | Downstream effect |
 |---|---|---|
 | `user.human.added` | `user_created` | Onboarding trigger → welcome bundle |
 | `user.human.selfregistered` | `user_created` | Same |
@@ -1449,7 +1449,7 @@ Unknown events are acknowledged with 200 OK and logged but not dispatched.
 
 ## Self-mutation guard
 
-When MkAuth's backend mutates Zitadel via Management API (e.g. `RemoveUserGrant`), Zitadel emits the corresponding event back to the listener. Without filtering, you get an infinite loop. The translator drops events whose `editorUserId` matches `ZITADEL_M2M_USER_ID`.
+When Syndra's backend mutates Zitadel via Management API (e.g. `RemoveUserGrant`), Zitadel emits the corresponding event back to the listener. Without filtering, you get an infinite loop. The translator drops events whose `editorUserId` matches `ZITADEL_M2M_USER_ID`.
 
 To find the M2M service-user ID, after the first successful Management API call check the Zitadel event log: any event with the resource you mutated will show the editor user ID. Set it in `.env`:
 
@@ -1461,7 +1461,7 @@ Unset disables the guard (acceptable in local-dev; required in any environment t
 
 ## Signing key
 
-Captured at target creation by `register.sh` and written to `zitadel/actions/.action-signing-key.mkauth-event-listener` (mode 0600). Apply to backend env via the env-fragment writer:
+Captured at target creation by `register.sh` and written to `zitadel/actions/.action-signing-key.syndra-event-listener` (mode 0600). Apply to backend env via the env-fragment writer:
 
 ```bash
 cat zitadel/actions/.action-env.fragment >> .env
@@ -1471,7 +1471,7 @@ docker compose up -d backend
 Rotation:
 
 ```bash
-make zitadel-actions-rotate-key TARGET=mkauth-event-listener
+make zitadel-actions-rotate-key TARGET=syndra-event-listener
 ```
 
 Same rotation flow as the claim injector — see `SIGNING_KEY.md`.
@@ -1482,8 +1482,8 @@ Same rotation flow as the claim injector — see `SIGNING_KEY.md`.
 |---|---|---|
 | Welcome bundle never assigned on new user | Listener target not registered, or signing key mismatch | `make zitadel-actions-register`; check `webhook_events` table for failed rows |
 | Loop: same user grant mutated repeatedly | `ZITADEL_M2M_USER_ID` unset or wrong | Set the env var to the backend's M2M service-user ID |
-| `401 INVALID_SIGNATURE` in backend logs | Stale or wrong `ZITADEL_EVENT_SIGNING_KEY` | Rotate via `make zitadel-actions-rotate-key TARGET=mkauth-event-listener` |
-| Unknown-event log spam | Zitadel emitting events MkAuth doesn't subscribe to (unlikely if executions are pinned) | Check executions list in Zitadel console; remove unwanted bindings |
+| `401 INVALID_SIGNATURE` in backend logs | Stale or wrong `ZITADEL_EVENT_SIGNING_KEY` | Rotate via `make zitadel-actions-rotate-key TARGET=syndra-event-listener` |
+| Unknown-event log spam | Zitadel emitting events Syndra doesn't subscribe to (unlikely if executions are pinned) | Check executions list in Zitadel console; remove unwanted bindings |
 ```
 
 - [ ] **Step 2: Update `zitadel/actions/README.md` Contents table**
@@ -1513,8 +1513,8 @@ After the existing `ZITADEL_ACTION_SIGNING_KEY_ROTATION_THRESHOLD_DAYS` block (a
 
 ```
 # --- Zitadel Actions v2 event-listener signing key (uncomment when Action target is live) ---
-# Returned ONCE by Zitadel when the mkauth-event-listener Action target is created
-# (see zitadel/actions/register.sh). Captured to .action-signing-key.mkauth-event-listener
+# Returned ONCE by Zitadel when the syndra-event-listener Action target is created
+# (see zitadel/actions/register.sh). Captured to .action-signing-key.syndra-event-listener
 # and the .action-env.fragment apply file.
 # When unset, the /api/webhooks/zitadel endpoint runs in dev mode (signature verification
 # disabled, warning logged). When set, every event POST MUST carry a valid ZITADEL-Signature
@@ -1524,7 +1524,7 @@ After the existing `ZITADEL_ACTION_SIGNING_KEY_ROTATION_THRESHOLD_DAYS` block (a
 # ZITADEL_EVENT_SIGNING_KEY_ROTATION_THRESHOLD_DAYS=90
 
 # --- Self-mutation loop guard ---
-# Zitadel service-user ID that MkAuth uses for M2M Management API calls. Events whose
+# Zitadel service-user ID that Syndra uses for M2M Management API calls. Events whose
 # editorUserId matches are dropped at the webhook listener (otherwise backend-initiated
 # grant mutations echo through Actions v2 and re-trigger orchestration). Find via the
 # Zitadel event log after the first M2M call. Unset disables the guard (dev-mode only).
@@ -1662,8 +1662,8 @@ Expected: `OK`.
 - Create: `openspec/changes/zitadel-event-trigger-propagation/IMPLEMENTATION.md`
 - Modify: `openspec/changes/zitadel-event-trigger-propagation/tasks.md` (tick all)
 - Modify: `openspec/INDEX.md` (flip Status from "In Progress" to "Complete")
-- Modify: `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md` (`webhook-invalidation` row producer status)
-- Modify: `openspec/changes/mkauth-core-architecture/ROADMAP.md` (tick item)
+- Modify: `openspec/changes/syndra-core-architecture/specs/feature-coverage.md` (`webhook-invalidation` row producer status)
+- Modify: `openspec/changes/syndra-core-architecture/ROADMAP.md` (tick item)
 
 - [ ] **Step 1: Write IMPLEMENTATION.md**
 
@@ -1737,7 +1737,7 @@ This step uses the codebase-memory MCP tool, not bash. From within the Claude Co
 
 ```
 mcp__codebase-memory-mcp__detect_changes(
-  project="Users-notkanishk-Documents-Mkrspc-Projects-MkAuth-backend",
+  project="Users-notkanishk-Documents-Mkrspc-Projects-Syndra-backend",
   base_branch="main"
 )
 ```
@@ -1746,7 +1746,7 @@ Then re-index if changes are detected:
 
 ```
 mcp__codebase-memory-mcp__index_repository(
-  repo_path="/Users/notkanishk/Documents/Mkrspc/Projects/MkAuth/backend",
+  repo_path="/Users/notkanishk/Documents/Mkrspc/Projects/Syndra/backend",
   mode="moderate"
 )
 ```

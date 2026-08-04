@@ -219,7 +219,7 @@ func GetGrantIndex(ctx context.Context, grantID string) (ZitadelGrantIndex, erro
 // triggering event/URL param). Returns ErrGrantIndexNotFound on a cache miss — same tolerance as
 // GetGrantIndex; the caller degrades to an empty ZitadelGrantID, and the drain's own 4xx handling
 // fails just that row without halting the batch.
-// ponytail: LIMIT 1 assumes at most one grant aggregate per (user, project), true for how MkAuth
+// ponytail: LIMIT 1 assumes at most one grant aggregate per (user, project), true for how Syndra
 // and Zitadel model grants today; revisit if a user can hold two grants on the same project.
 func GetGrantIndexByUserProject(ctx context.Context, userID, projectID string) (ZitadelGrantIndex, error) {
 	const query = `

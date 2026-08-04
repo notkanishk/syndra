@@ -605,7 +605,7 @@ docker compose exec backend /app/migrate up   # adjust to whatever the project's
 - [ ] **Step 4: Verify the table exists**
 
 ```bash
-docker compose exec db psql -U "${POSTGRES_USER:-mkauth}" -d "${POSTGRES_DB:-mkauth}" -c '\d zitadel_grants_index'
+docker compose exec db psql -U "${POSTGRES_USER:-syndra}" -d "${POSTGRES_DB:-syndra}" -c '\d zitadel_grants_index'
 ```
 
 Expected: shows columns `grant_id`, `user_id`, `project_id`, `role_keys`, `created_at`, `updated_at`.
@@ -831,7 +831,7 @@ import (
 	"context"
 	"testing"
 
-	"mkauth/internal/zitadel"
+	"syndra/internal/zitadel"
 )
 
 type stubZitadelClient struct {
@@ -897,7 +897,7 @@ import (
 	"context"
 	"fmt"
 
-	"mkauth/internal/zitadel"
+	"syndra/internal/zitadel"
 )
 
 // zitadelGrantLookup is the subset of the Zitadel management client used
@@ -978,8 +978,8 @@ import (
 	"errors"
 	"testing"
 
-	"mkauth/internal/db"
-	"mkauth/internal/zitadel"
+	"syndra/internal/db"
+	"syndra/internal/zitadel"
 )
 
 func setupEnrichDeps(t *testing.T) {
@@ -1090,7 +1090,7 @@ import (
 	"errors"
 	"log"
 
-	"mkauth/internal/db"
+	"syndra/internal/db"
 )
 
 // enrichGrantPayload fills in the projectId (and roleKeys for grant_removed)
@@ -1289,7 +1289,7 @@ In Zitadel Console, perform each operation on test users and confirm the matchin
 - [ ] **Step 4: Confirm `zitadel_grants_index` is being maintained**
 
 ```bash
-docker compose exec db psql -U "${POSTGRES_USER:-mkauth}" -d "${POSTGRES_DB:-mkauth}" -c \
+docker compose exec db psql -U "${POSTGRES_USER:-syndra}" -d "${POSTGRES_DB:-syndra}" -c \
   "SELECT grant_id, user_id, project_id, role_keys, updated_at FROM zitadel_grants_index ORDER BY updated_at DESC LIMIT 10;"
 ```
 
@@ -1405,7 +1405,7 @@ The wire-format and enrichment changes added new functions and a new table — k
 
 ```bash
 # Via the codebase-memory-mcp:
-mcp__codebase-memory-mcp__detect_changes project=Users-notkanishk-Documents-Mkrspc-Projects-MkAuth-backend since=HEAD
+mcp__codebase-memory-mcp__detect_changes project=Users-notkanishk-Documents-Mkrspc-Projects-Syndra-backend since=HEAD
 ```
 
 - [ ] **Step 2: If `impacted_symbols` is non-empty, re-index the affected scope**

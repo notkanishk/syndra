@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"mkauth/internal/zitadel"
+	"syndra/internal/zitadel"
 )
 
 // Regression: demoEnabled must agree with directory.Init on what "live mode"
@@ -26,7 +26,7 @@ func TestDemoEnabled_InitClientFailed_SeedStillRuns(t *testing.T) {
 	// catalog data on an empty DB.
 	t.Setenv("ZITADEL_DOMAIN", "auth.example.com")
 	t.Setenv("ZITADEL_MACHINE_KEY_PATH", "/tmp/does-not-exist.json")
-	t.Setenv("MKAUTH_SEED_DEMO", "")
+	t.Setenv("SYNDRA_SEED_DEMO", "")
 	withMgmtClient(t, nil)
 
 	if !demoEnabled() {
@@ -40,7 +40,7 @@ func TestDemoEnabled_InitClientFailed_SeedStillRuns(t *testing.T) {
 func TestDemoEnabled_LiveClientReady_SeedSkipped(t *testing.T) {
 	t.Setenv("ZITADEL_DOMAIN", "auth.example.com")
 	t.Setenv("ZITADEL_MACHINE_KEY_PATH", "/tmp/any.json")
-	t.Setenv("MKAUTH_SEED_DEMO", "")
+	t.Setenv("SYNDRA_SEED_DEMO", "")
 	withMgmtClient(t, stubClient{})
 
 	if demoEnabled() {
@@ -54,7 +54,7 @@ func TestDemoEnabled_LiveClientReady_SeedSkipped(t *testing.T) {
 func TestDemoEnabled_NoZitadel_SeedRuns(t *testing.T) {
 	t.Setenv("ZITADEL_DOMAIN", "")
 	t.Setenv("ZITADEL_MACHINE_KEY_PATH", "")
-	t.Setenv("MKAUTH_SEED_DEMO", "")
+	t.Setenv("SYNDRA_SEED_DEMO", "")
 	withMgmtClient(t, nil)
 
 	if !demoEnabled() {
@@ -65,14 +65,14 @@ func TestDemoEnabled_NoZitadel_SeedRuns(t *testing.T) {
 func TestDemoEnabled_ExplicitOverrides(t *testing.T) {
 	withMgmtClient(t, stubClient{})
 
-	t.Setenv("MKAUTH_SEED_DEMO", "true")
+	t.Setenv("SYNDRA_SEED_DEMO", "true")
 	if !demoEnabled() {
-		t.Fatal("MKAUTH_SEED_DEMO=true should force-enable even in live mode")
+		t.Fatal("SYNDRA_SEED_DEMO=true should force-enable even in live mode")
 	}
 
-	t.Setenv("MKAUTH_SEED_DEMO", "false")
+	t.Setenv("SYNDRA_SEED_DEMO", "false")
 	if demoEnabled() {
-		t.Fatal("MKAUTH_SEED_DEMO=false should force-disable even in demo mode")
+		t.Fatal("SYNDRA_SEED_DEMO=false should force-disable even in demo mode")
 	}
 }
 

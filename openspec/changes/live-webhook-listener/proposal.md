@@ -1,6 +1,6 @@
 ## Why
 
-The webhook handler processed all events identically — no event type discrimination, no grant revocation flow, no event persistence for deduplication, and no user deactivation handling. When a role was revoked in Zitadel, MkAuth couldn't cascade that revocation through mapping rules. Duplicate webhook deliveries were processed multiple times. Event history was invisible to operators.
+The webhook handler processed all events identically — no event type discrimination, no grant revocation flow, no event persistence for deduplication, and no user deactivation handling. When a role was revoked in Zitadel, Syndra couldn't cascade that revocation through mapping rules. Duplicate webhook deliveries were processed multiple times. Event history was invisible to operators.
 
 ## What Changes
 

@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // DriftTriageQueue is the read behind Review › Unexplained access.
@@ -86,7 +86,7 @@ func driftRank(item models.DriftTriageItem) int {
 	case isSafetyGated(item.RoleGroup):
 		return 2
 	case !item.RoleInCatalogue:
-		// A role MkAuth no longer knows about. Adopting would recreate
+		// A role Syndra no longer knows about. Adopting would recreate
 		// something somebody deliberately retired, which is worth surfacing
 		// above routine drift even though nothing physical is at stake.
 		return 1
@@ -105,7 +105,7 @@ func isSafetyGated(group string) bool {
 
 // isServiceAccount marks machine accounts, for which "adopt" is the wrong verb
 // — an integration that provisions itself on every deploy will re-create the
-// grant tomorrow no matter what MkAuth records.
+// grant tomorrow no matter what Syndra records.
 func isServiceAccount(user models.UserProfile) bool {
 	local := strings.ToLower(user.Email)
 	if at := strings.Index(local, "@"); at >= 0 {

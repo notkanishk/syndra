@@ -2,7 +2,7 @@
 
 `dashboard-ux-elevation` shipped the missing UX foundation (toast, ConfirmModal, theme toggle, audit grouping, topology pan/zoom) but the dashboard still has three structural problems that compound into poor day-to-day usability:
 
-1. **Visual: generic and sparse.** The current tokens (vanilla indigo on neutral grays) read as default-Tailwind, not as a deliberate IAM console. The dashboard, applications, and graph pages have empty stretches at wide viewports; bundle and policies pages feel cramped. There is no cohesive design language to anchor the admin-console-first commitment in `mkauth-core-architecture/design.md` § 5.
+1. **Visual: generic and sparse.** The current tokens (vanilla indigo on neutral grays) read as default-Tailwind, not as a deliberate IAM console. The dashboard, applications, and graph pages have empty stretches at wide viewports; bundle and policies pages feel cramped. There is no cohesive design language to anchor the admin-console-first commitment in `syndra-core-architecture/design.md` § 5.
 2. **Human readability: raw UIDs leak.** The audit log (`audit/page.tsx:242-244, 96, 98, 310`), request approval queue (`requests/AdminRequestsView.tsx:245`), dashboard activity feed (`page.tsx:239`), and graph node detail render Zitadel UUIDs verbatim. The actor filter on `/audit` is a `<select>` of UUIDs. None of this tells the operator *who* or *what* is involved — the central question of an admin console.
 3. **Backend feature parity: orphaned endpoints.** The backend ships bundle creation (`POST /api/v1/bundles`), role authoring (`POST /api/v1/roles`), bundle impact preview (`GET /api/v1/bundles/{id}/impact`), provisioning intent visibility (`GET /api/v1/intents`), webhook event log (`GET /api/v1/webhook/events`), onboarding triggers (`GET /api/v1/onboarding/triggers`), and Zitadel global grants (`GET /api/v1/zitadel/grants`) — none of which have UI. Phase-5 OpenSpec calls for service-to-bundle visibility and reconciliation visibility, both gated by missing surfaces.
 
@@ -37,7 +37,7 @@ The change is staged across four tracks, executed in order. One umbrella OpenSpe
 - **Bundle CRUD**: `CreateBundleModal`, `AddRolesToBundlePicker`, `BundleImpactAccordion` mounted from `/bundles` toolbar. Wires existing `POST /bundles`, `POST /bundles/{id}/roles`, `GET /bundles/{id}/impact`.
 - **Role authoring**: `CreateRoleModal` opened from project detail; supports `clone_from` prefill via existing `POST /roles`.
 - **`/operations` (NEW route)**: admin-only. Three tabs — Intents / Webhook events / Onboarding triggers — surface `GET /intents`, `/webhook/events`, `/onboarding/triggers`. Status filter pills, `<Pulse/>` per row, `refetchInterval: 5000`. Payload viewer in a `Modal` with `<JsonView/>`.
-- **`/grants` (NEW route)**: admin-only. Tab 1 "All grants" surfaces `GET /api/v1/zitadel/grants`. Tab 2 "Reconciliation" renders side-by-side MkAuth-vs-Zitadel diff backed by NEW backend `GET /api/v1/reconciliation/grants` returning `{only_in_mkauth[], only_in_zitadel[], drift[]}` — visibility only, no remediation.
+- **`/grants` (NEW route)**: admin-only. Tab 1 "All grants" surfaces `GET /api/v1/zitadel/grants`. Tab 2 "Reconciliation" renders side-by-side Syndra-vs-Zitadel diff backed by NEW backend `GET /api/v1/reconciliation/grants` returning `{only_in_syndra[], only_in_zitadel[], drift[]}` — visibility only, no remediation.
 - **Sidebar**: new "Admin" eyebrow section gated on session admin role; items "Operations" → `/operations`, "Grants" → `/grants`.
 
 ## Capabilities

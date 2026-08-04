@@ -324,7 +324,7 @@ function UnexplainedAccess({ count }: { count: number }) {
       <CardHeader title="Unexplained access" count={count} tone="danger" />
       <CardRow>
         <div className="flex-1 text-[14.5px]">
-          {count} {count === 1 ? "grant" : "grants"} MkAuth can&rsquo;t explain
+          {count} {count === 1 ? "grant" : "grants"} Syndra can&rsquo;t explain
         </div>
         <ButtonLink href="/governance/drift" size="sm">
           Open triage

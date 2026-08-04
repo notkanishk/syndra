@@ -4,11 +4,11 @@
 
 ## ADDED Requirements
 
-### Requirement: A direct grant MUST be removable through MkAuth's own ledger
+### Requirement: A direct grant MUST be removable through Syndra's own ledger
 
 `DELETE /api/v1/users/{id}/grants/{grantId}` MUST delete the `direct_role_grants` row, write the audit row, and enqueue the user's effective-access delta, all in a single transaction. The compiled cache MUST be rebuilt on a context detached from the request before the response is returned.
 
-It MUST NOT be implemented as the Zitadel-side grant delete (`DELETE /api/v1/zitadel/users/{id}/grants/{grantId}`), which removes a different object and leaves the MkAuth row behind for the next cache compile to restore.
+It MUST NOT be implemented as the Zitadel-side grant delete (`DELETE /api/v1/zitadel/users/{id}/grants/{grantId}`), which removes a different object and leaves the Syndra row behind for the next cache compile to restore.
 
 A grant that does not exist for that user MUST return 404, not 500: clicking remove twice, or clicking after the expiry sweep, is an ordinary race and not a server fault.
 

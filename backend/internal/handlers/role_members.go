@@ -4,8 +4,8 @@ import (
 	"errors"
 	"net/http"
 
-	"mkauth/internal/db"
-	"mkauth/internal/services"
+	"syndra/internal/db"
+	"syndra/internal/services"
 )
 
 // handleGetRoleMembers answers "who can currently use this?" for one
@@ -47,7 +47,7 @@ func handleGetGovernanceIndicators(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, indicators)
 }
 
-// handleDeleteUserDirectGrant removes one MkAuth direct grant: the ledger row
+// handleDeleteUserDirectGrant removes one Syndra direct grant: the ledger row
 // goes away and a revoke is queued for Zitadel, in one transaction.
 //
 //	DELETE /api/v1/users/{id}/grants/{grantId}

@@ -46,7 +46,7 @@
 | `ui/src/lib/queries/useBundles.ts` | modify | Add `useSetWelcomeBundle` mutation; expose `is_welcome` on `BundleRow` (D1) |
 | `ui/src/app/bundles/page.tsx` | modify | Render "Welcome bundle" badge + toggle in `BundleRowCard` (D1) |
 | `ui/src/app/bundles/__tests__/page.test.tsx` | modify | Smoke-test the toggle interaction (D1) |
-| `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md` | modify | Update Welcome Bundle row from "convention-based" → "explicit; errors when not configured" (D1) |
+| `openspec/changes/syndra-core-architecture/specs/feature-coverage.md` | modify | Update Welcome Bundle row from "convention-based" → "explicit; errors when not configured" (D1) |
 | `openspec/INDEX.md` | modify | Add Wave 1 row in Change Log (Phase 5.5) |
 
 Each file has one responsibility; no file does more than one fix from the audit table.
@@ -184,7 +184,7 @@ Smallest, most isolated win. Doing it first removes destructive code that could 
 
 - [ ] **Step 1.1: Verify nothing imports the package**
 
-Run: `cd backend && grep -rn "mkauth/cmd/test" .`
+Run: `cd backend && grep -rn "syndra/cmd/test" .`
 Expected: no matches.
 
 Run: `cd backend && go list ./...`
@@ -256,7 +256,7 @@ In the same file, the first statement of `func main()` becomes:
 ```go
 func main() {
 	requireProductionSigningKeys()
-	fmt.Println("MkAuth Backend Starting...")
+	fmt.Println("Syndra Backend Starting...")
 	// ... existing body unchanged
 ```
 
@@ -282,7 +282,7 @@ SMOKE_PID=$!
 sleep 1
 kill "$SMOKE_PID"
 ```
-Expected: prints `MkAuth Backend Starting...` and `Control Plane Backend Listening on :8080` before being killed.
+Expected: prints `Syndra Backend Starting...` and `Control Plane Backend Listening on :8080` before being killed.
 
 - [ ] **Step 2.5: Commit**
 
@@ -750,7 +750,7 @@ import (
 	"errors"
 	"testing"
 
-	"mkauth/internal/db"
+	"syndra/internal/db"
 )
 
 // ... TestTriggerOnboarding_NoBundleAvailable_MarksFailedAndReturnsError:
@@ -1166,8 +1166,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"mkauth/internal/directory"
-	"mkauth/internal/models"
+	"syndra/internal/directory"
+	"syndra/internal/models"
 )
 
 type stubDirectory struct {
@@ -1289,7 +1289,7 @@ func handleGetMyProfile(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-Add `"mkauth/internal/directory"` to the import block.
+Add `"syndra/internal/directory"` to the import block.
 
 - [ ] **Step 8.4: Wire the route**
 
@@ -1611,7 +1611,7 @@ Close the OpenSpec loop and refresh the graph so subsequent waves search against
 - Create: `openspec/changes/wave-1-production-trust-hardening/specs/automation-policies/spec.md` (delta)
 - Create: `openspec/changes/wave-1-production-trust-hardening/specs/production-security-boundary/spec.md` (delta)
 - Create: `openspec/changes/wave-1-production-trust-hardening/specs/operational-readiness/spec.md` (delta)
-- Modify: `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md` (welcome-bundle row)
+- Modify: `openspec/changes/syndra-core-architecture/specs/feature-coverage.md` (welcome-bundle row)
 - Modify: `openspec/INDEX.md` (Change Log row, Phase 5.5)
 - Modify: `openspec/changes/wave-1-production-trust-hardening/IMPLEMENTATION.md` (final state)
 
@@ -1694,7 +1694,7 @@ A failed metadata fetch MUST NOT block session creation; affected fields render 
 
 - [ ] **Step 10.4: Update `feature-coverage.md`**
 
-In `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md`, find the `automation-policies` row (search for `Welcome` or `convention`). Replace the "Notes" cell text "convention-based" with "explicit `is_welcome` flag, errors when not configured (Wave 1)". Update the Status column entry accordingly.
+In `openspec/changes/syndra-core-architecture/specs/feature-coverage.md`, find the `automation-policies` row (search for `Welcome` or `convention`). Replace the "Notes" cell text "convention-based" with "explicit `is_welcome` flag, errors when not configured (Wave 1)". Update the Status column entry accordingly.
 
 - [ ] **Step 10.5: Update `openspec/INDEX.md`**
 
@@ -1708,7 +1708,7 @@ Place it after the Lifecycle Event Propagation row (Phase 5).
 
 - [ ] **Step 10.6: Refresh the codebase memory graph**
 
-Run via the `mcp__codebase-memory-mcp__detect_changes` tool with the project name `Users-notkanishk-Documents-Mkrspc-Projects-MkAuth`. Verify the diff includes the new symbols (`SetWelcomeBundle`, `ErrNoWelcomeBundleConfigured`, `handleSetWelcomeBundle`, `handleGetMyProfile`, `fetchProfileMetadata`, `useSetWelcomeBundle`) and that the deleted `cmd/test/main.go` no longer appears.
+Run via the `mcp__codebase-memory-mcp__detect_changes` tool with the project name `Users-notkanishk-Documents-Mkrspc-Projects-Syndra`. Verify the diff includes the new symbols (`SetWelcomeBundle`, `ErrNoWelcomeBundleConfigured`, `handleSetWelcomeBundle`, `handleGetMyProfile`, `fetchProfileMetadata`, `useSetWelcomeBundle`) and that the deleted `cmd/test/main.go` no longer appears.
 
 If `detect_changes` does not auto-reindex, follow up with `index_repository` for the same project.
 
@@ -1745,7 +1745,7 @@ Expected: all green.
 - [ ] **Step 10.9: Commit the spec deltas**
 
 ```bash
-git add openspec/changes/wave-1-production-trust-hardening/specs/ openspec/changes/wave-1-production-trust-hardening/IMPLEMENTATION.md openspec/changes/mkauth-core-architecture/specs/feature-coverage.md openspec/INDEX.md
+git add openspec/changes/wave-1-production-trust-hardening/specs/ openspec/changes/wave-1-production-trust-hardening/IMPLEMENTATION.md openspec/changes/syndra-core-architecture/specs/feature-coverage.md openspec/INDEX.md
 git commit -m "openspec: wave-1 spec deltas + INDEX update
 
 Adds three deltas (automation-policies, production-security-boundary,

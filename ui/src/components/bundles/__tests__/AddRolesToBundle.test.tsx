@@ -33,7 +33,7 @@ function role(overrides: Partial<CatalogRole> = {}): CatalogRole {
     rule_count: 0,
     assigned_user_count: 0,
     is_unused: false,
-    source: "mkauth",
+    source: "syndra",
     ...overrides,
   };
 }

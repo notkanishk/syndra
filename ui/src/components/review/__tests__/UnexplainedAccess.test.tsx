@@ -148,7 +148,7 @@ describe("Unexplained access — triage", () => {
     fireEvent.click(screen.getAllByRole("checkbox")[1]);
 
     const bar = screen.getByRole("region", { name: "Selection" });
-    expect(within(bar).getByRole("button", { name: "Adopt in MkAuth" })).toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "Adopt in Syndra" })).toBeInTheDocument();
     expect(within(bar).getByRole("button", { name: "Mark as owned elsewhere" })).toBeInTheDocument();
     expect(within(bar).queryByRole("button", { name: /Revoke/ })).not.toBeInTheDocument();
   });
@@ -266,13 +266,13 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       op: "adopt",
       applied: false,
       outcomes: [
-        { user_id: "d1", name: "Ada Lovelace", email: "u1", effect: "apply", detail: "Adopted into MkAuth (trained)." },
+        { user_id: "d1", name: "Ada Lovelace", email: "u1", effect: "apply", detail: "Adopted into Syndra (trained)." },
         { user_id: "d2", name: "Sam Patel", email: "u2", effect: "no_change", detail: "Already resolved as adopted." },
       ],
       summary: { total: 2, apply: 1, no_change: 1, blocked: 0, failed: 0, succeeded: 0 },
     };
     selectTwo();
-    fireEvent.click(screen.getByRole("button", { name: "Adopt in MkAuth" }));
+    fireEvent.click(screen.getByRole("button", { name: "Adopt in Syndra" }));
 
     // Rows are named, and the confirm button counts only what will change —
     // offering "Apply to 2" when one is already resolved would be a lie.
@@ -290,7 +290,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0 },
     };
     selectTwo();
-    fireEvent.click(screen.getByRole("button", { name: "Adopt in MkAuth" }));
+    fireEvent.click(screen.getByRole("button", { name: "Adopt in Syndra" }));
 
     await waitFor(() => expect(bulk.rehearsals).toBeGreaterThan(0));
     expect(bulk.applies).toBe(0);
@@ -309,7 +309,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       summary: { total: 1, apply: 0, no_change: 1, blocked: 0, failed: 0, succeeded: 0 },
     };
     selectTwo();
-    fireEvent.click(screen.getByRole("button", { name: "Adopt in MkAuth" }));
+    fireEvent.click(screen.getByRole("button", { name: "Adopt in Syndra" }));
 
     expect(await screen.findByRole("button", { name: "Nothing to apply" })).toBeDisabled();
   });
@@ -325,7 +325,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       summary: { total: 2, apply: 2, no_change: 0, blocked: 0, failed: 0, succeeded: 0 },
     };
     selectTwo();
-    fireEvent.click(screen.getByRole("button", { name: "Adopt in MkAuth" }));
+    fireEvent.click(screen.getByRole("button", { name: "Adopt in Syndra" }));
     fireEvent.click(await screen.findByRole("button", { name: "Apply to 2 items" }));
 
     // The result is a diff against the plan that was approved, not a fresh

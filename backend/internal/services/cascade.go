@@ -5,9 +5,9 @@ import (
 	"log"
 	"sort"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
-	"mkauth/internal/services/propagation"
+	"syndra/internal/db"
+	"syndra/internal/models"
+	"syndra/internal/services/propagation"
 )
 
 // CascadeResult reports what a cascade enqueued and (auto only) drained.
@@ -92,7 +92,7 @@ func applyMode(ctx context.Context, mode string, ids []string) (CascadeResult, e
 //
 // Every cascade below projects a user's EFFECTIVE-ROLE CLOSURE delta (adds = after−before,
 // revokes = before−after) rather than a bundle's literal roles or a single grant-index lookup.
-// This inherently discovers rule-derived targets (P1a) from MkAuth's own tables regardless of
+// This inherently discovers rule-derived targets (P1a) from Syndra's own tables regardless of
 // whether the grant has reached Zitadel yet (P1b), and subsumes the old OtherSourceCovers check:
 // a role still covered by another source stays in `after` and is never revoked; a role dropped by
 // every source falls out of `after` and is revoked.
@@ -301,7 +301,7 @@ func EditBundleWorkingCopy(ctx context.Context, actor, bundleID, projectID, role
 // CascadeRuleCreated creates the rule AND enqueues, for every known user, the closure delta caused
 // by the new source→target edge (empty delta users are skipped), in one tx, then (auto) drains.
 // Affected users come from GetAllKnownUserIDs — not a grant-index lookup — so a user who holds the
-// source only via MkAuth's own tables (pending/manual/failed-drain) is still discovered (P1b). The
+// source only via Syndra's own tables (pending/manual/failed-drain) is still discovered (P1b). The
 // enqueue params carry SourceRef="" here; CreateMappingRuleAndEnqueue stamps the new rule id onto
 // them after the INSERT ... RETURNING, since the id doesn't exist yet at simulation time. Returns
 // the new rule id for the handler response. The handler does cycle/self-ref validation first.

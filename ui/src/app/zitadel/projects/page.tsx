@@ -23,7 +23,7 @@ import {
  * Projects and their roles, as the identity provider holds them.
  *
  * This is the list `/roles` cannot show: GET /api/v1/roles returns only roles
- * MkAuth created, so a role somebody made upstream is invisible there. That is
+ * Syndra created, so a role somebody made upstream is invisible there. That is
  * exactly the gap this page exists to close.
  */
 export default function UpstreamProjectsPage() {
@@ -38,9 +38,9 @@ export default function UpstreamProjectsPage() {
   return (
     <UpstreamShell
       title="Projects and their roles"
-      lede="Read live from the identity provider, including roles MkAuth never created."
-      mkauthHref="/projects"
-      mkauthLabel="See the same projects as MkAuth understands them"
+      lede="Read live from the identity provider, including roles Syndra never created."
+      syndraHref="/projects"
+      syndraLabel="See the same projects as Syndra understands them"
     >
       <div className="flex flex-wrap items-start gap-5">
         <Card className="w-[280px] min-w-[240px] flex-none">
@@ -105,7 +105,7 @@ export default function UpstreamProjectsPage() {
             empty={
               <EmptyState
                 title="This project has no roles upstream."
-                guidance="Create one here, or — preferably — create it in MkAuth so it is tracked."
+                guidance="Create one here, or — preferably — create it in Syndra so it is tracked."
               />
             }
           >
@@ -215,7 +215,7 @@ function RoleDialog({
     <Modal open onClose={onClose} busy={busy} size="sm">
       <ModalHeader
         title={role ? `Edit ${role.key} upstream` : "New role upstream"}
-        lede="Roles created here are not tracked by MkAuth until somebody adopts them."
+        lede="Roles created here are not tracked by Syndra until somebody adopts them."
       />
       <div className="flex flex-col gap-3.5 px-6">
         <div>
@@ -246,7 +246,7 @@ function RoleDialog({
             placeholder="Safety-gated"
           />
         </div>
-        <DirectWriteWarning what="Creating or renaming a role here happens outside MkAuth's record." />
+        <DirectWriteWarning what="Creating or renaming a role here happens outside Syndra's record." />
       </div>
       <ModalFooter>
         <Button

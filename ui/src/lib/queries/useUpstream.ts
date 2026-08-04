@@ -8,7 +8,7 @@ import { request } from "@/lib/api-client";
  * The identity provider's own view, read straight through the proxy.
  *
  * This is deliberately a separate layer from every other query in the app. The
- * rest of MkAuth reads its own model of the world; these read what Zitadel
+ * rest of Syndra reads its own model of the world; these read what Zitadel
  * actually holds, which is the only way to answer "does it agree with us".
  * Nothing here is cached long — a stale answer to that question is worse than
  * no answer.
@@ -132,7 +132,7 @@ export function useUpstreamGrants() {
 }
 
 // ---------------------------------------------------------------------------
-// Writes. These bypass MkAuth's ledger and outbox entirely — see the warning
+// Writes. These bypass Syndra's ledger and outbox entirely — see the warning
 // the Identity provider page renders above them. Kept here rather than beside
 // the ordinary mutations so nothing reaches for one by accident.
 // ---------------------------------------------------------------------------

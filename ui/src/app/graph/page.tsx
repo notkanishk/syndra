@@ -120,7 +120,7 @@ export default function AccessMapPage() {
         meta={
           focus
             ? "One node at a time, and what it touches."
-            : "Everything MkAuth knows about, grouped. Pick something to see what feeds it and what it feeds."
+            : "Everything Syndra knows about, grouped. Pick something to see what feeds it and what it feeds."
         }
       />
 

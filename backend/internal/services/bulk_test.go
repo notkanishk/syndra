@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"mkauth/internal/directory"
-	"mkauth/internal/models"
+	"syndra/internal/directory"
+	"syndra/internal/models"
 )
 
 // bulkFixture swaps the directory and every DB injectable the rehearsal reads,

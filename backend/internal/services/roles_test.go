@@ -9,9 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
-	"mkauth/internal/zitadel"
+	"syndra/internal/db"
+	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 func resetRoleDeps(t *testing.T) {
@@ -118,7 +118,7 @@ func TestGlobalRoleCatalog_Deduplicates(t *testing.T) {
 	resetRoleDeps(t)
 	noopRoleDeps()
 
-	// Same role in local DB and demo catalog — should appear once with "mkauth" source.
+	// Same role in local DB and demo catalog — should appear once with "syndra" source.
 	svcDbGetAllLocalRoles = func(_ context.Context) ([]models.Role, error) {
 		return []models.Role{
 			{ProjectID: "printing", RoleKey: "admin", DisplayName: "Admin Override"},
@@ -135,8 +135,8 @@ func TestGlobalRoleCatalog_Deduplicates(t *testing.T) {
 	for _, cr := range catalog {
 		if cr.ProjectID == "printing" && cr.RoleKey == "admin" {
 			count++
-			if cr.Source != "mkauth" {
-				t.Errorf("expected source=mkauth (local DB wins), got %s", cr.Source)
+			if cr.Source != "syndra" {
+				t.Errorf("expected source=syndra (local DB wins), got %s", cr.Source)
 			}
 			if cr.DisplayName != "Admin Override" {
 				t.Errorf("expected local display name, got %s", cr.DisplayName)

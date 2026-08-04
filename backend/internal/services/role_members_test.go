@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // stubRoleFixtures wires the injectables RoleMembers and GovernanceIndicators

@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"mkauth/internal/cache"
-	"mkauth/internal/claims"
-	"mkauth/internal/db"
-	"mkauth/internal/directory"
-	"mkauth/internal/models"
+	"syndra/internal/cache"
+	"syndra/internal/claims"
+	"syndra/internal/db"
+	"syndra/internal/directory"
+	"syndra/internal/models"
 )
 
 type roleKey struct {
@@ -305,7 +305,7 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 
 	hints := make([]string, 0, 2)
 	if len(bundles) == 0 {
-		hints = append(hints, "No MkAuth bundle is assigned yet, so this user depends entirely on direct platform grants.")
+		hints = append(hints, "No Syndra bundle is assigned yet, so this user depends entirely on direct platform grants.")
 	}
 	if len(roleMap) >= 5 {
 		hints = append(hints, "This user spans several systems; review whether every downstream permission is still required.")
@@ -580,7 +580,7 @@ func UserDirectGrants(ctx context.Context, userID string) ([]models.DirectGrant,
 	return svcGetDirectGrantsForUser(ctx, userID, true)
 }
 
-// AllDirectGrants returns every active MkAuth-direct grant. Active means
+// AllDirectGrants returns every active Syndra-direct grant. Active means
 // expires_at is NULL or in the future — expired rows are excluded so the
 // reconciliation handler compares like-for-like with what Zitadel currently
 // surfaces. Backs GET /api/v1/reconciliation/grants.

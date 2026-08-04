@@ -77,7 +77,7 @@ beforeEach(() => {
 });
 
 describe("PersonAccess — Zitadel grant id in Advanced (C9a)", () => {
-  it("shows the id, labelled as Zitadel's rather than MkAuth's", () => {
+  it("shows the id, labelled as Zitadel's rather than Syndra's", () => {
     renderPerson(true);
     expect(screen.getByText("zg-77")).toBeInTheDocument();
     expect(document.body.textContent).toMatch(/Zitadel grant/);
@@ -98,7 +98,7 @@ describe("PersonAccess — Zitadel grant id in Advanced (C9a)", () => {
     expect(screen.queryByText("zg-77")).not.toBeInTheDocument();
   });
 
-  // MkAuth listing roles for a project Zitadel has no grant for is a real condition. Saying
+  // Syndra listing roles for a project Zitadel has no grant for is a real condition. Saying
   // "none" names it; a dash would let it read as "not loaded".
   it("says a missing grant is missing, and points at where that gets triaged", () => {
     state.grants = [];

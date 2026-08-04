@@ -1,10 +1,10 @@
 ## Rationale
 
-The sync service is the runtime component of MkAuth's Bridge Plane. It closes the loop between Zitadel identity events (captured as provisioning intents) and LLDAP infrastructure state (group memberships and passwords). The service is deliberately minimal: it has no business logic, no policy decisions, and no public interface — it is a pure executor.
+The sync service is the runtime component of Syndra's Bridge Plane. It closes the loop between Zitadel identity events (captured as provisioning intents) and LLDAP infrastructure state (group memberships and passwords). The service is deliberately minimal: it has no business logic, no policy decisions, and no public interface — it is a pure executor.
 
 Key design choices:
 - **Separate Go module**: No shared code with the backend. The only contract is the REST API. This avoids pulling LDAP dependencies into the backend and keeps deployment units independent.
-- **External LLDAP compatibility**: The sync service is responsible for reaching LLDAP over the network; LLDAP does not need to run inside the MkAuth Docker Compose stack. A separately managed deployment, such as an LLDAP server running in its own Proxmox LXC, is a valid target.
+- **External LLDAP compatibility**: The sync service is responsible for reaching LLDAP over the network; LLDAP does not need to run inside the Syndra Docker Compose stack. A separately managed deployment, such as an LLDAP server running in its own Proxmox LXC, is a valid target.
 - **Zitadel UID as LLDAP uid**: Stable, immutable identifier. `displayName` and `mail` are synced for human readability during manual LLDAP audits.
 - **`member` attribute on group DN**: Standard LDAP group membership pattern. The group entry is modified, not the user entry.
 - **Single LDAP connection + mutex**: LLDAP is a lightweight Rust-based server for small deployments (makerspaces). Connection pooling adds unnecessary complexity.
@@ -13,11 +13,11 @@ Key design choices:
 
 ## Open Question / Research Blocker
 
-The current sync-service design assumes that MkAuth can fetch a pre-hashed shadow credential from the backend and apply it to LLDAP through the normal LDAP write path. That assumption is not yet validated against the real target deployment.
+The current sync-service design assumes that Syndra can fetch a pre-hashed shadow credential from the backend and apply it to LLDAP through the normal LDAP write path. That assumption is not yet validated against the real target deployment.
 
-Before the LLDAP/password bridge is treated as production-ready, MkAuth needs clarity on:
+Before the LLDAP/password bridge is treated as production-ready, Syndra needs clarity on:
 - whether LLDAP accepts the intended password update mechanism at all
-- whether LLDAP accepts pre-hashed credentials in the format MkAuth stores
+- whether LLDAP accepts pre-hashed credentials in the format Syndra stores
 - whether the community-managed Proxmox LXC deployment behaves the same way as upstream-documented LLDAP installs
 
 Until that research is complete, end-to-end password sync to LLDAP is considered paused even though the surrounding sync-service code exists.
@@ -27,7 +27,7 @@ Until that research is complete, end-to-end password sync to LLDAP is considered
 ### 1. Configuration
 
 Environment variables with defaults:
-- `BACKEND_URL` (default `http://backend:8080`), `MKAUTH_API_KEY` (required)
+- `BACKEND_URL` (default `http://backend:8080`), `SYNDRA_API_KEY` (required)
 - `LLDAP_URL` (default `ldaps://lldap:636` for local/containerized development; in production this often points to an external host such as a Proxmox LXC), `LLDAP_BIND_DN` (required), `LLDAP_BIND_PASSWORD` (required), `LLDAP_BASE_DN` (default `dc=example,dc=com`), `LLDAP_INSECURE_SKIP_VERIFY` (default `false`)
 - `SYNC_POLL_INTERVAL` (default `10s`), `SYNC_WORKER_COUNT` (default `5`), `SYNC_INTENT_LIMIT` (default `50`)
 
@@ -40,7 +40,7 @@ Consumes the existing backend API (no backend changes for intent operations):
 - `GET /api/v1/shadow-credentials/{uid}/hash` — get shadow password hash (404 = no credential, not an error)
 - `GET /api/v1/users/{uid}/profile` — get display name + email (new endpoint)
 
-All requests include `Authorization: Bearer <MKAUTH_API_KEY>`.
+All requests include `Authorization: Bearer <SYNDRA_API_KEY>`.
 
 ### 3. LLDAP Client
 
@@ -88,7 +88,7 @@ Sync service added to `docker-compose.yml`:
 - Environment variables for LLDAP connection and polling config
 - `restart: unless-stopped`
 
-LLDAP itself is not required to be part of the same Compose deployment. The supported production shape is that MkAuth runs its own containers while the sync service connects to an externally hosted LLDAP server over `LLDAP_URL`.
+LLDAP itself is not required to be part of the same Compose deployment. The supported production shape is that Syndra runs its own containers while the sync service connects to an externally hosted LLDAP server over `LLDAP_URL`.
 
 ### 8. Graceful Shutdown
 

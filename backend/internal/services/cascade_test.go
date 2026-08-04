@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
-	"mkauth/internal/services/propagation"
+	"syndra/internal/db"
+	"syndra/internal/models"
+	"syndra/internal/services/propagation"
 )
 
 // resetCascadeDeps captures and restores every cascade injectable, mirroring
@@ -344,9 +344,9 @@ func TestEditBundleWorkingCopy_RemoveEnqueuesNothing(t *testing.T) {
 // --- CascadeRuleCreated ---
 
 // TestCascadeRuleCreated_DiscoversHolderAbsentFromGrantIndex is brief test 4 (P1b holder
-// discovery): a user holds the new rule's source role via a bundle — present in MkAuth's own
+// discovery): a user holds the new rule's source role via a bundle — present in Syndra's own
 // tables, but the test never stubs anything resembling the Zitadel grant index. Discovery must
-// come from GetAllKnownUserIDs + userBaseHoldings (MkAuth-side), not a grant-index lookup, so the
+// come from GetAllKnownUserIDs + userBaseHoldings (Syndra-side), not a grant-index lookup, so the
 // user still gets the rule's target.
 func TestCascadeRuleCreated_DiscoversHolderAbsentFromGrantIndex(t *testing.T) {
 	resetCascadeDeps(t)

@@ -3,7 +3,7 @@ package db
 import (
 	"testing"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 func TestHasCycleWithRules(t *testing.T) {

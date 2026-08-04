@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // handleDrainPropagations is the operator's explicit "Resume now" action: it

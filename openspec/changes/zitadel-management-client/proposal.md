@@ -1,6 +1,6 @@
 ## Why
 
-MkAuth's orchestrator has contained the logic for mapping-rule enforcement and role propagation since Phase 2, but the actual Zitadel Management API client was stubbed — `MgmtClient interface{} = nil`. The system ran in "local-policy-only mode": webhook-driven orchestration triggered the code path but every grant operation was a no-op. This blocked the Live Webhook Listener and any production role lifecycle management.
+Syndra's orchestrator has contained the logic for mapping-rule enforcement and role propagation since Phase 2, but the actual Zitadel Management API client was stubbed — `MgmtClient interface{} = nil`. The system ran in "local-policy-only mode": webhook-driven orchestration triggered the code path but every grant operation was a no-op. This blocked the Live Webhook Listener and any production role lifecycle management.
 
 The frontend OIDC token forwarding, backend JWT validation, and webhook HMAC verification were all completed in earlier Phase 3 work, satisfying the security preconditions documented in the design. The M2M client was the final missing piece before the orchestration layer becomes functional.
 

@@ -1,7 +1,7 @@
 # Design — Basic / Advanced IA and real claim shaping
 
 **Roadmap phase:** 5 (operator experience).
-**Related:** [core architecture](../mkauth-core-architecture/design.md) · [application-claims spec](../mkauth-core-architecture/specs/application-claims/spec.md) · [zitadel-actions-v2-deployment](../zitadel-actions-v2-deployment/design.md) · supersedes the visual layer of [obsidian-clarity-redesign](../obsidian-clarity-redesign/proposal.md).
+**Related:** [core architecture](../syndra-core-architecture/design.md) · [application-claims spec](../syndra-core-architecture/specs/application-claims/spec.md) · [zitadel-actions-v2-deployment](../zitadel-actions-v2-deployment/design.md) · supersedes the visual layer of [obsidian-clarity-redesign](../obsidian-clarity-redesign/proposal.md).
 
 ## 1. The two views
 
@@ -28,7 +28,7 @@ Advanced is operator-only and is not rendered for members at all — not greyed,
 | | Before | After |
 |---|---|---|
 | Compiler writes | a finished claim map | facts (`roles`, ids, profile attributes) |
-| Actions v2 emits | the raw cache map, keys namespaced `mkauth.<projectID>.` on multi-project | `claims.Shape(profiles, facts)` |
+| Actions v2 emits | the raw cache map, keys namespaced `syndra.<projectID>.` on multi-project | `claims.Shape(profiles, facts)` |
 | Simulator emits | `{iss, sub, aud, source, project, <claim_name>: …}` | `claims.Shape(profiles, facts)` — the same call |
 | `claim_name` / `format_type` | read only by the simulator | read by both |
 
@@ -46,7 +46,7 @@ The model that is actually true: a token issued for a project carries the projec
 
 ### The collision the old namespacing hid
 
-Two projects nobody has configured both default to `roles`. The old code prefixed every multi-project key with `mkauth.<projectID>.`, which prevented the collision and simultaneously guaranteed no application ever received the key it asked for. Now: keys are explicit and validated, and `mergeProjectClaims` namespaces only keys that two projects both emit — logging loudly and telling the operator to name the claims. Configured keys are never rewritten.
+Two projects nobody has configured both default to `roles`. The old code prefixed every multi-project key with `syndra.<projectID>.`, which prevented the collision and simultaneously guaranteed no application ever received the key it asked for. Now: keys are explicit and validated, and `mergeProjectClaims` namespaces only keys that two projects both emit — logging loudly and telling the operator to name the claims. Configured keys are never rewritten.
 
 ## 3. Removal is source-specific
 

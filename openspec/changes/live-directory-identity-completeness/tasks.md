@@ -44,8 +44,8 @@
 
 - [x] 5.1 Created `openspec/changes/live-directory-identity-completeness/` with `proposal.md`, `design.md`, `tasks.md`.
 - [x] 5.2 Updated `openspec/INDEX.md` — added Change Log row.
-- [x] 5.3 Updated `openspec/changes/mkauth-core-architecture/ROADMAP.md` — Phase 5 bullet.
-- [x] 5.4 Updated `openspec/changes/mkauth-core-architecture/specs/feature-coverage.md` — `application-claims` and `user-management` rows reflect real-apps + metadata overlay.
+- [x] 5.3 Updated `openspec/changes/syndra-core-architecture/ROADMAP.md` — Phase 5 bullet.
+- [x] 5.4 Updated `openspec/changes/syndra-core-architecture/specs/feature-coverage.md` — `application-claims` and `user-management` rows reflect real-apps + metadata overlay.
 
 ## 6. Verification
 

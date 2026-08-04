@@ -1,6 +1,6 @@
 ## 1. Project Scaffolding
 
-- [x] 1.1 Create `sync/go.mod` with `mkauth-sync` module
+- [x] 1.1 Create `sync/go.mod` with `syndra-sync` module
 - [x] 1.2 Create `sync/cmd/sync/main.go` entry point
 - [x] 1.3 Create `sync/Dockerfile` (multi-stage build)
 - [x] 1.4 Create `sync/internal/config/config.go` with `Load()`
@@ -95,6 +95,6 @@
 ## 13. Follow-up Research
 
 - [ ] 13.1 Verify how the real target LLDAP deployment expects password updates to be performed
-- [ ] 13.2 Verify whether the target LLDAP deployment accepts MkAuth's stored pre-hashed Argon2id credential format
+- [ ] 13.2 Verify whether the target LLDAP deployment accepts Syndra's stored pre-hashed Argon2id credential format
 - [ ] 13.3 Verify compatibility specifically against the external Proxmox LXC LLDAP installation
 - [ ] 13.4 Decide whether the current `SetUserPassword` design is valid, needs revision, or should be replaced with a different password-sync model

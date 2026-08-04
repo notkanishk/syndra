@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"mkauth/internal/models"
-	"mkauth/internal/zitadel"
+	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 func swap[T any](dst *T, v T) func() { o := *dst; *dst = v; return func() { *dst = o } }
@@ -81,9 +81,9 @@ func TestSweep_RuleDerivedGrantIsNotDrift(t *testing.T) {
 	}
 }
 
-func TestSweep_MkauthOnlyDirectGrantReEnqueues(t *testing.T) {
+func TestSweep_SyndraOnlyDirectGrantReEnqueues(t *testing.T) {
 	stubSweep(t)
-	// MkAuth expects u1/p1/viewer; Zitadel has nothing → re-enqueue (missed-webhook replay).
+	// Syndra expects u1/p1/viewer; Zitadel has nothing → re-enqueue (missed-webhook replay).
 	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{{UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
 	})()
@@ -98,11 +98,11 @@ func TestSweep_MkauthOnlyDirectGrantReEnqueues(t *testing.T) {
 		t.Fatal(err)
 	}
 	if opType != "add" || res.ReEnqueued != 1 {
-		t.Fatalf("mkauth_only direct grant must re-enqueue an add, got op=%q res=%+v", opType, res)
+		t.Fatalf("syndra_only direct grant must re-enqueue an add, got op=%q res=%+v", opType, res)
 	}
 }
 
-func TestSweep_MkauthOnlySkipsReEnqueueWhenPendingOutboxAdd(t *testing.T) {
+func TestSweep_SyndraOnlySkipsReEnqueueWhenPendingOutboxAdd(t *testing.T) {
 	stubSweep(t)
 	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{{UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil

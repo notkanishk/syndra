@@ -255,7 +255,7 @@ function ProfileForm({
             spellCheck={false}
             onChange={(event) => setClaimName(event.target.value)}
             className="min-w-[240px] flex-1 font-mono text-[13.5px]"
-            placeholder="mkauth.laser.roles"
+            placeholder="syndra.laser.roles"
           />
           <Segmented<ClaimFormat>
             label="Claim format"
@@ -304,7 +304,7 @@ function ProfileForm({
                   value={extra.key}
                   spellCheck={false}
                   aria-label="Claim key"
-                  placeholder="mkauth.laser.email"
+                  placeholder="syndra.laser.email"
                   onChange={(event) =>
                     setExtras((prev) => replace(prev, index, { ...extra, key: event.target.value }))
                   }

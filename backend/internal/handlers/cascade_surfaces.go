@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
+	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
 // resolveConfirmationMode returns reqMode (normalized) when the caller supplied one, else the

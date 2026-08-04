@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
-	"mkauth/internal/zitadel"
+	"syndra/internal/db"
+	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 // --- demoSource passthrough -------------------------------------------------
@@ -295,7 +295,7 @@ func TestZitadelSource_Applications_OverlayAppliesPerProject(t *testing.T) {
 	src := newZitadelSourceForTest(mc)
 	src.listClaimProfiles = func(context.Context) ([]db.ClaimProfileRow, error) {
 		return []db.ClaimProfileRow{
-			{ProjectID: "p1", ClaimName: "x_mkauth_roles", FormatType: "csv"},
+			{ProjectID: "p1", ClaimName: "x_syndra_roles", FormatType: "csv"},
 		}, nil
 	}
 
@@ -311,7 +311,7 @@ func TestZitadelSource_Applications_OverlayAppliesPerProject(t *testing.T) {
 		byID[a.ID] = a
 	}
 	for _, id := range []string{"app-a", "app-b"} {
-		if byID[id].ClaimName != "x_mkauth_roles" || byID[id].FormatType != "csv" {
+		if byID[id].ClaimName != "x_syndra_roles" || byID[id].FormatType != "csv" {
 			t.Fatalf("%s should inherit p1 overlay, got claim=%q format=%q", id, byID[id].ClaimName, byID[id].FormatType)
 		}
 	}

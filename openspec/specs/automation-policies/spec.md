@@ -18,7 +18,7 @@ When an operator changes bundle membership, bundle role composition, or a mappin
 - **WHEN** a bundle granting role A is assigned to a user, and an active mapping rule maps A to a target role B
 - **AND** the user did not already effectively hold B
 - **THEN** the backend MUST enqueue an add for BOTH A and B, attributed to the bundle (`source='bundle'`, `source_ref=<bundle.id>`)
-- **AND** this MUST hold regardless of whether the user already has any Zitadel-side grant recorded in the grant index — holder discovery reads MkAuth's own bundle/direct-grant tables, not the grant index
+- **AND** this MUST hold regardless of whether the user already has any Zitadel-side grant recorded in the grant index — holder discovery reads Syndra's own bundle/direct-grant tables, not the grant index
 
 #### Scenario: Closure coverage suppresses a revoke when another source still grants the role
 

@@ -1,19 +1,19 @@
 ## Why
 
-MkAuth had no local role storage, no role creation workflow, and no global role catalog. Roles existed only as opaque `(projectID, roleKey)` references scattered across `bundle_roles`, `mapping_rules`, and `direct_role_grants`. Creating a new role required manual Zitadel console interaction. There was no way to clone role metadata for accelerated setup, and no consolidated inventory for auditing unused or orphaned roles across projects.
+Syndra had no local role storage, no role creation workflow, and no global role catalog. Roles existed only as opaque `(projectID, roleKey)` references scattered across `bundle_roles`, `mapping_rules`, and `direct_role_grants`. Creating a new role required manual Zitadel console interaction. There was no way to clone role metadata for accelerated setup, and no consolidated inventory for auditing unused or orphaned roles across projects.
 
 ## What Changes
 
 * Adds a `roles` table (migration 000008) for locally-managed role metadata with `UNIQUE(zitadel_project_id, role_key)` constraint and clone provenance columns.
 * Extends `ZitadelClient` with `AddProjectRole`, `ListProjectRoles`, and `UpdateProjectRole` methods for Zitadel Management API v1 role endpoints.
 * Adds `POST /api/v1/roles` endpoint for role creation with optional `clone_from` parameter. When cloning, source role metadata (display name, description) is resolved from local DB or demo catalog and pre-populated into the new role. The role is propagated to Zitadel and persisted locally with provenance tracking.
-* Adds `GET /api/v1/roles` endpoint returning a global role catalog — a computed merge of three sources (local MkAuth roles, demo catalog, DB-referenced roles) with per-role usage counts (bundles, mapping rules, assigned users) and unused flagging.
+* Adds `GET /api/v1/roles` endpoint returning a global role catalog — a computed merge of three sources (local Syndra roles, demo catalog, DB-referenced roles) with per-role usage counts (bundles, mapping rules, assigned users) and unused flagging.
 * Global disambiguation via `DisplayLabel` field (`"ProjectName: DisplayName"` format). **Superseded** — see `ui-capability-gap-closure`.
 
 ## Capabilities
 
 ### New Capabilities
-* `role-creation`: Create roles in Zitadel projects via MkAuth with local metadata persistence.
+* `role-creation`: Create roles in Zitadel projects via Syndra with local metadata persistence.
 * `role-cloning`: Snapshot & Fork — clone existing role metadata when creating new roles.
 * `global-role-catalog`: Consolidated role inventory with usage metrics and unused detection.
 * `role-disambiguation`: Project-prefixed display labels in global views. **Relocated to the UI** by `ui-capability-gap-closure` — a server-composed label only exists on catalog rows, so it could not reach the grant, audit and request surfaces where two same-key roles actually collide.

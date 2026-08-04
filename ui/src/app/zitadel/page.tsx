@@ -32,7 +32,7 @@ interface RotationStatus {
  *
  * Health is a SENTENCE with a cause and a timestamp, never a green or red dot
  * on its own. A dot tells an operator that something is wrong and nothing else;
- * the sentence tells them what broke, when it last worked, and what MkAuth is
+ * the sentence tells them what broke, when it last worked, and what Syndra is
  * doing about it in the meantime.
  */
 export default function IdentityProviderPage() {
@@ -92,7 +92,7 @@ export default function IdentityProviderPage() {
               : `${projects.data?.length ?? 0}`
           }
           tone="neutral"
-          detail={live ? "As of the last successful read." : "From MkAuth's own cache."}
+          detail={live ? "As of the last successful read." : "From Syndra's own cache."}
         />
         <StatCard
           label="Mode"
@@ -100,8 +100,8 @@ export default function IdentityProviderPage() {
           tone={health.data?.mode === "live" ? "neutral" : "warn"}
           detail={
             health.data?.mode === "live"
-              ? "MkAuth reads and writes the real directory."
-              : "No management client is configured, so nothing MkAuth decides reaches a machine."
+              ? "Syndra reads and writes the real directory."
+              : "No management client is configured, so nothing Syndra decides reaches a machine."
           }
         />
       </div>
@@ -193,7 +193,7 @@ function SigningKey({
         )}
 
         <p className="max-w-[84ch] text-[13.5px] leading-[1.55] text-muted">
-          Between the rotation and the restart, MkAuth rejects Action calls as unsigned and Zitadel
+          Between the rotation and the restart, Syndra rejects Action calls as unsigned and Zitadel
           issues tokens with stock claims only. Nobody is locked out — custom claims simply go
           missing for the length of the gap, so keep it short and do it outside a session.
         </p>
@@ -251,7 +251,7 @@ function HealthVerdict({
           Reachable — answered in {latency ?? 0}ms.
         </div>
         <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-          MkAuth is reading the live directory. Queued writes drain as they are confirmed.
+          Syndra is reading the live directory. Queued writes drain as they are confirmed.
         </p>
       </div>
     );
@@ -265,12 +265,12 @@ function HealthVerdict({
         }`}
       >
         {notConfigured
-          ? "Not configured — MkAuth is running on local policy only."
+          ? "Not configured — Syndra is running on local policy only."
           : "Unreachable — the last call to the identity provider failed."}
       </div>
       <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
         {detail ||
-          "MkAuth is serving its own cache. Nothing is lost: writes stay queued and in order until it returns."}
+          "Syndra is serving its own cache. Nothing is lost: writes stay queued and in order until it returns."}
       </p>
     </div>
   );
@@ -318,7 +318,7 @@ function UpstreamInspection({ reachable }: { reachable: boolean }) {
     <Card>
       <CardHeader
         title="Inspect upstream directly"
-        note="What the identity provider holds, not what MkAuth thinks it holds."
+        note="What the identity provider holds, not what Syndra thinks it holds."
       />
       {rows.map((row) => (
         <div key={row.path} className="row-divider flex flex-wrap items-center gap-4 px-5 py-3.5">
@@ -348,7 +348,7 @@ function UpstreamInspection({ reachable }: { reachable: boolean }) {
 /**
  * The escape hatches, deliberately collapsed and deliberately loud.
  *
- * These write to the identity provider WITHOUT going through MkAuth's ledger
+ * These write to the identity provider WITHOUT going through Syndra's ledger
  * or outbox, which means the next cache compile can quietly undo them and the
  * drift sweep will report them as unexplained access created by a stranger.
  * They exist because sometimes the only way out of a broken state is to reach
@@ -378,11 +378,11 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
               Do not use these unless nothing else will do.
             </div>
             <p className="mt-1 max-w-[86ch] text-[14px] leading-[1.55] text-muted">
-              Everything here bypasses MkAuth entirely — no ledger row, no outbox entry, no audit
+              Everything here bypasses Syndra entirely — no ledger row, no outbox entry, no audit
               trail tying the change to a decision. Three things follow from that. The next cache
               compile can overwrite what you did. The drift sweep will report it as unexplained
               access created by somebody it cannot name. And nobody reading Change history
-              afterwards will find out it happened. Prefer the equivalent action in MkAuth: grant
+              afterwards will find out it happened. Prefer the equivalent action in Syndra: grant
               from a person&rsquo;s page, remove from role membership, edit roles under Access.
             </p>
           </div>

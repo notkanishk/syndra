@@ -1,6 +1,6 @@
 ## Why
 
-MkAuth can emit provisioning intents and store shadow credentials, but nothing consumes those intents to execute actual LLDAP mutations. Users who gain or lose roles in Zitadel see no change in their LLDAP group memberships or Samba access. The Bridge Plane described in the architecture has no runtime implementation.
+Syndra can emit provisioning intents and store shadow credentials, but nothing consumes those intents to execute actual LLDAP mutations. Users who gain or lose roles in Zitadel see no change in their LLDAP group memberships or Samba access. The Bridge Plane described in the architecture has no runtime implementation.
 
 ## What Changes
 
@@ -27,9 +27,9 @@ MkAuth can emit provisioning intents and store shadow credentials, but nothing c
 
 ## Research Status
 
-This change is implemented in code, but one part of the design remains unresolved: whether MkAuth's current password propagation model is actually compatible with the target LLDAP deployment, especially the externally hosted Proxmox LXC installation.
+This change is implemented in code, but one part of the design remains unresolved: whether Syndra's current password propagation model is actually compatible with the target LLDAP deployment, especially the externally hosted Proxmox LXC installation.
 
-Because of that uncertainty, the LLDAP password-sync portion of this capability is paused pending research and real-environment validation. Other MkAuth work can continue independently.
+Because of that uncertainty, the LLDAP password-sync portion of this capability is paused pending research and real-environment validation. Other Syndra work can continue independently.
 
 ## Impact
 

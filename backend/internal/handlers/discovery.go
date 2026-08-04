@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"time"
 
-	"mkauth/internal/db"
-	"mkauth/internal/directory"
-	"mkauth/internal/zitadel"
+	"syndra/internal/db"
+	"syndra/internal/directory"
+	"syndra/internal/zitadel"
 )
 
 // --- Request types ---

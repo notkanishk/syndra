@@ -1,5 +1,5 @@
--- Role metadata for MkAuth-managed roles.
--- Roles created through MkAuth are propagated to Zitadel and cached locally.
+-- Role metadata for Syndra-managed roles.
+-- Roles created through Syndra are propagated to Zitadel and cached locally.
 -- Demo catalog and Zitadel-only roles are NOT stored here; the global catalog
 -- merges sources at query time.
 

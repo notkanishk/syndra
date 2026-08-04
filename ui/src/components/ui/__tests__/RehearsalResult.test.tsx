@@ -5,7 +5,7 @@ import type { BulkPlan, BulkSummary } from "@/lib/queries/useBulkGrants";
 
 /**
  * The toast is where an apply's outcome actually reaches a person, and it used
- * to report `succeeded` alone. Rows MkAuth had written down but never got to
+ * to report `succeeded` alone. Rows Syndra had written down but never got to
  * Zitadel were simply absent from the sentence, so a bulk removal whose drain
  * was refused announced "12 people updated" while every one of those roles was
  * still live.

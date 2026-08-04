@@ -3,7 +3,7 @@ package demo
 import (
 	"slices"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 var users = []models.UserProfile{
@@ -89,7 +89,7 @@ var applications = []models.ApplicationCatalog{
 		ProjectID:   "printing",
 		Description: "Queue, certify, and track work orders for 3D print jobs.",
 		Consumer:    "Next.js member portal",
-		ClaimName:   "x_mkauth_roles",
+		ClaimName:   "x_syndra_roles",
 		FormatType:  "array",
 	},
 	{
@@ -161,7 +161,7 @@ func Applications() []models.ApplicationCatalog {
 // Zitadel ids are numeric snowflakes, so a stored `wiki` or `leo_mentor` in a
 // live deployment can only have come from the seeder.
 //
-// This exists because MKAUTH_SEED_DEMO answers the wrong question. It says
+// This exists because SYNDRA_SEED_DEMO answers the wrong question. It says
 // whether THIS process seeded; it says nothing about rows a previous process
 // left behind. An operator who sets it to false and restarts gets a backend
 // that reports no demo data while still serving all of it.

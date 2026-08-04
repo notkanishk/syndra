@@ -26,7 +26,7 @@ export default async function LoginPage() {
             <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-accent font-display text-[17px] font-bold text-accent-ink">
               m
             </span>
-            <span className="font-display text-[20px] font-semibold tracking-[-0.01em]">MkAuth</span>
+            <span className="font-display text-[20px] font-semibold tracking-[-0.01em]">Syndra</span>
           </div>
 
           <h1 className="font-display text-[62px] font-semibold leading-[0.96] tracking-[-0.03em]">
@@ -36,7 +36,7 @@ export default async function LoginPage() {
           </h1>
           <p className="mt-6 max-w-[46ch] text-[17px] leading-[1.55] text-muted">
             {isOidcMode
-              ? "Sign in with your makerspace account. Your token is forwarded to MkAuth and verified on every request."
+              ? "Sign in with your makerspace account. Your token is forwarded to Syndra and verified on every request."
               : "Local development. Pick an identity to exercise the operator and member surfaces without a live identity provider."}
           </p>
         </section>

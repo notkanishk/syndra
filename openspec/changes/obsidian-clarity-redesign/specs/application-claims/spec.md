@@ -4,30 +4,30 @@
 
 ### Requirement: Operators MUST have a global grants viewer at /grants
 
-The dashboard MUST expose a `/grants` admin route surfacing the union of MkAuth-direct grants, derived grants, and Zitadel grants (via `GET /api/v1/zitadel/grants`). Each row MUST resolve user/project/role names; the grant source (mkauth/zitadel/derived) MUST be visible.
+The dashboard MUST expose a `/grants` admin route surfacing the union of Syndra-direct grants, derived grants, and Zitadel grants (via `GET /api/v1/zitadel/grants`). Each row MUST resolve user/project/role names; the grant source (syndra/zitadel/derived) MUST be visible.
 
 #### Scenario: All grants table renders resolved names
 - **WHEN** an admin opens `/grants` "All grants" tab
 - **THEN** each row MUST display user via `<UserName/>`, project via `<ProjectName/>`, role via `<RoleName/>`
-- **AND** each row MUST display a "Source" pill (mkauth-direct / zitadel-only / derived-from-rule)
+- **AND** each row MUST display a "Source" pill (syndra-direct / zitadel-only / derived-from-rule)
 - **AND** filter pills for project, user, source MUST be present on the filter rail
 
 #### Scenario: All grants tab is admin-gated
 - **WHEN** a non-admin session navigates to `/grants`
 - **THEN** the RSC layer MUST redirect to `/`
 
-### Requirement: Reconciliation viewer MUST diff MkAuth vs Zitadel grants
+### Requirement: Reconciliation viewer MUST diff Syndra vs Zitadel grants
 
-The `/grants` page MUST include a "Reconciliation" tab that renders the three drift categories returned by `GET /api/v1/reconciliation/grants`: `only_in_mkauth`, `only_in_zitadel`, and `drift` (role-set mismatches). The viewer is read-only; no remediation action MAY be invoked from this surface.
+The `/grants` page MUST include a "Reconciliation" tab that renders the three drift categories returned by `GET /api/v1/reconciliation/grants`: `only_in_syndra`, `only_in_zitadel`, and `drift` (role-set mismatches). The viewer is read-only; no remediation action MAY be invoked from this surface.
 
 #### Scenario: Drift summary card
 - **WHEN** the Reconciliation tab renders
-- **THEN** a summary card MUST show three counts: only-in-mkauth, only-in-zitadel, role-mismatch
+- **THEN** a summary card MUST show three counts: only-in-syndra, only-in-zitadel, role-mismatch
 - **AND** each count MUST be clickable to scope the table below
 
 #### Scenario: Drift row detail
 - **WHEN** an admin clicks a drift row
-- **THEN** a `<Drawer/>` MUST open showing both the MkAuth and Zitadel grant records side-by-side via `<JsonView/>`
+- **THEN** a `<Drawer/>` MUST open showing both the Syndra and Zitadel grant records side-by-side via `<JsonView/>`
 - **AND** the differing fields MUST be highlighted (consistent with the Token Simulator compare highlight pattern)
 
 #### Scenario: No remediation actions present

@@ -3,7 +3,7 @@
 > **Status:** Archived. Bun adoption is complete. The UI uses `bun.lock`, `bun run`, and `oven/bun` Docker images. This change is closed.
 
 ## Objective
-Transition the MkAuth UI to a **Bun-native** ecosystem. This replaces the legacy Node.js environment with an all-in-one toolkit that optimizes build times and simplifies the containerized runtime stack.
+Transition the Syndra UI to a **Bun-native** ecosystem. This replaces the legacy Node.js environment with an all-in-one toolkit that optimizes build times and simplifies the containerized runtime stack.
 
 ## Scope
 - **Development**: Migrate all local scripts and dev servers to `bun run`.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // mockClient records calls to the ZitadelClient interface.

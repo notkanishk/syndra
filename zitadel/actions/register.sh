@@ -34,7 +34,7 @@
 #
 # Required env:
 #   ZITADEL_DOMAIN            e.g. your-instance.zitadel.cloud
-#   MKAUTH_EXTERNAL_URL       Base URL Zitadel should POST to (e.g. https://mkauth.internal)
+#   SYNDRA_EXTERNAL_URL       Base URL Zitadel should POST to (e.g. https://syndra.internal)
 #
 # Required one of (for M2M auth):
 #   ZITADEL_M2M_TOKEN         Access token minted ahead of time
@@ -78,7 +78,7 @@ source "${REPO_ROOT}/scripts/lib/load-env.sh"
 unset _ENV_FILE
 
 : "${ZITADEL_DOMAIN:?ZITADEL_DOMAIN is required (set in .env or export)}"
-: "${MKAUTH_EXTERNAL_URL:?MKAUTH_EXTERNAL_URL is required (where Zitadel will POST; set in .env or export)}"
+: "${SYNDRA_EXTERNAL_URL:?SYNDRA_EXTERNAL_URL is required (where Zitadel will POST; set in .env or export)}"
 
 for bin in curl jq; do
   command -v "$bin" >/dev/null 2>&1 || { echo "error: $bin not installed" >&2; exit 1; }
@@ -87,7 +87,7 @@ done
 # ---- Resolve M2M access token ----
 # Order of preference: an explicit ZITADEL_M2M_TOKEN (useful for CI or ops
 # hosts without a Go toolchain), else mint one from the service-account key
-# via `backend/cmd/mkauth-token`. The mint helper must run inside the
+# via `backend/cmd/syndra-token`. The mint helper must run inside the
 # `backend` module root so `go run` can resolve imports — which means we
 # first need to pin ZITADEL_MACHINE_KEY_PATH to an absolute path, because
 # `.env.example` documents it as "relative paths resolve against the
@@ -105,14 +105,14 @@ elif [[ -n "${ZITADEL_MACHINE_KEY_PATH:-}" ]]; then
   export ZITADEL_MACHINE_KEY_PATH="$_abs_key"
   unset _abs_key
 
-  echo "Minting M2M token via backend/cmd/mkauth-token..." >&2
+  echo "Minting M2M token via backend/cmd/syndra-token..." >&2
   BACKEND_DIR="${REPO_ROOT}/backend"
-  if ! TOKEN="$(cd "$BACKEND_DIR" && go run ./cmd/mkauth-token)"; then
-    echo "error: could not mint M2M token from ZITADEL_MACHINE_KEY_PATH — see mkauth-token stderr above, or provide ZITADEL_M2M_TOKEN directly" >&2
+  if ! TOKEN="$(cd "$BACKEND_DIR" && go run ./cmd/syndra-token)"; then
+    echo "error: could not mint M2M token from ZITADEL_MACHINE_KEY_PATH — see syndra-token stderr above, or provide ZITADEL_M2M_TOKEN directly" >&2
     exit 2
   fi
   if [[ -z "$TOKEN" ]]; then
-    echo "error: mkauth-token returned an empty token" >&2
+    echo "error: syndra-token returned an empty token" >&2
     exit 2
   fi
 else
@@ -129,11 +129,11 @@ source "${REPO_ROOT}/scripts/lib/zitadel-api.sh"
 
 # ---- Render targets.json ----
 # Strip _comment/_note annotations (JSON-illegal per Zitadel's strict decoder)
-# and substitute ${MKAUTH_EXTERNAL_URL} in any endpoint string.
-RENDERED_MANIFEST="$(jq --arg url "$MKAUTH_EXTERNAL_URL" '
+# and substitute ${SYNDRA_EXTERNAL_URL} in any endpoint string.
+RENDERED_MANIFEST="$(jq --arg url "$SYNDRA_EXTERNAL_URL" '
   walk(
-    if type == "string" and test("\\$\\{MKAUTH_EXTERNAL_URL\\}")
-    then sub("\\$\\{MKAUTH_EXTERNAL_URL\\}"; $url)
+    if type == "string" and test("\\$\\{SYNDRA_EXTERNAL_URL\\}")
+    then sub("\\$\\{SYNDRA_EXTERNAL_URL\\}"; $url)
     else . end
   )
   | walk(

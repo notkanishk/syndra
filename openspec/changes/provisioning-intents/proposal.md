@@ -1,6 +1,6 @@
 ## Why
 
-MkAuth had no mechanism to bridge Zitadel identity events to legacy infrastructure. When a user gained or lost a role in Zitadel, there was no way to propagate that change to LLDAP for Samba/UniFi access. The webhook handler processed grant events for Zitadel orchestration and cache invalidation, but the Bridge Plane described in the architecture design had no implementation.
+Syndra had no mechanism to bridge Zitadel identity events to legacy infrastructure. When a user gained or lost a role in Zitadel, there was no way to propagate that change to LLDAP for Samba/UniFi access. The webhook handler processed grant events for Zitadel orchestration and cache invalidation, but the Bridge Plane described in the architecture design had no implementation.
 
 ## What Changes
 

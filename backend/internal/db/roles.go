@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // -------------------------------------------------------------
@@ -23,7 +23,7 @@ type RoleUsage struct {
 // ErrDuplicateRole is returned when a role with the same (project, key) already exists.
 var ErrDuplicateRole = errors.New("role already exists")
 
-// CreateRole persists a new MkAuth-managed role. Returns the ID on success.
+// CreateRole persists a new Syndra-managed role. Returns the ID on success.
 // Returns ErrDuplicateRole if the (project, roleKey) pair already exists.
 func CreateRole(ctx context.Context, projectID, roleKey, displayName, description, group, createdBy string,
 	clonedFromProject, clonedFromRole *string) (string, error) {
@@ -75,7 +75,7 @@ func GetRole(ctx context.Context, projectID, roleKey string) (models.Role, error
 	return r, nil
 }
 
-// GetAllLocalRoles returns all roles created through MkAuth.
+// GetAllLocalRoles returns all roles created through Syndra.
 func GetAllLocalRoles(ctx context.Context) ([]models.Role, error) {
 	query := `
 		SELECT id, zitadel_project_id, role_key, display_name, description, role_group,

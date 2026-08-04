@@ -329,7 +329,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
  * next to a project name is noise around the thing that matters.
  *
  * Four states, and none of them guesses. An absent grant is stated as absent rather than shown
- * as a dash: MkAuth listing roles for a project Zitadel has no grant for is a real condition,
+ * as a dash: Syndra listing roles for a project Zitadel has no grant for is a real condition,
  * and naming it is not the same as interpreting it — Reconciliation is where that gets triaged.
  */
 function ZitadelGrantId({

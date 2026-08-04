@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"mkauth/internal/auth"
-	"mkauth/internal/directory"
-	"mkauth/internal/models"
+	"syndra/internal/auth"
+	"syndra/internal/directory"
+	"syndra/internal/models"
 )
 
 type stubDirectory struct {

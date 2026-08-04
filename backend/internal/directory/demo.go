@@ -3,8 +3,8 @@ package directory
 import (
 	"context"
 
-	"mkauth/internal/demo"
-	"mkauth/internal/models"
+	"syndra/internal/demo"
+	"syndra/internal/models"
 )
 
 // demoSource is a thin delegate over the demo.* helpers. Used for local-dev

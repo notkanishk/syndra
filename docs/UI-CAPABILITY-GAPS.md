@@ -1,4 +1,4 @@
-# MkAuth — UI Capability Gaps
+# Syndra — UI Capability Gaps
 
 > What the product can do that the console does not let anybody do.
 > Audited 2026-08-02 against `465bdb5` (= the revision running on the deployment).
@@ -339,7 +339,7 @@ migration `000010`. Design brief §S10 names all four. A member has no way to se
 hardware bridge reads.
 
 This is adjacent to the parked LLDAP work but is **not blocked by it**: the vault is self-service
-credential storage inside MkAuth and works whether or not LLDAP is reachable. The sync service's
+credential storage inside Syndra and works whether or not LLDAP is reachable. The sync service's
 read path (`GET /shadow-credentials/{uid}/hash`, API-key auth) is the part that waits on LLDAP.
 
 ### B2 · `GET /api/v1/propagations/cascades` — orphaned
@@ -578,7 +578,7 @@ Brief §E3: in System, the person page "gains raw grant ids, cascade lineage, ha
 appended in place, same URL."
 
 **C9a · Raw grant ids — done.** The Advanced panel already showed `direct_role_grants.id`, which
-answers "what does MkAuth think" rather than "what does Zitadel hold". It now also shows Zitadel's
+answers "what does Syndra think" rather than "what does Zitadel hold". It now also shows Zitadel's
 own user-grant id, keyed by **project** because that is Zitadel's shape — one grant carries every
 role a person holds there, and repeating it per role row would imply otherwise. Operator-only and
 not fetched otherwise: this route also serves a member their own record, and the endpoint behind it
@@ -620,10 +620,10 @@ reveal is a two-screen pattern that the brief assumes is general.
 
 Deployment at `198.51.100.16` runs `465bdb5` — current with `main`.
 
-**`mkauth_sync` is crash-looping.** Restarts roughly every 60 seconds:
+**`syndra_sync` is crash-looping.** Restarts roughly every 60 seconds:
 
 ```
-[SYNC] MkAuth Sync Service starting...
+[SYNC] Syndra Sync Service starting...
 [SYNC] Configuration error: LLDAP_BIND_PASSWORD is required
 ```
 

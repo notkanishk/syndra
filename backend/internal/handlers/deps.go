@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	"mkauth/internal/auth"
-	"mkauth/internal/cache"
-	"mkauth/internal/db"
-	"mkauth/internal/services"
-	"mkauth/internal/services/drift"
-	"mkauth/internal/services/propagation"
-	"mkauth/internal/zitadel"
+	"syndra/internal/auth"
+	"syndra/internal/cache"
+	"syndra/internal/db"
+	"syndra/internal/services"
+	"syndra/internal/services/drift"
+	"syndra/internal/services/propagation"
+	"syndra/internal/zitadel"
 )
 
 var (
@@ -24,7 +24,7 @@ var (
 	dbUpsertDirectGrant = db.UpsertDirectGrant
 	dbGetAccessRequests = db.GetAccessRequests
 
-	// Outbox: every MkAuth-mediated Zitadel grant mutation flows through the
+	// Outbox: every Syndra-mediated Zitadel grant mutation flows through the
 	// transactional enqueue (ledger+audit+outbox), drained explicitly by the
 	// operator. The handlers no longer call Zitadel grant APIs directly (B4/D3).
 	dbEnqueueDirectGrantPropagation = db.EnqueueDirectGrantPropagation
@@ -121,7 +121,7 @@ var (
 	dbListUserGrantsLive = listUserGrantsViaZitadel
 
 	// Real-time webhook drift detection (C6): a surviving grant_added event
-	// (already past the self-mutation guard) that MkAuth neither expects nor
+	// (already past the self-mutation guard) that Syndra neither expects nor
 	// has excluded is out-of-band drift. See detectWebhookDrift in webhook.go.
 	dbUpsertDriftItemWithEvidence = db.UpsertDriftItemWithEvidence
 	dbHasExclusion                = func(ctx context.Context, u, p, r string) (bool, error) {
@@ -131,7 +131,7 @@ var (
 		}
 		return services.IsExcluded(ex, u, p, r), nil
 	}
-	// svcUserExpectsRole reports whether MkAuth already expects (project,role)
+	// svcUserExpectsRole reports whether Syndra already expects (project,role)
 	// for the user — via direct grant, bundle, or mapping rule. Reuses the
 	// existing per-user resolver so the webhook's "is this explained?" check is
 	// one function, not a re-implementation.

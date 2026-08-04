@@ -4,13 +4,13 @@
 
 ## Context
 
-`zitadel-actions-v2-deployment` shipped function-trigger Actions v2 for claim injection. The webhook listener at `/api/webhooks/zitadel` (from `live-webhook-listener`) was producer-less — its HMAC scheme and payload contract were MkAuth-internal, never reachable from Zitadel without a translator. This change closes that loop by registering a second Actions v2 target with `condition.event` executions and converging the two webhook authentication paths onto the canonical Zitadel-Signature scheme already used by `/api/action/inject`.
+`zitadel-actions-v2-deployment` shipped function-trigger Actions v2 for claim injection. The webhook listener at `/api/webhooks/zitadel` (from `live-webhook-listener`) was producer-less — its HMAC scheme and payload contract were Syndra-internal, never reachable from Zitadel without a translator. This change closes that loop by registering a second Actions v2 target with `condition.event` executions and converging the two webhook authentication paths onto the canonical Zitadel-Signature scheme already used by `/api/action/inject`.
 
 ## Decisions
 
 ### D1. Two targets, not one
 
-Function triggers (claim injection) need `restCall` so Zitadel parses the response body. Event triggers need `restAsync` so Zitadel does not block the actor's request on MkAuth latency. Mixing both on one target is impossible — `target_type` is a oneof. Conclusion: two distinct targets, each with its own signing key, bound to disjoint trigger sets.
+Function triggers (claim injection) need `restCall` so Zitadel parses the response body. Event triggers need `restAsync` so Zitadel does not block the actor's request on Syndra latency. Mixing both on one target is impossible — `target_type` is a oneof. Conclusion: two distinct targets, each with its own signing key, bound to disjoint trigger sets.
 
 ### D2. Reuse `withZitadelActionSignature`, retire the legacy verifier
 
@@ -18,7 +18,7 @@ Function triggers (claim injection) need `restCall` so Zitadel parses the respon
 
 ### D3. Translator keyed off shape, not Content-Type
 
-Zitadel's event payload follows the `ContextInfoEvent` wire format (`zitadel/zitadel:internal/repository/execution/queue.go`): flat top-level fields `aggregateID`, `aggregateType`, `event_type`, `event_payload`, `userID` (the editor — NOT the subject). MkAuth's internal `WebhookPayload` has top-level `event_type` + `user_id` and no `aggregateID`. The two are unambiguously distinguishable by probing for `aggregateID`. `HandleZitadelWebhook` peeks at the parsed JSON, picks the path, and produces a `WebhookPayload` in either case. No Content-Type sniffing.
+Zitadel's event payload follows the `ContextInfoEvent` wire format (`zitadel/zitadel:internal/repository/execution/queue.go`): flat top-level fields `aggregateID`, `aggregateType`, `event_type`, `event_payload`, `userID` (the editor — NOT the subject). Syndra's internal `WebhookPayload` has top-level `event_type` + `user_id` and no `aggregateID`. The two are unambiguously distinguishable by probing for `aggregateID`. `HandleZitadelWebhook` peeks at the parsed JSON, picks the path, and produces a `WebhookPayload` in either case. No Content-Type sniffing.
 
 ### D4. `role_keys[]` plural in WebhookPayload, not fan-out in translator
 
@@ -34,7 +34,7 @@ When the backend calls Zitadel's Management API (e.g. `RemoveUserGrant` from `Re
 - Editor check: drop events where the `ContextInfoEvent` top-level `userID` equals `ZITADEL_M2M_USER_ID`.
 - Idempotency safety net: existing `webhook_events.idempotency_key` dedup.
 
-Editor check is the primary defense; idempotency is the backup. The env var is the service-user ID Zitadel returns when MkAuth authenticates with the M2M JWT-profile flow — captured manually on first deploy. Unset env var disables the guard with a startup log warning (acceptable for local-dev).
+Editor check is the primary defense; idempotency is the backup. The env var is the service-user ID Zitadel returns when Syndra authenticates with the M2M JWT-profile flow — captured manually on first deploy. Unset env var disables the guard with a startup log warning (acceptable for local-dev).
 
 ### D6. Welcome-bundle assignment requires no new code
 
@@ -51,7 +51,7 @@ Zitadel's exact event-type strings for grants (`user.user.grant.added` vs `user.
 ## Rejected alternatives
 
 - **Keep both HMAC schemes (legacy + Actions v2).** No producer for the legacy scheme exists; carrying both is dead code with no upside.
-- **Single target with both function and event triggers.** Zitadel's `target_type` oneof forbids this; even if it didn't, `restCall` blocks on MkAuth latency, which is unacceptable for token issuance and irrelevant for events.
+- **Single target with both function and event triggers.** Zitadel's `target_type` oneof forbids this; even if it didn't, `restCall` blocks on Syndra latency, which is unacceptable for token issuance and irrelevant for events.
 - **Fan-out role_keys at translator time** (D4 alternative).
 - **Inline event-name regex matching against `event.eventType` strings.** Brittle. Explicit map in the translator is testable and auditable.
 

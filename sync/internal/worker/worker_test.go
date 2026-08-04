@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"mkauth-sync/internal/backend"
-	ldapclient "mkauth-sync/internal/ldap"
+	"syndra-sync/internal/backend"
+	ldapclient "syndra-sync/internal/ldap"
 
 	ldapv3 "github.com/go-ldap/ldap/v3"
 )

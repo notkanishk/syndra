@@ -3,11 +3,11 @@
 // a small package whose external effects are injectable function vars so the
 // drain logic is testable without a live Zitadel or DB.
 //
-// Doctrine: every MkAuth-mediated Zitadel grant mutation is first written to the
+// Doctrine: every Syndra-mediated Zitadel grant mutation is first written to the
 // durable ledger + outbox (db.EnqueueDirectGrantPropagation), then propagated
 // here. `applied` (synchronous 2xx, or an idempotent 409 AlreadyExists) is
 // terminal success — there is no `confirmed` state, because the self-mutation
-// guard drops MkAuth's own grant webhook events (design Decision 1).
+// guard drops Syndra's own grant webhook events (design Decision 1).
 package propagation
 
 import (
@@ -16,8 +16,8 @@ import (
 	"os"
 	"strconv"
 
-	"mkauth/internal/db"
-	"mkauth/internal/zitadel"
+	"syndra/internal/db"
+	"syndra/internal/zitadel"
 )
 
 // Injectable dependencies — save/swap/restore in tests (see expiry/deps.go).

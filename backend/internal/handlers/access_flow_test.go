@@ -9,16 +9,16 @@ import (
 	"testing"
 	"time"
 
-	"mkauth/internal/auth"
-	"mkauth/internal/db"
-	"mkauth/internal/models"
-	"mkauth/internal/services/propagation"
+	"syndra/internal/auth"
+	"syndra/internal/db"
+	"syndra/internal/models"
+	"syndra/internal/services/propagation"
 )
 
 // Approving a request creates the same kind of direct grant the operator grant
 // endpoint does, so it MUST flow through the outbox (enqueue), not the bare
 // ledger upsert — otherwise the grant is invisible to the Pending UI, never
-// projected to Zitadel, and later re-surfaces as mkauth_only drift. The chosen
+// projected to Zitadel, and later re-surfaces as syndra_only drift. The chosen
 // semantics are enqueue + apply inline (the approval is the operator's confirm).
 func TestHandleResolveAccessRequestApprovedEnqueuesGrantAndRebuildsCache(t *testing.T) {
 	resetAccessDeps(t)

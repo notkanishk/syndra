@@ -1,7 +1,7 @@
 # Contract Hardening and Test Foundation Design
 
 ## 1. Goal
-MkAuth needs a contract backbone that is explicit, validated, testable, and difficult to misuse. This initiative is not about adding new user-facing features first. It is about making the existing and planned features safe enough to trust as the system grows into a real identity and authorization control plane.
+Syndra needs a contract backbone that is explicit, validated, testable, and difficult to misuse. This initiative is not about adding new user-facing features first. It is about making the existing and planned features safe enough to trust as the system grows into a real identity and authorization control plane.
 
 ## 2. Quality Principles
 
@@ -28,7 +28,7 @@ Permissive decoding creates hidden attack and regression surface. Request decodi
 If the implemented contract changes, the corresponding OpenSpec documents, roadmap, and coverage matrix must change in the same workstream.
 
 ### 2.6 Zitadel communication is standardized around Actions v2
-Zitadel is the external source-of-truth boundary, so compatibility and security at that edge must be designed around Zitadel Actions v2 behavior and constraints. Internal contracts between the frontend UI, backend, and LLDAP sync service may be purpose-built for MkAuth, but they must not weaken or redefine the Zitadel-facing contract.
+Zitadel is the external source-of-truth boundary, so compatibility and security at that edge must be designed around Zitadel Actions v2 behavior and constraints. Internal contracts between the frontend UI, backend, and LLDAP sync service may be purpose-built for Syndra, but they must not weaken or redefine the Zitadel-facing contract.
 
 ## 3. Risk Summary
 
@@ -85,14 +85,14 @@ Examples:
 Validation failures should return stable error codes and predictable field-level detail so UI and automation behavior can remain deterministic.
 
 ### 4.5 External vs internal contract boundary
-MkAuth should distinguish between:
+Syndra should distinguish between:
 * external source-of-truth contracts: Zitadel-facing communication, which must remain Actions v2-compatible and security-hardened
 * internal control-plane contracts: frontend UI to backend and backend to sync-service payloads, which may be self-defined as long as they are explicit, validated, authenticated, and isolated from the external boundary
 
 For privileged frontend-to-backend requests, the preferred production contract is simple: the frontend sends a Zitadel-issued user access token, the backend validates it, and the backend makes the authorization decision. A shared internal API key may remain as an internal service guard, but it must not be the primary authorization proof for admin mutations.
 
 ### 4.6 Zitadel integration responsibility split
-MkAuth should use two different mechanisms for two different classes of work:
+Syndra should use two different mechanisms for two different classes of work:
 * Zitadel Actions v2: token-time claim shaping and Zitadel-native event-triggered compatibility paths
 * service user account (machine-to-machine): backend-owned management operations against the Zitadel Management API
 
@@ -153,12 +153,12 @@ The first hardening wave should cover:
 | --- | --- | --- | --- |
 | token claim injection for downstream apps | Actions v2 | Runs in Zitadel's token flow and is the right place for custom claim emission | keep payload minimal, deterministic, and format-tested |
 | userinfo/token-response claim shaping | Actions v2 | Same source-of-truth claim path and same compatibility boundary | never reimplement this through an internal-only shortcut |
-| automated onboarding or policy triggers initiated by Zitadel events | Actions v2, with backend webhook/event intake where needed | preserves Zitadel-native trigger semantics while letting MkAuth evaluate policy | document the exact event contract and validate all incoming fields |
+| automated onboarding or policy triggers initiated by Zitadel events | Actions v2, with backend webhook/event intake where needed | preserves Zitadel-native trigger semantics while letting Syndra evaluate policy | document the exact event contract and validate all incoming fields |
 | backend reads or writes to grants, roles, memberships, or project assignments in Zitadel | service user account | requires Management API access that Actions v2 is not meant to replace | scope to least privilege, store credentials only server-side, rotate keys |
 | mapping-rule propagation back into Zitadel | service user account | this is a backend control-plane mutation against the source of truth | require audit logging and idempotent retry behavior |
 | administrative reconciliation jobs against Zitadel | service user account | long-running or bulk management work belongs in the backend control plane | isolate scopes, rate-limit, and add rollback-aware logging |
 | frontend-to-backend admin actions | Zitadel-issued user access token validated by backend, then backend uses service user account if needed | keeps secrets and Zitadel management access out of the UI while preserving the acting user's identity | frontend never talks directly to Zitadel management APIs; shared internal API keys are optional defense-in-depth only |
-| backend-to-sync-service provisioning intents | internal MkAuth contract | this is not a Zitadel contract and should stay private to MkAuth | mutually authenticate services and validate every command payload |
+| backend-to-sync-service provisioning intents | internal Syndra contract | this is not a Zitadel contract and should stay private to Syndra | mutually authenticate services and validate every command payload |
 
 ### 6.2 Service and utility matrix
 

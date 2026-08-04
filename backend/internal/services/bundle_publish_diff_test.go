@@ -3,7 +3,7 @@ package services
 import (
 	"testing"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // diffRoles' result is marshalled straight to the console on four routes, and a Go nil slice

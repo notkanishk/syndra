@@ -7,7 +7,7 @@ import (
 
 func TestLoad_RetryAttemptsAndBackoffFromEnv(t *testing.T) {
 	// Required vars (LoadConfig errors without them).
-	t.Setenv("MKAUTH_API_KEY", "test-key")
+	t.Setenv("SYNDRA_API_KEY", "test-key")
 	t.Setenv("LLDAP_BIND_DN", "uid=admin,dc=example,dc=com")
 	t.Setenv("LLDAP_BIND_PASSWORD", "test-pw")
 
@@ -27,7 +27,7 @@ func TestLoad_RetryAttemptsAndBackoffFromEnv(t *testing.T) {
 }
 
 func TestLoad_RetryDefaultsWhenEnvAbsent(t *testing.T) {
-	t.Setenv("MKAUTH_API_KEY", "test-key")
+	t.Setenv("SYNDRA_API_KEY", "test-key")
 	t.Setenv("LLDAP_BIND_DN", "uid=admin,dc=example,dc=com")
 	t.Setenv("LLDAP_BIND_PASSWORD", "test-pw")
 	// Explicitly clear in case the host env has them.
@@ -47,7 +47,7 @@ func TestLoad_RetryDefaultsWhenEnvAbsent(t *testing.T) {
 }
 
 func TestLoad_InvalidRetryAttemptsReturnsError(t *testing.T) {
-	t.Setenv("MKAUTH_API_KEY", "test-key")
+	t.Setenv("SYNDRA_API_KEY", "test-key")
 	t.Setenv("LLDAP_BIND_DN", "uid=admin,dc=example,dc=com")
 	t.Setenv("LLDAP_BIND_PASSWORD", "test-pw")
 	t.Setenv("SYNC_RETRY_ATTEMPTS", "not-a-number")
@@ -66,7 +66,7 @@ func TestLoad_InvalidRetryAttemptsReturnsError(t *testing.T) {
 func TestLoad_NonPositiveRetryAttemptsReturnsError(t *testing.T) {
 	for _, v := range []string{"0", "-1"} {
 		t.Run(v, func(t *testing.T) {
-			t.Setenv("MKAUTH_API_KEY", "test-key")
+			t.Setenv("SYNDRA_API_KEY", "test-key")
 			t.Setenv("LLDAP_BIND_DN", "uid=admin,dc=example,dc=com")
 			t.Setenv("LLDAP_BIND_PASSWORD", "test-pw")
 			t.Setenv("SYNC_RETRY_ATTEMPTS", v)
@@ -83,7 +83,7 @@ func TestLoad_NonPositiveRetryAttemptsReturnsError(t *testing.T) {
 func TestLoad_NonPositiveRetryBackoffReturnsError(t *testing.T) {
 	for _, v := range []string{"0s", "-5s"} {
 		t.Run(v, func(t *testing.T) {
-			t.Setenv("MKAUTH_API_KEY", "test-key")
+			t.Setenv("SYNDRA_API_KEY", "test-key")
 			t.Setenv("LLDAP_BIND_DN", "uid=admin,dc=example,dc=com")
 			t.Setenv("LLDAP_BIND_PASSWORD", "test-pw")
 			t.Setenv("SYNC_RETRY_BACKOFF", v)

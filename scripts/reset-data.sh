@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# scripts/reset-data.sh — return a MkAuth deployment to a known starting state.
+# scripts/reset-data.sh — return a Syndra deployment to a known starting state.
 #
 # There are two of those, and they are not the same thing:
 #
 #   demo  Delete only the rows that reference a demo fixture. Real people,
 #         real projects and every decision an operator actually made survive.
 #         This is what you want when a deployment was brought up with
-#         MKAUTH_SEED_DEMO on and has since been used for real.
+#         SYNDRA_SEED_DEMO on and has since been used for real.
 #
 #   all   Truncate every operator-owned table. A genuine blank slate: no
 #         bundles, no rules, no grants, no audit history. Schema and
 #         migrations are untouched, so the backend comes back up and
 #         re-registers nothing.
 #
-# Neither mode touches Zitadel. MkAuth's ledger is a record of what MkAuth
+# Neither mode touches Zitadel. Syndra's ledger is a record of what Syndra
 # decided — clearing it does not revoke anything upstream, and grants that
 # exist in Zitadel without a local row will be re-detected by the next
 # reconciliation sweep as unexplained access. That is the correct outcome:
@@ -26,10 +26,10 @@
 #   scripts/reset-data.sh all --apply
 #
 # Env:
-#   PG_CONTAINER     default mkauth_postgres
-#   REDIS_CONTAINER  default mkauth_redis
-#   PG_USER          default mkauth
-#   PG_DB            default mkauthdb
+#   PG_CONTAINER     default syndra_postgres
+#   REDIS_CONTAINER  default syndra_redis
+#   PG_USER          default syndra
+#   PG_DB            default syndradb
 
 set -euo pipefail
 
@@ -37,10 +37,10 @@ MODE="${1:-}"
 APPLY=""
 [[ "${2:-}" == "--apply" ]] && APPLY=1
 
-PG_CONTAINER="${PG_CONTAINER:-mkauth_postgres}"
-REDIS_CONTAINER="${REDIS_CONTAINER:-mkauth_redis}"
-PG_USER="${PG_USER:-mkauth}"
-PG_DB="${PG_DB:-mkauthdb}"
+PG_CONTAINER="${PG_CONTAINER:-syndra_postgres}"
+REDIS_CONTAINER="${REDIS_CONTAINER:-syndra_redis}"
+PG_USER="${PG_USER:-syndra}"
+PG_DB="${PG_DB:-syndradb}"
 
 if [[ "$MODE" != "demo" && "$MODE" != "all" ]]; then
   sed -n '2,32p' "$0" | sed 's|^# \{0,1\}||'
@@ -101,7 +101,7 @@ demo_where() {
 # point at it, so it is handled separately after bundle_roles is counted.
 BUNDLE_PREDICATE="name IN ('Student Access','Staff Onboarding','Prototyping Mentor')"
 
-echo "MkAuth reset — mode=${MODE} target=${PG_CONTAINER}/${PG_DB}"
+echo "Syndra reset — mode=${MODE} target=${PG_CONTAINER}/${PG_DB}"
 echo
 
 total=0
@@ -163,7 +163,7 @@ if [[ "$MODE" == "demo" ]]; then
     echo "  WARNING — these are not demo accounts, and they lose access here:"
     echo "    ${affected}"
     echo "  They hold a demo bundle or a grant on a demo project. Removing the"
-    echo "  fixture removes their access with it; MkAuth will not re-grant it."
+    echo "  fixture removes their access with it; Syndra will not re-grant it."
     echo "  Re-grant from each person's page afterwards if it was deliberate."
   fi
 fi
@@ -227,5 +227,5 @@ fi
 
 echo
 echo "Next:"
-echo "  1. Confirm MKAUTH_SEED_DEMO=false in .env, or the next restart re-seeds what you just removed."
+echo "  1. Confirm SYNDRA_SEED_DEMO=false in .env, or the next restart re-seeds what you just removed."
 echo "  2. docker compose restart backend"

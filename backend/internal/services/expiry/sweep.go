@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // Sweep runs a single pass: fetches up to batchSize expired direct grants,

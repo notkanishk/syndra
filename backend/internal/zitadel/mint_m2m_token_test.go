@@ -30,7 +30,7 @@ func TestMintM2MToken_SurfacesLoadFailure(t *testing.T) {
 	// Point at a path that doesn't exist. The error must wrap
 	// LoadServiceAccountKey's failure, not swallow it — operators need to
 	// see exactly why the mint failed so they can fix their env.
-	_, err := MintM2MToken(context.Background(), "example.zitadel.cloud", "/tmp/mkauth-nonexistent-"+t.Name())
+	_, err := MintM2MToken(context.Background(), "example.zitadel.cloud", "/tmp/syndra-nonexistent-"+t.Name())
 	if err == nil {
 		t.Fatal("expected error for nonexistent key file, got nil")
 	}

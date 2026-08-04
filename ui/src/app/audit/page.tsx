@@ -76,7 +76,7 @@ export default function AuditPage() {
         meta={
           scopedUser
             ? "Everything this person did, and everything done to them. Filtered at the source, so nothing is missing from the window."
-            : `Every mutation MkAuth made, and who asked for it. ${all.length} loaded${
+            : `Every mutation Syndra made, and who asked for it. ${all.length} loaded${
                 entries.hasNextPage ? ", more further back" : " — that is the whole log"
               } · the filters below narrow what is loaded.`
         }
@@ -258,7 +258,7 @@ function downloadCsv(
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;
-  link.download = `mkauth-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.download = `syndra-audit-${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
   URL.revokeObjectURL(url);
 }

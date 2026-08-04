@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Detect every out-of-band Zitadel grant (webhook real-time + a scheduled reconciliation sweep) that MkAuth has no intent record for, surface it on `/governance/drift` for explicit operator triage (Attribute / Revoke / Mark external), and replay MkAuth-expected-but-Zitadel-absent direct grants back through the outbox — closing B2 (right-sized, scheduled reconciliation) and C6 (overlay-cache miss backstop).
+**Goal:** Detect every out-of-band Zitadel grant (webhook real-time + a scheduled reconciliation sweep) that Syndra has no intent record for, surface it on `/governance/drift` for explicit operator triage (Attribute / Revoke / Mark external), and replay Syndra-expected-but-Zitadel-absent direct grants back through the outbox — closing B2 (right-sized, scheduled reconciliation) and C6 (overlay-cache miss backstop).
 
-**Architecture:** Two new tables (`drift_items` + `external_grant_exclusions`, migration `000016`) with a `db/drift.go` + `db/exclusions.go` repository pair. A new `services/drift` package mirrors `services/expiry` exactly (ticker + immediate-sweep-on-boot + graceful `Done()`), running the reconciliation on `DRIFT_RECONCILIATION_INTERVAL_HOURS` (default 6) and on operator demand. `zitadel_only` grants (in Zitadel, unexplained by MkAuth's direct/bundle/rule/exclusion sets) become `drift_items`; `mkauth_only` direct grants (MkAuth expects, Zitadel lacks) re-enqueue through the sub-phase-1 outbox. Real-time drift comes from the webhook — the self-mutation guard means only *externally*-authored grant events survive translation, so drift detection is free. The triage UI is **red, undismissible, breaks out of layout** — deliberately louder than sub-phase-1's amber, in-layout Pending Propagation surfaces.
+**Architecture:** Two new tables (`drift_items` + `external_grant_exclusions`, migration `000016`) with a `db/drift.go` + `db/exclusions.go` repository pair. A new `services/drift` package mirrors `services/expiry` exactly (ticker + immediate-sweep-on-boot + graceful `Done()`), running the reconciliation on `DRIFT_RECONCILIATION_INTERVAL_HOURS` (default 6) and on operator demand. `zitadel_only` grants (in Zitadel, unexplained by Syndra's direct/bundle/rule/exclusion sets) become `drift_items`; `syndra_only` direct grants (Syndra expects, Zitadel lacks) re-enqueue through the sub-phase-1 outbox. Real-time drift comes from the webhook — the self-mutation guard means only *externally*-authored grant events survive translation, so drift detection is free. The triage UI is **red, undismissible, breaks out of layout** — deliberately louder than sub-phase-1's amber, in-layout Pending Propagation surfaces.
 
 **Tech Stack:** Go (`pgx/v5` pool, stdlib `testing`, injectable-deps pattern), PostgreSQL (golang-migrate). Next.js + TypeScript + React Query (Bun), Vitest + Testing-Library. Material (obsidian-clarity) **error/red** tokens for the drift UI.
 
@@ -25,11 +25,11 @@
 
 Every task's requirements implicitly include these. Values copied verbatim from the design/specs:
 
-- **Go module path:** `mkauth`. Imports are `mkauth/internal/...`.
+- **Go module path:** `syndra`. Imports are `syndra/internal/...`.
 - **Migrations dir:** `backend/db/migrations/`; highest is `000015`; **next is `000016`**. Paired `.up.sql`/`.down.sql`, `IF EXISTS`/`IF NOT EXISTS` guards, `DO $$` for constraint blocks, real down migrations.
 - **`db` package has NO live-DB test harness.** It is covered only by *migration-coherence guards* (assert the SQL `CHECK` enums match the Go string literals — see `backend/internal/db/propagations_migration_test.go`). Behavioral coverage for repository logic lives in the **injectable service tests** (`services/drift`) and **handler tests**, never live SQL. Follow this exactly for `db/drift.go` + `db/exclusions.go`.
 - **No new dependencies.** The repo carries NO uuid module — outbox idempotency keys are minted from `crypto/rand` via `db.newOutboxIdempotencyKey() (string, error)` (canonical v4 UUID string; `db/propagations.go:77`). **NEVER import `github.com/google/uuid`.** In-package `db` helpers call `newOutboxIdempotencyKey()` directly; `services/drift` reuses it via a one-line exported wrapper `db.NewOutboxIdempotencyKey` added to `db/propagations.go` in Task 14 (a wrapper, NOT a rename, so the existing `EnqueueDirectGrantPropagation` call site is untouched). Env parsing: **stdlib inline** (`strconv.Atoi` / `time.ParseDuration`) — there is NO `getEnvInt` helper; `cmd/api/main.go` reads env vars with per-var functions (`schedulerInterval()` etc.).
-- **`applied`/`drift` doctrine (design Decision 1):** the self-mutation guard (`webhook_translate.go`: `editor == ZITADEL_M2M_USER_ID` → dropped) means MkAuth's own grant mutations never return over the webhook. Surviving grant events are therefore *externally-originated* — the drift candidates.
+- **`applied`/`drift` doctrine (design Decision 1):** the self-mutation guard (`webhook_translate.go`: `editor == ZITADEL_M2M_USER_ID` → dropped) means Syndra's own grant mutations never return over the webhook. Surviving grant events are therefore *externally-originated* — the drift candidates.
 - **Reconciliation safety cap = 2 000** (down from 10 000). Right-sized for the single-LXC ~200-user makerspace.
 - **No drift auto-resolution.** Every `drift_items` row requires explicit operator action. No age-based auto-mark.
 - **Drift UI is red + undismissible + breaks out of layout**; Pending UI (sub-phase 1) is amber + dismissible + in-layout. Drift MUST be louder at every dimension. Use Material `error`/`on-error`/`error-container` tokens. Respect `prefers-reduced-motion`. The optional chime is gated by a `localStorage` toggle (default on), mirroring `ui/src/lib/theme.tsx`.
@@ -41,8 +41,8 @@ Every task's requirements implicitly include these. Values copied verbatim from 
 | Symbol | File:line | Current shape |
 |---|---|---|
 | `reconciliationSafetyCap` | `backend/internal/handlers/reconciliation.go:29` | `var reconciliationSafetyCap = 10_000` (drop to 2_000) |
-| `computeReconciliationDiff` | `reconciliation.go:142-236` | pure; `(mkauth []models.DirectGrant, zitadel []zitadel.UserGrant) ReconciliationDiff` |
-| `ReconciliationDiff` / `ReconciliationGrant` / `ReconciliationDrift` | `reconciliation.go:34-68` | `OnlyInMkAuth`/`OnlyInZitadel`/`Drift`/`Truncated` |
+| `computeReconciliationDiff` | `reconciliation.go:142-236` | pure; `(syndra []models.DirectGrant, zitadel []zitadel.UserGrant) ReconciliationDiff` |
+| `ReconciliationDiff` / `ReconciliationGrant` / `ReconciliationDrift` | `reconciliation.go:34-68` | `OnlyInSyndra`/`OnlyInZitadel`/`Drift`/`Truncated` |
 | `fetchAllZitadelGrants` | `reconciliation.go:113-138` | paginates `zitadelListAllGrants`, caps at `reconciliationSafetyCap` |
 | `svcAllDirectGrants` / `zitadelListAllGrants` | reconciliation handler injectables | `(ctx) ([]models.DirectGrant, error)` / `(ctx, zitadel.SearchParams) (*SearchResult[UserGrant], error)` |
 | `collectUserRoles` | `backend/internal/services/views.go:730-799` | `(ctx, userID) (map[roleKey]*EffectiveRole, []Bundle, error)`; unions direct+bundle+rule |
@@ -79,7 +79,7 @@ Every task's requirements implicitly include these. Values copied verbatim from 
 ```sql
 -- 000016_drift_queue.up.sql
 -- Wave 2 · Part 4 sub-phase 2 (B2/C6): the drift triage queue for out-of-band
--- Zitadel grants MkAuth has no intent record for, plus the operator's
+-- Zitadel grants Syndra has no intent record for, plus the operator's
 -- "this is legitimately external, stop flagging it" exclusion list.
 -- No drift item resolves automatically (design §8): every row needs explicit
 -- Attribute / Revoke / Mark-external triage.
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS drift_items (
     zitadel_grant_id        TEXT,
     detected_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     detection_source        TEXT NOT NULL CHECK (detection_source IN ('webhook', 'reconciliation_sweep')),
-    drift_type              TEXT NOT NULL CHECK (drift_type IN ('zitadel_only', 'mkauth_only')),
+    drift_type              TEXT NOT NULL CHECK (drift_type IN ('zitadel_only', 'syndra_only')),
     status                  TEXT NOT NULL DEFAULT 'pending_triage'
                                 CHECK (status IN ('pending_triage', 'attributed', 'revoked', 'marked_external')),
     resolved_at             TIMESTAMPTZ,
@@ -170,7 +170,7 @@ git commit -m "feat(db): drift_items triage queue + external_grant_exclusions (0
 In `models.go`, near `PendingPropagation` / `GovernanceSummary`:
 ```go
 // DriftItem is one out-of-band grant discrepancy awaiting operator triage.
-// zitadel_only: exists in Zitadel, no MkAuth intent. mkauth_only: MkAuth
+// zitadel_only: exists in Zitadel, no Syndra intent. syndra_only: Syndra
 // expects it (direct grant), Zitadel lacks it. No item resolves automatically.
 type DriftItem struct {
 	ID                string     `json:"id"`
@@ -180,7 +180,7 @@ type DriftItem struct {
 	ZitadelGrantID    string     `json:"zitadel_grant_id,omitempty"`
 	DetectedAt        time.Time  `json:"detected_at"`
 	DetectionSource   string     `json:"detection_source"` // webhook | reconciliation_sweep
-	DriftType         string     `json:"drift_type"`       // zitadel_only | mkauth_only
+	DriftType         string     `json:"drift_type"`       // zitadel_only | syndra_only
 	Status            string     `json:"status"`           // pending_triage | attributed | revoked | marked_external
 	ResolvedAt        *time.Time `json:"resolved_at,omitempty"`
 	ResolvedBy        string     `json:"resolved_by,omitempty"`
@@ -224,7 +224,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // DriftFilter narrows a drift listing. Empty fields are ignored.
@@ -338,7 +338,7 @@ func CountPendingDrift(ctx context.Context) (int, error) {
 
 // HasPendingDrift reports whether a pending drift row already exists for the
 // exact (user, project, role, drift_type). The sweep uses this to avoid
-// re-enqueueing an mkauth_only grant the operator is already triaging — scoped
+// re-enqueueing an syndra_only grant the operator is already triaging — scoped
 // to the specific role so an unrelated missing role on the same pair is NOT
 // suppressed.
 func HasPendingDrift(ctx context.Context, userID, projectID, roleKey, driftType string) (bool, error) {
@@ -487,7 +487,7 @@ import (
 	"context"
 	"fmt"
 
-	"mkauth/internal/models"
+	"syndra/internal/models"
 )
 
 // InsertExclusion records an operator "legitimately external" marker. Idempotent
@@ -554,7 +554,7 @@ func TestDriftMigrationEnumsMatchCode(t *testing.T) {
 			t.Errorf("detection_source %s written by code but missing from 000016 CHECK", v)
 		}
 	}
-	for _, v := range []string{"'zitadel_only'", "'mkauth_only'"} {
+	for _, v := range []string{"'zitadel_only'", "'syndra_only'"} {
 		if !strings.Contains(sql, v) {
 			t.Errorf("drift_type %s written by code but missing from 000016 CHECK", v)
 		}
@@ -605,8 +605,8 @@ package services
 import (
 	"testing"
 
-	"mkauth/internal/models"
-	"mkauth/internal/zitadel"
+	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 func TestExpectedViaRule_UserHoldingSourceMakesTargetExpected(t *testing.T) {
@@ -649,12 +649,12 @@ Expected: FAIL — `undefined: BuildHolderSet` / `ExpectedViaRule` / `IsExcluded
 package services
 
 import (
-	"mkauth/internal/models"
-	"mkauth/internal/zitadel"
+	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 // HolderKey is one (user, project, role) tuple a user actually holds — union of
-// MkAuth direct grants and live Zitadel grants. It is the input to rule
+// Syndra direct grants and live Zitadel grants. It is the input to rule
 // derivation: a mapping rule's target is "expected" only for users who hold the
 // rule's source.
 type HolderKey struct {
@@ -663,7 +663,7 @@ type HolderKey struct {
 	RoleKey   string
 }
 
-// BuildHolderSet unions MkAuth direct grants and Zitadel grants into the set of
+// BuildHolderSet unions Syndra direct grants and Zitadel grants into the set of
 // tuples each user currently holds.
 func BuildHolderSet(direct []models.DirectGrant, zit []zitadel.UserGrant) map[HolderKey]bool {
 	h := make(map[HolderKey]bool)
@@ -738,7 +738,7 @@ In `handleGetReconciliationDiff`, after `diff := computeReconciliationDiff(...)`
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	holder := services.BuildHolderSet(mkauthGrants, allZitadel)
+	holder := services.BuildHolderSet(syndraGrants, allZitadel)
 	diff.OnlyInZitadel = filterExplained(diff.OnlyInZitadel, holder, rules, exclusions)
 ```
 Add the helper (keeps `computeReconciliationDiff` itself pure and untouched):
@@ -766,14 +766,14 @@ func filterExplained(in []ReconciliationGrant, holder map[services.HolderKey]boo
 	return out
 }
 ```
-(Import `mkauth/internal/services`.)
+(Import `syndra/internal/services`.)
 
 - [ ] **Step 13.6: Write the failing endpoint test (rule-derived not reported as drift)**
 
 Add to `reconciliation_test.go`, extending `withReconciliationDeps` to also stub the two new deps (default empty), then:
 ```go
 func TestReconciliation_RuleDerivedNotOnlyInZitadel(t *testing.T) {
-	// MkAuth has the source grant; Zitadel has source + rule-derived target.
+	// Syndra has the source grant; Zitadel has source + rule-derived target.
 	withReconciliationDeps(t,
 		[]models.DirectGrant{directGrant("u-1", "p1", "member")},
 		[]zitadel.UserGrant{
@@ -841,10 +841,10 @@ package drift
 import (
 	"context"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
-	"mkauth/internal/services"
-	"mkauth/internal/zitadel"
+	"syndra/internal/db"
+	"syndra/internal/models"
+	"syndra/internal/services"
+	"syndra/internal/zitadel"
 )
 
 // driftSafetyCap is the same right-sized cap as the on-demand reconciliation
@@ -864,7 +864,7 @@ var (
 	}
 	upsertDriftItem = db.UpsertDriftItem   // (ctx,user,project,roleKeys,grantID,source,type) (id,inserted,err)
 	hasPendingDrift = db.HasPendingDrift   // (ctx,user,project,role,type) (bool,err)
-	insertPending   = db.InsertPendingPropagation // re-enqueue path (mkauth_only)
+	insertPending   = db.InsertPendingPropagation // re-enqueue path (syndra_only)
 
 	// Reachability + paginated grant listing. A nil MgmtClient means offline.
 	zitadelReachable = func(ctx context.Context) bool { return zitadel.MgmtClient != nil }
@@ -897,8 +897,8 @@ import (
 	"context"
 	"testing"
 
-	"mkauth/internal/models"
-	"mkauth/internal/zitadel"
+	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 func swap[T any](dst *T, v T) func() { o := *dst; *dst = v; return func() { *dst = o } }
@@ -963,9 +963,9 @@ func TestSweep_RuleDerivedGrantIsNotDrift(t *testing.T) {
 	}
 }
 
-func TestSweep_MkauthOnlyDirectGrantReEnqueues(t *testing.T) {
+func TestSweep_SyndraOnlyDirectGrantReEnqueues(t *testing.T) {
 	stubSweep(t)
-	// MkAuth expects u1/p1/viewer; Zitadel has nothing → re-enqueue (missed-webhook replay).
+	// Syndra expects u1/p1/viewer; Zitadel has nothing → re-enqueue (missed-webhook replay).
 	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{{UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
 	})()
@@ -975,11 +975,11 @@ func TestSweep_MkauthOnlyDirectGrantReEnqueues(t *testing.T) {
 	res, err := Sweep(context.Background())
 	if err != nil { t.Fatal(err) }
 	if opType != "add" || res.ReEnqueued != 1 {
-		t.Fatalf("mkauth_only direct grant must re-enqueue an add, got op=%q res=%+v", opType, res)
+		t.Fatalf("syndra_only direct grant must re-enqueue an add, got op=%q res=%+v", opType, res)
 	}
 }
 
-func TestSweep_MkauthOnlySkipsReEnqueueWhenPendingDrift(t *testing.T) {
+func TestSweep_SyndraOnlySkipsReEnqueueWhenPendingDrift(t *testing.T) {
 	stubSweep(t)
 	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{{UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
@@ -1037,28 +1037,28 @@ import (
 	"context"
 	"log"
 
-	"mkauth/internal/models"
-	"mkauth/internal/services"
-	"mkauth/internal/zitadel"
+	"syndra/internal/models"
+	"syndra/internal/services"
+	"syndra/internal/zitadel"
 )
 
 // DriftResult summarizes one sweep for logs + the [Reconcile now] response.
 type DriftResult struct {
 	ZitadelGrants     int    `json:"zitadel_grants"`
 	DriftItemsCreated int    `json:"drift_items_created"` // zitadel_only, deduped
-	ReEnqueued        int    `json:"re_enqueued"`         // mkauth_only replays
+	ReEnqueued        int    `json:"re_enqueued"`         // syndra_only replays
 	Truncated         bool   `json:"truncated"`
 	Halted            bool   `json:"halted"`
 	Reason            string `json:"reason,omitempty"`
 }
 
-// Sweep reconciles Zitadel grants against MkAuth's expected set. Callable by the
+// Sweep reconciles Zitadel grants against Syndra's expected set. Callable by the
 // scheduler and by the operator's [Reconcile now]. Two outcomes per role:
 //   - zitadel_only  (in Zitadel, unexplained by direct/rule/exclusion) → drift_items
-//   - mkauth_only   (direct grant MkAuth expects, absent from Zitadel)  → outbox re-enqueue
+//   - syndra_only   (direct grant Syndra expects, absent from Zitadel)  → outbox re-enqueue
 // Bundle/rule-derived expected roles that are ABSENT from Zitadel are NOT drift
 // in sub-phase 2 — cascade projection is sub-phase 3, so they are legitimately
-// unprojected. Only source-mediated direct grants can be mkauth_only here.
+// unprojected. Only source-mediated direct grants can be syndra_only here.
 func Sweep(ctx context.Context) (DriftResult, error) {
 	if !zitadelReachable(ctx) {
 		return DriftResult{Halted: true, Reason: "zitadel_offline"}, nil
@@ -1088,12 +1088,12 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	res := DriftResult{ZitadelGrants: len(zit), Truncated: truncated}
 
 	// --- zitadel_only: unexplained live grants → drift_items ---
-	directSet := services.BuildHolderSet(direct, nil) // MkAuth's own direct intent
+	directSet := services.BuildHolderSet(direct, nil) // Syndra's own direct intent
 	for _, g := range zit {
 		for _, rk := range g.RoleKeys {
 			k := services.HolderKey{UserID: g.UserID, ProjectID: g.ProjectID, RoleKey: rk}
 			if directSet[k] {
-				continue // MkAuth has a direct intent for this — not drift
+				continue // Syndra has a direct intent for this — not drift
 			}
 			if services.ExpectedViaRule(holder, rules, g.UserID, g.ProjectID, rk) {
 				continue // expected_via_rule — not drift (design §7 Q… / access-governance scenario)
@@ -1110,7 +1110,7 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 		}
 	}
 
-	// --- mkauth_only: direct grants MkAuth expects but Zitadel lacks → re-enqueue ---
+	// --- syndra_only: direct grants Syndra expects but Zitadel lacks → re-enqueue ---
 	zitSet := services.BuildHolderSet(nil, zit)
 	for _, dg := range direct {
 		k := services.HolderKey{UserID: dg.UserID, ProjectID: dg.ProjectID, RoleKey: dg.RoleKey}
@@ -1119,7 +1119,7 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 		}
 		// Skip if the operator is already triaging this triple (webhook grant_removed
 		// may have surfaced it) — do not fight an in-flight triage with an auto-replay.
-		if pending, _ := hasPendingDrift(ctx, dg.UserID, dg.ProjectID, dg.RoleKey, "mkauth_only"); pending {
+		if pending, _ := hasPendingDrift(ctx, dg.UserID, dg.ProjectID, dg.RoleKey, "syndra_only"); pending {
 			continue
 		}
 		key, kerr := newIdempotencyKey()
@@ -1129,7 +1129,7 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 		}
 		if _, err := insertPending(ctx, "add", dg.UserID, dg.ProjectID, []string{dg.RoleKey},
 			"", "{}", key, "system:drift-sweep"); err != nil {
-			log.Printf("[DRIFT] re-enqueue mkauth_only failed user=%s project=%s role=%s: %v", dg.UserID, dg.ProjectID, dg.RoleKey, err)
+			log.Printf("[DRIFT] re-enqueue syndra_only failed user=%s project=%s role=%s: %v", dg.UserID, dg.ProjectID, dg.RoleKey, err)
 		} else {
 			res.ReEnqueued++
 		}
@@ -1232,7 +1232,7 @@ Expected: PASS (all six sweep tests).
 
 In `cmd/api/main.go`, beside the expiry `sched` block (`:97-109`):
 ```go
-	// Drift reconciliation scheduler: periodic Zitadel↔MkAuth sweep (B2/C6).
+	// Drift reconciliation scheduler: periodic Zitadel↔Syndra sweep (B2/C6).
 	var driftSched *drift.Scheduler
 	if driftSchedulerEnabled() {
 		driftSched = drift.NewScheduler(driftInterval())
@@ -1279,15 +1279,15 @@ func driftInterval() time.Duration {
 	return time.Duration(n) * time.Hour
 }
 ```
-(Import `mkauth/internal/services/drift`.)
+(Import `syndra/internal/services/drift`.)
 
 - [ ] **Step 14.8: Document env vars in `.env.example`**
 
 Add beside the expiry scheduler block:
 ```
 # --- Drift Reconciliation Scheduler (optional — defaults are sensible) ---
-# Periodic Zitadel↔MkAuth grant reconciliation. zitadel_only grants become
-# drift_items for operator triage; mkauth_only direct grants re-enqueue through
+# Periodic Zitadel↔Syndra grant reconciliation. zitadel_only grants become
+# drift_items for operator triage; syndra_only direct grants re-enqueue through
 # the outbox (missed-webhook replay). Also triggerable on demand via
 # [Reconcile now] on /governance/drift.
 # DRIFT_SCHEDULER_ENABLED=true
@@ -1311,9 +1311,9 @@ git commit -m "feat(drift): scheduled reconciliation sweep + main.go wiring (B2/
 - Modify: `backend/internal/handlers/deps.go` (add drift injectables)
 - Modify: `backend/internal/handlers/webhook_test.go` (or a focused new test file)
 
-A surviving `grant_added` reached this code only because it was NOT MkAuth's own mutation (self-mutation guard). If it is unexplained by MkAuth's expected set and not excluded, it is real-time drift.
+A surviving `grant_added` reached this code only because it was NOT Syndra's own mutation (self-mutation guard). If it is unexplained by Syndra's expected set and not excluded, it is real-time drift.
 
-**Scope decision (resolved here):** Task 15 implements `grant_added → zitadel_only` drift — the one scenario the spec mandates ("Webhook detects an externally-authored grant"). External `grant_removed` of an MkAuth-expected grant is left to the sweep's `mkauth_only` re-enqueue path (which already skips triples under active triage). This avoids a webhook/sweep double-handling of the same `mkauth_only` triple and keeps the real-time path to the single tested behavior. `ponytail:` grant_removed real-time drift can be added later if the 6-hour sweep latency proves too slow for removals; the sweep is the documented backstop.
+**Scope decision (resolved here):** Task 15 implements `grant_added → zitadel_only` drift — the one scenario the spec mandates ("Webhook detects an externally-authored grant"). External `grant_removed` of an Syndra-expected grant is left to the sweep's `syndra_only` re-enqueue path (which already skips triples under active triage). This avoids a webhook/sweep double-handling of the same `syndra_only` triple and keeps the real-time path to the single tested behavior. `ponytail:` grant_removed real-time drift can be added later if the 6-hour sweep latency proves too slow for removals; the sweep is the documented backstop.
 
 - [ ] **Step 15.1: Add drift injectables in `handlers/deps.go`**
 
@@ -1327,7 +1327,7 @@ A surviving `grant_added` reached this code only because it was NOT MkAuth's own
 		}
 		return services.IsExcluded(ex, u, p, r), nil
 	}
-	// svcUserEffectiveRoles reports whether MkAuth already expects (project,role)
+	// svcUserEffectiveRoles reports whether Syndra already expects (project,role)
 	// for the user — via direct grant, bundle, or mapping rule. Reuses the
 	// existing per-user resolver so the webhook's "is this explained?" check is
 	// one function, not a re-implementation.
@@ -1335,7 +1335,7 @@ A surviving `grant_added` reached this code only because it was NOT MkAuth's own
 ```
 Add `services.UserExpectsRole` to `services/expected.go` (or `views.go`), reusing `collectUserRoles`:
 ```go
-// UserExpectsRole reports whether MkAuth's effective-role computation already
+// UserExpectsRole reports whether Syndra's effective-role computation already
 // includes (projectID, roleKey) for the user (direct | bundle | rule). Used by
 // the webhook to decide whether a surviving external grant event is drift.
 func UserExpectsRole(ctx context.Context, userID, projectID, roleKey string) (bool, error) {
@@ -1377,7 +1377,7 @@ func TestProcessGrantAdded_UnexplainedGrantCreatesDrift(t *testing.T) {
 
 func TestProcessGrantAdded_ExpectedGrantNoDrift(t *testing.T) {
 	resetWebhookDeps(t)
-	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return true, nil } // MkAuth expects it
+	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return true, nil } // Syndra expects it
 	called := false
 	dbUpsertDriftItem = func(context.Context, string, string, []string, string, string, string) (string, bool, error) { called = true; return "", false, nil }
 
@@ -1386,7 +1386,7 @@ func TestProcessGrantAdded_ExpectedGrantNoDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 	if called {
-		t.Fatal("a grant MkAuth already expects must not be flagged as drift")
+		t.Fatal("a grant Syndra already expects must not be flagged as drift")
 	}
 }
 ```
@@ -1401,12 +1401,12 @@ Expected: FAIL — `dbUpsertDriftItem` never called.
 Just before `return nil` in `processGrantAdded` (`webhook.go:254`):
 ```go
 	// Real-time drift: a surviving (non-self, per the self-mutation guard)
-	// grant event that MkAuth neither expects nor has excluded is out-of-band.
+	// grant event that Syndra neither expects nor has excluded is out-of-band.
 	detectWebhookDrift(ctx, event)
 	return nil
 }
 
-// detectWebhookDrift flags roles on a surviving grant event that MkAuth has no
+// detectWebhookDrift flags roles on a surviving grant event that Syndra has no
 // intent for. Best-effort and non-fatal: a detection failure must never bounce
 // a 4xx back to Zitadel (redelivery storm) — the sweep is the backstop.
 func detectWebhookDrift(ctx context.Context, event WebhookPayload) {
@@ -1480,7 +1480,7 @@ Endpoints (all operator-auth, mirroring the reconciliation/propagations route wi
 	svcDrainOne                = propagation.DrainOne         // phase-1 targeted drain (revoke, best-effort after commit)
 	svcGetRolesForBundleDrift  = db.GetRolesForBundle         // source-remap validation for attribute→bundle
 ```
-(Attribute/revoke enqueue via the transactional `db.*AndEnqueue` helpers — which internally reuse phase-1's `enqueueWrites` — so the drift handlers never call `dbEnqueueDirectGrantPropagation` directly and never resolve the drift row outside the enqueue's transaction. Import `mkauth/internal/services/drift` and `mkauth/internal/services/propagation`.)
+(Attribute/revoke enqueue via the transactional `db.*AndEnqueue` helpers — which internally reuse phase-1's `enqueueWrites` — so the drift handlers never call `dbEnqueueDirectGrantPropagation` directly and never resolve the drift row outside the enqueue's transaction. Import `syndra/internal/services/drift` and `syndra/internal/services/propagation`.)
 
 - [ ] **Step 16.2: Write failing handler tests**
 
@@ -1600,8 +1600,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"mkauth/internal/db"
-	"mkauth/internal/models"
+	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
 func handleListDrift(w http.ResponseWriter, r *http.Request) {
@@ -2070,7 +2070,7 @@ Keep the component focused; extract the per-row action menu into a small `DriftR
 
 Create `driftChime.ts` mirroring `theme.tsx`'s localStorage pattern:
 ```typescript
-const STORAGE_KEY = "mkauth-drift-chime";
+const STORAGE_KEY = "syndra-drift-chime";
 export function isChimeEnabled(): boolean {
   if (typeof window === "undefined") return true;
   return localStorage.getItem(STORAGE_KEY) !== "off"; // default on
@@ -2135,7 +2135,7 @@ mcp__codebase-memory-mcp__index_repository   # scope: backend/internal/{db,handl
 - [ ] **Step 18.10: OpenSpec validate + tick the ledger**
 
 ```bash
-cd /Users/notkanishk/Documents/Mkrspc/Projects/MkAuth
+cd /Users/notkanishk/Documents/Mkrspc/Projects/Syndra
 openspec validate wave-2-part-4-zitadel-state-projection-and-drift-control --strict
 ```
 Then check off Sub-phase 2 Tasks 11–18 in `tasks.md` (append per-task notes as sub-phase 1 did) and commit:
@@ -2148,14 +2148,14 @@ git commit -m "chore(openspec): tick wave-2-part-4 sub-phase 2 (drift) tasks com
 
 ## Self-review checklist (run after implementation, before requesting review)
 
-1. **Detection completeness:** `zitadel_only` drift arrives both real-time (webhook `grant_added`, Task 15) and via the scheduled sweep (Task 14); `mkauth_only` direct grants re-enqueue through the sub-phase-1 outbox (Task 14). C6 overlay-cache misses are backstopped by the sweep — documented, not separately engineered.
-2. **No false drift:** rule-derived grants classify `expected_via_rule` (Task 13 + sweep), excluded triples are silently filtered (Tasks 13/14/15), and MkAuth's own mutations never reach the webhook (self-mutation guard). Bundle/rule-derived roles ABSENT from Zitadel are NOT `mkauth_only` drift in sub-phase 2 (cascade projection is sub-phase 3).
-3. **No auto-resolution:** every `drift_items` row needs explicit Attribute / Revoke / Mark-external. The only automatic action is the `mkauth_only` re-enqueue (design-mandated missed-webhook replay), and it skips the specific role already under triage (`HasPendingDrift`, role-scoped so an unrelated missing role is not suppressed).
+1. **Detection completeness:** `zitadel_only` drift arrives both real-time (webhook `grant_added`, Task 15) and via the scheduled sweep (Task 14); `syndra_only` direct grants re-enqueue through the sub-phase-1 outbox (Task 14). C6 overlay-cache misses are backstopped by the sweep — documented, not separately engineered.
+2. **No false drift:** rule-derived grants classify `expected_via_rule` (Task 13 + sweep), excluded triples are silently filtered (Tasks 13/14/15), and Syndra's own mutations never reach the webhook (self-mutation guard). Bundle/rule-derived roles ABSENT from Zitadel are NOT `syndra_only` drift in sub-phase 2 (cascade projection is sub-phase 3).
+3. **No auto-resolution:** every `drift_items` row needs explicit Attribute / Revoke / Mark-external. The only automatic action is the `syndra_only` re-enqueue (design-mandated missed-webhook replay), and it skips the specific role already under triage (`HasPendingDrift`, role-scoped so an unrelated missing role is not suppressed).
 4. **Dedup at role granularity:** the partial-unique index and `UpsertDriftItem` `ON CONFLICT` key on `(user, project, drift_type, role_keys)` — one single-role row per drifting role, so a 2nd role on the same pair is never swallowed; resolved rows leave the index so a role can legitimately re-drift.
 4a. **Triage is atomic + race-safe (no recovery gap):** each action resolves the drift row AND writes its side effect (outbox row / exclusions) in ONE transaction — `db.AttributeDriftAndEnqueue` / `RevokeDriftAndEnqueue` / `MarkDriftExternalTx`, all composing phase-1's `enqueueWrites` seam behind a guarded `UPDATE … WHERE status='pending_triage'`. A lost concurrent-triage race returns `409` with the whole tx rolled back (nothing written); a side-effect write failure rolls the resolution back too, so the drift never leaves the triage queue without its durable side effect. Revoke's inline drain is best-effort AFTER commit. Rule/exclusion lookup failures propagate (endpoint 500 / sweep abort) rather than degrading to an empty set and flagging false drift.
 5. **Reconciliation right-sized (B2):** cap is 2 000 everywhere (endpoint + sweep); the sweep is scheduled (`DRIFT_RECONCILIATION_INTERVAL_HOURS`, default 6) and on-demand (`POST …/drift/reconcile`).
 6. **Urgency tiers:** Drift is red + undismissible + breaks out of layout (top-level nav + persistent red dot, sticky banner, undismissible dashboard callout); Pending stays amber + dismissible + in-layout. Motion `motion-safe:`-gated; chime `localStorage`-gated, default on.
-7. **Type consistency:** `drift_type ∈ {zitadel_only, mkauth_only}`, `detection_source ∈ {webhook, reconciliation_sweep}`, `status ∈ {pending_triage, attributed, revoked, marked_external}` — identical between the `000016` CHECKs (Task 11), the migration-coherence guard (Task 12), the repositories, the sweep/webhook, and the TS `DriftItem`. `DriftResult` field names match between Go and any TS that reads the reconcile response.
+7. **Type consistency:** `drift_type ∈ {zitadel_only, syndra_only}`, `detection_source ∈ {webhook, reconciliation_sweep}`, `status ∈ {pending_triage, attributed, revoked, marked_external}` — identical between the `000016` CHECKs (Task 11), the migration-coherence guard (Task 12), the repositories, the sweep/webhook, and the TS `DriftItem`. `DriftResult` field names match between Go and any TS that reads the reconcile response.
 8. **Reuse over reinvention:** attribute/revoke reuse phase-1's `EnqueueDirectGrantPropagation` + `DrainOne`; the sweep + endpoint share `services` classification helpers; the drift scheduler mirrors `expiry.Scheduler`; the drift UI mirrors the pending UI. No package extraction, no import cycles (handlers→services/drift only, matching handlers→services/propagation).
 9. **Scope discipline:** no `confirmation_mode`, no cascade enqueueing, no bundle/rule projection — those are sub-phase 3.
 

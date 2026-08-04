@@ -32,7 +32,7 @@ Four endpoints for the sync service to consume intents:
 - `POST /api/v1/intents/{id}/complete` — mark as done
 - `POST /api/v1/intents/{id}/fail` — record failure with error message
 
-These use `withAPIKeyAuth` (shared MKAUTH_API_KEY), matching the internal service communication pattern.
+These use `withAPIKeyAuth` (shared SYNDRA_API_KEY), matching the internal service communication pattern.
 
 - `GET /api/v1/intents` — operator view (uses `withUserAuth`)
 

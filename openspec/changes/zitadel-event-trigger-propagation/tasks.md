@@ -24,7 +24,7 @@
 
 ## 4. Deployment: multi-target manifest
 - [x] 4.1 Reshape `targets.json` to `targets[]` + `executions[]` with named `target` reference
-- [x] 4.2 Add `mkauth-event-listener` target (`restAsync`, 5s timeout)
+- [x] 4.2 Add `syndra-event-listener` target (`restAsync`, 5s timeout)
 - [x] 4.3 Add 6 `condition.event` executions for the lifecycle event names
 
 ## 5. Deployment: register.sh + rotate.sh

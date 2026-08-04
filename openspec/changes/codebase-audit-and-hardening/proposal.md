@@ -1,6 +1,6 @@
 ## Why
 
-MkAuth reached a point where the product shape, governance model, and security boundary architecture are all validated — but several cross-cutting concerns had accumulated without dedicated attention: wildcard CORS, missing security headers, timing-vulnerable API key comparison, no request body limits, hardcoded Docker paths blocking local development, untyped frontend API layer, zero frontend tests, and no cache compiler test coverage. These are the kinds of issues that individually feel minor but collectively determine whether a codebase is production-grade or merely functional.
+Syndra reached a point where the product shape, governance model, and security boundary architecture are all validated — but several cross-cutting concerns had accumulated without dedicated attention: wildcard CORS, missing security headers, timing-vulnerable API key comparison, no request body limits, hardcoded Docker paths blocking local development, untyped frontend API layer, zero frontend tests, and no cache compiler test coverage. These are the kinds of issues that individually feel minor but collectively determine whether a codebase is production-grade or merely functional.
 
 A full audit was conducted to surface and fix these issues in a single pass rather than letting them compound across future feature work.
 
