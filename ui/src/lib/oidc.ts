@@ -73,13 +73,18 @@ export function buildCallbackUri(request: Request): string {
   const forwardedHost = request.headers.get("x-forwarded-host");
   const forwardedProto = request.headers.get("x-forwarded-proto");
 
-  const url = new URL(request.url);
-  url.protocol = forwardedProto ? `${forwardedProto}:` : requestUrl.protocol;
-  url.host = forwardedHost || request.headers.get("host") || requestUrl.host;
-  url.pathname = "/auth/callback";
-  url.search = "";
-  url.hash = "";
-  return url.toString();
+  const proto = forwardedProto || requestUrl.protocol.replace(/:$/, "");
+  const host = forwardedHost || request.headers.get("host") || requestUrl.host;
+
+  // Build the origin from scratch rather than mutating the incoming URL. The
+  // WHATWG host setter only overwrites the port when the value it is given
+  // carries one, so assigning a bare "syndra.example.org" onto a request
+  // URL of "http://…:3000/…" leaves the :3000 in place. Behind a reverse proxy
+  // that produced redirect_uri=https://syndra.example.org:3000/auth/callback
+  // — the container's port, advertised to the public internet — and Zitadel
+  // rejected the login with "requested redirect_uri is missing in the client
+  // configuration", naming the one field that looked correct in its console.
+  return new URL("/auth/callback", `${proto}://${host}`).toString();
 }
 
 // ---------------------------------------------------------------------------
