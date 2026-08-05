@@ -49,10 +49,16 @@ const RETIRED_CSS_TOKENS = [
 
 /**
  * The design board's literal values. Every one of them has a token, and the
- * token is what keeps light theme correct — a hardcoded #d8f24e stays lime on
- * a white page, where the accent is meant to be violet.
+ * token is what keeps light theme correct — a hardcoded #7f5af0 stays the dark
+ * room's violet on a white page, where the accent is a different one, and a
+ * hardcoded #a3e635 stays a lime nobody can read on paper.
  */
 const HARDCODED_COLOURS = [
+  "#7f5af0",
+  "#9b7bff",
+  "#6f4ae0",
+  "#a3e635",
+  "#4d7c0f",
   "#d8f24e",
   "#f5a524",
   "#ff5c4d",
@@ -102,6 +108,29 @@ function patternOffenders(pattern: RegExp, label: string): Array<{ file: string;
     }
   }
   return found;
+}
+
+/** The brace-matched body of the named at-rule. Anchored so that a lookup for
+ *  `@keyframes flash` cannot land on `@keyframes flash-value`. */
+function namedAtRuleBody(css: string, keyword: string, name: string): string {
+  const at = new RegExp(`${keyword}\\s+${name}\\s*\\{`).exec(css);
+  return at ? atRuleBody(css.slice(at.index), `${keyword} ${name}`) : "";
+}
+
+/** The brace-matched body of the first at-rule whose prelude matches. */
+function atRuleBody(css: string, prelude: string): string {
+  const start = css.indexOf(prelude);
+  if (start < 0) return "";
+  const open = css.indexOf("{", start);
+  let depth = 0;
+  for (let i = open; i < css.length; i += 1) {
+    if (css[i] === "{") depth += 1;
+    else if (css[i] === "}") {
+      depth -= 1;
+      if (depth === 0) return css.slice(open + 1, i);
+    }
+  }
+  return "";
 }
 
 function describeOffenders(list: Array<{ file: string; matches: string[] }>): string {
@@ -169,6 +198,141 @@ describe("design system", () => {
       found,
       `A button nested in a link — use ButtonLink:\n${describeOffenders(found)}`,
     ).toEqual([]);
+  });
+
+  // The doorway's breathing pool and animated grain are ambience: pleasant,
+  // and nothing is lost without them. Motion nobody asked for is exactly the
+  // motion a reduced-motion visitor must never be started on, so the guard is
+  // opt-in — not "start it and let the global reduce rule rescue them".
+  it("starts the doorway ambience only for a visitor who has not asked for less motion", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const guarded = atRuleBody(css, "@media (prefers-reduced-motion: no-preference)");
+    expect(guarded, "globals.css must declare a no-preference guard").not.toBe("");
+
+    for (const rule of ["animation: doorBreath", "animation: doorGrain"]) {
+      expect(css.split(rule).length - 1, `${rule} must be declared exactly once`).toBe(1);
+      expect(guarded, `${rule} must sit inside the no-preference guard`).toContain(rule);
+    }
+  });
+
+  // ── Motion ──────────────────────────────────────────────────────────────
+
+  // Six roles cover the product. A component that reaches past them for a raw
+  // duration is a component whose timing nobody argued for, and the first one
+  // to do it is how a design system starts being a suggestion.
+  it("spends motion through the six named roles, never a raw duration", () => {
+    const found = offenders(["transition-colors", "transition-all", "duration-1", "duration-2"]);
+    expect(
+      found,
+      `Raw transition timings — use motion-tint / motion-press / motion-settle:\n${describeOffenders(found)}`,
+    ).toEqual([]);
+  });
+
+  // "Only one thing loops" is the rule that makes a loop mean something. Two
+  // states are licensed to say "this is still happening": degraded, and
+  // loading. Everything else holds still, and the healthy state earns its calm
+  // by being the only thing on screen that is perfectly still.
+  it("licenses exactly one looping animation outside the doorway", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+
+    // The doorway's ambience is its own, opt-in and guarded above.
+    const app = css.replace(atRuleBody(css, "@media (prefers-reduced-motion: no-preference)"), "");
+    const loops = app.match(/animation:[^;]*infinite[^;]*;/g) ?? [];
+
+    expect(loops.length, `Looping animations found:\n${loops.join("\n")}`).toBeGreaterThan(0);
+    for (const loop of loops) {
+      expect(loop, `Only 'breathe' may loop, found: ${loop}`).toContain("breathe");
+    }
+  });
+
+  // `arrive` staggers rows up to 200ms. Collapsing durations without also
+  // collapsing delays leaves the sixth row of every list invisible for a fifth
+  // of a second before it appears — a stall rather than an animation, which is
+  // the exact thing the preference is asking us not to do.
+  it("collapses delays as well as durations for reduced motion", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const reduce = atRuleBody(css, "@media (prefers-reduced-motion: reduce)");
+    expect(reduce, "globals.css must declare a reduce block").not.toBe("");
+
+    for (const property of [
+      "animation-duration",
+      "animation-delay",
+      "animation-iteration-count",
+      "transition-duration",
+      "transition-delay",
+    ]) {
+      expect(reduce, `reduced motion must neutralise ${property}`).toContain(property);
+    }
+  });
+
+  // A scrim is the whole viewport AND the parent of the dialog card, so a
+  // transform on it does two wrong things at once: it drags a `fixed inset-0`
+  // element off its own bottom edge, and it compounds with the card's rise so
+  // the dialog travels further than the 10px anything is allowed to move.
+  //
+  // Pointing the scrim at a row-arrival keyframe is an easy mistake to make
+  // and an invisible one to review — both animations are "fade in from
+  // nothing" until you read the keyframes.
+  it("fades the dialog scrim without moving it", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const scrim = atRuleBody(css, "@utility settle-scrim");
+    expect(scrim, "globals.css must declare a settle-scrim utility").not.toBe("");
+
+    const name = /animation:\s*([\w-]+)/.exec(scrim)?.[1];
+    expect(name, "settle-scrim must name an animation").toBeTruthy();
+
+    const frames = namedAtRuleBody(css, "@keyframes", name!);
+    expect(frames, `@keyframes ${name} must exist`).not.toBe("");
+    expect(frames, `a scrim only fades — @keyframes ${name} must not transform`).not.toContain(
+      "transform",
+    );
+  });
+
+  // The class only decides when the wash comes OFF; the animation itself is
+  // authored in CSS. If the two drift, the row either loses its flash early or
+  // sits in a finished animation doing nothing.
+  it("times the flash class to the flash animation", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const declared = /--duration-flash:\s*(\d+)ms/.exec(css);
+    expect(declared, "globals.css must declare --duration-flash").not.toBeNull();
+
+    const hook = readFileSync(resolve(SRC_ROOT, "lib/useFlashOnChange.ts"), "utf8");
+    const constant = /FLASH_MS = (\d+)/.exec(hook);
+    expect(constant, "useFlashOnChange must export FLASH_MS").not.toBeNull();
+
+    expect(constant![1], "FLASH_MS must equal --duration-flash").toBe(declared![1]);
+  });
+
+  // ── Colour roles ────────────────────────────────────────────────────────
+
+  // --accent-ink on --accent is 4.18:1, which fails AA for anything smaller
+  // than large text — and every filled control in this product carries a label
+  // at 13.5px or below. --accent-dense takes the same label to 5.2:1. So the
+  // rule is mechanical: a fill that carries text is dense, a fill that carries
+  // nothing (a dot, a bar, a checkbox) keeps the brighter one.
+  it("never puts a label on the bright accent fill", () => {
+    const found = patternOffenders(
+      /bg-accent(?![-\w])[^"'`]*text-accent-ink|text-accent-ink[^"'`]*bg-accent(?![-\w])/,
+      "bg-accent + text-accent-ink",
+    );
+    expect(
+      found,
+      `Small text on the bright accent fails AA — use bg-accent-dense:\n${describeOffenders(found)}`,
+    ).toEqual([]);
+  });
+
+  // Healthy means "nothing needed here": a dot, a word, or a hairline. There
+  // is no healthy button and no healthy filled field, so the token set gives
+  // you nothing to build one out of. The absence of these siblings IS the
+  // enforcement — every other role has them.
+  it("gives the healthy role no fill to be built out of", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    expect(css, "globals.css must declare --healthy").toContain("--healthy:");
+    for (const sibling of ["--healthy-soft", "--healthy-ink", "--healthy-line", "--healthy-text"]) {
+      expect(css, `${sibling} would license a healthy fill — healthy is a dot, not a field`).not.toContain(
+        sibling,
+      );
+    }
   });
 
   it("focus is never removed", () => {
