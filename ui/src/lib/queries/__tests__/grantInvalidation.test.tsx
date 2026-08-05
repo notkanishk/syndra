@@ -53,7 +53,7 @@ describe("grant writes invalidate the expiring-access queue", () => {
     await waitFor(() => expect(invalidated.length).toBeGreaterThan(0));
     const roots = keyRoots(invalidated);
     expect(roots).toContain("review");
-    // Today counts what is expiring, so it is wrong by one until this lands too.
+    // Home counts what is expiring, so it is wrong by one until this lands too.
     expect(roots).toContain("governance");
     // And still the caches it always dropped.
     expect(roots).toContain("users");

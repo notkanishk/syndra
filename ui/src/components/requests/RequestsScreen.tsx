@@ -73,7 +73,7 @@ export function RequestsScreen({ isOperator, userId }: { isOperator: boolean; us
   return isOperator ? <OperatorQueue /> : <MemberRequests userId={userId} />;
 }
 
-/** The operator queue — same row shape as the Today block, terminal actions. */
+/** The operator queue — same row shape as the Home block, terminal actions. */
 function OperatorQueue() {
   const [status, setStatus] = useState<StatusFilter>("pending");
   const requests = useRequestsAdmin(status);
@@ -162,6 +162,9 @@ function OperatorQueue() {
                   ? "New requests appear here the moment someone submits one."
                   : "Try another filter."
               }
+              // An empty pending queue is resolved work; an empty filter result
+              // is just a filter that matched nothing.
+              resolved={status === "pending"}
             />
           }
         >
@@ -447,8 +450,8 @@ function RequestDialog({
                 type="button"
                 aria-pressed={howLong === value}
                 onClick={() => setHowLong(value)}
-                className={`rounded-pill px-3.5 py-[7px] text-[13px] font-semibold transition-colors ${
-                  howLong === value ? "bg-accent text-accent-ink" : "bg-tint-2 text-ink"
+                className={`rounded-pill px-3.5 py-[7px] text-[13px] font-semibold motion-tint ${
+                  howLong === value ? "bg-accent-dense text-accent-ink" : "bg-tint-2 text-ink"
                 }`}
               >
                 {label}

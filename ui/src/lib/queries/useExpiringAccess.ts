@@ -42,7 +42,7 @@ const KEYS = {
 
 /**
  * Review › Expiring access reads its own window rather than a slice of the
- * governance summary. Today's queue looks 14 days ahead because its job is to
+ * governance summary. Home's queue looks 14 days ahead because its job is to
  * be finishable; this screen looks 30, because its job is a review.
  */
 export function useExpiringGrants(withinDays = 30) {

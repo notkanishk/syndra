@@ -1,7 +1,6 @@
 "use client";
 
 import { MemberCatalog } from "@/components/member/MemberCatalog";
-import { ShadowCredential } from "@/components/member/ShadowCredential";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -127,11 +126,14 @@ export function MemberAccess({ session }: { session: SessionUser }) {
       <MemberCatalog heldByProject={heldByProject} />
 
       {/*
-        Last, deliberately. This screen answers "what can I use and why"; the workshop password
-        is a setting, not an answer, and putting a password field above somebody's access would
-        make the page read as an account screen.
+        The workshop password card used to sit here, last on the page. It is withdrawn from the
+        member view for now — nothing reads that password yet (the door and machine bridge is
+        unbuilt, see System > Hardware sync), so the card asked members to set a credential that
+        does nothing and then had to spend a paragraph admitting it.
+
+        <ShadowCredential/> and its backend are intact and tested; restoring it is re-adding the
+        line. Do that when the bridge can actually read it, and not before.
       */}
-      <ShadowCredential userId={session.id} />
     </div>
   );
 }

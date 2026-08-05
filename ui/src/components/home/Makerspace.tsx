@@ -18,7 +18,7 @@ import { isDeparted } from "@/lib/people-filters";
 /**
  * The makerspace, below the work.
  *
- * Today's original contract was "actionable work only — no counts you cannot
+ * Home's original contract was "actionable work only — no counts you cannot
  * act on, no charts", and it was right about the top of the page: the queue
  * must never be pushed down by anything. But the contract assumed the queue is
  * always non-empty, and most days it isn't. An operator who lands on "Nothing
@@ -98,6 +98,10 @@ function Health() {
 }
 
 const TONE_CLASS = {
+  // `calm` is this system's "nothing needed here" — the provider answered, the
+  // queue is empty, nothing expires inside the window. It gets the healthy
+  // lime as a WORD, never as a fill: a green field behind a count would make
+  // the absence of work the loudest thing on the page.
   calm: "text-ink",
   accent: "text-accent-text",
   warn: "text-warn-text",
@@ -120,11 +124,19 @@ function HealthCell({
   return (
     <Link
       href={href}
-      className="panel flex flex-col gap-1 px-4 py-3.5 transition-colors hover:bg-[var(--hover)]"
+      className="panel flex flex-col gap-1 px-4 py-3.5 motion-tint hover:bg-[var(--hover)]"
     >
       <span className="type-label">{label}</span>
       <span className={`font-display text-[26px] leading-none ${TONE_CLASS[tone]}`}>{value}</span>
-      <span className="text-[12.5px] text-faint">{note}</span>
+      <span className="flex items-center gap-2 text-[12.5px] text-faint">
+        {/* Healthy is a DOT here, never the value. Four 26px lime numerals in
+            a row would make "nothing is wrong" the loudest thing on the page,
+            and this state earns its meaning by being the quietest. */}
+        {tone === "calm" && (
+          <span aria-hidden className="h-1.5 w-1.5 flex-none rounded-pill bg-healthy" />
+        )}
+        {note}
+      </span>
     </Link>
   );
 }
@@ -189,7 +201,7 @@ function GapRow({
   return (
     <Link
       href={href}
-      className="row-divider flex items-baseline gap-3 px-5 py-3.5 transition-colors hover:bg-[var(--hover)]"
+      className="row-divider flex items-baseline gap-3 px-5 py-3.5 motion-tint hover:bg-[var(--hover)]"
     >
       <span className="font-display text-[20px] leading-none text-accent-text">{count}</span>
       <span className="text-[14.5px]">{headline}</span>
@@ -229,7 +241,7 @@ function AccessShape() {
           <Link
             key={`${role.project_id}:${role.role_key}`}
             href={peopleHref({ project: role.project_id, role: role.role_key })}
-            className="row-divider flex items-baseline gap-3 px-5 py-3 transition-colors hover:bg-[var(--hover)]"
+            className="row-divider flex items-baseline gap-3 px-5 py-3 motion-tint hover:bg-[var(--hover)]"
           >
             <span className="w-[36px] shrink-0 font-display text-[18px] leading-none">
               {role.assigned_user_count}

@@ -165,7 +165,7 @@ export function useCreateGrant(userId: string) {
       // old date — and, if it had been acknowledged, still showing an acknowledgement that the
       // new date has already voided. The screen would be contradicting the backend.
       qc.invalidateQueries({ queryKey: ["review", "expiring-grants"] });
-      // Today counts what is expiring, so its queue is wrong by one until this lands too.
+      // Home counts what is expiring, so its queue is wrong by one until this lands too.
       qc.invalidateQueries({ queryKey: ["governance"] });
     },
   });

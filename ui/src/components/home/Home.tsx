@@ -5,7 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { AccessSource } from "@/components/access/AccessSource";
-import { Makerspace } from "@/components/today/Makerspace";
+import { Makerspace } from "@/components/home/Makerspace";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
@@ -25,7 +25,18 @@ import { ClockTime, Relative } from "@/components/ui/Time";
 import { formatShortDate, formatWeekday, daysUntil } from "@/lib/format";
 
 /**
- * Today — the operator landing. Two zones, in a fixed order.
+ * Home — the operator landing. Two zones, in a fixed order.
+ *
+ * It was called Today, in the rail and here, and the name was retired in both
+ * places at once so that "Today" now means exactly one thing in this codebase:
+ * the day. The page outgrew it. The queue on top IS today's work — a 14-day
+ * expiry horizon, the weekday, "last checked" — but the makerspace zone below
+ * is not day-scoped at all, so a name promising a day described half the
+ * screen. Home is the one position-word in that rail which is also a true
+ * name, because this page's identity is that it is where you land.
+ *
+ * Where "today" still appears below it is the day and nothing else: today's
+ * work, what expires today. It is never the name of this page.
  *
  * **Work, on top.** Open requests, expiring access, and — in Advanced — pending
  * changes and unexplained access. Every block here is something you can finish.
@@ -49,7 +60,7 @@ import { formatShortDate, formatWeekday, daysUntil } from "@/lib/format";
  * changes and Unexplained access belong to the machine, and the machine lives
  * in Advanced.
  */
-export function Today({ session }: { session: SessionUser }) {
+export function Home({ session }: { session: SessionUser }) {
   const advanced = useIsAdvanced();
   const summary = useGovernanceSummary();
   const requests = useRequestsAdmin("pending");
@@ -99,7 +110,9 @@ export function Today({ session }: { session: SessionUser }) {
         // One calm line, not a full-page card: the page continues below, and a
         // hero-sized empty state would read as the end of it.
         <div className="panel flex items-center gap-3 px-5 py-4">
-          <span aria-hidden className="h-2.5 w-2.5 rounded-pill bg-accent" />
+          {/* Healthy, not accent. Violet is what you can act on, and the whole
+              statement of this row is that there is nothing to act on. */}
+          <span aria-hidden className="h-2.5 w-2.5 rounded-pill bg-healthy" />
           <span className="text-[14.5px]">
             <strong className="font-semibold">Nothing needs you.</strong>{" "}
             <span className="text-muted">
@@ -265,7 +278,7 @@ function ExpiringRow({
             await extend.mutateAsync({
               project_id: grant.project_id,
               role_key: grant.role_key,
-              reason: "Extended from Today",
+              reason: "Extended from Home",
               duration_days: 90,
             });
             toast.success("Extended by 90 days.");

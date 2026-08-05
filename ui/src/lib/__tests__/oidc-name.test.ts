@@ -10,7 +10,7 @@ import {
  * The regression these tests exist for: a Zitadel access token carries profile
  * claims only when the instance is configured to inline userinfo. By default it
  * carries none, and `extractSessionFields` used to fall back to `claims.sub` —
- * so the shell header and the Today greeting rendered the operator's opaque
+ * so the shell header and the Home greeting rendered the operator's opaque
  * Zitadel id where their name belonged. `sub` must never surface as a name.
  */
 describe("extractSessionFields — name", () => {

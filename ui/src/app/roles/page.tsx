@@ -30,7 +30,7 @@ export default function RolesPage() {
   const [group, setGroup] = useState("");
   const [creating, setCreating] = useState(false);
 
-  // Unused lives in the URL, unlike the other two, because Today links straight
+  // Unused lives in the URL, unlike the other two, because Home links straight
   // here with "N roles nobody holds" — a link that until now landed on an
   // unfiltered index and left the reader to find them.
   const unusedOnly = params.get("unused") === "1";
@@ -176,7 +176,7 @@ export default function RolesPage() {
             <Link
               key={`${role.project_id}:${role.role_key}`}
               href={`/projects/${role.project_id}/roles/${encodeURIComponent(role.role_key)}`}
-              className="row-divider flex items-center gap-[18px] px-5 py-3 transition-colors hover:bg-[var(--hover)]"
+              className="row-divider flex items-center gap-[18px] px-5 py-3 motion-tint hover:bg-[var(--hover)]"
             >
               <span className="w-[180px] truncate text-[14.5px] text-muted">
                 {role.project_name || role.project_id}

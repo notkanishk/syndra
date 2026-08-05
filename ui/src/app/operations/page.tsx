@@ -24,7 +24,7 @@ type Source = "all" | "provider" | "onboarding";
  *
  * A raw timeline, not a dashboard. Its job is forensic — "what did the identity
  * provider tell us at 09:38, and what did we do about it". No tiles, no counts,
- * no roll-ups: Today already owns actionable summary, and a second dashboard
+ * no roll-ups: Home already owns actionable summary, and a second dashboard
  * here would make it ambiguous which one is authoritative.
  *
  * Webhook events and onboarding triggers are ONE time-ordered stream. They are
@@ -171,7 +171,7 @@ export default function EventActivityPage() {
                   type="button"
                   onClick={() => setOpenPayload((cur) => (cur === row.id ? null : row.id))}
                   aria-expanded={openPayload === row.id}
-                  className="shrink-0 text-[13px] text-faint transition-colors hover:text-ink"
+                  className="shrink-0 text-[13px] text-faint motion-tint hover:text-ink"
                 >
                   payload {openPayload === row.id ? "⌃" : "⌄"}
                 </button>

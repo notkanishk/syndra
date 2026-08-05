@@ -5,7 +5,7 @@ import type { UserListEntry } from "@/lib/queries/useUsers";
  *
  * Filters live in the URL rather than in component state, and that is the whole
  * point of this file: it makes every count elsewhere in the product a link.
- * "3 unexplained" on Today, "12 people hold this" on a role, a bundle chip on
+ * "3 unexplained" on Home, "12 people hold this" on a role, a bundle chip on
  * someone's record — each becomes a href into People already narrowed to
  * exactly that set, and the resulting view is shareable and bookmarkable
  * instead of being a state an operator has to reconstruct by hand.

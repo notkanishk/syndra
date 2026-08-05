@@ -177,7 +177,7 @@ export function extractSessionFields(
   // only when the instance is configured to inline userinfo; by default it
   // carries none, so a `?? userId` fallback here silently turned every
   // signed-in operator's display name into their opaque Zitadel id — in the
-  // shell header and in the Today greeting, the two places a name is most
+  // shell header and in the Home greeting, the two places a name is most
   // obviously a name. An empty string is the honest answer: the caller layers
   // /me/profile behind it, which does know.
   const name =

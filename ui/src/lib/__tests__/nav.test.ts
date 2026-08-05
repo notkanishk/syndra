@@ -23,12 +23,12 @@ describe("navigation contract", () => {
     expect(advanced.length).toBeGreaterThan(basic.length);
   });
 
-  it("puts Today first in both operator views", () => {
-    expect(navLeaves(BASIC_NAV)[0].label).toBe("Today");
-    expect(navLeaves(ADVANCED_NAV)[0].label).toBe("Today");
+  it("puts Home first in both operator views", () => {
+    expect(navLeaves(BASIC_NAV)[0].label).toBe("Home");
+    expect(navLeaves(ADVANCED_NAV)[0].label).toBe("Home");
   });
 
-  it("gives members two destinations and no Today", () => {
+  it("gives members two destinations and no Home", () => {
     const labels = navLeaves(MEMBER_NAV).map((leaf) => leaf.label);
     expect(labels).toEqual(["My access", "Requests"]);
     expect(navFor("member")).toBe(MEMBER_NAV);
@@ -81,8 +81,8 @@ describe("active-route matching", () => {
     expect(leafMatches(people, "/users/u_2f81")).toBe(true);
   });
 
-  it("does not light Today up on every route", () => {
-    const today = byLabel.get("Today")!;
+  it("does not light Home up on every route", () => {
+    const today = byLabel.get("Home")!;
     expect(leafMatches(today, "/")).toBe(true);
     expect(leafMatches(today, "/users")).toBe(false);
   });

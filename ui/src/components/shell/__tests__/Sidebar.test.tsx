@@ -115,7 +115,7 @@ describe("the rail's active row", () => {
 
     const people = screen.getByRole("link", { name: "People" });
     expect(people).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Today" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Home" })).not.toHaveAttribute("aria-current");
   });
 
   it("marks Roles, not Projects, on a role detail route", () => {

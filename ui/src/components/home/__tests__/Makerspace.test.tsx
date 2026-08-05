@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { Makerspace } from "@/components/today/Makerspace";
+import { Makerspace } from "@/components/home/Makerspace";
 import type { UserListEntry } from "@/lib/queries/useUsers";
 
 const state = vi.hoisted(() => ({
@@ -70,7 +70,7 @@ beforeEach(() => {
   };
 });
 
-describe("Today › The makerspace", () => {
+describe("Home › The makerspace", () => {
   it("renders even when nothing needs the operator", () => {
     // The reason this zone exists: an empty queue used to leave a blank page,
     // so the operator went hunting through the nav instead.
@@ -110,10 +110,27 @@ describe("Today › The makerspace", () => {
     renderMakerspace();
     expect(screen.getByText("Unreachable").className).toContain("text-danger-text");
     expect(screen.getByText("2").className).toContain("text-danger-text");
-    // A healthy cell stays quiet rather than shouting green.
+
+    // A cell with nothing to report stays quiet. The healthy signal is a dot
+    // beside the note, never the value itself — four 26px lime numerals would
+    // make "nothing is wrong" the loudest thing on the page, and this is the
+    // one state that earns its meaning by being the calmest.
     const calm = screen.getAllByText("0");
     expect(calm.length).toBeGreaterThan(0);
-    calm.forEach((cell) => expect(cell.className).toContain("text-ink"));
+    for (const cell of calm) {
+      expect(cell.className).toContain("text-ink");
+      expect(cell.className).not.toContain("healthy");
+      // Healthy is never an action, so it must never borrow the accent either.
+      expect(cell.className).not.toContain("accent");
+    }
+
+    // It is still said — quietly, and only where nothing is wrong.
+    const dots = document.querySelectorAll(".bg-healthy");
+    expect(dots.length, "a calm cell marks itself with a healthy dot").toBeGreaterThan(0);
+    expect(
+      screen.getByText("Writes stay queued — nothing is lost").querySelector(".bg-healthy"),
+      "an unhealthy cell gets no healthy dot",
+    ).toBeNull();
   });
 
   it("makes every role in the shape list a link to the people holding it", () => {

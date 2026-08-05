@@ -66,7 +66,7 @@ const group = (label: string, children: NavLeaf[]): NavGroup => ({
 
 /** Basic — the everyday surface. Four destinations. */
 export const BASIC_NAV: NavEntry[] = [
-  leaf("Today", "/"),
+  leaf("Home", "/"),
   leaf("People", "/users", { pattern: /^\/users(\/|$)/ }),
   group("Access", [
     leaf("Projects", "/projects", { pattern: /^\/projects(\/[^/]+)?$/ }),
@@ -106,9 +106,9 @@ export const ADVANCED_NAV: NavEntry[] = [
 ];
 
 /**
- * Member — two destinations, and that is deliberate. No Today: a work queue
- * for someone with no queue is an empty room. The view switch is not rendered
- * for members at all.
+ * Member — two destinations, and that is deliberate. No Home: a member's
+ * landing IS their access, so a separate landing would be an empty room in
+ * front of the only room. The view switch is not rendered for members at all.
  */
 export const MEMBER_NAV: NavEntry[] = [
   leaf("My access", "/"),
