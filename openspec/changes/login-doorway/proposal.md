@@ -1,7 +1,7 @@
 # Login Doorway
 
 **Status:** Complete
-**Source:** `design_handoff_syndra_login/` — README, `login-reference.html`, `Syndra Brand.dc.html` panel `8a`
+**Source:** `design_handoff_syndra/login/` — `LOGIN.md`, `login-reference.html`, `Syndra Brand.dc.html` panel `8a`
 **Phase:** 5.5
 **Fidelity:** High. Colours, typography, spacing, easing curves and durations in the handoff are final.
 
