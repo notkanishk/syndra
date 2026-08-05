@@ -17,7 +17,7 @@ export const Select = React.forwardRef<
   return (
     <select
       ref={ref}
-      className={`block w-full appearance-none rounded-inner border bg-transparent px-[15px] py-3 text-[15px] text-ink transition-colors disabled:cursor-not-allowed disabled:text-faint ${
+      className={`block w-full appearance-none rounded-inner border bg-transparent px-[15px] py-3 text-[15px] text-ink motion-tint disabled:cursor-not-allowed disabled:text-faint ${
         emphasis ? "border-accent-line" : "border-line-strong"
       } ${className}`}
       {...props}
@@ -58,8 +58,8 @@ export function Segmented<T extends string>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(option.value)}
-            className={`rounded-pill font-semibold transition-colors duration-150 ${pad} ${
-              active ? "bg-accent text-accent-ink" : "text-muted hover:text-ink"
+            className={`rounded-pill font-semibold motion-tint ${pad} ${
+              active ? "bg-accent-dense text-accent-ink" : "text-muted hover:text-ink"
             }`}
           >
             {option.label}
@@ -93,7 +93,7 @@ export function FilterPills<T extends string>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(option.value)}
-            className={`rounded-pill px-3.5 py-1.5 text-[13px] transition-colors duration-150 ${
+            className={`rounded-pill px-3.5 py-1.5 text-[13px] motion-tint ${
               active ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
             }`}
           >

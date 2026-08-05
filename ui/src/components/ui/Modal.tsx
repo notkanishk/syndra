@@ -96,14 +96,17 @@ export function Modal({
       aria-modal="true"
       aria-labelledby={labelledBy}
       aria-describedby={describedBy}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4"
+      className="settle-scrim fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4"
       onClick={(event) => {
         if (event.target === event.currentTarget && !busy) onClose();
       }}
     >
+      {/* The scrim fades, then the card rises 10px from 97% a beat behind it.
+          It never zooms out of screen centre — the destination is where the
+          dialog will live, so the eye lands there and stays. */}
       <div
         ref={panelRef}
-        className={`w-full ${SIZE_CLASS[size]} animate-panel-in overflow-hidden rounded-[22px] border border-line-strong bg-surface-2 shadow-dialog`}
+        className={`w-full ${SIZE_CLASS[size]} settle-in overflow-hidden rounded-[22px] border border-line-strong bg-surface-2 shadow-dialog`}
       >
         {children}
       </div>

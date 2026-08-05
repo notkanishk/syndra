@@ -96,7 +96,7 @@ export function CommandBlock({
           type="button"
           onClick={copy}
           aria-label={label ?? `Copy command: ${command}`}
-          className={`shrink-0 rounded-pill px-3.5 py-1.5 text-[13px] font-semibold transition-colors duration-150 ${
+          className={`shrink-0 rounded-pill px-3.5 py-1.5 text-[13px] font-semibold motion-tint ${
             onWarn
               ? "border border-warn-ink/30 text-warn-ink hover:bg-warn-ink/10"
               : "border border-line-strong text-ink hover:bg-[var(--hover)]"

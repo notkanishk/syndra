@@ -13,7 +13,7 @@ type Tone = "neutral" | "accent" | "warn" | "danger";
 
 const TONES: Record<Tone, string> = {
   neutral: "bg-tint-2 text-ink/[.82]",
-  accent: "bg-accent text-accent-ink",
+  accent: "bg-accent-dense text-accent-ink",
   warn: "bg-warn text-warn-ink",
   danger: "bg-danger text-danger-ink",
 };

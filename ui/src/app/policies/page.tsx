@@ -144,7 +144,7 @@ export default function AutomaticRulesPage() {
               <button
                 type="button"
                 onClick={() => setEditing(rule)}
-                className="flex min-w-0 flex-1 flex-wrap items-center gap-[18px] py-3.5 text-left transition-colors hover:bg-[var(--hover)]"
+                className="flex min-w-0 flex-1 flex-wrap items-center gap-[18px] py-3.5 text-left motion-tint hover:bg-[var(--hover)]"
               >
                 <Mono className="w-[110px] shrink-0 truncate text-faint">
                   {shortRuleId(rule.id)}

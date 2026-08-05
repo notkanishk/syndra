@@ -122,7 +122,7 @@ export default function UpstreamGrantsPage() {
               <button
                 type="button"
                 onClick={() => setLimit((current) => current + PAGE)}
-                className="rounded-pill border border-line-strong px-4 py-1.5 text-[13.5px] font-semibold transition-colors hover:bg-[var(--hover)]"
+                className="rounded-pill border border-line-strong px-4 py-1.5 text-[13.5px] font-semibold motion-tint hover:bg-[var(--hover)]"
               >
                 Load next {Math.min(PAGE, rows.length - visible.length)}
               </button>

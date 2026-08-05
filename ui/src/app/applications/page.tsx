@@ -99,7 +99,7 @@ export default function AppsPage() {
             <Link
               key={entry.application.id}
               href={`/applications/${entry.application.id}`}
-              className="row-divider flex items-center gap-[18px] px-5 py-3.5 transition-colors hover:bg-[var(--hover)]"
+              className="row-divider flex items-center gap-[18px] px-5 py-3.5 motion-tint hover:bg-[var(--hover)]"
             >
               <span className="w-[170px] min-w-0">
                 <span className="block truncate text-[15.5px] font-semibold">

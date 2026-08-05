@@ -83,7 +83,7 @@ export function SelectionBar({
         <button
           type="button"
           onClick={onClear}
-          className="rounded-pill px-3 py-1.5 text-[13px] font-semibold text-muted transition-colors hover:text-ink"
+          className="rounded-pill px-3 py-1.5 text-[13px] font-semibold text-muted motion-tint hover:text-ink"
         >
           Clear
         </button>
@@ -109,7 +109,7 @@ export function SelectionAction({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-pill border px-3.5 py-1.5 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`rounded-pill border px-3.5 py-1.5 text-[13px] font-semibold motion-tint disabled:cursor-not-allowed disabled:opacity-50 ${
         tone === "danger"
           ? "border-danger-line text-danger-text hover:bg-danger-soft"
           : "border-line-strong hover:bg-[var(--hover)]"

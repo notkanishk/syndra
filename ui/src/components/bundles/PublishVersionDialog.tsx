@@ -158,7 +158,7 @@ function Choice({
       role="radio"
       aria-checked={selected}
       onClick={onSelect}
-      className={`rounded-inner border px-4 py-3 text-left transition-colors ${
+      className={`rounded-inner border px-4 py-3 text-left motion-tint ${
         selected ? "border-accent bg-accent-soft" : "border-line-strong hover:bg-[var(--hover)]"
       }`}
     >

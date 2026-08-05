@@ -91,7 +91,7 @@ export default function UpstreamUsersPage() {
                 type="button"
                 onClick={() => setSelected(user.id)}
                 aria-current={activeId === user.id ? "true" : undefined}
-                className={`row-divider flex w-full flex-col items-start px-4 py-2.5 text-left transition-colors ${
+                className={`row-divider flex w-full flex-col items-start px-4 py-2.5 text-left motion-tint ${
                   activeId === user.id ? "bg-accent-soft/60" : "hover:bg-[var(--hover)]"
                 }`}
               >

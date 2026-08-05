@@ -199,7 +199,7 @@ export function UnexplainedAccess() {
             type="button"
             onClick={() => router.replace(entry === "triage" ? "?" : "?tab=reconciliation")}
             aria-current={tab === entry ? "page" : undefined}
-            className={`rounded-pill px-4 py-2 text-[14.5px] transition-colors duration-150 ${
+            className={`rounded-pill px-4 py-2 text-[14.5px] motion-tint ${
               tab === entry ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
             }`}
           >
@@ -264,6 +264,7 @@ export function UnexplainedAccess() {
                   <EmptyState
                     title="Everything is explained."
                     guidance="Every grant in the identity provider traces back to something Syndra did."
+                    resolved
                   />
                 )
               }
@@ -292,7 +293,7 @@ export function UnexplainedAccess() {
                   <button
                     type="button"
                     onClick={() => setLimit(items.length)}
-                    className="rounded-pill border border-line-strong px-4 py-1.5 text-[13.5px] font-semibold transition-colors hover:bg-[var(--hover)]"
+                    className="rounded-pill border border-line-strong px-4 py-1.5 text-[13.5px] font-semibold motion-tint hover:bg-[var(--hover)]"
                   >
                     Show all {items.length}
                   </button>
@@ -449,7 +450,7 @@ function TriageRow({
           <button
             type="button"
             onClick={onSelectSimilar}
-            className="text-[12.5px] font-semibold text-muted underline-offset-2 transition-colors hover:text-accent-text hover:underline"
+            className="text-[12.5px] font-semibold text-muted underline-offset-2 motion-tint hover:text-accent-text hover:underline"
           >
             Select similar
           </button>
@@ -702,6 +703,7 @@ function Reconciliation() {
             <EmptyState
               title="The two sides agree."
               guidance="Every grant Syndra expects exists upstream, and nothing upstream is unaccounted for."
+              resolved
             />
           }
         >

@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import { useIndicators, type Indicators } from "@/lib/queries/useIndicators";
 import { leafMatches, navFor, type BadgeTone, type NavLeaf } from "@/lib/nav";
 import { useUiView } from "@/lib/ui-view";
+import { useFlashOnChange } from "@/lib/useFlashOnChange";
+import { SyndraMark } from "./SyndraMark";
 
 /**
  * The navigation rail. 252px, its own background, one border on the right.
@@ -21,7 +23,7 @@ import { useUiView } from "@/lib/ui-view";
 export default function Sidebar() {
   const pathname = usePathname();
   const { audience, isOperator } = useUiView();
-  const { data: indicators } = useIndicators(isOperator);
+  const { data: indicators, isPlaceholderData } = useIndicators(isOperator);
 
   const entries = navFor(audience);
   const viewLabel =
@@ -30,9 +32,7 @@ export default function Sidebar() {
   return (
     <div className="flex w-[252px] flex-none flex-col gap-5 overflow-y-auto border-r border-line bg-rail px-3 pb-[22px] pt-5">
       <div className="flex items-center gap-2.5 px-2">
-        <span className="flex h-7 w-7 items-center justify-center rounded-[9px] bg-accent font-display text-[15px] font-bold text-accent-ink">
-          m
-        </span>
+        <SyndraMark />
         <span className="font-display text-[18px] font-semibold tracking-[-0.01em]">Syndra</span>
         <span className="flex-1" />
         <span className="rounded-pill border border-line-strong px-2 py-0.5 text-[11px] text-faint">
@@ -48,6 +48,7 @@ export default function Sidebar() {
               item={entry}
               pathname={pathname}
               indicators={indicators}
+              settled={!isPlaceholderData}
               nested={false}
             />
           ) : (
@@ -62,6 +63,7 @@ export default function Sidebar() {
                   item={child}
                   pathname={pathname}
                   indicators={indicators}
+                  settled={!isPlaceholderData}
                   nested
                 />
               ))}
@@ -74,7 +76,7 @@ export default function Sidebar() {
 }
 
 const BADGE_TONE: Record<BadgeTone, string> = {
-  accent: "bg-accent text-accent-ink",
+  accent: "bg-accent-dense text-accent-ink",
   warn: "bg-warn text-warn-ink",
   danger: "bg-danger text-danger-ink",
 };
@@ -83,21 +85,34 @@ function NavRow({
   item,
   pathname,
   indicators,
+  settled,
   nested,
 }: {
   item: NavLeaf;
   pathname: string;
   indicators?: Indicators;
+  /** False while the rail is showing the query's placeholder zeros. */
+  settled: boolean;
   nested: boolean;
 }) {
   const active = leafMatches(item, pathname);
   const count = item.indicator ? Number(indicators?.[item.indicator] ?? 0) : undefined;
+  // The rail is polled, so this is where a value most often changes while the
+  // operator is reading something else. The ROW washes; the count itself only
+  // lifts into place. Nothing counts up or ticks.
+  //
+  // `settled` is what stops every nonzero badge flashing on page load: until
+  // the first payload lands these counts are the query's placeholder zeros,
+  // and a real 12 arriving over a fabricated 0 is an arrival, not a change.
+  const changed = useFlashOnChange(count, settled);
 
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
-      className={`flex items-center gap-[9px] rounded-nav text-[14.5px] transition-colors duration-150 ${
+      className={`flex items-center gap-[9px] rounded-nav text-[14.5px] motion-tint ${
+        changed ? "flash " : ""
+      }${
         nested ? "py-2 pl-[21px] pr-3" : "px-3 py-[9px]"
       } ${
         active
@@ -118,8 +133,8 @@ function NavRow({
         (count > 0 ? (
           <span
             className={`rounded-pill px-2 py-0.5 text-[11.5px] font-semibold ${
-              BADGE_TONE[item.tone ?? "accent"]
-            }`}
+              changed ? "flash-value " : ""
+            }${BADGE_TONE[item.tone ?? "accent"]}`}
           >
             {count}
           </span>

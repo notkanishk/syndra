@@ -37,8 +37,8 @@ export function ChimeToggle() {
           setChimeEnabled(!enabled);
           setEnabled(!enabled);
         }}
-        className={`rounded-pill px-4 py-[7px] text-[13.5px] font-semibold transition-colors ${
-          enabled ? "bg-accent text-accent-ink" : "border border-line-strong text-muted"
+        className={`rounded-pill px-4 py-[7px] text-[13.5px] font-semibold motion-tint ${
+          enabled ? "bg-accent-dense text-accent-ink" : "border border-line-strong text-muted"
         }`}
       >
         {enabled ? "Sound on" : "Sound off"}

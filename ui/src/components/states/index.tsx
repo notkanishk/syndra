@@ -48,19 +48,33 @@ export function RowSkeleton({
 /**
  * Empty — a sentence naming what is absent, one line of guidance, one link to
  * the next move. No illustration, no "you're all caught up!".
+ *
+ * `resolved` separates the two very different things an empty list can mean.
+ * A triage queue with nothing in it is *resolved*: work existed, and none of
+ * it needs you. A people list with nothing in it is merely *absent*: nobody
+ * has been added yet, which is not good news, it is just news. Only the first
+ * earns the healthy dot, and it is the caller's assertion rather than
+ * something inferred from a zero — the component cannot tell them apart.
  */
 export function EmptyState({
   title,
   guidance,
   action,
+  resolved = false,
 }: {
   title: string;
   guidance?: string;
   action?: { label: string; href: string } | { label: string; onClick: () => void };
+  resolved?: boolean;
 }) {
   return (
     <div role="status" className="flex flex-col justify-center gap-2.5 px-6 py-8">
-      <div className="type-empty-title">{title}</div>
+      <div className="flex items-center gap-2.5">
+        {resolved && (
+          <span aria-hidden className="h-2 w-2 flex-none rounded-pill bg-healthy" />
+        )}
+        <div className="type-empty-title">{title}</div>
+      </div>
       {guidance && <p className="max-w-[60ch] text-[14px] text-muted">{guidance}</p>}
       {action &&
         ("href" in action ? (
@@ -125,7 +139,7 @@ export function ErrorState({
           <button
             type="button"
             onClick={onRetry}
-            className="rounded-pill bg-tint-3 px-4 py-1.5 text-[13px] font-semibold text-ink transition-colors hover:bg-tint-2"
+            className="rounded-pill bg-tint-3 px-4 py-1.5 text-[13px] font-semibold text-ink motion-tint hover:bg-tint-2"
           >
             Try again
           </button>
@@ -180,5 +194,12 @@ export function ListStates({
   if (isLoading) return <>{skeleton ?? <RowSkeleton />}</>;
   if (error) return <ErrorState title={errorTitle} error={error} onRetry={onRetry} bare />;
   if (isEmpty) return <>{empty}</>;
-  return <>{children}</>;
+  // `arrive`, applied at the one place every list in the product already
+  // passes through — so a new list gets it by being a list, and no view can
+  // quietly opt out of it any more than it can skip an empty state.
+  //
+  // `contents` keeps the wrapper out of the layout entirely: this sits inside
+  // flex and grid parents everywhere, and a real box here would collapse the
+  // gaps between rows.
+  return <div className="contents arrive-list">{children}</div>;
 }

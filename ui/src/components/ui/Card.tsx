@@ -43,7 +43,7 @@ export function CardHeader({
       ? "bg-warn text-warn-ink"
       : tone === "danger"
         ? "bg-danger text-danger-ink"
-        : "bg-accent text-accent-ink";
+        : "bg-accent-dense text-accent-ink";
 
   return (
     <div className={`flex flex-wrap items-center gap-[11px] px-5 py-4 ${className}`}>

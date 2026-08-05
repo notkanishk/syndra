@@ -72,9 +72,13 @@ export function DegradedBanner() {
       role="alert"
       className="sticky top-0 z-40 flex items-start gap-3.5 bg-warn px-[26px] py-4 text-warn-ink"
     >
+      {/* The mark breathes, not the banner. This is one of the product's two
+          licensed loops and it means "still happening" — a whole amber field
+          pulsing behind text would be unreadable, and would be decoration
+          rather than the statement that the provider is still unreachable. */}
       <span
         aria-hidden
-        className="mt-0.5 flex h-[22px] w-[22px] flex-none items-center justify-center rounded-pill bg-warn-ink text-[13px] font-bold text-warn"
+        className="breathe mt-0.5 flex h-[22px] w-[22px] flex-none items-center justify-center rounded-pill bg-warn-ink text-[13px] font-bold text-warn"
       >
         !
       </span>

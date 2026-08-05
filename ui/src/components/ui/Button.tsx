@@ -27,19 +27,23 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   reason?: string;
 }
 
+/** Every label on this control is 13–13.5px, which is small text by WCAG at
+ *  any weight — so a filled variant takes the dense accent, not the bright
+ *  one. `--accent` under `--accent-ink` is 4.18:1 and fails; `--accent-dense`
+ *  is 5.2:1 and passes. */
 const VARIANTS: Record<Variant, string> = {
-  accent: "bg-accent text-accent-ink hover:brightness-105 active:brightness-95",
+  accent: "bg-accent-dense text-accent-ink hover:brightness-110",
   accentSoft: "bg-accent-soft text-accent-text hover:brightness-110",
   outline: "border border-line-strong text-ink hover:bg-[var(--hover)]",
   ghost: "text-muted hover:text-ink hover:bg-[var(--hover)]",
   danger: "border border-danger-line text-danger-text hover:bg-danger-soft",
-  dangerConfirm: "bg-danger text-danger-ink hover:brightness-105 active:brightness-95",
+  dangerConfirm: "bg-danger text-danger-ink hover:brightness-110",
 };
 
 /** A blocked control keeps the semantic colour it would otherwise carry, at
  *  reduced alpha — it must still read as the destructive action it is. */
 const DISABLED: Record<Variant, string> = {
-  accent: "bg-accent/25 text-accent-ink/50",
+  accent: "bg-accent-dense/25 text-accent-ink/50",
   accentSoft: "bg-accent-soft/50 text-accent-text/40",
   outline: "border border-line text-faint",
   ghost: "text-faint",
@@ -68,11 +72,12 @@ export function Button({
       className={buttonClasses({ variant, size, disabled: isDisabled, className })}
       {...props}
     >
+      {/* A dot on the product's one licensed loop, not a spinner. `breathe`
+          already means "this is still happening" everywhere else in the
+          system, and a second idiom for the same statement is one the
+          operator has to learn twice. */}
       {isPending && (
-        <span
-          aria-hidden
-          className="h-3.5 w-3.5 animate-spin rounded-pill border-2 border-current/40 border-t-current"
-        />
+        <span aria-hidden className="breathe h-2 w-2 flex-none rounded-pill bg-current" />
       )}
       {children}
     </button>
@@ -127,7 +132,10 @@ function buttonClasses({
   className?: string;
 }): string {
   const sizeClass = size === "sm" ? "px-3.5 py-1.5 text-[13px]" : "px-4 py-[7px] text-[13.5px]";
-  return `inline-flex items-center justify-center gap-2 rounded-pill font-semibold transition-all duration-150 disabled:cursor-not-allowed ${sizeClass} ${
+  // `press`, and a 3% scale-down rather than a translate, so the button stays
+  // under the finger. Destructive buttons behave identically — muscle memory
+  // must never depend on what a button does.
+  return `inline-flex items-center justify-center gap-2 rounded-pill font-semibold motion-press press-scale disabled:cursor-not-allowed ${sizeClass} ${
     disabled ? DISABLED[variant] : VARIANTS[variant]
   } ${className}`;
 }

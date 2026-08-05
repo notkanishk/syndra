@@ -29,7 +29,7 @@ export function UpstreamShell({
       <div>
         <Link
           href="/zitadel"
-          className="text-[13.5px] font-semibold text-accent-text transition-colors hover:brightness-110"
+          className="text-[13.5px] font-semibold text-accent-text motion-tint hover:brightness-110"
         >
           ← Identity provider
         </Link>

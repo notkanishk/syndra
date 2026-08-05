@@ -162,7 +162,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
             type="button"
             onClick={() => setTab(entry)}
             aria-current={tab === entry ? "page" : undefined}
-            className={`rounded-pill px-4 py-2 text-[14.5px] transition-colors duration-150 ${
+            className={`rounded-pill px-4 py-2 text-[14.5px] motion-tint ${
               tab === entry ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
             }`}
           >
@@ -441,7 +441,7 @@ function RoleGroup({
                     grantId: grant?.id,
                   })
                 }
-                className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-pill border border-line-strong text-[15px] leading-none text-muted transition-colors hover:text-ink"
+                className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-pill border border-line-strong text-[15px] leading-none text-muted motion-tint hover:text-ink"
               >
                 ⋯
               </button>

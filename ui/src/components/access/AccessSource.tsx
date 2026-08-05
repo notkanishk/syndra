@@ -210,7 +210,7 @@ export function SourcePopover({
       </button>
 
       {open && (
-        <span className="absolute left-0 top-[calc(100%+8px)] z-30 w-[380px] animate-panel-in rounded-panel border border-line-strong bg-surface-2 shadow-popover">
+        <span className="absolute left-0 top-[calc(100%+8px)] z-30 w-[380px] settle-in rounded-panel border border-line-strong bg-surface-2 shadow-popover">
           <span className="flex items-center gap-2.5 border-b border-line px-[18px] py-4">
             <SourceChip kind={kind} />
             <span className="font-display text-[19px] font-semibold">{expandedTitle(kind)}</span>

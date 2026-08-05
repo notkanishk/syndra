@@ -65,7 +65,7 @@ export default function UpstreamProjectsPage() {
                 type="button"
                 onClick={() => setSelected(project.id)}
                 aria-current={activeId === project.id ? "true" : undefined}
-                className={`row-divider flex w-full flex-col items-start px-4 py-3 text-left transition-colors ${
+                className={`row-divider flex w-full flex-col items-start px-4 py-3 text-left motion-tint ${
                   activeId === project.id ? "bg-accent-soft/60" : "hover:bg-[var(--hover)]"
                 }`}
               >

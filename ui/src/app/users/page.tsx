@@ -206,7 +206,7 @@ export default function PeoplePage() {
               type="button"
               onClick={() => (bulkMode ? exitBulk() : setParams({}, { bulk: "1" }))}
               aria-pressed={bulkMode}
-              className={`rounded-pill border px-4 py-[7px] text-[13.5px] font-semibold transition-colors ${
+              className={`rounded-pill border px-4 py-[7px] text-[13.5px] font-semibold motion-tint ${
                 bulkMode
                   ? "border-accent-line bg-accent-soft text-accent-text"
                   : "border-line-strong hover:bg-[var(--hover)]"
@@ -311,7 +311,7 @@ export default function PeoplePage() {
               <button
                 type="button"
                 onClick={() => setLimit((current) => current + PAGE)}
-                className="rounded-pill border border-line-strong px-4 py-1.5 text-[13.5px] font-semibold transition-colors hover:bg-[var(--hover)]"
+                className="rounded-pill border border-line-strong px-4 py-1.5 text-[13.5px] font-semibold motion-tint hover:bg-[var(--hover)]"
               >
                 Load next {Math.min(PAGE, rows.length - visible.length)}
               </button>
@@ -371,7 +371,7 @@ function FilterChip({ label, onClear }: { label: string; onClear: () => void }) 
         type="button"
         onClick={onClear}
         aria-label={`Clear filter: ${label}`}
-        className="rounded-pill px-2 py-0.5 font-semibold text-muted transition-colors hover:text-ink"
+        className="rounded-pill px-2 py-0.5 font-semibold text-muted motion-tint hover:text-ink"
       >
         ✕
       </button>
@@ -447,7 +447,7 @@ function PersonRow({
     </>
   );
 
-  const shared = `row-divider flex items-center gap-[18px] px-5 py-3.5 transition-colors hover:bg-[var(--hover)] ${
+  const shared = `row-divider flex items-center gap-[18px] px-5 py-3.5 motion-tint hover:bg-[var(--hover)] ${
     departed ? "opacity-60" : ""
   }`;
 

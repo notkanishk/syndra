@@ -134,8 +134,8 @@ export function GrantDirectAccess({
                 type="button"
                 aria-pressed={preset === value}
                 onClick={() => setPreset(value)}
-                className={`rounded-pill px-3.5 py-[7px] text-[13px] font-semibold transition-colors ${
-                  preset === value ? "bg-accent text-accent-ink" : "bg-tint-2 text-ink"
+                className={`rounded-pill px-3.5 py-[7px] text-[13px] font-semibold motion-tint ${
+                  preset === value ? "bg-accent-dense text-accent-ink" : "bg-tint-2 text-ink"
                 }`}
               >
                 {label}

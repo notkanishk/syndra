@@ -107,7 +107,7 @@ export function ManageBundles({
                   return next;
                 })
               }
-              className={`flex items-center gap-3 rounded-inner border px-[15px] py-3 text-left transition-colors ${
+              className={`flex items-center gap-3 rounded-inner border px-[15px] py-3 text-left motion-tint ${
                 isSelected
                   ? "border-accent-line bg-accent-soft/70"
                   : "border-line-strong hover:bg-[var(--hover)]"

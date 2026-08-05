@@ -163,7 +163,7 @@ export default function AccessMapPage() {
                   type="button"
                   onClick={() => toggleKind(kind)}
                   aria-pressed={shown(kind)}
-                  className={`flex items-center gap-2.5 rounded-nav px-2 py-1.5 text-left transition-colors hover:bg-[var(--hover)] ${
+                  className={`flex items-center gap-2.5 rounded-nav px-2 py-1.5 text-left motion-tint hover:bg-[var(--hover)] ${
                     shown(kind) ? "" : "opacity-40"
                   }`}
                 >
@@ -233,7 +233,7 @@ export default function AccessMapPage() {
                 <button
                   type="button"
                   onClick={() => setFocusId(null)}
-                  className="font-semibold text-accent-text transition-colors hover:brightness-110"
+                  className="font-semibold text-accent-text motion-tint hover:brightness-110"
                 >
                   All nodes
                 </button>
@@ -353,7 +353,7 @@ function RootView({
                 key={node.id}
                 type="button"
                 onClick={() => onFocus(node.id)}
-                className="flex items-center gap-3 rounded-block border border-line bg-surface-1 px-4 py-3 text-left transition-colors hover:bg-[var(--hover)]"
+                className="flex items-center gap-3 rounded-block border border-line bg-surface-1 px-4 py-3 text-left motion-tint hover:bg-[var(--hover)]"
               >
                 <NodeGlyph kind={node.kind} />
                 <span className="min-w-0 flex-1">
@@ -404,7 +404,7 @@ function NodeColumn({
               // A dashed edge means an automatic rule produced this link — the
               // same dashed language the Access source chip uses for "nobody
               // clicked it". The node itself is still a role or a project.
-              className={`flex items-center gap-3 rounded-block bg-surface-1 px-4 py-3.5 text-left transition-colors hover:bg-[var(--hover)] ${
+              className={`flex items-center gap-3 rounded-block bg-surface-1 px-4 py-3.5 text-left motion-tint hover:bg-[var(--hover)] ${
                 viaRule ? "border border-dashed border-ink/25" : "border border-line"
               }`}
             >

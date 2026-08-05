@@ -106,6 +106,7 @@ export default function PendingChangesPage() {
             <EmptyState
               title="Nothing is waiting."
               guidance="Every decision Syndra has made has reached the identity provider."
+              resolved
             />
           }
         >

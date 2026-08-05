@@ -70,7 +70,7 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
             <button
               type="button"
               onClick={() => setLimit((current) => Math.min(current + PAGE, 200))}
-              className="rounded-pill border border-line-strong px-4 py-1.5 text-[13.5px] font-semibold transition-colors hover:bg-[var(--hover)]"
+              className="rounded-pill border border-line-strong px-4 py-1.5 text-[13.5px] font-semibold motion-tint hover:bg-[var(--hover)]"
             >
               Load more
             </button>

@@ -69,7 +69,7 @@ export function TopBar({ session }: { session: SessionUser }) {
       <form action="/auth/logout" method="post">
         <button
           type="submit"
-          className="rounded-pill border border-line-strong px-3 py-1.5 text-[13px] font-semibold text-muted transition-colors hover:text-ink"
+          className="rounded-pill border border-line-strong px-3 py-1.5 text-[13px] font-semibold text-muted motion-tint hover:text-ink"
         >
           Sign out
         </button>

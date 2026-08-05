@@ -124,6 +124,7 @@ export default function ExpiringAccessPage() {
             <EmptyState
               title="Nothing expires in the next 30 days."
               guidance="Direct grants appear here a month before their expiry date."
+              resolved
             />
           }
         >

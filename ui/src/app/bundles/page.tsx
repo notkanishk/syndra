@@ -91,7 +91,7 @@ export default function BundlesPage() {
                 type="button"
                 onClick={() => setSelected(bundle.id)}
                 aria-current={activeId === bundle.id ? "true" : undefined}
-                className={`row-divider flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors ${
+                className={`row-divider flex w-full items-center gap-2.5 px-4 py-3 text-left motion-tint ${
                   activeId === bundle.id ? "bg-accent-soft/60" : "hover:bg-[var(--hover)]"
                 }`}
               >

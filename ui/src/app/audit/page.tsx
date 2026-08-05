@@ -117,7 +117,7 @@ export default function AuditPage() {
             type="button"
             onClick={() => router.replace("/audit", { scroll: false })}
             aria-label="Show the whole audit log"
-            className="rounded-pill px-2 py-0.5 font-semibold text-muted transition-colors hover:text-ink"
+            className="rounded-pill px-2 py-0.5 font-semibold text-muted motion-tint hover:text-ink"
           >
             ✕
           </button>

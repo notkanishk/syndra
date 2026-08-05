@@ -29,9 +29,9 @@ export function ViewSwitch() {
             role="radio"
             aria-checked={active}
             onClick={() => setView(option)}
-            className={`rounded-pill px-4 py-1.5 text-[13.5px] transition-colors duration-150 ${
+            className={`rounded-pill px-4 py-1.5 text-[13.5px] motion-tint ${
               active
-                ? "bg-accent font-semibold text-accent-ink"
+                ? "bg-accent-dense font-semibold text-accent-ink"
                 : "text-muted hover:text-ink"
             }`}
           >

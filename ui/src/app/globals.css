@@ -4,19 +4,25 @@
  * Syndra — Basic / Advanced design system
  *
  * Dark is home; light is daylight. Same geometry, same spacing, same
- * components — only colour changes between them. The brand accent shifts hue
- * with the ground so it keeps its weight: lime carries a near-black room,
- * violet carries a paper one.
+ * components — and now the same hue. Violet carries both rooms; only its
+ * weight changes with the ground.
  *
- * Colour is semantic, never decorative. Four roles:
+ * Colour is semantic, never decorative. Five roles:
  *
  *   accent      the primary action and the current selection, one per screen
  *               region. Never means "good" or "safe".
+ *   healthy     "nothing needed here" — the provider answered, the queue is
+ *               empty, the cache is fresh. A dot, a word, or a hairline.
+ *               Never a button, never a fill behind text.
  *   warn        a deadline or a broken assumption — expiring access, queued
  *               writes, an unreachable provider. Nothing is lost yet.
  *   danger      takes access away, or reports that something already failed.
  *               Solid fill ONLY on the confirming button inside a dialog.
  *   neutral     everything else, which is most of the interface.
+ *
+ * accent and healthy are the pair that keeps each other honest. Violet is what
+ * you can act on; lime is what needs nothing from you. A screen where the two
+ * are confused is a screen that cannot tell you where to look.
  *
  * Access source chips encode a kind, not a severity: Direct takes the accent
  * because it is the one source an operator can act on; Via bundle and
@@ -54,6 +60,16 @@
   --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
   --color-accent-line: var(--accent-line);
+  /* The same accent, denser, for when the label riding on it is small. See
+     --accent-dense in the theme blocks for why it has to exist. */
+  --color-accent-dense: var(--accent-dense);
+
+  /* Healthy — deliberately ONE token, and no -soft, -ink or -line sibling.
+     The role is "nothing needed here": a dot, a word, or a hairline. There is
+     no such thing as a healthy button or a healthy filled field, so the token
+     set gives you nothing to build one out of. Where a hairline is wanted,
+     color-mix it down at the callsite. */
+  --color-healthy: var(--healthy);
 
   /* Attention */
   --color-warn: var(--warn);
@@ -84,22 +100,64 @@
   --radius-nav: 12px;
   --radius-pill: 999px;
 
-  /* Motion — this is a tool used in a hurry. Nothing longer than 200ms. */
-  --animate-panel-in: panelIn 0.2s ease-out;
-  --animate-row-in: rowIn 0.16s ease-out;
+  /* ── Motion ──────────────────────────────────────────────────────────────
+   * Six durations for the whole product, and nothing on the critical path is
+   * slower than 260ms: an operator clearing a queue of twelve should never
+   * wait for the interface.
+   *
+   * Motion does three jobs here and no others — it softens the arrival of
+   * things you did not ask for, it confirms the thing you touched, and it
+   * marks the one state that is still changing. Three rules govern all of it:
+   *
+   *   1. Direction carries meaning. Things the system produced RISE. Things
+   *      you opened SCALE from where you clicked. Nothing slides sideways and
+   *      nothing travels more than 10px.
+   *   2. Only one thing loops. A repeating animation means "this is still
+   *      happening" — degraded breathes, skeletons breathe. Nothing healthy
+   *      and no decoration is ever allowed to loop.
+   *   3. Never on a number. Counts, dates and ids are read, not watched. What
+   *      animates is the row around them, once, and only when the value
+   *      arrived while the operator was looking elsewhere.
+   *
+   * Use the motion-* / arrive / flash / breathe utilities below rather than
+   * these raw values, so a duration and its easing can never drift apart.
+   * ─────────────────────────────────────────────────────────────────────── */
 
-  @keyframes panelIn {
+  --ease-tint: cubic-bezier(0.4, 0, 0.6, 1);
+  --ease-press: cubic-bezier(0.22, 0.61, 0.36, 1);
+  /* settle and arrive share an easing — the same decelerating curve, told
+     over a different distance. */
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --duration-tint: 120ms;
+  --duration-press: 180ms;
+  --duration-settle: 260ms;
+  --duration-arrive: 420ms;
+  --duration-flash: 900ms;
+  --duration-breathe: 2400ms;
+
+  /* Rows stagger 40ms apart, and the stagger caps at six: a queue of forty
+     must not take two seconds to become readable. */
+  --arrive-step: 40ms;
+  --arrive-cap: 5;
+
+  @keyframes arrive {
     from {
       opacity: 0;
-      transform: translateY(6px) scale(0.99);
+      transform: translateY(8px);
     }
     to {
       opacity: 1;
-      transform: translateY(0) scale(1);
+      transform: none;
     }
   }
 
-  @keyframes rowIn {
+  /* Opacity and nothing else. A scrim is the whole viewport and it is the
+     PARENT of the dialog card, so any transform here does two wrong things at
+     once: it drags a `fixed inset-0` element off its own bottom edge, and it
+     compounds with the card's rise so the dialog travels further than the
+     10px the system allows anything to move. */
+  @keyframes fade {
     from {
       opacity: 0;
     }
@@ -108,18 +166,78 @@
     }
   }
 
-  @keyframes shimmer {
-    0%,
-    100% {
-      opacity: 0.55;
+  /* Things you opened scale from where you clicked, so the dialog grows into
+     the place it is going to live rather than zooming out of screen centre. */
+  @keyframes settle-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.97);
     }
-    50% {
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes flash {
+    from {
+      background-color: var(--accent-soft);
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+
+  /* The one concession to rule 3: the value lifts into place, once. It does
+     not roll, count up, or tick. */
+  @keyframes flash-value {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes breathe {
+    from {
+      opacity: 0.5;
+    }
+    to {
       opacity: 1;
     }
   }
 }
 
 @layer base {
+  /* ── Brand violet ────────────────────────────────────────────────────────
+   * The accent the brand locks. Declared once and theme-independent, because
+   * a ramp is a ramp — the themes decide what they spend it on. Both rooms
+   * now spend it: the doorway, the dark app, and the light app all point here
+   * rather than carrying their own hexes.
+   * ─────────────────────────────────────────────────────────────────────── */
+  :root {
+    --violet-600: #6f4ae0; /* a denser fill, for small labels — see below */
+    --violet-500: #7f5af0; /* filled elements: the primary button */
+    --violet-400: #9b7bff; /* accent text on dark, the orb's core */
+    --violet-300: #c9b6ff; /* the quiet head, the focus outline */
+    --on-violet: #f7f4ff; /* label on a violet fill */
+
+    /* --on-violet on --violet-500 is 4.18:1. That passes AA as large text
+       (≥18.5px, or ≥14px bold) and FAILS it for anything smaller — which
+       includes the 11.5px count badges in the rail. --violet-600 takes the
+       same label to 5.2:1, so small text on accent uses the denser fill and
+       large text keeps the brighter one. */
+
+    /* Lime is no longer the accent. It has one job now: "nothing needed
+       here". Kept on the ramp beside violet because the two are read
+       against each other. */
+    --lime-400: #a3e635; /* healthy, on a near-black ground */
+    --lime-700: #4d7c0f; /* healthy, on paper — the bright one vanishes */
+  }
+
   /* ── Dark — the default room ─────────────────────────────────────────── */
   :root,
   [data-theme="dark"] {
@@ -141,11 +259,19 @@
     --faint: rgba(243, 245, 239, 0.42);
     --label: rgba(243, 245, 239, 0.34);
 
-    --accent: #d8f24e;
-    --accent-text: #d8f24e;
-    --accent-ink: #12140d;
-    --accent-soft: rgba(216, 242, 78, 0.15);
-    --accent-line: rgba(216, 242, 78, 0.28);
+    /* Fill and text differ, and must: --violet-500 is the pill you press,
+       --violet-400 is the tone that stays legible as 13px text on #141612. */
+    --accent: var(--violet-500);
+    --accent-text: var(--violet-400);
+    --accent-ink: var(--on-violet);
+    --accent-dense: var(--violet-600);
+    --accent-soft: rgba(155, 123, 255, 0.15);
+    --accent-line: rgba(155, 123, 255, 0.28);
+    /* The quiet head of the ramp. A focus ring has to be findable against a
+       violet button as well as against the ground, so it is not --accent. */
+    --focus-ring: var(--violet-300);
+
+    --healthy: var(--lime-400);
 
     --warn: #f5a524;
     --warn-text: #f7b955;
@@ -169,8 +295,17 @@
     --shadow-popover: 0 18px 40px rgba(0, 0, 0, 0.5);
     --shadow-card: none;
 
-    --avatar-from: #454b34;
-    --avatar-to: #23261c;
+    /* Same two tonal steps the olive pair held, moved onto the violet axis —
+       an olive avatar beside a violet accent reads as moss. */
+    --avatar-from: #403466;
+    --avatar-to: #211b33;
+
+    /* The mark — a miniature of the login's arch and orb. */
+    --mark-base: rgba(155, 123, 255, 0.22);
+    --mark-arc: rgba(206, 188, 255, 0.92);
+    --mark-arc-opacity: 0.62;
+    --mark-dot: var(--violet-400);
+    --mark-glow: rgba(155, 123, 255, 0.6);
 
     color-scheme: dark;
   }
@@ -193,12 +328,19 @@
     --label: rgba(29, 24, 48, 0.4);
 
     /* Fill and text differ: #7a5af8 carries a white pill, #5b3fd6 is the
-       AA-contrast text/link tone on a white card. */
+       AA-contrast text/link tone on a white card — and doubles as the dense
+       fill, since white on it clears AA at any size. */
     --accent: #7a5af8;
     --accent-text: #5b3fd6;
     --accent-ink: #ffffff;
+    --accent-dense: #5b3fd6;
     --accent-soft: rgba(122, 90, 248, 0.12);
     --accent-line: rgba(122, 90, 248, 0.32);
+    /* --violet-300 on white is a smudge; daylight focuses in the text tone. */
+    --focus-ring: var(--accent-text);
+
+    /* The bright lime is invisible on paper; daylight gets the deep one. */
+    --healthy: var(--lime-700);
 
     --warn: #a86a00;
     --warn-text: #8a5600;
@@ -225,6 +367,14 @@
     --avatar-from: #cdbdfa;
     --avatar-to: #a58ef0;
 
+    /* The near-white arc is invisible on paper, so daylight darkens the mark
+       and leans on it harder to compensate for the lost glow. */
+    --mark-base: rgba(91, 63, 214, 0.18);
+    --mark-arc: rgba(76, 48, 196, 0.85);
+    --mark-arc-opacity: 0.9;
+    --mark-dot: var(--accent-text);
+    --mark-glow: rgba(91, 63, 214, 0.3);
+
     color-scheme: light;
   }
 
@@ -242,13 +392,16 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Every interactive element gets a themed focus ring in the accent. The
-     default browser ring is never acceptable — it vanishes against the dark
-     ground and clashes with the accent in light. */
+  /* Every interactive element gets a themed focus ring. The default browser
+     ring is never acceptable — it vanishes against the dark ground. The
+     4px offset is what lets the ring clear a violet button instead of
+     merging with it, and it moves on `press` timing like everything else
+     that answers a keystroke or a click. */
   :focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 4px;
     border-radius: 4px;
+    transition: outline-color var(--duration-press) var(--ease-press);
   }
 
   ::selection {
@@ -264,6 +417,13 @@
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
+      /* Delays collapse too, and this is not a formality. `arrive` staggers
+         rows up to 200ms; without this the sixth row of every list in the
+         product sits invisible for a fifth of a second before appearing —
+         a stall rather than an animation, which is the exact thing the
+         preference is asking us not to do. */
+      animation-delay: 0.01ms !important;
+      transition-delay: 0.01ms !important;
     }
   }
 }
@@ -343,6 +503,190 @@
   font-weight: 400;
 }
 
+/* ── Motion roles ─────────────────────────────────────────────────────────
+ * The six tokens above, spent. Components reach for these names, never for a
+ * raw duration: `motion-tint`, not `transition-colors duration-150`. The name
+ * is the argument for the timing, so a row that starts lifting on hover reads
+ * as wrong in the diff rather than only in the browser.
+ *
+ * Reduced motion is handled globally in @layer base — every duration here
+ * collapses and every loop stops. Nothing below carries state that movement
+ * is the only witness to.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+/* tint · 120ms — colour and opacity only. Explicitly NOT transform: a table
+   of forty rows where each one lifts on hover is a table that flickers as you
+   read down it. */
+@utility motion-tint {
+  transition-property: color, background-color, border-color, fill, stroke, opacity, box-shadow;
+  transition-duration: var(--duration-tint);
+  transition-timing-function: var(--ease-tint);
+}
+
+/* press · 180ms — anything that answers a click. */
+@utility motion-press {
+  transition-property: color, background-color, border-color, opacity, box-shadow, transform,
+    filter;
+  transition-duration: var(--duration-press);
+  transition-timing-function: var(--ease-press);
+}
+
+/* The press itself: a 3% scale-down, never a translate, so the button stays
+   under the finger. Destructive buttons behave identically — muscle memory
+   must not depend on what a button does. */
+@utility press-scale {
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
+/* settle · 260ms — anything that changes the page's height. */
+@utility motion-settle {
+  transition-property: height, max-height, opacity, transform;
+  transition-duration: var(--duration-settle);
+  transition-timing-function: var(--ease-settle);
+}
+
+/* Dialogs and popovers: the card rises 10px from 97%, 40ms behind its scrim.
+   It never zooms from screen centre — the destination is where the dialog
+   will live, so the eye lands there and stays. */
+@utility settle-in {
+  animation: settle-in var(--duration-settle) var(--ease-settle) 40ms both;
+}
+
+@utility settle-scrim {
+  animation: fade var(--duration-settle) var(--ease-tint) both;
+}
+
+/* arrive · 420ms — first paint of a screen or a list. Rows rise 8px in
+   sequence, 40ms apart.
+ *
+ * Staggered by :nth-child rather than by an index prop, for two reasons: the
+ * cap cannot be got wrong at a callsite, and a list gains the behaviour by
+ * being a list rather than by every row remembering to ask for it.
+ *
+ * The cap is the load-bearing part. A queue of forty must not take two
+ * seconds to become readable, so the sixth row and everything after it arrive
+ * together — the whole list is resolved inside 620ms however long it is. */
+@utility arrive-list {
+  > * {
+    animation: arrive var(--duration-arrive) var(--ease-settle) both;
+    animation-delay: calc(var(--arrive-cap) * var(--arrive-step));
+  }
+
+  > *:nth-child(1) {
+    animation-delay: 0ms;
+  }
+  > *:nth-child(2) {
+    animation-delay: calc(1 * var(--arrive-step));
+  }
+  > *:nth-child(3) {
+    animation-delay: calc(2 * var(--arrive-step));
+  }
+  > *:nth-child(4) {
+    animation-delay: calc(3 * var(--arrive-step));
+  }
+  > *:nth-child(5) {
+    animation-delay: calc(4 * var(--arrive-step));
+  }
+}
+
+/* flash · 900ms, once — a value changed while you were on the page. Never on
+   load: a page that flashes everything on arrival has told you nothing about
+   what moved. */
+@utility flash {
+  animation: flash var(--duration-flash) ease-out 1;
+}
+
+@utility flash-value {
+  animation: flash-value var(--duration-settle) var(--ease-settle) 1;
+}
+
+/* breathe · 2.4s — the only licensed loop, and it means "still happening".
+   Degraded mode and skeletons, nothing else. */
+@utility breathe {
+  animation: breathe var(--duration-breathe) ease-in-out infinite alternate;
+}
+
+/* ── The mark ─────────────────────────────────────────────────────────────
+ * A contained orb: a faint base ring under a brighter arc, with a lit dot at
+ * the centre. It is a miniature of the login's arch-and-orb, which is the
+ * point — the rail should read as the same room the door opened onto.
+ *
+ * Scales off one custom property so the rail (22px) and the favicon (16px)
+ * are the same drawing rather than two that have to be kept in agreement.
+ *
+ * One trap, learned the hard way and worth stating: the base ring's radial
+ * fade must keep its opaque stop at 88% OR BEYOND. At 62% on a 22px box the
+ * mask erases the 1.5px border entirely, because that border occupies
+ * 93.5–100% of the mask radius. The ring simply disappears and nothing in the
+ * markup looks wrong.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+@layer components {
+  .syndra-mark {
+    --mark-size: 22px;
+    position: relative;
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--mark-size);
+    height: var(--mark-size);
+  }
+
+  .syndra-mark-base,
+  .syndra-mark-arc {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-pill);
+    border: 1.5px solid var(--mark-base);
+  }
+
+  .syndra-mark-base {
+    -webkit-mask-image: radial-gradient(
+      closest-side,
+      #000 88%,
+      rgba(0, 0, 0, 0.5) 97%,
+      transparent 100%
+    );
+    mask-image: radial-gradient(closest-side, #000 88%, rgba(0, 0, 0, 0.5) 97%, transparent 100%);
+  }
+
+  /* The lit arc falls off symmetrically from the apex, so the orb reads as
+     lit from above rather than as a ring with a gap in it. */
+  .syndra-mark-arc {
+    border-color: var(--mark-arc);
+    opacity: var(--mark-arc-opacity);
+    -webkit-mask-image: conic-gradient(
+      from 0deg,
+      #000 0deg,
+      rgba(0, 0, 0, 0.28) 118deg,
+      transparent 158deg,
+      transparent 202deg,
+      rgba(0, 0, 0, 0.28) 242deg,
+      #000 360deg
+    );
+    mask-image: conic-gradient(
+      from 0deg,
+      #000 0deg,
+      rgba(0, 0, 0, 0.28) 118deg,
+      transparent 158deg,
+      transparent 202deg,
+      rgba(0, 0, 0, 0.28) 242deg,
+      #000 360deg
+    );
+  }
+
+  .syndra-mark-dot {
+    width: 35%;
+    height: 35%;
+    border-radius: var(--radius-pill);
+    background: var(--mark-dot);
+    box-shadow: 0 0 14px 2px var(--mark-glow);
+  }
+}
+
 /* ── Surfaces ─────────────────────────────────────────────────────────────
  * One card treatment used everywhere. In light it carries a soft lift instead
  * of a hairline, per the design's light-theme note.
@@ -386,9 +730,13 @@
   border-radius: var(--radius-inner);
 }
 
-/* Neutral hover for nav rows and list rows. */
+/* Neutral hover for nav rows and list rows. Background only — no lift, no
+   shadow, no border change. Nav rows use the same tint as table rows, so the
+   sidebar and the table read as one surface. */
 @utility hover-tint {
-  transition: background-color 0.14s ease-out, color 0.14s ease-out;
+  transition-property: color, background-color;
+  transition-duration: var(--duration-tint);
+  transition-timing-function: var(--ease-tint);
 
   &:hover {
     background-color: var(--hover);
@@ -402,7 +750,9 @@
 @utility skeleton-bar {
   background-color: var(--tint-2);
   border-radius: var(--radius-pill);
-  animation: shimmer 1.6s ease-in-out infinite;
+  /* One of the product's two licensed loops. It says "still loading", and it
+     stops the moment the row it stands in becomes real. */
+  animation: breathe var(--duration-breathe) ease-in-out infinite alternate;
 }
 
 /* ── Avatar ───────────────────────────────────────────────────────────────
@@ -421,4 +771,524 @@
 
 @utility shadow-popover {
   box-shadow: var(--shadow-popover);
+}
+
+/* ══ The doorway — /login ═════════════════════════════════════════════════
+ * The only unauthenticated screen, and the only ceremonial one: an arch, an
+ * orb suspended in it, the wordmark, and a single button on the threshold.
+ * Its three states — resting, opening, refused — are told through the arch
+ * itself rather than through banners.
+ *
+ * It is always the dark room. A light-theme operator still arrives at night,
+ * because the composition IS the arch, the pool of light beneath it, and the
+ * fade where the uprights dissolve into the floor.
+ *
+ * No images, no icons, no SVG illustrations. Borders, radii, gradients,
+ * masks, and one inline feTurbulence tile.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Always-dark surface tokens. Deliberately not --ground/--ink: those flip
+     with the theme and the doorway does not. */
+  --door-page: #0a0b08;
+  --door-ink: #f3f5ef;
+  --door-ink-55: rgba(243, 245, 239, 0.55);
+  --door-ink-50: rgba(243, 245, 239, 0.5);
+  --door-ink-40: rgba(243, 245, 239, 0.4);
+  --door-ink-30: rgba(243, 245, 239, 0.3);
+  --door-ink-25: rgba(243, 245, 239, 0.25);
+
+  --door-stroke: rgba(155, 123, 255, 0.5);
+  --door-ring-base: rgba(155, 123, 255, 0.22);
+  --door-ring-lit: rgba(206, 188, 255, 0.92);
+  --door-amber: #f5a524;
+  --door-amber-stroke: rgba(245, 165, 36, 0.5);
+
+  /* Read from JS for the sign-in transition, so the button's two shadows and
+     its two fills live here and nowhere else. Both shadows carry three layers
+     so they interpolate cleanly into each other. */
+  --door-fill: var(--violet-500);
+  --door-fill-quiet: rgba(127, 90, 240, 0.34);
+  --door-label-quiet: rgba(247, 244, 255, 0.62);
+  --door-shadow-rest: 0 26px 60px -18px rgba(127, 90, 240, 0.85),
+    0 8px 24px -8px rgba(127, 90, 240, 0.6), 0 0 70px 10px rgba(127, 90, 240, 0.18);
+  --door-shadow-quiet: 0 10px 26px -16px rgba(127, 90, 240, 0.5),
+    0 4px 12px -8px rgba(127, 90, 240, 0.25), 0 0 34px 4px rgba(127, 90, 240, 0.06);
+
+  /* The uprights dissolve before they reach the floor. This fade is the single
+     most important detail on the screen — the whole direction is "no hard
+     edges" — and removing it is what tells you the door stayed shut. */
+  --door-arch-mask: linear-gradient(to bottom, #000 6%, rgba(0, 0, 0, 0.5) 54%, transparent 95%);
+
+  --door-arch-w: 430px;
+  --door-arch-h: 392px;
+  --door-arch-r: 190px;
+  /* Keeps the wordmark and the button clear of the uprights. A percentage
+     would resolve against the stage, not the group, and crush the button. */
+  --door-arch-inset: 44px;
+  --door-wordmark: 58px;
+  --door-stage-inset: 56px;
+}
+
+/* The arch group is the one fixed-width thing here. Below ~480px it scales on
+   its own ratio (430:392, radius scaled to match) rather than compressing the
+   composition around it. */
+@media (max-width: 480px) {
+  :root {
+    --door-arch-w: 320px;
+    --door-arch-h: 292px;
+    --door-arch-r: 141px;
+    --door-arch-inset: 24px;
+    --door-wordmark: 40px;
+    --door-stage-inset: 24px;
+  }
+}
+
+/* A light-theme visitor would otherwise get a lilac scrollbar and a lilac
+   overscroll gutter framing the night. */
+html:has(.login-stage),
+body:has(.login-stage) {
+  background: var(--door-page);
+  color-scheme: dark;
+}
+
+@layer components {
+  .login-stage {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    /* The composition does not compress: the button overhangs the arch's
+       baseline while the base text is pinned to the floor, and the two collide
+       below ~610px of viewport height. A short window scrolls instead. */
+    min-height: max(100vh, 800px);
+    overflow: hidden;
+    padding: var(--door-stage-inset);
+    background: var(--door-page);
+    color: var(--door-ink);
+    /* The app body sets 1.55 for dense operator rows. Nothing on this screen
+       is a row: the wordmark, the button and the eyebrow are all single lines
+       whose boxes the composition is measured against. */
+    line-height: normal;
+  }
+
+  /* ── Ambient light ──────────────────────────────────────────────────── */
+
+  .login-floor {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 420px;
+    background: radial-gradient(50% 100% at 50% 100%, rgba(127, 90, 240, 0.2), transparent 72%);
+  }
+
+  .login-pool,
+  .login-pool-amber {
+    position: absolute;
+    bottom: 196px;
+    left: 50%;
+    width: 820px;
+    height: 290px;
+    transform: translateX(-50%);
+    filter: blur(48px);
+  }
+
+  .login-pool {
+    background: radial-gradient(
+      50% 50% at 50% 50%,
+      rgba(127, 90, 240, 0.3),
+      rgba(127, 90, 240, 0.08) 46%,
+      transparent 72%
+    );
+  }
+
+  /* Amber only ever means a broken assumption. It is at zero until one. */
+  .login-pool-amber {
+    opacity: 0;
+    background: radial-gradient(
+      50% 50% at 50% 50%,
+      rgba(245, 165, 36, 0.26),
+      rgba(245, 120, 36, 0.07) 46%,
+      transparent 72%
+    );
+  }
+
+  .login-grain {
+    position: absolute;
+    inset: 0;
+    opacity: 0.4;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* ── Text pinned to the ceiling and the floor ───────────────────────── */
+
+  .login-eyebrow {
+    position: absolute;
+    top: 44px;
+    right: 0;
+    left: 0;
+    text-align: center;
+    font-size: 13px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--door-ink-40);
+  }
+
+  .login-base {
+    position: absolute;
+    right: 0;
+    bottom: 44px;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    /* left/right: 0 escapes the stage's own padding. */
+    padding: 0 24px;
+  }
+
+  .login-syn {
+    max-width: 560px;
+    text-align: center;
+    /* `pretty` only saves the last line from being an orphan; centred over two
+       lines that still leaves one long and one short. `balance` evens them,
+       which is what a centred pull-quote wants. */
+    text-wrap: balance;
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--door-ink-55);
+  }
+
+  .login-credit {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 12.5px;
+    letter-spacing: 0.05em;
+    color: var(--door-ink-30);
+  }
+
+  .login-credit-dot {
+    width: 3px;
+    height: 3px;
+    border-radius: var(--radius-pill);
+    background: var(--door-ink-25);
+  }
+
+  /* Messages sit at the Syn line's own height, so a state change fades one
+     out and the other in over the same slot instead of moving the layout. */
+  .login-message {
+    position: absolute;
+    right: 0;
+    bottom: 74px;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    /* left/right: 0 escapes the stage's own padding, so the message carries
+       its own on a narrow screen. */
+    padding: 0 24px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* The dev identity picker lives in this slot and has to be clickable. */
+  .login-message :where(a, button) {
+    pointer-events: auto;
+  }
+
+  .login-message-head {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--violet-300);
+  }
+
+  .login-message-sub {
+    max-width: 560px;
+    text-align: center;
+    text-wrap: pretty;
+    font-size: 14.5px;
+    color: var(--door-ink-50);
+  }
+
+  .login-error .login-message-head {
+    color: var(--door-amber);
+  }
+
+  /* ── The arch ───────────────────────────────────────────────────────── */
+
+  .login-group {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    width: var(--door-arch-w);
+    height: var(--door-arch-h);
+    /* Mathematically centred, the composition reads bottom-heavy: the button
+       overhangs the baseline by ~35px. This balances the gap above the arch
+       against the gap below the button. */
+    margin-top: -52px;
+    padding: 0 var(--door-arch-inset);
+  }
+
+  /* The entrance reveals the arch top-down by growing this wrapper. Its height
+     is a percentage so the animation carries no pixel constant and the narrow
+     breakpoint needs no second set of keyframes. */
+  .login-arch-clip {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .login-arch {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: var(--door-arch-h);
+    border: 1.5px solid var(--door-stroke);
+    border-bottom: none;
+    border-radius: var(--door-arch-r) var(--door-arch-r) 0 0;
+    mask-image: var(--door-arch-mask);
+    -webkit-mask-image: var(--door-arch-mask);
+    /* Transitioned rather than animated on purpose: a filling WAAPI animation
+       outranks inline styles and would strand this colour amber forever. */
+    transition: border-color 0.7s ease;
+  }
+
+  /* Refused. The fade is removed, so the stroke renders as a complete closed
+     line — that, and the amber, is the whole failure state. No banner. */
+  .login-stage[data-scene="unreachable"] .login-arch {
+    border-color: var(--door-amber-stroke);
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+
+  .login-wash {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--door-arch-r) var(--door-arch-r) 0 0;
+    background: linear-gradient(to top, rgba(127, 90, 240, 0.15), transparent 62%);
+    mask-image: linear-gradient(to bottom, #000 60%, transparent 99%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent 99%);
+  }
+
+  /* ── The orb ────────────────────────────────────────────────────────── */
+
+  .login-orb-slot {
+    position: absolute;
+    top: 54px;
+    right: 0;
+    left: 0;
+    display: flex;
+    justify-content: center;
+  }
+
+  .login-orb {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 46px;
+  }
+
+  .login-orb-base,
+  .login-orb-lit {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-pill);
+  }
+
+  /* Always visible, so the circle never disappears when the lit arc swings
+     away. The opaque stop stays at 88%: a 1.5px border on a 46px box occupies
+     93.5–100% of the mask radius, exactly where a shorter stop runs out of
+     alpha and erases the ring entirely. */
+  .login-orb-base {
+    border: 1.5px solid var(--door-ring-base);
+    mask-image: radial-gradient(closest-side, #000 88%, rgba(0, 0, 0, 0.5) 97%, transparent 100%);
+    -webkit-mask-image: radial-gradient(closest-side, #000 88%, rgba(0, 0, 0, 0.5) 97%, transparent 100%);
+  }
+
+  /* The layer that tracks the pointer. The pointer supplies these two numbers
+     and nothing else — the gradient, its stops and its colour stay here, so
+     there is one authored mask rather than one here and a second assembled in
+     a component. The values below are the static top-lit fallback: what a
+     reduced-motion visitor keeps, and what releasing the focus lock restores. */
+  .login-orb-lit {
+    --door-ring-angle: 180deg;
+    --door-ring-reach: 76%;
+    border: 1.5px solid var(--door-ring-lit);
+    opacity: 0.5;
+    mask-image: linear-gradient(var(--door-ring-angle), #000 4%, transparent var(--door-ring-reach));
+    -webkit-mask-image: linear-gradient(
+      var(--door-ring-angle),
+      #000 4%,
+      transparent var(--door-ring-reach)
+    );
+    transition: opacity 0.25s ease-out;
+  }
+
+  .login-orb-bloom {
+    position: absolute;
+    inset: -16px;
+    border-radius: var(--radius-pill);
+    background: radial-gradient(closest-side, rgba(170, 142, 255, 0.3), transparent 76%);
+    opacity: 0;
+    transition: opacity 0.3s ease-out;
+  }
+
+  .login-orb-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: var(--radius-pill);
+    background: var(--violet-400);
+    box-shadow: 0 0 34px 6px rgba(155, 123, 255, 0.55);
+  }
+
+  /* ── Wordmark and the button on the threshold ───────────────────────── */
+
+  .login-wordmark {
+    position: relative;
+    margin-bottom: 34px;
+    font-family: var(--font-bricolage), sans-serif;
+    font-size: var(--door-wordmark);
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+
+  .login-action {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    /* Sized to its label, not to the arch. */
+    width: auto;
+    padding: 16px 30px;
+    border-radius: var(--radius-inner);
+    background: var(--door-fill);
+    color: var(--on-violet);
+    font-size: 15.5px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    /* Straddles the arch's baseline, 14px below dead centre so the arch's own
+       fade finishes before the button starts. */
+    transform: translateY(calc(50% + 14px));
+    box-shadow: var(--door-shadow-rest);
+  }
+
+  .login-action:focus-visible {
+    outline: 2px solid var(--violet-300);
+    outline-offset: 4px;
+  }
+
+  .login-action-arrow {
+    font-size: 17px;
+    line-height: 1;
+  }
+
+  /* ── Development identities ─────────────────────────────────────────── */
+
+  .login-identities {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    max-width: 620px;
+  }
+
+  .login-identity {
+    padding: 9px 16px;
+    border: 1px solid var(--door-ink-25);
+    border-radius: var(--radius-pill);
+    color: var(--door-ink-55);
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color 0.15s ease-out, color 0.15s ease-out;
+  }
+
+  .login-identity:hover {
+    border-color: var(--door-ring-base);
+    color: var(--door-ink);
+  }
+
+  .login-identity:focus-visible {
+    outline: 2px solid var(--violet-300);
+    outline-offset: 3px;
+  }
+
+  .login-identity-role {
+    color: var(--door-ink-30);
+  }
+}
+
+/* ── Doorway ambience ─────────────────────────────────────────────────────
+ * Neither is load-bearing — the screen reads correctly with both off. They
+ * exist so the room is a room rather than a photograph of one: the pool
+ * breathes at a rate you notice only by its absence, and the grain moves at
+ * 8fps, which is the rate film grain actually moves at.
+ *
+ * CSS animations rather than WAAPI, on purpose. They never need to be
+ * cancelled, reset, or coordinated with a scene, so they stay out of the
+ * `running[]` array entirely — and they animate the two properties the
+ * choreography never touches (the pool's transform, the grain's background
+ * position), so the two can never fight over a value.
+ *
+ * Opt-in rather than switched off: a visitor who asked for less motion never
+ * starts them, instead of starting them and being rescued by the global
+ * reduce rule.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+@layer components {
+  @media (prefers-reduced-motion: no-preference) {
+    .login-pool {
+      animation: doorBreath 10s ease-in-out infinite alternate;
+    }
+
+    .login-grain {
+      animation: doorGrain 0.75s steps(1, end) infinite;
+    }
+  }
+}
+
+@keyframes doorBreath {
+  from {
+    transform: translateX(-50%) scale(1);
+  }
+  to {
+    transform: translateX(-50%) scale(1.06);
+  }
+}
+
+/* Six offsets held flat for one step each — 8 frames a second, not a slide. */
+@keyframes doorGrain {
+  0% {
+    background-position: 0 0;
+  }
+  16.66% {
+    background-position: -37px 21px;
+  }
+  33.33% {
+    background-position: 52px -14px;
+  }
+  50% {
+    background-position: -19px -46px;
+  }
+  66.66% {
+    background-position: 31px 38px;
+  }
+  83.33% {
+    background-position: -58px 7px;
+  }
 }
