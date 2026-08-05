@@ -10,7 +10,10 @@ import { getSession } from "@/lib/session";
  * the one screen that explains to a member why they can badge into the laser
  * lab.
  */
-export default async function Home() {
+// `LandingPage`, not `Home`: the route serves Home to operators and My access
+// to members, so naming it after one of them would describe half of what it
+// does — and it would collide with the Home component it imports.
+export default async function LandingPage() {
   const session = await getSession();
   if (!session) return null;
 
