@@ -1,14 +1,12 @@
-<!--
-  BANNER — drop a 1280×320 image at docs/assets/banner.png, then delete this
-  comment wrapper so the tag below renders. Kept commented until the asset
-  exists so the README never shows a broken image.
-
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Syndra" width="100%">
+  <img src="docs/assets/banner.png" alt="Syndra — Syn keeps the door. Syndra keeps the list." width="100%">
 </p>
--->
 
 <h1 align="center">Syndra</h1>
+
+<p align="center">
+  <em>Syn keeps the door. Syndra keeps the list.</em>
+</p>
 
 <p align="center">
   <strong>An identity &amp; access orchestration layer for Zitadel.</strong><br>

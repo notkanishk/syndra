@@ -51,6 +51,13 @@ Paused pending research on real LLDAP password-propagation and credential semant
 - **ORS-19** — `CountDemoResidue` matches audit rows on actor and target user id, and the seeder writes audit actors as display names (`alice.rivera`, `maya.chen`), so two of its four seeded audit rows are invisible to the count. Harmless while any other table carries residue — the banner still fires — but it would under-report on a database where audit rows are all that remain. Fix by matching the seeder's actor strings, or by giving seeded audit rows a marker.
 - **Wider fixture drift** — the residue check and the reset script both read the demo catalog's project and user ids, and a `demo` package test fails when the script's copy diverges. Nothing guards a *new table* the seeder starts writing: it would be missed by both, silently. Worth revisiting if the seeder grows.
 
+### Login doorway — what the brand handoff left open
+
+- ~~**App-wide violet**~~ — **shipped.** Both themes now point at the violet ramp, and lime returned as the `Healthy` role rather than being retired. The token swap was the easy half; the half that could not be mechanical was finding every place the old accent stood in for "this is fine", since violet must never mean good or safe. Also brought the six motion roles, the contained-orb mark and the first favicon. See `changes/violet-and-motion/`.
+- **The one thing left from it:** the GitHub social preview. GitHub exposes no REST endpoint, so `gh` cannot set it — the file is staged at `docs/assets/social-preview.png` and wants a manual upload at `github.com/notkanishk/syndra/settings`.
+- ~~**Unauthenticated pages fetch authenticated data**~~ — **fixed.** `NameResolverProvider` takes an `enabled` gate fed by the session the root layout already resolves, covering all three of its requests including the per-miss `POST /lookup`; `/login` now issues zero proxy requests and logs nothing. Both `enabled` and `hasSession` default to `true`, so a caller who forgets the prop gets working name resolution rather than blank names.
+- ~~**Ambience toggles**~~ — **shipped on.** Breathing pool and animated grain are CSS `@keyframes` inside `@media (prefers-reduced-motion: no-preference)`, animating the two properties the choreography never touches. Measured 120fps, worst frame 9.3ms.
+
 ### Phase 5 — Automation & Governance
 
 - **Service Catalog Abstraction** — the spec'd service→bundle request mapping still falls back to project/role. [`specs/service-catalog`]
