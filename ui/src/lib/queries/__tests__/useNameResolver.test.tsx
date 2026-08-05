@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NameResolverProvider, useNameResolver } from "@/lib/queries/useNameResolver";
@@ -209,5 +209,67 @@ describe("useNameResolver (full-catalog)", () => {
     await client.invalidateQueries({ queryKey: ["name-catalog"] });
 
     await waitFor(() => expect(screen.getByTestId("user-unknown").textContent).toBe("New Person"));
+  });
+});
+
+describe("NameResolverProvider — the unauthenticated gate", () => {
+  /** An id the catalog fixture does not carry, so resolving it provokes a lookup. */
+  const MISSING_ID = "u-not-in-catalog";
+
+  function Consumer({ id }: { id: string }) {
+    const { resolveUser } = useNameResolver();
+    const user = resolveUser(id);
+    return <span data-testid="name">{user.value?.display_name ?? (user.resolved ? "—" : "…")}</span>;
+  }
+
+  function mount(enabled: boolean, id = MISSING_ID) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={client}>
+        <NameResolverProvider enabled={enabled}>
+          <Consumer id={id} />
+        </NameResolverProvider>
+      </QueryClientProvider>,
+    );
+  }
+
+  // The miss lookup is queued from a microtask and fired a render later, so
+  // asserting "no request" straight after render proves nothing — it just races
+  // the queue. Flush far enough that a request would have landed, then assert.
+  async function settle() {
+    await act(async () => {
+      for (let i = 0; i < 3; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  // The control for the test below. If this ever stops firing, `settle()` has
+  // become too short and the silence it observes stops meaning anything.
+  it("(control) the same wait catches every request an enabled provider makes", async () => {
+    mount(true);
+    await settle();
+    const seen = proxy.calls.map((call) => `${call.method} ${call.url.split("?")[0]}`);
+    expect(seen).toContain("GET /api/proxy/catalog");
+    expect(seen).toContain("GET /api/proxy/bundles");
+    // Triggered by a descendant merely calling resolveUser on an unknown id.
+    expect(seen).toContain("POST /api/proxy/lookup");
+  });
+
+  it("issues no request at all when there is nobody to resolve names for", async () => {
+    mount(false);
+    await settle();
+    expect(proxy.calls).toEqual([]);
+  });
+
+  // A disabled query is pending-but-idle, so `resolved` must read true and the
+  // caller must render its fallback rather than a skeleton that never resolves.
+  it("resolves to a fallback rather than an eternal skeleton", async () => {
+    mount(false);
+    await settle();
+    expect(screen.getByTestId("name")).toHaveTextContent("—");
+  });
+
+  it("still resolves names for a signed-in visitor", async () => {
+    mount(true, USER_ID);
+    await waitFor(() => expect(screen.getByTestId("name")).toHaveTextContent("Jane Doe"));
   });
 });

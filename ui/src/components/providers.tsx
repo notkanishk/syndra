@@ -19,7 +19,18 @@ import { ThemeProvider } from "@/lib/theme";
  *
  * Mounted once in the root layout. Devtools render only in development.
  */
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  hasSession = true,
+}: {
+  children: React.ReactNode;
+  /**
+   * False on the unauthenticated `/login`, which this stack also wraps. The
+   * name resolver has nothing to resolve there and its two warm-up fetches
+   * would only collect 401s.
+   */
+  hasSession?: boolean;
+}) {
   // The cache() inside getQueryClient ensures one client per request on the
   // server and one shared client for the browser session. Calling it directly
   // here (not in a useState) is correct because Providers is itself rendered
@@ -28,7 +39,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <NameResolverProvider>
+      <NameResolverProvider enabled={hasSession}>
         <ThemeProvider>
           <ErrorBoundary>{children}</ErrorBoundary>
           <Toaster position="bottom-right" closeButton richColors />

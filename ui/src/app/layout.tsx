@@ -58,7 +58,7 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="bg-ground text-ink antialiased">
-        <Providers>
+        <Providers hasSession={Boolean(session)}>
           {session ? <AppShell session={session}>{children}</AppShell> : children}
         </Providers>
       </body>

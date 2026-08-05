@@ -96,7 +96,7 @@ function buildBundleMap(data: Bundle[] | undefined): Map<string, ResolvedBundle>
  * FindUser falls through to a direct Zitadel read, so a miss here is usually
  * recoverable; asking once and caching the answer makes it permanent.
  */
-function useMissResolver(known: (id: string) => boolean) {
+function useMissResolver(known: (id: string) => boolean, enabled: boolean) {
   // `queue` holds only ids that have NOT yet been asked about. Ids leave it
   // when their lookup settles, which is what lets the next batch through: a
   // queue that kept settled ids would re-slice the same first LOOKUP_MAX_BATCH
@@ -111,6 +111,10 @@ function useMissResolver(known: (id: string) => boolean) {
 
   const note = useCallback(
     (id: string) => {
+      // No session, nothing to ask on behalf of. Refused before the queue
+      // rather than before the request, so a disabled provider does no state
+      // churn either.
+      if (!enabled) return;
       if (!id || known(id) || asked.current.has(id) || pending.current.has(id)) return;
       pending.current.add(id);
       // Defer the state write out of the render that discovered the miss.
@@ -125,7 +129,7 @@ function useMissResolver(known: (id: string) => boolean) {
         });
       });
     },
-    [known],
+    [known, enabled],
   );
 
   const ids = useMemo(() => Array.from(queue).sort().slice(0, LOOKUP_MAX_BATCH), [queue]);
@@ -134,7 +138,10 @@ function useMissResolver(known: (id: string) => boolean) {
     queryKey: ["name-lookup", ids],
     queryFn: () =>
       request<LookupResponse>("lookup", { method: "POST", body: { user_ids: ids } }),
-    enabled: ids.length > 0,
+    // Gated twice on purpose. `note()` keeps ids out of the queue while
+    // disabled; this keeps a queue filled *before* the gate closed — a session
+    // expiring under a mounted tree — from draining after it.
+    enabled: enabled && ids.length > 0,
     staleTime: STALE_TIME,
     retry: false,
   });
@@ -171,11 +178,36 @@ function useMissResolver(known: (id: string) => boolean) {
 /** Matches the backend's `lookupMaxBatchSize`. */
 const LOOKUP_MAX_BATCH = 256;
 
-export function NameResolverProvider({ children }: { children: React.ReactNode }) {
+/**
+ * `enabled` is "is there someone to resolve names for". The provider mounts in
+ * the root layout, which wraps the unauthenticated `/login` as well as every
+ * signed-in route, so without it both queries fire at a stranger and take a
+ * 401 — four wasted round trips and four console errors on the one screen
+ * somebody sees before they trust this software.
+ *
+ * It gates all three requests this provider can make — the catalog and bundle
+ * warm-ups, and the per-miss `POST /lookup` that a descendant triggers merely by
+ * calling `resolveUser` on an id the catalog does not carry. Gating only the
+ * first two leaves the guarantee to whether anything happens to render a name,
+ * which is not a guarantee.
+ *
+ * A disabled query in TanStack v5 is `pending` with `fetchStatus: "idle"`, so
+ * `isLoading` is false and `resolved` reads true: callers render their fallback
+ * rather than an eternal skeleton. Defaults to `true` — a caller who forgets it
+ * gets working name resolution, not silently blank names.
+ */
+export function NameResolverProvider({
+  children,
+  enabled = true,
+}: {
+  children: React.ReactNode;
+  enabled?: boolean;
+}) {
   // Catalog: users + projects + nested roles. Member-allowed via proxy.
   const catalogQ = useQuery({
     queryKey: ["name-catalog"],
     queryFn: () => request<CatalogResponse>("catalog"),
+    enabled,
     staleTime: STALE_TIME,
   });
   // Bundles: separate + non-retrying. Member GET /bundles is 403 by design;
@@ -184,6 +216,7 @@ export function NameResolverProvider({ children }: { children: React.ReactNode }
   const bundlesQ = useQuery({
     queryKey: ["name-bundles"],
     queryFn: () => request<Bundle[]>("bundles"),
+    enabled,
     staleTime: STALE_TIME,
     retry: false,
   });
@@ -195,7 +228,7 @@ export function NameResolverProvider({ children }: { children: React.ReactNode }
     (id: string) => catalogMaps.users.has(id),
     [catalogMaps],
   );
-  const { note, resolved: lateUsers, pendingLookup } = useMissResolver(catalogHas);
+  const { note, resolved: lateUsers, pendingLookup } = useMissResolver(catalogHas, enabled);
 
   const value = useMemo<NameResolverContextValue>(
     () => ({
