@@ -18,6 +18,7 @@ understand *why* something ended up the way it did.
 | [`DESIGN-BRIEF.md`](DESIGN-BRIEF.md) | The UI/UX brief — visual language, layout principles, the Basic/Advanced split |
 | [`AUDIT.md`](AUDIT.md) | Rolling self-assessment: bloat, spec drift, correctness concerns, prioritized recommendations. Written to be uncomfortable |
 | [`UI-CAPABILITY-GAPS.md`](UI-CAPABILITY-GAPS.md) | Backend capabilities with no frontend surface, and the reverse |
+| [`adr/`](adr/) | Architecture decision records — a decision, its context, and what was rejected. Unlike the plans below, these are meant to stay true |
 | [`superpowers/plans/`](superpowers/plans/) | Dated implementation plans, one per wave of work. Historical record — a plan describes what was intended at the time, not necessarily what shipped |
 | [`superpowers/specs/`](superpowers/specs/) | Design documents produced in response to audit findings |
 | `assets/` | Images used by the README |

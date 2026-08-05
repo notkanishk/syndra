@@ -22,6 +22,7 @@
 ## 3. Root and tracked-file hygiene
 
 - [x] 3.1 Untrack `.serena/`, `.codebase-memory/`, `.codex/`; add to `.gitignore`
+- [x] 3.1a A second `.codebase-memory/` existed under `backend/` and survived the first pass — the untrack named root paths only, and an ignore rule does not untrack what is already tracked. It held a genuine ADR rather than cache, so it moved to `docs/adr/` instead of being dropped
 - [x] 3.2 Keep `CLAUDE.md`, `AGENTS.md`, and `.claude/` workflows tracked — these are what make the repo navigable by an agent
 - [x] 3.3 Move `AUDIT.md` to `docs/AUDIT.md`
 - [x] 3.4 Ignore `*.zip` (design-tool exports) and `DEPLOY.local.md`
