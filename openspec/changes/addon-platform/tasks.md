@@ -30,10 +30,10 @@
 
 ## 2. Add-on registry and wire contract
 
-- [ ] 2.1 Define the manifest types: entitlement schema, operation descriptors (`scope`, `confirm`, `secret_params`), target product and version
-- [ ] 2.2 Add-on registry: config-driven registration (base URL, client-certificate or signing-key reference, declared contract version), manifest fetch and cache, `deps.go` seam for tests
-- [ ] 2.3 Contract-version check at registration: refuse an add-on declaring a version the backend does not support, with that reason, so a mismatch fails at startup rather than as an absent field later
-- [ ] 2.4 Tests: unregistered add-on is not callable; an operation absent from the manifest is rejected even if requested
+- [x] 2.1 Define the manifest types: entitlement schema, operation descriptors (`scope`, `confirm`, `secret_params`), target product and version. The manifest declares no target name — the registration owns it, so there is no mismatch case to resolve. Entitlement fields carry a `lifecycle` flag, the source structural mapping validation needs to reject them (task 7.4)
+- [x] 2.2 Add-on registry: config-driven registration (base URL, client-certificate or signing-key reference, declared contract version), manifest fetch and cache, `deps.go` seam for tests. Registration and callability are separate states: `Init` reads config with no network I/O so an unreachable add-on still registers (nav derives from deployment, not from what answers), and a periodic refresh is what turns registration into capability. A refused refresh keeps the last accepted manifest rather than revoking a verified capability set
+- [x] 2.3 Contract-version check at registration: refuse an add-on declaring a version the backend does not support, with that reason, so a mismatch fails at startup rather than as an absent field later. The refusal names both versions, because "the add-on is newer" and "the backend is newer" are different operator actions
+- [x] 2.4 Tests: unregistered add-on is not callable; an operation absent from the manifest is rejected even if requested; registered-but-never-answered is a third distinct state rather than either of those
 - [ ] 2.5 Add-on HTTP client with per-add-on auth, timeouts, and a circuit breaker; carries plan id, fingerprints, and operation id on every mutating call
 - [ ] 2.6 Tests: client failure modes — unreachable, timeout, 5xx, open circuit — each map to the intended outcome and never to silent success
 - [ ] 2.7 Redaction layer keyed off `secret_params`: values stripped before any audit write, log line, or outbox payload
@@ -61,9 +61,9 @@
 - [ ] 2.29 Tests: a truncated add-on log is detected by the anchor even though its remaining chain verifies
 - [ ] 2.30 Queued accounting: extend the existing `BulkSummary.Queued` semantics to add-on targets so unconfirmed rows never count as succeeded
 - [ ] 2.31 Tests: an unreachable add-on yields queued rows, a reachable one yields succeeded rows, and the summary distinguishes them
-- [ ] 2.32 Backend operation policy: per-operation-id scope, confirmation requirement, and parameter schema, owned by the backend and independent of any manifest
-- [ ] 2.33 Manifest intersection: effective operation set is manifest ∩ policy with policy prevailing; unknown operation ids fail closed
-- [ ] 2.34 Tests: a manifest cannot widen scope, cannot drop a confirmation requirement, cannot introduce an unknown operation, and can narrow
+- [x] 2.32 Backend operation policy: per-operation-id scope, confirmation requirement, and parameter schema, owned by the backend and independent of any manifest. A Go table, not configuration — a policy an operator can edit at runtime is a second manifest with a friendlier name
+- [x] 2.33 Manifest intersection: effective operation set is manifest ∩ policy with policy prevailing; unknown operation ids fail closed. Expressed as one rule that holds on every dimension — **the effective operation is the more restrictive of the two** — so a later dimension cannot be added with the comparison inverted: admin beats member, required confirmation beats none, secret parameters union, unavailable beats available
+- [x] 2.34 Tests: a manifest cannot widen scope, cannot drop a confirmation requirement, cannot introduce an unknown operation, and can narrow; an unrecognised scope resolves to admin rather than defaulting permissive; a manifest omitting a policy-declared secret parameter cannot thereby make it loggable
 - [ ] 2.35 mTLS between backend and add-ons with a private CA, or signed requests carrying timestamp and body hash where mTLS is impractical
 - [ ] 2.36 Tests: a call without a valid client certificate is refused; a signature not matching body or timestamp is refused; a bare shared secret is insufficient
 - [ ] 2.37 Certificate and key material provisioning, rotation, and expiry surfacing for the add-on transport

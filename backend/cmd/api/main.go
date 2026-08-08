@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/handlers"
@@ -78,6 +79,12 @@ func main() {
 	// demo fallback otherwise). Emits the [DIRECTORY] Source=... log line.
 	directory.Init()
 
+	// Read the add-on registry from deployment configuration. No network I/O:
+	// an add-on that is switched off must not delay startup, and one that is
+	// unreachable must still be registered, because operator navigation derives
+	// from this list rather than from what happens to be answering.
+	addons.Init()
+
 	if err := seed.EnsureDemoData(context.Background()); err != nil {
 		log.Fatalf("Demo seed failed: %v", err)
 	}
@@ -125,6 +132,18 @@ func main() {
 		log.Println("[DRIFT] Disabled via DRIFT_SCHEDULER_ENABLED=false")
 	}
 
+	// Add-on manifest refresh: reads each registered add-on's /capabilities,
+	// checks the contract version, and resolves the effective operation set
+	// against backend policy. Registration alone makes nothing callable — this
+	// loop is what turns a configured add-on into a capable one, and what
+	// notices when an operation stops being available on its target. Runs once
+	// immediately, then on each tick.
+	var addonSched *periodic.Runner
+	if len(addons.Registered()) > 0 {
+		addonSched = periodic.New("ADDON", addonRefreshInterval(), 15*time.Minute, addons.RefreshAll)
+		go addonSched.Start(ctx)
+	}
+
 	// Start server in background
 	go func() {
 		fmt.Println("Control Plane Backend Listening on :8080")
@@ -161,6 +180,14 @@ func main() {
 		case <-driftSched.Done():
 		case <-shutdownCtx.Done():
 			log.Println("[DRIFT] Shutdown deadline exceeded waiting for scheduler; closing anyway")
+		}
+	}
+
+	if addonSched != nil {
+		select {
+		case <-addonSched.Done():
+		case <-shutdownCtx.Done():
+			log.Println("[ADDON] Shutdown deadline exceeded waiting for refresh; closing anyway")
 		}
 	}
 
@@ -222,6 +249,19 @@ func driftSchedulerEnabled() bool {
 		return true
 	}
 	return b
+}
+
+func addonRefreshInterval() time.Duration {
+	v := os.Getenv("ADDON_MANIFEST_REFRESH_INTERVAL")
+	if v == "" {
+		return 15 * time.Minute
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		log.Printf("[ADDON] Invalid ADDON_MANIFEST_REFRESH_INTERVAL=%q, defaulting to 15m", v)
+		return 15 * time.Minute
+	}
+	return d
 }
 
 func driftInterval() time.Duration {
