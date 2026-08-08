@@ -115,7 +115,17 @@ No command queue. Two durable queues would disagree about what is still pending,
 - **Hashes never leave the add-on.** `user.query` returns `unixhash` and `smbhash` — the NT hash is a pass-the-hash credential. The add-on passes `select` to fetch only what it needs and strips those fields on every path.
 - **Activity needs enabling.** SMB auditing is per-share; `activity.get` reports which shares have it off rather than silently returning nothing.
 
-### 11. Deprovisioning is reversible; purge is deliberate
+### 11. Usernames derive from the email localpart, once, and are then recorded
+
+The target generates nothing. No middleware method produces a username and `user.create` requires one. The webui carried a client-side generator wired to the full-name field — first initial plus last word, truncated at 8 characters, lowercased — which read the full name only, never the email, and resolved collisions by refusing to and making an operator rename the account by hand. Current master has removed it and now defaults `full_name` from the username instead.
+
+The add-on therefore derives the name itself, from the Zitadel identity's primary email localpart: lowercase, sub-addressing stripped, characters outside `/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*[$]?$/` replaced, truncated to 32. Google Workspace is the sole IdP and already guarantees localpart uniqueness, so the collision suffix — a stable hash of the Zitadel user ID, never a counter — is a correctness backstop that should not fire in practice.
+
+*Alternative considered:* reproducing the TrueNAS-native shape (`skhurana`) so Syndra-created accounts look like hand-created ones. Rejected because it derives from a mutable display name, collides readily across a shared surname, and still owes the collision resolution TrueNAS never wrote.
+
+**Derivation happens once, at account creation, and the resulting name is recorded.** Renaming a TrueNAS account disturbs its home directory, ACL entries, and SMB identity, so a later email change MUST NOT rename an existing account. This means the derivation is a recovery path for the common case, not a guarantee: if the add-on's store is lost, re-deriving recovers every subject whose email has not changed since creation, and the recorded binding in Syndra covers the rest. The recorded binding remains authoritative.
+
+### 12. Deprovisioning is reversible; purge is deliberate
 
 Losing the last TrueNAS-granting role locks the account and clears `smb`, keeping the account and its home data. Purge stays a manual action behind the data checklist, driven from a dormant-account housekeeping view that lists stagnant accounts and supports individual and bulk action.
 
@@ -151,6 +161,5 @@ cd ui && bun run test && bun run lint && bun run build
 
 ## Open Questions
 
-- **Username derivation.** The target generates nothing: no middleware method produces a username, and `user.create` requires one. The webui carried a client-side generator wired to the full-name field — first initial plus last word, truncated at 8 characters, lowercased — with no collision resolution beyond a validator that rejects and makes an operator fix it by hand. It derived from full name only, never email, and current master has removed it in favour of taking the username as input and defaulting `full_name` to it. The add-on must therefore derive the name itself, within `/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*[$]?$/` and 32 characters. Two candidates: the email localpart, whose uniqueness Google Workspace already guarantees so no collision logic is needed and the binding stays reconstructible from the Zitadel identity; or the TrueNAS-native shape, familiar to operators but derived from a mutable display name and requiring the collision suffix TrueNAS never solved. Leaning localpart.
 - **Default quota by role.** Phase 2. Natural shape is a per-role default with a per-user allowance override, matching the two-layer model, but not yet decided.
 - **Zitadel role granularity.** One `truenas` project is settled; whether per-lab-project access is expressed as distinct roles (`printing_member`) or as allowances over a single role is an operator modelling choice still open.

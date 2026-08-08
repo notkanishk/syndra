@@ -55,20 +55,22 @@
 
 - [ ] 5.1 `account.ensure`: query-then-create with a deterministic username derivation, report the created account name back, idempotency-keyed
 - [ ] 5.2 Tests: repeat invocation creates no duplicate account and returns the same account name
-- [ ] 5.3 Username derivation: normalize to `/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*[$]?$/` within 32 characters, with a deterministic collision suffix as an unreachable fallback
-- [ ] 5.4 Tests: non-ASCII and invalid characters normalize; an over-length source truncates stably; a forced collision resolves deterministically and never reuses another subject's name
-- [ ] 5.5 `password.set`: `user.update({password})`, forwarded and never persisted, declared with `secret_params`
-- [ ] 5.6 Tests: the plaintext appears in no store, snapshot, or log; the mutation log records that a password was set
-- [ ] 5.7 `account.lock`: set `locked`, clear `smb`, rotate password; response states that established sessions end on reconnect
-- [ ] 5.8 Tests: lock applies all three effects and the response carries the reconnect caveat
-- [ ] 5.9 `account.smb.set`: reversible SMB suspend and resume
-- [ ] 5.10 Tests: suspend then resume restores the prior state
-- [ ] 5.11 `account.purge`: plan discloses retained home data before apply; `user.delete` only on explicit confirmation
-- [ ] 5.12 Tests: purge without confirmation refuses; the plan reports retained data size
-- [ ] 5.13 `activity.get`: `audit.query` with `service: "SMB"`, reporting shares with auditing disabled
-- [ ] 5.14 Tests: an empty result names the unaudited shares rather than implying no activity
-- [ ] 5.15 `health.get`: `system.info`, `alert.list`, `pool.query`, `service.query` composed into the operator health shape
-- [ ] 5.16 Tests: health composes all four sources and degrades per-source rather than failing whole
+- [ ] 5.3 Username derivation from the email localpart: lowercase, strip sub-addressing, replace characters outside `/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*[$]?$/`, enforce a valid leading character, truncate to 32; collision suffix from a stable hash of the Zitadel user ID
+- [ ] 5.4 Tests: derivation is deterministic and always pattern-valid; non-ASCII, sub-addressed, leading-dot, and over-length localparts normalize; a forced collision resolves reproducibly and never reuses another subject's name
+- [ ] 5.5 Record the derived name against the subject as the authoritative binding; a later email change MUST NOT rename an existing account
+- [ ] 5.6 Tests: an email change after creation leaves the account name unchanged and the binding still resolves the subject
+- [ ] 5.7 `password.set`: `user.update({password})`, forwarded and never persisted, declared with `secret_params`
+- [ ] 5.8 Tests: the plaintext appears in no store, snapshot, or log; the mutation log records that a password was set
+- [ ] 5.9 `account.lock`: set `locked`, clear `smb`, rotate password; response states that established sessions end on reconnect
+- [ ] 5.10 Tests: lock applies all three effects and the response carries the reconnect caveat
+- [ ] 5.11 `account.smb.set`: reversible SMB suspend and resume
+- [ ] 5.12 Tests: suspend then resume restores the prior state
+- [ ] 5.13 `account.purge`: plan discloses retained home data before apply; `user.delete` only on explicit confirmation
+- [ ] 5.14 Tests: purge without confirmation refuses; the plan reports retained data size
+- [ ] 5.15 `activity.get`: `audit.query` with `service: "SMB"`, reporting shares with auditing disabled
+- [ ] 5.16 Tests: an empty result names the unaudited shares rather than implying no activity
+- [ ] 5.17 `health.get`: `system.info`, `alert.list`, `pool.query`, `service.query` composed into the operator health shape
+- [ ] 5.18 Tests: health composes all four sources and degrades per-source rather than failing whole
 
 ## 6. Allowances
 

@@ -70,6 +70,29 @@ Losing the last entitlement on the target MUST lock the account and clear its SM
 - **THEN** the plan MUST state what data the account holds before the apply is possible
 - **AND** account deletion MUST NOT imply deletion of that data unless separately requested
 
+### Requirement: Account names MUST derive from the email localpart once and then be recorded
+
+The target generates no username and requires one at creation. The add-on MUST derive it from the subject's primary email localpart — lowercased, sub-addressing removed, characters outside `/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*[$]?$/` replaced, truncated to 32 characters — and MUST resolve any collision with a deterministic suffix derived from the subject's stable identity, never a counter. The derived name MUST be reported back and recorded against the subject, and the recorded binding MUST be authoritative thereafter.
+
+#### Scenario: Derivation is deterministic and valid
+
+- **WHEN** the add-on derives an account name for a subject
+- **THEN** the result MUST match the target's permitted pattern and length
+- **AND** deriving again from the same email MUST produce the same name
+
+#### Scenario: Collision resolves without reusing another subject's name
+
+- **WHEN** two subjects derive to the same candidate name
+- **THEN** the add-on MUST append a suffix derived from the subject's stable identity
+- **AND** the resolved name MUST NOT equal any name already bound to another subject
+- **AND** resolution MUST be reproducible from the subject's identity alone
+
+#### Scenario: A later email change does not rename the account
+
+- **WHEN** a subject's primary email changes after their account exists
+- **THEN** the add-on MUST NOT rename the target account
+- **AND** the recorded binding MUST continue to resolve the subject to the existing account
+
 ### Requirement: The add-on MUST probe and gate on the target version
 
 The target's API is versioned per release with methods gained and removed across majors. The add-on MUST read the target version at startup and before resuming after an outage, MUST report it through its health surface, and MUST refuse to operate against a major version it does not support.
