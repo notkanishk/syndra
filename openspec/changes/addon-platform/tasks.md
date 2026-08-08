@@ -55,18 +55,20 @@
 
 - [ ] 5.1 `account.ensure`: query-then-create with a deterministic username derivation, report the created account name back, idempotency-keyed
 - [ ] 5.2 Tests: repeat invocation creates no duplicate account and returns the same account name
-- [ ] 5.3 `password.set`: `user.update({password})`, forwarded and never persisted, declared with `secret_params`
-- [ ] 5.4 Tests: the plaintext appears in no store, snapshot, or log; the mutation log records that a password was set
-- [ ] 5.5 `account.lock`: set `locked`, clear `smb`, rotate password; response states that established sessions end on reconnect
-- [ ] 5.6 Tests: lock applies all three effects and the response carries the reconnect caveat
-- [ ] 5.7 `account.smb.set`: reversible SMB suspend and resume
-- [ ] 5.8 Tests: suspend then resume restores the prior state
-- [ ] 5.9 `account.purge`: plan discloses retained home data before apply; `user.delete` only on explicit confirmation
-- [ ] 5.10 Tests: purge without confirmation refuses; the plan reports retained data size
-- [ ] 5.11 `activity.get`: `audit.query` with `service: "SMB"`, reporting shares with auditing disabled
-- [ ] 5.12 Tests: an empty result names the unaudited shares rather than implying no activity
-- [ ] 5.13 `health.get`: `system.info`, `alert.list`, `pool.query`, `service.query` composed into the operator health shape
-- [ ] 5.14 Tests: health composes all four sources and degrades per-source rather than failing whole
+- [ ] 5.3 Username derivation: normalize to `/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*[$]?$/` within 32 characters, with a deterministic collision suffix as an unreachable fallback
+- [ ] 5.4 Tests: non-ASCII and invalid characters normalize; an over-length source truncates stably; a forced collision resolves deterministically and never reuses another subject's name
+- [ ] 5.5 `password.set`: `user.update({password})`, forwarded and never persisted, declared with `secret_params`
+- [ ] 5.6 Tests: the plaintext appears in no store, snapshot, or log; the mutation log records that a password was set
+- [ ] 5.7 `account.lock`: set `locked`, clear `smb`, rotate password; response states that established sessions end on reconnect
+- [ ] 5.8 Tests: lock applies all three effects and the response carries the reconnect caveat
+- [ ] 5.9 `account.smb.set`: reversible SMB suspend and resume
+- [ ] 5.10 Tests: suspend then resume restores the prior state
+- [ ] 5.11 `account.purge`: plan discloses retained home data before apply; `user.delete` only on explicit confirmation
+- [ ] 5.12 Tests: purge without confirmation refuses; the plan reports retained data size
+- [ ] 5.13 `activity.get`: `audit.query` with `service: "SMB"`, reporting shares with auditing disabled
+- [ ] 5.14 Tests: an empty result names the unaudited shares rather than implying no activity
+- [ ] 5.15 `health.get`: `system.info`, `alert.list`, `pool.query`, `service.query` composed into the operator health shape
+- [ ] 5.16 Tests: health composes all four sources and degrades per-source rather than failing whole
 
 ## 6. Allowances
 
