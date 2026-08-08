@@ -860,8 +860,8 @@ func TestProcessGrantAdded_UnexplainedGrantCreatesDrift(t *testing.T) {
 	if err := processGrantAdded(context.Background(), ev, "evt-1"); err != nil {
 		t.Fatal(err)
 	}
-	if driftUser != "ext-u" || driftType != "zitadel_only" {
-		t.Fatalf("unexplained external grant must create zitadel_only drift, got user=%q type=%q", driftUser, driftType)
+	if driftUser != "ext-u" || driftType != "target_only" {
+		t.Fatalf("unexplained external grant must create target_only drift, got user=%q type=%q", driftUser, driftType)
 	}
 }
 

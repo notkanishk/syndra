@@ -17,7 +17,11 @@ Four buckets, in the order they actually unblock each other:
 
 ## 1. Code
 
-### LDAP / sync (the known parked track)
+### LDAP / sync (the known parked track) — **superseded, not resuming**
+
+**Abandoned by [`changes/addon-platform`](changes/addon-platform/proposal.md)** (2026-08-08), which reaches TrueNAS SCALE and UniFi Access through their own management APIs instead of an intermediate directory. Nothing in this subsection is picked up again; `sync/` is deleted in that change's group 11, which is deliberately last because the vault reduction inside it is the point of no return. The items stay listed because a parked track that vanishes reads as forgotten rather than decided.
+
+**Active pickup point for that work is [`changes/addon-platform/tasks.md`](changes/addon-platform/tasks.md).** Group 1 (the target dimension: `targets` registry, `propagation_outbox` rename and reshape, `desired_state_snapshots`, plan storage, drift target dimension — migration `000026`) is done and stands alone. Group 2 begins at 2.1; 2.17 onward and all of group 3 depend on group 1's plan storage, which now exists.
 
 Paused pending research on real LLDAP password-propagation and credential semantics. Listed for completeness — you already know this one.
 

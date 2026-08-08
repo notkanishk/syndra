@@ -12,7 +12,7 @@ import (
 // DriftResult summarizes one sweep for logs + the [Reconcile now] response.
 type DriftResult struct {
 	ZitadelGrants     int    `json:"zitadel_grants"`
-	DriftItemsCreated int    `json:"drift_items_created"` // zitadel_only, deduped
+	DriftItemsCreated int    `json:"drift_items_created"` // target_only, deduped
 	ReEnqueued        int    `json:"re_enqueued"`         // syndra_only replays
 	Truncated         bool   `json:"truncated"`
 	Halted            bool   `json:"halted"`
@@ -21,8 +21,8 @@ type DriftResult struct {
 
 // Sweep reconciles Zitadel grants against Syndra's expected set. Callable by the
 // scheduler and by the operator's [Reconcile now]. Two outcomes per role:
-//   - zitadel_only  (in Zitadel, unexplained by direct/rule/exclusion) → drift_items
-//   - syndra_only   (direct grant Syndra expects, absent from Zitadel)  → outbox re-enqueue
+//   - target_only (in Zitadel, unexplained by direct/rule/exclusion) → drift_items
+//   - syndra_only (direct grant Syndra expects, absent from Zitadel)  → outbox re-enqueue
 //
 // Bundle/rule-derived expected roles that are ABSENT from Zitadel are NOT drift
 // in sub-phase 2 — cascade projection is sub-phase 3, so they are legitimately
@@ -55,7 +55,7 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 
 	res := DriftResult{ZitadelGrants: len(zit), Truncated: truncated}
 
-	// --- zitadel_only: unexplained live grants → drift_items ---
+	// --- target_only: unexplained live grants → drift_items ---
 	directSet := buildHolderSet(direct, nil) // Syndra's own direct intent
 	for _, g := range zit {
 		for _, rk := range g.RoleKeys {
@@ -70,8 +70,8 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 				continue // marked external — silently filtered
 			}
 			if _, inserted, err := upsertDriftItem(ctx, g.UserID, g.ProjectID,
-				[]string{rk}, g.ID, "reconciliation_sweep", "zitadel_only"); err != nil {
-				log.Printf("[DRIFT] upsert zitadel_only failed user=%s project=%s role=%s: %v", g.UserID, g.ProjectID, rk, err)
+				[]string{rk}, g.ID, "reconciliation_sweep", "target_only"); err != nil {
+				log.Printf("[DRIFT] upsert target_only failed user=%s project=%s role=%s: %v", g.UserID, g.ProjectID, rk, err)
 			} else if inserted {
 				res.DriftItemsCreated++
 			}

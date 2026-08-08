@@ -86,7 +86,7 @@ function item(overrides: Partial<DriftTriageItem> = {}): DriftTriageItem {
     user_id: "u1",
     project_id: "p1",
     role_keys: ["operator"],
-    drift_type: "zitadel_only",
+    drift_type: "target_only",
     detection_source: "reconciliation_sweep",
     detected_at: "2026-07-22T06:00:00Z",
     role_in_catalogue: true,

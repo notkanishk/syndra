@@ -106,7 +106,7 @@ func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]any{"status": "attributed"})
 }
 
-// attributeOneDrift writes the ledger intent for a zitadel_only drift and marks
+// attributeOneDrift writes the ledger intent for a target_only drift and marks
 // it attributed. It enqueues nothing, and that is the whole point: adoption is
 // the operator saying "Zitadel is right, Syndra was wrong", so there is no
 // mutation owed upstream and no outbox row to carry one.

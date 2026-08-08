@@ -49,7 +49,7 @@ func TryAcquireDrainLock(ctx context.Context) (func(), bool, error) {
 // no longer exists (e.g. pruned). The ?apply=true inline drain uses it to report
 // THIS request's row outcome rather than the batch drain's aggregate.
 func GetPropagationStatus(ctx context.Context, id string) (string, error) {
-	const q = `SELECT status FROM pending_zitadel_propagations WHERE id=$1`
+	const q = `SELECT status FROM propagation_outbox WHERE id=$1`
 	var st string
 	if err := PG.QueryRow(ctx, q, id).Scan(&st); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -64,7 +64,7 @@ func GetPropagationStatus(ctx context.Context, id string) (string, error) {
 // ZITADEL PROPAGATION OUTBOX
 // -------------------------------------------------------------
 //
-// pending_zitadel_propagations buffers every Syndra-mediated Zitadel grant
+// propagation_outbox buffers every Syndra-mediated Zitadel grant
 // mutation so the operator drains them explicitly (services/propagation).
 // It mirrors the provisioning_intents claim-and-process pattern: rows move
 // pending -> in_flight -> applied|failed. `applied` is terminal success; there
@@ -95,7 +95,7 @@ func NewOutboxIdempotencyKey() (string, error) { return newOutboxIdempotencyKey(
 func InsertPendingPropagation(ctx context.Context, opType, userID, projectID string,
 	roleKeys []string, zitadelGrantID, payloadJSON, idempotencyKey, initiatedBy string) (string, error) {
 	const q = `
-		INSERT INTO pending_zitadel_propagations
+		INSERT INTO propagation_outbox
 			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json, idempotency_key, initiated_by)
 		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8)
 		RETURNING id`
@@ -112,7 +112,7 @@ func InsertPendingPropagation(ctx context.Context, opType, userID, projectID str
 // not pile a fresh duplicate every tick for a grant that stays missing in Zitadel.
 func PendingOutboxAddExists(ctx context.Context, userID, projectID, roleKey string) (bool, error) {
 	const q = `SELECT EXISTS(
-		SELECT 1 FROM pending_zitadel_propagations
+		SELECT 1 FROM propagation_outbox
 		WHERE op_type='add' AND user_id=$1 AND project_id=$2
 		  AND $3 = ANY(role_keys) AND status IN ('pending','in_flight'))`
 	var exists bool
@@ -140,13 +140,13 @@ func ClaimPendingPropagations(ctx context.Context, limit int) ([]models.PendingP
 	}
 	const q = `
 		WITH claimed AS (
-			SELECT id FROM pending_zitadel_propagations
+			SELECT id FROM propagation_outbox
 			WHERE status IN ('pending','in_flight')
 			ORDER BY created_at
 			LIMIT $1
 			FOR UPDATE SKIP LOCKED
 		)
-		UPDATE pending_zitadel_propagations p
+		UPDATE propagation_outbox p
 		SET status = 'in_flight', started_at = NOW()
 		FROM claimed
 		WHERE p.id = claimed.id
@@ -171,7 +171,7 @@ func ClaimPendingPropagations(ctx context.Context, limit int) ([]models.PendingP
 // advisory lock already serializes drains.
 func ClaimPropagationByID(ctx context.Context, id string) (*models.PendingPropagation, bool, error) {
 	const q = `
-		UPDATE pending_zitadel_propagations
+		UPDATE propagation_outbox
 		SET status='in_flight', started_at=NOW()
 		WHERE id=$1 AND status IN ('pending','in_flight')
 		RETURNING id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
@@ -196,14 +196,14 @@ func ClaimPropagationByID(ctx context.Context, id string) (*models.PendingPropag
 // transient error message.
 func MarkPropagationApplied(ctx context.Context, id string) error {
 	return execPropagation(ctx, id,
-		`UPDATE pending_zitadel_propagations SET status='applied', completed_at=NOW(), last_error=NULL WHERE id=$1`)
+		`UPDATE propagation_outbox SET status='applied', completed_at=NOW(), last_error=NULL WHERE id=$1`)
 }
 
 // MarkPropagationFailed marks a row terminal-failed with the operator-facing
 // error. Failed rows survive the retention window as the attention-needed audit
 // trail.
 func MarkPropagationFailed(ctx context.Context, id, errMsg string) error {
-	const q = `UPDATE pending_zitadel_propagations
+	const q = `UPDATE propagation_outbox
 		SET status='failed', completed_at=NOW(), last_error=$2 WHERE id=$1`
 	if _, err := PG.Exec(ctx, q, id, errMsg); err != nil {
 		return fmt.Errorf("mark propagation failed: %w", err)
@@ -214,7 +214,7 @@ func MarkPropagationFailed(ctx context.Context, id, errMsg string) error {
 // RequeuePropagation returns a row to pending after a transient error and bumps
 // attempts. Caller decides (via attempts vs OUTBOX_MAX_RETRIES) whether to halt.
 func RequeuePropagation(ctx context.Context, id, errMsg string) (int, error) {
-	const q = `UPDATE pending_zitadel_propagations
+	const q = `UPDATE propagation_outbox
 		SET status='pending', attempts=attempts+1, last_error=$2, started_at=NULL
 		WHERE id=$1 RETURNING attempts`
 	var attempts int
@@ -231,7 +231,7 @@ func GetPendingPropagations(ctx context.Context) ([]models.PendingPropagation, e
 		SELECT id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
 		       COALESCE(cascade_id::text,''), COALESCE(zitadel_grant_id,''),
 		       status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at
-		FROM pending_zitadel_propagations
+		FROM propagation_outbox
 		WHERE status IN ('pending','in_flight')
 		ORDER BY cascade_id NULLS LAST, created_at`
 	rows, err := PG.Query(ctx, q)
@@ -245,7 +245,7 @@ func GetPendingPropagations(ctx context.Context) ([]models.PendingPropagation, e
 // CountPendingPropagations counts rows still in flight (pending or in_flight) —
 // the badge/callout depth. Terminal rows (applied/failed) are excluded.
 func CountPendingPropagations(ctx context.Context) (int, error) {
-	const q = `SELECT COUNT(*) FROM pending_zitadel_propagations WHERE status IN ('pending','in_flight')`
+	const q = `SELECT COUNT(*) FROM propagation_outbox WHERE status IN ('pending','in_flight')`
 	var n int
 	if err := PG.QueryRow(ctx, q).Scan(&n); err != nil {
 		return 0, fmt.Errorf("count pending propagations: %w", err)
@@ -259,7 +259,7 @@ func CountPendingPropagations(ctx context.Context) (int, error) {
 // `failed` rows are kept the full window as the audit trail of attention-needing
 // mutations. Returns the number of rows pruned.
 func PruneTerminalPropagations(ctx context.Context, retentionDays int) (int64, error) {
-	const q = `DELETE FROM pending_zitadel_propagations
+	const q = `DELETE FROM propagation_outbox
 		WHERE status IN ('applied','failed')
 		  AND completed_at IS NOT NULL
 		  AND completed_at < NOW() - ($1 || ' days')::interval`

@@ -7,7 +7,7 @@ import (
 )
 
 // handleDrainPropagations is the operator's explicit "Resume now" action: it
-// flushes the pending_zitadel_propagations outbox to Zitadel and returns the
+// flushes the propagation_outbox outbox to Zitadel and returns the
 // drain summary. Operator-gated (see router.go). A drain error is a 502 because
 // the failure is downstream (Zitadel), not a client mistake.
 func handleDrainPropagations(w http.ResponseWriter, r *http.Request) {

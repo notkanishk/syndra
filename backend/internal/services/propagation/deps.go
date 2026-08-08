@@ -1,5 +1,5 @@
 // Package propagation contains the operator-triggered drain that flushes the
-// pending_zitadel_propagations outbox to Zitadel. It mirrors services/expiry:
+// propagation_outbox outbox to Zitadel. It mirrors services/expiry:
 // a small package whose external effects are injectable function vars so the
 // drain logic is testable without a live Zitadel or DB.
 //

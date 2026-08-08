@@ -98,7 +98,7 @@ type CascadeAudit struct {
 // row, non-fatally — see GetGrantIndexByUserProject).
 func enqueueCascadeRows(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, params []EnqueueParams) ([]string, error) {
 	const insertOutbox = `
-		INSERT INTO pending_zitadel_propagations
+		INSERT INTO propagation_outbox
 			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json,
 			 idempotency_key, initiated_by, source, source_ref, cascade_id)
 		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,NULLIF($10,''),$11)
@@ -415,14 +415,14 @@ func GetCascadeGroups(ctx context.Context, limit int, cascadeID string) ([]model
 		SELECT COALESCE(cascade_id::text, id::text) AS group_id,
 		       id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
 		       COALESCE(cascade_id::text,''), status, created_at, completed_at
-		FROM pending_zitadel_propagations
+		FROM propagation_outbox
 		WHERE source = ANY($1::text[])`
 
 	// The most recent N cascades — the glance list.
 	q := columns + `
 		  AND COALESCE(cascade_id::text, id::text) IN (
 		      SELECT COALESCE(cascade_id::text, id::text)
-		      FROM pending_zitadel_propagations
+		      FROM propagation_outbox
 		      WHERE source = ANY($1::text[])
 		      GROUP BY COALESCE(cascade_id::text, id::text)
 		      ORDER BY MAX(created_at) DESC

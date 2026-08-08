@@ -59,7 +59,7 @@ func resetDriftDeps(t *testing.T) {
 func pendingDrift() models.DriftItem {
 	return models.DriftItem{
 		ID: "d1", UserID: "u1", ProjectID: "p_laser",
-		RoleKeys: []string{"trained"}, DriftType: "zitadel_only", Status: "pending_triage",
+		RoleKeys: []string{"trained"}, DriftType: "target_only", Status: "pending_triage",
 	}
 }
 
@@ -162,7 +162,7 @@ func TestAttributeDrift_ExternalBackfillRecordsADirectGrantWithNoRef(t *testing.
 func TestHandleMarkExternal_ResolvesAtomically(t *testing.T) {
 	resetDriftDeps(t)
 	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
-		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, DriftType: "zitadel_only", Status: "pending_triage"}, nil
+		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, DriftType: "target_only", Status: "pending_triage"}, nil
 	}
 	var gotUser, gotRole string
 	dbMarkDriftExternalTx = func(_ context.Context, _, user, _ string, roles []string, _, _, _ string) error {
@@ -189,7 +189,7 @@ func TestHandleMarkExternal_ResolvesAtomically(t *testing.T) {
 func TestHandleRevokeDrift_EnqueuesRevokeAtomicallyThenDrains(t *testing.T) {
 	resetDriftDeps(t)
 	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
-		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, ZitadelGrantID: "g1", DriftType: "zitadel_only", Status: "pending_triage"}, nil
+		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, ZitadelGrantID: "g1", DriftType: "target_only", Status: "pending_triage"}, nil
 	}
 	var gotOp string
 	dbRevokeDriftAndEnqueue = func(_ context.Context, _ string, p db.EnqueueParams) (string, error) {

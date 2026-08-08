@@ -396,8 +396,11 @@ type CascadeGroup struct {
 }
 
 // DriftItem is one out-of-band grant discrepancy awaiting operator triage.
-// zitadel_only: exists in Zitadel, no Syndra intent. syndra_only: Syndra
-// expects it (direct grant), Zitadel lacks it. No item resolves automatically.
+// target_only: exists on the target, no Syndra intent. syndra_only: Syndra
+// expects it (direct grant), the target lacks it. No item resolves
+// automatically. Which target drifted is the row's `target` column, not part of
+// the drift type — `zitadel_only` was the pre-add-on name and would be a false
+// statement on any target that is not Zitadel.
 type DriftItem struct {
 	ID                string     `json:"id"`
 	UserID            string     `json:"user_id"`
@@ -406,7 +409,7 @@ type DriftItem struct {
 	ZitadelGrantID    string     `json:"zitadel_grant_id,omitempty"`
 	DetectedAt        time.Time  `json:"detected_at"`
 	DetectionSource   string     `json:"detection_source"` // webhook | reconciliation_sweep
-	DriftType         string     `json:"drift_type"`       // zitadel_only | syndra_only
+	DriftType         string     `json:"drift_type"`       // target_only | syndra_only
 	Status            string     `json:"status"`           // pending_triage | attributed | revoked | marked_external
 	ResolvedAt        *time.Time `json:"resolved_at,omitempty"`
 	ResolvedBy        string     `json:"resolved_by,omitempty"`

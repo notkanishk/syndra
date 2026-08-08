@@ -19,9 +19,14 @@ type DriftFilter struct {
 }
 
 // UpsertDriftItem inserts a pending drift row, deduped by the partial-unique
-// index (user_id, project_id, drift_type, role_keys) WHERE status='pending_triage'.
-// Callers pass ONE role per call (single-element role_keys); the role is part of
-// the dedup key so a second drifting role on the same pair is NOT swallowed.
+// index (target, user_id, project_id, drift_type, role_keys) WHERE
+// status='pending_triage'. Callers pass ONE role per call (single-element
+// role_keys); the role is part of the dedup key so a second drifting role on
+// the same pair is NOT swallowed. `target` is part of it for the same reason at
+// one level up: without it, two targets drifting on one user would silently
+// suppress each other. Every caller here writes Zitadel drift and leaves the
+// column to its default; add-on callers arrive with the sweep's target
+// threading (change `addon-platform` task 1.12).
 // Returns (id, inserted). On an existing identical pending row it returns
 // ("", false) — a re-detection of the same drift is a no-op, not a second entry.
 func UpsertDriftItem(ctx context.Context, userID, projectID string, roleKeys []string,
@@ -49,7 +54,7 @@ func UpsertDriftItemWithEvidence(ctx context.Context, userID, projectID string, 
 		INSERT INTO drift_items (user_id, project_id, role_keys, zitadel_grant_id, detection_source, drift_type,
 		                         upstream_actor, upstream_created_at, last_seen_at)
 		VALUES ($1,$2,$3,NULLIF($4,''),$5,$6,NULLIF($7,''),$8,NOW())
-		ON CONFLICT (user_id, project_id, drift_type, role_keys) WHERE (status = 'pending_triage')
+		ON CONFLICT (target, user_id, project_id, drift_type, role_keys) WHERE (status = 'pending_triage')
 		DO UPDATE SET
 			last_seen_at        = NOW(),
 			-- Never overwrite known evidence with an unknown: a sweep re-detecting

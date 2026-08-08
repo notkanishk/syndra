@@ -46,8 +46,8 @@ func TestSweep_UnexplainedZitadelGrantBecomesDrift(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if driftType != "zitadel_only" || res.DriftItemsCreated != 1 {
-		t.Fatalf("unexplained zitadel grant must create a zitadel_only drift item, got type=%q res=%+v", driftType, res)
+	if driftType != "target_only" || res.DriftItemsCreated != 1 {
+		t.Fatalf("unexplained zitadel grant must create a target_only drift item, got type=%q res=%+v", driftType, res)
 	}
 }
 

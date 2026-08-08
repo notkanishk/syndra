@@ -299,7 +299,7 @@ func detectWebhookDrift(ctx context.Context, event WebhookPayload) {
 			continue
 		}
 		if _, _, err := dbUpsertDriftItemWithEvidence(ctx, event.UserID, event.SourceProject,
-			[]string{role}, event.GrantID, "webhook", "zitadel_only",
+			[]string{role}, event.GrantID, "webhook", "target_only",
 			db.DriftEvidence{UpstreamActor: event.EditorID, UpstreamCreatedAt: event.EventCreatedAt}); err != nil {
 			log.Printf("[DRIFT] webhook upsert failed user=%s role=%s: %v (non-fatal)", event.UserID, role, err)
 		}

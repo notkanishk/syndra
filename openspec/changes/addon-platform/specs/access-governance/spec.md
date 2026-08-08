@@ -187,6 +187,36 @@ Because target propagation fails open, a revocation may be recorded in Syndra wi
 
 ## MODIFIED Requirements
 
+### Requirement: Every Syndra-mediated Zitadel grant mutation MUST be recorded in the intent ledger before the Zitadel API call, within one transaction
+
+The backend MUST NOT mutate a Zitadel `user_grant` through any Syndra-mediated path without first durably recording the corresponding intent (`direct_role_grants` row with `source`, `source_ref`, `granted_by`, `reason`, `expires_at`), the audit entry, and an outbox row (`propagation_outbox`) in a single database transaction. The Zitadel call happens during the drain, after the intent is committed. Every path that creates a direct grant resolves to this one enqueue: `POST /api/v1/users/{id}/grants`, the `POST /api/v1/zitadel/users/{id}/grants` alias, AND the access-request approval path (`POST /api/v1/requests/{id}/decision` with `status=approved`). Approvals MUST NOT take the bare `UpsertDirectGrant` shortcut, because a ledger row with no matching outbox row is invisible to the Pending UI, never projected to Zitadel, and re-surfaces as `syndra_only` drift in reconciliation.
+
+The outbox table is `propagation_outbox`. It was `pending_zitadel_propagations`, a name that becomes false the moment a second target exists; it carries a `target` column resolved against the `targets` registry, and its Zitadel-shaped columns (`project_id`, `role_keys`, `zitadel_grant_id`) are nullable for rows whose target is not Zitadel and MUST remain populated for rows whose target is. `direct_role_grants` gains no target column: direct grants are intents against Zitadel `user_grant`s, and add-on entitlements come from mappings and allowances instead.
+
+#### Scenario: A Zitadel outbox row cannot be written half-formed
+
+- **WHEN** an outbox row names `target='zitadel'`
+- **THEN** the database MUST refuse it unless `project_id` and `role_keys` are both present
+- **AND** the relaxation that lets an add-on row omit them MUST NOT relax them for Zitadel
+
+### Requirement: Out-of-band Zitadel grants MUST be detected as drift and surfaced for operator triage
+
+A grant that exists on a target with no matching Syndra expected record and no `external_grant_exclusions` entry MUST be recorded as a `drift_items` row and surfaced on `/governance/drift`. Detection is real-time via webhook with a scheduled reconciliation sweep (cap 2 000) as backstop. Triage offers exactly Attribute / Revoke / Mark external. No drift item resolves automatically.
+
+The drift type MUST NOT name a target inside its own value. `zitadel_only` becomes `target_only` — "present on the target, unexplained by Syndra" — with the target named by the row's `target` column beside it, because `drift_type='zitadel_only'` on a TrueNAS drift row is a false statement. `syndra_only` is unchanged. The pending-dedupe unique index and the `external_grant_exclusions` primary key MUST both include the target, so two targets drifting on one user cannot suppress each other, and an exclusion recorded against one target does not silence another.
+
+#### Scenario: Webhook detects an externally-authored grant
+
+- **WHEN** the webhook processes a `grant_added` event that survives the self-mutation guard, matches no `external_grant_exclusions` row, and matches no Syndra expected grant
+- **THEN** the backend MUST insert a `drift_items` row (`detection_source='webhook'`, `drift_type='target_only'`, `target='zitadel'`, `status='pending_triage'`)
+- **AND** a duplicate detection for the same `(target, user_id, project_id, drift_type, role_keys)` while still `pending_triage` MUST NOT create a second row
+
+#### Scenario: Two targets drifting on one user do not suppress each other
+
+- **WHEN** two registered targets each drift on the same user, project, and role
+- **THEN** both MUST produce their own `drift_items` row
+- **AND** marking one external MUST NOT suppress detection on the other
+
 ### Requirement: Buffered propagations MUST drain only on explicit operator action, and `applied` MUST be the terminal success state
 
 Buffered **grants** MUST drain only on explicit operator action, on every target. Buffered **revocations** MAY additionally be drained by a background runner, because a delayed grant withholds access while a delayed revocation retains it, and the consent property this requirement protects concerns conferring access rather than withdrawing it. A background revocation drain MUST obey every other rule in this requirement — the same advisory lock, the same claim semantics, the same terminal-state discipline — and MUST NOT dispatch any row whose `op_type` confers access. The operator surface MUST state, for each submitted operation, whether it will drain on its own or wait for an operator, so that neither behaviour is inferred.
