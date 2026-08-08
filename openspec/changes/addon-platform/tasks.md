@@ -1,21 +1,28 @@
-## 1. Target dimension in the data layer
+## 1. Schema and the target dimension
 
-- [ ] 1.1 Migration: create the `targets` registry table seeded with `zitadel`; add `target TEXT NOT NULL DEFAULT 'zitadel'` to `pending_zitadel_propagations`, `direct_role_grants`, and the drift tables with a foreign key to it and an index on `(target, status)`
-- [ ] 1.2 Migration-coherence guard test asserting the registry table, the new columns, defaults, foreign keys, and index exist, that pre-existing rows read back as `zitadel`, and that a row naming an unregistered target is refused
-- [ ] 1.3 Thread `target` through the propagation claim, drain, and terminal-state writes in `services/propagation`; the drain claims one target per pass
-- [ ] 1.4 Tests: a drain for one target leaves other targets' rows untouched; an unreachable target halts only its own pass
-- [ ] 1.5 Thread `target` through `services/drift` sweep and `drift_triage.go` so drift is classified per target
-- [ ] 1.6 Tests: drift on one target does not appear under another; existing Zitadel drift behaviour is unchanged
-- [ ] 1.7 Thread `target` through `services/expiry` drain so allowance and grant expiry re-converge the right target
-- [ ] 1.8 Tests: expiry sweep emits per-target propagations and leaves unrelated targets alone
-- [ ] 1.9 Migration: `desired_state_snapshots` — immutable rows per `(subject, target)` with a monotonic version; outbox rows reference a snapshot instead of instructing a re-resolve
-- [ ] 1.10 Migration-coherence guard test: snapshot rows are immutable, versions are monotonic per `(subject, target)`, and the outbox foreign key holds
-- [ ] 1.11 Per-`(subject, target)` serialization and stale-version rejection in the drain
-- [ ] 1.12 Tests: an apply carrying an older version is rejected without dispatch; concurrent applies for one subject serialize; the settled state equals the higher version; a queued grant cannot land after a later revoke
-- [ ] 1.13 Two snapshot read paths: operator-initiated applies dispatch the recorded snapshot, periodic reconcile resolves current state
-- [ ] 1.14 Tests: a policy change between approval and drain still applies the approved snapshot; reconcile resolves fresh and never replays a superseded snapshot
-- [ ] 1.15 Revocation priority: the drain dispatches revocations before grants for the same target
-- [ ] 1.16 Tests: a mixed queue dispatches revocations first; retry budget applies per row without starving revocations
+- [ ] 1.1 Migration: `targets` registry table with `state` (`active | disabled`), seeded with `zitadel`
+- [ ] 1.2 Migration: rename `pending_zitadel_propagations` to a target-neutral name; the old name becomes false the moment a second target exists
+- [ ] 1.3 Migration: relax the Zitadel-shaped columns on the renamed outbox — `project_id`, `role_keys`, `zitadel_grant_id` become nullable and stay populated for Zitadel rows — widen `op_type` to include `apply`, add `target` with an FK to `targets`, and index `(target, status, created_at)`
+- [ ] 1.4 Migration: `desired_state_snapshots` — immutable rows per `(subject, target)` with a monotonic version; outbox rows reference a snapshot instead of instructing a re-resolve, and add-on rows carry their intent there rather than in Zitadel columns
+- [ ] 1.5 Migration: add `target` to `drift_items` including its `drift_type` CHECK values and the `idx_drift_items_pending_unique` index, and to `external_grant_exclusions`' primary key, so two targets drifting on one user cannot suppress each other
+- [ ] 1.6 Migration-coherence guard tests: registry and state, rename, relaxed nullability, widened `op_type`, snapshot immutability and monotonic versions, drift CHECK and unique index include target, exclusions PK includes target, pre-existing rows read back as `zitadel`, and a row naming an unregistered target is refused
+- [ ] 1.7 Confirm `direct_role_grants` needs **no** target column and that nothing in this change reads or writes a non-`zitadel` direct grant
+- [ ] 1.8 Thread `target` through the propagation claim, drain, and terminal-state writes in `services/propagation`; the drain claims one target per pass and skips targets whose registry state is not `active`
+- [ ] 1.9 Tests: a drain for one target leaves other targets' rows untouched; a disabled target is skipped without erroring; an unreachable target halts only its own pass
+- [ ] 1.10 Thread `target` through `services/drift` sweep and `drift_triage.go` so drift is classified per target
+- [ ] 1.11 Tests: drift on one target does not appear under another; existing Zitadel drift behaviour is unchanged
+- [ ] 1.12 Drift sweep consumes only reads marked current; a target served from a stale snapshot is recorded unreconciled rather than diffed
+- [ ] 1.13 Tests: an outage produces no drift findings and does record an unreconciled target with the age of the last current read; reconciliation resumes on return
+- [ ] 1.14 Thread `target` through `services/expiry` drain so allowance and grant expiry re-converge the right target
+- [ ] 1.15 Tests: expiry sweep emits per-target propagations and leaves unrelated targets alone
+- [ ] 1.16 Per-`(subject, target)` serialization and stale-version rejection in the drain
+- [ ] 1.17 Tests: an apply carrying an older version is rejected without dispatch; concurrent applies for one subject serialize; the settled state equals the higher version; a queued grant cannot land after a later revoke
+- [ ] 1.18 Two snapshot read paths: operator-initiated applies dispatch the recorded snapshot, periodic reconcile resolves current state
+- [ ] 1.19 Tests: a policy change between approval and drain still applies the approved snapshot; reconcile resolves fresh and never replays a superseded snapshot
+- [ ] 1.20 Background revocation drain: a `periodic.Runner` alongside expiry and drift that claims only access-withdrawing rows, takes the same advisory lock as the operator drain, and never dispatches an access-conferring row
+- [ ] 1.21 Tests: the runner drains revocations and leaves grants queued; it cannot run concurrently with an operator drain; a grant row is never claimed by it
+- [ ] 1.22 Revocation priority within the operator drain: revocations dispatch before grants for the same target
+- [ ] 1.23 Tests: a mixed queue dispatches revocations first; the retry budget applies per row without starving revocations
 
 ## 2. Add-on registry and wire contract
 
@@ -42,29 +49,36 @@
 - [ ] 2.21 Tests: scan plan rows, indexes, and caches for a submitted secret value and assert absence; the apply still succeeds with the value carried transiently
 - [ ] 2.22 Provisional plans: when a target is unreachable, record the approved snapshot and issue a plan against last-known state, labelled with its age and marked provisional
 - [ ] 2.23 Tests: an entitlement change is accepted while the target is unreachable and yields a provisional plan, presented as recorded and awaiting the target, never as applied
-- [ ] 2.24 Provisional resolution on return: re-fingerprint against live state, auto-dispatch on match, withhold and require fresh approval on mismatch
-- [ ] 2.25 Tests: matching fingerprints dispatch without re-approval; differing fingerprints withhold dispatch and surface what changed since approval
-- [ ] 2.26 Log-head anchoring: persist each add-on's reported log head digest and record count, flagging a decreased count or a non-extending head as truncation
-- [ ] 2.27 Tests: a truncated add-on log is detected by the anchor even though its remaining chain verifies
-- [ ] 2.28 Queued accounting: extend the existing `BulkSummary.Queued` semantics to add-on targets so unconfirmed rows never count as succeeded
-- [ ] 2.29 Tests: an unreachable add-on yields queued rows, a reachable one yields succeeded rows, and the summary distinguishes them
-- [ ] 2.30 Backend operation policy: per-operation-id scope, confirmation requirement, and parameter schema, owned by the backend and independent of any manifest
-- [ ] 2.31 Manifest intersection: effective operation set is manifest ∩ policy with policy prevailing; unknown operation ids fail closed
-- [ ] 2.32 Tests: a manifest cannot widen scope, cannot drop a confirmation requirement, cannot introduce an unknown operation, and can narrow
-- [ ] 2.33 mTLS between backend and add-ons with a private CA, or signed requests carrying timestamp and body hash where mTLS is impractical
-- [ ] 2.34 Tests: a call without a valid client certificate is refused; a signature not matching body or timestamp is refused; a bare shared secret is insufficient
-- [ ] 2.35 Certificate and key material provisioning, rotation, and expiry surfacing for the add-on transport
-- [ ] 2.36 Tests: an expiring transport credential is surfaced before it fails; rotation does not drop in-flight operations
+- [ ] 2.24 Provisional plans are exempt from the ordinary plan lifetime, gated by re-fingerprinting rather than elapsed time, so a long outage cannot discard an approved change
+- [ ] 2.25 Provisional resolution on return: re-fingerprint against live state, dispatch under the ordinary drain rules on match, withhold and require fresh approval on mismatch
+- [ ] 2.26 Tests: a provisional plan outliving the ordinary lifetime is still valid; matching fingerprints dispatch without re-approval; differing fingerprints withhold and surface what changed
+- [ ] 2.27 Log-head anchoring: persist each add-on's reported log head digest and record count, flagging a decreased count or a non-extending head as truncation
+- [ ] 2.28 Tests: a truncated add-on log is detected by the anchor even though its remaining chain verifies
+- [ ] 2.29 Queued accounting: extend the existing `BulkSummary.Queued` semantics to add-on targets so unconfirmed rows never count as succeeded
+- [ ] 2.30 Tests: an unreachable add-on yields queued rows, a reachable one yields succeeded rows, and the summary distinguishes them
+- [ ] 2.31 Backend operation policy: per-operation-id scope, confirmation requirement, and parameter schema, owned by the backend and independent of any manifest
+- [ ] 2.32 Manifest intersection: effective operation set is manifest ∩ policy with policy prevailing; unknown operation ids fail closed
+- [ ] 2.33 Tests: a manifest cannot widen scope, cannot drop a confirmation requirement, cannot introduce an unknown operation, and can narrow
+- [ ] 2.34 mTLS between backend and add-ons with a private CA, or signed requests carrying timestamp and body hash where mTLS is impractical
+- [ ] 2.35 Tests: a call without a valid client certificate is refused; a signature not matching body or timestamp is refused; a bare shared secret is insufficient
+- [ ] 2.36 Certificate and key material provisioning, rotation, and expiry surfacing for the add-on transport
+- [ ] 2.37 Tests: an expiring transport credential is surfaced before it fails; rotation does not drop in-flight operations
+- [ ] 2.38 Cohort guard at plan time: the backend computes the affected-subject count and refuses to issue a plan exceeding the configured limit without an explicit scope acknowledgement
+- [ ] 2.39 Tests: an oversized cohort is refused before any add-on is called and reports the computed count
+- [ ] 2.40 Lifecycle-state refusals account as queued, never failed, and resume when the add-on returns to `active`
+- [ ] 2.41 Tests: a `draining` or `read_only` refusal leaves the row queued, is excluded from failure counts, and resumes on return
 
 ## 3. Zitadel plan retrofit
 
-- [ ] 3.1 Persist plans on the Zitadel rehearse paths: `rehearseDriftBatch`, bulk, and reconciliation return a plan id alongside the outcomes
-- [ ] 3.2 Fingerprint a Zitadel subject as a hash of their current grant set, recorded per subject in the plan
-- [ ] 3.3 Tests: a plan persists with per-subject fingerprints and expires on its TTL
-- [ ] 3.4 **BREAKING** Change `applyDriftPlan` and the bulk and reconciliation apply endpoints to take a plan id instead of a plan body; re-verify fingerprints before dispatch
-- [ ] 3.5 Tests: an apply carrying a plan body is refused; an unknown or expired plan id is refused; a subject whose grants moved between plan and apply fails the apply, mutates nothing, and is named in the error
-- [ ] 3.6 Update the frontend bulk, drift-triage, and reconciliation flows to hold and send the plan id, with the stale-plan re-plan path
-- [ ] 3.7 Tests: the UI sends only the plan id; a stale plan re-plans and shows which subjects moved rather than reporting a generic failure
+- [ ] 3.1 Plan store: persist rehearsal outcomes under a plan id with a bounded lifetime, recording per subject the intended outcome and a fingerprint of the reviewed state
+- [ ] 3.2 Fingerprint the object that was reviewed, not only grants: the grant set for bulk operations, and the drift row's own status for triage, so a row someone else resolved fails verification
+- [ ] 3.3 Tests: a plan persists with per-subject fingerprints and expires on its lifetime; a drift row resolved concurrently fails verification
+- [ ] 3.4 Rehearsal responses on all four surfaces return a plan id — `POST /api/v1/grants/bulk`, `POST /api/v1/requests/bulk-decision`, `POST /api/v1/governance/drift/bulk-attribute`, `POST /api/v1/governance/drift/bulk-mark-external`
+- [ ] 3.5 **BREAKING** Apply on those four surfaces cites the plan id instead of causing recomputation from a re-submitted request; `applyDriftPlan` and `applyBulkPlan` take the persisted plan, and fingerprints are re-verified before dispatch
+- [ ] 3.6 Tests: an apply with no plan id is refused; an unknown or expired id is refused; a subject whose reviewed state moved between rehearsal and apply fails the apply, mutates nothing, and is named in the error
+- [ ] 3.7 Confirm reconciliation stays read-only: `GET /api/v1/reconciliation/grants` has no apply path, and its rows reach mutation through drift triage
+- [ ] 3.8 Update the frontend bulk, request-decision, and drift-triage flows to hold and send the plan id, with the stale-plan re-plan path
+- [ ] 3.9 Tests: the UI sends only the plan id; a stale plan re-plans and shows which subjects moved rather than reporting a generic failure
 
 ## 4. TrueNAS add-on: skeleton and read path
 
@@ -89,24 +103,25 @@
 ## 5. TrueNAS add-on: entitlement plane
 
 - [ ] 5.1 `POST /apply`: accept a resolved entitlement set for one subject, converge via `user.update({groups})`, level-triggered
-- [ ] 5.2 Declare `enabled` and `smb_enabled` as entitlement-schema fields and converge them via `user.update({locked, smb})` on the same apply path
-- [ ] 5.3 Tests: a set resolving both to disabled locks the account and clears SMB; a later set resolving them to enabled restores it with no second account created; neither path uses a creation operation
-- [ ] 5.4 Tests: re-applying an unchanged set is a no-op with no mutating call; a reduced set converges to exactly the remaining groups
-- [ ] 5.5 Blast-radius limiter: compute affected subject count, refuse beyond the configured limit without an explicit scope acknowledgement
-- [ ] 5.6 Tests: an oversized effect is refused, returns the computed count, and mutates nothing
-- [ ] 5.7 `POST /plan`: returns `BulkPlan`/`BulkOutcome`-shaped outcomes with `Detail` and `Consequence`, plus a per-subject target-state fingerprint, mutating nothing
-- [ ] 5.8 Tests: planning issues no mutating call, returns the apply path's shape, and produces a fingerprint that changes when the subject's target state changes
-- [ ] 5.9 Fingerprint re-verification on apply: refuse the call if any supplied fingerprint no longer matches live target state
-- [ ] 5.10 Tests: a subject mutated out of band between plan and apply causes refusal with that subject named, and nothing is applied
-- [ ] 5.11 Operation-id deduplication for `/apply` and `/op/{id}`, backed by the idempotency store
-- [ ] 5.12 Tests: replaying an operation id returns the original outcome without a second mutating call
-- [ ] 5.13 Absence handling: a subject missing from the expected set is reported as drift and never deleted or locked
-- [ ] 5.14 Tests: a missing subject produces a drift report and no mutation
+- [ ] 5.2 `/apply` creates the account when absent as part of convergence and reports the derived name, so no separate creation operation has to be sequenced before it
+- [ ] 5.3 Declare `enabled` and `smb_enabled` as entitlement-schema fields and converge them via `user.update({locked, smb})` on the same apply path
+- [ ] 5.4 Tests: a set resolving both to disabled locks the account and clears SMB; a later set resolving them to enabled restores it with no second account created; neither path uses a creation operation
+- [ ] 5.5 Tests: re-applying an unchanged set is a no-op with no mutating call; a reduced set converges to exactly the remaining groups
+- [ ] 5.6 Blast-radius limiter: compute affected subject count, refuse beyond the configured limit without an explicit scope acknowledgement
+- [ ] 5.7 Tests: an oversized effect is refused, returns the computed count, and mutates nothing
+- [ ] 5.8 `POST /plan`: returns `BulkPlan`/`BulkOutcome`-shaped outcomes with `Detail` and `Consequence`, plus a per-subject target-state fingerprint, mutating nothing
+- [ ] 5.9 Tests: planning issues no mutating call, returns the apply path's shape, and produces a fingerprint that changes when the subject's target state changes
+- [ ] 5.10 Fingerprint re-verification on apply: refuse the call if any supplied fingerprint no longer matches live target state
+- [ ] 5.11 Tests: a subject mutated out of band between plan and apply causes refusal with that subject named, and nothing is applied
+- [ ] 5.12 Operation-id deduplication for `/apply` and `/op/{id}`, backed by the idempotency store
+- [ ] 5.13 Tests: replaying an operation id returns the original outcome without a second mutating call
+- [ ] 5.14 Absence handling: a subject missing from the expected set is reported as drift and never deleted or locked
+- [ ] 5.15 Tests: a missing subject produces a drift report and no mutation
 
 ## 6. TrueNAS add-on: operations
 
-- [ ] 6.1 `account.ensure`: query-then-create with a deterministic username derivation, report the created account name back, idempotency-keyed
-- [ ] 6.2 Tests: repeat invocation creates no duplicate account and returns the same account name
+- [ ] 6.1 Account creation inside `/apply`: query-then-create with a deterministic username derivation, reporting the created name; no standalone creation operation exists
+- [ ] 6.2 Tests: applying twice creates no duplicate account and reports the same name; a subject with no account is planned as absent and created on apply
 - [ ] 6.3 Username derivation from the email localpart: lowercase, strip sub-addressing, replace characters outside `/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*[$]?$/`, enforce a valid leading character, truncate to 32; collision suffix from a stable hash of the Zitadel user ID
 - [ ] 6.4 Tests: derivation is deterministic and always pattern-valid; non-ASCII, sub-addressed, leading-dot, and over-length localparts normalize; a forced collision resolves reproducibly and never reuses another subject's name
 - [ ] 6.5 Normalization fallbacks: a localpart that normalizes to nothing usable falls back to a name derived from the Zitadel user id; the collision suffix is reserved before truncation, never appended after
@@ -140,7 +155,7 @@
 - [ ] 7.6 Tests: an edit creates a new version with actor and time; rollback restores the prior mapping and re-resolves affected subjects
 - [ ] 7.7 Role-derived resolution: derive the role half of a subject's entitlement set from the mappings and from nothing else
 - [ ] 7.8 Tests: a role with no mapping contributes nothing; two mappings on one role contribute both fields; resolution is stable under repetition
-- [ ] 7.9 Lifecycle trigger on the existing grant path: look up targets mapped to the changed role, enqueue `account.ensure` on gaining a first mapped role, and resolve the lifecycle entitlement fields in both directions so losing the last mapped role disables and regaining one re-enables
+- [ ] 7.9 Lifecycle trigger on the existing grant path: look up targets mapped to the changed role and resolve the lifecycle entitlement fields in both directions, so gaining a first mapped role enables (creating the account through the apply) and losing the last disables
 - [ ] 7.10 Tests: first mapped role creates the account before the entitlement apply; last mapped role removal locks and never deletes; regaining a mapped role restores without operator action; an unmapped role triggers nothing
 - [ ] 7.11 Mapping edit and delete plan through the standard plan path, subject to the blast-radius guard
 - [ ] 7.12 Tests: deleting a mapping held by many subjects plans across all of them and trips the blast-radius guard without an acknowledgement
@@ -163,7 +178,7 @@
 - [ ] 9.1 Manifest-driven operation rendering: member and admin panels built from `scope`, with no add-on-specific frontend code
 - [ ] 9.2 Tests: an operation removed from a manifest disappears from the UI without a frontend change
 - [ ] 9.3 Plan-then-apply flow reusing the `rehearse* → apply*` pattern, carrying the backend-issued plan id rather than round-tripping the plan body
-- [ ] 9.4 Tests: apply is unreachable until a plan has been issued; the request carries only the plan id; a tampered or client-fabricated plan body is refused
+- [ ] 9.4 Tests: apply is unreachable until a rehearsal has issued a plan id; the apply request carries the id rather than the original submission; an apply with no id is refused
 - [ ] 9.5 Stale-plan recovery UX: a rejected apply re-plans and shows which subjects moved since the operator reviewed it
 - [ ] 9.6 Tests: a subject changed between plan and apply produces the stale-plan path with that subject named, not a generic failure
 - [ ] 9.7 Mapping management UI: role-to-target bindings with version history, rollback, and the plan shown before any edit or delete lands
@@ -172,33 +187,54 @@
 - [ ] 9.10 Tests: queued revokes are counted and presented apart from queued grants; crossing the threshold changes the presentation
 - [ ] 9.11 Dormant-account housekeeping view: reason, age, individual and bulk action, plan before apply
 - [ ] 9.12 Tests: accounts held by an active role are excluded; bulk action plans before applying
-- [ ] 9.13 Add-on health surface distinguishing unreachable, read-only, backlogged, and stale-snapshot states
-- [ ] 9.14 Tests: each state renders distinctly and stale data is labelled with its age
-- [ ] 9.15 Allowance authoring UI with the carve-out shown wherever the affected role is displayed
-- [ ] 9.16 Tests: a role with an active subtractive allowance never renders as full access
+- [ ] 9.13 Remove `System > Hardware sync` from `ui/src/lib/nav.ts` and its route; add a per-target System entry per registered add-on, derived from deployment configuration rather than from what the current operator can see
+- [ ] 9.14 Tests: nav renders a target entry for each registered add-on regardless of that operator's data, and the LLDAP entry and route are gone
+- [ ] 9.15 Align the new operator surfaces with `basic-advanced-ia`: Basic versus Advanced placement, structure that does not move in response to data
+- [ ] 9.16 Extend `GET /api/v1/governance/indicators` with the unconfirmed-revocation count and wire the `NavLeaf` indicator key so the badge can carry it
+- [ ] 9.17 Tests: the indicator appears when unconfirmed revocations exist and clears when they resolve
+- [ ] 9.18 Apply-surface disclosure: every submitted operation states whether it drains automatically or waits for an operator resume
+- [ ] 9.19 Tests: a revocation says it will drain on its own, a grant says it is queued until resumed, and neither requires the operator to infer it
+- [ ] 9.20 Add-on health surface distinguishing unreachable, read-only, draining, backlogged, and stale-snapshot states
+- [ ] 9.21 Tests: each state renders distinctly and stale data is labelled with its age
+- [ ] 9.22 Allowance authoring UI supporting both bounded forms — an expiry, or no expiry with a mandatory review date — and rejecting a denial with neither
+- [ ] 9.23 Carve-out rendering wherever that role appears for that subject: user view, project role-holder lists, filtered cohorts, bulk selection
+- [ ] 9.24 Tests: a role with an active subtractive allowance never renders as full access; a role-holder list never counts a suspended subject as holding the listed access
+- [ ] 9.25 Review-date surfacing: an indefinite suspension appears in governance once its review date passes and stays in force until decided
+- [ ] 9.26 Tests: a passed review date surfaces the suspension without lifting it
 
 ## 10. Member surfaces
 
-- [ ] 10.1 Self-service credential set and reset, scoped-to-infrastructure copy, existence and last-change status only
-- [ ] 10.2 Tests: the credential value is never returned to the client or persisted; status renders from metadata alone
-- [ ] 10.3 Connection instructions showing the add-on-reported account name and only the resources current entitlements reach
-- [ ] 10.4 Tests: instructions change with entitlements and never list an unreachable resource
+- [ ] 10.1 Member add-on surfaces render as a section within `My access`, not a third `MEMBER_NAV` destination; a member with no add-on access sees the section explaining that rather than a vanished section
+- [ ] 10.2 Tests: `MEMBER_NAV` still has exactly two leaves; the section renders for members with and without target access
+- [ ] 10.3 Self-service credential set and reset, scoped-to-infrastructure copy, existence and last-change status only
+- [ ] 10.4 Tests: the credential value is never returned to the client or persisted; status renders from metadata alone
+- [ ] 10.5 Connection instructions showing the add-on-reported account name and only the resources current entitlements reach
+- [ ] 10.6 Tests: instructions change with entitlements and never list an unreachable resource
+- [ ] 10.7 A credential set fails closed and says so when the target is unreachable, refusing for lifecycle state, or the account does not yet exist
+- [ ] 10.8 Tests: each of those three cases returns an explicit failure, records nothing as queued, and tells the member to retry
 
 ## 11. Retire the LLDAP bridge
 
-- [ ] 11.1 Delete `sync/`, `backend/internal/services/lldap.go`, the `go-ldap/v3` dependency, and the sync Compose profile
-- [ ] 11.2 Remove the LLDAP group-flattening convention and its tests; confirm no caller remains
-- [ ] 11.3 Reduce the shadow vault to existence and rotation metadata; drop hash storage and its handlers
-- [ ] 11.4 Tests: no hash column is written; existing status endpoints still answer from metadata
-- [ ] 11.5 Remove LLDAP-specific environment variables from `.env.example`, `DEPLOY.md`, and `docker-compose.yml`
+- [ ] 11.1 Delete `sync/` in full, the sync Compose profile and its `SYNC_*` / `LLDAP_*` environment, and the `go-ldap/v3` dependency
+- [ ] 11.2 Delete the intent pipeline: `db/intents.go`, `handlers/intents.go`, `services/provisioning.go`, `services/lldap.go` and their tests, the `/api/v1/intents*` routes in `router.go`, and the `ProvisioningIntent` types in `models.go`
+- [ ] 11.3 Remove intent emission from `handlers/webhook.go`, `handlers/profile.go`, and `services/expiry/sweep.go` (the removal-intent path), plus their `deps.go` seams in `handlers/`, `services/`, and `services/expiry/`
+- [ ] 11.4 Tests: no caller of the removed intent functions remains; webhook and expiry paths still complete their remaining work; `go vet ./...` is clean
+- [ ] 11.5 Migration: drop `provisioning_intents` and its `lldap_group` column
+- [ ] 11.6 Migration: drop `credential_hash`, `algorithm`, and `salt_params` from `shadow_credentials`, keeping existence and rotation metadata; paired coherence guard asserting no column can hold a credential hash
+- [ ] 11.7 Tests: the vault status endpoints answer from metadata alone; no hash is written or readable
+- [ ] 11.8 Member re-enrolment cutover: because stored hashes cannot be converted, every enrolled member must set a new credential — surface the un-enrolled state in the member view and prepare the operator communication before this step ships
+- [ ] 11.9 Tests: a member with pre-cutover metadata and no new credential renders as needing enrolment, not as enrolled
+- [ ] 11.10 Remove LLDAP-specific variables from `.env.example`, `DEPLOY.md`, and `docker-compose.yml`
 
 ## 12. Documentation and graph refresh
 
 - [ ] 12.1 Update `openspec/changes/syndra-core-architecture/design.md` §3 Bridge Plane and §9 interaction matrix for the add-on model
 - [ ] 12.2 Update `ROADMAP.md` Phase 4 to record the LLDAP path as abandoned and the add-on platform as its replacement
-- [ ] 12.3 Update `openspec/INDEX.md`, `openspec/NEXT.md`, and `specs/feature-coverage.md`
-- [ ] 12.4 Update root `CLAUDE.md` and `README.md` for the removal of `sync/` and the addition of `addons/`
-- [ ] 12.5 Run `detect_changes` and re-index the affected scope in codebase memory; record an ADR for the adapter-not-controller decision
+- [ ] 12.3 Update `openspec/INDEX.md`: remove or supersede the LDAP Sync and Provisioning capability rows so INDEX stops advertising a bridge that no longer exists
+- [ ] 12.4 Mark `changes/syndra-core-architecture/specs/{ldap-sync,provisioning}/spec.md` superseded, pointing at this change
+- [ ] 12.5 Update `openspec/NEXT.md` and `specs/feature-coverage.md`
+- [ ] 12.6 Update root `CLAUDE.md` and `README.md` for the removal of `sync/` and the addition of `addons/`
+- [ ] 12.7 Run `detect_changes` and re-index the affected scope in codebase memory; record ADRs for adapter-not-controller and for narrowing the operator-only drain rule
 
 ## 13. P1 fixes
 

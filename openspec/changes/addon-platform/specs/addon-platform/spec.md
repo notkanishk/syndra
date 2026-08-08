@@ -88,6 +88,13 @@ The set of valid targets MUST be represented as registry rows referenced by the 
 
 An add-on MUST accept a resolved desired entitlement set for a subject and converge the target to exactly that set. Applying the same set twice MUST produce the same result as applying it once. Granting and revoking partial access MUST be expressed as the same call with a different desired set, not as separate add and remove operations.
 
+#### Scenario: Applying to a subject with no account creates it
+
+- **WHEN** an entitlement set is applied for a subject with no account on the target
+- **THEN** the add-on MUST create the account as part of convergence and report the account name in its outcome
+- **AND** the apply MUST NOT depend on a separately queued creation operation having run first
+- **AND** a plan for such a subject MUST fingerprint them as absent
+
 #### Scenario: Re-applying an unchanged set is a no-op
 
 - **WHEN** the backend applies an entitlement set identical to the target's current state
@@ -150,9 +157,25 @@ Each entitlement change MUST record an immutable desired-state snapshot for its 
 - **THEN** they MUST be serialized
 - **AND** the resulting target state MUST equal the state of the higher version
 
+### Requirement: A stale read MUST NOT be classified as drift
+
+The drift sweep MUST consume only target reads the add-on reports as current. A read served from a last-known snapshot MUST NOT be diffed against desired state to produce drift findings, because every outage would otherwise manufacture findings for every change made during it. The backend MUST instead record the target as unreconciled for the period and say so.
+
+#### Scenario: An outage produces no drift findings
+
+- **WHEN** the drift sweep runs while a target is unreachable and only stale reads are available
+- **THEN** it MUST NOT raise drift for that target
+- **AND** MUST record the target as unreconciled, with the age of the last current read
+
+#### Scenario: Reconciliation resumes on return
+
+- **WHEN** the target becomes reachable and a current read is available
+- **THEN** the sweep MUST diff against that read
+- **AND** changes made during the outage MUST be classified on their own merits, not as a backlog of outage artefacts
+
 ### Requirement: Add-on transport MUST be mutually authenticated and bind the request
 
-Calls between the backend and an add-on MUST use mutual TLS, or signed requests carrying a timestamp and a hash of the body where mutual TLS is impractical. A bearer shared secret alone MUST NOT be sufficient, because it authenticates the caller without binding anything to the request. Replay protection for mutations MUST rest on the operation identifier and the plan fingerprints, and a separate nonce store MUST NOT be introduced to duplicate that guarantee.
+Calls between the backend and an add-on MUST use mutual TLS, or signed requests carrying a timestamp and a hash of the body where mutual TLS is impractical. A bearer shared secret alone MUST NOT be sufficient, because it authenticates the caller without binding anything to the request. Replay protection for mutations MUST rest on the operation identifier and the plan fingerprints, and a separate nonce store MUST NOT be introduced to duplicate that guarantee. Deduplication by operation identifier MUST therefore cover every mutating call rather than a subset, since that universality is what makes the nonce store unnecessary. The retention of that record is the replay window, and MUST exceed any plausible retry or outage window; beyond it, replay is bounded by the request timestamp in signed-request mode and by the level-triggered nature of entitlement application.
 
 #### Scenario: An unauthenticated or unbound call is refused
 
@@ -200,7 +223,7 @@ Each add-on MUST write every mutation it performs to an append-only local log wi
 
 ### Requirement: Every Syndra-mediated target mutation MUST leave a trace before the call
 
-The backend MUST NOT mutate an add-on target without first durably recording the outbox row and audit entry, in one transaction, with the row's `target` set to the add-on. The target call happens during the drain, after the record is committed. A target-side change with no such record MUST be detected as drift and surfaced for triage, exactly as an untraced Zitadel change is.
+The backend MUST NOT mutate an add-on target without first durably recording the outbox row and audit entry, in one transaction, with the row's `target` set to the add-on. Exactly one exception exists: an operation declaring `secret_params` cannot be queued and MUST instead leave its pre-dispatch trace in the operation record described below. No other operation MUST be exempt. The target call happens during the drain, after the record is committed. A target-side change with no such record MUST be detected as drift and surfaced for triage, exactly as an untraced Zitadel change is.
 
 #### Scenario: Entitlement change enqueues before dispatch
 
@@ -238,29 +261,23 @@ An operation declaring `secret_params` MUST NOT be queued in the outbox, because
 - **THEN** the add-on MUST recognise the operation id and MUST NOT apply it a second time
 - **AND** MUST return the original outcome
 
-### Requirement: Target-affecting operations MUST apply against a durable backend-issued plan
+### Requirement: Add-ons MUST support planning and honour plan fingerprints
 
-Every entitlement application and every declared operation MUST be planned before it applies. The backend MUST issue the plan, persist it under an identifier with a bounded lifetime, and record for each affected subject both the intended outcome and a fingerprint of that subject's current target state. An apply MUST cite a plan identifier; the backend MUST NOT accept an apply that carries a plan supplied by the client instead of one it issued.
+The governing rule for plan-then-apply is stated in the `access-governance` capability and is not restated here. Under it, an add-on MUST compute a plan without mutating its target, MUST return outcomes in the shared plan shape with a state fingerprint per subject, and MUST refuse a mutating call whose supplied fingerprints no longer match live target state.
 
-#### Scenario: Plan precedes apply and binds it
-
-- **WHEN** an operator initiates any target-affecting operation
-- **THEN** the backend MUST issue a plan describing the effect on each affected subject and persist it under an identifier
-- **AND** the apply MUST cite that identifier
-- **AND** the apply MUST act on the subjects recorded in the plan rather than recomputing the cohort
-
-#### Scenario: A stale plan is rejected, not silently reapplied
-
-- **WHEN** an apply cites a plan whose recorded fingerprint no longer matches live target state for one or more subjects
-- **THEN** the backend MUST reject the apply without mutating any subject
-- **AND** the error MUST identify the subjects whose state changed so the surface can re-plan and show what moved
-- **AND** an unknown or expired plan identifier MUST be rejected the same way
+An add-on MAY cap the number of subjects a single request may affect, as defence in depth. It MUST NOT be the sole enforcement point for cohort size, because a per-subject call cannot observe a cohort.
 
 #### Scenario: Planning mutates nothing
 
 - **WHEN** an add-on computes a plan
 - **THEN** it MUST NOT issue any mutating call to its target
 - **AND** MUST return the same outcome shape the apply path returns, with a fingerprint per subject
+
+#### Scenario: A moved subject fails verification at the add-on
+
+- **WHEN** a mutating call arrives whose supplied fingerprint no longer matches live target state for a subject
+- **THEN** the add-on MUST refuse the call without mutating that subject
+- **AND** MUST identify the subject whose state moved
 
 #### Scenario: The plan store holds no secrets
 
@@ -290,6 +307,13 @@ A live state fingerprint cannot be obtained from an unreachable target, so plann
 - **THEN** the backend MUST withhold dispatch
 - **AND** MUST require fresh approval, presenting what changed since the original approval
 
+#### Scenario: A provisional plan does not expire on the ordinary plan lifetime
+
+- **WHEN** a target remains unreachable for longer than the ordinary plan lifetime
+- **THEN** the provisional plan MUST remain valid and its approved snapshot MUST be retained
+- **AND** the backend MUST NOT discard the operator's approved change because the target was away
+- **AND** re-fingerprinting on return, not elapsed time, MUST be what gates its dispatch
+
 #### Scenario: Provisional is visibly distinct from applied
 
 - **WHEN** a change is held under a provisional plan
@@ -313,15 +337,15 @@ An unreachable or failing add-on MUST NOT block the entitlement decision. The ba
 - **THEN** the queued rows for that target MUST be dispatched and driven to a terminal state
 - **AND** rows for other targets MUST be unaffected by the earlier outage
 
-### Requirement: Add-ons MUST refuse operations exceeding a configured blast radius
+### Requirement: Add-ons MUST cap the subjects a single request may affect
 
-An add-on MUST compute the number of affected subjects before applying, and MUST refuse an operation whose effect exceeds its configured subject limit unless the request carries an explicit acknowledgement of that scope.
+An add-on MUST refuse a request affecting more subjects than its configured per-request limit unless the request carries an explicit acknowledgement of that scope. This is a backstop against a backend asking for too much at once; the authoritative cohort guard is specified in `access-governance` and enforced at plan time, where the cohort is known.
 
-#### Scenario: Oversized effect is refused
+#### Scenario: An oversized request is refused at the add-on
 
-- **WHEN** an operation would affect more subjects than the configured limit and carries no scope acknowledgement
-- **THEN** the add-on MUST refuse the operation without mutating the target
-- **AND** MUST return the computed subject count so the operator can acknowledge it deliberately
+- **WHEN** a single request would affect more subjects than the add-on's configured limit and carries no scope acknowledgement
+- **THEN** the add-on MUST refuse it without mutating the target
+- **AND** MUST return the count it computed
 
 ### Requirement: Subject absence MUST NOT be treated as deletion
 

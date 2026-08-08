@@ -32,6 +32,23 @@ TrueNAS accepts plaintext passwords only; no hash form can be written. The add-o
 - **THEN** it MUST derive the answer from existence and last-change metadata
 - **AND** MUST NOT require the credential value to do so
 
+### Requirement: A credential set MUST fail closed
+
+A credential set cannot be queued, because queuing requires retaining the secret. An unreachable target, a lifecycle-state refusal, or a subject with no account yet MUST therefore produce an immediate explicit failure rather than a queued row, and the member MUST be told plainly that nothing was recorded and to retry.
+
+#### Scenario: An unreachable target fails the set outright
+
+- **WHEN** a member submits a credential and the target is unreachable or refusing for lifecycle state
+- **THEN** the backend MUST fail the operation immediately
+- **AND** MUST NOT record it as queued or pending
+- **AND** the member MUST be told that nothing was set and that they should retry
+
+#### Scenario: A credential set before the account exists fails closed
+
+- **WHEN** a member submits a credential before their target account has been created
+- **THEN** the operation MUST fail explicitly
+- **AND** MUST NOT be retained for later application
+
 ### Requirement: Credential hashes MUST NOT leave the add-on
 
 `user.query` returns `unixhash` and `smbhash`. The NT hash is a usable authentication credential. The add-on MUST request only the fields it needs and MUST strip hash fields from every response it returns, every snapshot it stores, and every log it writes.
@@ -89,7 +106,7 @@ Losing the last entitlement on the target MUST resolve the account and its SMB a
 
 ### Requirement: Account names MUST derive from the email localpart once and then be recorded
 
-The target generates no username and requires one at creation. The add-on MUST derive it from the subject's primary email localpart — lowercased, sub-addressing removed, characters outside `/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*[$]?$/` replaced, truncated to 32 characters — and MUST resolve any collision with a deterministic suffix derived from the subject's stable identity, never a counter. The derived name MUST be reported back and recorded against the subject, and the recorded binding MUST be authoritative thereafter.
+The target generates no username and requires one at creation. Localpart uniqueness is guaranteed by the identity provider only within a single Workspace domain; if a second domain is ever federated the collision suffix becomes routine rather than exceptional, and MUST remain correct in that case. The add-on MUST derive it from the subject's primary email localpart — lowercased, sub-addressing removed, characters outside `/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*[$]?$/` replaced, truncated to 32 characters — and MUST resolve any collision with a deterministic suffix derived from the subject's stable identity, never a counter. The derived name MUST be reported back and recorded against the subject, and the recorded binding MUST be authoritative thereafter.
 
 #### Scenario: Derivation is deterministic and valid
 
@@ -124,12 +141,13 @@ The target generates no username and requires one at creation. The add-on MUST d
 
 ### Requirement: Binding conflicts MUST be an operator decision, never an inference
 
-Account creation is query-then-create, so it can encounter an existing account holding the derived name. The add-on MUST NOT adopt an account that is not already bound to the subject, because that account may belong to someone else and adopting it would hand them the subject's entitlements. A collision MUST halt the operation and be reported for an operator decision. Reconciliation MUST likewise report an account whose name has changed out of band beneath a recorded binding, rather than treating the subject as missing.
+Account creation happens as part of entitlement convergence and is query-then-create, so it can encounter an existing account holding the derived name. The add-on MUST NOT adopt an account that is not already bound to the subject, because that account may belong to someone else and adopting it would hand them the subject's entitlements. A collision MUST halt the operation and be reported for an operator decision. Reconciliation MUST likewise report an account whose name has changed out of band beneath a recorded binding, rather than treating the subject as missing.
 
 #### Scenario: An unbound account with the derived name halts creation
 
 - **WHEN** the derived name is already held by an account not bound to this subject
 - **THEN** the add-on MUST NOT create, adopt, or modify any account
+- **AND** the apply MUST fail for that subject rather than converging their entitlements onto a stranger's account
 - **AND** MUST report a binding conflict identifying the existing account
 - **AND** the operator MUST choose between adopting it and creating under a disambiguated name
 

@@ -1,30 +1,60 @@
 ## ADDED Requirements
 
-### Requirement: Every apply MUST cite a backend-issued plan, on every target including Zitadel
+### Requirement: Every apply MUST cite a persisted plan, on every target including Zitadel
 
-Plan-then-apply MUST be a backend guarantee rather than a client convention, on all mutation paths — bulk operations, drift triage, reconciliation, and add-on targets alike. The backend MUST issue and persist the plan under an identifier with a bounded lifetime, recording for each subject the intended outcome and a fingerprint of that subject's current state on the target. An apply MUST cite that identifier, and the backend MUST NOT accept a plan body supplied by the client in its place.
+Plan-then-apply MUST be a backend guarantee rather than a convention resting on the client re-sending the same request. This is the canonical statement of the rule; other capabilities reference it rather than restating it.
 
-#### Scenario: Zitadel applies cite a plan identifier
+The rehearsal request MUST persist its outcomes under a plan identifier with a bounded lifetime and return that identifier, recording for each subject the intended outcome and a fingerprint of the state that was reviewed. The apply request MUST cite that identifier rather than re-submitting the original request for recomputation, and the backend MUST re-verify every fingerprint before dispatching. This applies to `POST /api/v1/grants/bulk`, `POST /api/v1/requests/bulk-decision`, `POST /api/v1/governance/drift/bulk-attribute`, `POST /api/v1/governance/drift/bulk-mark-external`, and every add-on target operation.
 
-- **WHEN** an operator applies a bulk, drift-triage, or reconciliation action against Zitadel
-- **THEN** the request MUST carry a plan identifier the backend issued
-- **AND** the backend MUST reject a request carrying a plan body instead
+The fingerprint MUST cover the object the operator reviewed, not only the subject's grants — for drift triage it MUST include the drift row's own status, so that a row resolved by someone else while the operator was reading the list fails verification instead of being re-resolved.
+
+The sole exemption is an operation scoped to `member` acting on the acting subject alone, which has no cohort and no diff to review and MUST be dispatched synchronously.
+
+#### Scenario: Apply cites the plan the operator reviewed
+
+- **WHEN** an operator rehearses a bulk or drift-triage action and then applies it
+- **THEN** the rehearsal MUST return a plan identifier
+- **AND** the apply MUST cite that identifier rather than causing the plan to be recomputed
+- **AND** the backend MUST reject an apply that cites no identifier
 
 #### Scenario: A grant set that moved invalidates the plan
 
-- **WHEN** a subject's Zitadel grants change between the plan and the apply
+- **WHEN** a subject's grants change between the rehearsal and the apply
 - **THEN** the recorded fingerprint MUST no longer match
 - **AND** the backend MUST reject the apply without mutating any subject
 - **AND** the error MUST name the subjects whose state changed
+
+#### Scenario: A concurrently resolved drift row invalidates the plan
+
+- **WHEN** a drift row in the plan is resolved by another operator before the apply
+- **THEN** fingerprint verification MUST fail for that row
+- **AND** the apply MUST NOT re-resolve it
 
 #### Scenario: Plan identifiers expire
 
 - **WHEN** an apply cites a plan identifier that is unknown or past its lifetime
 - **THEN** the backend MUST reject it and MUST NOT mutate any subject
 
+#### Scenario: Member self-service is exempt
+
+- **WHEN** a member invokes a `member`-scoped operation against themselves
+- **THEN** it MUST dispatch synchronously without a plan
+- **AND** no other operation MUST be exempt on that basis
+
+### Requirement: The cohort guard MUST live where the cohort is known
+
+An operation's affected-subject count MUST be computed and enforced by the backend at plan time, because the backend is the only component that holds the cohort — a per-subject apply call cannot know how many subjects an operation touches. The backend MUST refuse to issue a plan exceeding the configured subject count without an explicit scope acknowledgement. An add-on MAY additionally cap the subjects one request may affect as defence in depth, but MUST NOT be the sole enforcement point.
+
+#### Scenario: An oversized cohort is refused at plan time
+
+- **WHEN** an operation would affect more subjects than the configured limit and carries no scope acknowledgement
+- **THEN** the backend MUST refuse to issue the plan
+- **AND** MUST report the computed subject count so the operator can acknowledge it deliberately
+- **AND** no add-on MUST have been called
+
 ### Requirement: Unconfirmed revocations MUST drain ahead of grants and carry a containment path
 
-Revocations MUST be dispatched before grants for the same target, because a delayed grant withholds access while a delayed revocation retains it. When a target is unreachable and access must end immediately, the escalation surface MUST carry the out-of-band procedure for that target, since the backend has no path to it. A change an operator makes out of band to contain an incident MUST be recognised by the drift sweep as reconciling the outstanding revocation, not raised as fresh drift.
+Revocations MUST be dispatched before grants for the same target, and MUST be eligible for background draining while grants remain operator-gated, because a delayed grant withholds access while a delayed revocation retains it. When a target is unreachable and access must end immediately, the escalation surface MUST carry the out-of-band procedure for that target, since the backend has no path to it. A change an operator makes out of band to contain an incident MUST be recognised by the drift sweep as reconciling the outstanding revocation, not raised as fresh drift.
 
 #### Scenario: Revocations are dispatched first
 
@@ -85,15 +115,21 @@ Access on an add-on target derives from a Zitadel role the operator maps to targ
 - **THEN** the allowance band MUST be empty for that subject
 - **AND** the backend MUST NOT create an allowance as a side effect of the role grant
 
-### Requirement: Subtractive allowances MUST carry an expiry
+### Requirement: Subtractive allowances MUST be bounded by an expiry or a review date
 
-An allowance that removes access the subject's role would otherwise grant MUST have an expiry and MUST be treated as a time-boxed suspension. A permanent reduction MUST be expressed by changing the role mapping, not by an open-ended denial, so a held role remains a truthful statement of access.
+An allowance that removes access the subject's role would otherwise grant MUST carry either an expiry, making it a self-lapsing suspension, or — where the suspension is genuinely indefinite — a mandatory review date that surfaces in governance once it passes. A denial with neither MUST be rejected, because an open-ended carve-out nobody is prompted to revisit becomes permanent by inattention. Permanent removal of one person's access MUST be expressed by revoking that person's role grant, never by editing the role mapping, which changes access for every holder of that role.
 
-#### Scenario: Subtractive allowance without an expiry is rejected
+#### Scenario: A denial with neither bound is rejected
 
-- **WHEN** an operator submits a subtractive allowance with no expiry
+- **WHEN** an operator submits a subtractive allowance with no expiry and no review date
 - **THEN** the backend MUST reject it
-- **AND** the error MUST direct the operator to change the role mapping for a permanent reduction
+- **AND** the error MUST offer the two valid forms and name role-grant revocation as the permanent per-person path
+
+#### Scenario: An indefinite suspension surfaces at its review date
+
+- **WHEN** a subtractive allowance with no expiry passes its review date
+- **THEN** it MUST surface in governance for an explicit decision
+- **AND** it MUST remain in force until that decision is made
 
 #### Scenario: Expiring suspension restores role-derived access
 
@@ -104,8 +140,9 @@ An allowance that removes access the subject's role would otherwise grant MUST h
 #### Scenario: Carve-out is visible wherever the role appears
 
 - **WHEN** a subject holds a role whose access is partially suspended by a subtractive allowance
-- **THEN** every surface presenting that role for that subject MUST show the carve-out
+- **THEN** every surface presenting that role for that subject MUST show the carve-out — the user view, project role-holder lists, filtered cohorts, and bulk selection alike
 - **AND** MUST NOT present the role's full access as effective
+- **AND** a role-holder list MUST NOT count a suspended subject as holding the access it lists
 
 ### Requirement: Unconfirmed revocations MUST escalate as a security finding
 
@@ -123,3 +160,73 @@ Because target propagation fails open, a revocation may be recorded in Syndra wi
 - **WHEN** an unconfirmed revocation exceeds the configured age threshold
 - **THEN** the surface MUST present it as a live security finding rather than a pending task
 - **AND** MUST state how long the subject has retained access beyond the recorded revocation
+
+## MODIFIED Requirements
+
+### Requirement: Buffered propagations MUST drain only on explicit operator action, and `applied` MUST be the terminal success state
+
+Buffered **grants** MUST drain only on explicit operator action, on every target. Buffered **revocations** MAY additionally be drained by a background runner, because a delayed grant withholds access while a delayed revocation retains it, and the consent property this requirement protects concerns conferring access rather than withdrawing it. A background revocation drain MUST obey every other rule in this requirement — the same advisory lock, the same claim semantics, the same terminal-state discipline — and MUST NOT dispatch any row whose `op_type` confers access. The operator surface MUST state, for each submitted operation, whether it will drain on its own or wait for an operator, so that neither behaviour is inferred.
+
+The operator-triggered drain MUST be triggered by the operator (`POST /api/v1/propagations/drain`), MUST pre-flight target reachability, and MUST treat a `2xx` Management API response as terminal confirmation (`status='applied'`). There MUST be no dependence on a webhook return-trip to confirm a Syndra-originated grant, because such events are dropped by the self-mutation guard.
+
+The claim step MUST select both `pending` AND `in_flight` rows (the pending worklist and count report the same set), so a drain that crashed after claiming but before recording a terminal state leaves no orphaned `in_flight` row that is visible yet never re-driven. Because claiming `in_flight` rows would otherwise let a second drain re-dispatch a row the first drain is still processing, drains MUST be serialized by a session-level advisory lock: a drain that cannot acquire the lock MUST halt with reason `drain_in_progress` and MUST NOT claim or dispatch any row. Serialization guarantees the only `in_flight` rows a claiming drain ever sees are those orphaned by a crashed drain (whose session, and therefore lock, is gone). Marking a row terminal (`applied`/`failed`) or requeuing it MUST be the sole way a row leaves `in_flight`: the drain MUST NOT report a row as `applied`/`failed`/`requeued` unless that state was actually persisted, so a state-write failure never masquerades as success. An `applied` `revoke` or `replace` MUST reconcile the intent ledger (`direct_role_grants`) so Syndra stops treating removed roles as expected grants.
+
+#### Scenario: Drain halts cleanly when Zitadel is unreachable
+
+- **WHEN** the operator triggers the drain and the `/zitadel/health` pre-flight reports unreachable
+- **THEN** the drain MUST halt without transitioning any outbox row to `in_flight`
+- **AND** the response MUST indicate the halt reason `zitadel_offline` so the UI can keep the pending callout visible with the resume button disabled
+
+#### Scenario: Per-row ACK classification
+
+- **WHEN** the drain dispatches a pending outbox row and the Management API returns `2xx`
+- **THEN** the row MUST transition to `status='applied'` with `completed_at` set
+- **AND WHEN** the call returns a `4xx`, the row MUST transition to `status='failed'` with `last_error` recorded, without halting the remaining rows
+- **AND WHEN** the call returns `5xx` or times out, the row MUST return to `status='pending'` with `attempts` incremented, and the drain MUST halt once `attempts` exceeds `OUTBOX_MAX_RETRIES`
+
+#### Scenario: Already-exists check short-circuits redundant and replayed mutations
+
+- **WHEN** the drain processes an `add` outbox row whose `(user_id, project_id, role_key)` already exists in the webhook-derived grant index (or a live `ListUserGrants`)
+- **THEN** the row MUST be marked `applied` without issuing a Management API call
+- **AND** an `in_flight` row left by a process crash between the Zitadel ACK and the status update MUST be re-claimed by the next drain (the claim covers `in_flight`) and resolve to `applied` via this same check, with no double-write
+- **AND** a `replace` row MUST short-circuit ONLY when Zitadel already holds EXACTLY the desired role set; a superset (a superseded role still present) MUST NOT short-circuit, because the presence-only grant index cannot prove the absence of extras — `replace` therefore compares against a live `ListUserGrants` and issues `UpdateUserGrant` until the sets match exactly
+
+#### Scenario: Applied revoke and replace reconcile the intent ledger
+
+- **WHEN** a `revoke` outbox row is marked `applied` (whether by a `2xx`/`409` dispatch or by the already-exists short-circuit for a role already absent in Zitadel)
+- **THEN** the backend MUST delete the named `(user_id, project_id, role_key)` rows from `direct_role_grants` so the revoked role is no longer treated as an expected grant by the access-decision compiler
+- **AND WHEN** a `replace` outbox row is marked `applied`
+- **THEN** the backend MUST delete any `source='direct'` `direct_role_grants` row on `(user_id, project_id)` whose role is not in the new set (the new roles were upserted at enqueue), leaving the ledger equal to the replace target
+- **AND** the ledger reconcile MUST run BEFORE the terminal `applied` write, so a reconcile failure leaves the row `in_flight` for the next drain rather than stranding a terminal row beside a stale ledger
+
+#### Scenario: A state-persistence failure is never reported as success
+
+- **WHEN** the Zitadel outcome for a row is decided (`2xx`/`409`/`4xx`/transient) but the corresponding state write (`mark applied`, `mark failed`, `requeue`, or ledger reconcile) fails
+- **THEN** the drain MUST NOT increment `applied`/`failed`/`requeued` for that row, MUST count it under `errored`, and MUST continue processing the remaining rows rather than halting the batch or returning overall success
+- **AND** the row MUST remain `in_flight` so the next drain re-claims and re-drives it to a terminal state
+
+#### Scenario: Concurrent drains are serialized
+
+- **WHEN** a drain is triggered while another drain (a second `POST /api/v1/propagations/drain`, or an inline `?apply=true` drain) already holds the drain advisory lock
+- **THEN** the second drain MUST halt with reason `drain_in_progress` without claiming, dispatching, or transitioning any row
+- **AND** the lock MUST be released when the holding drain returns (including early halts), so the next drain proceeds normally
+
+#### Scenario: Inline apply drains only the requesting row and reports its own status
+
+- **WHEN** a grant mutation is submitted with `?apply=true`
+- **THEN** the compiled cache MUST be rebuilt from the committed ledger row BEFORE the inline drain runs, on a context detached from the request lifecycle, so access is effective regardless of the drain outcome or a client disconnect
+- **AND** the inline drain MUST target ONLY this request's own outbox row (`DrainOne` by `outbox_id`), never the global oldest-first batch — applying one grant MUST NOT project unrelated mutations an operator left queued
+- **AND** the `202` response's `status` MUST reflect the current status of that row (read back by `outbox_id`), so a requeued/errored row reports its actual status (e.g. `pending`), never a false `applied`
+
+#### Scenario: A background runner drains revocations but never grants
+
+- **WHEN** the background revocation runner claims work
+- **THEN** it MUST claim only rows whose operation withdraws access
+- **AND** MUST leave access-conferring rows for the operator-triggered drain
+- **AND** MUST acquire the same advisory lock, so it cannot run concurrently with an operator drain
+
+#### Scenario: The apply surface states which rule applies
+
+- **WHEN** an operator submits an operation that enters the outbox
+- **THEN** the response and the surface MUST state whether it will drain automatically or wait for an explicit resume
+- **AND** an operator MUST NOT have to know the operation's type to infer whether further action is required of them

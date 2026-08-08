@@ -44,6 +44,13 @@ Each add-on MUST support three configured states: `active`; `draining`, in which
 - **AND** MUST allow the in-flight operations to reach a terminal state
 - **AND** the operator surface MUST show when draining has completed, so credential rotation or a target upgrade can proceed safely
 
+#### Scenario: A lifecycle refusal is queued, not failed
+
+- **WHEN** a mutating operation is refused because the add-on is in `draining` or `read_only`
+- **THEN** the backend MUST account for it as queued, exactly as it does for an unreachable add-on
+- **AND** MUST NOT record it as failed
+- **AND** the row MUST resume when the add-on returns to `active`, so a maintenance window cannot silently convert pending revocations into terminal failures
+
 #### Scenario: A non-active state is not reported as unhealthy
 
 - **WHEN** an add-on is in `draining` or `read_only`
