@@ -253,8 +253,12 @@ func TestDesiredStateSnapshotsAreImmutableAndVersioned(t *testing.T) {
 	if !strings.Contains(body, "UNIQUE (subject_id, target, version)") {
 		t.Error("desired_state_snapshots must be unique per (subject_id, target, version) — the database backstop for monotonic versioning")
 	}
-	if !regexp.MustCompile(`version\s+BIGINT NOT NULL CHECK \(version > 0\)`).MatchString(body) {
-		t.Error("version must be a positive BIGINT — version 0 has no predecessor to be newer than")
+	// CHECK (version > 0) survives the trigger rather than being replaced by it:
+	// it is the assertion that holds if the trigger is ever dropped, and it is
+	// what turns the DEFAULT 0 sentinel into an error rather than a stored row
+	// should an allocation ever fail to happen.
+	if !regexp.MustCompile(`version\s+BIGINT NOT NULL DEFAULT 0 CHECK \(version > 0\)`).MatchString(body) {
+		t.Error("version must be a positive BIGINT defaulting to the 0 sentinel the trigger replaces")
 	}
 
 	// Immutability is enforced, not merely intended. Without the trigger, "an
@@ -267,28 +271,39 @@ func TestDesiredStateSnapshotsAreImmutableAndVersioned(t *testing.T) {
 	// UNIQUE forbids two rows sharing a version; it does NOT make versions
 	// monotonic. Version 2 then version 1 satisfies it, and the stale-version
 	// check ("older than the last version applied") is then comparing against a
-	// number that went backwards. The allocation has to be enforced where a
-	// writer cannot skip it.
+	// number that went backwards.
 	if !regexp.MustCompile(`(?is)CREATE TRIGGER desired_state_snapshots_version_monotonic\s+BEFORE INSERT ON desired_state_snapshots`).MatchString(up) {
 		t.Error("desired_state_snapshots needs a BEFORE INSERT trigger allocating the version — UNIQUE(subject_id, target, version) permits 2 then 1")
 	}
-	fn := regexp.MustCompile(`(?is)CREATE OR REPLACE FUNCTION enforce_desired_state_snapshot_version\(\).*?\n\$\$;`).FindString(up)
-	if fn == "" {
+	// Comments stripped: a commented-out lock still contains the word, and a
+	// guard satisfied by prose guards nothing.
+	fn := stripSQLComments(regexp.MustCompile(`(?is)CREATE OR REPLACE FUNCTION enforce_desired_state_snapshot_version\(\).*?\n\$\$;`).FindString(up))
+	if strings.TrimSpace(fn) == "" {
 		t.Fatal("could not isolate the version-allocation trigger function")
 	}
 	for _, want := range []string{
+		"pg_advisory_xact_lock",                                     // serialize the pair, so MAX+1 is still true at insert
+		"NEW.subject_id || ':' || NEW.target",                       // scoped to the pair, not to the whole table
 		"COALESCE(MAX(version), 0)",                                 // the predecessor, with an empty history meaning 0
-		"WHERE subject_id = NEW.subject_id AND target = NEW.target", // scoped to the pair the version is monotonic within
-		"NEW.version <> last_version + 1",                           // exactly the successor: no gaps, no regressions
-		"RAISE EXCEPTION",                                           // and it refuses rather than silently correcting
+		"WHERE subject_id = NEW.subject_id AND target = NEW.target", // read the same pair the lock covers
+		"NEW.version := last_version + 1",                           // ALLOCATE. Validating would put a retry loop in every writer
 	} {
 		if !strings.Contains(fn, want) {
-			t.Errorf("the version trigger must assert %q; body:\n%s", want, fn)
+			t.Errorf("the version trigger must contain %q; body:\n%s", want, fn)
 		}
+	}
+	// The lock has to precede the read it protects, or it protects nothing.
+	if strings.Index(fn, "pg_advisory_xact_lock") > strings.Index(fn, "COALESCE(MAX(version), 0)") {
+		t.Error("the advisory lock must be taken before MAX(version) is read")
+	}
+	// A writer cannot know the next version for a pair, so it must be able to
+	// omit the column entirely.
+	if !regexp.MustCompile(`version\s+BIGINT NOT NULL DEFAULT 0`).MatchString(body) {
+		t.Error("version must default, so an INSERT can omit what the trigger allocates")
 	}
 
 	if !strings.Contains(up, "RAISE EXCEPTION") {
-		t.Error("the snapshot triggers must raise, not silently swallow the write")
+		t.Error("the immutability trigger must raise, not silently swallow the write")
 	}
 	for _, want := range []string{
 		"DROP TRIGGER IF EXISTS desired_state_snapshots_immutable",

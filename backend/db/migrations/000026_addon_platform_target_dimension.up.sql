@@ -105,7 +105,9 @@ CREATE TABLE IF NOT EXISTS desired_state_snapshots (
     id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     subject_id VARCHAR(255) NOT NULL,
     target     TEXT NOT NULL REFERENCES targets(target),
-    version    BIGINT NOT NULL CHECK (version > 0),
+    -- Allocated by the trigger below, never supplied by the writer. The default
+    -- exists so an INSERT can legally omit it; a supplied value is replaced.
+    version    BIGINT NOT NULL DEFAULT 0 CHECK (version > 0),
     state_json JSONB NOT NULL,
     created_by VARCHAR(255) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -127,27 +129,40 @@ CREATE TRIGGER desired_state_snapshots_immutable
 -- The UNIQUE above forbids two rows sharing a version. It does NOT make versions
 -- monotonic: it permits version 2 followed by version 1 for one (subject,
 -- target), and a stale-version check compares against "the last version
--- applied", which a backwards insert makes a lie. So the version is allocated
--- here rather than trusted from the writer — exactly the reasoning behind the
--- immutability trigger above, applied to the other half of the same guarantee.
+-- applied", which a backwards insert makes a lie — on the mechanism whose whole
+-- job is stopping a queued grant landing after a newer revoke.
 --
--- The two constraints are complementary under concurrency: this trigger forbids
--- gaps and regressions, and when two concurrent inserts both read the same MAX
--- and both propose N+1, the UNIQUE rejects the loser. Neither alone is enough.
+-- So the version is ALLOCATED here, not validated here. Validating it would
+-- leave every writer to read MAX, propose MAX+1, and retry on the unique
+-- violation when it lost the race — the same loop, written again, in each of
+-- them, and wrong in whichever one forgets. Allocation under a pair-scoped
+-- advisory lock means the loop exists nowhere: a concurrent writer for the same
+-- (subject, target) blocks until the first commits and then reads the version it
+-- wrote. The next version for a pair is not a fact a writer can know, so it is
+-- not a value a writer supplies.
+--
+-- The lock is transaction-scoped, so it releases on commit or rollback with
+-- nothing to leak. hashtext can collide, which costs two unrelated pairs a
+-- little needless serialization and costs correctness nothing.
+--
+-- ponytail: a transaction inserting snapshots for many subjects takes one lock
+-- per pair, so bulk writers must insert in a deterministic subject order or two
+-- overlapping bulk writes can deadlock. Ordering is free at the call site; if
+-- that ever stops being true, take one lock for the whole target instead.
+--
+-- UNIQUE stays as the backstop that does not depend on this trigger existing.
 CREATE OR REPLACE FUNCTION enforce_desired_state_snapshot_version() RETURNS trigger
     LANGUAGE plpgsql AS $$
 DECLARE
     last_version BIGINT;
 BEGIN
+    PERFORM pg_advisory_xact_lock(hashtext(NEW.subject_id || ':' || NEW.target));
+
     SELECT COALESCE(MAX(version), 0) INTO last_version
       FROM desired_state_snapshots
      WHERE subject_id = NEW.subject_id AND target = NEW.target;
 
-    IF NEW.version <> last_version + 1 THEN
-        RAISE EXCEPTION
-            'desired_state_snapshots version must be % for (subject_id=%, target=%), got %',
-            last_version + 1, NEW.subject_id, NEW.target, NEW.version;
-    END IF;
+    NEW.version := last_version + 1;
     RETURN NEW;
 END;
 $$;
