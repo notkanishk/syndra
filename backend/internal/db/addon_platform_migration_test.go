@@ -147,7 +147,7 @@ func TestOutboxRenameIsComplete(t *testing.T) {
 		"pending_zitadel_propagations_pkey",
 		"pending_zitadel_propagations_idempotency_key_key",
 	} {
-		if !regexp.MustCompile(`(?is)ALTER INDEX IF EXISTS\s+`+regexp.QuoteMeta(idx)+`\s+RENAME TO`).MatchString(up) {
+		if !regexp.MustCompile(`(?is)ALTER INDEX IF EXISTS\s+` + regexp.QuoteMeta(idx) + `\s+RENAME TO`).MatchString(up) {
 			t.Errorf("index %s still carries the old table's name after the rename", idx)
 		}
 	}
@@ -263,12 +263,82 @@ func TestDesiredStateSnapshotsAreImmutableAndVersioned(t *testing.T) {
 	if !regexp.MustCompile(`(?is)CREATE TRIGGER desired_state_snapshots_immutable\s+BEFORE UPDATE OR DELETE ON desired_state_snapshots`).MatchString(up) {
 		t.Error("desired_state_snapshots needs a BEFORE UPDATE OR DELETE trigger — the snapshot an outbox row cites must not be editable after approval")
 	}
-	if !strings.Contains(up, "RAISE EXCEPTION") {
-		t.Error("the immutability trigger must raise, not silently swallow the write")
+
+	// UNIQUE forbids two rows sharing a version; it does NOT make versions
+	// monotonic. Version 2 then version 1 satisfies it, and the stale-version
+	// check ("older than the last version applied") is then comparing against a
+	// number that went backwards. The allocation has to be enforced where a
+	// writer cannot skip it.
+	if !regexp.MustCompile(`(?is)CREATE TRIGGER desired_state_snapshots_version_monotonic\s+BEFORE INSERT ON desired_state_snapshots`).MatchString(up) {
+		t.Error("desired_state_snapshots needs a BEFORE INSERT trigger allocating the version — UNIQUE(subject_id, target, version) permits 2 then 1")
 	}
-	if !strings.Contains(down, "DROP TRIGGER IF EXISTS desired_state_snapshots_immutable") ||
-		!strings.Contains(down, "DROP FUNCTION IF EXISTS reject_desired_state_snapshot_mutation") {
-		t.Error("down migration must drop both the trigger and its function — a leftover function is a rollback that did not roll back")
+	fn := regexp.MustCompile(`(?is)CREATE OR REPLACE FUNCTION enforce_desired_state_snapshot_version\(\).*?\n\$\$;`).FindString(up)
+	if fn == "" {
+		t.Fatal("could not isolate the version-allocation trigger function")
+	}
+	for _, want := range []string{
+		"COALESCE(MAX(version), 0)",                                 // the predecessor, with an empty history meaning 0
+		"WHERE subject_id = NEW.subject_id AND target = NEW.target", // scoped to the pair the version is monotonic within
+		"NEW.version <> last_version + 1",                           // exactly the successor: no gaps, no regressions
+		"RAISE EXCEPTION",                                           // and it refuses rather than silently correcting
+	} {
+		if !strings.Contains(fn, want) {
+			t.Errorf("the version trigger must assert %q; body:\n%s", want, fn)
+		}
+	}
+
+	if !strings.Contains(up, "RAISE EXCEPTION") {
+		t.Error("the snapshot triggers must raise, not silently swallow the write")
+	}
+	for _, want := range []string{
+		"DROP TRIGGER IF EXISTS desired_state_snapshots_immutable",
+		"DROP TRIGGER IF EXISTS desired_state_snapshots_version_monotonic",
+		"DROP FUNCTION IF EXISTS reject_desired_state_snapshot_mutation",
+		"DROP FUNCTION IF EXISTS enforce_desired_state_snapshot_version",
+	} {
+		if !strings.Contains(down, want) {
+			t.Errorf("down migration missing %q — a leftover trigger or function is a rollback that did not roll back", want)
+		}
+	}
+}
+
+// 1.7 — a primary key gaining a column is a change to every ON CONFLICT arbiter
+// that named it. Postgres cannot infer a constraint from a partial column list,
+// so a missed arbiter is not a subtle mismatch: the statement errors and the
+// whole triage transaction rolls back, which is Mark external failing outright.
+func TestExclusionWritesMatchTheWidenedPrimaryKey(t *testing.T) {
+	src, err := os.ReadFile("drift.go")
+	if err != nil {
+		t.Fatalf("read drift.go: %v", err)
+	}
+	ins := regexp.MustCompile(`(?is)INSERT INTO external_grant_exclusions \(([^)]*)\).*?ON CONFLICT \(([^)]*)\)`).FindStringSubmatch(string(src))
+	if ins == nil {
+		t.Fatal("could not isolate the external_grant_exclusions INSERT and its conflict target")
+	}
+	for _, col := range []string{"target", "user_id", "project_id", "role_key"} {
+		if !strings.Contains(ins[2], col) {
+			t.Errorf("ON CONFLICT must name every primary-key column; %q missing from (%s)", col, ins[2])
+		}
+		if !strings.Contains(ins[1], col) {
+			t.Errorf("the INSERT must supply %q — relying on the column default would write every target's exclusion as zitadel", col)
+		}
+	}
+
+	// And the target written must be the drift row's own, not a literal: an
+	// exclusion is a statement about the target that drifted.
+	if !regexp.MustCompile(`(?is)target, err := claimDriftTx\(`).MatchString(string(src)) {
+		t.Error("MarkDriftExternalTx must take the target from the drift row it claims, so the exclusion cannot outlive its target's identity")
+	}
+
+	// The read side of the same key. An unscoped read lets one target's
+	// exclusion suppress another target's drift — the suppression the target
+	// column entered the primary key to prevent.
+	exc, err := os.ReadFile("exclusions.go")
+	if err != nil {
+		t.Fatalf("read exclusions.go: %v", err)
+	}
+	if !regexp.MustCompile(`(?is)FROM external_grant_exclusions WHERE target\s*=`).MatchString(string(exc)) {
+		t.Error("GetExclusions must scope its read by target — an unscoped read lets an exclusion recorded on one target silence the identical triple on another")
 	}
 }
 
@@ -418,7 +488,7 @@ func TestDownMigrationRefusesToReinterpretForeignRows(t *testing.T) {
 		t.Fatal("the down migration must refuse when rows name a target other than zitadel")
 	}
 	for _, table := range []string{"propagation_outbox", "drift_items", "external_grant_exclusions", "desired_state_snapshots"} {
-		if !regexp.MustCompile(`(?is)FROM `+table+` WHERE target <> 'zitadel'`).MatchString(down) {
+		if !regexp.MustCompile(`(?is)FROM ` + table + ` WHERE target <> 'zitadel'`).MatchString(down) {
 			t.Errorf("the down-migration guard must count %s rows naming a non-zitadel target", table)
 		}
 	}

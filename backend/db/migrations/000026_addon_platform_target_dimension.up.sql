@@ -124,6 +124,39 @@ CREATE TRIGGER desired_state_snapshots_immutable
     BEFORE UPDATE OR DELETE ON desired_state_snapshots
     FOR EACH ROW EXECUTE FUNCTION reject_desired_state_snapshot_mutation();
 
+-- The UNIQUE above forbids two rows sharing a version. It does NOT make versions
+-- monotonic: it permits version 2 followed by version 1 for one (subject,
+-- target), and a stale-version check compares against "the last version
+-- applied", which a backwards insert makes a lie. So the version is allocated
+-- here rather than trusted from the writer — exactly the reasoning behind the
+-- immutability trigger above, applied to the other half of the same guarantee.
+--
+-- The two constraints are complementary under concurrency: this trigger forbids
+-- gaps and regressions, and when two concurrent inserts both read the same MAX
+-- and both propose N+1, the UNIQUE rejects the loser. Neither alone is enough.
+CREATE OR REPLACE FUNCTION enforce_desired_state_snapshot_version() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+DECLARE
+    last_version BIGINT;
+BEGIN
+    SELECT COALESCE(MAX(version), 0) INTO last_version
+      FROM desired_state_snapshots
+     WHERE subject_id = NEW.subject_id AND target = NEW.target;
+
+    IF NEW.version <> last_version + 1 THEN
+        RAISE EXCEPTION
+            'desired_state_snapshots version must be % for (subject_id=%, target=%), got %',
+            last_version + 1, NEW.subject_id, NEW.target, NEW.version;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS desired_state_snapshots_version_monotonic ON desired_state_snapshots;
+CREATE TRIGGER desired_state_snapshots_version_monotonic
+    BEFORE INSERT ON desired_state_snapshots
+    FOR EACH ROW EXECUTE FUNCTION enforce_desired_state_snapshot_version();
+
 -- 1.5 --------------------------------------------------------------------
 -- Plan storage. One approval, one durable object: the per-subject row holds
 -- both the snapshot that was approved and the fingerprint of the state it was

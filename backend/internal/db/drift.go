@@ -180,7 +180,7 @@ func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) erro
 		return fmt.Errorf("begin attribute tx: %w", err)
 	}
 	defer tx.Rollback(ctx) // no-op after Commit
-	if err := claimDriftTx(ctx, tx, driftID, "attributed", p.GrantedBy, p.PayloadJSON); err != nil {
+	if _, err := claimDriftTx(ctx, tx, driftID, "attributed", p.GrantedBy, p.PayloadJSON); err != nil {
 		return err
 	}
 	p.NoPropagation = true
@@ -204,7 +204,7 @@ func RevokeDriftAndEnqueue(ctx context.Context, driftID string, p EnqueueParams)
 		return "", fmt.Errorf("begin revoke tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
-	if err := claimDriftTx(ctx, tx, driftID, "revoked", p.GrantedBy, "{}"); err != nil {
+	if _, err := claimDriftTx(ctx, tx, driftID, "revoked", p.GrantedBy, "{}"); err != nil {
 		return "", err
 	}
 	key, err := newOutboxIdempotencyKey()
@@ -230,13 +230,18 @@ func MarkDriftExternalTx(ctx context.Context, driftID, userID, projectID string,
 		return fmt.Errorf("begin mark-external tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
-	if err := claimDriftTx(ctx, tx, driftID, "marked_external", markedBy, payloadJSON); err != nil {
+	target, err := claimDriftTx(ctx, tx, driftID, "marked_external", markedBy, payloadJSON)
+	if err != nil {
 		return err
 	}
-	const ins = `INSERT INTO external_grant_exclusions (user_id, project_id, role_key, marked_by, reason)
-		VALUES ($1,$2,$3,$4,NULLIF($5,'')) ON CONFLICT (user_id, project_id, role_key) DO NOTHING`
+	// The conflict target must name every column of the primary key, which gained
+	// `target` in 000026. An exclusion is a statement about one target, so the
+	// row carries the target of the drift it resolves — marking a TrueNAS grant
+	// external must not silence the same triple on Zitadel.
+	const ins = `INSERT INTO external_grant_exclusions (target, user_id, project_id, role_key, marked_by, reason)
+		VALUES ($1,$2,$3,$4,$5,NULLIF($6,'')) ON CONFLICT (target, user_id, project_id, role_key) DO NOTHING`
 	for _, rk := range roleKeys {
-		if _, err := tx.Exec(ctx, ins, userID, projectID, rk, markedBy, reason); err != nil {
+		if _, err := tx.Exec(ctx, ins, target, userID, projectID, rk, markedBy, reason); err != nil {
 			return fmt.Errorf("insert exclusion in tx: %w", err)
 		}
 	}
@@ -247,15 +252,23 @@ func MarkDriftExternalTx(ctx context.Context, driftID, userID, projectID string,
 // terminal status inside the caller's tx, or returns ErrDriftNotPending (which
 // makes the caller's deferred Rollback discard everything) when it is no longer
 // pending. This is what makes the whole action atomic AND race-safe.
-func claimDriftTx(ctx context.Context, tx pgx.Tx, driftID, status, resolvedBy, payloadJSON string) error {
-	tag, err := tx.Exec(ctx, `UPDATE drift_items
+//
+// It returns the claimed row's target. A triage resolution is a statement about
+// the target that drifted, and reading it back from the row being claimed is
+// what keeps it true once the sweep starts writing non-Zitadel drift (change
+// `addon-platform` task 1.12) — the alternative, a literal at the call site,
+// would be correct today and silently wrong then.
+func claimDriftTx(ctx context.Context, tx pgx.Tx, driftID, status, resolvedBy, payloadJSON string) (string, error) {
+	var target string
+	err := tx.QueryRow(ctx, `UPDATE drift_items
 		SET status=$2, resolved_at=NOW(), resolved_by=$3, resolution_payload_json=NULLIF($4,'')::jsonb
-		WHERE id=$1 AND status='pending_triage'`, driftID, status, resolvedBy, payloadJSON)
+		WHERE id=$1 AND status='pending_triage'
+		RETURNING target`, driftID, status, resolvedBy, payloadJSON).Scan(&target)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrDriftNotPending
+	}
 	if err != nil {
-		return fmt.Errorf("claim drift %s: %w", driftID, err)
+		return "", fmt.Errorf("claim drift %s: %w", driftID, err)
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrDriftNotPending
-	}
-	return nil
+	return target, nil
 }

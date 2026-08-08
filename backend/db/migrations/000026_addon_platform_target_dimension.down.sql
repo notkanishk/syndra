@@ -55,8 +55,10 @@ DROP TABLE IF EXISTS plan_subjects;
 DROP TABLE IF EXISTS plans;
 
 -- 1.4 --------------------------------------------------------------------
+DROP TRIGGER IF EXISTS desired_state_snapshots_version_monotonic ON desired_state_snapshots;
 DROP TRIGGER IF EXISTS desired_state_snapshots_immutable ON desired_state_snapshots;
 DROP TABLE IF EXISTS desired_state_snapshots;
+DROP FUNCTION IF EXISTS enforce_desired_state_snapshot_version();
 DROP FUNCTION IF EXISTS reject_desired_state_snapshot_mutation();
 
 -- 1.3 --------------------------------------------------------------------
