@@ -53,7 +53,7 @@ A member MUST be able to set and reset the credential their lab equipment requir
 - **THEN** the surface MUST state that it is scoped to lab infrastructure access only
 - **AND** MUST NOT imply it governs Syndra or Zitadel sign-in
 
-### Requirement: Members MUST see connection instructions with the target-generated account name
+### Requirement: Members MUST see connection instructions with the account name the target uses
 
 A member with access to a target MUST see the instructions needed to connect, including the account name the target actually uses for them, which may differ from their Syndra or Zitadel identity. Instructions MUST reflect the paths the member's current entitlements grant, and MUST NOT list resources they cannot reach.
 

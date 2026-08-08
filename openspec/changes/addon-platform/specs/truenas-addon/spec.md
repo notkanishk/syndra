@@ -4,11 +4,20 @@
 
 The add-on MUST connect over the JSON-RPC 2.0 WebSocket API using a user-linked API key with `expires_at` set, whose linked account holds only the roles its feature set requires. It MUST set and rotate passwords through `user.create` / `user.update`, which require `ACCOUNT_WRITE`, and MUST NOT use `user.set_password`, which requires `FULL_ADMIN` when the target is another user.
 
+The add-on's own credential MUST NOT carry account deletion. Deletion MUST require an elevated credential supplied by the operator at the moment of purge, used for that call alone and never persisted, so that the one irreversible operation is not available to the add-on unaided.
+
 #### Scenario: Password is set without full administrator rights
 
 - **WHEN** the add-on sets or rotates a member's password
 - **THEN** it MUST use `user.update` with the password field
 - **AND** MUST NOT call `user.set_password`
+
+#### Scenario: Deletion is impossible with the add-on's own credential
+
+- **WHEN** the add-on attempts an account deletion using its own API key
+- **THEN** the target MUST refuse it for want of privilege
+- **AND** a purge MUST succeed only when carrying an operator-supplied elevated credential
+- **AND** that credential MUST NOT be persisted, cached, or logged after the call
 
 #### Scenario: Key expiry is visible before it breaks provisioning
 
@@ -34,7 +43,7 @@ TrueNAS accepts plaintext passwords only; no hash form can be written. The add-o
 
 ### Requirement: A credential set MUST fail closed
 
-A credential set cannot be queued, because queuing requires retaining the secret. An unreachable target, a lifecycle-state refusal, or a subject with no account yet MUST therefore produce an immediate explicit failure rather than a queued row, and the member MUST be told plainly that nothing was recorded and to retry.
+A credential set cannot be queued, because queuing requires retaining the secret. It MUST also be rate-limited per subject, because it is a member-driven write terminating in a single rate-limited session shared with every other operation, and repeated resets would otherwise wedge the target for everyone. An unreachable target, a lifecycle-state refusal, or a subject with no account yet MUST therefore produce an immediate explicit failure rather than a queued row, and the member MUST be told plainly that nothing was recorded and to retry.
 
 #### Scenario: An unreachable target fails the set outright
 
@@ -42,6 +51,12 @@ A credential set cannot be queued, because queuing requires retaining the secret
 - **THEN** the backend MUST fail the operation immediately
 - **AND** MUST NOT record it as queued or pending
 - **AND** the member MUST be told that nothing was set and that they should retry
+
+#### Scenario: Repeated resets are rate-limited
+
+- **WHEN** a member submits credential sets faster than the configured per-subject rate
+- **THEN** the backend MUST refuse the excess without calling the add-on
+- **AND** the limit MUST be generous enough that ordinary use never reaches it
 
 #### Scenario: A credential set before the account exists fails closed
 

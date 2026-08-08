@@ -109,7 +109,7 @@ An add-on MUST accept a resolved desired entitlement set for a subject and conve
 
 ### Requirement: Account lifecycle state MUST be entitlement, not operation
 
-Whether a subject's target account is enabled, and whether its service access is enabled, MUST be fields in the target's entitlement schema resolved from mappings and allowances, not effects of one-shot operations. Deprovisioning MUST resolve them to disabled and restoration MUST resolve them to enabled, both converged by the ordinary apply path. A creation operation MUST NOT be the mechanism by which a disabled account is restored.
+Whether a subject's target account is enabled, and whether its service access is enabled, MUST be fields in the target's entitlement schema, computed by the resolver and overridable by allowance, not effects of one-shot operations and not bindable by a mapping. Deprovisioning MUST resolve them to disabled and restoration MUST resolve them to enabled, both converged by the ordinary apply path. A creation operation MUST NOT be the mechanism by which a disabled account is restored.
 
 #### Scenario: Regaining a mapped role restores the account through convergence
 
@@ -128,6 +128,88 @@ Whether a subject's target account is enabled, and whether its service access is
 
 - **WHEN** a subject's account was disabled solely because they held no mapped role
 - **THEN** regaining a mapped role MUST re-enable it without operator action
+
+### Requirement: A member-scoped operation MUST act only on the authenticated actor
+
+Scope MUST bind the subject as well as the audience. The backend MUST reject a `member`-scoped operation whose subject is anyone other than the authenticated actor, and MUST enforce this independently of the manifest and of the operation policy, because the manifest is untrusted and the policy describes operations rather than requests.
+
+#### Scenario: A member cannot act on another subject
+
+- **WHEN** a member invokes a `member`-scoped operation naming a subject other than themselves
+- **THEN** the backend MUST reject the request
+- **AND** MUST NOT call the add-on
+
+#### Scenario: The binding does not depend on the manifest
+
+- **WHEN** a manifest declares an operation `member`-scoped without any subject constraint
+- **THEN** the backend MUST still enforce subject equal to actor
+- **AND** the enforcement MUST NOT be defeasible by manifest or policy content
+
+### Requirement: Drift MUST cover only bound subjects
+
+A target holds accounts the backend never provisioned. The drift sweep MUST compute drift only over subjects with a recorded binding. An unbound target account MUST be reported as unmanaged inventory rather than entered into triage, and MUST become managed only through an explicit operator adoption.
+
+#### Scenario: Pre-existing accounts do not flood triage
+
+- **WHEN** the first sweep runs against a target holding accounts with no recorded binding
+- **THEN** none of them MUST appear as drift
+- **AND** they MUST be reported as unmanaged inventory
+
+#### Scenario: Adoption is explicit
+
+- **WHEN** an unbound target account is to become managed
+- **THEN** it MUST require an explicit operator decision
+- **AND** the sweep MUST NOT bind it by inference
+
+### Requirement: A version-rejected row MUST terminate as superseded, not failed
+
+A row rejected because a newer version for its `(subject, target)` has already been applied MUST reach a terminal state distinct from failure. Revocation-first ordering makes this outcome ordinary, and reporting it as a failure would show operators a phantom failure for a row the system deliberately discarded.
+
+#### Scenario: A grant overtaken by a later revoke is superseded
+
+- **WHEN** a grant at an older version is dispatched after a revocation at a newer version for the same subject and target
+- **THEN** the grant row MUST terminate as superseded
+- **AND** MUST NOT be counted or presented as failed
+
+### Requirement: Declared secrets MUST NOT reach the transport or diagnostic layers
+
+The `secret_params` rules MUST apply to request logging, error responses, and captured stack traces, not only to durable stores. A declared secret parameter MUST NOT appear in a logged request body, an error payload echoing the request, or a panic capture, on any leg of the path including the member-to-backend request.
+
+#### Scenario: Request logging does not capture the value
+
+- **WHEN** request logging is enabled and an operation carrying a declared secret is invoked
+- **THEN** the logged record MUST NOT contain the value
+
+#### Scenario: Errors and panics do not echo the value
+
+- **WHEN** an operation carrying a declared secret fails or panics
+- **THEN** neither the error response nor any captured trace MUST contain the value
+
+### Requirement: The manifest MUST declare a contract version checked at registration
+
+An add-on MUST declare the version of the backend-to-add-on contract it implements, and the backend MUST refuse to register an add-on whose declared version it does not support. Version mismatch MUST fail at registration rather than surfacing later as an absent field.
+
+#### Scenario: An unsupported contract version is refused at registration
+
+- **WHEN** an add-on declares a contract version the backend does not support
+- **THEN** registration MUST fail with that reason
+- **AND** the add-on MUST NOT become callable
+
+### Requirement: Lifecycle fields MUST NOT be mapping-bindable
+
+The entitlement-schema fields governing whether an account and its service access are enabled MUST be computed by the resolver from whether the subject holds any mapped role for the target, and MUST be overridable only by an allowance. Structural validation MUST reject a role-to-target mapping naming one of them, because a mapping binding a role to a disabled account would contradict the derived lifecycle state on every resolution.
+
+#### Scenario: A mapping onto a lifecycle field is rejected
+
+- **WHEN** an operator submits a mapping whose field is a lifecycle field
+- **THEN** the backend MUST reject it during structural validation
+- **AND** MUST NOT call the add-on
+
+#### Scenario: Lifecycle state remains derived and allowance-overridable
+
+- **WHEN** a subject's mapped roles change
+- **THEN** the lifecycle fields MUST be recomputed from whether any mapped role remains
+- **AND** an allowance MUST remain able to override them
 
 ### Requirement: Desired state MUST be snapshotted, versioned, and applied in order per subject
 

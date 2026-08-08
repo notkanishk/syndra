@@ -15,58 +15,71 @@
 - [ ] 1.13 Tests: an outage produces no drift findings and does record an unreconciled target with the age of the last current read; reconciliation resumes on return
 - [ ] 1.14 Thread `target` through `services/expiry` drain so allowance and grant expiry re-converge the right target
 - [ ] 1.15 Tests: expiry sweep emits per-target propagations and leaves unrelated targets alone
-- [ ] 1.16 Per-`(subject, target)` serialization and stale-version rejection in the drain
-- [ ] 1.17 Tests: an apply carrying an older version is rejected without dispatch; concurrent applies for one subject serialize; the settled state equals the higher version; a queued grant cannot land after a later revoke
-- [ ] 1.18 Two snapshot read paths: operator-initiated applies dispatch the recorded snapshot, periodic reconcile resolves current state
-- [ ] 1.19 Tests: a policy change between approval and drain still applies the approved snapshot; reconcile resolves fresh and never replays a superseded snapshot
-- [ ] 1.20 Background revocation drain: a `periodic.Runner` alongside expiry and drift that claims only access-withdrawing rows, takes the same advisory lock as the operator drain, and never dispatches an access-conferring row
-- [ ] 1.21 Tests: the runner drains revocations and leaves grants queued; it cannot run concurrently with an operator drain; a grant row is never claimed by it
-- [ ] 1.22 Revocation priority within the operator drain: revocations dispatch before grants for the same target
-- [ ] 1.23 Tests: a mixed queue dispatches revocations first; the retry budget applies per row without starving revocations
+- [ ] 1.16 Drift scoped to bound subjects: unbound target accounts are enumerated as unmanaged inventory, never entered into triage, and become managed only by explicit adoption
+- [ ] 1.17 Tests: a first sweep against a target holding pre-existing unbound accounts raises no drift and reports them as inventory; adoption requires an operator decision
+- [ ] 1.18 Per-`(subject, target)` serialization and stale-version rejection in the drain
+- [ ] 1.19 Tests: an apply carrying an older version is rejected without dispatch; concurrent applies for one subject serialize; the settled state equals the higher version; a queued grant cannot land after a later revoke
+- [ ] 1.20 Two snapshot read paths: operator-initiated applies dispatch the recorded snapshot, periodic reconcile resolves current state
+- [ ] 1.21 Tests: a policy change between approval and drain still applies the approved snapshot; reconcile resolves fresh and never replays a superseded snapshot
+- [ ] 1.22 Background revocation drain: a `periodic.Runner` alongside expiry and drift that claims only access-withdrawing rows, takes the same advisory lock as the operator drain, and never dispatches an access-conferring row
+- [ ] 1.23 Tests: the runner drains revocations and leaves grants queued; it cannot run concurrently with an operator drain; a grant row is never claimed by it
+- [ ] 1.24 Revocation priority within the operator drain: revocations dispatch before grants for the same target
+- [ ] 1.25 Tests: a mixed queue dispatches revocations first; the retry budget applies per row without starving revocations
 
 ## 2. Add-on registry and wire contract
 
 - [ ] 2.1 Define the manifest types: entitlement schema, operation descriptors (`scope`, `confirm`, `secret_params`), target product and version
-- [ ] 2.2 Add-on registry: config-driven registration (base URL, shared secret ref), manifest fetch and cache, `deps.go` seam for tests
-- [ ] 2.3 Tests: unregistered add-on is not callable; an operation absent from the manifest is rejected even if requested
-- [ ] 2.4 Add-on HTTP client with per-add-on auth, timeouts, and a circuit breaker; carries plan id, fingerprints, and operation id on every mutating call
-- [ ] 2.5 Tests: client failure modes — unreachable, timeout, 5xx, open circuit — each map to the intended outcome and never to silent success
-- [ ] 2.6 Redaction layer keyed off `secret_params`: values stripped before any audit write, log line, or outbox payload
-- [ ] 2.7 Tests: a secret parameter value never appears in audit rows, outbox rows, or emitted logs, asserted by scanning the written records
-- [ ] 2.8 Enqueue path for entitlement changes: outbox row plus audit row in one transaction with `target` set, before any add-on call
-- [ ] 2.9 Tests: transactional rollback leaves no partial state; no add-on call is issued before commit
-- [ ] 2.10 Migration: `addon_operations` record table — operation id, target FK, actor, subject, operation name, status, timestamps; no parameter values column
-- [ ] 2.11 Migration-coherence guard test for `addon_operations`, including that there is no column able to hold a secret parameter value
-- [ ] 2.12 Secret-bearing dispatch protocol: commit the operation record with a non-terminal status before the call, send the operation id, write the terminal status after the response; never enqueue in the outbox and never auto-retry
-- [ ] 2.13 Tests: the record commits before the call; a simulated crash between dispatch and terminal write leaves the row non-terminal and no retry is attempted; no secret value reaches any table or log
-- [ ] 2.14 Unresolved-operation surface: non-terminal `addon_operations` rows presented as unresolved, distinct from succeeded and failed
-- [ ] 2.15 Tests: an unresolved row renders as unresolved and is excluded from both success and failure counts
-- [ ] 2.16 Plan store: `POST /plan` handler persisting a plan id with bounded TTL, per-subject desired state and target-state fingerprint
-- [ ] 2.17 Tests: a plan persists and expires; an apply citing an unknown or expired plan id is rejected
-- [ ] 2.18 Apply gate: reject any apply not citing a backend-issued plan id; re-verify every fingerprint against live target state before dispatch
-- [ ] 2.19 Tests: a client-supplied plan is refused; a fingerprint mismatch fails the apply, mutates nothing, and names the subjects that moved
-- [ ] 2.20 Plan store secret exclusion: `secret_params` values are excluded from plan persistence; the value rides the apply request and is discarded with it
-- [ ] 2.21 Tests: scan plan rows, indexes, and caches for a submitted secret value and assert absence; the apply still succeeds with the value carried transiently
-- [ ] 2.22 Provisional plans: when a target is unreachable, record the approved snapshot and issue a plan against last-known state, labelled with its age and marked provisional
-- [ ] 2.23 Tests: an entitlement change is accepted while the target is unreachable and yields a provisional plan, presented as recorded and awaiting the target, never as applied
-- [ ] 2.24 Provisional plans are exempt from the ordinary plan lifetime, gated by re-fingerprinting rather than elapsed time, so a long outage cannot discard an approved change
-- [ ] 2.25 Provisional resolution on return: re-fingerprint against live state, dispatch under the ordinary drain rules on match, withhold and require fresh approval on mismatch
-- [ ] 2.26 Tests: a provisional plan outliving the ordinary lifetime is still valid; matching fingerprints dispatch without re-approval; differing fingerprints withhold and surface what changed
-- [ ] 2.27 Log-head anchoring: persist each add-on's reported log head digest and record count, flagging a decreased count or a non-extending head as truncation
-- [ ] 2.28 Tests: a truncated add-on log is detected by the anchor even though its remaining chain verifies
-- [ ] 2.29 Queued accounting: extend the existing `BulkSummary.Queued` semantics to add-on targets so unconfirmed rows never count as succeeded
-- [ ] 2.30 Tests: an unreachable add-on yields queued rows, a reachable one yields succeeded rows, and the summary distinguishes them
-- [ ] 2.31 Backend operation policy: per-operation-id scope, confirmation requirement, and parameter schema, owned by the backend and independent of any manifest
-- [ ] 2.32 Manifest intersection: effective operation set is manifest ∩ policy with policy prevailing; unknown operation ids fail closed
-- [ ] 2.33 Tests: a manifest cannot widen scope, cannot drop a confirmation requirement, cannot introduce an unknown operation, and can narrow
-- [ ] 2.34 mTLS between backend and add-ons with a private CA, or signed requests carrying timestamp and body hash where mTLS is impractical
-- [ ] 2.35 Tests: a call without a valid client certificate is refused; a signature not matching body or timestamp is refused; a bare shared secret is insufficient
-- [ ] 2.36 Certificate and key material provisioning, rotation, and expiry surfacing for the add-on transport
-- [ ] 2.37 Tests: an expiring transport credential is surfaced before it fails; rotation does not drop in-flight operations
-- [ ] 2.38 Cohort guard at plan time: the backend computes the affected-subject count and refuses to issue a plan exceeding the configured limit without an explicit scope acknowledgement
-- [ ] 2.39 Tests: an oversized cohort is refused before any add-on is called and reports the computed count
-- [ ] 2.40 Lifecycle-state refusals account as queued, never failed, and resume when the add-on returns to `active`
-- [ ] 2.41 Tests: a `draining` or `read_only` refusal leaves the row queued, is excluded from failure counts, and resumes on return
+- [ ] 2.2 Add-on registry: config-driven registration (base URL, client-certificate or signing-key reference, declared contract version), manifest fetch and cache, `deps.go` seam for tests
+- [ ] 2.3 Contract-version check at registration: refuse an add-on declaring a version the backend does not support, with that reason, so a mismatch fails at startup rather than as an absent field later
+- [ ] 2.4 Tests: unregistered add-on is not callable; an operation absent from the manifest is rejected even if requested
+- [ ] 2.5 Add-on HTTP client with per-add-on auth, timeouts, and a circuit breaker; carries plan id, fingerprints, and operation id on every mutating call
+- [ ] 2.6 Tests: client failure modes — unreachable, timeout, 5xx, open circuit — each map to the intended outcome and never to silent success
+- [ ] 2.7 Redaction layer keyed off `secret_params`: values stripped before any audit write, log line, or outbox payload
+- [ ] 2.8 Tests: a secret parameter value never appears in audit rows, outbox rows, or emitted logs, asserted by scanning the written records
+- [ ] 2.9 Enqueue path for entitlement changes: outbox row plus audit row in one transaction with `target` set, before any add-on call
+- [ ] 2.10 Tests: transactional rollback leaves no partial state; no add-on call is issued before commit
+- [ ] 2.11 Migration: `addon_operations` record table — operation id, target FK, actor, subject, operation name, status, timestamps; no parameter values column
+- [ ] 2.12 Migration-coherence guard test for `addon_operations`, including that there is no column able to hold a secret parameter value
+- [ ] 2.13 Secret-bearing dispatch protocol: commit the operation record with a non-terminal status before the call, send the operation id, write the terminal status after the response; never enqueue in the outbox and never auto-retry
+- [ ] 2.14 Tests: the record commits before the call; a simulated crash between dispatch and terminal write leaves the row non-terminal and no retry is attempted; no secret value reaches any table or log
+- [ ] 2.15 Unresolved-operation surface: non-terminal `addon_operations` rows presented as unresolved, distinct from succeeded and failed
+- [ ] 2.16 Tests: an unresolved row renders as unresolved and is excluded from both success and failure counts
+- [ ] 2.17 Plan store: `POST /plan` handler persisting a plan id with bounded TTL, per-subject desired state and target-state fingerprint
+- [ ] 2.18 Tests: a plan persists and expires; an apply citing an unknown or expired plan id is rejected
+- [ ] 2.19 Apply gate: reject any apply not citing a backend-issued plan id; re-verify every fingerprint against live target state before dispatch
+- [ ] 2.20 Tests: a client-supplied plan is refused; a fingerprint mismatch fails the apply, mutates nothing, and names the subjects that moved
+- [ ] 2.21 Plan store secret exclusion: `secret_params` values are excluded from plan persistence; the value rides the apply request and is discarded with it
+- [ ] 2.22 Tests: scan plan rows, indexes, and caches for a submitted secret value and assert absence; the apply still succeeds with the value carried transiently
+- [ ] 2.23 Provisional plans: when a target is unreachable, record the approved snapshot and issue a plan against last-known state, labelled with its age and marked provisional
+- [ ] 2.24 Tests: an entitlement change is accepted while the target is unreachable and yields a provisional plan, presented as recorded and awaiting the target, never as applied
+- [ ] 2.25 Provisional plans are exempt from the ordinary plan lifetime, gated by re-fingerprinting rather than elapsed time, so a long outage cannot discard an approved change
+- [ ] 2.26 Provisional resolution on return: re-fingerprint against live state, dispatch under the ordinary drain rules on match, withhold and require fresh approval on mismatch
+- [ ] 2.27 Tests: a provisional plan outliving the ordinary lifetime is still valid; matching fingerprints dispatch without re-approval; differing fingerprints withhold and surface what changed
+- [ ] 2.28 Log-head anchoring: persist each add-on's reported log head digest and record count, flagging a decreased count or a non-extending head as truncation
+- [ ] 2.29 Tests: a truncated add-on log is detected by the anchor even though its remaining chain verifies
+- [ ] 2.30 Queued accounting: extend the existing `BulkSummary.Queued` semantics to add-on targets so unconfirmed rows never count as succeeded
+- [ ] 2.31 Tests: an unreachable add-on yields queued rows, a reachable one yields succeeded rows, and the summary distinguishes them
+- [ ] 2.32 Backend operation policy: per-operation-id scope, confirmation requirement, and parameter schema, owned by the backend and independent of any manifest
+- [ ] 2.33 Manifest intersection: effective operation set is manifest ∩ policy with policy prevailing; unknown operation ids fail closed
+- [ ] 2.34 Tests: a manifest cannot widen scope, cannot drop a confirmation requirement, cannot introduce an unknown operation, and can narrow
+- [ ] 2.35 mTLS between backend and add-ons with a private CA, or signed requests carrying timestamp and body hash where mTLS is impractical
+- [ ] 2.36 Tests: a call without a valid client certificate is refused; a signature not matching body or timestamp is refused; a bare shared secret is insufficient
+- [ ] 2.37 Certificate and key material provisioning, rotation, and expiry surfacing for the add-on transport
+- [ ] 2.38 Tests: an expiring transport credential is surfaced before it fails; rotation does not drop in-flight operations
+- [ ] 2.39 Cohort guard at plan time: the backend computes the affected-subject count and refuses to issue a plan exceeding the configured limit without an explicit scope acknowledgement
+- [ ] 2.40 Tests: an oversized cohort is refused before any add-on is called and reports the computed count
+- [ ] 2.41 Lifecycle-state refusals account as queued, never failed, and resume when the add-on returns to `active`
+- [ ] 2.42 Tests: a `draining` or `read_only` refusal leaves the row queued, is excluded from failure counts, and resumes on return
+- [ ] 2.43 Member-scope subject binding: reject any `member`-scoped operation whose subject is not the authenticated actor, enforced independently of manifest and policy
+- [ ] 2.44 Tests: a member naming another subject is refused and no add-on call is made; a manifest declaring no subject constraint does not defeat the check
+- [ ] 2.45 `superseded` as a terminal outbox state distinct from `failed`, for rows rejected on version
+- [ ] 2.46 Tests: a grant overtaken by a later revoke terminates `superseded` and is excluded from failure counts and surfaces
+- [ ] 2.47 Secret redaction across the transport and diagnostic layers: request logging, error responses, and panic captures on every leg including member-to-backend
+- [ ] 2.48 Tests: a submitted secret appears in no logged request body, error payload, or captured trace
+- [ ] 2.49 Rate-limit the member credential set per subject, refusing excess before any add-on call
+- [ ] 2.50 Tests: the limit refuses excess without calling the add-on and is not reached by ordinary use
+- [ ] 2.51 Background revocation runner hardening: escalate retry-budget exhaustion onto the unconfirmed-revocation surface as a finding, back off on lock contention, pre-flight target reachability
+- [ ] 2.52 Tests: an exhausted revocation surfaces with its error rather than halting silently; lock contention backs off without spinning or starving; an unreachable target costs a probe, not a budget
 
 ## 3. Zitadel plan retrofit
 
@@ -107,13 +120,13 @@
 - [ ] 5.3 Declare `enabled` and `smb_enabled` as entitlement-schema fields and converge them via `user.update({locked, smb})` on the same apply path
 - [ ] 5.4 Tests: a set resolving both to disabled locks the account and clears SMB; a later set resolving them to enabled restores it with no second account created; neither path uses a creation operation
 - [ ] 5.5 Tests: re-applying an unchanged set is a no-op with no mutating call; a reduced set converges to exactly the remaining groups
-- [ ] 5.6 Blast-radius limiter: compute affected subject count, refuse beyond the configured limit without an explicit scope acknowledgement
-- [ ] 5.7 Tests: an oversized effect is refused, returns the computed count, and mutates nothing
+- [ ] 5.6 Per-request subject cap: refuse a request affecting more subjects than the configured limit without an explicit scope acknowledgement — defence in depth only, since a per-subject call cannot see a cohort
+- [ ] 5.7 Tests: an oversized request is refused and returns the count it computed; the authoritative cohort guard is asserted backend-side in group 2, not here
 - [ ] 5.8 `POST /plan`: returns `BulkPlan`/`BulkOutcome`-shaped outcomes with `Detail` and `Consequence`, plus a per-subject target-state fingerprint, mutating nothing
 - [ ] 5.9 Tests: planning issues no mutating call, returns the apply path's shape, and produces a fingerprint that changes when the subject's target state changes
 - [ ] 5.10 Fingerprint re-verification on apply: refuse the call if any supplied fingerprint no longer matches live target state
 - [ ] 5.11 Tests: a subject mutated out of band between plan and apply causes refusal with that subject named, and nothing is applied
-- [ ] 5.12 Operation-id deduplication for `/apply` and `/op/{id}`, backed by the idempotency store
+- [ ] 5.12 Operation-id deduplication for `/apply` and `/op/{name}`, backed by the idempotency store; the path segment is the operation name, the dedup token is the operation id, and they are never the same value
 - [ ] 5.13 Tests: replaying an operation id returns the original outcome without a second mutating call
 - [ ] 5.14 Absence handling: a subject missing from the expected set is reported as drift and never deleted or locked
 - [ ] 5.15 Tests: a missing subject produces a drift report and no mutation
@@ -138,8 +151,8 @@
 - [ ] 6.16 Tests: rotation persists, caches, and logs no value, and records that a rotation occurred with actor and time
 - [ ] 6.17 Revocation composition: the operator action writes the disabling allowance and enqueues the rotation, with copy stating that established sessions end on reconnect
 - [ ] 6.18 Tests: revocation produces both halves; the surface never presents it as immediate session termination
-- [ ] 6.19 `account.purge`: plan discloses retained home data before apply; `user.delete` only on explicit confirmation
-- [ ] 6.20 Tests: purge without confirmation refuses; the plan reports retained data size
+- [ ] 6.19 `account.purge`: plan discloses retained home data before apply; `user.delete` requires an operator-supplied elevated credential used for that call alone, since the add-on's own key excludes deletion
+- [ ] 6.20 Tests: purge without confirmation refuses; a purge attempted on the add-on's own key is refused by the target for want of privilege; the elevated credential is not persisted, cached, or logged; the plan reports retained data size
 - [ ] 6.21 `activity.get`: `audit.query` with `service: "SMB"`, reporting shares with auditing disabled
 - [ ] 6.22 Tests: an empty result names the unaudited shares rather than implying no activity
 - [ ] 6.23 `health.get`: `system.info`, `alert.list`, `pool.query`, `service.query` composed into the operator health shape
@@ -150,28 +163,32 @@
 - [ ] 7.1 Migration: `target_role_mappings` binding `(target, project_id, role_key)` to an entitlement field and value, versioned with actor and reason like bundle definitions
 - [ ] 7.2 Migration-coherence guard test: uniqueness on `(target, project_id, role_key, field)`, version history retained, rollback target reachable
 - [ ] 7.3 Mapping CRUD with split validation — backend checks the field is in the add-on's declared schema and the role exists; the add-on confirms the value resolves on its target
-- [ ] 7.4 Tests: an undeclared field is rejected without calling the add-on; an unresolvable value is rejected after the add-on reports it; a duplicate binding is rejected
+- [ ] 7.4 Tests: an undeclared field is rejected without calling the add-on; a lifecycle field is rejected as a mapping target; an unresolvable value is rejected after the add-on reports it; a duplicate binding is rejected
 - [ ] 7.5 Mapping versioning and rollback reusing the bundle version machinery
 - [ ] 7.6 Tests: an edit creates a new version with actor and time; rollback restores the prior mapping and re-resolves affected subjects
 - [ ] 7.7 Role-derived resolution: derive the role half of a subject's entitlement set from the mappings and from nothing else
 - [ ] 7.8 Tests: a role with no mapping contributes nothing; two mappings on one role contribute both fields; resolution is stable under repetition
 - [ ] 7.9 Lifecycle trigger on the existing grant path: look up targets mapped to the changed role and resolve the lifecycle entitlement fields in both directions, so gaining a first mapped role enables (creating the account through the apply) and losing the last disables
-- [ ] 7.10 Tests: first mapped role creates the account before the entitlement apply; last mapped role removal locks and never deletes; regaining a mapped role restores without operator action; an unmapped role triggers nothing
+- [ ] 7.10 Tests: gaining a first mapped role creates the account through the apply itself with no separate sequencing; last mapped role removal disables and never deletes; regaining restores without operator action; an unmapped role triggers nothing
 - [ ] 7.11 Mapping edit and delete plan through the standard plan path, subject to the blast-radius guard
 - [ ] 7.12 Tests: deleting a mapping held by many subjects plans across all of them and trips the blast-radius guard without an acknowledgement
 
 ## 8. Allowances
 
-- [ ] 8.1 Migration: allowance table with subject, target, entitlement field, value, direction, actor, reason, `expires_at`
-- [ ] 8.2 Migration-coherence guard test, including the CHECK that a subtractive allowance requires a non-null `expires_at`
-- [ ] 8.3 Resolver: combine role-derived entitlements with additive and subtractive allowances into the resolved set handed to the add-on
-- [ ] 8.4 Tests: additive extends, subtractive removes, deny beats allow, and the resolved set is stable under re-resolution
-- [ ] 8.5 Reject subtractive allowances submitted without an expiry, with an error directing the operator to the role mapping
-- [ ] 8.6 Tests: submission without expiry is rejected; with expiry is accepted
+- [ ] 8.1 Migration: allowance table with subject, target, entitlement field, value, `direction`, actor, reason, `expires_at`, `review_date`
+- [ ] 8.2 Migration-coherence guard test, including the CHECK that a subtractive allowance requires `expires_at IS NOT NULL OR review_date IS NOT NULL`
+- [ ] 8.3 Resolver, subtractive arm only: combine role-derived entitlements with subtractive allowances, deny beating allow
+- [ ] 8.4 Tests: a subtractive allowance removes access, deny beats allow, and the resolved set is stable under re-resolution
+- [ ] 8.5 Reject a subtractive allowance carrying neither expiry nor review date, with an error offering both valid forms and naming role-grant revocation — not a mapping edit — as the per-person permanent path
+- [ ] 8.6 Tests: neither-bound is rejected; expiry-only is accepted; review-date-only is accepted
 - [ ] 8.7 Expiry sweep removes lapsed allowances and re-converges the subject, writing an audit entry
 - [ ] 8.8 Tests: a lapsed subtractive allowance restores role-derived access and records the restoration
-- [ ] 8.9 Extend the lineage builder in `services/views.go` with the allowance band, carrying actor and grant time
-- [ ] 8.10 Tests: every entitlement attributes to exactly one of source, derived, or allowance
+- [ ] 8.9 Review-date governance surfacing: an allowance whose review date has passed appears for decision and stays in force until decided
+- [ ] 8.10 Tests: a passed review date surfaces without lifting the suspension
+- [ ] 8.11 Extend the lineage builder in `services/views.go` with the allowance band, carrying actor and grant time
+- [ ] 8.12 Tests: every entitlement attributes to exactly one of source, derived, or allowance
+- [ ] 8.13 Defer the additive arm: no additive resolver path, authoring, or lineage rendering ships in phase 1, since quota and path grants are phase-2 Open Questions and would be an abstraction with no implementation behind it
+- [ ] 8.14 Tests: submitting an additive allowance is refused as not-yet-supported rather than silently accepted and ignored
 
 ## 9. Operator surfaces
 
@@ -204,7 +221,7 @@
 
 ## 10. Member surfaces
 
-- [ ] 10.1 Add a third `MEMBER_NAV` leaf in `ui/src/lib/nav.ts` for member add-on surfaces, present for every member regardless of entitlement, and extend the member route allow-list to cover it
+- [ ] 10.1 Add a third `MEMBER_NAV` leaf `NAS/Network Storage` in `ui/src/lib/nav.ts`, present for every member regardless of entitlement, and extend the member route allow-list to cover it
 - [ ] 10.2 Tests: the leaf renders for a member with no infrastructure access and does not appear or vanish as mapped roles change
 - [ ] 10.3 Content gating on entitlement: a member with no role mapped to any target sees an explanation, and no credential form or connection instructions render
 - [ ] 10.4 Content gating on account existence: a member holding a mapped role whose account is not yet created sees the pending state, with the credential affordance still withheld

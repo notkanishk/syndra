@@ -17,6 +17,12 @@ The sole exemption is an operation scoped to `member` acting on the acting subje
 - **AND** the apply MUST cite that identifier rather than causing the plan to be recomputed
 - **AND** the backend MUST reject an apply that cites no identifier
 
+#### Scenario: Verification happens at dispatch, not at acceptance
+
+- **WHEN** an apply is accepted and its rows wait in the outbox before an operator resumes the drain
+- **THEN** fingerprints MUST be verified again at dispatch
+- **AND** a subject whose state moved after acceptance but before dispatch MUST NOT be written
+
 #### Scenario: A grant set that moved invalidates the plan
 
 - **WHEN** a subject's grants change between the rehearsal and the apply
@@ -54,12 +60,24 @@ An operation's affected-subject count MUST be computed and enforced by the backe
 
 ### Requirement: Unconfirmed revocations MUST drain ahead of grants and carry a containment path
 
-Revocations MUST be dispatched before grants for the same target, and MUST be eligible for background draining while grants remain operator-gated, because a delayed grant withholds access while a delayed revocation retains it. When a target is unreachable and access must end immediately, the escalation surface MUST carry the out-of-band procedure for that target, since the backend has no path to it. A change an operator makes out of band to contain an incident MUST be recognised by the drift sweep as reconciling the outstanding revocation, not raised as fresh drift.
+Revocations MUST be dispatched before grants for the same target, and MUST be eligible for background draining while grants remain operator-gated, because a delayed grant withholds access while a delayed revocation retains it. A revocation exhausting its retry budget MUST escalate onto the unconfirmed-revocation surface as a finding rather than silently halting a background pass, since no operator is watching a background loop. The background runner MUST back off rather than spin when it cannot take the drain lock, and MUST pre-flight target reachability so an unreachable target costs a probe rather than a retry budget. When a target is unreachable and access must end immediately, the escalation surface MUST carry the out-of-band procedure for that target, since the backend has no path to it. A change an operator makes out of band to contain an incident MUST be recognised by the drift sweep as reconciling the outstanding revocation, not raised as fresh drift.
 
 #### Scenario: Revocations are dispatched first
 
 - **WHEN** the drain has both revocations and grants queued for one target
 - **THEN** it MUST dispatch the revocations before the grants
+
+#### Scenario: An exhausted retry budget escalates rather than halting silently
+
+- **WHEN** a revocation exceeds its retry budget in a background pass
+- **THEN** it MUST appear on the unconfirmed-revocation surface as a finding carrying its last error
+- **AND** MUST NOT be left as a silently halted row
+
+#### Scenario: Lock contention slows the runner rather than starving it
+
+- **WHEN** the background runner cannot acquire the drain lock because an operator drain holds it
+- **THEN** it MUST back off and retry later
+- **AND** MUST NOT spin, and MUST NOT be starved indefinitely by repeated operator drains
 
 #### Scenario: Escalation carries the manual procedure
 
@@ -92,6 +110,12 @@ A mapping binds a role on a project to a value for a field the target's entitlem
 
 - **WHEN** an operator submits a mapping for a field absent from the target's declared entitlement schema
 - **THEN** the backend MUST reject it without calling the add-on
+
+#### Scenario: A mapping naming a lifecycle field is rejected
+
+- **WHEN** an operator submits a mapping whose field governs whether the account or its service access is enabled
+- **THEN** the backend MUST reject it during structural validation
+- **AND** lifecycle state MUST remain resolver-computed and allowance-overridable only
 
 #### Scenario: Editing a mapping is planned like any other bulk effect
 

@@ -71,7 +71,7 @@ The rule: anything with a desired state goes in the first, anything that is an e
 
 **Lifecycle state is desired state, so it lives in the entitlement plane.** An earlier draft had `account.lock` as an operation, and that was an edge-triggered leak with a real consequence: deprovisioning left an account `locked` with SMB cleared, and regaining a mapped role could not bring it back, because a create-if-absent `ensure` sees an existing account and does nothing. The account would stay dark forever while Syndra believed access was restored.
 
-So `enabled` and `smb_enabled` are fields in the entitlement schema, resolved from role mappings and allowances like any other field, and converged by `/apply`. Deprovisioning resolves them to false; regaining a mapped role resolves them to true and the same apply path restores the account. Nothing special-cases restoration because nothing special-cased suspension.
+So `enabled` and `smb_enabled` are fields in the entitlement schema, converged by `/apply` like any other field — but **resolver-computed, not mapping-bindable**. A mapping binding `role_key=X → enabled=false` would mean holding a role disables the account, colliding head-on with the derived lifecycle lock this decision exists to build, and the two rules would fight on every resolution. The resolver computes them from whether the subject holds any mapped role for the target; allowances may override them; structural mapping validation rejects them as mapping targets. Deprovisioning resolves them to false; regaining a mapped role resolves them to true and the same apply path restores the account. Nothing special-cases restoration because nothing special-cased suspension.
 
 This also disambiguates two locks that would otherwise be indistinguishable on a target that has no field to tell them apart. A lifecycle lock is derived — the subject holds no mapped role — and clears itself when they do. An operator suspension is a subtractive allowance on `enabled`, carries an expiry like every subtractive allowance (§6), and survives re-resolution until it lapses or is lifted. An operator's deliberate suspension therefore cannot be undone by a role grant, and a lifecycle lock cannot outlive the condition that caused it.
 
@@ -87,6 +87,8 @@ The absolute form of the trace rule — no target mutation without an outbox row
 
 That row is a record, not a queue. It is never automatically retried, because retrying requires the secret and Syndra does not have it. Recovery is the member re-submitting, which is safe because the add-on deduplicates on operation id and because setting the same credential twice converges anyway. The distinction matters: the outbox drives work, `addon_operations` only witnesses it.
 
+**A credential set is rate-limited per member.** It is a write path a member can drive at will, and it terminates in a single rate-limited WebSocket session shared by every other operation the add-on performs. Repeated resets are a cheap way to wedge the target for everyone, deliberately or otherwise. The limit is per subject and generous enough that no honest member meets it.
+
 **So a credential set fails closed.** It cannot be queued — queuing needs the secret, and not retaining it is the point — which means an unreachable target, a lifecycle-state refusal, or a subject whose account does not yet exist all produce an immediate, explicit failure telling the member to try again later. This is the one place the system does not fail open, and the member must be told plainly that nothing was recorded, because a member who believes their password was set and finds it was not will conclude the storage is broken rather than that they should retry.
 
 Level-triggering is available almost everywhere in both targets: `user.update({groups: [...]})`, `filesystem.setacl`, and `pool.dataset.set_quota` are all full replaces, as is UniFi's `PUT /users/:id/access_policies`. Retry is therefore safe by construction and "revoke partial" is the same call as "grant partial" with a different desired set.
@@ -98,13 +100,15 @@ GET  /capabilities   → entitlement_schema, operations, target product + versio
 GET  /subjects       → full state read, feeds the existing drift sweep
 POST /plan           → compute the effect of a proposed change; mutates nothing
 POST /apply          → apply resolved entitlement state for one subject
-POST /op/{id}        → one-shot operation from the manifest
+POST /op/{name}      → one-shot operation from the manifest
 GET  /health         → reachability, target version, last reconcile
 ```
 
 `/plan` returns per-subject outcomes plus, for each subject, a **state fingerprint** — a hash of that subject's current state on the target. Every mutating call carries the fingerprints from the plan it came from, and the add-on refuses the call if any no longer matches. See §8.
 
 Plans persist intent, never secrets. A plan for a secret-bearing operation records that the operation will occur and against whom; the value rides the apply request and is discarded with it. The `secret_params` redaction rules cover the plan store exactly as they cover audit rows, outbox payloads, and logs — a plan is one more durable place a secret must never reach.
+
+The manifest also declares the **contract version** it speaks — an integer, checked at registration, refused on mismatch. Add-ons are separately deployed containers, so one will eventually ship ahead of or behind the backend, and without a version that shows up as a field silently missing rather than a clean refusal at startup. One integer now is cheaper than a compatibility matrix later.
 
 `entitlement_schema` names the fields the target understands (`group[]`, `quota_bytes`, `path_grant[]`). Syndra fills them; it never learns what `lab_makers` means to TrueNAS. `operations` carries `scope` (member/admin), `confirm`, and `secret_params` — the last being a hard instruction that those values are never persisted or logged.
 
@@ -113,6 +117,10 @@ Plans persist intent, never secrets. A plan for a secret-bearing operation recor
 **Layer 1 — Zitadel role.** A `truenas` project in Zitadel whose roles Syndra manages. The role is the sky-high statement of what a person can reach, mapped by operator config to a pre-existing TrueNAS group. Membership follows the role, is drift-checked, and expires through existing machinery.
 
 **Layer 2 — Syndra allowance.** An explicit per-user overlay: quota, a specific path, a specific restriction. Recorded in Syndra, never inferred, and rendered as a visually distinct third band beside the Source and Derived bands `services/views.go` already produces. "Why does this user have access to X" answers with exactly one of: the role gives it, a rule derived it, or someone explicitly granted it — with actor and timestamp.
+
+**Phase 1 ships the subtractive half only.** The additive directions — quota, path grants — have no phase-1 consumer: both are Open Questions deferred to phase 2, so building the resolver arm, the authoring UI, and the lineage rendering for them now would be an abstraction with zero implementations behind it. The only thing phase 1 needs from this layer is operator suspension, which is subtractive.
+
+The table keeps its `direction` column, because schema generality is the cheap part and migrating to add it later is not. What defers is the code: the additive resolver arm, additive authoring, and additive lineage rendering land with quotas, when a second consumer makes the abstraction real rather than anticipated.
 
 **A subtractive allowance MUST be bounded in time, by an expiry or by a review date.** A deny is normally a time-boxed suspension — a safety violation, unpaid dues — and it expires on its own. But some suspensions are genuinely indefinite: an open incident, a safety ban with no agreed end. Those may omit the expiry only by carrying a mandatory review date, which surfaces in governance when it passes. What is forbidden is a denial with neither: an open-ended carve-out that nobody is ever prompted to revisit is how a temporary measure becomes permanent by inattention.
 
@@ -138,6 +146,10 @@ An unreachable add-on does not block the grant. Syndra records it and the outbox
 
 This requires a `MODIFIED Requirements` delta narrowing that MUST from "buffered propagations" to "buffered grants", with revocations exempted and the rationale recorded. It is a real weakening of a deliberate rule and it is scoped as narrowly as the goal allows.
 
+**A background drain needs an exit the operator can see.** The inherited rule halts a drain once a row exceeds `OUTBOX_MAX_RETRIES`. In an operator-triggered drain that halt is loud because a human is watching it happen. In a background loop it is a silent permanent stop, on the one row class where delay *is* the security exposure. So a revocation exhausting its retry budget does not merely halt the pass: it escalates onto the unconfirmed-revocation surface as a finding, with its error, and stays there until resolved.
+
+Two smaller properties follow. The runner backs off rather than spinning when it cannot take the advisory lock, so a busy operator drain slows it instead of starving it. And it pre-flights reachability per target, so an unreachable target costs one probe rather than a retry budget — the budget exists for real failures, not for a NAS that is switched off.
+
 **Neither behaviour may be implicit.** The apply surface states, per operation, what will happen next: a revocation says it will drain on its own, a grant says it is queued until an operator resumes. An operator who has just approved something must never have to know which rule applied to infer whether anything more is required of them.
 
 Queued revokes also get a dedicated surface beside drift triage, with an age threshold above which an unconfirmed one is presented as a live security finding rather than a pending task. With automatic draining that threshold now measures a target that is genuinely unreachable rather than a human who has not clicked.
@@ -152,8 +164,11 @@ The real gap is between the two *requests*. An operator sends the rehearsal (`ap
 
 So the rehearsal becomes a durable object rather than a throwaway computation:
 
-- The rehearsal request persists its outcomes under a plan id with a bounded lifetime, recording per subject the intended outcome and a fingerprint of that subject's current state on the target, and returns the id alongside the plan.
-- The apply request cites the plan id instead of re-submitting the original request and trusting recomputation. The backend rejects an unknown or expired id, and re-verifies every fingerprint before dispatching.
+- The rehearsal request persists its outcomes under a plan id with a bounded lifetime and returns the id alongside the plan. Each plan carries one row per affected subject holding that subject's desired-state snapshot and the fingerprint of the state that was reviewed, and the outbox row references **that** row rather than the snapshot directly.
+
+  One approval, one durable object. An outbox row pointing at a snapshot while a plan separately held the fingerprints would have been two records of the same decision, free to disagree. With the snapshot and its fingerprint on one row, dispatch has exactly one thing to re-check. Plan expiry bounds how long an unexecuted plan may be cited; it MUST NOT delete the snapshots, which are audit records and outlive it.
+- The apply request cites the plan id instead of re-submitting the original request and trusting recomputation. The backend rejects an unknown or expired id.
+- **Fingerprints are re-verified at dispatch, not at apply.** Verifying at apply is the intuitive choice and it is wrong here: grants sit in the outbox until an operator resumes the drain, so the target can move between a verified apply and the actual write. "The diff you approved is the diff that lands" has to hold up to landing, not up to accepting. Add-on targets verify at dispatch already; Zitadel adopts the same point rather than inheriting a weaker one.
 - Any mismatch fails the apply with a distinct stale-plan error carrying the subjects that moved, so the surface can re-plan and show what changed rather than reporting a generic failure.
 
 **BREAKING:** the four rehearse-then-apply surfaces — `POST /api/v1/grants/bulk`, `POST /api/v1/requests/bulk-decision`, `POST /api/v1/governance/drift/bulk-attribute`, `POST /api/v1/governance/drift/bulk-mark-external` — stop treating `?apply=true` as "recompute and execute". Apply carries a plan id. Reconciliation is deliberately absent from that list: `GET /api/v1/reconciliation/grants` is a diff view with no apply endpoint, and its rows reach mutation through drift triage.
@@ -190,6 +205,10 @@ Provisional plans are visibly distinct from confirmed ones throughout, because "
 | `mutations.log` | append-only JSONL of every write performed | no — that is the point |
 | in-memory | ID cache: syndra id → uid, group name → gid | yes |
 
+**Drift is computed only over bound subjects.** A real NAS holds accounts Syndra never provisioned — `root`, app service accounts, whatever an admin made by hand — and `/subjects` is a full state read. Diffing that against expected state would classify every one of them as untraced drift, and the first sweep after deployment would bury the queue in findings that are not findings. Trust in a triage queue is set on the day it first fills.
+
+So drift covers subjects with a recorded binding. Unbound target accounts are an **unmanaged inventory**: enumerated, reported once so an operator can see what else lives on the target, and never entered into triage. An account moving from unmanaged to bound is an explicit adoption decision (§12), not something a sweep infers.
+
 **Stale reads must not become drift.** The snapshot exists so an unreachable target can still answer a read, and the drift sweep consumes exactly those reads. Left unsaid, every outage would manufacture findings: the sweep would compare current desired state against an ageing mirror and report every intervening change as out-of-band. The sweep therefore consumes only reads the add-on marks current, and records the target as unreconciled for the duration instead — an absence of evidence, reported as such, rather than fabricated evidence of absence.
 
 No command queue. Two durable queues would disagree about what is still pending, and Syndra's is the one that knows why the operation exists. The mutation log is not duplicated state — it is an independent forensic record that survives loss or tampering of Syndra's audit tables.
@@ -198,6 +217,7 @@ The idempotency store covers every mutating call, not a chosen few. §15 decline
 
 ### 10. TrueNAS specifics
 
+- **The add-on's privilege excludes `user.delete`.** Dataset and ACL lifecycle is an explicit non-goal, so phase 1 has no reason to grant deletion to a credential living in the least-trusted component. Purge is already manual, rare, and the one irreversible operation in the set — so it takes an operator-supplied elevated credential at the moment of use, used for that call and never stored. A compromised add-on can then misassign, disable, and rotate, but cannot delete an account on its own. That costs nothing while purge is a deliberate human action, and is far cheaper to establish now than to retrofit once the key is already broad.
 - **Use `user.update({password})`, never `user.set_password`.** The latter rejects the call unless the session is `FULL_ADMIN` when the target is another user; the former needs only `ACCOUNT_WRITE`. The add-on's TrueNAS identity is a dedicated local user in a group whose privilege grants `ACCOUNT_WRITE` and `SYSTEM_AUDIT_READ`, holding an API key with `expires_at` set.
 - **Plaintext is mandatory.** No API accepts an NT or unix hash. Members set their own password in Syndra; it is forwarded and never stored.
 - **Session revocation does not exist.** There is no `smb.status`, `smb.sessions`, or close/disconnect method. Revocation ships as an entitlement change resolving `enabled` and `smb_enabled` to disabled — `user.update({locked: true, smb: false})` — plus `password.rotate`, and the UI MUST state that established sessions end on reconnect rather than immediately.
@@ -233,21 +253,31 @@ Without this the manifest is an authorization source, and a compromised or misco
 
 The cost is real and intended: adding an operation requires a backend policy entry, so a new add-on version cannot quietly grow its surface. Unknown operation ids fail closed.
 
-### 14. Desired state is snapshotted, versioned, and applied in order per subject
+### 14. A `member` scope binds the subject, not just the audience
+
+Scope decides who may invoke an operation. It must also decide *on whom*. A member-scoped operation MUST reject any subject other than the authenticated actor, enforced in the backend independently of both the manifest and the operation policy.
+
+Without that, "scoped to `member`" only means "a member may call this", and `password.set` with somebody else's subject id resets their storage credential. The manifest cannot be trusted to bind it (§13), and the policy table describes operations rather than requests, so the check belongs at the request boundary and nowhere else.
+
+### 15. Desired state is snapshotted, versioned, and applied in order per subject
 
 An outbox row referencing "converge this subject" is under-specified: the drain runs later, the resolver recomputes, and what lands may not be what anyone approved. Each entitlement change therefore writes an immutable `desired_state_snapshots` row for `(subject, target)` with a monotonic version, and the outbox row references that snapshot.
 
 **Two read paths, deliberately different.** An operator-initiated change is an approval and MUST apply its snapshot — the diff the operator saw is the diff that lands. The periodic reconcile is a convergence and MUST resolve current state instead, or it would spend forever replaying superseded snapshots and fighting every legitimate policy change. Conflating the two is how a reconcile loop reverts an intentional edit.
 
-Application is serialized per `(subject, target)`, and an apply carrying a version older than the target's last applied version is rejected rather than executed. Otherwise a queued grant can land after a newer revoke and silently restore access. This hazard is not hypothetical here: the sync service carried `internal/worker/ordering.go` for exactly it, and deleting that service should not delete the lesson.
+Application is serialized per `(subject, target)`, and an apply carrying a version older than the target's last applied version is rejected rather than executed.
 
-### 15. Add-on transport is mutually authenticated; the operation id is the replay token
+**A version-rejected row terminates as `superseded`, not `failed`.** Revocation-first ordering makes this ordinary rather than exceptional: a grant at v5 queued behind a revoke at v6 is dispatched second and correctly refused. That is the system working, and labelling it `failed` shows the operator a phantom failure for a row deliberately discarded — on the row class where real failures matter most. Otherwise a queued grant can land after a newer revoke and silently restore access. This hazard is not hypothetical here: the sync service carried `internal/worker/ordering.go` for exactly it, and deleting that service should not delete the lesson.
+
+### 16. Add-on transport is mutually authenticated; the operation id is the replay token
+
+*(Naming: the path segment is the operation **name** — `/op/password.set`. "Operation id" throughout this document means the per-call dedup token, never the operation's name. They were briefly the same word and that would have cost a debugging session.)*
 
 Add-on calls use mTLS with a private CA, or signed requests carrying a timestamp and a body hash where mTLS is impractical. A bare shared secret is not sufficient: it authenticates the caller but binds nothing to the request, so an intercepted call can be replayed verbatim.
 
 **No separate nonce store.** Every mutating call already carries an operation id the add-on deduplicates on, and every apply carries fingerprints re-verified against live target state, so a replayed mutation either hits the dedup store or fails verification. A nonce table would be a second replay-prevention mechanism guarding the same door, with its own expiry policy and its own failure mode. The operation id is the nonce, and the spec says so rather than building the machinery twice.
 
-### 16. The mutation log has a durability contract
+### 17. The mutation log has a durability contract
 
 An append-only file with no stated guarantees is not a forensic record. `mutations.log` is written `0600`, fsynced per record — writes are rare enough at makerspace volume that batching buys nothing — and rotated by size with long retention, bounded only so the volume cannot fill.
 
@@ -257,11 +287,15 @@ Each record carries the digest of the record before it. A chain gives real tampe
 
 This deliberately reuses the health path rather than introducing signed checkpoints or external object storage. The anchor's only job is to live somewhere the add-on cannot rewrite, and Syndra's database already is that — for a single-LXC deployment, adding object storage to hold one digest would be infrastructure serving a sentence of code. Signing is skipped for the same reason it was before: the key would live on the host it defends.
 
-**The limit of this, stated plainly.** The add-on is declared the least trusted component (§13), and it is also the thing reporting its own head digest and record count. A compromised add-on can truncate its log and report a consistent lie, and the anchor will agree with it. What the anchor actually detects is log loss, volume corruption, and tampering by anything that is not the add-on itself. That is worth having and it is not integrity against the add-on. The defences that do apply to a compromised add-on are elsewhere: it cannot widen its own authority (§13), it cannot exceed the backend's cohort limits (§14), and its mutations are independently visible in Syndra's own audit trail.
+**Why the chain and anchor stay in phase 1.** It is fair to ask whether they earn their place when §2's motivating threat is a compromised add-on and neither defends against one. They stay because that is not the failure that actually happens. A rotation bug, a full disk, or a bad volume mount silently eating records is ordinary, and a decreasing record count against a persisted head is exactly what detects it. Fifteen lines and two tests buy detection of the realistic failure; the unrealistic one was never the claim.
+
+**The limit of this, stated plainly.** The add-on is declared the least trusted component (§13), and it is also the thing reporting its own head digest and record count. A compromised add-on can truncate its log and report a consistent lie, and the anchor will agree with it. What the anchor actually detects is log loss, volume corruption, and tampering by anything that is not the add-on itself. That is worth having and it is not integrity against the add-on. The defences that do apply to a compromised add-on are elsewhere: it cannot widen its own authority (§13), it cannot exceed the backend's cohort limits (§15), and its mutations are independently visible in Syndra's own audit trail.
 
 Records are structured and redacted by the same `secret_params` rules as everything else.
 
-### 17. Add-ons have a lifecycle state, and operations have individual availability
+**Those rules cover the wire, not only the stores.** Listing tables, logs, and payloads leaves the paths a secret actually escapes through in practice: request-logging middleware that dumps bodies, error responses that echo the offending request, panic traces that capture arguments, and the member-to-backend leg before the value ever reaches a store. A declared secret parameter must be absent from all of them, and that is worth asserting in tests rather than assuming, because every one of those paths is code somebody adds later for debugging.
+
+### 18. Add-ons have a lifecycle state, and operations have individual availability
 
 The read-only flag becomes a three-valued state: `active`, `draining` — refuse new mutations, let issued operations settle, keep serving reads — and `read_only`. Draining is what makes API-key rotation and target upgrades safe, and both will happen: the key carries `expires_at`, and TrueNAS majors break. All three are configuration, none requires a redeploy, and all three are visible to operators.
 
@@ -269,11 +303,25 @@ The read-only flag becomes a three-valued state: `active`, `draining` — refuse
 
 Version gating is per operation, not per major. A target major can be broadly supported while a specific method is absent — the research behind this design found methods moving across TrueNAS releases and per-feature floors throughout UniFi Access (user groups 2.2.6, webhooks 2.2.10, NFC import 3.3.10). The manifest therefore marks individual operations unavailable with a reason, and the operator surface shows them disabled and explained rather than absent or failing on use.
 
+### 19. Navigation and the member surface
+
+`System > Hardware sync` (`/system/hardware-sync`) is the LLDAP operator surface and is removed, replaced by a per-target entry under System for each registered add-on.
+
+That sits close to `basic-advanced-ia`'s rule that structure never moves in response to data, so the distinction has to be explicit: **add-on registration is deployment configuration, not runtime data.** Nav derived from which add-ons a deployment runs is as stable as nav derived from which features a deployment has — it changes when someone deploys, not when someone's entitlements change. What the rule forbids is a nav row that appears because *this operator* has something to see there, and no per-target entry may work that way. An operator on a deployment with a TrueNAS add-on sees the TrueNAS entry whether or not it currently has drift.
+
+Member add-on surfaces get their own `MEMBER_NAV` destination — a third leaf, **NAS/Network Storage**, beside `My access` and `Requests`. That name is target-specific on purpose: when UniFi Access lands, doors are a different thing in a different place and want their own leaf rather than a heading broad enough to swallow both. `My access` answers what a person is entitled to; this answers how they actually reach it, which is a different question with different content: a credential, a connection path, and later a PIN and a door list. Folding both under one heading would have worked for TrueNAS alone and stopped working the moment UniFi Access added doors.
+
+**The leaf is always present.** Whether a member holds infrastructure access is exactly the kind of data `basic-advanced-ia` forbids structure from moving in response to — a nav row that appears when someone gains a role and vanishes when they lose it is the failure that rule exists to prevent. Audience decides structure; entitlement decides content.
+
+**The content is gated, and gated on two things, not one.** A member with no mapped role for any target sees an explanation, not a form. A member who has the role but whose account has not been created yet — the grant is queued, or the target was unreachable when it landed — sees that state, and still no form. The credential affordance appears only once there is an account to set a credential on.
+
+That gating is the design, not a convenience. A credential set cannot be queued, because queuing it would mean retaining the secret (§4), so offering the form before the account exists offers an action that can only fail. The fail-closed path stays as the backstop for the narrow race where an account disappears between render and submit; it is not the mechanism by which members without access are handled.
+
 ## Risks / Trade-offs
 
 - **A queued revoke is retained access** → revokes drain ahead of grants, get a dedicated surface with age escalation (§7), and an unconfirmed revoke past threshold is a security finding, not a task. Containment when the add-on is unreachable is necessarily out of band — Syndra has no path to the target — so the escalation carries the manual procedure, and the drift sweep recognises the resulting change as reconciling rather than raising it as fresh drift. Otherwise doing the right thing under pressure generates an alert.
-- **The add-on is the least trusted component and holds the target credential** → the manifest is a ceiling over backend policy, never an authorization source (§13); mTLS binds the transport (§15); the mutation log is tamper-evident (§16).
-- **A stale queued change can undo a newer one** → snapshots are versioned, application is serialized per `(subject, target)`, and an older version is rejected rather than applied (§14).
+- **The add-on is the least trusted component and holds the target credential** → the manifest is a ceiling over backend policy, never an authorization source (§13); mTLS binds the transport (§16); the mutation log is tamper-evident (§17).
+- **A stale queued change can undo a newer one** → snapshots are versioned, application is serialized per `(subject, target)`, and an older version is rejected rather than applied (§15).
 - **The add-on's credential is broad** → `ACCOUNT_WRITE` plus `SYSTEM_AUDIT_READ` is most of what matters on the NAS. Scoped as tightly as the feature set allows, key expiry set and surfaced, read-only kill switch available without redeploy. Honest limit: scoping buys less once ACL and quota writes arrive in phase 2.
 - **A mapping bug can revoke many people at once** → the cohort guard lives in the backend, because that is the only place the cohort exists. `/apply` is per subject, so an add-on sees one subject per call and can never compute "affected subject count" — specifying the guard there would have put it in the one component unable to implement it. The backend computes the cohort at plan time and refuses to issue a plan exceeding the configured subject count without an explicit scope acknowledgement. Add-ons keep a per-request cap as defence in depth against a backend that asks for too much at once. Combined with mandatory planning, this is the whole safety story for bulk effects.
 - **Deletion-by-absence would be catastrophic** → tombstones only. A subject missing from a feed is logged as an anomaly and never actioned as a delete.
@@ -302,20 +350,6 @@ cd addons/truenas && go test ./... && go vet ./...
 cd ui && bun run test && bun run lint && bun run build
 test ! -d sync   # the bridge plane is gone, not merely unwired
 ```
-
-### 18. Navigation and the member surface
-
-`System > Hardware sync` (`/system/hardware-sync`) is the LLDAP operator surface and is removed, replaced by a per-target entry under System for each registered add-on.
-
-That sits close to `basic-advanced-ia`'s rule that structure never moves in response to data, so the distinction has to be explicit: **add-on registration is deployment configuration, not runtime data.** Nav derived from which add-ons a deployment runs is as stable as nav derived from which features a deployment has — it changes when someone deploys, not when someone's entitlements change. What the rule forbids is a nav row that appears because *this operator* has something to see there, and no per-target entry may work that way. An operator on a deployment with a TrueNAS add-on sees the TrueNAS entry whether or not it currently has drift.
-
-Member add-on surfaces get their own `MEMBER_NAV` destination — a third leaf beside `My access` and `Requests`. `My access` answers what a person is entitled to; this answers how they actually reach it, which is a different question with different content: a credential, a connection path, and later a PIN and a door list. Folding both under one heading would have worked for TrueNAS alone and stopped working the moment UniFi Access added doors.
-
-**The leaf is always present.** Whether a member holds infrastructure access is exactly the kind of data `basic-advanced-ia` forbids structure from moving in response to — a nav row that appears when someone gains a role and vanishes when they lose it is the failure that rule exists to prevent. Audience decides structure; entitlement decides content.
-
-**The content is gated, and gated on two things, not one.** A member with no mapped role for any target sees an explanation, not a form. A member who has the role but whose account has not been created yet — the grant is queued, or the target was unreachable when it landed — sees that state, and still no form. The credential affordance appears only once there is an account to set a credential on.
-
-That gating is the design, not a convenience. A credential set cannot be queued, because queuing it would mean retaining the secret (§4), so offering the form before the account exists offers an action that can only fail. The fail-closed path stays as the backstop for the narrow race where an account disappears between render and submit; it is not the mechanism by which members without access are handled.
 
 ## Open Questions
 
