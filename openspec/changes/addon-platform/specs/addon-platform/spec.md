@@ -100,6 +100,28 @@ An add-on MUST accept a resolved desired entitlement set for a subject and conve
 - **THEN** the add-on MUST converge the target to exactly the two remaining groups
 - **AND** MUST NOT require a separate revoke operation to remove the third
 
+### Requirement: Account lifecycle state MUST be entitlement, not operation
+
+Whether a subject's target account is enabled, and whether its service access is enabled, MUST be fields in the target's entitlement schema resolved from mappings and allowances, not effects of one-shot operations. Deprovisioning MUST resolve them to disabled and restoration MUST resolve them to enabled, both converged by the ordinary apply path. A creation operation MUST NOT be the mechanism by which a disabled account is restored.
+
+#### Scenario: Regaining a mapped role restores the account through convergence
+
+- **WHEN** a subject who lost their last mapped role regains one
+- **THEN** the resolved entitlement set MUST mark the account and its service access enabled
+- **AND** the ordinary apply path MUST converge the target to that state
+- **AND** restoration MUST NOT depend on the creation operation, which finds the account already present
+
+#### Scenario: An operator suspension is not undone by a role grant
+
+- **WHEN** a subject under an explicit operator suspension receives a mapped role
+- **THEN** the suspension MUST continue to resolve the account as disabled until it lapses or is lifted
+- **AND** the role grant MUST NOT re-enable the account
+
+#### Scenario: A lifecycle disable does not outlive its cause
+
+- **WHEN** a subject's account was disabled solely because they held no mapped role
+- **THEN** regaining a mapped role MUST re-enable it without operator action
+
 ### Requirement: Desired state MUST be snapshotted, versioned, and applied in order per subject
 
 Each entitlement change MUST record an immutable desired-state snapshot for its `(subject, target)` with a monotonically increasing version, and the outbox row MUST reference that snapshot rather than instructing the drain to re-resolve. An operator-initiated change MUST apply its recorded snapshot, so that what was approved is what lands. Periodic reconciliation MUST instead resolve current state, so that convergence does not replay superseded snapshots. Application MUST be serialized per `(subject, target)`.
@@ -146,17 +168,29 @@ Calls between the backend and an add-on MUST use mutual TLS, or signed requests 
 
 ### Requirement: The mutation log MUST be durable and tamper-evident
 
-Each add-on MUST write every mutation it performs to an append-only local log with file permissions restricting it to its own service account, flushed to disk before the operation is reported complete, rotated by size with a bounded retention that exists only to prevent unbounded growth. Each record MUST carry the digest of the preceding record so that alteration or removal is detectable, and MUST be redacted by the same rules as any other record.
+Each add-on MUST write every mutation it performs to an append-only local log with file permissions restricting it to its own service account, flushed to disk before the operation is reported complete, rotated by size with a bounded retention that exists only to prevent unbounded growth. Each record MUST carry the digest of the preceding record, and MUST be redacted by the same rules as any other record. Because a digest chain cannot detect truncation of its own tail, the add-on MUST additionally publish its log head digest and record count for the backend to persist outside the add-on's writable storage.
 
 #### Scenario: A mutation is durably logged before it is reported
 
 - **WHEN** the add-on completes a mutating call
 - **THEN** the corresponding record MUST be flushed to disk before the operation is reported complete
 
-#### Scenario: Tampering is detectable
+#### Scenario: Alteration and interior removal are detectable
 
-- **WHEN** a record in the log is altered or removed
+- **WHEN** a record in the log is altered, or removed from within the retained chain
 - **THEN** verification of the digest chain MUST fail at that point
+
+#### Scenario: The log head is anchored outside the add-on
+
+- **WHEN** the add-on reports health
+- **THEN** it MUST include its current log head digest and record count
+- **AND** the backend MUST persist each observation
+
+#### Scenario: Tail truncation is detectable by the anchor
+
+- **WHEN** the reported record count has decreased, or the reported head does not extend the last head the backend recorded
+- **THEN** the backend MUST report the log as truncated
+- **AND** MUST NOT treat a locally valid chain as evidence the log is intact
 
 #### Scenario: The log carries no secrets
 
@@ -227,6 +261,40 @@ Every entitlement application and every declared operation MUST be planned befor
 - **WHEN** an add-on computes a plan
 - **THEN** it MUST NOT issue any mutating call to its target
 - **AND** MUST return the same outcome shape the apply path returns, with a fingerprint per subject
+
+#### Scenario: The plan store holds no secrets
+
+- **WHEN** a plan is persisted for an operation declaring secret parameters
+- **THEN** the plan MUST record the intent and the subject without any declared secret value
+- **AND** the value MUST travel on the apply request only and MUST NOT be retained after it
+
+### Requirement: A change approved while a target is unreachable MUST produce a provisional plan
+
+A live state fingerprint cannot be obtained from an unreachable target, so planning MUST NOT be a precondition for recording an entitlement decision. A change approved while the target is unreachable MUST retain its approved desired-state snapshot and MUST produce a provisional plan computed against the add-on's last-known state, labelled with the age of that state. Before any dispatch, the plan MUST be re-fingerprinted against live target state. Fail-open MUST apply to the entitlement decision only, never to dispatching an unreviewed change.
+
+#### Scenario: An outage does not block the decision
+
+- **WHEN** an operator changes entitlements while the target is unreachable
+- **THEN** the backend MUST record the change and its desired-state snapshot
+- **AND** MUST issue a provisional plan against last-known state, labelled with that state's age
+- **AND** MUST NOT refuse the change for want of a live fingerprint
+
+#### Scenario: Nothing moved, so the plan dispatches
+
+- **WHEN** the target becomes reachable and live fingerprints match those recorded provisionally
+- **THEN** the backend MUST dispatch the change without requiring fresh approval
+
+#### Scenario: The target moved, so the plan needs re-approval
+
+- **WHEN** the target becomes reachable and any live fingerprint differs from the provisional one
+- **THEN** the backend MUST withhold dispatch
+- **AND** MUST require fresh approval, presenting what changed since the original approval
+
+#### Scenario: Provisional is visibly distinct from applied
+
+- **WHEN** a change is held under a provisional plan
+- **THEN** the operator surface MUST present it as recorded and awaiting the target
+- **AND** MUST NOT count it as applied
 
 ### Requirement: An unreachable add-on MUST fail open with queued accounting
 

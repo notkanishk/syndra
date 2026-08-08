@@ -13,7 +13,7 @@ Replacing the bridge with target add-ons also avoids duplication. Syndra already
 - Add a target dimension to `pending_zitadel_propagations`, `direct_role_grants`, and the drift tables, with a registry table rather than a CHECK. One drain loop, one sweep, filtered by target, with versioned desired-state snapshots applied in order per subject.
 - **BREAKING** Plan-then-apply becomes a backend guarantee on every path, Zitadel included: the backend issues and holds the plan, and bulk, drift-triage, and reconciliation applies cite a plan identifier instead of returning a plan body.
 - Add an add-on registry and wire contract. Add-ons are separate containers on the internal network, mutually authenticated, declaring an entitlement schema and an operation set via a manifest that can only narrow what backend policy already permits.
-- Ship the TrueNAS SCALE add-on: member password and mount instructions; account lifecycle (auto-create on role grant, SMB suspend, lock, purge); observability (SMB activity, NAS health, drift).
+- Ship the TrueNAS SCALE add-on: member password and mount instructions; account lifecycle (auto-create on role grant, reversible disable, credential rotation, purge); observability (SMB activity, NAS health, drift).
 - Add Syndra allowances — explicit per-user overlays alongside role-derived access. Subtractive allowances are time-boxed suspensions and must carry an expiry.
 - Add a queued-revoke surface with age escalation, and a dormant-account housekeeping view with bulk actions.
 - Every add-on operation is dry-runnable through the existing `BulkPlan`/`BulkOutcome` rehearse-then-apply pattern.

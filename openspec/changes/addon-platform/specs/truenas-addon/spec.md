@@ -42,27 +42,44 @@ TrueNAS accepts plaintext passwords only; no hash form can be written. The add-o
 - **THEN** no response body MUST contain `unixhash` or `smbhash`
 - **AND** no stored snapshot or log entry MUST contain them
 
-### Requirement: Account lock MUST state its true effect
+### Requirement: Revoking access MUST state its true effect
 
-The target exposes no method to terminate an established SMB session. The lock operation MUST apply `locked` and clear the SMB flag and rotate the password, and the operator surface MUST state that established sessions end on reconnect rather than immediately.
+The target exposes no method to terminate an established SMB session. Cutting a subject's access is therefore composed of an entitlement change resolving the account and SMB fields to disabled, plus a credential rotation, and the operator surface MUST state that established sessions end on reconnect rather than immediately.
 
-#### Scenario: Lock is applied and described honestly
+#### Scenario: Revocation applies both halves
 
-- **WHEN** an operator locks a subject's account
-- **THEN** the add-on MUST set `locked`, clear `smb`, and rotate the password
-- **AND** the operator surface MUST state that an established session persists until it reconnects
+- **WHEN** an operator revokes a subject's access
+- **THEN** the resolved entitlement set MUST mark the account and SMB access disabled, converged through the apply path
+- **AND** the credential MUST be rotated through the rotation operation
+- **AND** the target MUST reflect `locked` set and `smb` cleared
+
+#### Scenario: The effect is described honestly
+
+- **WHEN** a revocation is presented to an operator
+- **THEN** the surface MUST state that an established session persists until it reconnects
 - **AND** MUST NOT present the action as immediate session termination
+
+#### Scenario: Rotation does not retain the credential
+
+- **WHEN** the credential is rotated as part of a revocation
+- **THEN** the generated value MUST NOT be persisted, cached, or logged
+- **AND** the record MUST show that a rotation occurred, its actor, and its time
 
 ### Requirement: Deprovisioning MUST be reversible and purge MUST be deliberate
 
-Losing the last entitlement on the target MUST lock the account and clear its SMB access while preserving the account and its data. Deletion MUST require an explicit operator action that first discloses what data the account holds.
+Losing the last entitlement on the target MUST resolve the account and its SMB access to disabled while preserving the account and its data, and regaining an entitlement MUST resolve them back to enabled through the same apply path. Deletion MUST require an explicit operator action that first discloses what data the account holds.
 
 #### Scenario: Last entitlement removal preserves the account
 
 - **WHEN** a subject's final target-granting role is removed
-- **THEN** the add-on MUST lock the account and clear SMB access
+- **THEN** the apply path MUST converge the account to disabled with SMB cleared
 - **AND** MUST NOT delete the account or its home data
-- **AND** the action MUST be reversible by restoring the role
+
+#### Scenario: Restoring the role restores the account
+
+- **WHEN** the subject regains a target-granting role
+- **THEN** the apply path MUST converge the account back to enabled with SMB restored per their entitlements
+- **AND** MUST NOT create a second account
 
 #### Scenario: Purge discloses retained data first
 

@@ -60,12 +60,18 @@ A target account MUST be created when a subject first receives a role granting a
 - **THEN** it MUST decide from the role-to-target mappings for that target
 - **AND** a role with no mapping to a target MUST NOT trigger account creation on it
 
-#### Scenario: Losing the last mapped role locks rather than deletes
+#### Scenario: Losing the last mapped role disables rather than deletes
 
 - **WHEN** a subject loses their last role mapped to a target
-- **THEN** the backend MUST enqueue the lock operation for that target
+- **THEN** the resolved entitlement set MUST mark the account and its service access disabled
 - **AND** MUST NOT enqueue a deletion
-- **AND** regaining a mapped role MUST restore the account without operator intervention
+- **AND** the account and its data MUST survive
+
+#### Scenario: Regaining a mapped role re-enables through the same path
+
+- **WHEN** the subject later regains a role mapped to that target
+- **THEN** the resolved entitlement set MUST mark the account and its service access enabled
+- **AND** the account MUST be restored without operator intervention and without a second account being created
 
 ### Requirement: Dormant target accounts MUST have a housekeeping surface
 

@@ -56,10 +56,18 @@ The permitted values come from a `targets` table with a foreign key, not a CHECK
 
 | Plane | Shape | Machinery | Examples |
 |---|---|---|---|
-| Entitlement | level-triggered desired state | outbox, drift sweep, expiry, cascade | group membership, quota, path grants |
-| Operation | one-shot event | audit only, no drift | `password.set`, `account.lock`, `account.purge`, `activity.get`, `health.get` |
+| Entitlement | level-triggered desired state | outbox, drift sweep, expiry, cascade | group membership, quota, path grants, **account enabled, SMB enabled** |
+| Operation | one-shot event | audit only, no drift | `password.set`, `password.rotate`, `account.ensure`, `account.purge`, `activity.get`, `health.get` |
 
 The rule: anything with a desired state goes in the first, anything that is an event goes in the second.
+
+**Lifecycle state is desired state, so it lives in the entitlement plane.** An earlier draft had `account.lock` as an operation, and that was an edge-triggered leak with a real consequence: deprovisioning left an account `locked` with SMB cleared, and regaining a mapped role could not bring it back, because a create-if-absent `ensure` sees an existing account and does nothing. The account would stay dark forever while Syndra believed access was restored.
+
+So `enabled` and `smb_enabled` are fields in the entitlement schema, resolved from role mappings and allowances like any other field, and converged by `/apply`. Deprovisioning resolves them to false; regaining a mapped role resolves them to true and the same apply path restores the account. Nothing special-cases restoration because nothing special-cased suspension.
+
+This also disambiguates two locks that would otherwise be indistinguishable on a target that has no field to tell them apart. A lifecycle lock is derived — the subject holds no mapped role — and clears itself when they do. An operator suspension is a subtractive allowance on `enabled`, carries an expiry like every subtractive allowance (§6), and survives re-resolution until it lapses or is lifted. An operator's deliberate suspension therefore cannot be undone by a role grant, and a lifecycle lock cannot outlive the condition that caused it.
+
+`account.ensure` stays an operation, reduced to what only it can do: create the account when absent and report the derived name. The lock button stays too, but as two things — an allowance write, plus `password.rotate` for the credential change, which is genuinely an event because it mints a new secret.
 
 This is what keeps plaintext out of the audit trail. `password.set` carries a secret and is an event, so it never touches the outbox — a durable intent row would write the member's password into Postgres and retain it.
 
@@ -82,6 +90,8 @@ GET  /health         → reachability, target version, last reconcile
 
 `/plan` returns per-subject outcomes plus, for each subject, a **state fingerprint** — a hash of that subject's current state on the target. Every mutating call carries the fingerprints from the plan it came from, and the add-on refuses the call if any no longer matches. See §8.
 
+Plans persist intent, never secrets. A plan for a secret-bearing operation records that the operation will occur and against whom; the value rides the apply request and is discarded with it. The `secret_params` redaction rules cover the plan store exactly as they cover audit rows, outbox payloads, and logs — a plan is one more durable place a secret must never reach.
+
 `entitlement_schema` names the fields the target understands (`group[]`, `quota_bytes`, `path_grant[]`). Syndra fills them; it never learns what `lab_makers` means to TrueNAS. `operations` carries `scope` (member/admin), `confirm`, and `secret_params` — the last being a hard instruction that those values are never persisted or logged.
 
 ### 6. Two-layer access model: role plus allowance
@@ -98,7 +108,7 @@ Syndra resolves role and allowance into the final entitlement set; the add-on tr
 
 Validation is split. Syndra checks structure: the field exists in the add-on's declared schema, the role exists, no duplicate binding for one `(target, project_id, role_key, field)`. The add-on checks reference: that `lab_makers` actually resolves on the target. Syndra cannot do the second — it does not know what the value means — so mapping writes are validated through the add-on and rejected if it cannot confirm the referent.
 
-**The lifecycle trigger is the mapping table, consulted on grant change.** The existing grant path already emits propagations; it gains a lookup of which targets the changed role is mapped to. Gaining a first mapped role for a target enqueues `account.ensure` before the entitlement apply. Losing the last mapped role for a target enqueues `account.lock` — never a delete (§12). Deletion of a mapping is itself a grant-affecting change and re-resolves every holder through the same path, which is exactly the case the plan and blast-radius guards exist to catch.
+**The lifecycle trigger is the mapping table, consulted on grant change.** The existing grant path already emits propagations; it gains a lookup of which targets the changed role is mapped to. Gaining a first mapped role for a target enqueues `account.ensure` before the entitlement apply. Losing the last resolves the lifecycle entitlement fields to disabled, and regaining one resolves them back — never a delete (§12), and never a bespoke restore path, because both directions are the same apply. Deletion of a mapping is itself a grant-affecting change and re-resolves every holder through the same path, which is exactly the case the plan and blast-radius guards exist to catch.
 
 ### 7. Fail-open, with the queue made loud
 
@@ -122,6 +132,19 @@ So the plan is a backend-issued object, not a client round-trip:
 
 **BREAKING:** the bulk, drift-triage, and reconciliation apply endpoints stop accepting a plan body. Clients send a plan id.
 
+**A fingerprint needs a reachable target, and fail-open means the target may be unreachable.** These two requirements collide directly: §7 says an unreachable add-on must not block the entitlement decision, and a live fingerprint cannot be obtained from something that is not answering. Taken naively, an add-on outage would block operators from recording grants at all — the opposite of fail-open.
+
+The resolution is that fail-open applies to the *entitlement decision*, never to unreviewed mutation. A change made while the target is unreachable is recorded, keeps its approved desired-state snapshot, and produces a **provisional plan**: computed against the add-on's last-known snapshot, fingerprinted from it, and labelled with that snapshot's age so nobody mistakes it for current truth.
+
+When the target returns, the plan is re-fingerprinted against live state before anything dispatches:
+
+- **Fingerprints match** — nothing moved while the target was away. Auto-dispatch. The operator reviewed a diff that turned out to be accurate.
+- **Fingerprints differ** — the target changed underneath the approval. The plan becomes stale, dispatch is withheld, and it requires fresh approval showing what moved.
+
+That is the only defensible split. Auto-dispatching a changed world would apply a diff nobody saw, and requiring re-approval when nothing changed would punish operators for an outage they did not cause.
+
+Provisional plans are visibly distinct from confirmed ones throughout, because "recorded and waiting" and "applied" are the distinction `BulkSummary.Queued` exists to protect.
+
 ### 9. Add-on local state is a backstop, never a queue
 
 | Store | Contents | Rebuildable |
@@ -137,7 +160,7 @@ No command queue. Two durable queues would disagree about what is still pending,
 
 - **Use `user.update({password})`, never `user.set_password`.** The latter rejects the call unless the session is `FULL_ADMIN` when the target is another user; the former needs only `ACCOUNT_WRITE`. The add-on's TrueNAS identity is a dedicated local user in a group whose privilege grants `ACCOUNT_WRITE` and `SYSTEM_AUDIT_READ`, holding an API key with `expires_at` set.
 - **Plaintext is mandatory.** No API accepts an NT or unix hash. Members set their own password in Syndra; it is forwarded and never stored.
-- **Session revocation does not exist.** There is no `smb.status`, `smb.sessions`, or close/disconnect method. `account.lock` ships as `user.update({locked: true, smb: false})` plus a password rotation, and the UI MUST state that established sessions end on reconnect rather than immediately.
+- **Session revocation does not exist.** There is no `smb.status`, `smb.sessions`, or close/disconnect method. Revocation ships as an entitlement change resolving `enabled` and `smb_enabled` to disabled — `user.update({locked: true, smb: false})` — plus `password.rotate`, and the UI MUST state that established sessions end on reconnect rather than immediately.
 - **Quotas are storage, not bandwidth.** `pool.dataset.set_quota` / `get_quota`; Syndra owns the thresholds and alerting.
 - **Hashes never leave the add-on.** `user.query` returns `unixhash` and `smbhash` — the NT hash is a pass-the-hash credential. The add-on passes `select` to fetch only what it needs and strips those fields on every path.
 - **Activity needs enabling.** SMB auditing is per-share; `activity.get` reports which shares have it off rather than silently returning nothing.
@@ -158,7 +181,7 @@ Two normalization edges need naming because both are silent-corruption bugs. A l
 
 ### 12. Deprovisioning is reversible; purge is deliberate
 
-Losing the last TrueNAS-granting role locks the account and clears `smb`, keeping the account and its home data. Purge stays a manual action behind the data checklist, driven from a dormant-account housekeeping view that lists stagnant accounts and supports individual and bulk action.
+Losing the last TrueNAS-granting role resolves the lifecycle fields to disabled — `locked` set, `smb` cleared — keeping the account and its home data, and regaining a role resolves them back through the same apply (§4). Purge stays a manual action behind the data checklist, driven from a dormant-account housekeeping view that lists stagnant accounts and supports individual and bulk action.
 
 *Alternative considered:* auto-purge after a grace period. Rejected — automated deletion on critical infrastructure, triggered by a role change that may itself be the mistake.
 
@@ -188,7 +211,11 @@ Add-on calls use mTLS with a private CA, or signed requests carrying a timestamp
 
 An append-only file with no stated guarantees is not a forensic record. `mutations.log` is written `0600`, fsynced per record — writes are rare enough at makerspace volume that batching buys nothing — and rotated by size with long retention, bounded only so the volume cannot fill.
 
-Each record carries the digest of the record before it. A chain gives real tamper evidence for a few lines of code: entries cannot be altered or removed without breaking it, and verification is a single pass. Signing is deliberately skipped — the key would live on the same host as the log it protects, so it defends against almost nothing the chain does not, and it adds key management to a component that currently needs none.
+Each record carries the digest of the record before it. A chain gives real tamper evidence for a few lines of code: an entry cannot be altered, and no entry can be removed from the middle, without breaking it.
+
+**A chain alone does not detect tail truncation.** Delete the last N records and what remains verifies perfectly — the strongest attack against a local append-only log is also the simplest one, and a chain by itself cannot see it. So the head is anchored off the add-on's own volume: the add-on reports its current head digest and record count on `/health`, and Syndra persists each observation. A log whose count has gone backwards, or whose head does not extend the last one Syndra recorded, is truncation, and Syndra can say so.
+
+This deliberately reuses the health path rather than introducing signed checkpoints or external object storage. The anchor's only job is to live somewhere the add-on cannot rewrite, and Syndra's database already is that — for a single-LXC deployment, adding object storage to hold one digest would be infrastructure serving a sentence of code. Signing is skipped for the same reason it was before: the key would live on the host it defends.
 
 Records are structured and redacted by the same `secret_params` rules as everything else.
 

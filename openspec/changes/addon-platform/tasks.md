@@ -38,15 +38,23 @@
 - [ ] 2.17 Tests: a plan persists and expires; an apply citing an unknown or expired plan id is rejected
 - [ ] 2.18 Apply gate: reject any apply not citing a backend-issued plan id; re-verify every fingerprint against live target state before dispatch
 - [ ] 2.19 Tests: a client-supplied plan is refused; a fingerprint mismatch fails the apply, mutates nothing, and names the subjects that moved
-- [ ] 2.20 Queued accounting: extend the existing `BulkSummary.Queued` semantics to add-on targets so unconfirmed rows never count as succeeded
-- [ ] 2.21 Tests: an unreachable add-on yields queued rows, a reachable one yields succeeded rows, and the summary distinguishes them
-- [ ] 2.22 Backend operation policy: per-operation-id scope, confirmation requirement, and parameter schema, owned by the backend and independent of any manifest
-- [ ] 2.23 Manifest intersection: effective operation set is manifest ∩ policy with policy prevailing; unknown operation ids fail closed
-- [ ] 2.24 Tests: a manifest cannot widen scope, cannot drop a confirmation requirement, cannot introduce an unknown operation, and can narrow
-- [ ] 2.25 mTLS between backend and add-ons with a private CA, or signed requests carrying timestamp and body hash where mTLS is impractical
-- [ ] 2.26 Tests: a call without a valid client certificate is refused; a signature not matching body or timestamp is refused; a bare shared secret is insufficient
-- [ ] 2.27 Certificate and key material provisioning, rotation, and expiry surfacing for the add-on transport
-- [ ] 2.28 Tests: an expiring transport credential is surfaced before it fails; rotation does not drop in-flight operations
+- [ ] 2.20 Plan store secret exclusion: `secret_params` values are excluded from plan persistence; the value rides the apply request and is discarded with it
+- [ ] 2.21 Tests: scan plan rows, indexes, and caches for a submitted secret value and assert absence; the apply still succeeds with the value carried transiently
+- [ ] 2.22 Provisional plans: when a target is unreachable, record the approved snapshot and issue a plan against last-known state, labelled with its age and marked provisional
+- [ ] 2.23 Tests: an entitlement change is accepted while the target is unreachable and yields a provisional plan, presented as recorded and awaiting the target, never as applied
+- [ ] 2.24 Provisional resolution on return: re-fingerprint against live state, auto-dispatch on match, withhold and require fresh approval on mismatch
+- [ ] 2.25 Tests: matching fingerprints dispatch without re-approval; differing fingerprints withhold dispatch and surface what changed since approval
+- [ ] 2.26 Log-head anchoring: persist each add-on's reported log head digest and record count, flagging a decreased count or a non-extending head as truncation
+- [ ] 2.27 Tests: a truncated add-on log is detected by the anchor even though its remaining chain verifies
+- [ ] 2.28 Queued accounting: extend the existing `BulkSummary.Queued` semantics to add-on targets so unconfirmed rows never count as succeeded
+- [ ] 2.29 Tests: an unreachable add-on yields queued rows, a reachable one yields succeeded rows, and the summary distinguishes them
+- [ ] 2.30 Backend operation policy: per-operation-id scope, confirmation requirement, and parameter schema, owned by the backend and independent of any manifest
+- [ ] 2.31 Manifest intersection: effective operation set is manifest ∩ policy with policy prevailing; unknown operation ids fail closed
+- [ ] 2.32 Tests: a manifest cannot widen scope, cannot drop a confirmation requirement, cannot introduce an unknown operation, and can narrow
+- [ ] 2.33 mTLS between backend and add-ons with a private CA, or signed requests carrying timestamp and body hash where mTLS is impractical
+- [ ] 2.34 Tests: a call without a valid client certificate is refused; a signature not matching body or timestamp is refused; a bare shared secret is insufficient
+- [ ] 2.35 Certificate and key material provisioning, rotation, and expiry surfacing for the add-on transport
+- [ ] 2.36 Tests: an expiring transport credential is surfaced before it fails; rotation does not drop in-flight operations
 
 ## 3. Zitadel plan retrofit
 
@@ -73,24 +81,27 @@
 - [ ] 4.11 Local stores: bbolt idempotency bucket with TTL, snapshot bucket; no command queue
 - [ ] 4.12 Tests: the snapshot serves a stale read with its age when the target is unreachable
 - [ ] 4.13 Mutation log: append-only JSONL, `0600`, fsync before the operation is reported complete, size-based rotation with bounded retention, each record carrying the digest of the previous
-- [ ] 4.14 Tests: a record is durable before completion is reported; altering or removing a record breaks chain verification; a secret-bearing mutation logs the event without the value
-- [ ] 4.15 Lifecycle state flag `active | draining | read_only`, settable without redeploy and reported through health
-- [ ] 4.16 Tests: `read_only` refuses all mutations while serving reads; `draining` refuses new mutations while in-flight ones settle and reports when drained; neither is reported as unhealthy
+- [ ] 4.14 Report the current log head digest and record count through `/health` for the backend to anchor
+- [ ] 4.15 Tests: a record is durable before completion is reported; altering or removing a record breaks chain verification; a secret-bearing mutation logs the event without the value
+- [ ] 4.16 Lifecycle state flag `active | draining | read_only`, settable without redeploy and reported through health
+- [ ] 4.17 Tests: `read_only` refuses all mutations while serving reads; `draining` refuses new mutations while in-flight ones settle and reports when drained; neither is reported as unhealthy
 
 ## 5. TrueNAS add-on: entitlement plane
 
 - [ ] 5.1 `POST /apply`: accept a resolved entitlement set for one subject, converge via `user.update({groups})`, level-triggered
-- [ ] 5.2 Tests: re-applying an unchanged set is a no-op with no mutating call; a reduced set converges to exactly the remaining groups
-- [ ] 5.3 Blast-radius limiter: compute affected subject count, refuse beyond the configured limit without an explicit scope acknowledgement
-- [ ] 5.4 Tests: an oversized effect is refused, returns the computed count, and mutates nothing
-- [ ] 5.5 `POST /plan`: returns `BulkPlan`/`BulkOutcome`-shaped outcomes with `Detail` and `Consequence`, plus a per-subject target-state fingerprint, mutating nothing
-- [ ] 5.6 Tests: planning issues no mutating call, returns the apply path's shape, and produces a fingerprint that changes when the subject's target state changes
-- [ ] 5.7 Fingerprint re-verification on apply: refuse the call if any supplied fingerprint no longer matches live target state
-- [ ] 5.8 Tests: a subject mutated out of band between plan and apply causes refusal with that subject named, and nothing is applied
-- [ ] 5.9 Operation-id deduplication for `/apply` and `/op/{id}`, backed by the idempotency store
-- [ ] 5.10 Tests: replaying an operation id returns the original outcome without a second mutating call
-- [ ] 5.11 Absence handling: a subject missing from the expected set is reported as drift and never deleted or locked
-- [ ] 5.12 Tests: a missing subject produces a drift report and no mutation
+- [ ] 5.2 Declare `enabled` and `smb_enabled` as entitlement-schema fields and converge them via `user.update({locked, smb})` on the same apply path
+- [ ] 5.3 Tests: a set resolving both to disabled locks the account and clears SMB; a later set resolving them to enabled restores it with no second account created; neither path uses a creation operation
+- [ ] 5.4 Tests: re-applying an unchanged set is a no-op with no mutating call; a reduced set converges to exactly the remaining groups
+- [ ] 5.5 Blast-radius limiter: compute affected subject count, refuse beyond the configured limit without an explicit scope acknowledgement
+- [ ] 5.6 Tests: an oversized effect is refused, returns the computed count, and mutates nothing
+- [ ] 5.7 `POST /plan`: returns `BulkPlan`/`BulkOutcome`-shaped outcomes with `Detail` and `Consequence`, plus a per-subject target-state fingerprint, mutating nothing
+- [ ] 5.8 Tests: planning issues no mutating call, returns the apply path's shape, and produces a fingerprint that changes when the subject's target state changes
+- [ ] 5.9 Fingerprint re-verification on apply: refuse the call if any supplied fingerprint no longer matches live target state
+- [ ] 5.10 Tests: a subject mutated out of band between plan and apply causes refusal with that subject named, and nothing is applied
+- [ ] 5.11 Operation-id deduplication for `/apply` and `/op/{id}`, backed by the idempotency store
+- [ ] 5.12 Tests: replaying an operation id returns the original outcome without a second mutating call
+- [ ] 5.13 Absence handling: a subject missing from the expected set is reported as drift and never deleted or locked
+- [ ] 5.14 Tests: a missing subject produces a drift report and no mutation
 
 ## 6. TrueNAS add-on: operations
 
@@ -108,10 +119,10 @@
 - [ ] 6.12 Tests: an email change after creation leaves the account name unchanged and the binding still resolves the subject
 - [ ] 6.13 `password.set`: `user.update({password})`, forwarded and never persisted, declared with `secret_params`
 - [ ] 6.14 Tests: the plaintext appears in no store, snapshot, or log; the mutation log records that a password was set
-- [ ] 6.15 `account.lock`: set `locked`, clear `smb`, rotate password; response states that established sessions end on reconnect
-- [ ] 6.16 Tests: lock applies all three effects and the response carries the reconnect caveat
-- [ ] 6.17 `account.smb.set`: reversible SMB suspend and resume
-- [ ] 6.18 Tests: suspend then resume restores the prior state
+- [ ] 6.15 `password.rotate`: mint and apply a new credential without returning or retaining it; the credential half of a revocation
+- [ ] 6.16 Tests: rotation persists, caches, and logs no value, and records that a rotation occurred with actor and time
+- [ ] 6.17 Revocation composition: the operator action writes the disabling allowance and enqueues the rotation, with copy stating that established sessions end on reconnect
+- [ ] 6.18 Tests: revocation produces both halves; the surface never presents it as immediate session termination
 - [ ] 6.19 `account.purge`: plan discloses retained home data before apply; `user.delete` only on explicit confirmation
 - [ ] 6.20 Tests: purge without confirmation refuses; the plan reports retained data size
 - [ ] 6.21 `activity.get`: `audit.query` with `service: "SMB"`, reporting shares with auditing disabled
@@ -129,7 +140,7 @@
 - [ ] 7.6 Tests: an edit creates a new version with actor and time; rollback restores the prior mapping and re-resolves affected subjects
 - [ ] 7.7 Role-derived resolution: derive the role half of a subject's entitlement set from the mappings and from nothing else
 - [ ] 7.8 Tests: a role with no mapping contributes nothing; two mappings on one role contribute both fields; resolution is stable under repetition
-- [ ] 7.9 Lifecycle trigger on the existing grant path: look up targets mapped to the changed role, enqueue `account.ensure` on gaining a first mapped role, enqueue `account.lock` on losing the last
+- [ ] 7.9 Lifecycle trigger on the existing grant path: look up targets mapped to the changed role, enqueue `account.ensure` on gaining a first mapped role, and resolve the lifecycle entitlement fields in both directions so losing the last mapped role disables and regaining one re-enables
 - [ ] 7.10 Tests: first mapped role creates the account before the entitlement apply; last mapped role removal locks and never deletes; regaining a mapped role restores without operator action; an unmapped role triggers nothing
 - [ ] 7.11 Mapping edit and delete plan through the standard plan path, subject to the blast-radius guard
 - [ ] 7.12 Tests: deleting a mapping held by many subjects plans across all of them and trips the blast-radius guard without an acknowledgement
