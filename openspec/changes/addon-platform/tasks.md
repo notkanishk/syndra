@@ -204,14 +204,17 @@
 
 ## 10. Member surfaces
 
-- [ ] 10.1 Member add-on surfaces render as a section within `My access`, not a third `MEMBER_NAV` destination; a member with no add-on access sees the section explaining that rather than a vanished section
-- [ ] 10.2 Tests: `MEMBER_NAV` still has exactly two leaves; the section renders for members with and without target access
-- [ ] 10.3 Self-service credential set and reset, scoped-to-infrastructure copy, existence and last-change status only
-- [ ] 10.4 Tests: the credential value is never returned to the client or persisted; status renders from metadata alone
-- [ ] 10.5 Connection instructions showing the add-on-reported account name and only the resources current entitlements reach
-- [ ] 10.6 Tests: instructions change with entitlements and never list an unreachable resource
-- [ ] 10.7 A credential set fails closed and says so when the target is unreachable, refusing for lifecycle state, or the account does not yet exist
-- [ ] 10.8 Tests: each of those three cases returns an explicit failure, records nothing as queued, and tells the member to retry
+- [ ] 10.1 Add a third `MEMBER_NAV` leaf in `ui/src/lib/nav.ts` for member add-on surfaces, present for every member regardless of entitlement, and extend the member route allow-list to cover it
+- [ ] 10.2 Tests: the leaf renders for a member with no infrastructure access and does not appear or vanish as mapped roles change
+- [ ] 10.3 Content gating on entitlement: a member with no role mapped to any target sees an explanation, and no credential form or connection instructions render
+- [ ] 10.4 Content gating on account existence: a member holding a mapped role whose account is not yet created sees the pending state, with the credential affordance still withheld
+- [ ] 10.5 Tests: all three states render distinctly — no entitlement, entitlement without account, account present — and the credential form appears only in the third
+- [ ] 10.6 Self-service credential set and reset, scoped-to-infrastructure copy, existence and last-change status only
+- [ ] 10.7 Tests: the credential value is never returned to the client or persisted; status renders from metadata alone
+- [ ] 10.8 Connection instructions showing the add-on-reported account name and only the resources current entitlements reach
+- [ ] 10.9 Tests: instructions change with entitlements and never list an unreachable resource
+- [ ] 10.10 A credential set fails closed and says so when the target is unreachable, refusing for lifecycle state, or the account disappeared between render and submission — the backstop for that race, not the path for members without access
+- [ ] 10.11 Tests: each case returns an explicit failure, records nothing as queued, and tells the member to retry
 
 ## 11. Retire the LLDAP bridge
 

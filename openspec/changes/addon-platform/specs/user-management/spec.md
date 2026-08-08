@@ -1,5 +1,35 @@
 ## ADDED Requirements
 
+### Requirement: Member add-on surfaces MUST occupy a fixed destination with gated content
+
+Member-facing add-on surfaces MUST live at their own member navigation destination, and that destination MUST be present for every member regardless of entitlement, because whether a member holds infrastructure access is data and navigation structure MUST NOT move in response to data.
+
+The content MUST be gated on both entitlement and account existence. A member with no role mapped to any target MUST see an explanation rather than any credential or connection affordance. A member holding such a role whose target account does not yet exist MUST see that pending state, and MUST still not be offered a credential affordance, because a credential set cannot be queued and would be offering an action that can only fail.
+
+#### Scenario: The destination exists regardless of entitlement
+
+- **WHEN** a member with no infrastructure access views their navigation
+- **THEN** the destination MUST be present
+- **AND** it MUST NOT appear or disappear as that member gains or loses a mapped role
+
+#### Scenario: No entitlement means no credential affordance
+
+- **WHEN** a member holds no role mapped to any target
+- **THEN** the surface MUST explain that they have no infrastructure access
+- **AND** MUST NOT render a credential form or connection instructions
+
+#### Scenario: Entitlement without an account shows the pending state
+
+- **WHEN** a member holds a mapped role but their target account has not yet been created
+- **THEN** the surface MUST show that provisioning is pending
+- **AND** MUST NOT render a credential form
+
+#### Scenario: The affordance appears once the account exists
+
+- **WHEN** the member's target account exists
+- **THEN** the credential affordance and connection instructions MUST render
+- **AND** the fail-closed path MUST remain only as a backstop for an account removed between render and submission
+
 ### Requirement: Members MUST be able to set their own infrastructure credential
 
 A member MUST be able to set and reset the credential their lab equipment requires, from their own Syndra surface, without operator involvement. The credential MUST be forwarded to the target and never retained by Syndra. Syndra MUST show whether a credential exists and when it last changed, and MUST NOT present the infrastructure credential as the member's primary account password.

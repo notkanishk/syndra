@@ -309,9 +309,13 @@ test ! -d sync   # the bridge plane is gone, not merely unwired
 
 That sits close to `basic-advanced-ia`'s rule that structure never moves in response to data, so the distinction has to be explicit: **add-on registration is deployment configuration, not runtime data.** Nav derived from which add-ons a deployment runs is as stable as nav derived from which features a deployment has — it changes when someone deploys, not when someone's entitlements change. What the rule forbids is a nav row that appears because *this operator* has something to see there, and no per-target entry may work that way. An operator on a deployment with a TrueNAS add-on sees the TrueNAS entry whether or not it currently has drift.
 
-Member surfaces are a section within `My access` rather than a third destination. `MEMBER_NAV`'s two leaves are deliberate — a member's landing *is* their access, and infrastructure credentials are access. On TrueNAS alone this is one credential and a connection panel, which does not carry a destination. UniFi Access changes that: a second target adds a PIN, a door list, and card status, at which point `My access` would be holding roles, storage, and doors under one heading. The promotion to its own destination is therefore an explicit decision deferred to that change, not an accident of growth.
+Member add-on surfaces get their own `MEMBER_NAV` destination — a third leaf beside `My access` and `Requests`. `My access` answers what a person is entitled to; this answers how they actually reach it, which is a different question with different content: a credential, a connection path, and later a PIN and a door list. Folding both under one heading would have worked for TrueNAS alone and stopped working the moment UniFi Access added doors.
 
-Members with no add-on access see the section explaining that, not a vanished section — same rule, applied within the page.
+**The leaf is always present.** Whether a member holds infrastructure access is exactly the kind of data `basic-advanced-ia` forbids structure from moving in response to — a nav row that appears when someone gains a role and vanishes when they lose it is the failure that rule exists to prevent. Audience decides structure; entitlement decides content.
+
+**The content is gated, and gated on two things, not one.** A member with no mapped role for any target sees an explanation, not a form. A member who has the role but whose account has not been created yet — the grant is queued, or the target was unreachable when it landed — sees that state, and still no form. The credential affordance appears only once there is an account to set a credential on.
+
+That gating is the design, not a convenience. A credential set cannot be queued, because queuing it would mean retaining the secret (§4), so offering the form before the account exists offers an action that can only fail. The fail-closed path stays as the backstop for the narrow race where an account disappears between render and submit; it is not the mechanism by which members without access are handled.
 
 ## Open Questions
 
