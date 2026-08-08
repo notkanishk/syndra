@@ -87,11 +87,40 @@ The target generates no username and requires one at creation. The add-on MUST d
 - **AND** the resolved name MUST NOT equal any name already bound to another subject
 - **AND** resolution MUST be reproducible from the subject's identity alone
 
+#### Scenario: An unusable localpart falls back deterministically
+
+- **WHEN** a subject's email localpart normalizes to nothing usable
+- **THEN** the add-on MUST derive a name deterministically from the subject's stable identity
+- **AND** MUST NOT assign a random or sequential name
+
+#### Scenario: Truncation cannot consume the collision suffix
+
+- **WHEN** a name requiring a collision suffix also exceeds the length limit
+- **THEN** the suffix MUST be reserved before truncation
+- **AND** the result MUST be within the limit and MUST still disambiguate
+
 #### Scenario: A later email change does not rename the account
 
 - **WHEN** a subject's primary email changes after their account exists
 - **THEN** the add-on MUST NOT rename the target account
 - **AND** the recorded binding MUST continue to resolve the subject to the existing account
+
+### Requirement: Binding conflicts MUST be an operator decision, never an inference
+
+Account creation is query-then-create, so it can encounter an existing account holding the derived name. The add-on MUST NOT adopt an account that is not already bound to the subject, because that account may belong to someone else and adopting it would hand them the subject's entitlements. A collision MUST halt the operation and be reported for an operator decision. Reconciliation MUST likewise report an account whose name has changed out of band beneath a recorded binding, rather than treating the subject as missing.
+
+#### Scenario: An unbound account with the derived name halts creation
+
+- **WHEN** the derived name is already held by an account not bound to this subject
+- **THEN** the add-on MUST NOT create, adopt, or modify any account
+- **AND** MUST report a binding conflict identifying the existing account
+- **AND** the operator MUST choose between adopting it and creating under a disambiguated name
+
+#### Scenario: An out-of-band rename is reported, not recreated
+
+- **WHEN** reconciliation finds the account behind a recorded binding under a different name
+- **THEN** it MUST report the rename against the existing binding
+- **AND** MUST NOT create a replacement account
 
 ### Requirement: The add-on MUST probe and gate on the target version
 

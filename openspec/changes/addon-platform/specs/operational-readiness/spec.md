@@ -26,13 +26,26 @@ Operators MUST be able to read the health of a target — capacity, alerts, serv
 - **THEN** capacity, active alerts, and relevant service state MUST be shown
 - **AND** the data MUST be retrieved by the add-on using its own credentials, not the operator's
 
-### Requirement: Read-only operation MUST be available without redeployment
+### Requirement: Add-ons MUST have an operator-settable lifecycle state
 
-Each add-on MUST support a configured read-only mode in which it serves state and health but refuses every mutating operation. Entering read-only mode MUST NOT require rebuilding or redeploying the add-on, and its state MUST be visible to operators.
+Each add-on MUST support three configured states: `active`; `draining`, in which new mutating operations are refused while already-issued operations are allowed to settle; and `read_only`, in which every mutating operation is refused immediately. All three MUST serve state and health requests, MUST be settable without rebuilding or redeploying the add-on, and MUST be visible to operators as a deliberate state rather than as a failure.
 
-#### Scenario: Read-only mode refuses writes and stays observable
+#### Scenario: Read-only refuses writes and stays observable
 
-- **WHEN** an add-on is placed in read-only mode and a mutating operation is dispatched
-- **THEN** the add-on MUST refuse the operation without mutating the target
+- **WHEN** an add-on is in `read_only` and a mutating operation is dispatched
+- **THEN** the add-on MUST refuse it without mutating the target
 - **AND** MUST continue to serve state and health requests
-- **AND** the operator surface MUST show the add-on as read-only rather than as failing
+- **AND** the operator surface MUST show it as read-only rather than as failing
+
+#### Scenario: Draining lets issued work settle
+
+- **WHEN** an add-on is placed in `draining` while operations are in flight
+- **THEN** it MUST refuse newly dispatched mutating operations
+- **AND** MUST allow the in-flight operations to reach a terminal state
+- **AND** the operator surface MUST show when draining has completed, so credential rotation or a target upgrade can proceed safely
+
+#### Scenario: A non-active state is not reported as unhealthy
+
+- **WHEN** an add-on is in `draining` or `read_only`
+- **THEN** health MUST report the state explicitly
+- **AND** MUST NOT present it as unreachable or failing

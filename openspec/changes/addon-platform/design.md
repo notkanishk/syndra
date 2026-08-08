@@ -118,7 +118,9 @@ So the plan is a backend-issued object, not a client round-trip:
 - Apply cites the plan id. The backend rejects an unknown or expired id, and re-verifies every fingerprint against live target state before dispatching.
 - Any mismatch fails the apply with a distinct stale-plan error carrying the subjects that moved, so the surface can re-plan and show what changed rather than reporting a generic failure.
 
-This is stricter than the Zitadel path is today. Bringing that path up to the same guarantee is out of scope here, but the shared `BulkPlan` shape means it can adopt the plan id later without another contract change.
+**This applies to Zitadel too, in this change.** The gap is not specific to add-ons — `applyDriftPlan` takes the plan back from the client with nothing binding it to what the backend computed, and the bulk and drift-triage paths share that shape. Leaving Zitadel on the weaker guarantee would mean two apply protocols, the older one being the one that governs production access today. The retrofit is mechanical because `BulkPlan`/`BulkOutcome` is already the shared vocabulary: the rehearse endpoints persist and return a plan id, the apply endpoints take the id instead of the body, and the fingerprint for a Zitadel subject is a hash of their current grant set. `BulkOutcome.GrantIDs` stays — it identifies rows within a plan — but it stops being the only thing standing between an approved diff and a different applied one.
+
+**BREAKING:** the bulk, drift-triage, and reconciliation apply endpoints stop accepting a plan body. Clients send a plan id.
 
 ### 9. Add-on local state is a backstop, never a queue
 
@@ -148,7 +150,11 @@ The add-on therefore derives the name itself, from the Zitadel identity's primar
 
 *Alternative considered:* reproducing the TrueNAS-native shape (`skhurana`) so Syndra-created accounts look like hand-created ones. Rejected because it derives from a mutable display name, collides readily across a shared surname, and still owes the collision resolution TrueNAS never wrote.
 
+Two normalization edges need naming because both are silent-corruption bugs. A localpart that normalizes to nothing usable — all-invalid characters, or empty after stripping — falls back to a deterministic name derived from the Zitadel user id, never to a random or sequential one. And the collision suffix is reserved *before* truncation, not appended after: appending after truncating to 32 either overflows the limit or, if the truncation is redone, can produce a name that collides with the one it was meant to disambiguate.
+
 **Derivation happens once, at account creation, and the resulting name is recorded.** Renaming a TrueNAS account disturbs its home directory, ACL entries, and SMB identity, so a later email change MUST NOT rename an existing account. This means the derivation is a recovery path for the common case, not a guarantee: if the add-on's store is lost, re-deriving recovers every subject whose email has not changed since creation, and the recorded binding in Syndra covers the rest. The recorded binding remains authoritative.
+
+**Binding conflicts are an operator decision, never an inference.** `account.ensure` is query-then-create, which means it can find an account already holding the name it derived. Silently adopting it is the dangerous outcome — that account may belong to someone else entirely, and adopting it hands them a subject's entitlements. So an unbound account whose name collides is reported as a binding conflict and the operation stops. The operator chooses: adopt it, or create under a suffixed name. Reconcile detects the mirror case — a stable uid whose username changed underneath a recorded binding — and reports it the same way rather than treating it as a missing account to recreate.
 
 ### 12. Deprovisioning is reversible; purge is deliberate
 
@@ -156,9 +162,47 @@ Losing the last TrueNAS-granting role locks the account and clears `smb`, keepin
 
 *Alternative considered:* auto-purge after a grace period. Rejected — automated deletion on critical infrastructure, triggered by a role change that may itself be the mistake.
 
+### 13. The manifest is a ceiling, not a grant
+
+An add-on declares what it *can* do. It does not decide what it is *allowed* to do. The backend holds its own policy for every operation id — the scope it may be offered at, whether it needs confirmation, its parameter schema — and the effective operation set is the intersection, with backend policy winning every disagreement. An operation id absent from backend policy is unavailable regardless of what the manifest says.
+
+Without this the manifest is an authorization source, and a compromised or misconfigured add-on can declare `scope: "member"` on `account.purge` and have Syndra render it to members. The add-on is the least trusted component in the system — it holds the target credential and talks to a third-party API — so it must not be able to widen its own authority.
+
+The cost is real and intended: adding an operation requires a backend policy entry, so a new add-on version cannot quietly grow its surface. Unknown operation ids fail closed.
+
+### 14. Desired state is snapshotted, versioned, and applied in order per subject
+
+An outbox row referencing "converge this subject" is under-specified: the drain runs later, the resolver recomputes, and what lands may not be what anyone approved. Each entitlement change therefore writes an immutable `desired_state_snapshots` row for `(subject, target)` with a monotonic version, and the outbox row references that snapshot.
+
+**Two read paths, deliberately different.** An operator-initiated change is an approval and MUST apply its snapshot — the diff the operator saw is the diff that lands. The periodic reconcile is a convergence and MUST resolve current state instead, or it would spend forever replaying superseded snapshots and fighting every legitimate policy change. Conflating the two is how a reconcile loop reverts an intentional edit.
+
+Application is serialized per `(subject, target)`, and an apply carrying a version older than the target's last applied version is rejected rather than executed. Otherwise a queued grant can land after a newer revoke and silently restore access. This hazard is not hypothetical here: the sync service carried `internal/worker/ordering.go` for exactly it, and deleting that service should not delete the lesson.
+
+### 15. Add-on transport is mutually authenticated; the operation id is the replay token
+
+Add-on calls use mTLS with a private CA, or signed requests carrying a timestamp and a body hash where mTLS is impractical. A bare shared secret is not sufficient: it authenticates the caller but binds nothing to the request, so an intercepted call can be replayed verbatim.
+
+**No separate nonce store.** Every mutating call already carries an operation id the add-on deduplicates on, and every apply carries fingerprints re-verified against live target state, so a replayed mutation either hits the dedup store or fails verification. A nonce table would be a second replay-prevention mechanism guarding the same door, with its own expiry policy and its own failure mode. The operation id is the nonce, and the spec says so rather than building the machinery twice.
+
+### 16. The mutation log has a durability contract
+
+An append-only file with no stated guarantees is not a forensic record. `mutations.log` is written `0600`, fsynced per record — writes are rare enough at makerspace volume that batching buys nothing — and rotated by size with long retention, bounded only so the volume cannot fill.
+
+Each record carries the digest of the record before it. A chain gives real tamper evidence for a few lines of code: entries cannot be altered or removed without breaking it, and verification is a single pass. Signing is deliberately skipped — the key would live on the same host as the log it protects, so it defends against almost nothing the chain does not, and it adds key management to a component that currently needs none.
+
+Records are structured and redacted by the same `secret_params` rules as everything else.
+
+### 17. Add-ons have a lifecycle state, and operations have individual availability
+
+The read-only flag becomes a three-valued state: `active`, `draining` — refuse new mutations, let issued operations settle, keep serving reads — and `read_only`. Draining is what makes API-key rotation and target upgrades safe, and both will happen: the key carries `expires_at`, and TrueNAS majors break. All three are configuration, none requires a redeploy, and all three are visible to operators.
+
+Version gating is per operation, not per major. A target major can be broadly supported while a specific method is absent — the research behind this design found methods moving across TrueNAS releases and per-feature floors throughout UniFi Access (user groups 2.2.6, webhooks 2.2.10, NFC import 3.3.10). The manifest therefore marks individual operations unavailable with a reason, and the operator surface shows them disabled and explained rather than absent or failing on use.
+
 ## Risks / Trade-offs
 
-- **A queued revoke is retained access** → dedicated surface with age escalation (§7); an unconfirmed revoke past threshold is a security finding, not a task.
+- **A queued revoke is retained access** → revokes drain ahead of grants, get a dedicated surface with age escalation (§7), and an unconfirmed revoke past threshold is a security finding, not a task. Containment when the add-on is unreachable is necessarily out of band — Syndra has no path to the target — so the escalation carries the manual procedure, and the drift sweep recognises the resulting change as reconciling rather than raising it as fresh drift. Otherwise doing the right thing under pressure generates an alert.
+- **The add-on is the least trusted component and holds the target credential** → the manifest is a ceiling over backend policy, never an authorization source (§13); mTLS binds the transport (§15); the mutation log is tamper-evident (§16).
+- **A stale queued change can undo a newer one** → snapshots are versioned, application is serialized per `(subject, target)`, and an older version is rejected rather than applied (§14).
 - **The add-on's credential is broad** → `ACCOUNT_WRITE` plus `SYSTEM_AUDIT_READ` is most of what matters on the NAS. Scoped as tightly as the feature set allows, key expiry set and surfaced, read-only kill switch available without redeploy. Honest limit: scoping buys less once ACL and quota writes arrive in phase 2.
 - **A mapping bug can revoke many people at once** → add-ons compute the diff and refuse operations exceeding a configured subject count unless the request carries an explicit scope acknowledgement. Combined with mandatory dry-run, this is the whole safety story for bulk effects.
 - **Deletion-by-absence would be catastrophic** → tombstones only. A subject missing from a feed is logged as an anomaly and never actioned as a delete.

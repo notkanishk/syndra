@@ -2,17 +2,18 @@
 
 ## Why
 
-Phase 4 shipped the LLDAP bridge and then stalled: password propagation to a real LLDAP was never proven, and the sync service still sits behind an opt-in Compose profile. The premise was wrong. The equipment Syndra needs to reach — TrueNAS SCALE for lab storage, UniFi Access for doors — both expose first-class management APIs. Routing them through an LDAP directory adds a system, loses fidelity, and blocks on a compatibility question that direct APIs make irrelevant.
+Phase 4 shipped the LLDAP bridge and stalled: password propagation was never proven, and the sync service still sits behind an opt-in Compose profile. The premise was wrong. The equipment Syndra needs to reach — TrueNAS SCALE for lab storage, UniFi Access for doors — both expose first-class management APIs. Routing them through an LDAP directory adds a system, loses fidelity, and blocks on a compatibility question that direct APIs make irrelevant.
 
-Replacing the bridge with target add-ons also removes a duplication risk. Syndra already owns outbox-before-mutation, drift sweep, cascade, expiry, lineage, and versioned policy. Those are target-agnostic in everything but naming. Extending them over a `target` dimension is a smaller change than teaching a second service to repeat them.
+Replacing the bridge with target add-ons also avoids duplication. Syndra already owns outbox-before-mutation, drift sweep, cascade, expiry, lineage, and versioned policy — target-agnostic in everything but naming. Extending them over a `target` dimension beats teaching a second service to repeat them.
 
 ## What Changes
 
 - **BREAKING** Remove `sync/`, `services/lldap.go`, `go-ldap/v3`, and the LLDAP group-flattening convention. Phase 4's LLDAP Integration item is abandoned, not deferred.
 - **BREAKING** The shadow-password vault stops storing Argon2id hashes. TrueNAS accepts plaintext only, so member-set passwords are forwarded and never persisted; the vault retains existence and rotation metadata for drift.
-- Add a target dimension to `pending_zitadel_propagations`, `direct_role_grants`, and the drift tables. One drain loop, one sweep, filtered by target.
-- Add an add-on registry and wire contract. Add-ons are separate containers on the internal network, reachable only by the backend, declaring an entitlement schema and an operation set via a manifest.
-- Ship the TrueNAS SCALE add-on: member password set/reset and mount instructions; admin account lifecycle (auto-create on role grant, SMB suspend, lock, purge); observability (SMB activity, NAS health, drift).
+- Add a target dimension to `pending_zitadel_propagations`, `direct_role_grants`, and the drift tables, with a registry table rather than a CHECK. One drain loop, one sweep, filtered by target, with versioned desired-state snapshots applied in order per subject.
+- **BREAKING** Plan-then-apply becomes a backend guarantee on every path, Zitadel included: the backend issues and holds the plan, and bulk, drift-triage, and reconciliation applies cite a plan identifier instead of returning a plan body.
+- Add an add-on registry and wire contract. Add-ons are separate containers on the internal network, mutually authenticated, declaring an entitlement schema and an operation set via a manifest that can only narrow what backend policy already permits.
+- Ship the TrueNAS SCALE add-on: member password and mount instructions; account lifecycle (auto-create on role grant, SMB suspend, lock, purge); observability (SMB activity, NAS health, drift).
 - Add Syndra allowances — explicit per-user overlays alongside role-derived access. Subtractive allowances are time-boxed suspensions and must carry an expiry.
 - Add a queued-revoke surface with age escalation, and a dormant-account housekeeping view with bulk actions.
 - Every add-on operation is dry-runnable through the existing `BulkPlan`/`BulkOutcome` rehearse-then-apply pattern.

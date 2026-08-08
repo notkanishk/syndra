@@ -32,6 +32,43 @@ An add-on MUST expose `GET /capabilities` returning an entitlement schema, an op
 - **THEN** the backend MUST NOT write that parameter's value to any table, audit row, or log
 - **AND** the audit record MUST state that the operation occurred, its actor, and its subject, with the secret value absent
 
+### Requirement: Backend policy MUST bound what a manifest can offer
+
+A manifest declares capability, not authorization. The backend MUST hold its own policy for each operation identifier — the scope it may be offered at, whether it requires confirmation, and its parameter schema — and the effective operation set MUST be the intersection of manifest and policy, with policy prevailing wherever they disagree. An operation identifier with no backend policy MUST be unavailable regardless of what the manifest declares.
+
+#### Scenario: A manifest cannot widen an operation's scope
+
+- **WHEN** a manifest declares an operation at a broader scope than backend policy permits
+- **THEN** the backend MUST offer it only at the scope policy permits
+- **AND** MUST NOT render it to principals outside that scope
+
+#### Scenario: A manifest cannot remove a confirmation requirement
+
+- **WHEN** a manifest declares an operation as requiring no confirmation and backend policy requires one
+- **THEN** the backend MUST require confirmation
+
+#### Scenario: An unknown operation fails closed
+
+- **WHEN** a manifest declares an operation identifier absent from backend policy
+- **THEN** the operation MUST be unavailable
+- **AND** MUST NOT become available merely because a later add-on version declares it
+
+#### Scenario: A manifest may narrow
+
+- **WHEN** a manifest omits or disables an operation backend policy permits
+- **THEN** the operation MUST be unavailable
+
+### Requirement: Operations MUST carry individual availability
+
+Target compatibility MUST be expressed per operation, not only per target version, because a supported target release may still lack a specific method. An operation the add-on cannot perform against its current target MUST be declared unavailable with a stated reason, and MUST be presented as disabled and explained rather than omitted or left to fail on use.
+
+#### Scenario: An unsupported operation is disabled with a reason
+
+- **WHEN** the target lacks the capability an operation depends on
+- **THEN** the manifest MUST mark that operation unavailable with a reason
+- **AND** the operator surface MUST show it disabled with that reason
+- **AND** invoking it MUST be refused rather than attempted
+
 ### Requirement: Registration MUST be a data fact, not a schema constant
 
 The set of valid targets MUST be represented as registry rows referenced by the tables that carry a target, so that registering a further add-on is a configuration and data operation rather than a schema migration. Rows naming an unregistered target MUST be refused at write time.
@@ -62,6 +99,70 @@ An add-on MUST accept a resolved desired entitlement set for a subject and conve
 - **WHEN** a subject's entitlement set is reduced from three groups to two
 - **THEN** the add-on MUST converge the target to exactly the two remaining groups
 - **AND** MUST NOT require a separate revoke operation to remove the third
+
+### Requirement: Desired state MUST be snapshotted, versioned, and applied in order per subject
+
+Each entitlement change MUST record an immutable desired-state snapshot for its `(subject, target)` with a monotonically increasing version, and the outbox row MUST reference that snapshot rather than instructing the drain to re-resolve. An operator-initiated change MUST apply its recorded snapshot, so that what was approved is what lands. Periodic reconciliation MUST instead resolve current state, so that convergence does not replay superseded snapshots. Application MUST be serialized per `(subject, target)`.
+
+#### Scenario: An approved change applies what was approved
+
+- **WHEN** policy changes between an operator's approval and the drain that dispatches it
+- **THEN** the drain MUST apply the snapshot recorded at approval
+- **AND** MUST NOT substitute a state resolved at drain time
+
+#### Scenario: Reconciliation converges rather than replays
+
+- **WHEN** the periodic reconcile runs for a subject with an older recorded snapshot
+- **THEN** it MUST resolve current desired state
+- **AND** MUST NOT reapply the superseded snapshot
+
+#### Scenario: A stale version cannot undo a newer one
+
+- **WHEN** an apply carries a snapshot version older than the last version applied for that `(subject, target)`
+- **THEN** the backend MUST reject it without dispatching
+- **AND** a queued grant MUST NOT be able to land after a later revoke
+
+#### Scenario: Concurrent applies for one subject do not interleave
+
+- **WHEN** two changes for the same `(subject, target)` are dispatched concurrently
+- **THEN** they MUST be serialized
+- **AND** the resulting target state MUST equal the state of the higher version
+
+### Requirement: Add-on transport MUST be mutually authenticated and bind the request
+
+Calls between the backend and an add-on MUST use mutual TLS, or signed requests carrying a timestamp and a hash of the body where mutual TLS is impractical. A bearer shared secret alone MUST NOT be sufficient, because it authenticates the caller without binding anything to the request. Replay protection for mutations MUST rest on the operation identifier and the plan fingerprints, and a separate nonce store MUST NOT be introduced to duplicate that guarantee.
+
+#### Scenario: An unauthenticated or unbound call is refused
+
+- **WHEN** a call arrives without a valid client certificate, or with a signature that does not match its body and timestamp
+- **THEN** the add-on MUST refuse it
+- **AND** MUST NOT mutate its target
+
+#### Scenario: A replayed mutation cannot double-apply
+
+- **WHEN** a previously accepted mutating call is replayed verbatim
+- **THEN** the add-on MUST recognise the operation identifier and MUST NOT apply it again
+- **AND** where the call also carries fingerprints, verification MUST fail if target state has since moved
+
+### Requirement: The mutation log MUST be durable and tamper-evident
+
+Each add-on MUST write every mutation it performs to an append-only local log with file permissions restricting it to its own service account, flushed to disk before the operation is reported complete, rotated by size with a bounded retention that exists only to prevent unbounded growth. Each record MUST carry the digest of the preceding record so that alteration or removal is detectable, and MUST be redacted by the same rules as any other record.
+
+#### Scenario: A mutation is durably logged before it is reported
+
+- **WHEN** the add-on completes a mutating call
+- **THEN** the corresponding record MUST be flushed to disk before the operation is reported complete
+
+#### Scenario: Tampering is detectable
+
+- **WHEN** a record in the log is altered or removed
+- **THEN** verification of the digest chain MUST fail at that point
+
+#### Scenario: The log carries no secrets
+
+- **WHEN** a mutation carried a declared secret parameter
+- **THEN** its log record MUST record the operation, actor, subject, and time
+- **AND** MUST NOT contain the parameter value
 
 ### Requirement: Every Syndra-mediated target mutation MUST leave a trace before the call
 
