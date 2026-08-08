@@ -3,28 +3,30 @@
 - [ ] 1.1 Migration: `targets` registry table with `state` (`active | disabled`), seeded with `zitadel`
 - [ ] 1.2 Migration: rename `pending_zitadel_propagations` to a target-neutral name; the old name becomes false the moment a second target exists
 - [ ] 1.3 Migration: relax the Zitadel-shaped columns on the renamed outbox — `project_id`, `role_keys`, `zitadel_grant_id` become nullable and stay populated for Zitadel rows — widen `op_type` to include `apply`, add `target` with an FK to `targets`, and index `(target, status, created_at)`
-- [ ] 1.4 Migration: `desired_state_snapshots` — immutable rows per `(subject, target)` with a monotonic version; outbox rows reference a snapshot instead of instructing a re-resolve, and add-on rows carry their intent there rather than in Zitadel columns
-- [ ] 1.5 Migration: add `target` to `drift_items` including its `drift_type` CHECK values and the `idx_drift_items_pending_unique` index, and to `external_grant_exclusions`' primary key, so two targets drifting on one user cannot suppress each other
-- [ ] 1.6 Migration-coherence guard tests: registry and state, rename, relaxed nullability, widened `op_type`, snapshot immutability and monotonic versions, drift CHECK and unique index include target, exclusions PK includes target, pre-existing rows read back as `zitadel`, and a row naming an unregistered target is refused
-- [ ] 1.7 Confirm `direct_role_grants` needs **no** target column and that nothing in this change reads or writes a non-`zitadel` direct grant
-- [ ] 1.8 Thread `target` through the propagation claim, drain, and terminal-state writes in `services/propagation`; the drain claims one target per pass and skips targets whose registry state is not `active`
-- [ ] 1.9 Tests: a drain for one target leaves other targets' rows untouched; a disabled target is skipped without erroring; an unreachable target halts only its own pass
-- [ ] 1.10 Thread `target` through `services/drift` sweep and `drift_triage.go` so drift is classified per target
-- [ ] 1.11 Tests: drift on one target does not appear under another; existing Zitadel drift behaviour is unchanged
-- [ ] 1.12 Drift sweep consumes only reads marked current; a target served from a stale snapshot is recorded unreconciled rather than diffed
-- [ ] 1.13 Tests: an outage produces no drift findings and does record an unreconciled target with the age of the last current read; reconciliation resumes on return
-- [ ] 1.14 Thread `target` through `services/expiry` drain so allowance and grant expiry re-converge the right target
-- [ ] 1.15 Tests: expiry sweep emits per-target propagations and leaves unrelated targets alone
-- [ ] 1.16 Drift scoped to bound subjects: unbound target accounts are enumerated as unmanaged inventory, never entered into triage, and become managed only by explicit adoption
-- [ ] 1.17 Tests: a first sweep against a target holding pre-existing unbound accounts raises no drift and reports them as inventory; adoption requires an operator decision
-- [ ] 1.18 Per-`(subject, target)` serialization and stale-version rejection in the drain
-- [ ] 1.19 Tests: an apply carrying an older version is rejected without dispatch; concurrent applies for one subject serialize; the settled state equals the higher version; a queued grant cannot land after a later revoke
-- [ ] 1.20 Two snapshot read paths: operator-initiated applies dispatch the recorded snapshot, periodic reconcile resolves current state
-- [ ] 1.21 Tests: a policy change between approval and drain still applies the approved snapshot; reconcile resolves fresh and never replays a superseded snapshot
-- [ ] 1.22 Background revocation drain: a `periodic.Runner` alongside expiry and drift that claims only access-withdrawing rows, takes the same advisory lock as the operator drain, and never dispatches an access-conferring row
-- [ ] 1.23 Tests: the runner drains revocations and leaves grants queued; it cannot run concurrently with an operator drain; a grant row is never claimed by it
-- [ ] 1.24 Revocation priority within the operator drain: revocations dispatch before grants for the same target
-- [ ] 1.25 Tests: a mixed queue dispatches revocations first; the retry budget applies per row without starving revocations
+- [ ] 1.4 Migration: `desired_state_snapshots` — immutable rows per `(subject, target)` with a monotonic version; add-on rows carry their intent here rather than in the outbox's Zitadel columns
+- [ ] 1.5 Migration: plan storage — a plan row with id and bounded lifetime, plus one row per affected subject holding that subject's snapshot reference and the fingerprint of the reviewed state; the outbox references the per-subject plan row, not the snapshot directly, so one object holds what was approved, against what state, by whom
+- [ ] 1.6 Migration-coherence guard: plan expiry never deletes snapshots, which are audit records and outlive it; the outbox foreign key resolves to a plan subject row; no column on either table can hold a declared secret
+- [ ] 1.7 Migration: add `target` to `drift_items` including its `drift_type` CHECK values and the `idx_drift_items_pending_unique` index, and to `external_grant_exclusions`' primary key, so two targets drifting on one user cannot suppress each other
+- [ ] 1.8 Migration-coherence guard tests: registry and state, rename, relaxed nullability, widened `op_type`, snapshot immutability and monotonic versions, drift CHECK and unique index include target, exclusions PK includes target, pre-existing rows read back as `zitadel`, and a row naming an unregistered target is refused
+- [ ] 1.9 Confirm `direct_role_grants` needs **no** target column and that nothing in this change reads or writes a non-`zitadel` direct grant
+- [ ] 1.10 Thread `target` through the propagation claim, drain, and terminal-state writes in `services/propagation`; the drain claims one target per pass and skips targets whose registry state is not `active`
+- [ ] 1.11 Tests: a drain for one target leaves other targets' rows untouched; a disabled target is skipped without erroring; an unreachable target halts only its own pass
+- [ ] 1.12 Thread `target` through `services/drift` sweep and `drift_triage.go` so drift is classified per target
+- [ ] 1.13 Tests: drift on one target does not appear under another; existing Zitadel drift behaviour is unchanged
+- [ ] 1.14 Drift sweep consumes only reads marked current; a target served from a stale snapshot is recorded unreconciled rather than diffed
+- [ ] 1.15 Tests: an outage produces no drift findings and does record an unreconciled target with the age of the last current read; reconciliation resumes on return
+- [ ] 1.16 Thread `target` through `services/expiry` drain so allowance and grant expiry re-converge the right target
+- [ ] 1.17 Tests: expiry sweep emits per-target propagations and leaves unrelated targets alone
+- [ ] 1.18 Drift scoped to bound subjects: unbound target accounts are enumerated as unmanaged inventory, never entered into triage, and become managed only through the single adoption action
+- [ ] 1.19 Tests: a first sweep against a target holding pre-existing unbound accounts raises no drift and reports them as inventory; adoption requires an operator decision
+- [ ] 1.20 Per-`(subject, target)` serialization and stale-version rejection in the drain
+- [ ] 1.21 Tests: an apply carrying an older version is rejected without dispatch; concurrent applies for one subject serialize; the settled state equals the higher version; a queued grant cannot land after a later revoke
+- [ ] 1.22 Two snapshot read paths: operator-initiated applies dispatch the recorded snapshot, periodic reconcile resolves current state
+- [ ] 1.23 Tests: a policy change between approval and drain still applies the approved snapshot; reconcile resolves fresh and never replays a superseded snapshot
+- [ ] 1.24 Background revocation drain: a `periodic.Runner` alongside expiry and drift that claims only access-withdrawing rows, takes the same advisory lock as the operator drain, and never dispatches an access-conferring row
+- [ ] 1.25 Tests: the runner drains revocations and leaves grants queued; it cannot run concurrently with an operator drain; a grant row is never claimed by it
+- [ ] 1.26 Revocation priority within the operator drain: revocations dispatch before grants for the same target
+- [ ] 1.27 Tests: a mixed queue dispatches revocations first; the retry budget applies per row without starving revocations
 
 ## 2. Add-on registry and wire contract
 
@@ -44,7 +46,7 @@
 - [ ] 2.14 Tests: the record commits before the call; a simulated crash between dispatch and terminal write leaves the row non-terminal and no retry is attempted; no secret value reaches any table or log
 - [ ] 2.15 Unresolved-operation surface: non-terminal `addon_operations` rows presented as unresolved, distinct from succeeded and failed
 - [ ] 2.16 Tests: an unresolved row renders as unresolved and is excluded from both success and failure counts
-- [ ] 2.17 Plan store: `POST /plan` handler persisting a plan id with bounded TTL, per-subject desired state and target-state fingerprint
+- [ ] 2.17 Plan store handler: `POST /plan` writes the plan and its per-subject rows from group 1's schema — no second store, and no per-subject state held anywhere but that row
 - [ ] 2.18 Tests: a plan persists and expires; an apply citing an unknown or expired plan id is rejected
 - [ ] 2.19 Apply gate: reject any apply not citing a backend-issued plan id; re-verify every fingerprint against live target state before dispatch
 - [ ] 2.20 Tests: a client-supplied plan is refused; a fingerprint mismatch fails the apply, mutates nothing, and names the subjects that moved
@@ -83,7 +85,7 @@
 
 ## 3. Zitadel plan retrofit
 
-- [ ] 3.1 Plan store: persist rehearsal outcomes under a plan id with a bounded lifetime, recording per subject the intended outcome and a fingerprint of the reviewed state
+- [ ] 3.1 Zitadel rehearsals write the same plan and per-subject rows, recording the intended outcome and a fingerprint of the reviewed state
 - [ ] 3.2 Fingerprint the object that was reviewed, not only grants: the grant set for bulk operations, and the drift row's own status for triage, so a row someone else resolved fails verification
 - [ ] 3.3 Tests: a plan persists with per-subject fingerprints and expires on its lifetime; a drift row resolved concurrently fails verification
 - [ ] 3.4 Rehearsal responses on all four surfaces return a plan id — `POST /api/v1/grants/bulk`, `POST /api/v1/requests/bulk-decision`, `POST /api/v1/governance/drift/bulk-attribute`, `POST /api/v1/governance/drift/bulk-mark-external`
@@ -139,8 +141,8 @@
 - [ ] 6.4 Tests: derivation is deterministic and always pattern-valid; non-ASCII, sub-addressed, leading-dot, and over-length localparts normalize; a forced collision resolves reproducibly and never reuses another subject's name
 - [ ] 6.5 Normalization fallbacks: a localpart that normalizes to nothing usable falls back to a name derived from the Zitadel user id; the collision suffix is reserved before truncation, never appended after
 - [ ] 6.6 Tests: an all-invalid and an empty-after-normalization localpart both yield deterministic valid names; a name needing both truncation and a suffix stays within the limit and still disambiguates
-- [ ] 6.7 Binding conflict handling: an unbound account already holding the derived name halts the operation and is reported for an operator decision — adopt or disambiguate — never silently adopted
-- [ ] 6.8 Tests: a colliding unbound account causes no create, adopt, or modify, and surfaces the existing account for decision
+- [ ] 6.7 Binding conflict handling: an unbound account already holding the derived name halts the operation and surfaces **the same adoption action** the unmanaged inventory offers — one decision, two entry points, never a second code path that fires mid-convergence
+- [ ] 6.8 Tests: a colliding unbound account causes no create, adopt, or modify, and surfaces the existing account for decision; adopting from the conflict and adopting from the inventory reach the same code and leave identical state
 - [ ] 6.9 Binding recovery in reconcile: an account whose name changed out of band beneath a recorded binding is reported as a rename, not as a missing account
 - [ ] 6.10 Tests: an out-of-band rename reports against the existing binding and creates no replacement account
 - [ ] 6.11 Record the derived name against the subject as the authoritative binding; a later email change MUST NOT rename an existing account
@@ -151,8 +153,8 @@
 - [ ] 6.16 Tests: rotation persists, caches, and logs no value, and records that a rotation occurred with actor and time
 - [ ] 6.17 Revocation composition: the operator action writes the disabling allowance and enqueues the rotation, with copy stating that established sessions end on reconnect
 - [ ] 6.18 Tests: revocation produces both halves; the surface never presents it as immediate session termination
-- [ ] 6.19 `account.purge`: plan discloses retained home data before apply; `user.delete` requires an operator-supplied elevated credential used for that call alone, since the add-on's own key excludes deletion
-- [ ] 6.20 Tests: purge without confirmation refuses; a purge attempted on the add-on's own key is refused by the target for want of privilege; the elevated credential is not persisted, cached, or logged; the plan reports retained data size
+- [ ] 6.19 `account.purge`: plan discloses retained home data before apply; `user.delete` runs on a backend-held elevated credential injected into that call alone, since the add-on's own key excludes deletion and no operator handles a target credential
+- [ ] 6.20 Tests: purge without confirmation refuses; a purge on the add-on's own key is refused by the target for want of privilege; the injected credential is not persisted, cached, or logged; no operator credential prompt exists; the plan reports retained data size
 - [ ] 6.21 `activity.get`: `audit.query` with `service: "SMB"`, reporting shares with auditing disabled
 - [ ] 6.22 Tests: an empty result names the unaudited shares rather than implying no activity
 - [ ] 6.23 `health.get`: `system.info`, `alert.list`, `pool.query`, `service.query` composed into the operator health shape
@@ -186,7 +188,7 @@
 - [ ] 8.9 Review-date governance surfacing: an allowance whose review date has passed appears for decision and stays in force until decided
 - [ ] 8.10 Tests: a passed review date surfaces without lifting the suspension
 - [ ] 8.11 Extend the lineage builder in `services/views.go` with the allowance band, carrying actor and grant time
-- [ ] 8.12 Tests: every entitlement attributes to exactly one of source, derived, or allowance
+- [ ] 8.12 Tests: every entitlement attributes to a source role or a derivation rule, and every suppressed entitlement attributes to the allowance suppressing it with its actor and time — the additive attribution case arrives with the additive arm
 - [ ] 8.13 Defer the additive arm: no additive resolver path, authoring, or lineage rendering ships in phase 1, since quota and path grants are phase-2 Open Questions and would be an abstraction with no implementation behind it
 - [ ] 8.14 Tests: submitting an additive allowance is refused as not-yet-supported rather than silently accepted and ignored
 

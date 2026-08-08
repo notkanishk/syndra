@@ -4,7 +4,7 @@
 
 The add-on MUST connect over the JSON-RPC 2.0 WebSocket API using a user-linked API key with `expires_at` set, whose linked account holds only the roles its feature set requires. It MUST set and rotate passwords through `user.create` / `user.update`, which require `ACCOUNT_WRITE`, and MUST NOT use `user.set_password`, which requires `FULL_ADMIN` when the target is another user.
 
-The add-on's own credential MUST NOT carry account deletion. Deletion MUST require an elevated credential supplied by the operator at the moment of purge, used for that call alone and never persisted, so that the one irreversible operation is not available to the add-on unaided.
+The add-on's own credential MUST NOT carry account deletion. Deletion MUST use a second elevated credential held by the backend and injected into the purge call alone, which the add-on MUST NOT persist, cache, or log. The one irreversible operation MUST NOT be available to the add-on unaided, and MUST NOT require an operator to handle a target credential.
 
 #### Scenario: Password is set without full administrator rights
 
@@ -16,8 +16,9 @@ The add-on's own credential MUST NOT carry account deletion. Deletion MUST requi
 
 - **WHEN** the add-on attempts an account deletion using its own API key
 - **THEN** the target MUST refuse it for want of privilege
-- **AND** a purge MUST succeed only when carrying an operator-supplied elevated credential
-- **AND** that credential MUST NOT be persisted, cached, or logged after the call
+- **AND** a purge MUST succeed only when the backend injects the elevated credential for that call
+- **AND** the add-on MUST NOT persist, cache, or log it
+- **AND** no operator MUST be asked to supply a target credential
 
 #### Scenario: Key expiry is visible before it breaks provisioning
 
@@ -157,6 +158,12 @@ The target generates no username and requires one at creation. Localpart uniquen
 ### Requirement: Binding conflicts MUST be an operator decision, never an inference
 
 Account creation happens as part of entitlement convergence and is query-then-create, so it can encounter an existing account holding the derived name. The add-on MUST NOT adopt an account that is not already bound to the subject, because that account may belong to someone else and adopting it would hand them the subject's entitlements. A collision MUST halt the operation and be reported for an operator decision. Reconciliation MUST likewise report an account whose name has changed out of band beneath a recorded binding, rather than treating the subject as missing.
+
+#### Scenario: Conflict adoption is the inventory adoption
+
+- **WHEN** an operator resolves a binding conflict by adopting the existing account
+- **THEN** it MUST invoke the same adoption action offered for an unmanaged-inventory account
+- **AND** MUST NOT follow a separate binding path that runs during convergence
 
 #### Scenario: An unbound account with the derived name halts creation
 

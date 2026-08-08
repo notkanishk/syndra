@@ -155,11 +155,12 @@ A target holds accounts the backend never provisioned. The drift sweep MUST comp
 - **THEN** none of them MUST appear as drift
 - **AND** they MUST be reported as unmanaged inventory
 
-#### Scenario: Adoption is explicit
+#### Scenario: Adoption is explicit and singular
 
 - **WHEN** an unbound target account is to become managed
 - **THEN** it MUST require an explicit operator decision
 - **AND** the sweep MUST NOT bind it by inference
+- **AND** adoption reached from a binding conflict during convergence MUST invoke the same action as adoption reached from the unmanaged inventory, leaving identical state
 
 ### Requirement: A version-rejected row MUST terminate as superseded, not failed
 
@@ -213,7 +214,7 @@ The entitlement-schema fields governing whether an account and its service acces
 
 ### Requirement: Desired state MUST be snapshotted, versioned, and applied in order per subject
 
-Each entitlement change MUST record an immutable desired-state snapshot for its `(subject, target)` with a monotonically increasing version, and the outbox row MUST reference that snapshot rather than instructing the drain to re-resolve. An operator-initiated change MUST apply its recorded snapshot, so that what was approved is what lands. Periodic reconciliation MUST instead resolve current state, so that convergence does not replay superseded snapshots. Application MUST be serialized per `(subject, target)`.
+Each entitlement change MUST record an immutable desired-state snapshot for its `(subject, target)` with a monotonically increasing version. The outbox row MUST reference the plan's per-subject row — which holds both that snapshot and the fingerprint of the reviewed state — rather than referencing the snapshot directly or instructing the drain to re-resolve, so that one durable object carries what was approved, against what state, and by whom. Plan expiry MUST NOT delete snapshots, which are audit records and outlive the plan that produced them. An operator-initiated change MUST apply its recorded snapshot, so that what was approved is what lands. Periodic reconciliation MUST instead resolve current state, so that convergence does not replay superseded snapshots. Application MUST be serialized per `(subject, target)`.
 
 #### Scenario: An approved change applies what was approved
 
@@ -226,6 +227,12 @@ Each entitlement change MUST record an immutable desired-state snapshot for its 
 - **WHEN** the periodic reconcile runs for a subject with an older recorded snapshot
 - **THEN** it MUST resolve current desired state
 - **AND** MUST NOT reapply the superseded snapshot
+
+#### Scenario: One object carries the approval
+
+- **WHEN** the drain dispatches an outbox row
+- **THEN** the desired state and the fingerprint it verifies MUST come from the same per-subject plan row
+- **AND** an expired plan MUST NOT have removed the snapshot that row referenced
 
 #### Scenario: A stale version cannot undo a newer one
 
