@@ -258,6 +258,18 @@
 - [ ] 12.6 Update root `CLAUDE.md` and `README.md` for the removal of `sync/` and the addition of `addons/`
 - [ ] 12.7 Run `detect_changes` and re-index the affected scope in codebase memory; record ADRs for adapter-not-controller and for narrowing the operator-only drain rule
 
+## Sequencing
+
+226 tasks across 12 working groups. Two dependencies decide the order everything else falls into.
+
+**1.5 (plan storage) gates the back half of §2 and all of §3.** Merging the plan and the snapshot onto one per-subject row means plan storage is schema, not handler state — so 2.17 through 2.26 (plan handler, apply gate, secret exclusion, provisional plans) and the entire Zitadel retrofit wait on it. §2's first sixteen tasks — manifest types, registry, client, redaction, enqueue, `addon_operations` — do not.
+
+**A first commit that stands alone is 1.1–1.7 plus their guards.** Schema only, no behaviour change, revertible: the registry, the outbox rename and reshape, snapshots, plan storage, the drift target dimension. Everything downstream assumes it, and nothing about it assumes anything downstream.
+
+**Group sizes**, for planning rather than for pride: §1 27, §2 52, §3 9, §4 17, §5 15, §6 24, §7 12, §8 14, §9 26, §10 11, §11 10, §12 7.
+
+**§11 goes last on purpose.** It deletes the LLDAP path, and the vault reduction inside it is the point of no return — once the hashes are dropped, every member re-enrols and returning to LLDAP means doing it again.
+
 ## 13. P1 fixes
 
 - [ ] 13.1 Reserved for post-review corrections
