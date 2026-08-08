@@ -32,6 +32,21 @@ An add-on MUST expose `GET /capabilities` returning an entitlement schema, an op
 - **THEN** the backend MUST NOT write that parameter's value to any table, audit row, or log
 - **AND** the audit record MUST state that the operation occurred, its actor, and its subject, with the secret value absent
 
+### Requirement: Registration MUST be a data fact, not a schema constant
+
+The set of valid targets MUST be represented as registry rows referenced by the tables that carry a target, so that registering a further add-on is a configuration and data operation rather than a schema migration. Rows naming an unregistered target MUST be refused at write time.
+
+#### Scenario: Registering a target requires no schema change
+
+- **WHEN** a new add-on is registered
+- **THEN** its target MUST become valid for propagation, grant, and drift rows without altering the schema
+
+#### Scenario: An unregistered target cannot be written
+
+- **WHEN** a write names a target with no registry row
+- **THEN** the database MUST reject it
+- **AND** the drain MUST NOT dispatch work for a target that is not registered
+
 ### Requirement: Entitlement application MUST be level-triggered
 
 An add-on MUST accept a resolved desired entitlement set for a subject and converge the target to exactly that set. Applying the same set twice MUST produce the same result as applying it once. Granting and revoking partial access MUST be expressed as the same call with a different desired set, not as separate add and remove operations.
@@ -64,32 +79,53 @@ The backend MUST NOT mutate an add-on target without first durably recording the
 - **THEN** the backend MUST classify it as drift for that target and surface it for operator triage
 - **AND** MUST NOT silently adopt it as expected state
 
-### Requirement: Secret-bearing operations MUST NOT enter the outbox
+### Requirement: Secret-bearing operations MUST leave a pre-dispatch record without leaving the secret
 
-An operation declaring `secret_params` MUST be dispatched synchronously and MUST NOT be queued in the outbox, because outbox rows are durable and retained for audit. Such an operation MUST be recorded in the audit trail as an event, with the secret absent.
+An operation declaring `secret_params` MUST NOT be queued in the outbox, because outbox rows are durable, retried, and retained for audit. It MUST still leave a trace before the call: the backend MUST commit an operation record — operation id, target, actor, subject, operation name, non-terminal status — before dispatching, carrying no value for any declared secret parameter, and MUST write the terminal status after the response. The operation id MUST be sent to the add-on and used by it to deduplicate, so a re-submission cannot double-apply.
 
-#### Scenario: Password set is dispatched without a durable payload
+#### Scenario: Record is committed before the add-on is called
 
 - **WHEN** a member submits a new infrastructure credential
-- **THEN** the backend MUST call the add-on synchronously
-- **AND** MUST NOT create an outbox row containing the credential
-- **AND** the audit entry MUST record the actor, subject, and timestamp with no credential value
+- **THEN** the backend MUST commit the operation record with a non-terminal status before issuing the call
+- **AND** the record MUST contain no credential value
+- **AND** the terminal status MUST be written only after the add-on responds
 
-### Requirement: Target-affecting operations MUST support dry-run
+#### Scenario: A crash mid-dispatch leaves an honest unresolved state
 
-Every entitlement application and every declared operation MUST accept a dry-run request and return the same outcome shape as the apply path, describing the effect per subject before anything is written. The operator surface MUST present that plan before an apply is possible.
+- **WHEN** the backend fails between dispatch and the terminal write
+- **THEN** the operation record MUST remain in its non-terminal status
+- **AND** the operator surface MUST present it as unresolved rather than as either succeeded or failed
+- **AND** the backend MUST NOT automatically retry it, because the secret is not retained
 
-#### Scenario: Plan precedes apply
+#### Scenario: Re-submission cannot double-apply
+
+- **WHEN** an operation carrying an operation id already applied is dispatched again
+- **THEN** the add-on MUST recognise the operation id and MUST NOT apply it a second time
+- **AND** MUST return the original outcome
+
+### Requirement: Target-affecting operations MUST apply against a durable backend-issued plan
+
+Every entitlement application and every declared operation MUST be planned before it applies. The backend MUST issue the plan, persist it under an identifier with a bounded lifetime, and record for each affected subject both the intended outcome and a fingerprint of that subject's current target state. An apply MUST cite a plan identifier; the backend MUST NOT accept an apply that carries a plan supplied by the client instead of one it issued.
+
+#### Scenario: Plan precedes apply and binds it
 
 - **WHEN** an operator initiates any target-affecting operation
-- **THEN** the backend MUST first obtain and present a plan describing the effect on each affected subject
-- **AND** the apply MUST act on the identified rows from that plan rather than recomputing the effect
+- **THEN** the backend MUST issue a plan describing the effect on each affected subject and persist it under an identifier
+- **AND** the apply MUST cite that identifier
+- **AND** the apply MUST act on the subjects recorded in the plan rather than recomputing the cohort
 
-#### Scenario: Dry-run mutates nothing
+#### Scenario: A stale plan is rejected, not silently reapplied
 
-- **WHEN** an add-on receives a request with dry-run set
+- **WHEN** an apply cites a plan whose recorded fingerprint no longer matches live target state for one or more subjects
+- **THEN** the backend MUST reject the apply without mutating any subject
+- **AND** the error MUST identify the subjects whose state changed so the surface can re-plan and show what moved
+- **AND** an unknown or expired plan identifier MUST be rejected the same way
+
+#### Scenario: Planning mutates nothing
+
+- **WHEN** an add-on computes a plan
 - **THEN** it MUST NOT issue any mutating call to its target
-- **AND** MUST return the same outcome shape the apply path would return
+- **AND** MUST return the same outcome shape the apply path returns, with a fingerprint per subject
 
 ### Requirement: An unreachable add-on MUST fail open with queued accounting
 

@@ -54,6 +54,19 @@ A target account MUST be created when a subject first receives a role granting a
 - **WHEN** a subject holds no role granting access to a target
 - **THEN** no account MUST be created for them on that target
 
+#### Scenario: A role qualifies only by virtue of a mapping
+
+- **WHEN** the backend evaluates whether a grant change qualifies for a target
+- **THEN** it MUST decide from the role-to-target mappings for that target
+- **AND** a role with no mapping to a target MUST NOT trigger account creation on it
+
+#### Scenario: Losing the last mapped role locks rather than deletes
+
+- **WHEN** a subject loses their last role mapped to a target
+- **THEN** the backend MUST enqueue the lock operation for that target
+- **AND** MUST NOT enqueue a deletion
+- **AND** regaining a mapped role MUST restore the account without operator intervention
+
 ### Requirement: Dormant target accounts MUST have a housekeeping surface
 
 Because deprovisioning preserves accounts, accounts accumulate that are locked, roleless, or unused. The backend MUST provide an operator surface listing these accounts with the reason each is dormant and how long it has been so, supporting both individual and bulk action, with a plan shown before any apply.

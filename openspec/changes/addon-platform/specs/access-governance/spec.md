@@ -1,5 +1,32 @@
 ## ADDED Requirements
 
+### Requirement: Role-to-target mappings MUST be versioned, validated, and the sole source of role-derived entitlements
+
+A mapping binds a role on a project to a value for a field the target's entitlement schema declares. Mappings MUST be versioned with the same change history, rollback, and audit as bundle definitions, because editing one silently changes what every holder of that role can reach. The resolver MUST derive the role half of a subject's entitlement set from these mappings and from nothing else. A mapping write MUST be validated for structure by the backend and for reference by the add-on, and MUST be rejected if the add-on cannot confirm the value resolves on its target.
+
+#### Scenario: Mapping edits are versioned and reversible
+
+- **WHEN** an operator changes a role-to-target mapping
+- **THEN** the change MUST be recorded as a new version with its actor and time
+- **AND** the previous version MUST remain available to roll back to
+
+#### Scenario: A mapping naming an unresolvable value is rejected
+
+- **WHEN** an operator submits a mapping whose value does not resolve on the target
+- **THEN** the add-on MUST report the value as unresolvable
+- **AND** the backend MUST reject the mapping without persisting it
+
+#### Scenario: A mapping naming an undeclared field is rejected
+
+- **WHEN** an operator submits a mapping for a field absent from the target's declared entitlement schema
+- **THEN** the backend MUST reject it without calling the add-on
+
+#### Scenario: Editing a mapping is planned like any other bulk effect
+
+- **WHEN** an operator edits or deletes a mapping held by existing subjects
+- **THEN** the backend MUST plan the effect across every affected subject before applying
+- **AND** the change MUST be subject to the same blast-radius guard as any other bulk effect
+
 ### Requirement: Allowances MUST be an explicit third access band, never inferred
 
 Access on an add-on target derives from a Zitadel role the operator maps to target resources. Anything beyond that — a quota, a specific path, a restriction — MUST be recorded as an explicit Syndra allowance with an actor and a timestamp, and MUST NOT be inferred from role membership. The access lineage surface MUST present allowances as a band distinct from source roles and derived grants, so the question "why does this user have access to X" resolves to exactly one of: the role grants it, a rule derived it, or a named operator granted it.

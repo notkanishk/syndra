@@ -48,6 +48,8 @@ Each add-on runs as its own Compose service, reachable only by the backend, with
 
 `pending_zitadel_propagations`, `direct_role_grants`, and the drift tables gain `target TEXT NOT NULL DEFAULT 'zitadel'`. The drain loop and sweep gain a target filter. Existing rows keep working untouched.
 
+The permitted values come from a `targets` table with a foreign key, not a CHECK constraint. A CHECK would make registering a later add-on a schema migration — configuration and schema would have to move together, and a config-only deployment could write rows the database refuses. The table makes registration a data fact the drain can join against, so a row for an unregistered target is rejected at the boundary rather than dispatched into nothing. Migration seeds `zitadel`.
+
 *Alternative considered:* per-target tables and drains. Rejected — three copies of the same convergence logic, drifting apart.
 
 ### 4. Two planes: entitlement and operation
@@ -61,6 +63,10 @@ The rule: anything with a desired state goes in the first, anything that is an e
 
 This is what keeps plaintext out of the audit trail. `password.set` carries a secret and is an event, so it never touches the outbox — a durable intent row would write the member's password into Postgres and retain it.
 
+**Staying out of the outbox must not mean staying out of the record.** Every Syndra-mediated mutation leaves a trace before the call, and a secret-bearing operation is no exception. It writes an `addon_operations` row — operation id, target, actor, subject, operation name, `status='dispatched'` — committed before the dispatch, carrying no parameter values. The terminal status is written after the response. A crash between the two leaves the row `dispatched`, which is the honest state: the target may or may not have applied it, and the operator surface says exactly that.
+
+That row is a record, not a queue. It is never automatically retried, because retrying requires the secret and Syndra does not have it. Recovery is the member re-submitting, which is safe because the add-on deduplicates on operation id and because setting the same credential twice converges anyway. The distinction matters: the outbox drives work, `addon_operations` only witnesses it.
+
 Level-triggering is available almost everywhere in both targets: `user.update({groups: [...]})`, `filesystem.setacl`, and `pool.dataset.set_quota` are all full replaces, as is UniFi's `PUT /users/:id/access_policies`. Retry is therefore safe by construction and "revoke partial" is the same call as "grant partial" with a different desired set.
 
 ### 5. The manifest declares an entitlement schema and an operation set
@@ -68,10 +74,13 @@ Level-triggering is available almost everywhere in both targets: `user.update({g
 ```
 GET  /capabilities   → entitlement_schema, operations, target product + version
 GET  /subjects       → full state read, feeds the existing drift sweep
-POST /apply          → apply resolved entitlement state for one subject; honours dry_run
+POST /plan           → compute the effect of a proposed change; mutates nothing
+POST /apply          → apply resolved entitlement state for one subject
 POST /op/{id}        → one-shot operation from the manifest
 GET  /health         → reachability, target version, last reconcile
 ```
+
+`/plan` returns per-subject outcomes plus, for each subject, a **state fingerprint** — a hash of that subject's current state on the target. Every mutating call carries the fingerprints from the plan it came from, and the add-on refuses the call if any no longer matches. See §8.
 
 `entitlement_schema` names the fields the target understands (`group[]`, `quota_bytes`, `path_grant[]`). Syndra fills them; it never learns what `lab_makers` means to TrueNAS. `operations` carries `scope` (member/admin), `confirm`, and `secret_params` — the last being a hard instruction that those values are never persisted or logged.
 
@@ -85,6 +94,12 @@ GET  /health         → reachability, target version, last reconcile
 
 Syndra resolves role and allowance into the final entitlement set; the add-on translates that set into TrueNAS constructs. Syndra decides who and what, the add-on decides how.
 
+**The mapping is a first-class versioned model, not deployment config.** `target_role_mappings` binds `(target, project_id, role_key)` to a value for a field the add-on's entitlement schema declares — `role_key='maker'` to `group='lab_makers'`. It carries the same versioning, rollback, and audit as bundles, because a mapping edit silently changes what every holder of that role can reach and needs the same change history a bundle edit gets. Without it the resolver has no source for the role-derived half of an entitlement set.
+
+Validation is split. Syndra checks structure: the field exists in the add-on's declared schema, the role exists, no duplicate binding for one `(target, project_id, role_key, field)`. The add-on checks reference: that `lab_makers` actually resolves on the target. Syndra cannot do the second — it does not know what the value means — so mapping writes are validated through the add-on and rejected if it cannot confirm the referent.
+
+**The lifecycle trigger is the mapping table, consulted on grant change.** The existing grant path already emits propagations; it gains a lookup of which targets the changed role is mapped to. Gaining a first mapped role for a target enqueues `account.ensure` before the entitlement apply. Losing the last mapped role for a target enqueues `account.lock` — never a delete (§12). Deletion of a mapping is itself a grant-affecting change and re-resolves every holder through the same path, which is exactly the case the plan and blast-radius guards exist to catch.
+
 ### 7. Fail-open, with the queue made loud
 
 An unreachable add-on does not block the grant. Syndra records it, the outbox holds the propagation, the drain retries. `BulkSummary.Queued` already carries exactly this semantic — *"rows Syndra recorded but could not confirm upstream. Kept apart from Succeeded so the headline cannot round them into success."*
@@ -93,7 +108,17 @@ Queued **revokes** are not symmetric with queued grants: a delayed grant is an i
 
 ### 8. Dry-run on every operation
 
-Both `/apply` and `/op/{id}` accept `dry_run` and return outcomes in `BulkPlan`/`BulkOutcome` shape, so the existing `rehearse* → apply*` pattern in `handlers/drift_rehearsal.go` and its UI render unchanged. `BulkOutcome.Consequence` is where the add-on states what the subject is left holding afterwards.
+Plans return outcomes in `BulkPlan`/`BulkOutcome` shape, so the existing `rehearse* → apply*` pattern in `handlers/drift_rehearsal.go` and its UI render unchanged. `BulkOutcome.Consequence` is where the add-on states what the subject is left holding afterwards.
+
+**A dry-run flag alone cannot enforce plan-then-apply, and this is where the existing pattern is weakest.** `applyDriftPlan` takes the plan back from the client, and `BulkOutcome.GrantIDs` exists so the apply acts on identified rows "rather than re-guessing" — but nothing binds that returned plan to the one the backend computed. Between the two requests, entitlements can change, the target can change, and the cohort the operator reviewed can stop being the cohort that gets mutated. The operator approved a diff; something else applies.
+
+So the plan is a backend-issued object, not a client round-trip:
+
+- `POST /plan` computes the effect and persists it under a plan id with a short TTL, recording per-subject the resolved desired state and a fingerprint of the subject's current target state.
+- Apply cites the plan id. The backend rejects an unknown or expired id, and re-verifies every fingerprint against live target state before dispatching.
+- Any mismatch fails the apply with a distinct stale-plan error carrying the subjects that moved, so the surface can re-plan and show what changed rather than reporting a generic failure.
+
+This is stricter than the Zitadel path is today. Bringing that path up to the same guarantee is out of scope here, but the shared `BulkPlan` shape means it can adopt the plan id later without another contract change.
 
 ### 9. Add-on local state is a backstop, never a queue
 
