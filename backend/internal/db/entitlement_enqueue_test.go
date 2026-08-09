@@ -545,3 +545,44 @@ func TestEveryFinalizerActsOnlyOnAnInFlightRow(t *testing.T) {
 		t.Error("RequeuePropagation must map a row it did not match to ErrPropagationNotInFlight — unguarded, it returns an abandoned row to pending on a target that no longer exists")
 	}
 }
+
+// 1.10 — the claim is scoped to one target and to a target still registered.
+//
+// Both conditions live in the claim rather than in the drain, for the reason
+// every other one does: the function is exported, and an invariant a caller
+// enforces is one the next caller can skip. Unscoped, a Zitadel drain claims a
+// TrueNAS row and pushes it through the Management API path, where it has no
+// project and no roles to send.
+func TestTheClaimIsScopedToOneActiveTarget(t *testing.T) {
+	src, err := os.ReadFile("propagations.go")
+	if err != nil {
+		t.Fatalf("read propagations.go: %v", err)
+	}
+	body := string(src)
+
+	for _, fn := range []string{"ClaimPendingPropagations", "ClaimPropagationByID"} {
+		at := strings.Index(body, "func "+fn+"(")
+		end := strings.Index(body[at+1:], "\nfunc ")
+		if at < 0 || end < 0 {
+			t.Fatalf("could not locate %s", fn)
+		}
+		fnBody := body[at : at+1+end]
+		if !regexp.MustCompile(`JOIN targets t ON t\.target = p\.target AND t\.state = 'active'|t\.target = p\.target AND t\.state = 'active'`).MatchString(fnBody) {
+			t.Errorf("%s must refuse rows whose target is no longer registered — nothing will dispatch them, and claiming them makes them look in flight", fn)
+		}
+	}
+
+	// The batch claim additionally narrows to the one target being drained.
+	at := strings.Index(body, "func ClaimPendingPropagations(")
+	end := strings.Index(body[at+1:], "\nfunc ")
+	if !strings.Contains(body[at:at+1+end], "p.target = $2") {
+		t.Error("ClaimPendingPropagations must claim one target's rows: a drain holds one dispatcher")
+	}
+	// And it locks the outbox rows, not the targets rows it joined for the
+	// state check — FOR UPDATE without OF would try to lock both, and taking a
+	// row lock on `targets` here would serialise every drain against every
+	// registry write.
+	if !strings.Contains(body[at:at+1+end], "FOR UPDATE OF p SKIP LOCKED") {
+		t.Error("the claim must lock only the outbox rows it claims")
+	}
+}

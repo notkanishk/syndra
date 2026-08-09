@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"syndra/internal/db"
 	"syndra/internal/models"
 )
 
@@ -18,7 +19,7 @@ func TestDrainBatch_ProcessesOnlyGivenIDs(t *testing.T) {
 	var claimed []string
 	claimOne = func(ctx context.Context, id string) (*models.PendingPropagation, bool, error) {
 		claimed = append(claimed, id)
-		return &models.PendingPropagation{ID: id, OpType: "add"}, true, nil
+		return &models.PendingPropagation{ID: id, Target: db.TargetZitadel, OpType: "add"}, true, nil
 	}
 	// with empty RoleKeys, alreadyExists' add-branch treats "no roles" as allIndexed=true
 	// (vacuous loop), so it short-circuits to applied via applyRow → markApplied.
@@ -50,7 +51,7 @@ func TestDrainBatch_EmptyIDsIsNoop(t *testing.T) {
 	if called {
 		t.Fatal("claimOne must not be called for an empty id list")
 	}
-	if res != (DrainResult{}) {
+	if res.Applied+res.Failed+res.Requeued+res.Abandoned+res.Errored != 0 || res.Halted || len(res.Awaiting) != 0 {
 		t.Fatalf("expected zero-value result, got %+v", res)
 	}
 }

@@ -141,6 +141,14 @@ Everything else is healthy: index tracks HEAD, embeddings are local-semantic (`X
 
 ---
 
+## 4b. Test infrastructure debt
+
+- **`internal/db` has no live-database harness.** Every assertion in that package is a migration-coherence or SQL-text guard, so anything that only manifests as an interleaving of two transactions is asserted structurally rather than executed. Three review findings in a row bottomed out here: apply-vs-deregistration, enqueue-vs-deregistration, and disable-during-dispatch. The fixes are in and guarded by source-level checks; what is missing is a test that actually runs them.
+
+  `golang-migrate` is already a dependency, so the harness is small: connect to a `SYNDRA_TEST_DATABASE_URL`, migrate up once, skip every live test when the variable is unset so `go test ./...` stays green without a database. What it needs is a throwaway Postgres — there is none on the development machine (no Docker, no `psql`), which is why this is debt rather than done.
+
+  Also blocked on it: the live-row half of 2.18 (a plan persists and expires), 2.20 (a fingerprint mismatch mutates nothing), 2.22 (scan plan rows for a submitted secret), and 1.11's real interleavings.
+
 ## 5. Declined / deliberately kept
 
 Don't re-litigate these without new information.

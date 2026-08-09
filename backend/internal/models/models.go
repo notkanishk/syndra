@@ -339,8 +339,12 @@ type ExpiringGrant struct {
 // (design Decision 1: the self-mutation guard drops Syndra's own grant events,
 // so no webhook round-trip can confirm a propagation).
 type PendingPropagation struct {
-	ID             string     `json:"id"`
-	OpType         string     `json:"op_type"` // add | revoke | replace
+	ID string `json:"id"`
+	// Target is which system this row converges. Carried on the row itself
+	// because the drain that dispatches it must know: a TrueNAS row pushed
+	// through the Zitadel path has no project and no roles to send.
+	Target         string     `json:"target"`
+	OpType         string     `json:"op_type"` // add | revoke | replace | apply
 	UserID         string     `json:"user_id"`
 	ProjectID      string     `json:"project_id"`
 	RoleKeys       []string   `json:"role_keys"`
@@ -348,7 +352,7 @@ type PendingPropagation struct {
 	SourceRef      string     `json:"source_ref,omitempty"` // bundle/rule id for cascade rows; drives worklist attribution
 	CascadeID      string     `json:"cascade_id,omitempty"` // shared by every write one triggering event produced
 	ZitadelGrantID string     `json:"zitadel_grant_id,omitempty"`
-	Status         string     `json:"status"` // pending | in_flight | applied | failed
+	Status         string     `json:"status"` // pending | in_flight | applied | failed | superseded | abandoned
 	Attempts       int        `json:"attempts"`
 	LastError      string     `json:"last_error,omitempty"`
 	InitiatedBy    string     `json:"initiated_by"`

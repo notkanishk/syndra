@@ -21,6 +21,9 @@ type DrainResult struct {
 	// call may well have reached the target, so it is not a failure, and
 	// nothing confirmed it, so it is certainly not a success.
 	Abandoned int `json:"abandoned"`
+	// Awaiting names active targets holding unresolved rows this pass did not
+	// dispatch, because a drain carries one target's dispatcher.
+	Awaiting []string `json:"awaiting,omitempty"`
 	// Errored counts rows whose Zitadel outcome was decided but whose state could
 	// NOT be persisted (mark-applied/failed, requeue, or ledger reconcile failed).
 	// Such a row is left non-terminal (in_flight) and is neither applied nor
@@ -65,11 +68,23 @@ func Drain(ctx context.Context) (DrainResult, error) {
 	if !zitadelReachable(ctx) {
 		return DrainResult{Halted: true, Reason: "zitadel_offline"}, nil
 	}
-	rows, err := claimPending(ctx, claimBatch)
+	// One target per pass, and this pass is Zitadel's: the dispatcher below
+	// speaks the Management API and nothing else. Add-on targets have their own
+	// dispatcher and their own pass (group 4); until that exists their rows are
+	// left alone rather than pushed through machinery shaped for a system they
+	// are not for.
+	rows, err := claimPending(ctx, db.TargetZitadel, claimBatch)
 	if err != nil {
 		return DrainResult{}, fmt.Errorf("claim pending: %w", err)
 	}
 	var res DrainResult
+	// Said out loud, because a pass that drained one target while another's
+	// work waits looks exactly like a pass with nothing left to do.
+	if waiting, err := awaitingDispatch(ctx, db.TargetZitadel); err != nil {
+		log.Printf("[PROPAGATION] could not list targets awaiting dispatch: %v (non-fatal)", err)
+	} else {
+		res.Awaiting = waiting
+	}
 	for _, row := range rows {
 		if halt := res.processRow(ctx, row); halt {
 			return res, nil
@@ -111,7 +126,17 @@ func DrainOne(ctx context.Context, outboxID string) (DrainResult, error) {
 	}
 	var res DrainResult
 	if !found {
-		return res, nil // already terminal or gone — nothing to project
+		return res, nil // already terminal, gone, or on a target no longer active
+	}
+	if row.Target != db.TargetZitadel {
+		// Claimed but not dispatchable here. Put it back rather than pushing it
+		// through the Zitadel path, and say so: leaving it in_flight would make
+		// it look like a dispatch nobody can account for.
+		if _, err := requeue(ctx, row.ID, "no dispatcher for target "+row.Target); err != nil && !errors.Is(err, db.ErrPropagationNotInFlight) {
+			return res, fmt.Errorf("release %s: %w", row.ID, err)
+		}
+		res.Awaiting = []string{row.Target}
+		return res, nil
 	}
 	res.processRow(ctx, *row)
 	return res, nil

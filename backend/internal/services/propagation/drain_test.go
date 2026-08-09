@@ -3,6 +3,7 @@ package propagation
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"syndra/internal/db"
@@ -24,10 +25,11 @@ func stubDrainDeps(t *testing.T) {
 	t.Helper()
 	for _, restore := range []func(){
 		swap(&zitadelReachable, func(context.Context) bool { return true }),
-		swap(&claimPending, func(context.Context, int) ([]models.PendingPropagation, error) { return nil, nil }),
+		swap(&claimPending, func(context.Context, string, int) ([]models.PendingPropagation, error) { return nil, nil }),
 		swap(&grantIndexHasRole, func(context.Context, string, string, string) (bool, error) { return false, nil }),
 		swap(&liveUserGrantRoles, func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{}, nil }),
 		swap(&pruneTerminal, func(context.Context, int) (int64, error) { return 0, nil }),
+		swap(&awaitingDispatch, func(context.Context, string) ([]string, error) { return nil, nil }),
 		swap(&markApplied, func(context.Context, string) error { return nil }),
 		swap(&markFailed, func(context.Context, string, string) error { return nil }),
 		swap(&requeue, func(context.Context, string, string) (int, error) { return 0, nil }),
@@ -42,9 +44,9 @@ func stubDrainDeps(t *testing.T) {
 	}
 }
 
-func oneRow(id, op string) func(context.Context, int) ([]models.PendingPropagation, error) {
-	return func(context.Context, int) ([]models.PendingPropagation, error) {
-		return []models.PendingPropagation{{ID: id, OpType: op, UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}}}, nil
+func oneRow(id, op string) func(context.Context, string, int) ([]models.PendingPropagation, error) {
+	return func(context.Context, string, int) ([]models.PendingPropagation, error) {
+		return []models.PendingPropagation{{ID: id, Target: db.TargetZitadel, OpType: op, UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}}}, nil
 	}
 }
 
@@ -95,7 +97,7 @@ func TestDrain_AlreadyExistsShortCircuits(t *testing.T) {
 
 func TestDrain_FailedOn4xx_DoesNotHaltOthers(t *testing.T) {
 	stubDrainDeps(t)
-	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{
 			{ID: "bad", OpType: "add", UserID: "u", ProjectID: "p", RoleKeys: []string{"r1"}},
 			{ID: "ok", OpType: "add", UserID: "u", ProjectID: "p", RoleKeys: []string{"r2"}},
@@ -190,7 +192,7 @@ func TestDrain_PrunesTerminalRowsAtTail(t *testing.T) {
 
 func TestDrain_RevokeShortCircuitsWhenAbsent(t *testing.T) {
 	stubDrainDeps(t)
-	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rv", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1"}}, nil
 	}
 	// Live grants don't contain role "r" → nothing to revoke → applied without a call.
@@ -233,7 +235,7 @@ func TestDrain_PersistFailureNotReportedApplied(t *testing.T) {
 
 func TestDrain_PersistFailureDoesNotHaltBatch(t *testing.T) {
 	stubDrainDeps(t)
-	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{
 			{ID: "p1", OpType: "add", UserID: "u", ProjectID: "p", RoleKeys: []string{"r1"}},
 			{ID: "p2", OpType: "add", UserID: "u", ProjectID: "p", RoleKeys: []string{"r2"}},
@@ -276,9 +278,9 @@ func TestDrainOne_ProcessesOnlyTargetRow(t *testing.T) {
 	var claimedID string
 	claimOne = func(_ context.Context, id string) (*models.PendingPropagation, bool, error) {
 		claimedID = id
-		return &models.PendingPropagation{ID: id, OpType: "add", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}}, true, nil
+		return &models.PendingPropagation{ID: id, Target: db.TargetZitadel, OpType: "add", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}}, true, nil
 	}
-	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		t.Fatal("DrainOne must NOT claim the global batch")
 		return nil, nil
 	}
@@ -343,7 +345,10 @@ func TestDrain_SkippedWhenAnotherDrainHoldsLock(t *testing.T) {
 	stubDrainDeps(t)
 	acquireDrainLock = func(context.Context) (func(), bool, error) { return func() {}, false, nil }
 	var claimed bool
-	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) { claimed = true; return nil, nil }
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
+		claimed = true
+		return nil, nil
+	}
 
 	res, err := Drain(context.Background())
 	if err != nil {
@@ -399,7 +404,7 @@ func TestDrain_LockAcquireErrorSurfaces(t *testing.T) {
 
 func TestDrain_ReplaceDoesNotShortCircuitOnExtraRole(t *testing.T) {
 	stubDrainDeps(t)
-	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rp", OpType: "replace", UserID: "u", ProjectID: "p", RoleKeys: []string{"new"}, ZitadelGrantID: "g1"}}, nil
 	}
 	// Zitadel currently holds {old,new}; target is {new}. The extra "old" means
@@ -421,7 +426,7 @@ func TestDrain_ReplaceDoesNotShortCircuitOnExtraRole(t *testing.T) {
 
 func TestDrain_ReplaceShortCircuitsOnExactMatch(t *testing.T) {
 	stubDrainDeps(t)
-	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rp2", OpType: "replace", UserID: "u", ProjectID: "p", RoleKeys: []string{"a", "b"}, ZitadelGrantID: "g1"}}, nil
 	}
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
@@ -444,7 +449,7 @@ func TestDrain_ReplaceShortCircuitsOnExactMatch(t *testing.T) {
 
 func TestDrain_RevokeReconcilesLedgerOnApplied(t *testing.T) {
 	stubDrainDeps(t)
-	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rv", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1", Source: "direct"}}, nil
 	}
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{"r": true}, nil }
@@ -477,7 +482,7 @@ func TestDrain_RevokeReconcilesLedgerOnApplied(t *testing.T) {
 // verifies the drain plumbs row.Source through, not the operator's assumed 'direct'.
 func TestDrain_CascadeRevokeReconcilesScopedToItsOwnSource(t *testing.T) {
 	stubDrainDeps(t)
-	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rv-b", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1", Source: "bundle", SourceRef: "b1"}}, nil
 	}
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{"r": true}, nil }
@@ -498,7 +503,7 @@ func TestDrain_CascadeRevokeReconcilesScopedToItsOwnSource(t *testing.T) {
 
 func TestDrain_RevokeShortCircuitAlsoReconcilesLedger(t *testing.T) {
 	stubDrainDeps(t)
-	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rv2", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1"}}, nil
 	}
 	// Already absent in Zitadel → short-circuit. The stale ledger row must still go.
@@ -530,7 +535,7 @@ func TestDrain_AddDoesNotReconcileLedger(t *testing.T) {
 
 func TestDrain_LedgerReconcileFailureLeavesRowForRetry(t *testing.T) {
 	stubDrainDeps(t)
-	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rv3", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1"}}, nil
 	}
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{"r": true}, nil }
@@ -553,7 +558,7 @@ func TestDrain_LedgerReconcileFailureLeavesRowForRetry(t *testing.T) {
 
 func TestDrain_RevokePartialCallsUpdateWithRemainingRoles(t *testing.T) {
 	stubDrainDeps(t)
-	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rv-partial", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r1"}, ZitadelGrantID: "g1"}}, nil
 	}
 	// The grant currently holds r1 (from this row's source) AND r2 (from some
@@ -580,7 +585,7 @@ func TestDrain_RevokePartialCallsUpdateWithRemainingRoles(t *testing.T) {
 
 func TestDrain_RevokeSoleRoleCallsRemoveUserGrant(t *testing.T) {
 	stubDrainDeps(t)
-	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rv-sole", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r1"}, ZitadelGrantID: "g1"}}, nil
 	}
 	// The grant holds only r1 — nothing survives the revoke, so the whole grant
@@ -603,7 +608,7 @@ func TestDrain_RevokeSoleRoleCallsRemoveUserGrant(t *testing.T) {
 
 func TestDrain_RevokeLiveLookupErrorRequeuesInsteadOfRemoving(t *testing.T) {
 	stubDrainDeps(t)
-	claimPending = func(context.Context, int) ([]models.PendingPropagation, error) {
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rv-err", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r1"}, ZitadelGrantID: "g1"}}, nil
 	}
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
@@ -723,5 +728,100 @@ func TestDrain_AbandonedRowIsLeftTerminal(t *testing.T) {
 			}
 			tc.assert(t, res)
 		})
+	}
+}
+
+// 1.10, 1.11 — a drain carries one target's dispatcher, so it claims one
+// target's rows. Before this, a drain would claim a TrueNAS row and push it
+// through the Zitadel path, where it has no project and no roles to send.
+func TestDrain_ClaimsOnlyItsOwnTarget(t *testing.T) {
+	stubDrainDeps(t)
+	var asked []string
+	claimPending = func(_ context.Context, target string, _ int) ([]models.PendingPropagation, error) {
+		asked = append(asked, target)
+		return nil, nil
+	}
+
+	if _, err := Drain(context.Background()); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if len(asked) != 1 || asked[0] != db.TargetZitadel {
+		t.Fatalf("the drain claimed %v, want exactly one pass for %q", asked, db.TargetZitadel)
+	}
+}
+
+// 1.11 — and it says what it left alone. A pass that dispatched one target's
+// work while another's waits is, from the outside, indistinguishable from a
+// pass with nothing left to do.
+func TestDrain_ReportsTargetsItCouldNotDispatch(t *testing.T) {
+	stubDrainDeps(t)
+	awaitingDispatch = func(_ context.Context, drained string) ([]string, error) {
+		if drained != db.TargetZitadel {
+			t.Errorf("awaiting was asked to exclude %q, want the target just drained", drained)
+		}
+		return []string{"truenas"}, nil
+	}
+
+	res, err := Drain(context.Background())
+	if err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if len(res.Awaiting) != 1 || res.Awaiting[0] != "truenas" {
+		t.Fatalf("awaiting = %v, want the undispatched target named", res.Awaiting)
+	}
+}
+
+// 1.11 — and failing to list them is not a failed drain. The work it did
+// dispatch still happened; refusing to report the result would lose that.
+func TestDrain_SurvivesAFailedAwaitingLookup(t *testing.T) {
+	stubDrainDeps(t)
+	claimPending = oneRow("p1", "add")
+	awaitingDispatch = func(context.Context, string) ([]string, error) {
+		return nil, errors.New("db unavailable")
+	}
+
+	res, err := Drain(context.Background())
+	if err != nil {
+		t.Fatalf("a failed awaiting lookup must not fail the drain: %v", err)
+	}
+	if res.Applied != 1 {
+		t.Errorf("the row it did dispatch was lost: %+v", res)
+	}
+}
+
+// 1.10 — the inline apply path refuses a row it cannot dispatch rather than
+// pushing it through the wrong machinery, and releases it rather than leaving
+// it in_flight, which would look like a dispatch nobody can account for.
+func TestDrainOne_ReleasesARowForAnotherTarget(t *testing.T) {
+	stubDrainDeps(t)
+	claimOne = func(context.Context, string) (*models.PendingPropagation, bool, error) {
+		return &models.PendingPropagation{ID: "ob-1", Target: "truenas", OpType: "apply", UserID: "u"}, true, nil
+	}
+	var requeued string
+	requeue = func(_ context.Context, id, msg string) (int, error) {
+		requeued = id
+		if !strings.Contains(msg, "truenas") {
+			t.Errorf("the release note does not name the target: %q", msg)
+		}
+		return 1, nil
+	}
+	var dispatched bool
+	zitadelAddUserGrant = func(context.Context, string, string, []string) error { dispatched = true; return nil }
+
+	res, err := DrainOne(context.Background(), "ob-1")
+	if err != nil {
+		t.Fatalf("DrainOne: %v", err)
+	}
+	if dispatched {
+		t.Error("a row for another target was dispatched through the Zitadel path")
+	}
+	if requeued != "ob-1" {
+		t.Error("the row was left in_flight rather than released")
+	}
+	if res.Applied != 0 || res.Failed != 0 {
+		t.Errorf("an undispatchable row was counted as an outcome: %+v", res)
+	}
+	if len(res.Awaiting) != 1 || res.Awaiting[0] != "truenas" {
+		t.Errorf("awaiting = %v, want the target that has no dispatcher yet", res.Awaiting)
 	}
 }

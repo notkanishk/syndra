@@ -22,11 +22,12 @@ import (
 
 // Injectable dependencies — save/swap/restore in tests (see expiry/deps.go).
 var (
-	claimPending = db.ClaimPendingPropagations
-	claimOne     = db.ClaimPropagationByID
-	markApplied  = db.MarkPropagationApplied
-	markFailed   = db.MarkPropagationFailed
-	requeue      = db.RequeuePropagation
+	claimPending     = db.ClaimPendingPropagations
+	claimOne         = db.ClaimPropagationByID
+	awaitingDispatch = db.TargetsAwaitingDispatch
+	markApplied      = db.MarkPropagationApplied
+	markFailed       = db.MarkPropagationFailed
+	requeue          = db.RequeuePropagation
 
 	// reconcileLedger prunes direct_role_grants to match the desired state an
 	// applied revoke/replace established in Zitadel (revoke removes the named

@@ -134,27 +134,36 @@ func PendingOutboxAddExists(ctx context.Context, userID, projectID, roleKey stri
 // re-drive each one, where the idempotent already-exists check (409→applied)
 // resolves any operation that actually reached Zitadel. `started_at` is reset so
 // the row's clock reflects the reclaim.
-func ClaimPendingPropagations(ctx context.Context, limit int) ([]models.PendingPropagation, error) {
+func ClaimPendingPropagations(ctx context.Context, target string, limit int) ([]models.PendingPropagation, error) {
 	if limit <= 0 {
 		limit = 100
 	}
+	// Scoped to one target, and to a target that is still registered. A drain
+	// holds exactly one dispatcher, so claiming another target's rows would
+	// push them through machinery shaped for a system they are not for — a
+	// TrueNAS row has no project and no roles for the Zitadel path to send.
+	//
+	// The active-target join is in the claim rather than in the caller for the
+	// usual reason: this is exported, and an invariant a caller enforces is one
+	// the next caller can skip.
 	const q = `
 		WITH claimed AS (
-			SELECT id FROM propagation_outbox
-			WHERE status IN ('pending','in_flight')
-			ORDER BY created_at
+			SELECT p.id FROM propagation_outbox p
+			JOIN targets t ON t.target = p.target AND t.state = 'active'
+			WHERE p.status IN ('pending','in_flight') AND p.target = $2
+			ORDER BY p.created_at
 			LIMIT $1
-			FOR UPDATE SKIP LOCKED
+			FOR UPDATE OF p SKIP LOCKED
 		)
 		UPDATE propagation_outbox p
 		SET status = 'in_flight', started_at = NOW()
 		FROM claimed
 		WHERE p.id = claimed.id
-		RETURNING p.id, p.op_type, p.user_id, p.project_id, p.role_keys,
+		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
 		          p.source, COALESCE(p.source_ref,''), COALESCE(p.cascade_id::text,''),
 		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
 		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at`
-	rows, err := PG.Query(ctx, q, limit)
+	rows, err := PG.Query(ctx, q, limit, target)
 	if err != nil {
 		return nil, fmt.Errorf("claim propagations: %w", err)
 	}
@@ -171,12 +180,15 @@ func ClaimPendingPropagations(ctx context.Context, limit int) ([]models.PendingP
 // advisory lock already serializes drains.
 func ClaimPropagationByID(ctx context.Context, id string) (*models.PendingPropagation, bool, error) {
 	const q = `
-		UPDATE propagation_outbox
+		UPDATE propagation_outbox p
 		SET status='in_flight', started_at=NOW()
-		WHERE id=$1 AND status IN ('pending','in_flight')
-		RETURNING id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
-		          COALESCE(cascade_id::text,''), COALESCE(zitadel_grant_id,''),
-		          status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at`
+		FROM targets t
+		WHERE p.id=$1 AND p.status IN ('pending','in_flight')
+		  AND t.target = p.target AND t.state = 'active'
+		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
+		          p.source, COALESCE(p.source_ref,''),
+		          COALESCE(p.cascade_id::text,''), COALESCE(p.zitadel_grant_id,''),
+		          p.status, p.attempts, COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at`
 	rows, err := PG.Query(ctx, q, id)
 	if err != nil {
 		return nil, false, fmt.Errorf("claim propagation %s: %w", id, err)
@@ -190,6 +202,35 @@ func ClaimPropagationByID(ctx context.Context, id string) (*models.PendingPropag
 		return nil, false, nil
 	}
 	return &out[0], true, nil
+}
+
+// TargetsAwaitingDispatch lists active targets holding unresolved outbox rows,
+// excluding the one just drained.
+//
+// It exists so a drain can SAY what it did not touch. A pass that silently
+// dispatches one target's work while another's waits is indistinguishable, from
+// the outside, from a system with nothing left to do.
+func TargetsAwaitingDispatch(ctx context.Context, drained string) ([]string, error) {
+	const q = `
+		SELECT DISTINCT p.target
+		  FROM propagation_outbox p
+		  JOIN targets t ON t.target = p.target AND t.state = 'active'
+		 WHERE p.status IN ('pending','in_flight') AND p.target <> $1
+		 ORDER BY p.target`
+	rows, err := PG.Query(ctx, q, drained)
+	if err != nil {
+		return nil, fmt.Errorf("list targets awaiting dispatch: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, fmt.Errorf("scan target awaiting dispatch: %w", err)
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
 }
 
 // ErrPropagationNotInFlight means the row this drain was settling is no longer
@@ -265,7 +306,8 @@ func RequeuePropagation(ctx context.Context, id, errMsg string) (int, error) {
 // oldest first — the operator's "awaiting Zitadel" worklist.
 func GetPendingPropagations(ctx context.Context) ([]models.PendingPropagation, error) {
 	const q = `
-		SELECT id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
+		SELECT id, target, op_type, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'),
+		       source, COALESCE(source_ref,''),
 		       COALESCE(cascade_id::text,''), COALESCE(zitadel_grant_id,''),
 		       status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at
 		FROM propagation_outbox
@@ -358,7 +400,7 @@ func scanPropagations(rows pgx.Rows) ([]models.PendingPropagation, error) {
 	var out []models.PendingPropagation
 	for rows.Next() {
 		var p models.PendingPropagation
-		if err := rows.Scan(&p.ID, &p.OpType, &p.UserID, &p.ProjectID, &p.RoleKeys,
+		if err := rows.Scan(&p.ID, &p.Target, &p.OpType, &p.UserID, &p.ProjectID, &p.RoleKeys,
 			&p.Source, &p.SourceRef, &p.CascadeID,
 			&p.ZitadelGrantID, &p.Status, &p.Attempts, &p.LastError, &p.InitiatedBy,
 			&p.CreatedAt, &p.StartedAt, &p.CompletedAt); err != nil {
