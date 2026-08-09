@@ -297,10 +297,17 @@ var (
 	dbGetCascadeGroups          = db.GetCascadeGroups
 
 	// Bulk access changes. Rehearsal is its own injectable so the handler's
-	// central contract — apply NEVER trusts a client-supplied plan, it
-	// re-rehearses server-side first — is assertable without a database.
+	// central contract — apply never acts on a diff nobody approved — is
+	// assertable without a database.
 	svcRehearseBulk     = services.RehearseBulk
 	svcUserDirectGrants = services.UserDirectGrants
+
+	// Plan-then-apply. The rehearsal persists what it showed; the apply cites
+	// it. Two seams rather than one because they are two halves of the
+	// guarantee and a test has to be able to fail either: a rehearsal that
+	// records nothing, and an apply that claims without verifying.
+	dbCreatePlan        = db.CreatePlan
+	dbClaimPlanVerified = db.ClaimPlanVerified
 
 	// Review › Expiring access reads its own window rather than a slice of the
 	// governance summary, so a 30-day review and Today's 14-day queue can

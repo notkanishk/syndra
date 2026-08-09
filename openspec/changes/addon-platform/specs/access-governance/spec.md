@@ -8,6 +8,12 @@ The rehearsal request MUST persist its outcomes under a plan identifier with a b
 
 The fingerprint MUST cover the object the operator reviewed, not only the subject's grants — for drift triage it MUST include the drift row's own status, so that a row resolved by someone else while the operator was reading the list fails verification instead of being re-resolved.
 
+Where an apply still carries the original request body — because that body holds what the write needs and the per-subject outcome does not — the plan MUST bind it. The backend MUST record a digest of the request the rehearsal was computed for and MUST compare it as one more dimension of the citation, so a submitted body that does not match loses in the database and spends nothing. Bound is not the same as trusted: what the apply executes MUST still be the recorded outcome, and the body MUST NOT be a second source for the cohort or the diff. Only the fields that change the effect may be bound. An annotation an operator writes at apply time — a reason, a review note — changes nothing about who gets what, and binding it would make correcting a typo cost a re-plan, which teaches operators to click through the stale-plan dialog on the surface where that dialog matters most. What the plan stores of the request MUST be a digest and nothing else, for the same reason no plan column may hold free text: a body is where a submitted secret lives.
+
+Verification MUST be all-or-nothing across the plan's subjects. A partial apply on a stale plan lands the subjects that did not move and leaves the operator to work out which, from a batch they approved as a unit, on the screen where a bulk mistake is hardest to unpick. A refused apply MUST leave the approval unspent, because re-plan-and-apply is the operator's only recovery and it must not then be refused as already-applied for something that never happened. A subject present on the approval and absent from the fresh read MUST count as moved rather than be skipped: the cohort is bound, so it cannot be a different selection — it is a subject that could no longer be evaluated, and unverifiable is not verified.
+
+The value compared on each side MUST be computed by the same code. A fingerprint the rehearsal derives one way and the apply derives another verifies nothing, in the same way a token preview computed by different code from the token it previews is a preview of nothing.
+
 The sole exemption is an operation scoped to `member` acting on the acting subject alone, which has no cohort and no diff to review and MUST be dispatched synchronously.
 
 A plan MUST be spent by at most one apply, and the transition that spends it MUST be the apply's authority rather than a check the caller performs. A lifetime bounds how long a plan may be cited but not how many times it may be cited, and while a first apply's rows are still waiting in the outbox the target has not moved, so fingerprint verification would not catch the repeat.
@@ -27,6 +33,14 @@ An approval MUST authorise at most one queued row, enforced by a uniqueness cons
 The target's registration MUST be read under a lock that serialises against the reconciliation which disables targets, and that lock MUST be taken by the write itself rather than by a caller ahead of it. An unlocked join is an MVCC read: work can begin while the target is active, a deregistration can disable it and sweep what it had queued, and the original snapshot can still commit a fresh row behind that sweep — undrainable, and invisible to the sweep that already ran. A lock held only by one caller is not an invariant, because the write is reachable without it. An unlocked read can return active, be overtaken by a committed disable, and let the apply commit the permanently undrainable row the check exists to refuse.
 
 Serialising is necessary and not sufficient: an apply that wins that race still commits work against a target about to be deregistered. Deregistration MUST therefore resolve the work it strands, in the same transaction that changes the registration state — across two transactions an apply commits into the gap between them. Stranded rows MUST reach a terminal state that is neither `failed` (which claims an attempt was made) nor `superseded` (which claims a later decision won), MUST be terminated rather than deleted so the subject, the approval, and the reason survive, MUST leave an audit trace written by that same statement, and MUST distinguish a row that was never dispatched from one that was in flight and whose outcome is therefore unknowable. Deregistration MUST NOT be refused for having queued work: a deployment change would then fail because of a queue, and a backend that died mid-drain would leave a target that can never be removed. Abandoned work MUST NOT be counted as failed, and MUST NOT be counted as queued — nobody is waiting for it — so any count that reaches these rows by asking for "not applied" rather than for the state it means is wrong.
+
+#### Scenario: An apply carries a different request than was reviewed
+
+- **WHEN** an apply cites a valid, unspent approval but submits a body whose cohort, operation, or parameters differ from the one the rehearsal was computed for
+- **THEN** it MUST be refused with a reason distinct from staleness, since the world did not move — the operator edited the form
+- **AND** the approval MUST remain unspent
+- **AND** nothing MUST be written
+- **AND** a body differing only in an annotation written at apply time MUST be accepted
 
 #### Scenario: An approval is spent once
 

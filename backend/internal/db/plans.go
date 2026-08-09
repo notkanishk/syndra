@@ -36,9 +36,14 @@ var (
 	ErrPlanNotCitableHere = errors.New("db: the plan was not issued for this surface and target")
 	// ErrPlanNotYours: approval is a person's, not the system's. An admin who
 	// reads a plan id out of a log or a screenshot has not reviewed the diff.
-	ErrPlanNotYours  = errors.New("db: the plan was approved by a different operator")
-	ErrPlanNoSubject = errors.New("db: the plan has no subject rows")
-	ErrInvalidPlan   = errors.New("db: invalid plan")
+	ErrPlanNotYours = errors.New("db: the plan was approved by a different operator")
+	// ErrPlanRequestMismatch: the plan is this operator's, on this surface, and
+	// unspent — but the request beside it is not the one it was computed for.
+	// Its own error because its own action: re-plan with what you actually want,
+	// rather than "re-plan, something moved" for a world that did not move.
+	ErrPlanRequestMismatch = errors.New("db: the submitted request is not the one this plan was computed for")
+	ErrPlanNoSubject       = errors.New("db: the plan has no subject rows")
+	ErrInvalidPlan         = errors.New("db: invalid plan")
 )
 
 // Effects a rehearsal may record for a subject. Three, because a plan states
@@ -139,6 +144,11 @@ type Plan struct {
 	// to say so.
 	StateReadAt *time.Time `json:"state_read_at,omitempty"`
 	AppliedAt   *time.Time `json:"applied_at,omitempty"`
+	// RequestFingerprint binds the plan to the request it was computed for.
+	// Never rendered: it is an integrity value, and a client that can read it
+	// can tell an operator's mistyped duration from a world that moved without
+	// asking the backend, which is the backend's answer to give.
+	RequestFingerprint string `json:"-"`
 }
 
 // PlanSubject is one subject's row: the desired state approved for them, and
@@ -165,7 +175,13 @@ type NewPlan struct {
 	Provisional bool
 	// StateReadAt is required for a provisional plan and welcome on any plan.
 	StateReadAt time.Time
-	Subjects    []NewPlanSubject
+	// RequestFingerprint is the digest of the request this rehearsal was
+	// computed for, or "" for a plan that binds no request. Only what changes
+	// the effect belongs in it — a cohort, an operation's parameters — never an
+	// annotation the operator writes at apply time, which would make fixing a
+	// typo in a reason cost a re-plan.
+	RequestFingerprint string
+	Subjects           []NewPlanSubject
 }
 
 // NewPlanSubject is one row of the rehearsal.
@@ -187,6 +203,12 @@ type PlanCitation struct {
 	Target  string
 	Surface string
 	Actor   string
+	// RequestFingerprint is recomputed from the body submitted alongside the
+	// citation. It is a citation dimension rather than a check the gate performs
+	// first, so a request that does not match loses in the database — and loses
+	// without spending the approval, because a claim that matched nothing
+	// changed nothing.
+	RequestFingerprint string
 }
 
 func (p NewPlan) validate() error {
@@ -278,10 +300,10 @@ func CreatePlan(ctx context.Context, p NewPlan) (Plan, error) {
 	// predicate is evaluated by the database clock. Computing the deadline here
 	// would make a plan's validity depend on the difference between two clocks.
 	const insertPlan = `
-		INSERT INTO plans (target, surface, created_by, expires_at, provisional, state_read_at)
+		INSERT INTO plans (target, surface, created_by, expires_at, provisional, state_read_at, request_fingerprint)
 		VALUES ($1, $2, $3,
 		        CASE WHEN $5::boolean THEN NULL ELSE NOW() + $4::interval END,
-		        $5, $6)
+		        $5, $6, $7)
 		RETURNING id, created_at, expires_at, applied_at`
 
 	var (
@@ -293,9 +315,10 @@ func CreatePlan(ctx context.Context, p NewPlan) (Plan, error) {
 		stateReadAt = &t
 	}
 
-	plan := Plan{Target: p.Target, Surface: p.Surface, CreatedBy: p.CreatedBy, Provisional: p.Provisional, StateReadAt: stateReadAt}
+	plan := Plan{Target: p.Target, Surface: p.Surface, CreatedBy: p.CreatedBy, Provisional: p.Provisional,
+		StateReadAt: stateReadAt, RequestFingerprint: p.RequestFingerprint}
 	if err := tx.QueryRow(ctx, insertPlan,
-		p.Target, p.Surface, p.CreatedBy, lifetime, p.Provisional, stateReadAt,
+		p.Target, p.Surface, p.CreatedBy, lifetime, p.Provisional, stateReadAt, p.RequestFingerprint,
 	).Scan(&plan.ID, &plan.CreatedAt, &plan.ExpiresAt, &plan.AppliedAt); err != nil {
 		return Plan{}, fmt.Errorf("insert plan: %w", err)
 	}
@@ -517,11 +540,12 @@ func ClaimPlanTx(ctx context.Context, tx pgx.Tx, c PlanCitation) (Plan, []PlanSu
 		   AND target = $2
 		   AND surface = $3
 		   AND created_by = $4
+		   AND request_fingerprint = $5
 		   AND applied_at IS NULL
 		   AND (expires_at IS NULL OR expires_at > NOW())
-		RETURNING id, target, surface, created_by, created_at, expires_at, provisional, state_read_at, applied_at`
+		RETURNING id, target, surface, created_by, created_at, expires_at, provisional, state_read_at, applied_at, request_fingerprint`
 
-	plan, err := scanPlan(tx.QueryRow(ctx, claim, c.PlanID, c.Target, c.Surface, c.Actor))
+	plan, err := scanPlan(tx.QueryRow(ctx, claim, c.PlanID, c.Target, c.Surface, c.Actor, c.RequestFingerprint))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Plan{}, nil, explainPlanRefusal(ctx, tx, c)
 	}
@@ -543,10 +567,49 @@ func ClaimPlanTx(ctx context.Context, tx pgx.Tx, c PlanCitation) (Plan, []PlanSu
 	return plan, subjects, nil
 }
 
+// ClaimPlanVerified spends an approval only if the world it describes is still
+// the world.
+//
+// It opens the transaction ClaimPlanTx needs and runs `verify` inside it, so a
+// plan whose subjects have moved leaves the approval **unspent**: the claim is
+// rolled back with the rest. That ordering is the whole point. Claiming first
+// and verifying after would burn the one apply an approval gets on a stale
+// plan, and the operator's next move — re-plan and apply — would then be
+// refused as already-applied for something that never happened.
+//
+// The caller's own mutations are deliberately NOT in this transaction. They are
+// per-subject writes with their own transactions, cache rebuilds and inline
+// drains, and pulling them in here would hold a transaction open across
+// Management API calls. The cost is stated rather than hidden: a crash between
+// this commit and the first mutation spends an approval that applied nothing,
+// and the operator re-plans. That is the fail-closed direction — the other one
+// applies a diff twice.
+func ClaimPlanVerified(ctx context.Context, c PlanCitation, verify func([]PlanSubject) error) (Plan, []PlanSubject, error) {
+	tx, err := PG.Begin(ctx)
+	if err != nil {
+		return Plan{}, nil, fmt.Errorf("begin plan claim: %w", err)
+	}
+	defer tx.Rollback(ctx) // no-op after a successful Commit
+
+	plan, subjects, err := ClaimPlanTx(ctx, tx, c)
+	if err != nil {
+		return Plan{}, nil, err
+	}
+	if verify != nil {
+		if err := verify(subjects); err != nil {
+			return Plan{}, nil, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Plan{}, nil, fmt.Errorf("commit plan claim: %w", err)
+	}
+	return plan, subjects, nil
+}
+
 // explainPlanRefusal re-reads the plan to say why the claim lost.
 func explainPlanRefusal(ctx context.Context, tx pgx.Tx, c PlanCitation) error {
 	const read = `
-		SELECT id, target, surface, created_by, created_at, expires_at, provisional, state_read_at, applied_at
+		SELECT id, target, surface, created_by, created_at, expires_at, provisional, state_read_at, applied_at, request_fingerprint
 		  FROM plans WHERE id = $1`
 
 	plan, err := scanPlan(tx.QueryRow(ctx, read, c.PlanID))
@@ -578,6 +641,13 @@ func planRefusal(p Plan, c PlanCitation, now time.Time) error {
 		return ErrPlanNotCitableHere
 	case p.CreatedBy != c.Actor:
 		return ErrPlanNotYours
+	case p.RequestFingerprint != c.RequestFingerprint:
+		// Identity, still: this plan is not a plan for that request. Reported
+		// ahead of state for the same reason the two above are — telling an
+		// operator their approval went stale, when what actually happened is
+		// that they edited the form, sends them to re-review a world that never
+		// moved.
+		return ErrPlanRequestMismatch
 	case p.AppliedAt != nil:
 		return ErrPlanAlreadyApplied
 	case p.ExpiresAt != nil && !p.ExpiresAt.After(now):
@@ -617,7 +687,7 @@ func planSubjectsTx(ctx context.Context, tx pgx.Tx, planID string) ([]PlanSubjec
 func scanPlan(row pgx.Row) (Plan, error) {
 	var p Plan
 	err := row.Scan(&p.ID, &p.Target, &p.Surface, &p.CreatedBy, &p.CreatedAt,
-		&p.ExpiresAt, &p.Provisional, &p.StateReadAt, &p.AppliedAt)
+		&p.ExpiresAt, &p.Provisional, &p.StateReadAt, &p.AppliedAt, &p.RequestFingerprint)
 	return p, err
 }
 

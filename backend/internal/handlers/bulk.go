@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"syndra/internal/db"
@@ -12,10 +13,11 @@ import (
 
 // BulkGrantRequest is one access operation aimed at a set of people.
 //
-// There is no "apply" field: applying is a query parameter (?apply=true), so a
-// rehearsal and the write it authorises are the same request body. A client
-// that reviews a plan and then submits something different is a bug this shape
-// makes hard to write.
+// Applying is still a query parameter (?apply=true) over the same body, but the
+// body is no longer what authorises the write: `PlanID` is. The body is
+// re-submitted because it carries what the write needs — the project, the role,
+// the duration — and the plan binds it, so an operator who reviewed a 30-day
+// grant cannot apply a permanent one by editing the field after the dialog.
 type BulkGrantRequest struct {
 	Op           string   `json:"op"`
 	UserIDs      []string `json:"user_ids"`
@@ -28,18 +30,23 @@ type BulkGrantRequest struct {
 	// every expiring direct grant the named people hold — which is what selecting PEOPLE means,
 	// and is not what selecting grant rows means.
 	GrantIDs []string `json:"grant_ids,omitempty"`
+	// PlanID cites the rehearsal being applied. Required with ?apply=true.
+	PlanID string `json:"plan_id,omitempty"`
 }
 
 // handleBulkGrants rehearses a bulk access change and, on ?apply=true, executes
-// the rows the rehearsal marked actionable.
+// the plan the operator approved.
 //
 //	POST /api/v1/grants/bulk[?apply=true]
 //
 // Rehearsal is the default because a bulk write is the one operation whose
-// blast radius an operator cannot hold in their head from a count. Apply does
-// not trust a plan the client sends back — it re-rehearses server-side and acts
-// on that, so a person whose access changed in between is re-evaluated rather
-// than acted on from a stale verdict.
+// blast radius an operator cannot hold in their head from a count. It now
+// persists what it showed and returns a `plan_id`.
+//
+// **BREAKING:** apply no longer recomputes the diff. It cites that id, and the
+// rows it acts on are the rows that were approved. Recomputation was the gap:
+// the operator read one diff and a second request computed another, with
+// grants, bundles and directory status free to move in between.
 func handleBulkGrants(w http.ResponseWriter, r *http.Request) {
 	var req BulkGrantRequest
 	if err := decodeJSONStrict(r.Body, &req); err != nil {
@@ -62,17 +69,64 @@ func handleBulkGrants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plan, err := svcRehearseBulk(r.Context(), input)
-	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "BULK_REHEARSAL_ERROR", err.Error())
-		return
-	}
+	actor := resolveActor(r, "")
+	requestFP := services.FingerprintBulkRequest(input)
 
 	if r.URL.Query().Get("apply") != "true" {
+		plan, err := svcRehearseBulk(r.Context(), input)
+		if err != nil {
+			jsonErrorResponse(w, http.StatusInternalServerError, "BULK_REHEARSAL_ERROR", err.Error())
+			return
+		}
+		if err := issuePlan(r.Context(), planSurfaceBulkGrants, actor, requestFP, &plan); err != nil {
+			// A rehearsal that could not be recorded must not be returned as
+			// one: the operator would review a diff they cannot then apply, and
+			// the surface would offer them the button.
+			jsonErrorResponse(w, http.StatusInternalServerError, "PLAN_NOT_RECORDED", err.Error())
+			return
+		}
 		jsonResponse(w, http.StatusOK, plan)
 		return
 	}
 
+	if strings.TrimSpace(req.PlanID) == "" {
+		missingPlanCitation(w)
+		return
+	}
+
+	// Re-rehearsed for its FINGERPRINTS, not for its verdicts. The stored
+	// outcomes are what the apply acts on; this read is how the backend asks
+	// whether the state behind them still holds. Where the two agree the fresh
+	// verdicts equal the stored ones anyway — same inputs, same function — and
+	// where they disagree the apply is refused rather than quietly re-decided.
+	//
+	// Deferred until the citation is accepted: a bogus plan id must not cost a
+	// full cohort read.
+	var current map[string]services.BulkOutcome
+	var rehearsalErr error
+	subjects, err := claimPlan(r.Context(), planSurfaceBulkGrants, actor, requestFP, req.PlanID,
+		func() map[string]services.BulkOutcome {
+			live, err := svcRehearseBulk(r.Context(), input)
+			if err != nil {
+				// Nothing verifies. An empty index reports every subject as
+				// moved, which is the fail-closed direction, and the error is
+				// reported over the staleness below.
+				rehearsalErr = err
+				return nil
+			}
+			current = indexOutcomes(live.Outcomes)
+			return current
+		})
+	if rehearsalErr != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "BULK_REHEARSAL_ERROR", rehearsalErr.Error())
+		return
+	}
+	if err != nil {
+		writePlanCitationError(w, err)
+		return
+	}
+
+	plan := planApprovedRows(input.Op, subjects, current)
 	applyBulkPlan(r, &plan, input)
 	jsonResponse(w, http.StatusAccepted, plan)
 }
@@ -95,7 +149,6 @@ func applyBulkPlan(r *http.Request, plan *services.BulkPlan, input services.Bulk
 		if out.Effect != services.EffectApply {
 			continue
 		}
-
 		outboxIDs, queued, err := applyBulkOne(r, actor, input, *out)
 		if err != nil {
 			out.Effect = services.EffectFailed

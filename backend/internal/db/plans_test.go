@@ -96,6 +96,23 @@ func TestTheClaimPredicateAndTheExplainerRefuseTheSameThings(t *testing.T) {
 			want:      ErrPlanExpired,
 			predicate: "expires_at > NOW()",
 		},
+		{
+			name:      "computed for a different request",
+			mutate:    func(p *Plan) { p.RequestFingerprint = "0f" + strings.Repeat("a", 62) },
+			want:      ErrPlanRequestMismatch,
+			predicate: "request_fingerprint = $",
+		},
+	}
+
+	// The list above is closed, not illustrative. Counting the predicate's own
+	// conjuncts is what makes it so: a dimension added to the claim without a
+	// case here is a refusal nobody can act on, and a case with no conjunct is a
+	// rule enforced in Go while the database grants it. Either way the arrangement
+	// this whole change exists to avoid comes back, quietly, in one direction.
+	conjuncts := strings.Count(sql, "AND ")
+	if conjuncts != len(cases) {
+		t.Errorf("the claim carries %d conditions beyond its id but %d are explained; every dimension of a citation needs both",
+			conjuncts, len(cases))
 	}
 
 	for _, tc := range cases {
@@ -597,11 +614,15 @@ func TestPlanWritesMatchTheMigratedColumns(t *testing.T) {
 		if m == nil {
 			t.Fatalf("could not isolate the %s INSERT", tc.table)
 		}
-		body := createTableBody(t, up, tc.table)
+		// CREATE TABLE plus every later ADD COLUMN: a column added by a
+		// subsequent migration is as declared as one in the original body, and
+		// reading only the original would make every future addition look like
+		// a write against a column that is not there.
+		body := createTableBody(t, up, tc.table) + "\n" + addedColumns(t, tc.table)
 		for _, col := range strings.Split(m[1], ",") {
 			col = strings.TrimSpace(col)
 			if !regexp.MustCompile(`(?m)^\s*` + regexp.QuoteMeta(col) + `\s`).MatchString(body) {
-				t.Errorf("%s writes column %q, which the migration does not declare", tc.table, col)
+				t.Errorf("%s writes column %q, which no migration declares", tc.table, col)
 			}
 		}
 	}
@@ -610,4 +631,18 @@ func TestPlanWritesMatchTheMigratedColumns(t *testing.T) {
 	if !regexp.MustCompile(`(?m)^\s*applied_at\s+TIMESTAMPTZ`).MatchString(createTableBody(t, up, "plans")) {
 		t.Error("plans must carry applied_at: without it a reviewed diff can be cited and enqueued repeatedly, and the fingerprint check will not notice while the first apply's rows are still queued")
 	}
+}
+
+// addedColumns returns one line per ADD COLUMN against `table` across every up
+// migration, in the shape createTableBody produces, so the two can be searched
+// as one declaration.
+func addedColumns(t *testing.T, table string) string {
+	t.Helper()
+	re := regexp.MustCompile(`(?is)ALTER TABLE\s+` + regexp.QuoteMeta(table) +
+		`\s+ADD COLUMN(?:\s+IF NOT EXISTS)?\s+(\w+)\s+([^;]*);`)
+	var out []string
+	for _, m := range re.FindAllStringSubmatch(allUpMigrationsSQL(t), -1) {
+		out = append(out, "    "+m[1]+" "+strings.TrimSpace(m[2]))
+	}
+	return strings.Join(out, "\n")
 }

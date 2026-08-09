@@ -59,8 +59,16 @@ func rehearseOneDrift(ctx context.Context, id, op string) services.BulkOutcome {
 	if err != nil {
 		out.Effect = services.EffectBlocked
 		out.Detail = "No longer in the queue — somebody may have resolved it already."
+		// Absence is a state to re-verify like any other: a row that reappears
+		// between the review and the apply is a row nobody reviewed.
+		out.Fingerprint = services.Fingerprint("drift", id, "unreadable")
 		return out
 	}
+	// The drift row's own status is in here, and that is the point (design §8).
+	// Somebody resolving a row while the operator reads the list is the ordinary
+	// case in a shared queue, and it is invisible to any fingerprint taken over
+	// the access alone — the grants have not moved and the person has not moved.
+	out.Fingerprint = services.FingerprintDriftItem(item)
 
 	// Name the person, not the drift row's uuid. A plan an operator cannot read
 	// is a plan they will approve without reading.
@@ -116,6 +124,33 @@ func humanDriftStatus(status string) string {
 		return "revoked"
 	}
 	return status
+}
+
+// claimDriftPlan spends the approval a drift apply cites and re-verifies every
+// row against the queue as it stands now.
+//
+// The re-read is the same one `rehearseOneDrift` does, hashed by the same
+// function, so "did this row move" is asked exactly as it was answered. A row
+// somebody else resolved in the meantime fails here — mutating nothing, and
+// naming itself — rather than being adopted twice or marked external over
+// somebody's revocation.
+func claimDriftPlan(r *http.Request, surface, op, actor, requestFP, planID string, ids []string) (services.BulkPlan, error) {
+	if strings.TrimSpace(planID) == "" {
+		return services.BulkPlan{}, errPlanCitationMissing
+	}
+	// The same rehearsal the operator read, run again: its fingerprints answer
+	// "did this row move" exactly as they asked it, and its sentences are what
+	// the result is rendered from. Deferred until the citation is accepted.
+	var live map[string]services.BulkOutcome
+	subjects, err := claimPlan(r.Context(), surface, actor, requestFP, planID,
+		func() map[string]services.BulkOutcome {
+			live = indexOutcomes(rehearseDriftBatch(r.Context(), ids, op).Outcomes)
+			return live
+		})
+	if err != nil {
+		return services.BulkPlan{}, err
+	}
+	return planApprovedRows(op, subjects, live), nil
 }
 
 // applyDriftPlan executes the actionable rows in place, rewriting each outcome

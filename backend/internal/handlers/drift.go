@@ -15,6 +15,7 @@ import (
 
 	"syndra/internal/db"
 	"syndra/internal/models"
+	"syndra/internal/services"
 )
 
 // handleListDrift serves the triage queue: risk, holder status and the
@@ -216,6 +217,8 @@ func handleMarkDriftExternal(w http.ResponseWriter, r *http.Request) {
 type bulkAttributeRequest struct {
 	IDs    []string `json:"ids"`
 	Source string   `json:"source"`
+	// PlanID cites the rehearsal being applied. Required with ?apply=true.
+	PlanID string `json:"plan_id,omitempty"`
 }
 
 func handleBulkAttributeDrift(w http.ResponseWriter, r *http.Request) {
@@ -231,19 +234,36 @@ func handleBulkAttributeDrift(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plan := rehearseDriftBatch(r.Context(), req.IDs, driftOpAdopt)
+	// The attribution source changes what adopting DOES, so it is bound to the
+	// plan. The cohort is bound with it: an apply that widened the id list under
+	// one approval would resolve rows nobody looked at.
+	actor := resolveActor(r, "operator")
+	requestFP := services.FingerprintIDCohort(driftOpAdopt, req.IDs, "source", req.Source)
+
 	if r.URL.Query().Get("apply") != "true" {
+		plan := rehearseDriftBatch(r.Context(), req.IDs, driftOpAdopt)
+		if err := issuePlan(r.Context(), planSurfaceDriftAdopt, actor, requestFP, &plan); err != nil {
+			jsonErrorResponse(w, http.StatusInternalServerError, "PLAN_NOT_RECORDED", err.Error())
+			return
+		}
 		jsonResponse(w, http.StatusOK, plan)
 		return
 	}
 
-	applyDriftPlan(r, &plan, driftOpAdopt, resolveActor(r, "operator"), "")
+	plan, err := claimDriftPlan(r, planSurfaceDriftAdopt, driftOpAdopt, actor, requestFP, req.PlanID, req.IDs)
+	if err != nil {
+		writePlanCitationError(w, err)
+		return
+	}
+	applyDriftPlan(r, &plan, driftOpAdopt, actor, "")
 	jsonResponse(w, http.StatusOK, plan)
 }
 
 type bulkMarkExternalRequest struct {
 	IDs    []string `json:"ids"`
 	Reason string   `json:"reason"`
+	// PlanID cites the rehearsal being applied. Required with ?apply=true.
+	PlanID string `json:"plan_id,omitempty"`
 }
 
 // handleBulkMarkDriftExternal is the second of exactly two bulk resolutions.
@@ -261,13 +281,29 @@ func handleBulkMarkDriftExternal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plan := rehearseDriftBatch(r.Context(), req.IDs, driftOpExternal)
+	// `Reason` is deliberately absent from the binding: it is recorded beside
+	// the exclusion and changes nothing about which rows are excluded, so making
+	// a typo cost a re-plan would only teach operators to click through the
+	// stale-plan dialog.
+	actor := resolveActor(r, "operator")
+	requestFP := services.FingerprintIDCohort(driftOpExternal, req.IDs)
+
 	if r.URL.Query().Get("apply") != "true" {
+		plan := rehearseDriftBatch(r.Context(), req.IDs, driftOpExternal)
+		if err := issuePlan(r.Context(), planSurfaceDriftExternal, actor, requestFP, &plan); err != nil {
+			jsonErrorResponse(w, http.StatusInternalServerError, "PLAN_NOT_RECORDED", err.Error())
+			return
+		}
 		jsonResponse(w, http.StatusOK, plan)
 		return
 	}
 
-	applyDriftPlan(r, &plan, driftOpExternal, resolveActor(r, "operator"), req.Reason)
+	plan, err := claimDriftPlan(r, planSurfaceDriftExternal, driftOpExternal, actor, requestFP, req.PlanID, req.IDs)
+	if err != nil {
+		writePlanCitationError(w, err)
+		return
+	}
+	applyDriftPlan(r, &plan, driftOpExternal, actor, req.Reason)
 	jsonResponse(w, http.StatusOK, plan)
 }
 

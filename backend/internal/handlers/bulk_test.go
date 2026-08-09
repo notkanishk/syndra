@@ -14,13 +14,33 @@ import (
 	"syndra/internal/services/propagation"
 )
 
+// bulkRequest builds the request a test makes. An apply is now the SECOND of
+// two requests — it cites an approval — so the helper performs the rehearsal
+// and splices its plan id in, exactly as a client must. The tests below stay
+// about what the apply does; how it is authorised is asserted in
+// plan_gate_test.go.
 func bulkRequest(t *testing.T, body string, apply bool) *http.Request {
 	t.Helper()
-	path := "/api/v1/grants/bulk"
-	if apply {
-		path += "?apply=true"
+	const path = "/api/v1/grants/bulk"
+	if !apply {
+		return httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	}
-	return httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+
+	rehearse := httptest.NewRecorder()
+	handleBulkGrants(rehearse, httptest.NewRequest(http.MethodPost, path, strings.NewReader(body)))
+	var issued services.BulkPlan
+	if err := json.Unmarshal(rehearse.Body.Bytes(), &issued); err != nil || issued.PlanID == "" {
+		// A body the rehearsal refuses has no plan to cite, and refusing it on
+		// the apply path is exactly what the validation tests below assert.
+		return httptest.NewRequest(http.MethodPost, path+"?apply=true", strings.NewReader(body))
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(body), &payload); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	payload["plan_id"] = issued.PlanID
+	cited, _ := json.Marshal(payload)
+	return httptest.NewRequest(http.MethodPost, path+"?apply=true", strings.NewReader(string(cited)))
 }
 
 func decodePlan(t *testing.T, rr *httptest.ResponseRecorder) services.BulkPlan {
@@ -37,6 +57,9 @@ func decodePlan(t *testing.T, rr *httptest.ResponseRecorder) services.BulkPlan {
 // client asked for rather than something it made up.
 func stubRehearsal(t *testing.T, plan services.BulkPlan) *services.BulkRequest {
 	t.Helper()
+	// Every rehearsal is now recorded, so a test that stubs one needs somewhere
+	// for it to land. Reuses the store the test already installed, if any.
+	stubPlanStore(t)
 	orig := svcRehearseBulk
 	t.Cleanup(func() { svcRehearseBulk = orig })
 
@@ -47,6 +70,16 @@ func stubRehearsal(t *testing.T, plan services.BulkPlan) *services.BulkRequest {
 		// must not corrupt the fixture across sub-tests.
 		copied := plan
 		copied.Outcomes = append([]services.BulkOutcome(nil), plan.Outcomes...)
+		for i := range copied.Outcomes {
+			// A fixture with no fingerprint would be refused at the plan store,
+			// and every one of these tests is about what happens after it is
+			// accepted. Derived from the subject so the apply's re-read agrees
+			// with the rehearsal — a test that wants them to DISAGREE swaps the
+			// rehearsal itself.
+			if copied.Outcomes[i].Fingerprint == "" {
+				copied.Outcomes[i].Fingerprint = "fp:" + copied.Outcomes[i].UserID
+			}
+		}
 		return copied, nil
 	}
 	return seen
@@ -113,9 +146,10 @@ func TestHandleBulkGrants_DefaultsToRehearsalAndWritesNothing(t *testing.T) {
 	}
 }
 
-// Apply recomputes the plan server-side. The client cannot hand back a doctored
-// plan — or an honest but stale one — and have it executed.
-func TestHandleBulkGrants_ApplyRerehearsesRatherThanTrustingTheClient(t *testing.T) {
+// Apply acts on the approval the backend issued, never on a cohort the client
+// asserts. The selection still reaches the rehearsal verbatim — that is what is
+// being reviewed — but what the apply executes is what was recorded.
+func TestHandleBulkGrants_ApplyActsOnTheApprovalNotTheClientsClaim(t *testing.T) {
 	seen := stubRehearsal(t, services.BulkPlan{
 		Op:       services.BulkOpAssignRole,
 		Outcomes: []services.BulkOutcome{{UserID: "u_server_says", Effect: services.EffectApply}},

@@ -104,13 +104,26 @@ type BulkOutcome struct {
 	// Grants the row would act on. Populated for remove_role and extend so the
 	// apply pass acts on identified rows rather than re-guessing.
 	GrantIDs []string `json:"grant_ids,omitempty"`
+	// Fingerprint digests the state this row was rehearsed against, so an apply
+	// citing the plan can tell whether the world it described is still the
+	// world (design §8).
+	//
+	// Never serialised. It is an integrity value the backend compares against
+	// its own recomputation; a client holding it could tell an operator's edited
+	// request from a moved subject without asking, which is the backend's answer
+	// to give, and a client that can send one is a client the comparison is no
+	// longer about.
+	Fingerprint string `json:"-"`
 }
 
 // BulkPlan is the whole rehearsal: every selected person, in a stable order,
 // plus the counts the confirmation headline is written from.
 type BulkPlan struct {
-	Op       string        `json:"op"`
-	Applied  bool          `json:"applied"`
+	Op string `json:"op"`
+	// PlanID is the approval this rehearsal became. An apply cites it instead
+	// of asking for the diff to be recomputed against a world that moved.
+	PlanID  string `json:"plan_id,omitempty"`
+	Applied bool   `json:"applied"`
 	Outcomes []BulkOutcome `json:"outcomes"`
 	Summary  BulkSummary   `json:"summary"`
 }
@@ -244,6 +257,10 @@ func rehearseOne(
 	if !known {
 		out.Effect = EffectBlocked
 		out.Detail = "No such account in the directory."
+		// Absence is reviewed state like any other: an account created between
+		// the review and the apply must invalidate the approval rather than be
+		// acted on under a row that said it did not exist.
+		out.Fingerprint = FingerprintUserAccess(uid, "absent", nil, nil)
 		return out, nil
 	}
 	out.Name, out.Email = profile.Name, profile.Email
@@ -254,6 +271,7 @@ func rehearseOne(
 		// cohort and nobody notices in a count.
 		out.Effect = EffectBlocked
 		out.Detail = fmt.Sprintf("Account is %s — remove it from the selection to continue.", strings.ToLower(profile.Status))
+		out.Fingerprint = FingerprintUserAccess(uid, profile.Status, nil, nil)
 		return out, nil
 	}
 
@@ -265,6 +283,10 @@ func rehearseOne(
 	if err != nil {
 		return BulkOutcome{}, err
 	}
+	// Taken from exactly what the rehearsal below reads, and recomputed at apply
+	// by the same function over a fresh read. A fingerprint the two sides
+	// compute differently verifies nothing.
+	out.Fingerprint = FingerprintUserAccess(uid, profile.Status, effectiveRoleKeys(roleMap), grants)
 
 	switch req.Op {
 	case BulkOpAssignRole:

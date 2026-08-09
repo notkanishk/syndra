@@ -18,6 +18,8 @@ import (
 
 func resetDriftDeps(t *testing.T) {
 	t.Helper()
+	// An apply cites an approval now, so every drift test needs a plan store.
+	stubPlanStore(t)
 	origGetItems := dbGetDriftItems
 	origGetItem := dbGetDriftItem
 	origAttribute := dbAttributeDriftTx
@@ -277,8 +279,7 @@ func TestHandleBulkAttributeDrift_WritesNoPropagation(t *testing.T) {
 		return propagation.DrainResult{}, nil
 	}
 
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
-		strings.NewReader(`{"ids":["d1","d2","d3"],"source":"external_backfill"}`))
+	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-attribute", `{"ids":["d1","d2","d3"],"source":"external_backfill"}`)
 	w := httptest.NewRecorder()
 	handleBulkAttributeDrift(w, req)
 
@@ -401,7 +402,7 @@ func TestHandleBulkAttributeDrift_ValidSourceAttributes(t *testing.T) {
 		return nil
 	}
 
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true", strings.NewReader(`{"ids":["d1"],"source":"external_backfill"}`))
+	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-attribute", `{"ids":["d1"],"source":"external_backfill"}`)
 	w := httptest.NewRecorder()
 	handleBulkAttributeDrift(w, req)
 
@@ -474,8 +475,7 @@ func TestBulkDrift_ReportsRowsSomebodyElseAlreadyResolved(t *testing.T) {
 		return nil
 	}
 
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
-		strings.NewReader(`{"ids":["d1","d2"],"source":"external_backfill"}`))
+	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-attribute", `{"ids":["d1","d2"],"source":"external_backfill"}`)
 	w := httptest.NewRecorder()
 	handleBulkAttributeDrift(w, req)
 
@@ -517,8 +517,7 @@ func TestBulkAttributeDrift_NamesTheIdsThatFailed(t *testing.T) {
 	}
 	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) error { return nil }
 
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
-		strings.NewReader(`{"ids":["d1","d2","d3"],"source":"external_backfill"}`))
+	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-attribute", `{"ids":["d1","d2","d3"],"source":"external_backfill"}`)
 	w := httptest.NewRecorder()
 	handleBulkAttributeDrift(w, req)
 
@@ -568,8 +567,7 @@ func TestBulkMarkExternalDrift_NamesTheIdsThatFailed(t *testing.T) {
 		return nil
 	}
 
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-mark-external?apply=true",
-		strings.NewReader(`{"ids":["d1","d3"],"reason":""}`))
+	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-mark-external", `{"ids":["d1","d3"],"reason":""}`)
 	w := httptest.NewRecorder()
 	handleBulkMarkDriftExternal(w, req)
 
@@ -599,8 +597,7 @@ func TestBulkResolutions_AlwaysReturnARowPerRequestedID(t *testing.T) {
 	}
 	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) error { return nil }
 
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
-		strings.NewReader(`{"ids":["d1","d1",""],"source":"external_backfill"}`))
+	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-attribute", `{"ids":["d1","d1",""],"source":"external_backfill"}`)
 	w := httptest.NewRecorder()
 	handleBulkAttributeDrift(w, req)
 
@@ -744,4 +741,31 @@ func TestDriftAction_UnsupportedTargetIsNotAConflict(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "DRIFT_TARGET_UNSUPPORTED") {
 		t.Errorf("the code must name the reason, got %s", w.Body.String())
 	}
+}
+
+// driftApplyRequest is the second of the two requests an operator's drift
+// confirmation flow makes: it rehearses, takes the plan id the backend issued,
+// and cites it. Applying without one is refused, which is asserted in
+// plan_gate_test.go rather than repeated in every case here.
+func driftApplyRequest(t *testing.T, path, body string) *http.Request {
+	t.Helper()
+	handler := handleBulkAttributeDrift
+	if strings.Contains(path, "mark-external") {
+		handler = handleBulkMarkDriftExternal
+	}
+
+	rehearse := httptest.NewRecorder()
+	handler(rehearse, httptest.NewRequest("POST", path, strings.NewReader(body)))
+	var issued services.BulkPlan
+	if err := json.Unmarshal(rehearse.Body.Bytes(), &issued); err != nil || issued.PlanID == "" {
+		return httptest.NewRequest("POST", path+"?apply=true", strings.NewReader(body))
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(body), &payload); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	payload["plan_id"] = issued.PlanID
+	cited, _ := json.Marshal(payload)
+	return httptest.NewRequest("POST", path+"?apply=true", strings.NewReader(string(cited)))
 }
