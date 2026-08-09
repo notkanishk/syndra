@@ -412,7 +412,51 @@ func TestQueuedRevocationsReadsReplaceAsItsComplement(t *testing.T) {
 // must not retract it.
 func TestReconciliationDoesNotRetractANewerIntent(t *testing.T) {
 	body := funcBody(t, readDBSource(t, "propagations.go"), "ReconcileLedgerOnApplied")
-	if !strings.Contains(body, "NOT EXISTS") || !strings.Contains(body, "o.op_type = 'add'") {
-		t.Error("the revoke reconciliation must leave alone a role an unresolved add is establishing")
+	i := strings.Index(body, "const newerAddExists")
+	if i < 0 {
+		t.Fatal("could not isolate the newer-add guard")
+	}
+	j := strings.Index(body[i:], "NOT EXISTS")
+	k := strings.Index(body[i+j:], "$5)")
+	if j < 0 || k < 0 {
+		t.Fatal("the guard fragment is not where it was")
+	}
+	guard := []string{"", body[i+j : i+j+k+len("$5)")]}
+	// Only an add that would ESTABLISH this ledger row protects it. Cascade
+	// adds write no direct_role_grants row at all, so treating any queued add
+	// as proof would keep a direct grant alive that nothing maintains — and it
+	// then reads as coverage forever, so removing the bundle later queues no
+	// revoke.
+	if !strings.Contains(guard[1], "o.source = d.source") {
+		t.Error("the guard must match the source, or a cascade add that writes no ledger row protects one")
+	}
+	// And newer than the decision being reconciled: an add queued before this
+	// revocation is older intent, and the revocation is the later word.
+	if !strings.Contains(guard[1], "o.created_at > $5") {
+		t.Error("the guard must be bound to this row's own moment")
+	}
+	if !strings.Contains(guard[1], "o.op_type = 'add'") ||
+		!strings.Contains(guard[1], "o.status IN ('pending', 'in_flight')") {
+		t.Error("only an unresolved add is an intent still being established")
+	}
+
+	// Both branches use it. A replace narrowing A to B while a later direct add
+	// re-establishes A would otherwise delete A's freshly written row, and the
+	// add would reach the target with nothing durable behind it.
+	if n := strings.Count(body, "newerAddExists"); n < 3 {
+		t.Errorf("revoke and replace must both carry the guard, found %d uses of the fragment", n)
+	}
+
+	// Everything the reconciliation scopes by comes from the row it is
+	// reconciling. Assembled by a caller, the tuple, the source and the moment
+	// can describe a set that never existed together — and the ordering
+	// comparison is meaningless unless the timestamp is this row's.
+	if !strings.Contains(body, "FROM propagation_outbox WHERE id = $1") {
+		t.Error("the reconciliation must read its own row rather than trust a caller's tuple")
+	}
+	// Including the moment. Compared against the clock instead, every add
+	// queued before this revocation counts as newer than it.
+	if !strings.Contains(body, "COALESCE(source,'direct'), created_at") {
+		t.Error("the ordering comparison must use the row's own created_at, not the current time")
 	}
 }

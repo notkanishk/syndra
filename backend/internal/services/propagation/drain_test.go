@@ -33,7 +33,7 @@ func stubDrainDeps(t *testing.T) {
 		swap(&markApplied, func(context.Context, string) error { return nil }),
 		swap(&markFailed, func(context.Context, string, string) error { return nil }),
 		swap(&requeue, func(context.Context, string, string) (int, error) { return 0, nil }),
-		swap(&reconcileLedger, func(context.Context, string, string, string, []string, string) error { return nil }),
+		swap(&reconcileLedger, func(context.Context, string) error { return nil }),
 		swap(&acquireDrainLock, func(context.Context) (func(), bool, error) { return func() {}, true, nil }),
 		swap(&claimOne, func(context.Context, string, string) (*models.PendingPropagation, bool, error) {
 			return nil, false, nil
@@ -457,19 +457,18 @@ func TestDrain_RevokeReconcilesLedgerOnApplied(t *testing.T) {
 		return []models.PendingPropagation{{ID: "rv", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1", Source: "direct"}}, nil
 	}
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{"r": true}, nil }
-	var gotOp, gotUser, gotProj, gotSource string
-	var gotRoles []string
-	reconcileLedger = func(_ context.Context, op, user, proj string, roles []string, source string) error {
-		gotOp, gotUser, gotProj, gotRoles, gotSource = op, user, proj, roles, source
+	var gotID string
+	reconcileLedger = func(_ context.Context, outboxID string) error {
+		gotID = outboxID
 		return nil
 	}
 
 	res, _ := Drain(context.Background())
-	if gotOp != "revoke" || gotUser != "u" || gotProj != "p" || len(gotRoles) != 1 || gotRoles[0] != "r" {
-		t.Fatalf("applied revoke must reconcile the ledger; got op=%q user=%q proj=%q roles=%v", gotOp, gotUser, gotProj, gotRoles)
-	}
-	if gotSource != "direct" {
-		t.Fatalf("reconcile must be scoped to the row's own source, got %q", gotSource)
+	// The row identifies itself. Everything the reconciliation scopes by — the
+	// tuple, the source, the moment — is read from that row, so the drain
+	// cannot hand it a set that never existed together.
+	if gotID != "rv" {
+		t.Fatalf("an applied revoke must reconcile the ledger for its own row, got %q", gotID)
 	}
 	if res.Applied != 1 {
 		t.Fatalf("revoke should be applied, got %+v", res)
@@ -490,15 +489,15 @@ func TestDrain_CascadeRevokeReconcilesScopedToItsOwnSource(t *testing.T) {
 		return []models.PendingPropagation{{ID: "rv-b", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1", Source: "bundle", SourceRef: "b1"}}, nil
 	}
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{"r": true}, nil }
-	var gotSource string
-	reconcileLedger = func(_ context.Context, op, user, proj string, roles []string, source string) error {
-		gotSource = source
+	var gotID string
+	reconcileLedger = func(_ context.Context, outboxID string) error {
+		gotID = outboxID
 		return nil
 	}
 
 	res, _ := Drain(context.Background())
-	if gotSource != "bundle" {
-		t.Fatalf("cascade revoke must reconcile scoped to its own source (bundle), got %q — an unscoped/direct-scoped reconcile risks stripping an operator row", gotSource)
+	if gotID != "rv-b" {
+		t.Fatalf("a cascade revoke must reconcile its own row, got %q", gotID)
 	}
 	if res.Applied != 1 {
 		t.Fatalf("got %+v", res)
@@ -513,7 +512,7 @@ func TestDrain_RevokeShortCircuitAlsoReconcilesLedger(t *testing.T) {
 	// Already absent in Zitadel → short-circuit. The stale ledger row must still go.
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{}, nil }
 	var reconciled bool
-	reconcileLedger = func(context.Context, string, string, string, []string, string) error { reconciled = true; return nil }
+	reconcileLedger = func(context.Context, string) error { reconciled = true; return nil }
 
 	res, _ := Drain(context.Background())
 	if !reconciled {
@@ -527,7 +526,7 @@ func TestDrain_RevokeShortCircuitAlsoReconcilesLedger(t *testing.T) {
 func TestDrain_AddDoesNotReconcileLedger(t *testing.T) {
 	stubDrainDeps(t)
 	claimPending = oneRow("ad", "add")
-	reconcileLedger = func(context.Context, string, string, string, []string, string) error {
+	reconcileLedger = func(context.Context, string) error {
 		t.Fatal("add must not delete ledger rows — the enqueue already upserted them")
 		return nil
 	}
@@ -543,7 +542,7 @@ func TestDrain_LedgerReconcileFailureLeavesRowForRetry(t *testing.T) {
 		return []models.PendingPropagation{{ID: "rv3", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1"}}, nil
 	}
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{"r": true}, nil }
-	reconcileLedger = func(context.Context, string, string, string, []string, string) error {
+	reconcileLedger = func(context.Context, string) error {
 		return errors.New("db unavailable")
 	}
 	markApplied = func(context.Context, string) error {

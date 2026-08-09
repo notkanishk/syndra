@@ -230,7 +230,7 @@ func (res *DrainResult) processRow(ctx context.Context, row models.PendingPropag
 // stale ledger. add is a ledger no-op; only revoke/replace prune rows.
 func applyRow(ctx context.Context, row models.PendingPropagation) error {
 	if row.OpType == "revoke" || row.OpType == "replace" {
-		if err := reconcileLedger(ctx, row.OpType, row.UserID, row.ProjectID, row.RoleKeys, row.Source); err != nil {
+		if err := reconcileLedger(ctx, row.ID); err != nil {
 			return err
 		}
 	}

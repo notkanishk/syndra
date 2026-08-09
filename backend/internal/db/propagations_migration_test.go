@@ -61,7 +61,7 @@ func TestReconcileLedgerOnApplied_RevokeIsSourceScoped(t *testing.T) {
 	if revokeCase == "" {
 		t.Fatal(`could not isolate the "revoke" case body in ReconcileLedgerOnApplied`)
 	}
-	if !regexp.MustCompile(`AND\s+source\s*=\s*\$4`).MatchString(revokeCase) {
+	if !regexp.MustCompile(`d\.source\s*=\s*\$4`).MatchString(revokeCase) {
 		t.Errorf("revoke branch must scope its DELETE by source (AND source=$4) so a cascade revoke never strips an operator's direct grant; body:\n%s", revokeCase)
 	}
 }

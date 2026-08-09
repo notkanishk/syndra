@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -428,41 +429,76 @@ func PruneTerminalPropagations(ctx context.Context, retentionDays int) (int64, e
 // already happened by the time this runs, so nothing holds the lock across the
 // network, and the window this closes is between the call returning and the
 // ledger catching up.
-func ReconcileLedgerOnApplied(ctx context.Context, opType, userID, projectID string, roleKeys []string, source string) error {
-	if opType != "revoke" && opType != "replace" {
-		return nil
-	}
+func ReconcileLedgerOnApplied(ctx context.Context, outboxID string) error {
 	return InTxLockingAccess(ctx, func(ctx context.Context) error {
 		tx, ok := ctx.Value(txKey).(pgx.Tx)
 		if !ok || tx == nil {
 			return fmt.Errorf("reconcile ledger: no transaction")
 		}
+		// Everything is read from the row being reconciled rather than passed
+		// alongside it. What has to hold is that the tuple, the source and the
+		// moment all describe THE SAME decision — a caller assembling them by
+		// hand can pass a set that never existed together, and the ordering
+		// comparison below is meaningless unless the timestamp is this row's.
+		var opType, userID, projectID, source string
+		var roleKeys []string
+		var createdAt time.Time
+		err := tx.QueryRow(ctx, `
+			SELECT op_type, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'),
+			       COALESCE(source,'direct'), created_at
+			FROM propagation_outbox WHERE id = $1`, outboxID).Scan(
+			&opType, &userID, &projectID, &roleKeys, &source, &createdAt)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			return fmt.Errorf("reconcile ledger: read %s: %w", outboxID, err)
+		}
+		if opType != "revoke" && opType != "replace" {
+			return nil
+		}
+
+		// A ledger row is protected only from an add that would ESTABLISH it.
+		//
+		// Cascade adds deliberately write no direct_role_grants row — bundle and
+		// rule intent lives in their own tables — so treating any queued add as
+		// proof the ledger row is newer keeps a direct grant alive that nothing
+		// is maintaining. It then reads as coverage forever: removing the bundle
+		// later sees it, concludes the role is still held, and queues no revoke.
+		// Matching the source is what distinguishes an add that writes this row
+		// from one that writes nothing.
+		//
+		// And it must be NEWER than the decision being reconciled. An add queued
+		// before this revocation and still waiting is older intent; the
+		// revocation is the later word, and the row goes.
+		const newerAddExists = `
+			NOT EXISTS (
+			    SELECT 1 FROM propagation_outbox o
+			    WHERE o.op_type = 'add'
+			      AND o.status IN ('pending', 'in_flight')
+			      AND o.user_id = d.user_id
+			      AND o.project_id = d.zitadel_project_id
+			      AND d.zitadel_role_key = ANY(o.role_keys)
+			      AND o.source = d.source
+			      AND o.created_at > $5)`
+
 		switch opType {
 		case "revoke":
-			// Not a role something is currently trying to establish. Once a
-			// queued revocation is visible to closure computation, a cascade
-			// that wants the role back queues an `add` behind it — and that
-			// add's enqueue has already written the ledger row it needs.
-			// Deleting here by triple would retract an intent newer than the
-			// one being reconciled, and the drain would then apply an add whose
-			// ledger row no longer exists.
-			const q = `DELETE FROM direct_role_grants
-				WHERE user_id=$1 AND zitadel_project_id=$2 AND zitadel_role_key = ANY($3) AND source=$4
-				  AND NOT EXISTS (
-				      SELECT 1 FROM propagation_outbox o
-				      WHERE o.user_id = direct_role_grants.user_id
-				        AND o.project_id = direct_role_grants.zitadel_project_id
-				        AND direct_role_grants.zitadel_role_key = ANY(o.role_keys)
-				        AND o.op_type = 'add'
-				        AND o.status IN ('pending', 'in_flight'))`
-			if _, err := tx.Exec(ctx, q, userID, projectID, roleKeys, source); err != nil {
+			if _, err := tx.Exec(ctx, `DELETE FROM direct_role_grants d
+				WHERE d.user_id=$1 AND d.zitadel_project_id=$2
+				  AND d.zitadel_role_key = ANY($3) AND d.source=$4
+				  AND `+newerAddExists, userID, projectID, roleKeys, source, createdAt); err != nil {
 				return fmt.Errorf("reconcile ledger (revoke): %w", err)
 			}
 		case "replace":
-			const q = `DELETE FROM direct_role_grants
-				WHERE user_id=$1 AND zitadel_project_id=$2 AND source='direct'
-				  AND NOT (zitadel_role_key = ANY($3))`
-			if _, err := tx.Exec(ctx, q, userID, projectID, roleKeys); err != nil {
+			// The same protection, because the same thing can happen: a replace
+			// narrowing A→B while a later direct add re-establishes A would
+			// otherwise delete A's freshly written row, and the add would reach
+			// the target with no durable record behind it.
+			if _, err := tx.Exec(ctx, `DELETE FROM direct_role_grants d
+				WHERE d.user_id=$1 AND d.zitadel_project_id=$2 AND d.source='direct'
+				  AND NOT (d.zitadel_role_key = ANY($3))
+				  AND `+newerAddExists, userID, projectID, roleKeys, "direct", createdAt); err != nil {
 				return fmt.Errorf("reconcile ledger (replace): %w", err)
 			}
 		}
