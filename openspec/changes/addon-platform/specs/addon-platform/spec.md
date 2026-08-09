@@ -267,11 +267,23 @@ The unreconciled period MUST start once and keep its start time until the target
 
 Failing to record currency MUST NOT discard the findings a pass did produce, and MUST NOT be reported as currency the backend cannot vouch for.
 
+What counts as the target failing to answer MUST be decided by the read, not by a pre-flight. A reachability check that inspects local configuration — whether a client is constructed, whether a URL is set — establishes that a call can be attempted, not that one succeeded, so a read that fails after such a check is an outage and MUST be recorded as one. Otherwise a live transport failure is the single kind of outage that goes unrecorded, and the existing row keeps reporting the last current read for its whole duration: the surface built to say the backend has not seen a target since Tuesday says it saw it on Tuesday. A read that fails partway through pagination MUST be discarded rather than diffed, on the same grounds as a capped one.
+
+A failure in the backend's OWN reads MUST NOT be recorded against the target. It is not a statement about the target, and recording it as one sends an operator to inspect a system that is working. Those failures surface as errors; the target's last current read stays visibly old without a period being opened against it.
+
 #### Scenario: An outage produces no drift findings
 
 - **WHEN** the drift sweep runs while a target is unreachable and only stale reads are available
 - **THEN** it MUST NOT raise drift for that target
 - **AND** MUST record the target as unreconciled, with the age of the last current read
+
+#### Scenario: A read that fails after the pre-flight is an outage
+
+- **WHEN** a reachability pre-flight passes and the target read then fails, on its first request or a later page
+- **THEN** the sweep MUST halt without diffing anything
+- **AND** MUST record the target as unreconciled, exactly as an unanswered pre-flight would
+- **AND** MUST distinguish a target that is not configured from one that is not answering
+- **AND** a failure in the backend's own reads MUST NOT be recorded against the target
 
 #### Scenario: A capped read concludes nothing about what it did not see
 

@@ -417,3 +417,117 @@ func TestSweep_AFailedCurrencyRecordDoesNotDiscardTheWork(t *testing.T) {
 		t.Error("an unwritten record must be absent rather than invented — Syndra cannot say how current its picture is if it could not record it")
 	}
 }
+
+// The reachability pre-flight is a nil check on the client, so passing it is
+// not evidence the target answers. A read that fails is the outage — on the
+// first page or a later one — and must be recorded as one, or the row left
+// behind keeps reporting the last current read for the whole outage.
+func TestSweep_AFailedReadIsAnOutage(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		pages func(int) (*zitadel.SearchResult[zitadel.UserGrant], error)
+	}{
+		{"first page", func(int) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+			return nil, errors.New("dial tcp: connection refused")
+		}},
+		{"a later page", func(call int) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+			if call > 1 {
+				return nil, errors.New("502 from the gateway mid-pagination")
+			}
+			items := make([]zitadel.UserGrant, zitadelPageSize)
+			for i := range items {
+				items[i] = zitadel.UserGrant{ID: "g", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}
+			}
+			return &zitadel.SearchResult[zitadel.UserGrant]{Items: items, Total: zitadelPageSize * 4}, nil
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stubSweep(t)
+			// The pre-flight passes: the client is configured. Only the read
+			// knows the target is not answering.
+			defer swap(&zitadelReachable, func(context.Context) bool { return true })()
+			defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
+				return []models.DirectGrant{{UserID: "u9", ProjectID: "p9", RoleKey: "viewer"}}, nil
+			})()
+			calls := 0
+			defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+				calls++
+				return tc.pages(calls)
+			})()
+			defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
+				t.Fatal("a failed read must not be diffed — a partly-read list is unseen, not absent")
+				return "", false, nil
+			})()
+			defer swap(&insertPending, func(context.Context, string, string, string, []string, string, string, string, string) (string, error) {
+				t.Fatal("a failed read must not replay an absence it never observed")
+				return "", nil
+			})()
+			defer swap(&markReconciled, func(context.Context, string) (db.TargetReconciliation, error) {
+				t.Fatal("a failed read must not be recorded as a current one")
+				return db.TargetReconciliation{}, nil
+			})()
+			var reason string
+			since := time.Unix(1_759_900_000, 0)
+			defer swap(&markUnreconciled, func(_ context.Context, target, r string) (db.TargetReconciliation, error) {
+				reason = r
+				return db.TargetReconciliation{Target: target, UnreconciledSince: &since, UnreconciledReason: r}, nil
+			})()
+
+			res, err := Sweep(context.Background())
+			if err != nil {
+				t.Fatalf("a target outage is a halt, not a sweep failure: %v", err)
+			}
+			if !res.Halted || res.Reason != "zitadel_unreachable" {
+				t.Fatalf("a failed read must halt and say why, got %+v", res)
+			}
+			if reason != db.UnreconciledUnreachable {
+				t.Fatalf("the outage must be recorded, got reason %q", reason)
+			}
+			if res.Reconciliation == nil || !res.Reconciliation.Unreconciled() {
+				t.Fatalf("the result must carry the unreconciled record, got %+v", res.Reconciliation)
+			}
+		})
+	}
+}
+
+// Syndra's own reads failing is not a statement about the target. Recording it
+// as one would send an operator to check Zitadel because a Syndra query broke.
+func TestSweep_ASyndraSideFailureIsNotTheTargetsFault(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		bind func()
+	}{
+		{"direct grants", func() {
+			svcAllDirectGrants = func(context.Context) ([]models.DirectGrant, error) {
+				return nil, errors.New("query failed")
+			}
+		}},
+		{"mapping rules", func() {
+			svcGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) {
+				return nil, errors.New("query failed")
+			}
+		}},
+		{"exclusions", func() {
+			svcGetExclusions = func(context.Context, string) ([]models.ExternalGrantExclusion, error) {
+				return nil, errors.New("query failed")
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stubSweep(t)
+			defer swap(&markUnreconciled, func(_ context.Context, _, r string) (db.TargetReconciliation, error) {
+				t.Fatalf("a Syndra-side failure must not be recorded against the target (%s)", r)
+				return db.TargetReconciliation{}, nil
+			})()
+			defer swap(&markReconciled, func(context.Context, string) (db.TargetReconciliation, error) {
+				t.Fatal("an aborted sweep must not claim a current read")
+				return db.TargetReconciliation{}, nil
+			})()
+			tc.bind()
+
+			if _, err := Sweep(context.Background()); err == nil {
+				t.Fatal("a Syndra-side failure must surface as an error, not a halt")
+			}
+		})
+	}
+}

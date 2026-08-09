@@ -57,6 +57,10 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 
 	// A target that cannot answer produces no findings — and says so. The
 	// alternative is not "no drift", it is silence that reads as no drift.
+	//
+	// This pre-flight tests whether Zitadel is CONFIGURED, not whether it
+	// answers: it is a nil check on the client. Passing it is not evidence of
+	// anything, so the read below has to be treated as the real test.
 	if !zitadelReachable(ctx) {
 		return DriftResult{
 			Target:         target,
@@ -70,10 +74,33 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	if err != nil {
 		return DriftResult{}, err
 	}
+	// The read failing IS the outage, on any page of it. Returning the error
+	// here would have made a live network failure the one kind of outage that
+	// goes unrecorded — and the row left behind would keep reporting the last
+	// current read for the duration, so the surface built to say "Syndra has
+	// not seen this target since Tuesday" would say "seen Tuesday" instead. It
+	// is the same halt as the branch above, reached by the honest test rather
+	// than the cheap one.
+	//
+	// A partly-read list is discarded rather than diffed: what did not arrive
+	// is unseen, not absent (see the truncation branch below for the same
+	// distinction reached a different way).
 	zit, truncated, err := fetchAllZitadelGrants(ctx)
 	if err != nil {
-		return DriftResult{}, err
+		log.Printf("[DRIFT] target read failed for %s: %v (recorded unreconciled, nothing diffed)", target, err)
+		return DriftResult{
+			Target: target,
+			Halted: true,
+			// Distinct from `zitadel_offline`: not wired up and not answering
+			// send an operator to different places.
+			Reason:         "zitadel_unreachable",
+			Reconciliation: recordUnreconciled(ctx, target, db.UnreconciledUnreachable),
+		}, nil
 	}
+	// The reads below are Syndra's own. Their failure is not a statement about
+	// the target and must not be recorded as one — an operator sent to check
+	// Zitadel because a Syndra query is broken is an operator looking in the
+	// wrong system. They abort, and the last current read stays visibly old.
 	// A lookup failure MUST NOT degrade to an empty set — that would flag
 	// rule-derived / excluded grants as false drift. Abort the sweep instead;
 	// the scheduler retries next tick and no noisy drift rows are written.
