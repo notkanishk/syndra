@@ -202,7 +202,7 @@ func TestTheOutboxRowIsDerivedFromTheApproval(t *testing.T) {
 		{"p.applied_at IS NOT NULL", "work may only be queued under an approval that was actually claimed"},
 		{"t.state = 'active'", "a target the deployment dropped must take no work, enforced at the write and not only at the caller"},
 		{"p.target <> $3", "the built-in target's rows carry project and role columns this path cannot fill"},
-		{"NOT EXISTS", "one approval, one queued convergence"},
+		{"ON CONFLICT (plan_subject_id) WHERE plan_subject_id IS NOT NULL DO NOTHING", "one approval, one queued convergence — and via the index, so a concurrent second caller gets the same typed refusal rather than a raised constraint violation that kills its transaction"},
 	} {
 		if !strings.Contains(insert, predicate.frag) {
 			t.Errorf("the insert must require %q: %s", predicate.frag, predicate.why)
@@ -236,7 +236,7 @@ func TestTheEnqueuePredicateAndItsExplainerRefuseTheSameThings(t *testing.T) {
 		{"the plan was never claimed", func(r *approvalRef) { r.claimed = false }, ErrNoClaimedApproval, "p.applied_at IS NOT NULL"},
 		{"the target was dropped", func(r *approvalRef) { r.targetState = TargetDisabled }, ErrTargetNotActive, "t.state = 'active'"},
 		{"the built-in target", func(r *approvalRef) { r.target = TargetZitadel }, ErrNotAnEntitlementTarget, "p.target <> $3"},
-		{"already queued", func(r *approvalRef) { r.alreadyQueued = true }, ErrAlreadyQueued, "NOT EXISTS"},
+		{"already queued", func(r *approvalRef) { r.alreadyQueued = true }, ErrAlreadyQueued, "DO NOTHING"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := queueable
@@ -248,6 +248,32 @@ func TestTheEnqueuePredicateAndItsExplainerRefuseTheSameThings(t *testing.T) {
 				t.Errorf("the insert does not require %q, so the database would write what the explainer calls a refusal", tc.predicate)
 			}
 		})
+	}
+}
+
+// P2 — the duplicate a predicate cannot see gets the same answer as the one it
+// can. A concurrent second caller passes any NOT EXISTS check, hits the unique
+// index, and raises 23505 — which aborts its transaction, so the explainer that
+// would have said ErrAlreadyQueued never runs and the caller gets an error
+// about an index instead. Absorbing the conflict is what keeps the promise.
+func TestAConcurrentDuplicateIsRefusedRatherThanRaised(t *testing.T) {
+	insert := entitlementInsert(t)
+
+	if strings.Contains(insert, "NOT EXISTS") {
+		t.Error("a NOT EXISTS predicate cannot see an uncommitted concurrent insert, so it cannot be what enforces one row per approval")
+	}
+	if !strings.Contains(insert, "DO NOTHING") {
+		t.Error("the conflict must be absorbed into no-row-returned, or the loser of a race gets a raised constraint violation and a dead transaction")
+	}
+	// Named, and named with the partial index's own predicate: an unqualified
+	// DO NOTHING would also swallow an idempotency-key collision, which means
+	// the key generator repeated itself and must not be quietly ignored.
+	if !strings.Contains(insert, "ON CONFLICT (plan_subject_id) WHERE plan_subject_id IS NOT NULL") {
+		t.Error("the conflict target must name the plan-subject index and its predicate, so no other uniqueness is absorbed with it")
+	}
+	// And the no-row case still ends at the typed refusal.
+	if err := enqueueRefusal(approvalRef{found: true, target: "truenas", targetState: TargetActive, claimed: true, alreadyQueued: true}, sampleUUID); !errors.Is(err, ErrAlreadyQueued) {
+		t.Errorf("enqueueRefusal = %v, want ErrAlreadyQueued", err)
 	}
 }
 
@@ -331,5 +357,83 @@ func TestTheEntitlementPathCannotWriteAZitadelRow(t *testing.T) {
 	up, _ := addonMigrationSQL(t)
 	if !strings.Contains(up, "propagation_outbox_zitadel_shape_check") {
 		t.Error("the shape CHECK this refusal anticipates is missing from the migration")
+	}
+}
+
+// P1 — deregistering a target resolves the work it strands, in the same
+// transaction that deregisters it.
+//
+// The lock only orders the two. An apply that wins the race still commits a row
+// against a target nothing will ever drain, and a row that never drains counts
+// as queued — which reads as "recorded". So the disable has to sweep, and the
+// sweep has to be in the same transaction as the state change: split across
+// two, an apply committing between them lands in exactly the gap the sweep just
+// left.
+func TestDeregisteringATargetResolvesTheWorkItStrands(t *testing.T) {
+	src, err := os.ReadFile("targets.go")
+	if err != nil {
+		t.Fatalf("read targets.go: %v", err)
+	}
+	body := string(src)
+
+	if !strings.Contains(body, "InTx(ctx, func(tx pgx.Tx) error {") {
+		t.Error("the disable must run in one transaction with its sweep — between two transactions, an apply commits into the gap")
+	}
+	stateChange := strings.Index(body, "UPDATE targets SET state = 'disabled'")
+	sweep := strings.Index(body, "abandonQueuedWorkTx(ctx, tx,")
+	if stateChange < 0 || sweep < 0 {
+		t.Fatal("could not locate the state change and the sweep")
+	}
+	if sweep < stateChange {
+		t.Error("the sweep must follow the state change: rows committed before the target row is locked are exactly the ones it exists to catch")
+	}
+
+	// Both unresolved states, because both are stranded. `pending` was never
+	// sent; `in_flight` may have been, and the row records which by the column
+	// that already means it.
+	m := regexp.MustCompile(`(?s)UPDATE propagation_outbox\s+SET status = 'abandoned'(.*?)RETURNING (.*?)` + "`").FindStringSubmatch(body)
+	if m == nil {
+		t.Fatal("could not isolate the abandon statement")
+	}
+	for _, frag := range []string{"status IN ('pending', 'in_flight')", "completed_at = NOW()", "target = $1"} {
+		if !strings.Contains(m[1], frag) {
+			t.Errorf("the sweep must contain %q", frag)
+		}
+	}
+	if !strings.Contains(m[2], "started_at IS NOT NULL") {
+		t.Error("the sweep must report which rows were already in flight — that is the difference between work that certainly did not happen and work nobody can account for")
+	}
+	// Terminated, never deleted: the subject, the approval, and now a reason
+	// have to survive, or an operator asking what happened to their change gets
+	// nothing.
+	if strings.Contains(body, "DELETE FROM propagation_outbox") {
+		t.Error("deregistration must terminate stranded rows, not delete them")
+	}
+	// The audit write is part of the same statement, not a loop over its
+	// results. A loop is skippable — by an empty slice, by an early return, by
+	// an edit — and a data-modifying CTE runs to completion whether or not the
+	// primary query reads it, so terminating a row and recording that it was
+	// terminated become one write.
+	if !regexp.MustCompile(`(?s)WITH abandoned AS \(.*?\), audited AS \(\s*INSERT INTO audit_logs.*?SELECT 'system', a\.user_id, \$2, a\.id FROM abandoned a\s*\)`).MatchString(body) {
+		t.Error("the audit rows must be written by the same statement that terminates the work: a change that silently stopped existing is the failure this plane is built against")
+	}
+	if !strings.Contains(body, `"entitlement."+target+".abandoned"`) {
+		t.Error("the audit action must name the target whose deregistration abandoned the work")
+	}
+}
+
+// P1 — `abandoned` is a status the database accepts, and it is its own status.
+// `failed` claims an attempt was made and did not work; `superseded` claims a
+// later decision won. Neither happened: the target went away.
+func TestAbandonedIsATerminalStatusOfItsOwn(t *testing.T) {
+	up, _ := addonMigrationSQL(t)
+	m := regexp.MustCompile(`(?is)ADD CONSTRAINT propagation_outbox_status_check\s+CHECK \(status IN \((.*?)\)\)`).FindStringSubmatch(up)
+	if m == nil {
+		t.Fatal("could not isolate the outbox status CHECK")
+	}
+	for _, status := range []string{"pending", "in_flight", "applied", "failed", "superseded", "abandoned"} {
+		if !strings.Contains(m[1], "'"+status+"'") {
+			t.Errorf("the status CHECK must accept %q", status)
+		}
 	}
 }

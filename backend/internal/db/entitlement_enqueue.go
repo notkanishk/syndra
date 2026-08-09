@@ -109,8 +109,17 @@ func EnqueueEntitlementApplyTx(ctx context.Context, tx pgx.Tx, p EntitlementAppl
 	// column is NOT NULL and this row has nothing to say that the snapshot does
 	// not — no parameter of this function can reach it.
 	//
-	// The NOT EXISTS gives a clean refusal for work already queued; the unique
-	// index behind it is what makes that true under a concurrent second caller.
+	// ON CONFLICT rather than a NOT EXISTS predicate, because the case that
+	// matters is the one a predicate cannot see: a concurrent caller whose row
+	// is not committed yet. That loser would raise 23505, and a raised
+	// constraint violation aborts the whole transaction — so instead of the
+	// typed refusal this function promises, the caller would get a dead
+	// transaction and an error about an index. DO NOTHING turns it into no row
+	// returned, which is the same answer every other refusal here gives.
+	//
+	// The conflict target is named, and named with the index's own predicate,
+	// so only this uniqueness is absorbed. An idempotency-key collision still
+	// raises, which is right: that one means the key generator repeated itself.
 	const insertOutbox = `
 		INSERT INTO propagation_outbox
 			(op_type, user_id, payload_json, idempotency_key, initiated_by, source, target, plan_subject_id)
@@ -122,7 +131,7 @@ func EnqueueEntitlementApplyTx(ctx context.Context, tx pgx.Tx, p EntitlementAppl
 		   AND p.applied_at IS NOT NULL
 		   AND p.target <> $3
 		   AND t.state = 'active'
-		   AND NOT EXISTS (SELECT 1 FROM propagation_outbox o WHERE o.plan_subject_id = ps.id)
+		ON CONFLICT (plan_subject_id) WHERE plan_subject_id IS NOT NULL DO NOTHING
 		RETURNING id, user_id, initiated_by, target`
 
 	var outboxID, subjectID, initiatedBy, target string

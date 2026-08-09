@@ -58,11 +58,19 @@ ALTER TABLE propagation_outbox
 -- version rejection (design §15). Same reasoning migration 000015 used for the
 -- 5-value source enum: a status the schema forbids is a runtime error waiting
 -- for a second ALTER, and this migration is where the outbox is already open.
+--
+-- `abandoned` is the other terminal state a second target makes possible:
+-- deregistering a target strands whatever it had queued, and those rows have to
+-- stop being queued. It is not `failed`, which claims an attempt was made and
+-- did not work, and it is not `superseded`, which claims a later decision won.
+-- Nothing was attempted and nothing overtook it; the target went away. Whether
+-- a row was already in flight is read from `started_at`, which records exactly
+-- that and needs no second vocabulary.
 ALTER TABLE propagation_outbox
     DROP CONSTRAINT IF EXISTS pending_zitadel_propagations_status_check;
 ALTER TABLE propagation_outbox
     ADD CONSTRAINT propagation_outbox_status_check
-    CHECK (status IN ('pending', 'in_flight', 'applied', 'failed', 'superseded'));
+    CHECK (status IN ('pending', 'in_flight', 'applied', 'failed', 'superseded', 'abandoned'));
 
 -- 1.3 --------------------------------------------------------------------
 -- `apply` is the add-on op_type: a level-triggered convergence onto a resolved

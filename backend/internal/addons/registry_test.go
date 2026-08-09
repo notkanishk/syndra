@@ -59,7 +59,7 @@ func withTargetRegistry(t *testing.T, f *fakeTargetRegistry) {
 		f.upserted = append(f.upserted, target)
 		return nil
 	}
-	dbDisableUnconfiguredTargets = func(_ context.Context, configured []string) ([]string, error) {
+	dbDisableUnconfiguredTargets = func(_ context.Context, configured []string) ([]db.DisabledTarget, error) {
 		keep := map[string]bool{}
 		for _, c := range configured {
 			keep[c] = true
@@ -69,7 +69,11 @@ func withTargetRegistry(t *testing.T, f *fakeTargetRegistry) {
 				f.disabled = append(f.disabled, a)
 			}
 		}
-		return f.disabled, nil
+		out := make([]db.DisabledTarget, 0, len(f.disabled))
+		for _, d := range f.disabled {
+			out = append(out, db.DisabledTarget{Target: d})
+		}
+		return out, nil
 	}
 	t.Cleanup(func() { dbUpsertTarget, dbDisableUnconfiguredTargets = savedUp, savedDis })
 }

@@ -22,9 +22,11 @@ An accepted apply MUST spend the plan and queue its work in one transaction, so 
 
 Every bound value on a queued row — the subject, the target, and the operator who approved it — MUST be derived from the approval by the write itself rather than supplied alongside it. A reference that is only checked for existence proves the approval exists and nothing more: not that it is this subject's, not that its plan was ever claimed, and not that its target still takes work. Each of those MUST be a condition of the write, so a row that should not exist is never written rather than written and then argued about.
 
-An approval MUST authorise at most one queued row, enforced by a uniqueness constraint and not only by a predicate, because a predicate cannot see what a concurrent transaction has not yet committed and two callers racing on one approval would each find no existing row.
+An approval MUST authorise at most one queued row, enforced by a uniqueness constraint and not only by a predicate, because a predicate cannot see what a concurrent transaction has not yet committed and two callers racing on one approval would each find no existing row. The loser of that race MUST receive the same refusal the non-concurrent case receives: a raised constraint violation aborts the transaction it was raised in, so the caller would get a database error about an index instead of the typed answer, and no diagnosis could run.
 
 The target's registration MUST be read under a lock that serialises against the reconciliation which disables targets. An unlocked read can return active, be overtaken by a committed disable, and let the apply commit the permanently undrainable row the check exists to refuse.
+
+Serialising is necessary and not sufficient: an apply that wins that race still commits work against a target about to be deregistered. Deregistration MUST therefore resolve the work it strands, in the same transaction that changes the registration state — across two transactions an apply commits into the gap between them. Stranded rows MUST reach a terminal state that is neither `failed` (which claims an attempt was made) nor `superseded` (which claims a later decision won), MUST be terminated rather than deleted so the subject, the approval, and the reason survive, MUST leave an audit trace written by that same statement, and MUST distinguish a row that was never dispatched from one that was in flight and whose outcome is therefore unknowable. Deregistration MUST NOT be refused for having queued work: a deployment change would then fail because of a queue, and a backend that died mid-drain would leave a target that can never be removed.
 
 #### Scenario: An approval is spent once
 
@@ -75,6 +77,14 @@ The target's registration MUST be read under a lock that serialises against the 
 - **AND** MUST NOT spend the plan, so the approval survives the target being re-registered
 - **AND** the refusal MUST be distinguishable from a target that is deployed and unreachable
 - **AND** a target disabled concurrently with an in-flight apply MUST NOT leave queued work behind
+
+#### Scenario: Deregistering a target resolves what it strands
+
+- **WHEN** a target is deregistered while it has queued or in-flight work
+- **THEN** that work MUST reach a terminal state in the same transaction as the deregistration
+- **AND** each terminated row MUST be preserved with its subject, its approval, and the reason
+- **AND** a row that was already in flight MUST be distinguishable from one that was never dispatched, because only the first may have applied
+- **AND** the deregistration MUST NOT be refused for having work queued
 
 #### Scenario: Work cannot be queued under another subject's approval
 

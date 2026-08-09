@@ -240,8 +240,18 @@ func syncTargetRegistry(ctx context.Context, reg map[string]*Addon) error {
 	if err != nil {
 		return fmt.Errorf("addon registry: %w", err)
 	}
-	for _, t := range disabled {
-		log.Printf("[ADDON] target=%s is no longer configured; registry state set to disabled (history retained)", t)
+	for _, d := range disabled {
+		log.Printf("[ADDON] target=%s is no longer configured; registry state set to disabled (history retained)", d.Target)
+		// Loud, because these are approved changes that will now never reach
+		// anyone. A deregistration that quietly swallowed queued work would be
+		// the silent discard this plane is built to avoid.
+		for _, w := range d.Abandoned {
+			if w.Dispatched {
+				log.Printf("[ADDON] target=%s subject=%s outbox=%s was IN FLIGHT when the target was deregistered; whether it applied is unknown", d.Target, w.SubjectID, w.OutboxID)
+				continue
+			}
+			log.Printf("[ADDON] target=%s subject=%s outbox=%s was queued and will never be dispatched", d.Target, w.SubjectID, w.OutboxID)
+		}
 	}
 	return nil
 }
