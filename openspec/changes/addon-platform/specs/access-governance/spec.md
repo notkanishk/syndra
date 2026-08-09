@@ -281,7 +281,21 @@ Because target propagation fails open, a revocation may be recorded in Syndra wi
 
 The backend MUST NOT mutate a Zitadel `user_grant` through any Syndra-mediated path without first durably recording the corresponding intent (`direct_role_grants` row with `source`, `source_ref`, `granted_by`, `reason`, `expires_at`), the audit entry, and an outbox row (`propagation_outbox`) in a single database transaction. The Zitadel call happens during the drain, after the intent is committed. Every path that creates a direct grant resolves to this one enqueue: `POST /api/v1/users/{id}/grants`, the `POST /api/v1/zitadel/users/{id}/grants` alias, AND the access-request approval path (`POST /api/v1/requests/{id}/decision` with `status=approved`). Approvals MUST NOT take the bare `UpsertDirectGrant` shortcut, because a ledger row with no matching outbox row is invisible to the Pending UI, never projected to Zitadel, and re-surfaces as `syndra_only` drift in reconciliation.
 
+Ending access is subject to the same rule as conferring it, and expiry is a path that ends it. A grant reaching its expiry MUST resolve to the same enqueue, in the same transaction as the ledger delete: an expired grant whose row is deleted with nothing queued leaves the access live on the target, unexplained by any Syndra record, and the next reconciliation correctly raises it as untraced drift — the sweep manufacturing findings out of the expiry's own inaction.
+
+What expiry queues MUST be the effective-access delta, not an unconditional revocation of whatever the lapsed grant named. A role the subject still holds through a bundle, or still derives through another live grant, MUST NOT be revoked; a derived role the lapsed grant alone supported MUST be. This is the same delta an operator's removal computes, and it MUST be computed per grant and applied in sequence, because two grants lapsing in one pass can each support the same derived role — computed together against one snapshot, each sees the other still covering it and neither revokes.
+
+The expiry re-check MUST live in the delete's own predicate rather than in the sweep that called it. Renewal pushes the date forward on the same row, so a grant read as expired can be alive by the time the write runs; a caller-side check decides from a snapshot, while the predicate decides from the row. A grant that no longer matches MUST leave the whole transaction — delete, audit, and queued revocations — unapplied, and MUST be distinguishable from a grant that is missing, since one means leave it alone and the other means something is wrong.
+
 The outbox table is `propagation_outbox`. It was `pending_zitadel_propagations`, a name that becomes false the moment a second target exists; it carries a `target` column resolved against the `targets` registry, and its Zitadel-shaped columns (`project_id`, `role_keys`, `zitadel_grant_id`) are nullable for rows whose target is not Zitadel and MUST remain populated for rows whose target is. `direct_role_grants` gains no target column: direct grants are intents against Zitadel `user_grant`s, and add-on entitlements come from mappings and allowances instead.
+
+#### Scenario: An expiring grant queues its revocation rather than becoming drift
+
+- **WHEN** a direct grant reaches its expiry and the sweep processes it
+- **THEN** the ledger delete, the audit row and the revocation MUST commit together
+- **AND** a role the subject still holds another way MUST NOT be revoked, and MUST be reported as retained
+- **AND** a role derived only from the lapsed grant MUST be revoked
+- **AND** a grant renewed between the sweep's read and its write MUST survive, with nothing queued and nothing audited
 
 #### Scenario: A Zitadel outbox row cannot be written half-formed
 

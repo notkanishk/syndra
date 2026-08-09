@@ -65,8 +65,9 @@ var (
 	svcGetAllDirectGrants     = db.GetAllDirectGrants
 	// Direct-grant removal: ledger delete + audit + the caller-computed
 	// effective-access delta, in one transaction.
-	svcDeleteDirectGrantAndEnqueue = db.DeleteDirectGrantAndEnqueue
-	svcGetActiveMappingRules       = db.GetActiveMappingRules
+	svcDeleteDirectGrantAndEnqueue        = db.DeleteDirectGrantAndEnqueue
+	svcDeleteExpiredDirectGrantAndEnqueue = db.DeleteExpiredDirectGrantAndEnqueue
+	svcGetActiveMappingRules              = db.GetActiveMappingRules
 
 	// Role management
 	svcDbCreateRole               = db.CreateRole

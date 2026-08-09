@@ -283,3 +283,85 @@ func DeleteDirectGrant(ctx context.Context, userID, grantID, actor string) (Dire
 		Status:    "pending",
 	}, nil
 }
+
+// ExpiredGrantRevocation is what one expired grant produced.
+//
+// ProjectID and RoleKey come from the row the delete actually removed, not from
+// the sweep's snapshot, so every downstream side effect names what went away.
+type ExpiredGrantRevocation struct {
+	ProjectID string
+	RoleKey   string
+	OutboxIDs []string
+	// Revoked lists "project/role" pairs the subject genuinely lost.
+	Revoked []string
+	// Retained lists pairs a bundle or a mapping rule still covers. Nothing is
+	// queued for these — the grant lapsed, the access did not.
+	Retained []string
+}
+
+// ExpireDirectGrant ends one expired grant the way an operator's removal ends a
+// live one: same closure delta, same single transaction, same outbox.
+//
+// Expiry used to delete the ledger row and then call Zitadel directly to revoke
+// whatever mapping rules derived from it. Two things were wrong with that. The
+// grant itself was never revoked upstream at all, so an expiring grant left the
+// access live in Zitadel with no Syndra record explaining it — and the next
+// drift sweep, correctly, raised it as unexplained access for a human to
+// triage. Expiry manufactured drift out of its own inaction. And the derived
+// revocations it did issue were unconditional: a rule-derived role the subject
+// still holds through a bundle, or through another grant of the same source
+// role, was taken away anyway, with nothing durable recording that it had been.
+//
+// Both follow from the same omission — expiry was computing no delta. It has
+// one now, and it is the delta every other removal computes.
+//
+// `before` is built from `after` plus the expiring grant's own role rather than
+// read separately, because the "before" read would not contain it: base
+// holdings exclude expired grants by definition, so reading both sides would
+// compare a world without this grant against a world without this grant and
+// find nothing to revoke. The one fact that distinguishes the two states is the
+// grant being expired, and that fact is the input, not something to rediscover.
+func ExpireDirectGrant(ctx context.Context, userID, grantID, projectID, role, actor string) (ExpiredGrantRevocation, error) {
+	rules, err := svcGetActiveMappingRules(ctx)
+	if err != nil {
+		return ExpiredGrantRevocation{}, err
+	}
+
+	after, err := userBaseHoldingsExcludingGrant(ctx, userID, grantID)
+	if err != nil {
+		return ExpiredGrantRevocation{}, err
+	}
+	lapsed := roleKey{projectID: projectID, roleKey: role}
+	before := make(map[roleKey]bool, len(after)+1)
+	for k := range after {
+		before[k] = true
+	}
+	before[lapsed] = true
+
+	afterClosure := effectiveClosure(after, rules)
+	_, revokes := closureDelta(effectiveClosure(before, rules), afterClosure)
+
+	retained := make([]string, 0, 1)
+	if afterClosure[lapsed] {
+		retained = append(retained, lapsed.projectID+"/"+lapsed.roleKey)
+	}
+
+	params := deltaParams(userID, nil, revokes, actor, "Grant expired", "direct", grantID)
+
+	deletedProject, deletedRole, ids, err := svcDeleteExpiredDirectGrantAndEnqueue(ctx, actor, userID, grantID, params)
+	if err != nil {
+		return ExpiredGrantRevocation{}, err
+	}
+
+	revoked := make([]string, 0, len(revokes))
+	for _, key := range revokes {
+		revoked = append(revoked, key.projectID+"/"+key.roleKey)
+	}
+	return ExpiredGrantRevocation{
+		ProjectID: deletedProject,
+		RoleKey:   deletedRole,
+		OutboxIDs: ids,
+		Revoked:   revoked,
+		Retained:  retained,
+	}, nil
+}

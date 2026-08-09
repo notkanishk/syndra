@@ -2,8 +2,10 @@ package expiry
 
 import (
 	"context"
+	"errors"
 	"log"
 
+	"syndra/internal/db"
 	"syndra/internal/models"
 )
 
@@ -13,27 +15,17 @@ import (
 //
 // The fetched snapshot is advisory only. Because UpsertDirectGrant renews
 // grants via ON CONFLICT DO UPDATE (same row ID, pushed-forward expires_at),
-// any decision made purely off the snapshot would be vulnerable to a
-// renewal that lands between fetch and mutation. The authoritative gate is
-// the DELETE itself: DeleteExpiredDirectGrantsByIDs re-validates
-// expires_at <= NOW() atomically and returns only rows that were still
-// expired at delete time. Every downstream side-effect is driven off that
-// returned set, never the pre-fetch snapshot.
+// any decision made purely off the snapshot would be vulnerable to a renewal
+// that lands between fetch and mutation. The authoritative gate is the DELETE
+// itself, inside services.ExpireDirectGrant's transaction: it re-checks
+// expires_at <= NOW() and a renewed grant simply does not match, taking the
+// whole transaction — audit row, outbox rows and all — down with it.
 //
-// Per-user order of operations:
-//  1. Atomic guarded delete (user-scoped, expires_at re-checked, RETURNING
-//     the rows actually removed). Renewed grants do not match and survive.
-//  2. For each actually-deleted grant, write an audit row. Audit lands
-//     immediately after the authoritative DB commit so the trail survives
-//     any downstream failure.
-//  3. For each actually-deleted grant, emit a provisioning intent
-//     (idempotent via grantID-discriminated key) so the sync service
-//     removes the LLDAP membership.
-//  4. Invalidate the user's cache once (lazy rebuild on next request,
-//     matching the webhook convention).
-//  5. Best-effort Zitadel cascade per unique (project, role) tuple.
-//     Log-and-continue on failure — matches the deferred
-//     "Partial Failure Rollback" Phase-5 compromise.
+// This package decides WHICH grants expire and in what order. What expiring one
+// means belongs to services.ExpireDirectGrant, which computes the same closure
+// delta an operator's removal computes and commits it with the ledger delete.
+// The sweep's own job is scheduling, batching, and not losing one user's work
+// to another user's failure.
 func Sweep(ctx context.Context, batchSize int) {
 	// Clamp against misconfiguration — a zero batch would sweep nothing
 	// forever, an unbounded one defeats the batching.
@@ -64,70 +56,57 @@ func Sweep(ctx context.Context, batchSize int) {
 	}
 }
 
-// processUser runs the full pipeline for a single user's candidate grants.
-// The post-delete sequence is driven off the rows DeleteExpiredDirectGrantsByIDs
-// actually removed — NOT the pre-fetch snapshot — so a concurrent renewal
-// that lands between fetch and delete is invisible to every subsequent step.
+// processUser expires a single user's candidate grants, one at a time.
+//
+// One at a time rather than one batched delete, because each grant's revocation
+// delta depends on what the subject still holds — including the other grants in
+// this batch. Two expiring grants can both derive the same role through mapping
+// rules; computed together against one snapshot, each sees the other still
+// covering it and neither revokes. Sequentially, each delta is computed against
+// the state the previous delete left, and the last one out produces the revoke.
+//
+// Every side effect is driven off what the delete actually removed, never the
+// pre-fetch snapshot, so a renewal landing between fetch and write is invisible
+// to all of them.
 func processUser(ctx context.Context, userID string, candidates []models.DirectGrant) {
-	ids := make([]string, len(candidates))
-	for i, g := range candidates {
-		ids[i] = g.ID
-	}
-
-	// Step 1: atomic guarded delete. Only rows still satisfying
-	// expires_at <= NOW() at delete time are removed and returned.
-	deleted, err := svcDeleteExpiredDirectGrantsByIDs(ctx, userID, ids)
-	if err != nil {
-		log.Printf("[SCHEDULER] Guarded delete failed user=%s candidates=%d err=%v — no downstream work for this user",
-			userID, len(ids), err)
-		return
-	}
-	if len(deleted) == 0 {
-		// All candidates were concurrently renewed (or already removed).
-		// Nothing to clean up for this user this tick.
-		log.Printf("[SCHEDULER] No grants deleted user=%s candidates=%d (all renewed or concurrently removed)",
-			userID, len(ids))
-		return
-	}
-	if len(deleted) < len(ids) {
-		log.Printf("[SCHEDULER] Partial delete user=%s candidates=%d deleted=%d (remainder renewed or concurrently removed)",
-			userID, len(ids), len(deleted))
-	}
-
-	// Step 2: audit each actually-deleted grant. Written before intent and
-	// cascade so the audit trail survives any later side-effect failure.
-	for _, g := range deleted {
-		_ = svcInsertAuditLog(ctx, "system:scheduler", userID, "direct_grant.revoked_by_expiry", g.ID)
-	}
-
-	// Step 3: emit provisioning intents for actually-deleted grants only.
-	// Idempotency key is grantID-discriminated so repeated sweeps across
-	// renewals cannot collide on an earlier grant's key.
-	for _, g := range deleted {
-		if err := svcEmitIntentFromScheduler(ctx, userID, "remove", g.ProjectID, g.RoleKey, g.ID); err != nil {
-			log.Printf("[SCHEDULER] Intent emit failed after delete user=%s grant=%s project=%s role=%s err=%v — LLDAP orphan possible; reconciler will reap",
-				userID, g.ID, g.ProjectID, g.RoleKey, err)
+	for _, candidate := range candidates {
+		if ctx.Err() != nil {
+			return
 		}
+		expireOne(ctx, userID, candidate)
 	}
-
-	// Step 4: cache invalidate once per user.
+	// Once per user, after every grant of theirs: the compile is per-user, so
+	// invalidating between grants would only rebuild state the next delete
+	// invalidates again.
 	if err := cacheInvalidateUser(ctx, userID); err != nil {
 		log.Printf("[SCHEDULER] Cache invalidate failed user=%s err=%v (non-fatal)", userID, err)
 	}
+}
 
-	// Step 5: best-effort Zitadel cascade, deduped per (project, role).
-	seen := make(map[string]struct{}, len(deleted))
-	for _, g := range deleted {
-		key := g.ProjectID + "|" + g.RoleKey
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		if err := zitadelRevokeMappingRules(ctx, userID, g.ProjectID, g.RoleKey); err != nil {
-			log.Printf("[SCHEDULER] Zitadel cascade failed user=%s project=%s role=%s err=%v — derived-grant orphans may remain; reconciler will clean up",
-				userID, g.ProjectID, g.RoleKey, err)
-		}
+func expireOne(ctx context.Context, userID string, candidate models.DirectGrant) {
+	res, err := svcExpireDirectGrant(ctx, userID, candidate.ID, candidate.ProjectID, candidate.RoleKey, expiryActor)
+	switch {
+	case errors.Is(err, db.ErrGrantRenewed):
+		// Somebody pushed the expiry forward between the fetch and the write.
+		// Nothing is wrong and nothing is owed: the grant is alive again.
+		log.Printf("[SCHEDULER] Grant renewed before expiry could run user=%s grant=%s (left alone)", userID, candidate.ID)
+		return
+	case err != nil:
+		log.Printf("[SCHEDULER] Expiry failed user=%s grant=%s err=%v — the grant stands and nothing was queued", userID, candidate.ID, err)
+		return
 	}
+
+	// The ledger delete, the audit row and the revocations committed together.
+	// What remains is the LLDAP intent, which is a different system's queue and
+	// cannot join that transaction; a failure here leaves a group membership
+	// behind for the reconciler, not an access decision half-made.
+	if err := svcEmitIntentFromScheduler(ctx, userID, "remove", res.ProjectID, res.RoleKey, candidate.ID); err != nil {
+		log.Printf("[SCHEDULER] Intent emit failed after expiry user=%s grant=%s project=%s role=%s err=%v — LLDAP orphan possible; reconciler will reap",
+			userID, candidate.ID, res.ProjectID, res.RoleKey, err)
+	}
+
+	log.Printf("[SCHEDULER] Grant expired user=%s grant=%s %s/%s revoked=%v retained=%v queued=%d",
+		userID, candidate.ID, res.ProjectID, res.RoleKey, res.Revoked, res.Retained, len(res.OutboxIDs))
 }
 
 func groupByUser(grants []models.DirectGrant) map[string][]models.DirectGrant {

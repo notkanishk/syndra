@@ -288,46 +288,66 @@ func GetExpiredDirectGrants(ctx context.Context, limit int) ([]models.DirectGran
 	return grants, nil
 }
 
-// DeleteExpiredDirectGrantsByIDs atomically hard-deletes direct role grants
-// for a specific user BUT only rows whose expires_at is still in the past at
-// the moment of the DELETE. Rows that were concurrently renewed via
-// UpsertDirectGrant (which uses ON CONFLICT DO UPDATE and therefore preserves
-// the row ID while pushing expires_at forward) will not satisfy the predicate
-// and will survive.
+// ErrGrantRenewed says the grant no longer satisfies `expires_at <= NOW()`:
+// somebody pushed it forward between the sweep's fetch and its write. Distinct
+// from ErrGrantNotFound because nothing is wrong — the grant is alive, and the
+// correct response is to leave it alone until it expires again.
+var ErrGrantRenewed = errors.New("direct grant is no longer expired")
+
+// DeleteExpiredDirectGrantAndEnqueue is the expiry sibling of
+// DeleteDirectGrantAndEnqueue: the same ledger-delete + audit + outbox rows in
+// one transaction, with the expiry re-check carried in the DELETE's own
+// predicate.
 //
-// The RETURNING clause guarantees the caller sees the exact set of rows that
-// were actually removed; downstream steps (intent emission, audit, cascade)
-// MUST be driven from this returned slice, not from the pre-fetch snapshot.
+// The re-check has to be here rather than in the sweep that called it.
+// `UpsertDirectGrant` renews by pushing `expires_at` forward on the same row,
+// so a grant fetched as expired can be alive by the time this runs; under READ
+// COMMITTED the DELETE re-evaluates its predicate against the version it finds,
+// and a renewed grant simply does not match. The caller's delta — computed
+// before this call, from a world where the grant is gone — is then discarded
+// with the transaction rather than queued against a grant that is still valid.
 //
-// The user_id scoping is defensive: it guarantees a caller cannot delete
-// another user's grants even if IDs were mis-grouped upstream.
-func DeleteExpiredDirectGrantsByIDs(ctx context.Context, userID string, ids []string) ([]models.DirectGrant, error) {
-	if len(ids) == 0 {
-		return nil, nil
+// `params` is the same DELTA the operator-driven removal passes: the roles the
+// subject genuinely loses. A role still covered by a bundle or a mapping rule
+// produces no revoke, because expiry of one grant is not loss of the access it
+// happened to carry.
+//
+// Returns the project and role read back from the deleted row, so every
+// downstream side effect names what actually went away rather than what the
+// sweep's snapshot said would.
+func DeleteExpiredDirectGrantAndEnqueue(ctx context.Context, actor, userID, grantID string,
+	params []EnqueueParams) (projectID, roleKey string, outboxIDs []string, err error) {
+	tx, err := PG.Begin(ctx)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("begin expire grant tx: %w", err)
 	}
-	query := `
+	defer tx.Rollback(ctx) // no-op after a successful Commit
+
+	const deleteGrant = `
 		DELETE FROM direct_role_grants
-		WHERE user_id = $1
-		  AND id = ANY($2::uuid[])
+		WHERE id = $1 AND user_id = $2
 		  AND expires_at IS NOT NULL
 		  AND expires_at <= NOW()
-		RETURNING id, user_id, zitadel_project_id, zitadel_role_key, granted_by, COALESCE(reason, ''), expires_at, created_at, updated_at`
-
-	rows, err := PG.Query(ctx, query, userID, ids)
-	if err != nil {
-		return nil, fmt.Errorf("failed to delete expired direct grants: %w", err)
-	}
-	defer rows.Close()
-
-	var deleted []models.DirectGrant
-	for rows.Next() {
-		var g models.DirectGrant
-		if err := rows.Scan(&g.ID, &g.UserID, &g.ProjectID, &g.RoleKey, &g.GrantedBy, &g.Reason, &g.ExpiresAt, &g.CreatedAt, &g.UpdatedAt); err != nil {
-			return nil, err
+		RETURNING zitadel_project_id, zitadel_role_key`
+	if err := tx.QueryRow(ctx, deleteGrant, grantID, userID).Scan(&projectID, &roleKey); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", "", nil, ErrGrantRenewed
 		}
-		deleted = append(deleted, g)
+		return "", "", nil, fmt.Errorf("delete expired direct grant %s: %w", grantID, err)
 	}
-	return deleted, nil
+
+	ids, err := enqueueCascadeRows(ctx, tx,
+		[]CascadeAudit{{Actor: actor, Target: userID, Action: "direct_grant.revoked_by_expiry",
+			ResourceID: projectID + "/" + roleKey}},
+		params)
+	if err != nil {
+		return "", "", nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return "", "", nil, fmt.Errorf("commit expire grant tx: %w", err)
+	}
+	return projectID, roleKey, ids, nil
 }
 
 // ErrGrantNotFound is returned when the (user, grant) pair names no row. The

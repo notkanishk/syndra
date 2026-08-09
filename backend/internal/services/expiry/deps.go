@@ -13,17 +13,21 @@ import (
 	"syndra/internal/cache"
 	"syndra/internal/db"
 	"syndra/internal/services"
-	"syndra/internal/zitadel"
 )
 
 // Injectable dependencies. Mirrors the save-swap-restore pattern used across
 // the backend (see services/deps.go, cache/deps.go, zitadel/deps.go). Tests
 // exercise sweep logic without a live DB/Redis/Zitadel by swapping these.
 var (
-	svcGetExpiredDirectGrants         = db.GetExpiredDirectGrants
-	svcDeleteExpiredDirectGrantsByIDs = db.DeleteExpiredDirectGrantsByIDs
-	svcEmitIntentFromScheduler        = services.EmitProvisioningIntentFromScheduler
-	svcInsertAuditLog                 = db.InsertAuditLog
-	cacheInvalidateUser               = cache.InvalidateUser
-	zitadelRevokeMappingRules         = zitadel.RevokeMappingRules
+	svcGetExpiredDirectGrants = db.GetExpiredDirectGrants
+	// One grant's whole expiry: closure delta, guarded ledger delete, audit and
+	// outbox rows, in one transaction. The sweep decides WHICH grants and in
+	// what order; it does not decide what expiring one means.
+	svcExpireDirectGrant       = services.ExpireDirectGrant
+	svcEmitIntentFromScheduler = services.EmitProvisioningIntentFromScheduler
+	cacheInvalidateUser        = cache.InvalidateUser
 )
+
+// expiryActor is the actor recorded on every row this sweep writes. Nobody
+// clicked anything; a clock did, and the audit trail says so.
+const expiryActor = "system:scheduler"
