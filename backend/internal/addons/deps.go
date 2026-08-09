@@ -1,7 +1,6 @@
 package addons
 
 import (
-	"net/http"
 	"os"
 	"time"
 
@@ -22,12 +21,21 @@ var (
 	// switched-off NAS would suppress the contract check on every other target.
 	refreshTimeout = 5 * time.Second
 
+	// callTimeout bounds ONE dispatched operation. Distinct from refreshTimeout
+	// because the two have different costs of being wrong: a manifest read that
+	// gives up early is retried on the next tick, while an operation that gives
+	// up early becomes indeterminate and needs a human.
+	callTimeout = 30 * time.Second
+
+	// breakerThreshold is how many consecutive non-deterministic failures open a
+	// target's circuit. Five, not one: a single timeout is ordinary, and opening
+	// on it would make one slow response look like an outage.
+	breakerThreshold = 5
+	// breakerCooldown is how long the circuit stays open. Short enough that a
+	// restarted add-on is picked up within one drain pass, long enough that a
+	// down target is not being asked once per queued row.
+	breakerCooldown = 30 * time.Second
+
 	dbUpsertTarget               = db.UpsertTarget
 	dbDisableUnconfiguredTargets = db.DisableUnconfiguredTargets
-
-	// manifestHTTPClient is the plain client used to read /capabilities. The
-	// mutually-authenticated client that carries plan ids and operation ids on
-	// mutating calls arrives with the transport work (task 2.5/2.35); reading a
-	// manifest over it changes nothing here but the RoundTripper.
-	manifestHTTPClient = &http.Client{Timeout: 10 * time.Second}
 )

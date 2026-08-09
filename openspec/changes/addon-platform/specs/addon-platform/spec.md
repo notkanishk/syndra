@@ -264,7 +264,9 @@ The drift sweep MUST consume only target reads the add-on reports as current. A 
 
 ### Requirement: Add-on transport MUST be mutually authenticated and bind the request
 
-Calls between the backend and an add-on MUST use mutual TLS, or signed requests carrying a timestamp and a hash of the body where mutual TLS is impractical. A bearer shared secret alone MUST NOT be sufficient, because it authenticates the caller without binding anything to the request. Replay protection for mutations MUST rest on the operation identifier and the plan fingerprints, and a separate nonce store MUST NOT be introduced to duplicate that guarantee. Deduplication by operation identifier MUST therefore cover every mutating call rather than a subset, since that universality is what makes the nonce store unnecessary. The retention of that record is the replay window, and MUST exceed any plausible retry or outage window; beyond it, replay is bounded by the request timestamp in signed-request mode and by the level-triggered nature of entitlement application.
+Calls between the backend and an add-on MUST use mutual TLS verified against the deployment's own private certificate authority, or signed requests carrying a timestamp and a hash of the body where mutual TLS is impractical. A bearer shared secret alone MUST NOT be sufficient, because it authenticates the caller without binding anything to the request. The private CA is not optional trimming of the mutual-TLS mode: without it the backend verifies the add-on against the public web PKI, under which the add-on's own certificate fails and any publicly issued certificate passes — a different and wrong trust anchor rather than a weaker version of the right one. A registration carrying incomplete mutual-TLS material MUST NOT be treated as mutually authenticated, and a registration carrying neither complete mode MUST NOT register at all.
+
+Every leg of the add-on contract MUST travel over that same authenticated transport, including the capability read. A manifest is what backend policy is intersected against to decide what is callable, so a manifest read over an unauthenticated channel is a capability set anyone on the path can edit — able to withdraw a working operation or offer one that must not be offered. Replay protection for mutations MUST rest on the operation identifier and the plan fingerprints, and a separate nonce store MUST NOT be introduced to duplicate that guarantee. Deduplication by operation identifier MUST therefore cover every mutating call rather than a subset, since that universality is what makes the nonce store unnecessary. The retention of that record is the replay window, and MUST exceed any plausible retry or outage window; beyond it, replay is bounded by the request timestamp in signed-request mode and by the level-triggered nature of entitlement application.
 
 #### Scenario: An unauthenticated or unbound call is refused
 
@@ -277,6 +279,46 @@ Calls between the backend and an add-on MUST use mutual TLS, or signed requests 
 - **WHEN** a previously accepted mutating call is replayed verbatim
 - **THEN** the add-on MUST recognise the operation identifier and MUST NOT apply it again
 - **AND** where the call also carries fingerprints, verification MUST fail if target state has since moved
+
+### Requirement: A dispatch outcome MUST distinguish what the target may have done
+
+The backend MUST classify every dispatched call by what the ADD-ON may have done, not by what is convenient to report, and MUST distinguish four outcomes rather than two: applied, refused-without-acting, never-arrived, and sent-but-unanswered. Where the evidence is ambiguous the pessimistic reading MUST win. Only never-arrived MUST be treated as safe to dispatch again; sent-but-unanswered MUST NOT be automatically retried and MUST NOT be counted as either succeeded or failed, because a retry may duplicate a mutation the target already performed and a count either way asserts something the backend does not know.
+
+Transport-level failure MUST NOT be inferred from a deterministic refusal. A refusal the add-on issued after validating the call is evidence the add-on is healthy, and MUST NOT contribute to any health signal that withholds traffic from the target — otherwise one malformed request repeated by one operator takes the target offline for everyone.
+
+#### Scenario: A timeout is not a failure
+
+- **WHEN** a dispatched call times out or its connection is lost after the request could have been delivered
+- **THEN** the backend MUST record it as unresolved rather than as succeeded or failed
+- **AND** MUST NOT dispatch it again automatically
+
+#### Scenario: An unreachable target leaves the intent intact
+
+- **WHEN** a call cannot reach the add-on at all
+- **THEN** the backend MUST record that nothing happened on the target
+- **AND** the row MUST remain queued and eligible for dispatch
+
+#### Scenario: A refusal does not withhold traffic from a healthy target
+
+- **WHEN** an add-on repeatedly refuses a specific malformed request while otherwise serving
+- **THEN** the backend MUST continue dispatching other calls to that target
+
+### Requirement: Transport credentials MUST be rotatable and their expiry surfaced
+
+Transport material MUST be reloadable without restarting the backend, since restarting the component that governs every other target to rotate one target's certificate makes rotation an outage. Material replaced on disk MUST be picked up by subsequent calls, and a call already in flight MUST complete on the material it started with. A reload that fails MUST leave the last working material in service rather than failing every call in the window, matching the rule that a refused manifest refresh keeps the last accepted one.
+
+Expiry MUST be surfaced before it fails, and MUST reflect the soonest expiry in the chain rather than the client certificate alone: a current certificate presented against an expired authority fails exactly as hard as an expired one.
+
+#### Scenario: Rotation mid-operation
+
+- **WHEN** transport material is replaced while an operation is in flight
+- **THEN** the in-flight operation MUST complete on its original material
+- **AND** the next call MUST use the replacement
+
+#### Scenario: Expiry is visible before it bites
+
+- **WHEN** any certificate in an add-on's transport chain is within the warning window
+- **THEN** the operator surface MUST report that target as expiring with the date and remaining days
 
 ### Requirement: The mutation log MUST be durable and tamper-evident
 

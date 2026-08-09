@@ -3,6 +3,7 @@ package addons
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 )
@@ -72,17 +73,64 @@ func withTargetRegistry(t *testing.T, f *fakeTargetRegistry) {
 }
 
 // resetRegistry clears package state between tests, since the registry is a
-// process-wide singleton like the rest of the backend's clients.
+// process-wide singleton like the rest of the backend's clients. The credential
+// cache goes with it: it is keyed by target, and a target name reused across
+// tests with different material would otherwise be served the first test's
+// certificate.
 func resetRegistry(t *testing.T) {
 	t.Helper()
-	registryMu.Lock()
-	registry = map[string]*Addon{}
-	registryMu.Unlock()
-	t.Cleanup(func() {
+	clear := func() {
 		registryMu.Lock()
 		registry = map[string]*Addon{}
 		registryMu.Unlock()
-	})
+		credMu.Lock()
+		credCache = map[string]*credential{}
+		credMu.Unlock()
+	}
+	clear()
+	t.Cleanup(clear)
+}
+
+// installAddon puts a target into the registry with an already-accepted
+// manifest, which is the state every dispatch test needs and no dispatch test
+// is about reaching.
+func installAddon(t *testing.T, r Registration, m Manifest) *Addon {
+	t.Helper()
+	resetRegistry(t)
+	ops, _ := resolveOperations(m)
+	a := &Addon{Registration: r}
+	a.manifest = &m
+	a.ops = ops
+	registryMu.Lock()
+	registry = map[string]*Addon{r.Target: a}
+	registryMu.Unlock()
+	return a
+}
+
+// testClock is a movable clock, for the breaker's cooldown. withClock freezes
+// time, which cannot express "and then thirty seconds passed".
+type testClock struct {
+	mu  sync.Mutex
+	now time.Time
+}
+
+func withTestClock(t *testing.T, start time.Time) *testClock {
+	t.Helper()
+	c := &testClock{now: start}
+	saved := timeNow
+	timeNow = func() time.Time {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		return c.now
+	}
+	t.Cleanup(func() { timeNow = saved })
+	return c
+}
+
+func (c *testClock) advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = c.now.Add(d)
 }
 
 func goodManifest() Manifest {

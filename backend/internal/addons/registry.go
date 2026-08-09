@@ -1,6 +1,7 @@
 package addons
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -98,6 +99,12 @@ type Addon struct {
 	ops       []EffectiveOperation
 	fetchedAt time.Time
 	lastErr   error
+
+	// br is this target's circuit breaker. Per add-on, never shared: one NAS
+	// being down is not a reason to stop calling a different one. Guarded by its
+	// own mutex rather than registryMu so a call in flight never holds the lock
+	// every read of the registry needs.
+	br breaker
 }
 
 var (
@@ -198,6 +205,7 @@ func Init(ctx context.Context) error {
 	registryMu.Lock()
 	registry = fresh
 	registryMu.Unlock()
+	purgeCredentialsExcept(fresh)
 
 	if len(fresh) == 0 {
 		log.Println("[ADDON] No add-ons registered")
@@ -427,7 +435,17 @@ func ResolveOperation(target, id string) (EffectiveOperation, error) {
 // against the backend that governs every other target.
 const maxManifestBytes = 1 << 20
 
-// httpFetchManifest reads GET {base}/capabilities.
+// httpFetchManifest reads GET {base}/capabilities over the add-on's own
+// authenticated transport — the same mutual TLS or request signing every
+// mutating call uses.
+//
+// Not a formality on a read. The manifest is what the backend intersects its
+// policy against to decide what is callable, so an unauthenticated read of it
+// lets anyone on the path edit the capability set the backend then reasons
+// from: mark an operation unavailable and the target quietly stops working,
+// mark one available and an operator is offered something that must not be
+// offered. The channel that carries the decision has to be as trustworthy as
+// the one that carries the mutation.
 //
 // Decoding is strict. An unknown field from the least trusted component means
 // the two sides disagree about the contract, and the contract version exists
@@ -435,20 +453,21 @@ const maxManifestBytes = 1 << 20
 // unknown fields would let a newer add-on introduce a field the backend ignores
 // while both believe they agree.
 func httpFetchManifest(ctx context.Context, r Registration) (Manifest, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.BaseURL+"/capabilities", nil)
+	cred, err := credentialFor(r)
 	if err != nil {
 		return Manifest{}, err
 	}
-	resp, err := manifestHTTPClient.Do(req)
-	if err != nil {
-		return Manifest{}, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return Manifest{}, fmt.Errorf("capabilities returned %d", resp.StatusCode)
+	// Bounded by the caller's context, which RefreshAll already gives its own
+	// per-target deadline; callTimeout is the ceiling, not the budget.
+	resp := doAuthenticated(ctx, cred, http.MethodGet, r.BaseURL+"/capabilities", nil, callTimeout)
+	if resp.Outcome != OutcomeSucceeded {
+		if resp.Status != 0 {
+			return Manifest{}, fmt.Errorf("capabilities returned %d", resp.Status)
+		}
+		return Manifest{}, resp.Err
 	}
 
-	dec := json.NewDecoder(io.LimitReader(resp.Body, maxManifestBytes))
+	dec := json.NewDecoder(io.LimitReader(bytes.NewReader(resp.Body), maxManifestBytes))
 	dec.DisallowUnknownFields()
 	var m Manifest
 	if err := dec.Decode(&m); err != nil {
