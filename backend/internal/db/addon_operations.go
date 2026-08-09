@@ -61,8 +61,17 @@ type AddonOperation struct {
 	SubjectID string     `json:"subject_id"`
 	Status    string     `json:"status"`
 	CreatedAt time.Time  `json:"created_at"`
+	ClaimedAt *time.Time `json:"claimed_at,omitempty"`
 	SettledAt *time.Time `json:"settled_at,omitempty"`
 }
+
+// Dispatched reports whether this record was ever claimed for a call.
+//
+// The distinction matters on the unresolved surface. A claimed row that never
+// settled may have applied to the target; an unclaimed one definitely did not,
+// because nothing was sent. Both are unresolved — neither succeeded nor failed —
+// but only one of them is a question about the target's state.
+func (o AddonOperation) Dispatched() bool { return o.ClaimedAt != nil }
 
 // Unresolved reports whether nobody yet knows what this operation did.
 func (o AddonOperation) Unresolved() bool {
@@ -116,30 +125,47 @@ func insertAddonOperation(ctx context.Context, tx pgx.Tx, p AddonOperationParams
 	return id, nil
 }
 
-// ErrAddonOperationNotOpen means no record with this id is awaiting an outcome:
-// it does not exist, or it has already settled.
-var ErrAddonOperationNotOpen = fmt.Errorf("no addon operation is open under this id")
-
-// LoadOpenAddonOperation reads back a record that is still awaiting its
-// outcome. The transport calls this to verify that the dispatch it is about to
-// make is described by a durable row — see addons.OperationRecord.
+// ErrAddonOperationNotOpen means no unclaimed record matching this call is
+// awaiting an outcome: it does not exist, it describes a different call, it has
+// already been claimed, or it has already settled.
 //
-// Scoped to `dispatching` on purpose. A settled record must not authorise a
-// second dispatch: the settle is what closes the window, and the window is what
-// a replay would need.
-func LoadOpenAddonOperation(ctx context.Context, id string) (AddonOperation, error) {
+// The four are one error on purpose. Telling an unauthorised caller which of
+// them applies is an oracle over records they have just demonstrated they should
+// not be holding.
+var ErrAddonOperationNotOpen = fmt.Errorf("no unclaimed addon operation matches this call")
+
+// ClaimAddonOperation takes exclusive ownership of a record for dispatch and
+// returns it, in one conditional UPDATE.
+//
+// This is a claim rather than a read, and that is the whole of its value. A read
+// can be repeated: two callers could obtain the same record concurrently, and a
+// caller could re-read a record after it settled and dispatch under it again.
+// A conditional UPDATE has exactly one winner, so a record authorises exactly
+// one call, once, ever.
+//
+// The call's identity is in the WHERE clause rather than compared afterwards.
+// Compared afterwards, a mismatched attempt would still have consumed the
+// record; in the predicate, a record that does not describe this call is simply
+// not claimed, and the legitimate dispatch behind it is unharmed.
+func ClaimAddonOperation(ctx context.Context, id, target, operation, subject string) (AddonOperation, error) {
 	const q = `
-		SELECT id, target, operation, actor_id, subject_id, status, created_at, settled_at
-		  FROM addon_operations
-		 WHERE id = $1 AND status = 'dispatching'`
+		UPDATE addon_operations
+		   SET claimed_at = NOW()
+		 WHERE id = $1
+		   AND status = 'dispatching'
+		   AND claimed_at IS NULL
+		   AND target = $2
+		   AND operation = $3
+		   AND subject_id = $4
+		RETURNING id, target, operation, actor_id, subject_id, status, created_at, claimed_at, settled_at`
 	var o AddonOperation
-	err := PG.QueryRow(ctx, q, id).Scan(&o.ID, &o.Target, &o.Operation, &o.ActorID,
-		&o.SubjectID, &o.Status, &o.CreatedAt, &o.SettledAt)
+	err := PG.QueryRow(ctx, q, id, target, operation, subject).Scan(&o.ID, &o.Target, &o.Operation,
+		&o.ActorID, &o.SubjectID, &o.Status, &o.CreatedAt, &o.ClaimedAt, &o.SettledAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return AddonOperation{}, fmt.Errorf("%w: %s", ErrAddonOperationNotOpen, id)
 	}
 	if err != nil {
-		return AddonOperation{}, fmt.Errorf("load addon operation: %w", err)
+		return AddonOperation{}, fmt.Errorf("claim addon operation: %w", err)
 	}
 	return o, nil
 }
@@ -175,13 +201,14 @@ func SettleAddonOperation(ctx context.Context, id, status string) error {
 // The grace period is what stops the surface flickering: a call in progress is
 // indistinguishable by status alone from one whose backend died, and only time
 // separates them. Callers pass something comfortably longer than the dispatch
-// timeout.
+// timeout. Age runs from the claim where there is one, since that is when the
+// call actually started.
 func ListUnresolvedAddonOperations(ctx context.Context, grace time.Duration, limit int) ([]AddonOperation, error) {
 	const q = `
-		SELECT id, target, operation, actor_id, subject_id, status, created_at, settled_at
+		SELECT id, target, operation, actor_id, subject_id, status, created_at, claimed_at, settled_at
 		  FROM addon_operations
 		 WHERE status = 'indeterminate'
-		    OR (status = 'dispatching' AND created_at < NOW() - $1::interval)
+		    OR (status = 'dispatching' AND COALESCE(claimed_at, created_at) < NOW() - $1::interval)
 		 ORDER BY created_at ASC
 		 LIMIT $2`
 	rows, err := PG.Query(ctx, q, grace.String(), limit)
@@ -194,7 +221,7 @@ func ListUnresolvedAddonOperations(ctx context.Context, grace time.Duration, lim
 	for rows.Next() {
 		var o AddonOperation
 		if err := rows.Scan(&o.ID, &o.Target, &o.Operation, &o.ActorID, &o.SubjectID,
-			&o.Status, &o.CreatedAt, &o.SettledAt); err != nil {
+			&o.Status, &o.CreatedAt, &o.ClaimedAt, &o.SettledAt); err != nil {
 			return nil, fmt.Errorf("scan unresolved addon operation: %w", err)
 		}
 		out = append(out, o)

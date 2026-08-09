@@ -51,6 +51,18 @@ CREATE TABLE IF NOT EXISTS addon_operations (
     status     TEXT NOT NULL DEFAULT 'dispatching'
         CHECK (status IN ('dispatching', 'succeeded', 'rejected', 'unreached', 'indeterminate')),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- When the record was CLAIMED for dispatch, which is a different moment
+    -- from when it was written. The claim is what makes the record a one-shot
+    -- capability rather than a lookup: it is taken by a single conditional
+    -- UPDATE, so exactly one caller can ever move a row from written to
+    -- dispatched, and a record cannot authorise a second call — not after it
+    -- settles, and not concurrently with the first.
+    --
+    -- It also separates two failures that `dispatching` alone conflates. A row
+    -- claimed and never settled may have applied to the target. A row never
+    -- claimed definitely did not: the process died between committing the
+    -- record and sending anything, and nothing reached the add-on.
+    claimed_at  TIMESTAMPTZ,
     settled_at  TIMESTAMPTZ,
     -- Settled exactly when terminal, in both directions. A terminal row with no
     -- settlement time cannot be aged, and a `dispatching` row carrying one is a

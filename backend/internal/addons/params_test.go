@@ -135,3 +135,42 @@ func TestEveryPolicyParameterTypeIsCheckable(t *testing.T) {
 		}
 	}
 }
+
+// P2 — the schema is checked before any value is, and for every declared
+// parameter rather than only the supplied ones. Checked lazily, an OPTIONAL
+// parameter of an unverifiable type would be enforced when present and waved
+// through when omitted, so leaving it out would make the whole operation
+// callable — the fail-closed rule inverted by absence.
+func TestAnUnsupportedTypeIsRefusedEvenWhenTheValueIsOmitted(t *testing.T) {
+	spec := opWith(
+		ParamSpec{Name: "password", Type: "string", Required: true},
+		ParamSpec{Name: "shape", Type: "matrix"}, // optional, and uncheckable
+	)
+
+	// The value is absent, which is exactly the case that used to pass.
+	if err := ValidateParams(spec, map[string]any{"password": "x"}); !errors.Is(err, ErrInvalidParams) {
+		t.Fatal("an operation declaring an unverifiable optional parameter was callable by omitting it")
+	}
+	// And still refused when supplied, so neither branch is the lenient one.
+	if err := ValidateParams(spec, map[string]any{"password": "x", "shape": "whatever"}); !errors.Is(err, ErrInvalidParams) {
+		t.Fatal("an unverifiable parameter was accepted when supplied")
+	}
+}
+
+// P2 — the two places that decide what a type means agree. A type declarable
+// but uncheckable, or checkable but undeclarable, is a disagreement that shows
+// up as an operation nobody can call.
+func TestTheSupportedTypeListMatchesTheChecker(t *testing.T) {
+	for _, typ := range []string{"string", "string[]", "bool", "int"} {
+		if !supportedParamType(typ) {
+			t.Errorf("checkParamType implements %q but supportedParamType rejects it", typ)
+		}
+		err := checkParamType(ParamSpec{Name: "p", Type: typ}, struct{}{})
+		if err != nil && strings.Contains(err.Error(), "unsupported type") {
+			t.Errorf("supportedParamType accepts %q but checkParamType cannot verify it", typ)
+		}
+	}
+	if supportedParamType("matrix") {
+		t.Error("supportedParamType accepted a type the checker does not implement")
+	}
+}

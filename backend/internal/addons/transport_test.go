@@ -89,7 +89,7 @@ func passwordSet(params map[string]any) CallRequest {
 		Operation: "password.set",
 		// Constructed directly because this file is in the package. No caller
 		// outside it can do this, which is the entire point of the type.
-		Record:      DispatchRecord{callID: "rec-0001"},
+		Record:      DispatchRecord{callID: "rec-0001", target: "truenas", operation: "password.set", subject: "user-42"},
 		Subject:     "user-42",
 		PlanID:      "plan-0001",
 		Fingerprint: "sha256:abc",

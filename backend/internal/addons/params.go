@@ -32,12 +32,23 @@ var ErrInvalidParams = errors.New("addon: parameters do not match the operation'
 // come to rest — an error is logged, returned to a client, and captured in a
 // trace.
 func ValidateParams(op EffectiveOperation, params map[string]any) error {
+	var problems []string
+
 	allowed := make(map[string]ParamSpec, len(op.Params))
 	for _, spec := range op.Params {
 		allowed[spec.Name] = spec
+		// The schema itself is checked before any value is, and for every
+		// declared parameter rather than only the supplied ones. Checked lazily,
+		// a policy entry of a type this validator cannot verify would be
+		// enforced when the parameter happened to be present and waved through
+		// when it was omitted — so an optional parameter would make the whole
+		// operation callable with the unverifiable field simply left out, which
+		// is the fail-closed rule inverted by absence.
+		if !supportedParamType(spec.Type) {
+			problems = append(problems, fmt.Sprintf("parameter %q declares unsupported type %q", spec.Name, spec.Type))
+		}
 	}
 
-	var problems []string
 	for name := range params {
 		if _, ok := allowed[name]; !ok {
 			problems = append(problems, fmt.Sprintf("unknown parameter %q", name))
@@ -120,10 +131,21 @@ func checkParamType(spec ParamSpec, v any) error {
 			return bad()
 		}
 	default:
-		// A policy entry naming a type this function does not implement is a
-		// backend bug, and the safe reading of "I do not know how to check
-		// this" is refusal rather than acceptance.
+		// Unreachable: ValidateParams refuses an unsupported type before any
+		// value is inspected. Kept as a refusal anyway, because the two
+		// branches must never disagree about what "I cannot check this" means.
 		return fmt.Errorf("parameter %q declares unsupported type %q", spec.Name, spec.Type)
 	}
 	return nil
+}
+
+// supportedParamType reports whether checkParamType implements this type. The
+// single list both consult, so a type can never be declarable but uncheckable.
+func supportedParamType(t string) bool {
+	switch t {
+	case "string", "string[]", "bool", "int":
+		return true
+	default:
+		return false
+	}
 }

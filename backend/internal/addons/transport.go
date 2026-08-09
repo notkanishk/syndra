@@ -156,6 +156,14 @@ func Call(ctx context.Context, req CallRequest) CallResponse {
 	if !req.Record.valid() {
 		return CallResponse{Outcome: OutcomeUnreached, Err: ErrNoCallRecord}
 	}
+	// The token was minted against a specific record; this is where that stops
+	// being history. Without it the verification would apply to whatever call
+	// was made at mint time and not to the one actually being sent, so a caller
+	// could claim a record for a health check and dispatch a password under it.
+	if !req.Record.authorises(req.Target, req.Operation, req.Subject) {
+		return CallResponse{Outcome: OutcomeUnreached,
+			Err: fmt.Errorf("%w: %s", ErrRecordMismatch, req.Record.callID)}
+	}
 	a, err := Get(req.Target)
 	if err != nil {
 		return CallResponse{Outcome: OutcomeUnreached, Err: err}

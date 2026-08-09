@@ -102,7 +102,7 @@ func TestAddonOperationsRecordTable(t *testing.T) {
 // fails on the column being added, not on the password arriving.
 func TestAddonOperationsHasNoColumnThatCouldHoldASecret(t *testing.T) {
 	got := addonOpsColumns(t)
-	want := []string{"actor_id", "created_at", "id", "operation", "settled_at", "status", "subject_id", "target"}
+	want := []string{"actor_id", "claimed_at", "created_at", "id", "operation", "settled_at", "status", "subject_id", "target"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("the addon_operations column set changed.\n got: %v\nwant: %v\n\n"+
 			"Every column here lives beside a subject's identity forever and the table is written on the "+
@@ -269,21 +269,72 @@ func TestDownMigrationRefusesToDropUnresolvedOperations(t *testing.T) {
 	}
 }
 
-// P2 — the record that authorises a dispatch must still be open. Scoped to
-// `dispatching`, so a settled record cannot authorise a second call: the settle
-// is what closes the window, and the window is what a replay would need.
-func TestLoadOpenAddonOperationIsScopedToDispatching(t *testing.T) {
+// P1 — the record that authorises a dispatch is CLAIMED, not read. A read can
+// be repeated: two callers could obtain the same record concurrently, and a
+// caller could re-read a settled record and dispatch under it again. A single
+// conditional UPDATE has exactly one winner.
+//
+// The call's identity is in the predicate rather than compared afterwards, so a
+// mismatched attempt consumes nothing and the legitimate dispatch behind it is
+// unharmed.
+func TestTheDispatchRecordIsClaimedAtomically(t *testing.T) {
 	src, err := os.ReadFile("addon_operations.go")
 	if err != nil {
 		t.Fatalf("read addon_operations.go: %v", err)
 	}
-	body := funcBody(t, string(src), "LoadOpenAddonOperation")
+	body := funcBody(t, string(src), "ClaimAddonOperation")
 
-	if !strings.Contains(body, "AND status = 'dispatching'") {
-		t.Fatal("the lookup must refuse a settled record, or a dispatch could be authorised twice " +
-			"under one record and the second would leave no trace of its own")
+	if !strings.Contains(body, "UPDATE addon_operations") || !strings.Contains(body, "SET claimed_at = NOW()") {
+		t.Fatal("the record must be claimed by an UPDATE; a SELECT can be repeated, and a capability that " +
+			"can be obtained twice authorises two dispatches under one record")
+	}
+	if strings.Contains(body, "SELECT id, target") {
+		t.Error("the claim must not be a read")
+	}
+	for _, guard := range []string{
+		"AND status = 'dispatching'",
+		"AND claimed_at IS NULL",
+		"AND target = $2",
+		"AND operation = $3",
+		"AND subject_id = $4",
+	} {
+		if !strings.Contains(body, guard) {
+			t.Errorf("the claim predicate is missing %q — without it a record could authorise a call it does not describe, "+
+				"or authorise one twice", guard)
+		}
 	}
 	if !strings.Contains(body, "ErrAddonOperationNotOpen") {
-		t.Error("a missing or settled record must be reported as its own condition, not as a generic scan error")
+		t.Error("a record that cannot be claimed must be reported as its own condition, not as a generic scan error")
+	}
+}
+
+// P1 — the claim is what separates two failures that `dispatching` alone
+// conflates. A claimed row that never settled may have applied to the target; an
+// unclaimed one definitely did not, because nothing was sent. The unresolved
+// surface ages from the claim where there is one, since that is when the call
+// actually started.
+func TestUnresolvedAgesFromTheClaimWhereThereIsOne(t *testing.T) {
+	src, err := os.ReadFile("addon_operations.go")
+	if err != nil {
+		t.Fatalf("read addon_operations.go: %v", err)
+	}
+	body := funcBody(t, string(src), "ListUnresolvedAddonOperations")
+	if !strings.Contains(body, "COALESCE(claimed_at, created_at)") {
+		t.Error("a dispatch that waited in the process before being sent would otherwise be aged from " +
+			"when its record was written rather than from when the call began")
+	}
+}
+
+// P1 — no migration may add a column to addon_operations outside the closed
+// list, including a later one. Without this, the column guard reads only the
+// CREATE TABLE and a future ALTER could add a free-text column it never sees.
+func TestNoLaterMigrationAltersTheRecordTable(t *testing.T) {
+	all := stripSQLComments(allUpMigrationsSQL(t))
+	re := regexp.MustCompile(`(?is)ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?addon_operations`)
+	if re.MatchString(all) {
+		t.Fatal("a migration alters addon_operations. Every column on this table lives beside a subject's " +
+			"identity forever and the table is written on the path that carries a password: add it to the " +
+			"CREATE TABLE and to the closed list in TestAddonOperationsHasNoColumnThatCouldHoldASecret, " +
+			"so the guard can see it.")
 	}
 }
