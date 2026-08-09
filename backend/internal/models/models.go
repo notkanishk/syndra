@@ -199,11 +199,45 @@ type ProjectAccessView struct {
 	EffectiveRoleKeys []string        `json:"effective_role_keys"`
 }
 
+// AllowanceBand is the third band beside Source and Derived (design §6).
+//
+// Rendered distinctly on purpose. A subject can hold a role whose access they
+// do not have, and that is a trap unless it is visible — a role-holder list
+// that shows somebody as holding access they are suspended from is worse than
+// not showing the list at all. So "why does this person have access to X"
+// answers with exactly one of: the role gives it, a rule derived it, or
+// somebody explicitly decided — and this band carries the third, with actor and
+// time attached to the person rather than erased into an absence.
+type AllowanceBand struct {
+	ID        string `json:"id"`
+	Target    string `json:"target"`
+	Field     string `json:"field"`
+	Value     string `json:"value"`
+	Direction string `json:"direction"`
+	ActorID   string `json:"actor_id"`
+	Reason    string `json:"reason"`
+	// InForce and ReviewDue are derived at read time rather than stored, so
+	// neither can go stale in a column while the date it depends on passes.
+	InForce   bool   `json:"in_force"`
+	ReviewDue bool   `json:"review_due"`
+	CreatedAt string `json:"created_at"`
+	// Ended says when and how it stopped applying: a date that arrived, or a
+	// person who lifted it. Empty while it still applies. Lapsed, lifted and in
+	// force are three states an operator asks about differently.
+	Ended   string `json:"ended,omitempty"`
+	EndedBy string `json:"ended_by,omitempty"`
+}
+
 type UserAccessView struct {
-	User         UserProfile         `json:"user"`
-	Bundles      []Bundle            `json:"bundles"`
-	Projects     []ProjectAccessView `json:"projects"`
-	CleanupHints []string            `json:"cleanup_hints"`
+	User     UserProfile         `json:"user"`
+	Bundles  []Bundle            `json:"bundles"`
+	Projects []ProjectAccessView `json:"projects"`
+	// Allowances is the third band. Present whether or not any is in force,
+	// because a suspension that ended is part of the answer to "what has been
+	// decided about this person" and erasing it would leave the band looking
+	// like it had never been used.
+	Allowances   []AllowanceBand `json:"allowances"`
+	CleanupHints []string        `json:"cleanup_hints"`
 }
 
 // UserListItem is one row of the People index. Beyond the counts, it carries

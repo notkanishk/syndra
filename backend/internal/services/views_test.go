@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
 )
@@ -15,6 +16,12 @@ import (
 // resetGovernanceDeps captures and restores all governance/lineage injectable vars.
 func resetGovernanceDeps(t *testing.T) {
 	t.Helper()
+	// The access view carries a third band now, so it makes a third read. Left
+	// unstubbed it reaches a nil pool, which would make every test in this file
+	// fail for a reason none of them is about.
+	defer func() {
+		svcAllowancesForSubject = func(context.Context, string) ([]db.Allowance, error) { return nil, nil }
+	}()
 	origGetRequests := svcGetAccessRequests
 	origGetExpiring := svcGetExpiringDirectGrants
 	origGetAllBundles := svcGetAllBundles
@@ -27,7 +34,9 @@ func resetGovernanceDeps(t *testing.T) {
 	origReachable := svcZitadelReachable
 	origCountDrift := svcCountPendingDrift
 	origTopDrift := svcGetTopDrift
+	origAllowances := svcAllowancesForSubject
 	t.Cleanup(func() {
+		svcAllowancesForSubject = origAllowances
 		svcGetAccessRequests = origGetRequests
 		svcGetExpiringDirectGrants = origGetExpiring
 		svcGetAllBundles = origGetAllBundles
@@ -587,5 +596,41 @@ func TestListProjects_CollectsUserRolesExactlyOncePerUser(t *testing.T) {
 	}
 	if calls != 3 {
 		t.Fatalf("expected 3 calls (once per user); got %d", calls)
+	}
+}
+
+// 8.12 — an unread band must not look like "no carve-outs". Empty and unread
+// are identical to a surface, and one of them means this person is suspended
+// from something the view cannot show.
+func TestAnUnreadableAllowanceBandIsSaidOutLoudInTheView(t *testing.T) {
+	resetGovernanceDeps(t)
+
+	svcGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) { return nil, nil }
+	svcGetBundlesForUser = func(context.Context, string) ([]models.Bundle, error) { return nil, nil }
+	svcGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) { return nil, nil }
+	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) { return nil, nil }
+	svcAllowancesForSubject = func(context.Context, string) ([]db.Allowance, error) {
+		return nil, fmt.Errorf("db down")
+	}
+
+	svcGetRolesForBundle = func(context.Context, string) ([]models.BundleRole, error) { return nil, nil }
+
+	view, err := ExplainUserAccess(context.Background(), "dev_admin")
+	if err != nil {
+		// The view still renders: one unreadable band must not deny an operator
+		// the rest of somebody's access.
+		t.Fatalf("the view must still be produced: %v", err)
+	}
+	var said bool
+	for _, hint := range view.CleanupHints {
+		if strings.Contains(hint, "Carve-outs could not be read") {
+			said = true
+		}
+	}
+	if !said {
+		t.Fatalf("the view must say the band is incomplete: %v", view.CleanupHints)
+	}
+	if view.Allowances == nil {
+		t.Error("and the band must be a list rather than nil, so a surface renders empty rather than crashing")
 	}
 }

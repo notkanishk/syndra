@@ -243,6 +243,44 @@ func holdsMatchingRole(roleMap map[roleKey]*models.EffectiveRole, query string) 
 	return false
 }
 
+// allowanceBand builds the third access band for a subject.
+//
+// Every allowance ever recorded, not only the ones in force. The question a
+// surface asks here is "what has been decided about this person", and an answer
+// showing only what still applies would erase every suspension that ended —
+// which is precisely the history this layer keeps attached to the person rather
+// than erasing into an absence.
+func allowanceBand(ctx context.Context, userID string) ([]models.AllowanceBand, error) {
+	rows, err := svcAllowancesForSubject(ctx, userID)
+	if err != nil {
+		return []models.AllowanceBand{}, err
+	}
+	now := time.Now()
+	out := make([]models.AllowanceBand, 0, len(rows))
+	for _, a := range rows {
+		band := models.AllowanceBand{
+			ID: a.ID, Target: a.Target, Field: a.Field, Value: a.Value,
+			Direction: a.Direction, ActorID: a.ActorID, Reason: a.Reason,
+			// Derived here rather than read from a column, so "in force" cannot
+			// be stale while the date it depends on passes.
+			InForce:   a.InForce(now),
+			ReviewDue: a.ReviewDue(now),
+			CreatedAt: a.CreatedAt.UTC().Format(time.RFC3339),
+		}
+		switch {
+		case a.LiftedAt != nil:
+			band.Ended, band.EndedBy = a.LiftedAt.UTC().Format(time.RFC3339), a.LiftedBy
+		case a.ExpiresAt != nil && !a.ExpiresAt.After(now):
+			// Lapsed is not lifted. The row keeps `lifted_at` NULL until the
+			// sweep records it, so an allowance that ran out and one somebody
+			// ended stay distinguishable forever — and the band says which.
+			band.Ended, band.EndedBy = a.ExpiresAt.UTC().Format(time.RFC3339), "the expiry date"
+		}
+		out = append(out, band)
+	}
+	return out, nil
+}
+
 func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessView, error) {
 	user, ok, err := directory.Default.FindUser(ctx, userID)
 	if err != nil {
@@ -303,7 +341,16 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 		return projects[i].ProjectName < projects[j].ProjectName
 	})
 
+	// The third band. Read failure is non-fatal and says so rather than
+	// silently returning an access view with no carve-outs in it: an empty band
+	// and an unread band look identical to a surface, and one of them means
+	// "this person is suspended from something and we could not tell you".
+	allowances, allowanceErr := allowanceBand(ctx, userID)
+
 	hints := make([]string, 0, 2)
+	if allowanceErr != nil {
+		hints = append(hints, "Carve-outs could not be read, so this view may not show every restriction in force.")
+	}
 	if len(bundles) == 0 {
 		hints = append(hints, "No Syndra bundle is assigned yet, so this user depends entirely on direct platform grants.")
 	}
@@ -312,6 +359,7 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 	}
 
 	return models.UserAccessView{
+		Allowances:   allowances,
 		User:         user,
 		Bundles:      ensureBundles(bundles),
 		Projects:     projects,

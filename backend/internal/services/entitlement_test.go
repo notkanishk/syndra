@@ -6,6 +6,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
+
+	"syndra/internal/models"
 
 	"syndra/internal/db"
 )
@@ -277,5 +280,91 @@ func TestMappingFieldValidation(t *testing.T) {
 	}
 	if err := ValidateMappingField(declared, "  "); !errors.Is(err, db.ErrMappingInvalid) {
 		t.Errorf("a blank field must be refused: %v", err)
+	}
+}
+
+// 8.11/8.12 — the third band.
+//
+// Every entitlement attributes to a source role or a derivation rule, and every
+// SUPPRESSED entitlement attributes to the allowance suppressing it, with its
+// actor and time. A subject can hold a role whose access they do not have, and
+// that is a trap unless it is visible.
+func TestTheAllowanceBandCarriesTheWholeHistoryWithItsAttribution(t *testing.T) {
+	past := time.Now().Add(-24 * time.Hour)
+	future := time.Now().Add(24 * time.Hour)
+
+	orig := svcAllowancesForSubject
+	t.Cleanup(func() { svcAllowancesForSubject = orig })
+	svcAllowancesForSubject = func(context.Context, string) ([]db.Allowance, error) {
+		return []db.Allowance{
+			{ID: "a1", Target: "truenas", Field: "group", Value: "lab_printing",
+				Direction: db.AllowanceDeny, ActorID: "op_1", Reason: "safety review",
+				CreatedAt: past, ExpiresAt: &future},
+			{ID: "a2", Target: "truenas", Field: "enabled", Value: "true",
+				Direction: db.AllowanceDeny, ActorID: "op_2", Reason: "open incident",
+				CreatedAt: past, ReviewDate: &past},
+			{ID: "a3", Target: "truenas", Field: "group", Value: "lab_laser",
+				Direction: db.AllowanceDeny, ActorID: "op_1", Reason: "expired dues",
+				CreatedAt: past, ExpiresAt: &past},
+			{ID: "a4", Target: "truenas", Field: "group", Value: "lab_wood",
+				Direction: db.AllowanceDeny, ActorID: "op_1", Reason: "lifted early",
+				CreatedAt: past, ReviewDate: &future, LiftedAt: &past, LiftedBy: "op_3"},
+		}, nil
+	}
+
+	band, err := allowanceBand(context.Background(), "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(band) != 4 {
+		t.Fatalf("the band must carry the whole history, not only what is in force: %d rows", len(band))
+	}
+	byID := map[string]models.AllowanceBand{}
+	for _, b := range band {
+		byID[b.ID] = b
+	}
+
+	// Every row attributes to who decided and why.
+	for id, want := range map[string]string{"a1": "op_1", "a2": "op_2", "a3": "op_1", "a4": "op_1"} {
+		if byID[id].ActorID != want || byID[id].Reason == "" {
+			t.Errorf("%s must attribute to its actor and reason: %+v", id, byID[id])
+		}
+		if byID[id].CreatedAt == "" {
+			t.Errorf("%s must carry when it was decided", id)
+		}
+	}
+
+	if !byID["a1"].InForce || byID["a1"].Ended != "" {
+		t.Errorf("an unexpired allowance is in force and has not ended: %+v", byID["a1"])
+	}
+	// A passed review date surfaces the decision and never makes it.
+	if !byID["a2"].InForce || !byID["a2"].ReviewDue {
+		t.Errorf("a passed review date must surface WITHOUT lifting: %+v", byID["a2"])
+	}
+	// Lapsed and lifted are different states, and the band says which.
+	if byID["a3"].InForce || byID["a3"].EndedBy != "the expiry date" {
+		t.Errorf("a lapsed allowance must say the date ended it: %+v", byID["a3"])
+	}
+	if byID["a4"].InForce || byID["a4"].EndedBy != "op_3" {
+		t.Errorf("a lifted allowance must name who ended it: %+v", byID["a4"])
+	}
+}
+
+// A read failure must not look like "no carve-outs". An empty band and an
+// unread band are identical to a surface, and one of them means this person is
+// suspended from something the view cannot show.
+func TestAnUnreadableBandSaysSoRatherThanLookingEmpty(t *testing.T) {
+	orig := svcAllowancesForSubject
+	t.Cleanup(func() { svcAllowancesForSubject = orig })
+	svcAllowancesForSubject = func(context.Context, string) ([]db.Allowance, error) {
+		return nil, errors.New("db down")
+	}
+
+	band, err := allowanceBand(context.Background(), "u1")
+	if err == nil {
+		t.Fatal("the failure must be reported")
+	}
+	if band == nil {
+		t.Error("and the band must still be a list rather than nil, so a surface renders empty rather than crashing")
 	}
 }

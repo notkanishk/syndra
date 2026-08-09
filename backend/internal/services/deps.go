@@ -66,10 +66,13 @@ var (
 	// Entitlement resolution (design §4, §6). Three seams, because the
 	// resolver's whole content is how the three answers combine and a test has
 	// to be able to move each one independently.
-	svcEffectiveRoleRefs  = effectiveRoleRefs
-	dbMappingsForRoles    = db.MappingsForRoles
-	dbAllowancesInForce   = db.AllowancesInForce
-	svcGetAllDirectGrants = db.GetAllDirectGrants
+	svcEffectiveRoleRefs = effectiveRoleRefs
+	dbMappingsForRoles   = db.MappingsForRoles
+	dbAllowancesInForce  = db.AllowancesInForce
+	// The lineage band reads the WHOLE history, not only what is in force: a
+	// suspension that ended is part of the answer to what has been decided.
+	svcAllowancesForSubject = db.AllowancesForSubject
+	svcGetAllDirectGrants   = db.GetAllDirectGrants
 	// Direct-grant removal: ledger delete + audit + the caller-computed
 	// effective-access delta, in one transaction.
 	svcDeleteDirectGrantAndEnqueue        = db.DeleteDirectGrantAndEnqueue
