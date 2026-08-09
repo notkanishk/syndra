@@ -24,11 +24,18 @@ const (
 	// UnreconciledTruncated — the read hit its safety cap. What was seen is
 	// real; what was not seen is unknown, so absence cannot be concluded.
 	UnreconciledTruncated = "read_truncated"
+	// UnreconciledReadRefused — the target answered and did not serve the read:
+	// rejected credentials, insufficient permission, or a failure on its own
+	// side. Distinct from unreachable because the operator's next move is
+	// different in kind — there is nothing to reach for, there is something to
+	// fix, and an outage that is really an expired service-account key would
+	// otherwise be waited out rather than repaired.
+	UnreconciledReadRefused = "read_refused"
 )
 
 func validUnreconciledReason(r string) bool {
 	switch r {
-	case UnreconciledUnreachable, UnreconciledStaleRead, UnreconciledTruncated:
+	case UnreconciledUnreachable, UnreconciledStaleRead, UnreconciledTruncated, UnreconciledReadRefused:
 		return true
 	default:
 		return false
@@ -38,7 +45,8 @@ func validUnreconciledReason(r string) bool {
 // ErrUnreconciledReason refuses a reason outside the vocabulary. It names the
 // vocabulary and never the value, so a caller that reached here holding
 // something it should not cannot write it into the error either.
-var ErrUnreconciledReason = errors.New("unreconciled reason must be one of: target_unreachable, read_stale, read_truncated")
+var ErrUnreconciledReason = errors.New(
+	"unreconciled reason must be one of: target_unreachable, read_stale, read_truncated, read_refused")
 
 // TargetReconciliation is how current Syndra's picture of a target is.
 //

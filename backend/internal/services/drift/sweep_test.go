@@ -422,15 +422,33 @@ func TestSweep_AFailedCurrencyRecordDoesNotDiscardTheWork(t *testing.T) {
 // not evidence the target answers. A read that fails is the outage — on the
 // first page or a later one — and must be recorded as one, or the row left
 // behind keeps reporting the last current read for the whole outage.
-func TestSweep_AFailedReadIsAnOutage(t *testing.T) {
+func TestSweep_AFailedReadIsAnOutageAndSaysWhichKind(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		pages func(int) (*zitadel.SearchResult[zitadel.UserGrant], error)
+		name       string
+		wantReason string
+		wantRecord string
+		pages      func(int) (*zitadel.SearchResult[zitadel.UserGrant], error)
 	}{
-		{"first page", func(int) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+		{"first page", "zitadel_unreachable", db.UnreconciledUnreachable, func(int) (*zitadel.SearchResult[zitadel.UserGrant], error) {
 			return nil, errors.New("dial tcp: connection refused")
 		}},
-		{"a later page", func(call int) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+		// Zitadel answered. The network is fine and the host is up; what is
+		// broken is a credential. Reported as unreachable it would look like
+		// weather — something to wait out rather than repair.
+		{"an answered 401", "zitadel_read_refused", db.UnreconciledReadRefused, func(int) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+			return nil, &zitadel.StatusError{Code: 401, Message: "invalid token"}
+		}},
+		{"an answered 403 mid-pagination", "zitadel_read_refused", db.UnreconciledReadRefused, func(call int) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+			if call > 1 {
+				return nil, &zitadel.StatusError{Code: 403, Message: "missing permission"}
+			}
+			items := make([]zitadel.UserGrant, zitadelPageSize)
+			for i := range items {
+				items[i] = zitadel.UserGrant{ID: "g", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}
+			}
+			return &zitadel.SearchResult[zitadel.UserGrant]{Items: items, Total: zitadelPageSize * 4}, nil
+		}},
+		{"a later page", "zitadel_unreachable", db.UnreconciledUnreachable, func(call int) (*zitadel.SearchResult[zitadel.UserGrant], error) {
 			if call > 1 {
 				return nil, errors.New("502 from the gateway mid-pagination")
 			}
@@ -477,11 +495,11 @@ func TestSweep_AFailedReadIsAnOutage(t *testing.T) {
 			if err != nil {
 				t.Fatalf("a target outage is a halt, not a sweep failure: %v", err)
 			}
-			if !res.Halted || res.Reason != "zitadel_unreachable" {
-				t.Fatalf("a failed read must halt and say why, got %+v", res)
+			if !res.Halted || res.Reason != tc.wantReason {
+				t.Fatalf("a failed read must halt and say why: want %q, got %+v", tc.wantReason, res)
 			}
-			if reason != db.UnreconciledUnreachable {
-				t.Fatalf("the outage must be recorded, got reason %q", reason)
+			if reason != tc.wantRecord {
+				t.Fatalf("the durable reason must distinguish not-answering from answered-and-declined, want %q got %q", tc.wantRecord, reason)
 			}
 			if res.Reconciliation == nil || !res.Reconciliation.Unreconciled() {
 				t.Fatalf("the result must carry the unreconciled record, got %+v", res.Reconciliation)

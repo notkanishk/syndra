@@ -12,9 +12,25 @@ import (
 // at compile time, not a slice a package could widen and not free text a caller
 // could fill with whatever it happens to be holding.
 func TestUnreconciledReasonIsAClosedVocabulary(t *testing.T) {
-	for _, r := range []string{UnreconciledUnreachable, UnreconciledStaleRead, UnreconciledTruncated} {
-		if !validUnreconciledReason(r) {
-			t.Errorf("%q is part of the vocabulary and must be accepted", r)
+	src := readDBSource(t, "target_reconciliation.go")
+
+	// The set is read out of the declarations rather than retyped here. A hand
+	// written list makes the test pass by agreeing with itself: the reason
+	// added tomorrow is the one nobody thinks to add in two places, and the
+	// gap it leaves is a constant the write refuses at runtime — the sweep's
+	// own stubs would never notice.
+	declared := regexp.MustCompile(`(?m)^\tUnreconciled\w+\s*=\s*"([^"]+)"`).FindAllStringSubmatch(src, -1)
+	if len(declared) < 4 {
+		t.Fatalf("expected to find every declared reason; found %d", len(declared))
+	}
+	for _, d := range declared {
+		if !validUnreconciledReason(d[1]) {
+			t.Errorf("%q is declared as a reason and must be accepted by the write", d[1])
+		}
+		// And the refusal has to name the same set it enforces, or it sends a
+		// caller looking for a value that is in fact allowed.
+		if !strings.Contains(ErrUnreconciledReason.Error(), d[1]) {
+			t.Errorf("the refusal must name %q among the reasons it allows: %v", d[1], ErrUnreconciledReason)
 		}
 	}
 	for _, r := range []string{"", "offline", "TARGET_UNREACHABLE", "hunter2"} {
@@ -23,7 +39,6 @@ func TestUnreconciledReasonIsAClosedVocabulary(t *testing.T) {
 		}
 	}
 
-	src := readDBSource(t, "target_reconciliation.go")
 	if !regexp.MustCompile(`(?s)func validUnreconciledReason\(r string\) bool \{\s*switch r \{`).MatchString(src) {
 		t.Error("membership must be a switch over the constants — an exported slice is a vocabulary any package can widen before the write runs")
 	}

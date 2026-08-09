@@ -269,6 +269,8 @@ Failing to record currency MUST NOT discard the findings a pass did produce, and
 
 What counts as the target failing to answer MUST be decided by the read, not by a pre-flight. A reachability check that inspects local configuration — whether a client is constructed, whether a URL is set — establishes that a call can be attempted, not that one succeeded, so a read that fails after such a check is an outage and MUST be recorded as one. Otherwise a live transport failure is the single kind of outage that goes unrecorded, and the existing row keeps reporting the last current read for its whole duration: the surface built to say the backend has not seen a target since Tuesday says it saw it on Tuesday. A read that fails partway through pagination MUST be discarded rather than diffed, on the same grounds as a capped one.
 
+A target that answers with an error status MUST be distinguished from one that does not answer at all. Bytes coming back establish that the network is fine and the host is up; what is broken is a credential, a permission, or the target itself, and the operator's next move differs in kind — there is nothing to reach for, there is something to fix. Recorded as unreachable, an expired service-account key reads as weather, to be waited out while every sweep goes on failing. The halt and the refusal to diff are identical in both cases; only the reason differs, and it MUST NOT be split finer than answered/not-answered, since choosing an operator's next move from a status code is guessing at the target's semantics.
+
 A failure in the backend's OWN reads MUST NOT be recorded against the target. It is not a statement about the target, and recording it as one sends an operator to inspect a system that is working. Those failures surface as errors; the target's last current read stays visibly old without a period being opened against it.
 
 #### Scenario: An outage produces no drift findings
@@ -283,6 +285,7 @@ A failure in the backend's OWN reads MUST NOT be recorded against the target. It
 - **THEN** the sweep MUST halt without diffing anything
 - **AND** MUST record the target as unreconciled, exactly as an unanswered pre-flight would
 - **AND** MUST distinguish a target that is not configured from one that is not answering
+- **AND** MUST distinguish a target that answered with an error status from one that did not answer
 - **AND** a failure in the backend's own reads MUST NOT be recorded against the target
 
 #### Scenario: A capped read concludes nothing about what it did not see

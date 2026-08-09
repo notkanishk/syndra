@@ -2,6 +2,7 @@ package drift
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 
@@ -87,14 +88,13 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	// distinction reached a different way).
 	zit, truncated, err := fetchAllZitadelGrants(ctx)
 	if err != nil {
-		log.Printf("[DRIFT] target read failed for %s: %v (recorded unreconciled, nothing diffed)", target, err)
+		reason, currency := classifyReadFailure(err)
+		log.Printf("[DRIFT] target read failed for %s (%s): %v (recorded unreconciled, nothing diffed)", target, reason, err)
 		return DriftResult{
-			Target: target,
-			Halted: true,
-			// Distinct from `zitadel_offline`: not wired up and not answering
-			// send an operator to different places.
-			Reason:         "zitadel_unreachable",
-			Reconciliation: recordUnreconciled(ctx, target, db.UnreconciledUnreachable),
+			Target:         target,
+			Halted:         true,
+			Reason:         reason,
+			Reconciliation: recordUnreconciled(ctx, target, currency),
 		}, nil
 	}
 	// The reads below are Syndra's own. Their failure is not a statement about
@@ -191,6 +191,30 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	log.Printf("[DRIFT] Sweep complete: target=%s zitadel_grants=%d drift_created=%d re_enqueued=%d truncated=%v",
 		res.Target, res.ZitadelGrants, res.DriftItemsCreated, res.ReEnqueued, res.Truncated)
 	return res, nil
+}
+
+// classifyReadFailure separates a target that did not answer from one that
+// answered and declined to serve the read, returning the result's reason code
+// and the durable currency reason.
+//
+// The split is answered / not answered, and deliberately no finer. A typed
+// status error means bytes came back from Zitadel: the network is fine, the
+// host is up, and the thing to fix is a credential, a permission, or Zitadel
+// itself. Reported as unreachable, an expired service-account key looks like
+// weather — something to wait out rather than repair, and the sweep would go on
+// failing every tick while the record said the target was down.
+//
+// Splitting further, 401 from 500, would be guessing at Zitadel's status
+// semantics to pick an operator's next move. The code is in the log; the
+// durable reason says only what the sweep actually established.
+func classifyReadFailure(err error) (reason, currency string) {
+	var status *zitadel.StatusError
+	if errors.As(err, &status) {
+		return "zitadel_read_refused", db.UnreconciledReadRefused
+	}
+	// Distinct from `zitadel_offline`: not wired up and not answering send an
+	// operator to different places again.
+	return "zitadel_unreachable", db.UnreconciledUnreachable
 }
 
 // recordUnreconciled and recordReconciled write the target's currency and hand
