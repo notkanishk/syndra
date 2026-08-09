@@ -43,6 +43,12 @@ var (
 	// helper (the repo has NO uuid module). Returns (string, error); the sweep
 	// handles the error.
 	newIdempotencyKey = db.NewOutboxIdempotencyKey // () (string, error)
+
+	// How current Syndra's picture of the target is. Written by the sweep
+	// itself because the sweep is the only thing that knows whether the read it
+	// consumed was one it can stand behind.
+	markUnreconciled = db.MarkTargetUnreconciled // (ctx, target, reason)
+	markReconciled   = db.MarkTargetReconciled   // (ctx, target)
 )
 
 // classification helpers are pure and shared with the reconciliation endpoint.

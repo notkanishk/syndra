@@ -261,11 +261,24 @@ Each entitlement change MUST record an immutable desired-state snapshot for its 
 
 The drift sweep MUST consume only target reads the add-on reports as current. A read served from a last-known snapshot MUST NOT be diffed against desired state to produce drift findings, because every outage would otherwise manufacture findings for every change made during it. The backend MUST instead record the target as unreconciled for the period and say so.
 
+A read that is current but INCOMPLETE MUST be treated the same way for any conclusion drawn from absence. The two halves of a sweep do not rest on the same evidence: what a read reports as present was observed, and remains a finding whatever else the read missed; what it does not report is unseen rather than missing. A capped or partial read MUST therefore still classify what it saw and MUST NOT conclude that anything is gone — otherwise every record beyond the cap is replayed as missing, filling the operator's queue with work that immediately discovers itself redundant, which is the same manufactured finding by another route.
+
+The unreconciled period MUST start once and keep its start time until the target returns. Restamping it on each sweep during an outage holds the outage permanently one tick old, and the age is the whole reason to record it. Recording a current read and ending the unreconciled period MUST be one write: a target read but still flagged, or a flag cleared with no read behind it, both describe a moment that did not happen, and the second reports confidence the backend does not have. The record MUST distinguish never-reconciled from long-ago-reconciled rather than collapsing the first into the second, since a newly registered target has no history to be old.
+
+Failing to record currency MUST NOT discard the findings a pass did produce, and MUST NOT be reported as currency the backend cannot vouch for.
+
 #### Scenario: An outage produces no drift findings
 
 - **WHEN** the drift sweep runs while a target is unreachable and only stale reads are available
 - **THEN** it MUST NOT raise drift for that target
 - **AND** MUST record the target as unreconciled, with the age of the last current read
+
+#### Scenario: A capped read concludes nothing about what it did not see
+
+- **WHEN** a sweep's read of a target reaches its safety cap
+- **THEN** the grants it did observe MUST still be classified
+- **AND** nothing MUST be re-enqueued or reported on the grounds of being absent from that read
+- **AND** the target MUST be recorded as unreconciled, naming the cap as the reason
 
 #### Scenario: Reconciliation resumes on return
 

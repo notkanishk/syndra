@@ -330,3 +330,33 @@ ALTER TABLE external_grant_exclusions
 -- intents against Zitadel user_grants; add-on entitlements come from mappings
 -- and allowances, which have their own tables. A column no code path can
 -- populate is a column someone will later assume means something (design §3).
+
+-- 1.14 --------------------------------------------------------------------
+-- Reconciliation currency, one row per target. Separate from `targets` on
+-- purpose: that table is the deployment's registry, read and locked by every
+-- registry reconcile and by the entitlement enqueue, and a sweep stamping a
+-- read every few minutes has no business contending for those locks. Runtime
+-- observation and declared configuration are also different kinds of fact —
+-- one is rebuilt by observing, the other by editing the deployment.
+--
+-- `last_current_read_at` is the age the operator is owed: it answers "when did
+-- Syndra last see this target for itself", which is the only honest thing to
+-- say while it cannot. NULL means never — a target registered and not yet
+-- reconciled is not the same as one reconciled long ago, and neither is the
+-- same as one reconciled a minute ago.
+--
+-- `unreconciled_since` is set once and left alone until the target returns.
+-- Restamping it on every sweep during an outage would hold the outage at one
+-- tick old forever, which is the reading that makes an operator ignore it.
+CREATE TABLE IF NOT EXISTS target_reconciliation (
+    target               TEXT PRIMARY KEY REFERENCES targets(target),
+    last_current_read_at TIMESTAMPTZ,
+    unreconciled_since   TIMESTAMPTZ,
+    unreconciled_reason  TEXT,
+    -- A reason without a period, or a period without a reason, is a row that
+    -- cannot be rendered. They arrive and leave together.
+    CONSTRAINT target_reconciliation_reason_check CHECK (
+        (unreconciled_since IS NULL AND unreconciled_reason IS NULL) OR
+        (unreconciled_since IS NOT NULL AND unreconciled_reason IS NOT NULL)
+    )
+);

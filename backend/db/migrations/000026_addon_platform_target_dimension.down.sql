@@ -24,6 +24,10 @@ BEGIN
 END
 $$;
 
+-- Reconciliation currency is an observation, rebuilt by the next sweep. It is
+-- dropped after the guard above, so a refused rollback leaves it intact.
+DROP TABLE IF EXISTS target_reconciliation;
+
 -- 1.7 --------------------------------------------------------------------
 ALTER TABLE external_grant_exclusions
     DROP CONSTRAINT IF EXISTS external_grant_exclusions_pkey;

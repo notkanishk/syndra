@@ -2,8 +2,11 @@ package drift
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
+	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/zitadel"
 )
@@ -25,6 +28,14 @@ func stubSweep(t *testing.T) {
 	t.Cleanup(swap(&pendingOutboxAddExists, func(context.Context, string, string, string, string) (bool, error) { return false, nil }))
 	t.Cleanup(swap(&insertPending, func(context.Context, string, string, string, []string, string, string, string, string) (string, error) {
 		return "o1", nil
+	}))
+	t.Cleanup(swap(&markUnreconciled, func(_ context.Context, target, reason string) (db.TargetReconciliation, error) {
+		since := time.Unix(1_760_000_000, 0)
+		return db.TargetReconciliation{Target: target, UnreconciledSince: &since, UnreconciledReason: reason}, nil
+	}))
+	t.Cleanup(swap(&markReconciled, func(_ context.Context, target string) (db.TargetReconciliation, error) {
+		read := time.Unix(1_770_000_000, 0)
+		return db.TargetReconciliation{Target: target, LastCurrentReadAt: &read}, nil
 	}))
 }
 
@@ -236,5 +247,173 @@ func TestSweep_ExclusionOnAnotherTargetDoesNotSuppressDrift(t *testing.T) {
 	}
 	if created != 1 {
 		t.Fatalf("an exclusion recorded against another target must not silence this one; drift rows created = %d", created)
+	}
+}
+
+// 1.15 — an outage produces no findings and does record the target as
+// unreconciled, with the age the operator is owed. Silence would read as "no
+// drift", which is the opposite of what happened.
+func TestSweep_AnOutageRecordsAnUnreconciledTargetAndFindsNothing(t *testing.T) {
+	stubSweep(t)
+	defer swap(&zitadelReachable, func(context.Context) bool { return false })()
+	// Syndra expects a grant Zitadel is not answering about. Neither half of
+	// the diff may run: one would invent drift, the other would replay it.
+	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
+		t.Fatal("an unreachable target must not be diffed at all")
+		return nil, nil
+	})()
+	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
+		t.Fatal("an outage must not raise drift")
+		return "", false, nil
+	})()
+	defer swap(&insertPending, func(context.Context, string, string, string, []string, string, string, string, string) (string, error) {
+		t.Fatal("an outage must not re-enqueue")
+		return "", nil
+	})()
+
+	lastRead := time.Unix(1_759_000_000, 0)
+	since := time.Unix(1_759_900_000, 0)
+	var gotTarget, gotReason string
+	defer swap(&markUnreconciled, func(_ context.Context, target, reason string) (db.TargetReconciliation, error) {
+		gotTarget, gotReason = target, reason
+		return db.TargetReconciliation{Target: target, LastCurrentReadAt: &lastRead,
+			UnreconciledSince: &since, UnreconciledReason: reason}, nil
+	})()
+	defer swap(&markReconciled, func(context.Context, string) (db.TargetReconciliation, error) {
+		t.Fatal("an outage must not record a current read")
+		return db.TargetReconciliation{}, nil
+	})()
+
+	res, err := Sweep(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Halted || res.DriftItemsCreated != 0 || res.ReEnqueued != 0 {
+		t.Fatalf("an outage must produce no findings, got %+v", res)
+	}
+	if gotTarget != "zitadel" || gotReason != db.UnreconciledUnreachable {
+		t.Fatalf("the unreachable target must be recorded as such, got %q/%q", gotTarget, gotReason)
+	}
+	if res.Reconciliation == nil || !res.Reconciliation.Unreconciled() {
+		t.Fatalf("the result must carry the unreconciled record, got %+v", res.Reconciliation)
+	}
+	// The age of the last current read is the whole point: "we last saw this
+	// target on Tuesday" is what an operator decides on.
+	if res.Reconciliation.LastCurrentReadAt == nil || !res.Reconciliation.LastCurrentReadAt.Equal(lastRead) {
+		t.Fatalf("the result must carry the last current read, got %v", res.Reconciliation.LastCurrentReadAt)
+	}
+}
+
+// Reconciliation resumes on return: the sweep diffs the current read, and the
+// unreconciled period ends with the same write that records the read.
+func TestSweep_ResumesOnReturn(t *testing.T) {
+	stubSweep(t)
+	defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+		return &zitadel.SearchResult[zitadel.UserGrant]{
+			Items: []zitadel.UserGrant{{ID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}}, Total: 1,
+		}, nil
+	})()
+	var created int
+	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
+		created++
+		return "d1", true, nil
+	})()
+	defer swap(&markUnreconciled, func(_ context.Context, _, reason string) (db.TargetReconciliation, error) {
+		t.Fatalf("a current, complete read must not be recorded as unreconciled (%s)", reason)
+		return db.TargetReconciliation{}, nil
+	})()
+	read := time.Unix(1_770_000_000, 0)
+	defer swap(&markReconciled, func(_ context.Context, target string) (db.TargetReconciliation, error) {
+		return db.TargetReconciliation{Target: target, LastCurrentReadAt: &read}, nil
+	})()
+
+	res, err := Sweep(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A change made during the outage is classified on its own merits — as the
+	// unexplained grant it is, not as an outage artefact.
+	if created != 1 {
+		t.Fatalf("a current read must be diffed, drift created = %d", created)
+	}
+	if res.Reconciliation == nil || res.Reconciliation.Unreconciled() {
+		t.Fatalf("returning must end the unreconciled period, got %+v", res.Reconciliation)
+	}
+	if res.Reconciliation.LastCurrentReadAt == nil || !res.Reconciliation.LastCurrentReadAt.Equal(read) {
+		t.Fatalf("the result must carry the new current read, got %v", res.Reconciliation.LastCurrentReadAt)
+	}
+}
+
+// A capped read has seen everything it reports and nothing about the rest.
+// Concluding absence from it would re-enqueue an `add` for every direct grant
+// beyond the cap — grants that already exist.
+func TestSweep_ATruncatedReadConcludesNoAbsence(t *testing.T) {
+	stubSweep(t)
+	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{UserID: "beyond-the-cap", ProjectID: "p9", RoleKey: "viewer"}}, nil
+	})()
+	// Total exceeds what the page returns and the cap is reached, so the fetch
+	// reports truncation.
+	defer swap(&zitadelListAllGrants, func(_ context.Context, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+		items := make([]zitadel.UserGrant, driftSafetyCap)
+		for i := range items {
+			items[i] = zitadel.UserGrant{ID: "g", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}
+		}
+		return &zitadel.SearchResult[zitadel.UserGrant]{Items: items, Total: driftSafetyCap * 2}, nil
+	})()
+	defer swap(&insertPending, func(context.Context, string, string, string, []string, string, string, string, string) (string, error) {
+		t.Fatal("a capped read cannot observe an absence, so it must not replay one")
+		return "", nil
+	})()
+	var reason string
+	defer swap(&markUnreconciled, func(_ context.Context, target, r string) (db.TargetReconciliation, error) {
+		reason = r
+		return db.TargetReconciliation{Target: target, UnreconciledReason: r}, nil
+	})()
+	defer swap(&markReconciled, func(context.Context, string) (db.TargetReconciliation, error) {
+		t.Fatal("a truncated read is not a read Syndra can stand behind")
+		return db.TargetReconciliation{}, nil
+	})()
+
+	res, err := Sweep(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Truncated || res.ReEnqueued != 0 {
+		t.Fatalf("a truncated sweep must conclude no absence, got %+v", res)
+	}
+	if reason != db.UnreconciledTruncated {
+		t.Fatalf("the cap must be recorded as the reason, got %q", reason)
+	}
+	// The half that concludes from what it SAW still runs: those grants were
+	// observed, and suppressing them would lose real findings for the same
+	// reason the other half is suppressed.
+	if res.DriftItemsCreated == 0 {
+		t.Error("grants actually seen must still be classified")
+	}
+}
+
+// The record is a report about the pass, not the pass itself. Losing it must
+// not lose the findings.
+func TestSweep_AFailedCurrencyRecordDoesNotDiscardTheWork(t *testing.T) {
+	stubSweep(t)
+	defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+		return &zitadel.SearchResult[zitadel.UserGrant]{
+			Items: []zitadel.UserGrant{{ID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}}, Total: 1,
+		}, nil
+	})()
+	defer swap(&markReconciled, func(context.Context, string) (db.TargetReconciliation, error) {
+		return db.TargetReconciliation{}, errors.New("database unreachable")
+	})()
+
+	res, err := Sweep(context.Background())
+	if err != nil {
+		t.Fatalf("a failed currency record must not fail the sweep: %v", err)
+	}
+	if res.DriftItemsCreated != 1 {
+		t.Fatalf("the findings the pass produced must survive, got %+v", res)
+	}
+	if res.Reconciliation != nil {
+		t.Error("an unwritten record must be absent rather than invented — Syndra cannot say how current its picture is if it could not record it")
 	}
 }
