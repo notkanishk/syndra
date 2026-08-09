@@ -114,12 +114,21 @@ func (tm *tokenManager) refresh(ctx context.Context) error {
 	// classifies on the way out. `doRequest` wraps this with %w, so callers
 	// reach it with errors.As.
 	//
-	// The body is truncated rather than embedded whole. It is a bounded
-	// diagnostic in a durable error that gets logged, and the token endpoint is
-	// the one endpoint whose request carried a signed assertion: an upstream
-	// that echoes it back should not be able to make Syndra copy it into a log.
+	// The body itself never leaves this function. This request carried a signed
+	// bearer assertion, and an endpoint that reflects a rejected parameter back
+	// in its error — a common enough shape — would have Syndra copy that
+	// assertion into every log and reporting path the resulting error reaches.
+	// Bounding the length was not a fix: a compact assertion fits inside any
+	// cap, and half a credential is still credential.
+	//
+	// What does escape is the RFC 6749 §5.2 error code, and only when it is one
+	// of the six the RFC defines — each returned as its own literal, so the
+	// only strings that can leave here are written in this file. That keeps the
+	// distinction an operator actually acts on: invalid_client says the service
+	// account is not recognised, invalid_grant says the key no longer matches
+	// it. Anything else is dropped, including a code an upstream invented.
 	if resp.StatusCode != http.StatusOK {
-		return &StatusError{Code: resp.StatusCode, Message: truncateDetail(string(body))}
+		return &StatusError{Code: resp.StatusCode, Message: tokenRejection(body)}
 	}
 
 	var tokResp tokenResponse
@@ -174,16 +183,36 @@ func MintM2MToken(ctx context.Context, domain, keyPath string) (string, error) {
 	return tm.Token(ctx)
 }
 
-// detailLimit bounds server-provided detail carried into a StatusError.
-const detailLimit = 512
-
-// truncateDetail keeps an error readable in a log line. The limit is generous
-// enough for any real OAuth error body and short enough that a hostile or
-// broken upstream cannot dictate how much of a log Syndra writes.
-func truncateDetail(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) <= detailLimit {
-		return s
+// tokenRejection turns a token-endpoint error body into a message safe to
+// carry. Nothing from the body is returned: every branch below returns a string
+// literal written here, so no amount of reflection by the endpoint can put the
+// assertion it was sent into an error Syndra logs.
+//
+// The switch is over the six codes RFC 6749 §5.2 defines for this endpoint. A
+// code outside them — including one an upstream invented to smuggle text out —
+// yields the bare message, and the HTTP status still carries the
+// classification callers need.
+func tokenRejection(body []byte) string {
+	var payload struct {
+		Error string `json:"error"`
 	}
-	return s[:detailLimit] + "… (truncated)"
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return "token exchange rejected"
+	}
+	switch payload.Error {
+	case "invalid_request":
+		return "token exchange rejected: invalid_request"
+	case "invalid_client":
+		return "token exchange rejected: invalid_client"
+	case "invalid_grant":
+		return "token exchange rejected: invalid_grant"
+	case "unauthorized_client":
+		return "token exchange rejected: unauthorized_client"
+	case "unsupported_grant_type":
+		return "token exchange rejected: unsupported_grant_type"
+	case "invalid_scope":
+		return "token exchange rejected: invalid_scope"
+	default:
+		return "token exchange rejected"
+	}
 }

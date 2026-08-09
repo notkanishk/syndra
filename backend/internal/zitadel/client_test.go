@@ -8,10 +8,13 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -640,15 +643,34 @@ func TestTokenExchange_ATransportFailureCarriesNoStatus(t *testing.T) {
 	}
 }
 
-// The detail is a diagnostic, not a transcript. A broken or hostile upstream
-// must not dictate how much of a log Syndra writes — and the token request is
-// the one that carried a signed assertion.
-func TestTokenExchange_BoundsTheDetailItCarries(t *testing.T) {
+// This request carries a signed bearer assertion. An endpoint that reflects a
+// rejected parameter back in its error — a common enough shape — must not be
+// able to make Syndra copy that assertion into a log. Bounding the length was
+// never a fix for this: a compact assertion fits inside any cap, and half a
+// credential is still credential.
+func TestTokenExchange_NeverCarriesAReflectedAssertion(t *testing.T) {
 	resetDeps(t)
-	httpDo = func(*http.Client, *http.Request) (*http.Response, error) {
+	var sent string
+	httpDo = func(_ *http.Client, req *http.Request) (*http.Response, error) {
+		raw, _ := io.ReadAll(req.Body)
+		form, err := url.ParseQuery(string(raw))
+		if err != nil {
+			t.Fatalf("parse token request: %v", err)
+		}
+		sent = form.Get("assertion")
+		if sent == "" {
+			t.Fatal("the token request must carry an assertion for this test to mean anything")
+		}
+		// The endpoint hands the credential straight back, the way a careless
+		// implementation reports which parameter it rejected.
+		reflected, _ := json.Marshal(map[string]string{
+			"error":             "invalid_grant",
+			"error_description": "assertion rejected: " + sent,
+			"assertion":         sent,
+		})
 		return &http.Response{
 			StatusCode: http.StatusBadRequest,
-			Body:       io.NopCloser(strings.NewReader(strings.Repeat("x", 40_000))),
+			Body:       io.NopCloser(strings.NewReader(string(reflected))),
 			Header:     http.Header{},
 		}, nil
 	}
@@ -657,9 +679,104 @@ func TestTokenExchange_BoundsTheDetailItCarries(t *testing.T) {
 	_, err := tm.Token(context.Background())
 	var status *StatusError
 	if !errors.As(err, &status) {
-		t.Fatalf("want a StatusError, got %T", err)
+		t.Fatalf("want a StatusError, got %T: %v", err, err)
 	}
-	if len(status.Message) > detailLimit+len("… (truncated)") {
-		t.Fatalf("detail must be bounded, got %d bytes", len(status.Message))
+	// Every rendering an operator or a log could see.
+	for _, rendered := range []string{status.Message, status.Error(), err.Error(),
+		fmt.Sprintf("%v", err), fmt.Sprintf("%+v", err)} {
+		if strings.Contains(rendered, sent) {
+			t.Fatalf("the assertion must never be copied into a diagnostic: %s", rendered)
+		}
+		// Not even a fragment of it. A partial credential is still credential,
+		// and a signature prefix narrows an offline attack.
+		for _, part := range strings.Split(sent, ".") {
+			if len(part) >= 16 && strings.Contains(rendered, part[:16]) {
+				t.Fatalf("a fragment of the assertion leaked into a diagnostic: %s", rendered)
+			}
+		}
+	}
+	// The diagnostic an operator does act on survives: invalid_grant says the
+	// key no longer matches the service account.
+	if !strings.Contains(status.Message, "invalid_grant") {
+		t.Errorf("the RFC 6749 code must survive, got %q", status.Message)
+	}
+}
+
+// A code the endpoint invented is not a code. Echoing it would be the same
+// disclosure with an extra step.
+func TestTokenExchange_DropsAnErrorCodeItDoesNotRecognise(t *testing.T) {
+	resetDeps(t)
+	smuggled := "eyJhbGciOiJSUzI1NiJ9.PAYLOAD.SIGNATURE"
+	httpDo = func(*http.Client, *http.Request) (*http.Response, error) {
+		body, _ := json.Marshal(map[string]string{"error": smuggled})
+		return &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Body:       io.NopCloser(strings.NewReader(string(body))),
+			Header:     http.Header{},
+		}, nil
+	}
+	tm := newTokenManager("test.zitadel.cloud", &ServiceAccountKey{KeyID: "kid-1", UserID: "sa-user"}, testRSAKey(t))
+
+	_, err := tm.Token(context.Background())
+	if strings.Contains(err.Error(), smuggled) {
+		t.Fatalf("an unrecognised code must be dropped, not echoed: %v", err)
+	}
+	var status *StatusError
+	if !errors.As(err, &status) || status.Code != http.StatusBadRequest {
+		t.Fatalf("the status must still classify the failure, got %v", err)
+	}
+}
+
+// A body that is not JSON at all, or is empty, still classifies.
+func TestTokenExchange_ClassifiesWithoutAUsableBody(t *testing.T) {
+	resetDeps(t)
+	for _, body := range []string{"", "<html>502 Bad Gateway</html>", "null"} {
+		httpDo = func(*http.Client, *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusBadGateway,
+				Body:       io.NopCloser(strings.NewReader(body)),
+				Header:     http.Header{},
+			}, nil
+		}
+		tm := newTokenManager("test.zitadel.cloud", &ServiceAccountKey{KeyID: "kid-1", UserID: "sa-user"}, testRSAKey(t))
+		_, err := tm.Token(context.Background())
+		var status *StatusError
+		if !errors.As(err, &status) || status.Code != http.StatusBadGateway {
+			t.Fatalf("body %q: the status must classify the failure regardless of the body, got %v", body, err)
+		}
+	}
+}
+
+// The guarantee is syntactic: only strings written in this file can leave.
+func TestTokenRejectionReturnsOnlyItsOwnLiterals(t *testing.T) {
+	src, err := os.ReadFile("token.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(src)
+	i := strings.Index(body, "func tokenRejection(")
+	if i < 0 {
+		t.Fatal("tokenRejection not found")
+	}
+	fn := body[i:]
+	if j := strings.Index(fn[1:], "\nfunc "); j >= 0 {
+		fn = fn[:j+1]
+	}
+	for _, forbidden := range []string{"return payload.Error", "return string(body)", "payload.Description"} {
+		if strings.Contains(fn, forbidden) {
+			t.Errorf("tokenRejection must not return anything derived from the body; found %q", forbidden)
+		}
+	}
+	// Anchored at both ends, so a return that merely BEGINS with a literal does
+	// not pass. `"rejected: " + payload.Error` starts with a quote and ends
+	// with the endpoint's own text — which is the whole disclosure, reached by
+	// concatenation instead of by assignment. Inside a matched case it is even
+	// byte-identical to the literal, so no behavioural test can tell the two
+	// apart: this guard is the only thing standing between them.
+	literal := regexp.MustCompile(`^"(?:[^"\\]|\\.)*"$`)
+	for _, ret := range regexp.MustCompile(`return ([^\n]+)`).FindAllStringSubmatch(fn, -1) {
+		if !literal.MatchString(strings.TrimSpace(ret[1])) {
+			t.Errorf("every return must be one whole string literal written here, got %q", strings.TrimSpace(ret[1]))
+		}
 	}
 }
