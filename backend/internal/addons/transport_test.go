@@ -996,3 +996,125 @@ func TestTheBreakerIgnoresALifecycleRefusal(t *testing.T) {
 		t.Fatal("a genuine outage must still open the circuit")
 	}
 }
+
+// The entitlement leg of the transport. Separate from `Call` because an apply
+// carries no secret and needs no durable record — but it shares the breaker,
+// the authentication and the four outcomes, and each of those is asserted here
+// rather than assumed from the other leg.
+func TestApplyRefusesWithoutADeduplicationToken(t *testing.T) {
+	var reached bool
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached = true }))
+	defer srv.Close()
+	signedAddon(t, srv.URL, []byte("k"))
+	withBreaker(t, 1000, time.Minute)
+
+	resp := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "sub-1"})
+	if resp.Outcome != OutcomeUnreached || !errors.Is(resp.Err, ErrNoCallRecord) {
+		t.Fatalf("want an unreached refusal, got %s / %v", resp.Outcome, resp.Err)
+	}
+	// The design leans on the call id being universal: §16 declines a nonce
+	// store because it already prevents replay, and that only holds if nothing
+	// dispatches without one.
+	if reached {
+		t.Fatal("nothing may be sent without a deduplication token")
+	}
+}
+
+func TestApplyConsultsTheBreakerBeforeSending(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	signedAddon(t, srv.URL, []byte("k"))
+	withBreaker(t, 1, time.Hour)
+
+	req := ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c1"}
+	if out := Apply(context.Background(), req); out.Outcome == OutcomeSucceeded {
+		t.Fatal("the first call must fail")
+	}
+	before := calls
+
+	second := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c2"})
+	if !errors.Is(second.Err, ErrCircuitOpen) {
+		t.Fatalf("want the circuit refusing, got %v", second.Err)
+	}
+	if calls != before {
+		t.Fatal("an open circuit must cost no request")
+	}
+}
+
+// A 2xx whose body will not decode is not a success the backend can record: the
+// add-on acted and did not say what it did, which is the definition of
+// indeterminate.
+func TestAnUndecodableApplySuccessIsIndeterminate(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`not json at all`))
+	}))
+	defer srv.Close()
+	signedAddon(t, srv.URL, []byte("k"))
+	withBreaker(t, 1000, time.Minute)
+
+	resp := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c1"})
+	if resp.Outcome != OutcomeIndeterminate {
+		t.Fatalf("want indeterminate, got %s", resp.Outcome)
+	}
+	if resp.Err == nil {
+		t.Error("and it must say why")
+	}
+}
+
+// A well-formed success carries back what the add-on did, including the derived
+// name — which is why account creation needs no separate operation sequenced
+// before the apply.
+func TestASuccessfulApplyCarriesBackWhatTheAddonDid(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"effect":"applied","username":"ada","fingerprint":"fp-2","detail":"Created ada."}`))
+	}))
+	defer srv.Close()
+	signedAddon(t, srv.URL, []byte("k"))
+	withBreaker(t, 1000, time.Minute)
+
+	resp := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c1"})
+	if resp.Outcome != OutcomeSucceeded {
+		t.Fatalf("want succeeded, got %s / %v", resp.Outcome, resp.Err)
+	}
+	if resp.Username != "ada" || resp.Fingerprint != "fp-2" {
+		t.Fatalf("the derived name and the new fingerprint must come back: %+v", resp)
+	}
+}
+
+// The apply leg goes over the same authenticated transport, or there are two
+// authentication stories and one of them is weaker.
+func TestApplyIsSignedLikeEveryOtherLeg(t *testing.T) {
+	key := []byte("k")
+	var verified error
+	var seenBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenBody, _ = io.ReadAll(r.Body)
+		verified = verifySignature(r.Header.Get(SignatureHeader), seenBody, key, time.Minute, time.Now())
+		_, _ = w.Write([]byte(`{"effect":"applied"}`))
+	}))
+	defer srv.Close()
+	signedAddon(t, srv.URL, key)
+	withBreaker(t, 1000, time.Minute)
+
+	Apply(context.Background(), ApplyRequest{
+		Target: "truenas", Subject: "sub-1", CallID: "c1", Fingerprint: "fp-1",
+		Desired: map[string]json.RawMessage{"group": json.RawMessage(`["lab_makers"]`)},
+	})
+	if verified != nil {
+		t.Fatalf("the apply must be signed: %v", verified)
+	}
+	// Everything binding the call travels INSIDE the signed body, so an
+	// intercepted call replayed against a different subject fails verification
+	// rather than succeeding under somebody else's approval.
+	for _, want := range []string{`"call_id":"c1"`, `"subject":"sub-1"`, `"fingerprint":"fp-1"`, `"lab_makers"`} {
+		if !strings.Contains(string(seenBody), want) {
+			t.Errorf("the signed body must carry %s: %s", want, seenBody)
+		}
+	}
+}

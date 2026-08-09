@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -258,3 +259,81 @@ func LockTargetStateTx(ctx context.Context, tx pgx.Tx, target string) (string, e
 	}
 	return state, nil
 }
+
+// EntitlementIntent is what an add-on drain needs to dispatch one queued row.
+//
+// Read as one object because its parts must describe one decision: the outbox
+// row, the plan subject it cites, the snapshot that subject approved, and the
+// fingerprint the state was reviewed against. Assembled by a caller from
+// separate reads they can describe a decision that never existed, which is the
+// same reason `ReconcileLedgerOnApplied` reads its tuple off the row.
+type EntitlementIntent struct {
+	OutboxID  string
+	Target    string
+	SubjectID string
+	// Fingerprint is what the add-on re-verifies against live state
+	// immediately before writing.
+	Fingerprint string
+	// DesiredJSON is the approved snapshot's state. Carried as raw JSON so
+	// nothing between here and the add-on has to know what a field means.
+	DesiredJSON []byte
+	// Version is the snapshot's monotonic version, for the ordering the drain
+	// already enforces at the claim.
+	Version int64
+}
+
+// Desired decodes the approved snapshot into the per-field shape the transport
+// sends.
+//
+// A decode failure yields nil rather than an error, and the caller must treat
+// nil as "nothing to send" rather than "send an empty set". An unreadable
+// snapshot is a snapshot nobody can act on; converging a subject to an empty
+// desired state on the strength of one would remove every entitlement they have
+// because a JSON column could not be parsed.
+func (i EntitlementIntent) Desired() map[string]json.RawMessage {
+	if len(i.DesiredJSON) == 0 {
+		return nil
+	}
+	var out map[string]json.RawMessage
+	if err := json.Unmarshal(i.DesiredJSON, &out); err != nil {
+		return nil
+	}
+	return out
+}
+
+// ReadEntitlementIntent resolves a claimed outbox row into what it approved.
+//
+// The RECORDED snapshot, never a fresh resolution. An operator-initiated change
+// is an approval and must apply the diff that was seen; re-resolving here would
+// dispatch whatever policy says now, which is a different decision wearing the
+// approval's plan id. (Periodic reconciliation is the other read path and
+// resolves current state deliberately — conflating the two is how a reconcile
+// loop reverts an intentional edit.)
+func ReadEntitlementIntent(ctx context.Context, outboxID string) (EntitlementIntent, error) {
+	const q = `
+		SELECT p.id, p.target, s.subject_id, ps.fingerprint, s.state_json, s.version
+		  FROM propagation_outbox p
+		  JOIN plan_subjects ps ON ps.id = p.plan_subject_id
+		  JOIN desired_state_snapshots s ON s.id = ps.snapshot_id
+		 WHERE p.id = $1`
+	var out EntitlementIntent
+	err := PG.QueryRow(ctx, q, outboxID).Scan(
+		&out.OutboxID, &out.Target, &out.SubjectID, &out.Fingerprint, &out.DesiredJSON, &out.Version)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// A row with no approval chain is not a row this drain may dispatch.
+		// Reported rather than defaulted: dispatching an empty desired state
+		// would converge the subject to nothing.
+		return EntitlementIntent{}, fmt.Errorf("%w: %s", ErrNoApprovedIntent, outboxID)
+	}
+	if err != nil {
+		return EntitlementIntent{}, fmt.Errorf("read entitlement intent %s: %w", outboxID, err)
+	}
+	return out, nil
+}
+
+// ErrNoApprovedIntent is an outbox row that cites no snapshot. It is a
+// programming error rather than an operational one — the enqueue writes the
+// citation — and it is refused rather than defaulted, because the default would
+// be an empty desired state and an empty desired state removes every
+// entitlement the subject has.
+var ErrNoApprovedIntent = errors.New("db: the outbox row cites no approved desired state")

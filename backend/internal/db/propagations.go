@@ -576,6 +576,23 @@ func RequeuePropagation(ctx context.Context, id, errMsg string) (int, error) {
 	return attempts, nil
 }
 
+// ReleasePropagation returns a row to pending WITHOUT spending a retry.
+//
+// For the one case where nothing was attempted: the target declined before
+// doing anything, because an operator put it into a maintenance window. A
+// requeue would spend an attempt and record a dispatch failure for a dispatch
+// that never happened — and a long enough window would exhaust the budget of
+// every queued row and halt the drain on rows that were never even sent.
+//
+// Guarded by `status='in_flight'` like every other settle, so a row terminated
+// while its dispatch was out is not returned to pending on a target that no
+// longer exists.
+func ReleasePropagation(ctx context.Context, id, reason string) error {
+	return settleOne(ctx, "release propagation", id,
+		`UPDATE propagation_outbox SET status='pending', last_error=$2, started_at=NULL
+		 WHERE id=$1 AND status='in_flight'`, reason)
+}
+
 // GetPendingPropagations returns rows still in flight (pending or in_flight),
 // oldest first — the operator's "awaiting Zitadel" worklist.
 func GetPendingPropagations(ctx context.Context) ([]models.PendingPropagation, error) {

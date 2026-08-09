@@ -16,6 +16,7 @@ import (
 	"os"
 	"strconv"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/zitadel"
 )
@@ -35,6 +36,9 @@ var (
 	markApplied      = db.MarkPropagationApplied
 	markFailed       = db.MarkPropagationFailed
 	requeue          = db.RequeuePropagation
+	// release returns a row to pending without spending a retry, for the one
+	// case where nothing was attempted at all.
+	release = db.ReleasePropagation
 
 	// reconcileLedger prunes direct_role_grants to match the desired state an
 	// applied revoke/replace established in Zitadel (revoke removes the named
@@ -90,6 +94,13 @@ var (
 	}
 
 	pruneTerminal = db.PruneTerminalPropagations
+
+	// The add-on dispatcher's two seams. Separate from the Zitadel ones because
+	// they are a different leg of the contract, and a test has to be able to
+	// fail either: a row dispatched without its approved snapshot, and an
+	// outcome recorded as something the target did not say.
+	readIntent       = db.ReadEntitlementIntent
+	applyEntitlement = addons.Apply
 
 	maxRetries    = outboxMaxRetries()    // OUTBOX_MAX_RETRIES (default 5)
 	retentionDays = outboxRetentionDays() // OUTBOX_RETENTION_DAYS (default 30)
