@@ -192,23 +192,56 @@ func ClaimPropagationByID(ctx context.Context, id string) (*models.PendingPropag
 	return &out[0], true, nil
 }
 
+// ErrPropagationNotInFlight means the row this drain was settling is no longer
+// the drain's to settle: something terminated it while the dispatch was out.
+//
+// Today that something is deregistration, which abandons a target's unresolved
+// rows. It is not an error — the row reached a terminal state legitimately —
+// but it is emphatically not success either, and a settle that quietly did
+// nothing would be counted as one.
+var ErrPropagationNotInFlight = errors.New("db: the propagation row is no longer in flight")
+
+// Every finalizer below is guarded by `status='in_flight'`, which is the status
+// the claim set and the only status a settle may act on.
+//
+// Unguarded, they overwrite whatever the row became while the dispatch was out.
+// The worst is the requeue: it would return an abandoned row to `pending` on a
+// deregistered target, recreating the undrainable row the deregistration had
+// just resolved — and invisibly, because the sweep that would have caught it
+// has already run.
+// settleOne runs a guarded finalizer and turns "matched nothing" into the
+// sentinel.
+//
+// One place, because the mapping is the whole safety property and three copies
+// of it are three chances to write `return nil` instead. A settle that affected
+// no rows did not settle: the caller is about to count an outcome it never
+// recorded.
+func settleOne(ctx context.Context, what, id, q string, args ...any) error {
+	tag, err := PG.Exec(ctx, q, append([]any{id}, args...)...)
+	if err != nil {
+		return fmt.Errorf("%s: %w", what, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("%w: %s", ErrPropagationNotInFlight, id)
+	}
+	return nil
+}
+
 // MarkPropagationApplied marks a row as terminal success and clears any prior
 // transient error message.
 func MarkPropagationApplied(ctx context.Context, id string) error {
-	return execPropagation(ctx, id,
-		`UPDATE propagation_outbox SET status='applied', completed_at=NOW(), last_error=NULL WHERE id=$1`)
+	return settleOne(ctx, "mark propagation applied", id,
+		`UPDATE propagation_outbox SET status='applied', completed_at=NOW(), last_error=NULL
+		 WHERE id=$1 AND status='in_flight'`)
 }
 
 // MarkPropagationFailed marks a row terminal-failed with the operator-facing
 // error. Failed rows survive the retention window as the attention-needed audit
 // trail.
 func MarkPropagationFailed(ctx context.Context, id, errMsg string) error {
-	const q = `UPDATE propagation_outbox
-		SET status='failed', completed_at=NOW(), last_error=$2 WHERE id=$1`
-	if _, err := PG.Exec(ctx, q, id, errMsg); err != nil {
-		return fmt.Errorf("mark propagation failed: %w", err)
-	}
-	return nil
+	return settleOne(ctx, "mark propagation failed", id,
+		`UPDATE propagation_outbox SET status='failed', completed_at=NOW(), last_error=$2
+		 WHERE id=$1 AND status='in_flight'`, errMsg)
 }
 
 // RequeuePropagation returns a row to pending after a transient error and bumps
@@ -216,9 +249,13 @@ func MarkPropagationFailed(ctx context.Context, id, errMsg string) error {
 func RequeuePropagation(ctx context.Context, id, errMsg string) (int, error) {
 	const q = `UPDATE propagation_outbox
 		SET status='pending', attempts=attempts+1, last_error=$2, started_at=NULL
-		WHERE id=$1 RETURNING attempts`
+		WHERE id=$1 AND status='in_flight' RETURNING attempts`
 	var attempts int
-	if err := PG.QueryRow(ctx, q, id, errMsg).Scan(&attempts); err != nil {
+	err := PG.QueryRow(ctx, q, id, errMsg).Scan(&attempts)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, fmt.Errorf("%w: %s", ErrPropagationNotInFlight, id)
+	}
+	if err != nil {
 		return 0, fmt.Errorf("requeue propagation: %w", err)
 	}
 	return attempts, nil

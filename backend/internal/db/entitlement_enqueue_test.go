@@ -74,7 +74,9 @@ func entitlementInsert(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("read entitlement_enqueue.go: %v", err)
 	}
-	m := regexp.MustCompile(`(?s)INSERT INTO propagation_outbox(.*?)RETURNING`).FindStringSubmatch(string(src))
+	// From the const's opening backtick, so the CTE that locks the target is
+	// part of what the guards read: it is as much of the write as the INSERT is.
+	m := regexp.MustCompile("(?s)const insertOutbox = `(.*?)`").FindStringSubmatch(string(src))
 	if m == nil {
 		t.Fatal("could not isolate the entitlement outbox INSERT")
 	}
@@ -200,6 +202,7 @@ func TestTheOutboxRowIsDerivedFromTheApproval(t *testing.T) {
 	}
 	for _, predicate := range []struct{ frag, why string }{
 		{"p.applied_at IS NOT NULL", "work may only be queued under an approval that was actually claimed"},
+		{"FOR UPDATE", "the target must be locked by this statement: an MVCC read lets a caller commit a fresh row behind a deregistration's sweep"},
 		{"t.state = 'active'", "a target the deployment dropped must take no work, enforced at the write and not only at the caller"},
 		{"p.target <> $3", "the built-in target's rows carry project and role columns this path cannot fill"},
 		{"ON CONFLICT (plan_subject_id) WHERE plan_subject_id IS NOT NULL DO NOTHING", "one approval, one queued convergence — and via the index, so a concurrent second caller gets the same typed refusal rather than a raised constraint violation that kills its transaction"},
@@ -235,6 +238,7 @@ func TestTheEnqueuePredicateAndItsExplainerRefuseTheSameThings(t *testing.T) {
 		{"no such approval", func(r *approvalRef) { r.found = false }, ErrNoClaimedApproval, "ps.id = $4"},
 		{"the plan was never claimed", func(r *approvalRef) { r.claimed = false }, ErrNoClaimedApproval, "p.applied_at IS NOT NULL"},
 		{"the target was dropped", func(r *approvalRef) { r.targetState = TargetDisabled }, ErrTargetNotActive, "t.state = 'active'"},
+		{"the target was dropped concurrently", func(r *approvalRef) { r.targetState = TargetDisabled }, ErrTargetNotActive, "FOR UPDATE"},
 		{"the built-in target", func(r *approvalRef) { r.target = TargetZitadel }, ErrNotAnEntitlementTarget, "p.target <> $3"},
 		{"already queued", func(r *approvalRef) { r.alreadyQueued = true }, ErrAlreadyQueued, "DO NOTHING"},
 	} {
@@ -360,6 +364,41 @@ func TestTheEntitlementPathCannotWriteAZitadelRow(t *testing.T) {
 	}
 }
 
+// P1 — the enqueue locks the target itself rather than trusting a caller to
+// have locked it.
+//
+// The gate does lock it, earlier and for a different reason, but this function
+// is exported and the invariant cannot rest on which callers remember. Under a
+// plain join the check is an MVCC read: start the INSERT while the target is
+// active, let a deregistration disable it and sweep its queued work, and this
+// statement still commits a fresh pending row — behind the sweep that would
+// have caught it, on a target nothing will drain.
+func TestTheEnqueueLocksTheTargetItChecks(t *testing.T) {
+	insert := entitlementInsert(t)
+
+	if !regexp.MustCompile(`(?s)WITH locked_target AS \(.*?FROM targets t.*?t\.state = 'active'.*?FOR UPDATE`).MatchString(insert) {
+		t.Error("the target row must be locked by this statement, with the state check inside the locking read — READ COMMITTED re-checks the predicate against the version it locked, which is what turns a stale snapshot into no match")
+	}
+	// And the insert must depend on that locked row, or the lock is taken and
+	// then ignored.
+	if !strings.Contains(insert, "JOIN locked_target") {
+		t.Error("the insert must join the locked target, or the lock guards nothing it writes")
+	}
+	if regexp.MustCompile(`JOIN targets t ON`).MatchString(insert) {
+		t.Error("the unlocked join must be gone, not merely accompanied by a locked one")
+	}
+
+	// Both locking reads name the same row in the same order, so an apply that
+	// goes through the gate takes the lock once and cannot deadlock with itself.
+	src, err := os.ReadFile("entitlement_enqueue.go")
+	if err != nil {
+		t.Fatalf("read entitlement_enqueue.go: %v", err)
+	}
+	if !strings.Contains(string(src), "SELECT state FROM targets WHERE target = $1 FOR UPDATE") {
+		t.Error("the gate's own lock must remain: it is what refuses before the approval is spent")
+	}
+}
+
 // P1 — deregistering a target resolves the work it strands, in the same
 // transaction that deregisters it.
 //
@@ -435,5 +474,74 @@ func TestAbandonedIsATerminalStatusOfItsOwn(t *testing.T) {
 		if !strings.Contains(m[1], "'"+status+"'") {
 			t.Errorf("the status CHECK must accept %q", status)
 		}
+	}
+}
+
+// P1 — every finalizer acts only on a row that is still in flight.
+//
+// Deregistration can terminate a claimed row while its dispatch is out.
+// Unguarded, the settle that follows overwrites that terminal state — and the
+// requeue is the one that does real damage: it returns the row to `pending` on
+// a target that no longer exists, recreating the undrainable row the
+// deregistration had just resolved, invisible to the sweep that already ran.
+func TestEveryFinalizerActsOnlyOnAnInFlightRow(t *testing.T) {
+	src, err := os.ReadFile("propagations.go")
+	if err != nil {
+		t.Fatalf("read propagations.go: %v", err)
+	}
+	body := string(src)
+
+	for _, fn := range []struct{ name, sets string }{
+		{"MarkPropagationApplied", "status='applied'"},
+		{"MarkPropagationFailed", "status='failed'"},
+		{"RequeuePropagation", "status='pending'"},
+	} {
+		at := strings.Index(body, "func "+fn.name+"(")
+		if at < 0 {
+			t.Errorf("could not locate %s", fn.name)
+			continue
+		}
+		// The function body up to the next top-level func.
+		end := strings.Index(body[at+1:], "\nfunc ")
+		if end < 0 {
+			end = len(body) - at - 1
+		}
+		fnBody := body[at : at+1+end]
+
+		if !strings.Contains(fnBody, fn.sets) {
+			t.Errorf("%s no longer writes %s — this guard is reading the wrong function", fn.name, fn.sets)
+			continue
+		}
+		if !strings.Contains(fnBody, "status='in_flight'") {
+			t.Errorf("%s must require the row to still be in flight: a row terminated while its dispatch was out is not this drain's to settle", fn.name)
+		}
+	}
+
+	// And a settle that matched nothing must say so. Silently affecting zero
+	// rows is the same bug wearing a different face: the drain counts an
+	// outcome it never recorded. The mapping lives in one place, because three
+	// copies of it are three chances to write `return nil` instead.
+	if !regexp.MustCompile(`(?s)func settleOne\(.*?if tag\.RowsAffected\(\) == 0 \{\s*\n\s*return fmt\.Errorf\("%w: %s", ErrPropagationNotInFlight, id\)`).MatchString(body) {
+		t.Error("settleOne must turn zero affected rows into ErrPropagationNotInFlight, unconditionally")
+	}
+	for _, fn := range []string{"MarkPropagationApplied", "MarkPropagationFailed"} {
+		at := strings.Index(body, "func "+fn+"(")
+		end := strings.Index(body[at+1:], "\nfunc ")
+		if at < 0 || end < 0 {
+			t.Fatalf("could not locate %s", fn)
+		}
+		if !strings.Contains(body[at:at+1+end], "settleOne(") {
+			t.Errorf("%s must go through settleOne rather than carrying its own copy of the mapping", fn)
+		}
+	}
+	// RequeuePropagation cannot: it returns the attempt count, so it reads
+	// RETURNING and maps ErrNoRows instead. Held to the same outcome.
+	at := strings.Index(body, "func RequeuePropagation(")
+	end := strings.Index(body[at+1:], "\nfunc ")
+	if at < 0 || end < 0 {
+		t.Fatal("could not locate RequeuePropagation")
+	}
+	if !regexp.MustCompile(`(?s)if errors\.Is\(err, pgx\.ErrNoRows\) \{\s*\n\s*return 0, fmt\.Errorf\("%w: %s", ErrPropagationNotInFlight, id\)`).MatchString(body[at : at+1+end]) {
+		t.Error("RequeuePropagation must map a row it did not match to ErrPropagationNotInFlight — unguarded, it returns an abandoned row to pending on a target that no longer exists")
 	}
 }

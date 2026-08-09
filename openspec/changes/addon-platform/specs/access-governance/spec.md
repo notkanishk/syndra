@@ -24,7 +24,7 @@ Every bound value on a queued row — the subject, the target, and the operator 
 
 An approval MUST authorise at most one queued row, enforced by a uniqueness constraint and not only by a predicate, because a predicate cannot see what a concurrent transaction has not yet committed and two callers racing on one approval would each find no existing row. The loser of that race MUST receive the same refusal the non-concurrent case receives: a raised constraint violation aborts the transaction it was raised in, so the caller would get a database error about an index instead of the typed answer, and no diagnosis could run.
 
-The target's registration MUST be read under a lock that serialises against the reconciliation which disables targets. An unlocked read can return active, be overtaken by a committed disable, and let the apply commit the permanently undrainable row the check exists to refuse.
+The target's registration MUST be read under a lock that serialises against the reconciliation which disables targets, and that lock MUST be taken by the write itself rather than by a caller ahead of it. An unlocked join is an MVCC read: work can begin while the target is active, a deregistration can disable it and sweep what it had queued, and the original snapshot can still commit a fresh row behind that sweep — undrainable, and invisible to the sweep that already ran. A lock held only by one caller is not an invariant, because the write is reachable without it. An unlocked read can return active, be overtaken by a committed disable, and let the apply commit the permanently undrainable row the check exists to refuse.
 
 Serialising is necessary and not sufficient: an apply that wins that race still commits work against a target about to be deregistered. Deregistration MUST therefore resolve the work it strands, in the same transaction that changes the registration state — across two transactions an apply commits into the gap between them. Stranded rows MUST reach a terminal state that is neither `failed` (which claims an attempt was made) nor `superseded` (which claims a later decision won), MUST be terminated rather than deleted so the subject, the approval, and the reason survive, MUST leave an audit trace written by that same statement, and MUST distinguish a row that was never dispatched from one that was in flight and whose outcome is therefore unknowable. Deregistration MUST NOT be refused for having queued work: a deployment change would then fail because of a queue, and a backend that died mid-drain would leave a target that can never be removed.
 
@@ -77,6 +77,13 @@ Serialising is necessary and not sufficient: an apply that wins that race still 
 - **AND** MUST NOT spend the plan, so the approval survives the target being re-registered
 - **AND** the refusal MUST be distinguishable from a target that is deployed and unreachable
 - **AND** a target disabled concurrently with an in-flight apply MUST NOT leave queued work behind
+
+#### Scenario: A settle finds the row is no longer its own
+
+- **WHEN** work is terminated while its dispatch is out, and the dispatcher then records the outcome
+- **THEN** the recording MUST act only on work still in flight and MUST NOT overwrite the terminal state
+- **AND** a retry path MUST NOT return terminated work to a queued state, which would recreate what the termination resolved and place it beyond the sweep that already ran
+- **AND** the dispatcher MUST count it as neither a success nor a failure, because the call may have reached the target and nothing confirmed it
 
 #### Scenario: Deregistering a target resolves what it strands
 

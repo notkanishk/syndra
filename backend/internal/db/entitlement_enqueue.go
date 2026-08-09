@@ -103,6 +103,20 @@ func EnqueueEntitlementApplyTx(ctx context.Context, tx pgx.Tx, p EntitlementAppl
 		return "", err
 	}
 
+	// The target is read FOR UPDATE, by this statement, and that is what makes
+	// the state check mean anything here. A plain join reads an MVCC snapshot: a
+	// caller could start this INSERT while the target was active, have a
+	// deregistration disable it and sweep its queued work, and still commit a
+	// fresh pending row behind that sweep — undrainable, and invisible to the
+	// sweep that already ran. Under FOR UPDATE the row is either locked before
+	// the disable, in which case the disable waits and then abandons what this
+	// wrote, or locked after it, in which case READ COMMITTED re-checks the
+	// predicate against the new version, finds it disabled, and matches nothing.
+	//
+	// The apply gate locks the same row earlier for a different reason: to
+	// refuse before spending the approval. Same row, same order, no deadlock —
+	// and a caller that skips the gate is no longer relying on it.
+	//
 	// project_id, role_keys and zitadel_grant_id stay NULL: they are the shape
 	// of the one target that has them, and `p.target <> $3` keeps that target's
 	// rows off this path entirely. payload_json is an empty object because the
@@ -121,16 +135,23 @@ func EnqueueEntitlementApplyTx(ctx context.Context, tx pgx.Tx, p EntitlementAppl
 	// so only this uniqueness is absorbed. An idempotency-key collision still
 	// raises, which is right: that one means the key generator repeated itself.
 	const insertOutbox = `
+		WITH locked_target AS (
+			SELECT t.target FROM targets t
+			 WHERE t.target = (SELECT p.target FROM plan_subjects ps
+			                     JOIN plans p ON p.id = ps.plan_id
+			                    WHERE ps.id = $4::uuid)
+			   AND t.state = 'active'
+			   FOR UPDATE
+		)
 		INSERT INTO propagation_outbox
 			(op_type, user_id, payload_json, idempotency_key, initiated_by, source, target, plan_subject_id)
 		SELECT 'apply', ps.subject_id, '{}'::jsonb, $1, p.created_by, $2, p.target, ps.id
 		  FROM plan_subjects ps
-		  JOIN plans   p ON p.id = ps.plan_id
-		  JOIN targets t ON t.target = p.target
+		  JOIN plans        p ON p.id = ps.plan_id
+		  JOIN locked_target lt ON lt.target = p.target
 		 WHERE ps.id = $4::uuid
 		   AND p.applied_at IS NOT NULL
 		   AND p.target <> $3
-		   AND t.state = 'active'
 		ON CONFLICT (plan_subject_id) WHERE plan_subject_id IS NOT NULL DO NOTHING
 		RETURNING id, user_id, initiated_by, target`
 

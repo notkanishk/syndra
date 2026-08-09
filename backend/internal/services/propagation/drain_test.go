@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/zitadel"
 )
@@ -645,5 +646,82 @@ func TestClassifyZitadelError_ByStatus(t *testing.T) {
 	// A non-status error (network/timeout) has no code → transient.
 	if got := classifyZitadelError(context.DeadlineExceeded); got != ackTransient {
 		t.Errorf("non-status error must be transient, got %d", got)
+	}
+}
+
+// P1 — a row terminated while its dispatch was out is left terminal, and is
+// counted as neither a success nor a failure.
+//
+// Deregistration abandons a target's unresolved rows. If that lands while the
+// drain's request is in the air, the settle that follows is no longer this
+// drain's to make: the row already reached a terminal state, legitimately, and
+// the drain must not overwrite it or claim the outcome it was about to record.
+func TestDrain_AbandonedRowIsLeftTerminal(t *testing.T) {
+	cases := []struct {
+		name    string
+		arrange func()
+		assert  func(t *testing.T, res DrainResult)
+	}{
+		{
+			name:    "while recording success",
+			arrange: func() { markApplied = func(context.Context, string) error { return db.ErrPropagationNotInFlight } },
+			assert: func(t *testing.T, res DrainResult) {
+				if res.Applied != 0 {
+					t.Errorf("counted an abandoned row as applied: %+v", res)
+				}
+			},
+		},
+		{
+			name: "while recording failure",
+			arrange: func() {
+				markFailed = func(context.Context, string, string) error { return db.ErrPropagationNotInFlight }
+				zitadelAddUserGrant = func(context.Context, string, string, []string) error { return statusErr(400) }
+			},
+			assert: func(t *testing.T, res DrainResult) {
+				if res.Failed != 0 {
+					t.Errorf("counted an abandoned row as failed: %+v", res)
+				}
+			},
+		},
+		{
+			name: "while requeueing",
+			arrange: func() {
+				requeue = func(context.Context, string, string) (int, error) { return 0, db.ErrPropagationNotInFlight }
+				zitadelAddUserGrant = func(context.Context, string, string, []string) error { return statusErr(429) }
+			},
+			assert: func(t *testing.T, res DrainResult) {
+				if res.Requeued != 0 {
+					t.Errorf("counted an abandoned row as requeued: %+v", res)
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stubDrainDeps(t)
+			claimPending = oneRow("p1", "add")
+			tc.arrange()
+
+			res, err := Drain(context.Background())
+			if err != nil {
+				t.Fatalf("Drain: %v", err)
+			}
+			if res.Abandoned != 1 {
+				t.Errorf("the row was not recorded as abandoned: %+v", res)
+			}
+			// Not an errored row either: nothing failed to persist. Counting it
+			// as a persistence error would send an operator looking for a
+			// database problem that is not there, and — for the requeue — the
+			// old code would have put the row back to `pending` on a target
+			// that no longer exists.
+			if res.Errored != 0 {
+				t.Errorf("an abandoned row was reported as a persistence failure: %+v", res)
+			}
+			if res.Halted {
+				t.Errorf("an abandoned row halted the drain: %+v", res)
+			}
+			tc.assert(t, res)
+		})
 	}
 }

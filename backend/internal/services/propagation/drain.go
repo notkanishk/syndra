@@ -2,9 +2,11 @@ package propagation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 
+	"syndra/internal/db"
 	"syndra/internal/models"
 )
 
@@ -13,6 +15,12 @@ type DrainResult struct {
 	Applied  int `json:"applied"`
 	Failed   int `json:"failed"`
 	Requeued int `json:"requeued"`
+	// Abandoned counts rows that stopped being this drain's to settle while
+	// their dispatch was out — today, because the target was deregistered
+	// underneath them. Its own counter because it is neither of the others: the
+	// call may well have reached the target, so it is not a failure, and
+	// nothing confirmed it, so it is certainly not a success.
+	Abandoned int `json:"abandoned"`
 	// Errored counts rows whose Zitadel outcome was decided but whose state could
 	// NOT be persisted (mark-applied/failed, requeue, or ledger reconcile failed).
 	// Such a row is left non-terminal (in_flight) and is neither applied nor
@@ -114,12 +122,27 @@ func DrainOne(ctx context.Context, outboxID string) (DrainResult, error) {
 // batch Drain and the targeted DrainOne so both classify, apply, and record
 // identically. A state-write failure is recorded via persistErr (never counted
 // as success) and leaves the row in_flight for a later reclaim.
+// abandoned reports whether the row stopped being this drain's to settle, and
+// records it if so. A settle that finds no in-flight row is not a persistence
+// failure to retry — the row reached a terminal state legitimately, under us —
+// but it is not the outcome the drain was about to claim either.
+func (res *DrainResult) abandoned(id, step string, err error) bool {
+	if !errors.Is(err, db.ErrPropagationNotInFlight) {
+		return false
+	}
+	log.Printf("[DRAIN] outbox=%s %s: the row was terminated while its dispatch was out; leaving it terminal", id, step)
+	res.Abandoned++
+	return true
+}
+
 func (res *DrainResult) processRow(ctx context.Context, row models.PendingPropagation) (halt bool) {
 	if exists, _ := alreadyExists(ctx, row); exists {
 		// Already in the desired Zitadel state — but a revoke/replace still owes
 		// the ledger a cleanup, so route through the same apply path.
 		if err := applyRow(ctx, row); err != nil {
-			res.persistErr(row.ID, "apply (short-circuit)", err)
+			if !res.abandoned(row.ID, "apply (short-circuit)", err) {
+				res.persistErr(row.ID, "apply (short-circuit)", err)
+			}
 			return false
 		}
 		res.Applied++
@@ -129,20 +152,29 @@ func (res *DrainResult) processRow(ctx context.Context, row models.PendingPropag
 	switch class {
 	case ackApplied:
 		if err := applyRow(ctx, row); err != nil {
-			res.persistErr(row.ID, "apply", err)
+			if !res.abandoned(row.ID, "apply", err) {
+				res.persistErr(row.ID, "apply", err)
+			}
 			return false
 		}
 		res.Applied++
 	case ackFailed:
 		if err := markFailed(ctx, row.ID, errMsg); err != nil {
-			res.persistErr(row.ID, "mark failed", err)
+			if !res.abandoned(row.ID, "mark failed", err) {
+				res.persistErr(row.ID, "mark failed", err)
+			}
 			return false
 		}
 		res.Failed++
 	case ackTransient:
 		attempts, err := requeue(ctx, row.ID, errMsg)
 		if err != nil {
-			res.persistErr(row.ID, "requeue", err)
+			// The requeue is the dangerous one: unguarded it would return an
+			// abandoned row to `pending` on a deregistered target, recreating
+			// the undrainable row the deregistration had just resolved.
+			if !res.abandoned(row.ID, "requeue", err) {
+				res.persistErr(row.ID, "requeue", err)
+			}
 			return false
 		}
 		res.Requeued++
