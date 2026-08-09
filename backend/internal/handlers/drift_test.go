@@ -637,6 +637,11 @@ func TestListDrift_ATargetFilterNarrowsTheListing(t *testing.T) {
 		got = f
 		return nil, nil
 	}
+	origRows := svcDriftTriageRows
+	t.Cleanup(func() { svcDriftTriageRows = origRows })
+	svcDriftTriageRows = func(_ context.Context, in []models.DriftItem) ([]models.DriftTriageItem, error) {
+		return nil, nil
+	}
 
 	req := httptest.NewRequest("GET", "/api/v1/governance/drift?target=truenas", nil)
 	w := httptest.NewRecorder()
@@ -674,5 +679,69 @@ func TestListDrift_UnfilteredStillGetsTheEnrichedQueue(t *testing.T) {
 	handleListDrift(httptest.NewRecorder(), req)
 	if !queueUsed {
 		t.Fatal("the unfiltered branch must still serve the enriched queue")
+	}
+}
+
+// A filtered response is the same shape as an unfiltered one. It used to be raw
+// drift rows, which the client types as DriftTriageItem: the enrichment fields
+// arrived absent, absent reads as false, and narrowing the queue silently
+// withdrew the "role not in catalogue" warning from rows that had earned it.
+func TestListDrift_FilteredRowsComeBackEnriched(t *testing.T) {
+	resetDriftDeps(t)
+	origRows := svcDriftTriageRows
+	t.Cleanup(func() { svcDriftTriageRows = origRows })
+
+	raw := []models.DriftItem{{ID: "d1", Target: "zitadel", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"legacy"}}}
+	dbGetDriftItems = func(context.Context, db.DriftFilter) ([]models.DriftItem, error) { return raw, nil }
+	var enrichedFrom []models.DriftItem
+	svcDriftTriageRows = func(_ context.Context, in []models.DriftItem) ([]models.DriftTriageItem, error) {
+		enrichedFrom = in
+		return []models.DriftTriageItem{{DriftItem: in[0], RoleCatalogueApplies: true, RoleInCatalogue: false}}, nil
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/governance/drift?source=webhook", nil)
+	w := httptest.NewRecorder()
+	handleListDrift(w, req)
+
+	if len(enrichedFrom) != 1 || enrichedFrom[0].ID != "d1" {
+		t.Fatalf("the filtered rows must be handed to the enrichment, got %+v", enrichedFrom)
+	}
+	var body struct {
+		Drift []map[string]any `json:"drift"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Drift) != 1 {
+		t.Fatalf("want one row, got %d", len(body.Drift))
+	}
+	for _, field := range []string{"role_catalogue_applies", "role_in_catalogue", "target"} {
+		if _, ok := body.Drift[0][field]; !ok {
+			t.Errorf("a filtered row must carry %q — absent is indistinguishable from false on the surface", field)
+		}
+	}
+}
+
+// A resolution whose side effects are Zitadel-shaped cannot resolve a finding on
+// another target. That is not a lost race, and reporting it as one would tell
+// the operator to retry something that can never work.
+func TestDriftAction_UnsupportedTargetIsNotAConflict(t *testing.T) {
+	resetDriftDeps(t)
+	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) { return pendingDrift(), nil }
+	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) error {
+		return db.ErrDriftTargetUnsupported
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/attribute",
+		strings.NewReader(`{"source":"external_backfill"}`))
+	req.SetPathValue("id", "d1")
+	w := httptest.NewRecorder()
+	handleAttributeDrift(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("an unsupported target must be 422, not %d — 409 invites a retry that can never succeed", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "DRIFT_TARGET_UNSUPPORTED") {
+		t.Errorf("the code must name the reason, got %s", w.Body.String())
 	}
 }

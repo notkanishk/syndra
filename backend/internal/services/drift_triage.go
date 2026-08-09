@@ -27,6 +27,38 @@ func DriftTriageQueue(ctx context.Context) ([]models.DriftTriageItem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load drift queue: %w", err)
 	}
+	// The whole pending queue is its own population: every row is counted, and
+	// each one's "other items" is the rest of it.
+	return enrichForTriage(ctx, items, items)
+}
+
+// DriftTriageRows enriches a caller-supplied subset of the queue — a filtered
+// listing — with the same evidence and the same ordering.
+//
+// A filtered response used to be raw drift rows. That is not a smaller answer,
+// it is a differently-shaped one: the surface reads `role_in_catalogue` off
+// every row, and an absent field is indistinguishable from a false one, so
+// filtering the queue silently retracted the "role not in catalogue" warning
+// from rows that had earned it. One shape, whether or not a filter was applied.
+//
+// The other-items count is taken over the whole pending queue rather than over
+// the subset, because "Marta has 2 more items" is a fact about Marta, not about
+// the query. Counted within a filter it would shrink to match whatever the
+// operator happened to be looking at, and read as reassurance.
+func DriftTriageRows(ctx context.Context, items []models.DriftItem) ([]models.DriftTriageItem, error) {
+	if len(items) == 0 {
+		return []models.DriftTriageItem{}, nil
+	}
+	population, err := svcGetPendingDriftItems(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load drift queue: %w", err)
+	}
+	return enrichForTriage(ctx, items, population)
+}
+
+// enrichForTriage attaches the evidence a triage decision needs to `items`,
+// counting per-person context over `population`.
+func enrichForTriage(ctx context.Context, items, population []models.DriftItem) ([]models.DriftTriageItem, error) {
 	if len(items) == 0 {
 		return []models.DriftTriageItem{}, nil
 	}
@@ -51,16 +83,25 @@ func DriftTriageQueue(ctx context.Context) ([]models.DriftTriageItem, error) {
 	// question it answers is about the person, not the system: unexplained
 	// access on the door controller AND in Zitadel is a stronger signal that
 	// something went wrong with them than either count alone.
-	perUser := make(map[string]int, len(items))
-	for _, item := range items {
+	perUser := make(map[string]int, len(population))
+	counted := make(map[string]bool, len(population))
+	for _, item := range population {
 		perUser[item.UserID]++
+		counted[item.ID] = true
 	}
 
 	out := make([]models.DriftTriageItem, 0, len(items))
 	for _, item := range items {
+		// Subtract this row only if the population actually contains it.
+		// Otherwise a row outside the counted set — a resolved one fetched by a
+		// status filter — would report one fewer item than the person has.
+		self := 0
+		if counted[item.ID] {
+			self = 1
+		}
 		enriched := models.DriftTriageItem{
 			DriftItem:            item,
-			OtherItemsForUser:    perUser[item.UserID] - 1,
+			OtherItemsForUser:    perUser[item.UserID] - self,
 			RoleCatalogueApplies: hasRoleCatalogue(item.Target),
 		}
 		if enriched.RoleCatalogueApplies && len(item.RoleKeys) > 0 {

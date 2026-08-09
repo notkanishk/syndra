@@ -180,6 +180,12 @@ var (
 	// the refusal is a constraint violation quoting a value, not a statement
 	// about what the detector failed to supply.
 	ErrDriftTargetRequired = errors.New("drift item requires a target")
+
+	// ErrDriftTargetUnsupported refuses a resolution that cannot act on the
+	// target that drifted. Distinct from ErrDriftNotPending because they tell
+	// the operator opposite things: a lost race means try again, this means the
+	// action has no reach into the system holding the access.
+	ErrDriftTargetUnsupported = errors.New("drift item is on a target this resolution cannot act on")
 )
 
 // AttributeDriftTx claims a pending drift (→attributed) and writes the
@@ -206,7 +212,7 @@ func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) erro
 		return fmt.Errorf("begin attribute tx: %w", err)
 	}
 	defer tx.Rollback(ctx) // no-op after Commit
-	if _, err := claimDriftTx(ctx, tx, driftID, "attributed", p.GrantedBy, p.PayloadJSON); err != nil {
+	if _, err := claimDriftTx(ctx, tx, driftID, TargetZitadel, "attributed", p.GrantedBy, p.PayloadJSON); err != nil {
 		return err
 	}
 	p.NoPropagation = true
@@ -230,7 +236,7 @@ func RevokeDriftAndEnqueue(ctx context.Context, driftID string, p EnqueueParams)
 		return "", fmt.Errorf("begin revoke tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
-	if _, err := claimDriftTx(ctx, tx, driftID, "revoked", p.GrantedBy, "{}"); err != nil {
+	if _, err := claimDriftTx(ctx, tx, driftID, TargetZitadel, "revoked", p.GrantedBy, "{}"); err != nil {
 		return "", err
 	}
 	key, err := newOutboxIdempotencyKey()
@@ -256,7 +262,9 @@ func MarkDriftExternalTx(ctx context.Context, driftID, userID, projectID string,
 		return fmt.Errorf("begin mark-external tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
-	target, err := claimDriftTx(ctx, tx, driftID, "marked_external", markedBy, payloadJSON)
+	// Target-generic on purpose: an exclusion is written against the target of
+	// the row it resolves, so it says something true whichever target that is.
+	target, err := claimDriftTx(ctx, tx, driftID, "", "marked_external", markedBy, payloadJSON)
 	if err != nil {
 		return err
 	}
@@ -279,12 +287,23 @@ func MarkDriftExternalTx(ctx context.Context, driftID, userID, projectID string,
 // makes the caller's deferred Rollback discard everything) when it is no longer
 // pending. This is what makes the whole action atomic AND race-safe.
 //
-// It returns the claimed row's target. A triage resolution is a statement about
-// the target that drifted, and reading it back from the row being claimed is
-// what keeps it true once the sweep starts writing non-Zitadel drift (change
-// `addon-platform` task 1.12) — the alternative, a literal at the call site,
-// would be correct today and silently wrong then.
-func claimDriftTx(ctx context.Context, tx pgx.Tx, driftID, status, resolvedBy, payloadJSON string) (string, error) {
+// It returns the claimed row's target, and `requireTarget` is how a resolution
+// that can only speak to one system says so. A resolution whose side effects
+// are Zitadel-shaped — a `direct_role_grants` row keyed by
+// `zitadel_project_id`, a `revoke` outbox row bound to the Zitadel dispatcher —
+// must not be reachable from a drift row on another target: it would mutate one
+// system while marking the other's finding resolved, and the finding would be
+// gone. The requirement lives here rather than at the two call sites because
+// both are exported, and an invariant a caller enforces is one the next caller
+// can skip. An empty requireTarget means the resolution is genuinely
+// target-generic, as marking a grant external is.
+//
+// The check runs after the claim rather than inside its predicate on purpose. A
+// predicate would make the wrong target indistinguishable from a lost race, and
+// those are opposite instructions to the operator: one says try again, the other
+// says this action cannot resolve this finding at all. The claim is discarded
+// either way — the caller's deferred Rollback sees to it.
+func claimDriftTx(ctx context.Context, tx pgx.Tx, driftID, requireTarget, status, resolvedBy, payloadJSON string) (string, error) {
 	var target string
 	err := tx.QueryRow(ctx, `UPDATE drift_items
 		SET status=$2, resolved_at=NOW(), resolved_by=$3, resolution_payload_json=NULLIF($4,'')::jsonb
@@ -296,5 +315,19 @@ func claimDriftTx(ctx context.Context, tx pgx.Tx, driftID, status, resolvedBy, p
 	if err != nil {
 		return "", fmt.Errorf("claim drift %s: %w", driftID, err)
 	}
+	if err := unsupportedTarget(requireTarget, target); err != nil {
+		return "", err
+	}
 	return target, nil
+}
+
+// unsupportedTarget judges the claimed row's target against what the resolution
+// can act on. Pure, so the rule can be exercised without a database — the
+// statement above decides nothing here beyond handing it the row's own target.
+func unsupportedTarget(requireTarget, target string) error {
+	if requireTarget == "" || target == requireTarget {
+		return nil
+	}
+	return fmt.Errorf("%w: this resolution acts on %s and the finding is on %s",
+		ErrDriftTargetUnsupported, requireTarget, target)
 }

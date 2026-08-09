@@ -177,7 +177,7 @@ func readDBSource(t *testing.T, name string) string {
 
 // balancedAfter returns the contents of the parenthesised group that follows
 // the first occurrence of prefix, matched by depth rather than by a lazy regex:
-// NULLIF($5,'') closes a paren the regex would mistake for the end of the list,
+// NULLIF($5,”) closes a paren the regex would mistake for the end of the list,
 // which is how a guard reads six values where the statement writes ten.
 func balancedAfter(t *testing.T, src, prefix string) string {
 	t.Helper()
@@ -244,4 +244,47 @@ func contains(hay []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// A resolution whose side effects are Zitadel-shaped — a direct_role_grants row
+// keyed by zitadel_project_id, a revoke outbox row bound to the Zitadel
+// dispatcher — must not be reachable from a finding on another target. It would
+// mutate one system while marking the other's finding resolved, and the finding
+// would be gone.
+func TestZitadelOnlyResolutionsRefuseAnotherTargetsFinding(t *testing.T) {
+	if err := unsupportedTarget(TargetZitadel, "truenas"); !errors.Is(err, ErrDriftTargetUnsupported) {
+		t.Fatalf("a Zitadel-only resolution must refuse an add-on finding, got %v", err)
+	}
+	if err := unsupportedTarget(TargetZitadel, TargetZitadel); err != nil {
+		t.Fatalf("it must still resolve its own target's findings, got %v", err)
+	}
+	// Mark external writes an exclusion carrying the drift row's own target, so
+	// it says something true whichever target that is.
+	if err := unsupportedTarget("", "truenas"); err != nil {
+		t.Fatalf("a target-generic resolution must accept any target, got %v", err)
+	}
+	// Distinct from a lost race: those tell the operator opposite things.
+	if errors.Is(unsupportedTarget(TargetZitadel, "truenas"), ErrDriftNotPending) {
+		t.Error("an unsupported target must not be reported as a lost triage race — retrying would never work")
+	}
+}
+
+// The requirement lives in the claim because both callers are exported, and an
+// invariant a caller enforces is one the next caller can skip.
+func TestEachResolutionDeclaresWhatItCanActOn(t *testing.T) {
+	src := readDBSource(t, "drift.go")
+	for _, want := range []struct{ fn, requires string }{
+		{"AttributeDriftTx", "TargetZitadel"},
+		{"RevokeDriftAndEnqueue", "TargetZitadel"},
+		{"MarkDriftExternalTx", `""`},
+	} {
+		body := funcBody(t, src, want.fn)
+		re := regexp.MustCompile(`claimDriftTx\(ctx, tx, driftID, ` + regexp.QuoteMeta(want.requires) + `,`)
+		if !re.MatchString(body) {
+			t.Errorf("%s must claim with requireTarget=%s, so the target it can act on is stated by the claim rather than assumed by the call site", want.fn, want.requires)
+		}
+	}
+	if !regexp.MustCompile(`(?s)func claimDriftTx\(.*?unsupportedTarget\(requireTarget, target\)`).MatchString(src) {
+		t.Error("claimDriftTx must consult unsupportedTarget — a requireTarget it accepts and never checks is worse than no parameter")
+	}
 }

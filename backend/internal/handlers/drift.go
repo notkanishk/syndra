@@ -17,12 +17,17 @@ import (
 	"syndra/internal/models"
 )
 
-// handleListDrift serves the triage queue. Unfiltered, it returns the enriched
-// view — risk, holder status and the other-items count each row needs to be
-// decided on without a click, ordered by risk then age. A filtered request
-// (user/project/source) stays on the raw listing: those callers are looking up
-// specific rows, not triaging a queue, and the enrichment cost isn't theirs to
-// pay.
+// handleListDrift serves the triage queue: risk, holder status and the
+// other-items count each row needs to be decided on without a click, ordered by
+// risk then age.
+//
+// One shape whether or not a filter was applied. The filtered branch used to
+// return raw drift rows to save the enrichment, which cost more than it saved:
+// the surface reads `role_in_catalogue` and `role_catalogue_applies` off every
+// row, and an absent field is indistinguishable from a false one, so narrowing
+// the queue silently withdrew the "role not in catalogue" warning from rows
+// that had earned it. A response that is a different type depending on a query
+// parameter is a contract the client cannot hold.
 func handleListDrift(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	filter := db.DriftFilter{
@@ -50,13 +55,18 @@ func handleListDrift(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items, err := dbGetDriftItems(r.Context(), filter)
+	rows, err := dbGetDriftItems(r.Context(), filter)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	items, err := svcDriftTriageRows(r.Context(), rows)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 	if items == nil {
-		items = []models.DriftItem{}
+		items = []models.DriftTriageItem{}
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{"drift": items})
 }
@@ -283,6 +293,11 @@ func writeDriftActionError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, db.ErrDriftNotPending):
 		jsonErrorResponse(w, http.StatusConflict, "DRIFT_NOT_PENDING", err.Error())
+	// Not a 409: nothing raced, and retrying will never work. The finding is on
+	// a system this action has no reach into, which is a statement about the
+	// request, not about a moment in time.
+	case errors.Is(err, db.ErrDriftTargetUnsupported):
+		jsonErrorResponse(w, http.StatusUnprocessableEntity, "DRIFT_TARGET_UNSUPPORTED", err.Error())
 	default:
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 	}

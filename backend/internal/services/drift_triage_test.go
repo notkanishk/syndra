@@ -218,3 +218,88 @@ func TestDriftTriageQueue_StillJudgesZitadelRowsAgainstTheCatalogue(t *testing.T
 		t.Fatalf("a Zitadel row must still be enriched from the catalogue, got %+v", got[0])
 	}
 }
+
+// A filtered listing is a smaller answer, not a differently-shaped one. The
+// surface reads role_in_catalogue and role_catalogue_applies off every row, and
+// an absent field is indistinguishable from a false one — so a raw filtered
+// response silently withdrew the "role not in catalogue" warning from rows that
+// had earned it.
+func TestDriftTriageRows_EnrichesAFilteredSubset(t *testing.T) {
+	same := time.Now().Add(-3 * 24 * time.Hour)
+	pending := []models.DriftItem{
+		{ID: "known", Target: db.TargetZitadel, UserID: "u1", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: same},
+		{ID: "retired", Target: db.TargetZitadel, UserID: "u1", ProjectID: "p_wiki", RoleKeys: []string{"legacy-op"}, DetectedAt: same},
+		{ID: "laser", Target: db.TargetZitadel, UserID: "u2", ProjectID: "p_laser", RoleKeys: []string{"operator"}, DetectedAt: same},
+	}
+	withTriageDeps(t, pending, nil)
+
+	got, err := DriftTriageRows(context.Background(), pending[1:2]) // the "retired" row alone
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("want the one filtered row, got %d", len(got))
+	}
+	if !got[0].RoleCatalogueApplies || got[0].RoleInCatalogue {
+		t.Errorf("a filtered Zitadel row must still be judged against the catalogue, got applies=%v in_catalogue=%v",
+			got[0].RoleCatalogueApplies, got[0].RoleInCatalogue)
+	}
+}
+
+// "Marta has 2 more items" is a fact about Marta, not about the query. Counted
+// within the filter it would shrink to match whatever the operator happened to
+// be looking at, and read as reassurance.
+func TestDriftTriageRows_CountsOtherItemsOverTheWholeQueue(t *testing.T) {
+	now := time.Now()
+	pending := []models.DriftItem{
+		{ID: "a", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: now},
+		{ID: "b", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read2"}, DetectedAt: now},
+		{ID: "c", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read3"}, DetectedAt: now},
+	}
+	withTriageDeps(t, pending, nil)
+
+	got, err := DriftTriageRows(context.Background(), pending[:1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].OtherItemsForUser != 2 {
+		t.Fatalf("the count must span the whole pending queue, not the filtered slice; got %d", got[0].OtherItemsForUser)
+	}
+}
+
+// A row outside the counted population — one a status filter pulled up after it
+// was resolved — must not report one fewer item than the person actually has.
+func TestDriftTriageRows_DoesNotDiscountARowOutsideThePendingQueue(t *testing.T) {
+	now := time.Now()
+	pending := []models.DriftItem{
+		{ID: "a", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: now},
+		{ID: "b", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read2"}, DetectedAt: now},
+	}
+	withTriageDeps(t, pending, nil)
+
+	resolved := models.DriftItem{ID: "old", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki",
+		RoleKeys: []string{"read9"}, Status: "revoked", DetectedAt: now}
+	got, err := DriftTriageRows(context.Background(), []models.DriftItem{resolved})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].OtherItemsForUser != 2 {
+		t.Fatalf("a row absent from the pending queue must not subtract itself from it; got %d", got[0].OtherItemsForUser)
+	}
+}
+
+// Nothing to enrich means nothing to load: an empty subset must not go asking
+// for the population it would count over.
+func TestDriftTriageRows_EmptySubsetLoadsNothing(t *testing.T) {
+	withTriageDeps(t, nil, nil)
+	orig := svcGetPendingDriftItems
+	t.Cleanup(func() { svcGetPendingDriftItems = orig })
+	svcGetPendingDriftItems = func(context.Context) ([]models.DriftItem, error) {
+		t.Fatal("an empty subset must not load the pending queue")
+		return nil, nil
+	}
+	got, err := DriftTriageRows(context.Background(), nil)
+	if err != nil || got == nil || len(got) != 0 {
+		t.Fatalf("want an empty slice and no error, got %#v / %v", got, err)
+	}
+}

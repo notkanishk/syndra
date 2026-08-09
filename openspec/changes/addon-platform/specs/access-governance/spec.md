@@ -307,6 +307,10 @@ Scope MUST live in the predicate, never in the caller's discipline. This applies
 
 A sweep MUST name the target it reconciled in its result, including when it halts: "nothing to report" about an unnamed target reads as a clean bill of health for all of them.
 
+A triage resolution MUST refuse a finding on a target it cannot act on, and the refusal MUST live in the claim rather than at the call sites, because those are exported and an invariant a caller enforces is one the next caller can skip. Attribute and Revoke write Zitadel-shaped side effects — a ledger row keyed by the Zitadel project, a revoke bound to the Zitadel dispatcher — so applied to an add-on finding they would mutate one system while marking the other's finding resolved, and the finding would be gone. Mark external stays target-generic, because the exclusion it writes carries the target of the row it resolves. The refusal MUST be typed distinctly from a lost triage race and MUST NOT be reported as one: a race says try again, an unsupported target says this action has no reach into the system holding the access.
+
+The triage listing MUST return one row shape whether or not a filter was applied. A response whose type depends on a query parameter is a contract the client cannot hold: the surface reads the enrichment fields off every row, an absent field is indistinguishable from a false one, and a filtered listing that omitted them silently withdrew the "role not in catalogue" warning from rows that had earned it. Per-person context on those rows MUST be counted over the whole pending queue rather than over the filtered subset, since "this person has two more items" is a fact about the person and not about the query — counted within a filter it shrinks to match whatever the operator was looking at, and reads as reassurance.
+
 Enrichment that only one target's data can support MUST be gated on the target having it. Syndra's role catalogue describes Zitadel projects and roles; a permission on another target is not absent from that catalogue, it is not the kind of thing the catalogue lists. Reporting it as absent MUST NOT happen, because "role not in catalogue" is the queue's loudest signal and would attach to every add-on row on the strength of a lookup that could never have succeeded. The surface MUST be able to tell "not in the catalogue" from "no catalogue applies", rather than inferring the second from a false first.
 
 #### Scenario: Two targets drifting on one user do not suppress each other
@@ -323,6 +327,20 @@ Enrichment that only one target's data can support MUST be gated on the target h
 - **THEN** the statement MUST name the target rather than relying on a column default
 - **AND** a finding submitted with no target MUST be refused before any write or transaction is opened
 - **AND** the drift listing MUST return the target on every row and MUST narrow by it when one is given
+
+#### Scenario: A Zitadel-only resolution refuses an add-on finding
+
+- **WHEN** Attribute or Revoke is invoked on a drift row whose target is not Zitadel
+- **THEN** the transaction MUST refuse before writing any ledger, audit, or outbox row
+- **AND** the drift row MUST remain `pending_triage`
+- **AND** the refusal MUST be distinguishable from a lost triage race, and MUST NOT be presented as one
+- **AND** Mark external MUST still resolve that row, writing an exclusion carrying the row's own target
+
+#### Scenario: A filtered triage listing is the same shape as an unfiltered one
+
+- **WHEN** the triage listing is requested with any filter
+- **THEN** the rows returned MUST carry the same enrichment as an unfiltered request
+- **AND** the per-person item count MUST be taken over the whole pending queue, not over the filtered subset
 
 #### Scenario: An add-on finding is not judged against Zitadel's role catalogue
 

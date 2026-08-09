@@ -275,6 +275,7 @@ var (
 	svcDriftSweep           = drift.Sweep
 	svcDrainOne             = propagation.DrainOne
 	svcDriftTriageQueue     = services.DriftTriageQueue
+	svcDriftTriageRows      = services.DriftTriageRows
 
 	// Confirmation-mode surfaces (Task 22): global default read/write, bulk toggle, and
 	// Change history.
