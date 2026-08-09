@@ -206,8 +206,21 @@ func writePlanCitationError(w http.ResponseWriter, err error) {
 	case errors.As(err, &stale):
 		// 409, not 400: the request was well formed and was correct when it was
 		// written. Something else changed.
-		jsonErrorResponse(w, http.StatusConflict, "PLAN_STALE",
-			"The state you reviewed has changed for: "+strings.Join(stale.IDs, ", ")+". Re-plan to see what moved.")
+		//
+		// The subjects are carried structurally, not only in the sentence. A
+		// surface that had to parse them out of prose would show "something
+		// changed" the day the wording is edited, which is the generic failure
+		// this refusal exists to replace. Keyed by subject so the client can
+		// mark the rows it is already displaying.
+		moved := make(map[string]string, len(stale.IDs))
+		for _, id := range stale.IDs {
+			moved[id] = "moved"
+		}
+		jsonResponse(w, http.StatusConflict, ErrorResponse{
+			Error:   "PLAN_STALE",
+			Message: "The state you reviewed has changed for: " + strings.Join(stale.IDs, ", ") + ". Re-plan to see what moved.",
+			Details: moved,
+		})
 	case errors.Is(err, db.ErrPlanNotFound):
 		jsonErrorResponse(w, http.StatusNotFound, "PLAN_NOT_FOUND", "No such plan. Re-plan and try again.")
 	case errors.Is(err, db.ErrPlanExpired):

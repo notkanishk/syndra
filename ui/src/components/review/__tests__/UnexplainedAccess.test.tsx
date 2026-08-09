@@ -15,7 +15,8 @@ const bulk = vi.hoisted(() => ({
     op: "adopt",
     applied: false,
     outcomes: [] as Array<Record<string, unknown>>,
-    summary: { total: 0, apply: 0, no_change: 0, blocked: 0, failed: 0, succeeded: 0 },
+    plan_id: "plan_1",
+    summary: { total: 0, apply: 0, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
   },
   rehearsals: 0,
   applies: 0,
@@ -113,7 +114,8 @@ beforeEach(() => {
     op: "adopt",
     applied: false,
     outcomes: [],
-    summary: { total: 0, apply: 0, no_change: 0, blocked: 0, failed: 0, succeeded: 0 },
+    plan_id: "plan_1",
+    summary: { total: 0, apply: 0, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
   };
   bulk.rehearsals = 0;
   bulk.applies = 0;
@@ -271,7 +273,8 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
         { user_id: "d1", name: "Ada Lovelace", email: "u1", effect: "apply", detail: "Adopted into Syndra (trained)." },
         { user_id: "d2", name: "Sam Patel", email: "u2", effect: "no_change", detail: "Already resolved as adopted." },
       ],
-      summary: { total: 2, apply: 1, no_change: 1, blocked: 0, failed: 0, succeeded: 0 },
+      plan_id: "plan_1",
+      summary: { total: 2, apply: 1, no_change: 1, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
     selectTwo();
     fireEvent.click(screen.getByRole("button", { name: "Adopt in Syndra" }));
@@ -289,7 +292,8 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       op: "adopt",
       applied: false,
       outcomes: [{ user_id: "d1", name: "Ada", email: "u1", effect: "apply", detail: "Adopted." }],
-      summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0 },
+      plan_id: "plan_1",
+      summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
     selectTwo();
     fireEvent.click(screen.getByRole("button", { name: "Adopt in Syndra" }));
@@ -308,7 +312,8 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       outcomes: [
         { user_id: "d1", name: "Ada", email: "u1", effect: "no_change", detail: "Already resolved." },
       ],
-      summary: { total: 1, apply: 0, no_change: 1, blocked: 0, failed: 0, succeeded: 0 },
+      plan_id: "plan_1",
+      summary: { total: 1, apply: 0, no_change: 1, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
     selectTwo();
     fireEvent.click(screen.getByRole("button", { name: "Adopt in Syndra" }));
@@ -324,7 +329,8 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
         { user_id: "d1", name: "Ada", email: "u1", effect: "apply", detail: "Adopted." },
         { user_id: "d2", name: "Sam", email: "u2", effect: "apply", detail: "Adopted." },
       ],
-      summary: { total: 2, apply: 2, no_change: 0, blocked: 0, failed: 0, succeeded: 0 },
+      plan_id: "plan_1",
+      summary: { total: 2, apply: 2, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
     selectTwo();
     fireEvent.click(screen.getByRole("button", { name: "Adopt in Syndra" }));

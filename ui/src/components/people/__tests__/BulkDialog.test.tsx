@@ -29,7 +29,7 @@ vi.mock("@/lib/queries/useBulkGrants", async () => {
       isPending: false,
       mutateAsync: async (input: unknown) => {
         api.applied.push(input);
-        return { ...api.plan!, applied: true };
+        return { ...api.plan!, plan_id: undefined, applied: true };
       },
     }),
   };
@@ -71,7 +71,10 @@ function plan(overrides: Partial<BulkPlan> = {}): BulkPlan {
         consequence: "Keeps the role via the Safety bundle — remove that source instead.",
       },
     ],
-    summary: { total: 3, apply: 1, no_change: 1, blocked: 1, failed: 0, succeeded: 0 },
+    // A rehearsal now returns the approval it became; the apply cites it, and
+    // the button stays disabled without one.
+    plan_id: "plan_1",
+    summary: { total: 3, apply: 1, no_change: 1, blocked: 1, failed: 0, succeeded: 0, queued: 0 },
     ...overrides,
   };
 }
@@ -136,18 +139,30 @@ describe("BulkDialog", () => {
     expect(screen.getByText(/1 already in that state · 1 refused/)).toBeInTheDocument();
   });
 
-  it("applies the same request it rehearsed", async () => {
+  it("applies the request it rehearsed, citing the approval that rehearsal became", async () => {
     open();
     await rehearse();
     fireEvent.click(screen.getByRole("button", { name: "Apply to 1 person" }));
     await waitFor(() => expect(api.applied).toHaveLength(1));
-    // The plan an operator approved and the write it authorises must describe
-    // the same operation.
-    expect(api.applied[0]).toEqual(api.rehearsed[0]);
+    // The body is the same operation, and it now names the approval. The
+    // backend binds the two, so a body that drifted from the reviewed one is
+    // refused rather than applied under an approval it does not belong to.
+    expect(api.applied[0]).toEqual({ ...(api.rehearsed[0] as object), plan_id: "plan_1" });
+  });
+
+  it("cannot apply a rehearsal the backend did not record", async () => {
+    api.plan = plan({ plan_id: undefined });
+    open();
+    await rehearse();
+    // No approval, no apply. The alternative is an operator pressing a button
+    // that can only fail.
+    expect(screen.getByRole("button", { name: "Apply to 1 person" })).toBeDisabled();
   });
 
   it("refuses to apply when the rehearsal found nothing to do", async () => {
-    api.plan = plan({ summary: { total: 3, apply: 0, no_change: 3, blocked: 0, failed: 0, succeeded: 0 } });
+    api.plan = plan({
+      summary: { total: 3, apply: 0, no_change: 3, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
+    });
     open();
     await rehearse();
     const button = screen.getByRole("button", { name: "Nothing to apply" });

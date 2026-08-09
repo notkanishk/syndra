@@ -530,8 +530,8 @@ function BulkDecisionDialog({
       noun={["request", "requests"]}
       destructive={false}
       onRehearse={() => rehearse.mutateAsync(body)}
-      onApply={async () => {
-        const plan = await apply.mutateAsync(body);
+      onApply={async (planId) => {
+        const plan = await apply.mutateAsync({ ...body, plan_id: planId });
         onApplied();
         return plan;
       }}

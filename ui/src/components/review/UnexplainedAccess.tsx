@@ -856,11 +856,11 @@ function BulkResolutionDialog({
           ? rehearseAdopt.mutateAsync(adoptBody)
           : rehearseExternal.mutateAsync(externalBody)
       }
-      onApply={async () => {
+      onApply={async (planId) => {
         const plan =
           op === "adopt"
-            ? await applyAdopt.mutateAsync(adoptBody)
-            : await applyExternal.mutateAsync(externalBody);
+            ? await applyAdopt.mutateAsync({ ...adoptBody, plan_id: planId })
+            : await applyExternal.mutateAsync({ ...externalBody, plan_id: planId });
         onApplied();
         return plan;
       }}

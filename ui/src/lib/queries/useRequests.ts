@@ -135,6 +135,8 @@ export interface BulkDecisionInput {
   ids: string[];
   status: "approved" | "rejected";
   review_note?: string;
+  /** Cites the rehearsal being applied. Set by the apply pass, never composed by hand. */
+  plan_id?: string;
 }
 
 function useBulkDecisionMutation(apply: boolean) {
