@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -164,7 +163,11 @@ func ClaimPendingPropagations(ctx context.Context, target string, limit int) ([]
 			SELECT p.id FROM propagation_outbox p
 			JOIN targets t ON t.target = p.target AND t.state = 'active'
 			WHERE p.status IN ('pending','in_flight') AND p.target = $2
-			ORDER BY p.created_at
+			-- Intent order, not transaction-start order: created_at is fixed at
+			-- BEGIN and the access lock is taken after it, so a serially-older
+			-- add can carry the earlier timestamp and be dispatched after the
+			-- revoke that overtook it.
+			ORDER BY p.intent_seq
 			LIMIT $1
 			FOR UPDATE OF p SKIP LOCKED
 		)
@@ -442,12 +445,12 @@ func ReconcileLedgerOnApplied(ctx context.Context, outboxID string) error {
 		// comparison below is meaningless unless the timestamp is this row's.
 		var opType, userID, projectID, source string
 		var roleKeys []string
-		var createdAt time.Time
+		var intentSeq int64
 		err := tx.QueryRow(ctx, `
 			SELECT op_type, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'),
-			       COALESCE(source,'direct'), created_at
+			       COALESCE(source,'direct'), intent_seq
 			FROM propagation_outbox WHERE id = $1`, outboxID).Scan(
-			&opType, &userID, &projectID, &roleKeys, &source, &createdAt)
+			&opType, &userID, &projectID, &roleKeys, &source, &intentSeq)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil
@@ -480,14 +483,14 @@ func ReconcileLedgerOnApplied(ctx context.Context, outboxID string) error {
 			      AND o.project_id = d.zitadel_project_id
 			      AND d.zitadel_role_key = ANY(o.role_keys)
 			      AND o.source = d.source
-			      AND o.created_at > $5)`
+			      AND o.intent_seq > $5)`
 
 		switch opType {
 		case "revoke":
 			if _, err := tx.Exec(ctx, `DELETE FROM direct_role_grants d
 				WHERE d.user_id=$1 AND d.zitadel_project_id=$2
 				  AND d.zitadel_role_key = ANY($3) AND d.source=$4
-				  AND `+newerAddExists, userID, projectID, roleKeys, source, createdAt); err != nil {
+				  AND `+newerAddExists, userID, projectID, roleKeys, source, intentSeq); err != nil {
 				return fmt.Errorf("reconcile ledger (revoke): %w", err)
 			}
 		case "replace":
@@ -498,7 +501,7 @@ func ReconcileLedgerOnApplied(ctx context.Context, outboxID string) error {
 			if _, err := tx.Exec(ctx, `DELETE FROM direct_role_grants d
 				WHERE d.user_id=$1 AND d.zitadel_project_id=$2 AND d.source='direct'
 				  AND NOT (d.zitadel_role_key = ANY($3))
-				  AND `+newerAddExists, userID, projectID, roleKeys, "direct", createdAt); err != nil {
+				  AND `+newerAddExists, userID, projectID, roleKeys, "direct", intentSeq); err != nil {
 				return fmt.Errorf("reconcile ledger (replace): %w", err)
 			}
 		}

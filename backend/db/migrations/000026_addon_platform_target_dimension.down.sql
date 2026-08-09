@@ -28,6 +28,10 @@ $$;
 -- dropped after the guard above, so a refused rollback leaves it intact.
 DROP TABLE IF EXISTS target_reconciliation;
 
+DROP INDEX IF EXISTS idx_propagation_outbox_intent_seq;
+ALTER TABLE propagation_outbox DROP COLUMN IF EXISTS intent_seq;
+DROP SEQUENCE IF EXISTS propagation_outbox_intent_seq;
+
 -- 1.7 --------------------------------------------------------------------
 ALTER TABLE external_grant_exclusions
     DROP CONSTRAINT IF EXISTS external_grant_exclusions_pkey;

@@ -432,8 +432,15 @@ func TestReconciliationDoesNotRetractANewerIntent(t *testing.T) {
 	}
 	// And newer than the decision being reconciled: an add queued before this
 	// revocation is older intent, and the revocation is the later word.
-	if !strings.Contains(guard[1], "o.created_at > $5") {
-		t.Error("the guard must be bound to this row's own moment")
+	// By intent order, not by timestamp: created_at is fixed at BEGIN and the
+	// access lock is taken after it, so a transaction can start first, block on
+	// the lock, and commit second — carrying the earlier timestamp while its
+	// decision is the later one.
+	if !strings.Contains(guard[1], "o.intent_seq > $5") {
+		t.Error("precedence must use the order allocated under the lock, not transaction-start time")
+	}
+	if strings.Contains(guard[1], "created_at") {
+		t.Error("transaction-start time is not the order the decisions were taken in")
 	}
 	if !strings.Contains(guard[1], "o.op_type = 'add'") ||
 		!strings.Contains(guard[1], "o.status IN ('pending', 'in_flight')") {
@@ -456,7 +463,57 @@ func TestReconciliationDoesNotRetractANewerIntent(t *testing.T) {
 	}
 	// Including the moment. Compared against the clock instead, every add
 	// queued before this revocation counts as newer than it.
-	if !strings.Contains(body, "COALESCE(source,'direct'), created_at") {
-		t.Error("the ordering comparison must use the row's own created_at, not the current time")
+	if !strings.Contains(body, "COALESCE(source,'direct'), intent_seq") {
+		t.Error("the ordering value must be read from the row being reconciled")
+	}
+}
+
+// The sequence is what makes precedence mean anything. `created_at` defaults to
+// NOW(), which is transaction-start time, and the access lock is taken after
+// BEGIN — so the row that started first can commit second and still carry the
+// earlier timestamp. A default allocated when the INSERT runs is allocated
+// under the lock, which is where the order is actually decided.
+func TestIntentOrderIsAllocatedUnderTheLock(t *testing.T) {
+	up, down := addonMigrationSQL(t)
+
+	if !strings.Contains(up, "CREATE SEQUENCE IF NOT EXISTS propagation_outbox_intent_seq") {
+		t.Fatal("intent order needs a sequence, not a timestamp")
+	}
+	if !strings.Contains(up, "ALTER COLUMN intent_seq SET DEFAULT nextval('propagation_outbox_intent_seq')") {
+		t.Error("the value must be allocated by the INSERT, which is what runs under the lock")
+	}
+	if !strings.Contains(up, "ALTER COLUMN intent_seq SET NOT NULL") {
+		t.Error("a row with no intent order cannot be compared against one that has it")
+	}
+	// Existing rows keep the only order history has, and the sequence resumes
+	// past them so a new row never collides with a backfilled one.
+	back := strings.Index(up, "row_number() OVER (ORDER BY created_at, id)")
+	set := strings.Index(up, "setval('propagation_outbox_intent_seq'")
+	def := strings.Index(up, "ALTER COLUMN intent_seq SET DEFAULT")
+	if back < 0 || set < 0 || back > set || set > def {
+		t.Error("backfill, then advance the sequence past it, then make it the default")
+	}
+
+	for _, want := range []string{
+		"DROP INDEX IF EXISTS idx_propagation_outbox_intent_seq",
+		"ALTER TABLE propagation_outbox DROP COLUMN IF EXISTS intent_seq",
+		"DROP SEQUENCE IF EXISTS propagation_outbox_intent_seq",
+	} {
+		if !strings.Contains(down, want) {
+			t.Errorf("the rollback must undo %q", want)
+		}
+	}
+}
+
+// Dispatch follows intent for the same reason precedence does: claiming in
+// timestamp order would dispatch a serially-older add after the revoke that
+// overtook it, and the target would settle on the wrong one.
+func TestTheClaimDispatchesInIntentOrder(t *testing.T) {
+	body := funcBody(t, readDBSource(t, "propagations.go"), "ClaimPendingPropagations")
+	if !strings.Contains(body, "ORDER BY p.intent_seq") {
+		t.Error("the claim must order by intent, not by transaction-start time")
+	}
+	if strings.Contains(body, "ORDER BY p.created_at") {
+		t.Error("transaction-start time is not the order the decisions were taken in")
 	}
 }

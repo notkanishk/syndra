@@ -360,3 +360,39 @@ CREATE TABLE IF NOT EXISTS target_reconciliation (
         (unreconciled_since IS NOT NULL AND unreconciled_reason IS NOT NULL)
     )
 );
+
+-- 1.16 --------------------------------------------------------------------
+-- Intent order, allocated where the intents are actually serialised.
+--
+-- `created_at DEFAULT NOW()` is transaction-start time (NOW() is
+-- transaction_timestamp()), and the access lock is taken after BEGIN. So a
+-- transaction can start first, block on the lock, and commit second — its row
+-- carries the earlier timestamp while its decision is the later one. Anything
+-- that reads created_at as precedence gets the order backwards for exactly the
+-- pair of writes the lock exists to order.
+--
+-- A sequence default is allocated when the INSERT runs, and every INSERT runs
+-- under the lock, so allocation order is serialisation order. Backfilled by
+-- created_at because that is the only order history has.
+CREATE SEQUENCE IF NOT EXISTS propagation_outbox_intent_seq;
+
+ALTER TABLE propagation_outbox ADD COLUMN IF NOT EXISTS intent_seq BIGINT;
+
+UPDATE propagation_outbox p
+   SET intent_seq = r.n
+  FROM (SELECT id, row_number() OVER (ORDER BY created_at, id) AS n
+          FROM propagation_outbox) r
+ WHERE p.id = r.id AND p.intent_seq IS NULL;
+
+SELECT setval('propagation_outbox_intent_seq',
+              COALESCE((SELECT MAX(intent_seq) FROM propagation_outbox), 0) + 1, false);
+
+ALTER TABLE propagation_outbox
+    ALTER COLUMN intent_seq SET DEFAULT nextval('propagation_outbox_intent_seq'),
+    ALTER COLUMN intent_seq SET NOT NULL;
+ALTER SEQUENCE propagation_outbox_intent_seq OWNED BY propagation_outbox.intent_seq;
+
+-- Dispatch follows intent for the same reason. Claiming by created_at would
+-- dispatch a serially-older add after the revoke it was overtaken by.
+CREATE INDEX IF NOT EXISTS idx_propagation_outbox_intent_seq
+    ON propagation_outbox (target, status, intent_seq);
