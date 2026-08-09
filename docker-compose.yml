@@ -138,6 +138,55 @@ services:
       - backend
     restart: unless-stopped
 
+  truenas-addon:
+    build:
+      context: ./addons/truenas
+      dockerfile: Dockerfile
+    container_name: syndra_truenas_addon
+    # Opt-in, like sync was, and for a sharper reason: this container holds the
+    # NAS API key, so a deployment with no NAS must not be running it at all.
+    # Start it with `docker compose --profile truenas up -d` once TRUENAS_* and
+    # the transport material are in place, and register it with
+    # ADDON_TARGETS=truenas on the backend.
+    profiles: ["truenas"]
+    environment:
+      - LISTEN_ADDR=:8443
+      # Always HTTPS. There is no plaintext mode: a client's transport settings
+      # are consulted only where a handshake happens, so a plaintext listener
+      # would mean the backend's certificate is never presented and its private
+      # CA never consulted, while both ends report themselves authenticated.
+      - TLS_CERT_FILE=/run/secrets/truenas-addon/tls.crt
+      - TLS_KEY_FILE=/run/secrets/truenas-addon/tls.key
+      # Exactly one of these. Mutual TLS against the deployment's own private CA
+      # is the stronger mode; SIGNING_KEY is the fallback where issuing a client
+      # certificate is impractical. Configuring both is refused at startup —
+      # a caller would choose, and the caller is the thing being authenticated.
+      - TLS_CLIENT_CA_FILE=${ADDON_CLIENT_CA_FILE:-/run/secrets/truenas-addon/ca.crt}
+      - SIGNING_KEY=${TRUENAS_ADDON_SIGNING_KEY:-}
+      - TRUENAS_URL=${TRUENAS_URL:-}
+      - TRUENAS_API_KEY=${TRUENAS_API_KEY:-}
+      # Surfaced through /health so an operator sees it coming. The key carries
+      # an expiry and a silently expired one looks exactly like an outage.
+      - TRUENAS_API_KEY_EXPIRES_AT=${TRUENAS_API_KEY_EXPIRES_AT:-}
+      # TrueNAS ships a self-signed certificate, so a lab deployment sets this
+      # false. It defaults true and must be turned off deliberately.
+      - TRUENAS_VERIFY_TLS=${TRUENAS_VERIFY_TLS:-true}
+      - TRUENAS_SUPPORTED_MAJORS=${TRUENAS_SUPPORTED_MAJORS:-25.04,25.10,26.04}
+      # active | draining | read_only. Draining is what makes an API-key
+      # rotation or a target upgrade safe; none of the three needs a redeploy.
+      - LIFECYCLE_STATE=${TRUENAS_LIFECYCLE_STATE:-active}
+      - STATE_PATH=/var/lib/syndra-truenas/state.db
+      - MUTATION_LOG_DIR=/var/lib/syndra-truenas
+    volumes:
+      - truenas_addon_state:/var/lib/syndra-truenas
+      - ${ADDON_SECRETS_DIR:-./secrets/truenas-addon}:/run/secrets/truenas-addon:ro
+    # No `ports:`. The backend reaches this on the internal network and nothing
+    # outside the deployment has any business doing so.
+    depends_on:
+      - backend
+    restart: unless-stopped
+
 volumes:
   pgdata:
   redisdata:
+  truenas_addon_state:
