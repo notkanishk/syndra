@@ -416,23 +416,44 @@ func PruneTerminalPropagations(ctx context.Context, retentionDays int) (int64, e
 //
 // Called only AFTER the Zitadel mutation is confirmed applied, so the ledger can
 // never drop a grant Zitadel still holds.
+// It takes the access-mutation lock, because deleting a ledger row changes what
+// somebody effectively holds and every delta is computed from those rows. The
+// drain is not a cascade, but its effect on the closure is the same: a cascade
+// can lock, read a direct grant that is still present, conclude the role it was
+// about to add is already covered, and commit that empty delta — while this
+// deletion lands in between and takes the cover away. Nobody adds it back,
+// because nobody thought it was missing.
+//
+// The lock is taken HERE and not around the dispatch. The Zitadel call has
+// already happened by the time this runs, so nothing holds the lock across the
+// network, and the window this closes is between the call returning and the
+// ledger catching up.
 func ReconcileLedgerOnApplied(ctx context.Context, opType, userID, projectID string, roleKeys []string, source string) error {
-	switch opType {
-	case "revoke":
-		const q = `DELETE FROM direct_role_grants
-			WHERE user_id=$1 AND zitadel_project_id=$2 AND zitadel_role_key = ANY($3) AND source=$4`
-		if _, err := PG.Exec(ctx, q, userID, projectID, roleKeys, source); err != nil {
-			return fmt.Errorf("reconcile ledger (revoke): %w", err)
-		}
-	case "replace":
-		const q = `DELETE FROM direct_role_grants
-			WHERE user_id=$1 AND zitadel_project_id=$2 AND source='direct'
-			  AND NOT (zitadel_role_key = ANY($3))`
-		if _, err := PG.Exec(ctx, q, userID, projectID, roleKeys); err != nil {
-			return fmt.Errorf("reconcile ledger (replace): %w", err)
-		}
+	if opType != "revoke" && opType != "replace" {
+		return nil
 	}
-	return nil
+	return InTxLockingAccess(ctx, func(ctx context.Context) error {
+		tx, ok := ctx.Value(txKey).(pgx.Tx)
+		if !ok || tx == nil {
+			return fmt.Errorf("reconcile ledger: no transaction")
+		}
+		switch opType {
+		case "revoke":
+			const q = `DELETE FROM direct_role_grants
+				WHERE user_id=$1 AND zitadel_project_id=$2 AND zitadel_role_key = ANY($3) AND source=$4`
+			if _, err := tx.Exec(ctx, q, userID, projectID, roleKeys, source); err != nil {
+				return fmt.Errorf("reconcile ledger (revoke): %w", err)
+			}
+		case "replace":
+			const q = `DELETE FROM direct_role_grants
+				WHERE user_id=$1 AND zitadel_project_id=$2 AND source='direct'
+				  AND NOT (zitadel_role_key = ANY($3))`
+			if _, err := tx.Exec(ctx, q, userID, projectID, roleKeys); err != nil {
+				return fmt.Errorf("reconcile ledger (replace): %w", err)
+			}
+		}
+		return nil
+	})
 }
 
 func execPropagation(ctx context.Context, id, q string) error {

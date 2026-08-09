@@ -160,22 +160,6 @@ func GetRolesForBundle(ctx context.Context, bundleID string) ([]models.BundleRol
 	return roles, nil
 }
 
-// AssignBundleToUser pins the assignment to the bundle's latest published
-// version. A new assignment always gets the current bundle; being left behind
-// is something that happens to you later, by a decision somebody took.
-func AssignBundleToUser(ctx context.Context, userID, bundleID string) error {
-	query := `
-		INSERT INTO user_bundle_assignments (user_id, bundle_id, version_id)
-		SELECT $1, $2, id FROM bundle_versions
-		WHERE bundle_id = $2 ORDER BY version DESC LIMIT 1
-		ON CONFLICT DO NOTHING;`
-	_, err := PG.Exec(ctx, query, userID, bundleID)
-	if err != nil {
-		return fmt.Errorf("failed to assign bundle: %w", err)
-	}
-	return nil
-}
-
 func GetBundlesForUser(ctx context.Context, userID string) ([]models.Bundle, error) {
 	query := `
 		SELECT b.id, b.name, b.description, b.is_welcome, b.confirmation_mode, b.created_at,

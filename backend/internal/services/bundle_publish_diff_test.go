@@ -1,6 +1,9 @@
 package services
 
 import (
+	"context"
+
+	"syndra/internal/directory"
 	"testing"
 
 	"syndra/internal/models"
@@ -57,5 +60,36 @@ func TestDiffRoles_ReportsTheDifference(t *testing.T) {
 	}
 	if len(removed) != 1 || removed[0] != gone {
 		t.Errorf("expected only the dropped role removed, got %v", removed)
+	}
+}
+
+// Names are the whole point of decoration: a rehearsal that lists subject ids
+// is a list nobody can review. Asserted behaviourally, because the guard in
+// internal/db can only see that the lookup is written in this function — not
+// that its result reaches the row.
+func TestDecoratePlan_FillsNamesFromTheDirectory(t *testing.T) {
+	orig := directory.Default
+	t.Cleanup(func() { directory.Default = orig })
+	directory.Default = directory.NewDemoSource()
+
+	demo, err := directory.Default.Users(context.Background())
+	if err != nil || len(demo) == 0 {
+		t.Skipf("no demo directory to decorate from: %v", err)
+	}
+	known := demo[0]
+
+	plan := BulkPlan{Outcomes: []BulkOutcome{
+		{UserID: known.ID},
+		{UserID: "nobody-by-that-name"},
+	}}
+	DecoratePlan(context.Background(), &plan)
+
+	if plan.Outcomes[0].Name != known.Name || plan.Outcomes[0].Email != known.Email {
+		t.Fatalf("a known subject must be named, got %+v", plan.Outcomes[0])
+	}
+	// A lookup that finds nothing leaves the row identified by the id it
+	// already carried, rather than blanking it or failing the rehearsal.
+	if plan.Outcomes[1].UserID != "nobody-by-that-name" || plan.Outcomes[1].Name != "" {
+		t.Fatalf("an unknown subject must keep its id and gain no name, got %+v", plan.Outcomes[1])
 	}
 }

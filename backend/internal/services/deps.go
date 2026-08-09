@@ -16,7 +16,7 @@ var (
 	// Onboarding
 	svcInsertOnboardingTrigger   = db.InsertOnboardingTrigger
 	svcGetWelcomeBundle          = db.GetWelcomeBundle
-	svcAssignBundleToUser        = db.AssignBundleToUser
+	svcCascadeWelcomeBundle      = CascadeBundleAssignedToUser
 	svcInsertAuditLog            = db.InsertAuditLog
 	svcCompleteOnboardingTrigger = db.CompleteOnboardingTrigger
 	svcFailOnboardingTrigger     = db.FailOnboardingTrigger

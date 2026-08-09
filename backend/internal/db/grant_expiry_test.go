@@ -309,3 +309,81 @@ func functionsCalling(src, call string) []string {
 	}
 	return out
 }
+
+// The drain is not a cascade, but deleting a ledger row changes what somebody
+// effectively holds, and every delta is computed from those rows. A cascade can
+// lock, read a grant that is still present, conclude the role it was about to
+// add is already covered, and commit that empty delta — while this deletion
+// takes the cover away in between, with nobody left who thinks it is missing.
+func TestTheDrainsLedgerReconciliationTakesTheAccessLock(t *testing.T) {
+	body := funcBody(t, readDBSource(t, "propagations.go"), "ReconcileLedgerOnApplied")
+	if !strings.Contains(body, "InTxLockingAccess(ctx,") {
+		t.Error("the ledger reconciliation must run under the access lock")
+	}
+	if strings.Contains(body, "PG.Exec(ctx,") {
+		t.Error("the deletes must run on the locked transaction, not on the pool")
+	}
+	// Taken here rather than around the dispatch: the Zitadel call has already
+	// happened, so nothing holds the lock across the network.
+	if strings.Contains(body, "dispatch") || strings.Contains(body, "MgmtClient") {
+		t.Error("no target call may happen inside this lock")
+	}
+}
+
+// A rehearsal that runs inside the access lock must not reach the directory:
+// in live mode that is Zitadel behind a cache that can miss, and a name nobody
+// has looked up yet would hold the one lock every expiry, grant and cascade
+// waits on for as long as an unreachable identity provider takes to time out.
+func TestNoDirectoryLookupInsideTheAccessLock(t *testing.T) {
+	src := readServicesSource(t, "bundle_publish.go")
+	for _, fn := range []string{"RehearseBundlePublish", "RehearseMoveHolders"} {
+		if strings.Contains(funcBody(t, src, fn), "directory.Default") {
+			t.Errorf("%s runs under the lock on the apply path and must not call the directory", fn)
+		}
+	}
+	// Decoration still happens — outside — or the rehearsal renders subject ids.
+	if !strings.Contains(funcBody(t, src, "DecoratePlan"), "directory.Default.FindUser") {
+		t.Error("DecoratePlan must be where the names come from")
+	}
+	for _, fn := range []string{"PublishBundleVersion", "MoveHolders"} {
+		body := funcBody(t, src, fn)
+		lock := strings.Index(body, "svcInTxLockingAccess(ctx,")
+		// Both exits decorate: the one that failed still renders a plan, and
+		// counting them is what distinguishes "decorated after the lock" from
+		// "decorated only on the path nobody looks at". A single call passes an
+		// ordering check while the returned plan carries no names at all.
+		if n := strings.Count(body, "DecoratePlan(ctx, &plan)"); n != 2 {
+			t.Errorf("%s must decorate on both exits from the locked region, found %d", fn, n)
+		}
+		for _, at := range indicesOf(body, "DecoratePlan(ctx, &plan)") {
+			if lock < 0 || at < lock {
+				t.Errorf("%s decorates before or inside the locked region", fn)
+			}
+		}
+	}
+}
+
+// Onboarding used to insert the assignment directly: the welcome bundle's roles
+// were never projected anywhere, and the write changed effective access without
+// the lock.
+func TestOnboardingGoesThroughTheCascade(t *testing.T) {
+	if strings.Contains(readDBSource(t, "bundles.go"), "func AssignBundleToUser") {
+		t.Error("the bare assignment has no caller; keeping it invites a second path that projects nothing")
+	}
+	body := funcBody(t, readServicesSource(t, "onboarding.go"), "TriggerOnboarding")
+	if !strings.Contains(body, "svcCascadeWelcomeBundle(ctx,") {
+		t.Error("the welcome bundle must be assigned through the cascade, which locks, computes the delta and queues it")
+	}
+}
+
+func indicesOf(hay, needle string) []int {
+	var out []int
+	for i := 0; ; {
+		j := strings.Index(hay[i:], needle)
+		if j < 0 {
+			return out
+		}
+		out = append(out, i+j)
+		i += j + len(needle)
+	}
+}

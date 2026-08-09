@@ -90,13 +90,24 @@ var (
 
 	// Bundle versioning: the draft diff, the version list, and the two rehearsed
 	// applies (publish, move holders).
-	svcBundleDraft          = services.BundleDraft
-	svcListBundleVersions   = db.ListBundleVersions
-	svcGetRolesForVersion   = db.GetRolesForVersion
-	svcBundleHolders        = db.GetBundleHoldersByVersion
-	svcRehearsePublish      = services.RehearseBundlePublish
+	svcBundleDraft        = services.BundleDraft
+	svcListBundleVersions = db.ListBundleVersions
+	svcGetRolesForVersion = db.GetRolesForVersion
+	svcBundleHolders      = db.GetBundleHoldersByVersion
+	// Decoration happens here rather than inside the rehearsal: the apply path
+	// runs the same rehearsal under the access lock, and looking a name up in
+	// the directory there would hold that lock across a call to Zitadel.
+	svcRehearsePublish = func(ctx context.Context, req services.PublishRequest) (services.BulkPlan, services.DraftDiff, error) {
+		plan, draft, err := services.RehearseBundlePublish(ctx, req)
+		services.DecoratePlan(ctx, &plan)
+		return plan, draft, err
+	}
 	svcPublishBundleVersion = services.PublishBundleVersion
-	svcRehearseMoveHolders  = services.RehearseMoveHolders
+	svcRehearseMoveHolders  = func(ctx context.Context, req services.MoveHoldersRequest) (services.BulkPlan, error) {
+		plan, err := services.RehearseMoveHolders(ctx, req)
+		services.DecoratePlan(ctx, &plan)
+		return plan, err
+	}
 	svcMoveHolders          = services.MoveHolders
 	dbGetStaleHolderCounts  = db.GetStaleHolderCounts
 	dbGetUserBundleVersions = db.GetUserBundleVersions

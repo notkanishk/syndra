@@ -153,9 +153,6 @@ func RehearseBundlePublish(ctx context.Context, req PublishRequest) (BulkPlan, D
 
 	for _, h := range holders {
 		out := BulkOutcome{UserID: h.UserID}
-		if u, ok, err := directory.Default.FindUser(ctx, h.UserID); err == nil && ok {
-			out.Name, out.Email = u.Name, u.Email
-		}
 
 		if !req.Migrate {
 			out.Effect = EffectNoChange
@@ -291,8 +288,11 @@ func PublishBundleVersion(ctx context.Context, actor string, req PublishRequest)
 		}
 		return nil
 	}); err != nil {
+		DecoratePlan(ctx, &plan)
 		return plan, version, err
 	}
+	// Outside the lock: the plan is being rendered, not decided.
+	DecoratePlan(ctx, &plan)
 
 	bundle, err := svcGetBundleByID(ctx, req.BundleID)
 	if err != nil {
@@ -368,9 +368,6 @@ func RehearseMoveHolders(ctx context.Context, req MoveHoldersRequest) (BulkPlan,
 
 	for _, id := range req.UserIDs {
 		out := BulkOutcome{UserID: id}
-		if u, ok, err := directory.Default.FindUser(ctx, id); err == nil && ok {
-			out.Name, out.Email = u.Name, u.Email
-		}
 		h, holds := wanted[id]
 		if !holds {
 			out.Effect = EffectBlocked
@@ -450,11 +447,13 @@ func MoveHolders(ctx context.Context, actor string, req MoveHoldersRequest) (Bul
 		}
 		return nil
 	}); err != nil {
+		DecoratePlan(ctx, &plan)
 		if errors.Is(err, errNothingToMove) {
 			return plan, nil
 		}
 		return plan, err
 	}
+	DecoratePlan(ctx, &plan)
 	bundle, err := svcGetBundleByID(ctx, req.BundleID)
 	if err != nil {
 		return plan, err
@@ -476,6 +475,29 @@ func markApplied(outcomes []BulkOutcome) {
 	for i := range outcomes {
 		if outcomes[i].Effect == EffectApply {
 			outcomes[i].Effect = EffectApplied
+		}
+	}
+}
+
+// DecoratePlan fills in the display names a rehearsal renders.
+//
+// Kept out of the rehearsal itself because the rehearsal runs inside the
+// access-mutation lock when an apply is what asked for it, and this reaches the
+// directory — which in live mode is Zitadel, through a cache that can miss. A
+// name nobody has looked up yet would then hold the one lock every expiry,
+// grant and cascade in the deployment waits on, for as long as an unreachable
+// identity provider takes to time out. Names are presentation; the lock exists
+// for state.
+//
+// A lookup that fails leaves the row identified by its subject id, which is
+// what it was identified by before anyone asked for a name.
+func DecoratePlan(ctx context.Context, plan *BulkPlan) {
+	if plan == nil {
+		return
+	}
+	for i := range plan.Outcomes {
+		if u, ok, err := directory.Default.FindUser(ctx, plan.Outcomes[i].UserID); err == nil && ok {
+			plan.Outcomes[i].Name, plan.Outcomes[i].Email = u.Name, u.Email
 		}
 	}
 }
