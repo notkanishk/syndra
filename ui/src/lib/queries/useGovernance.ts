@@ -20,6 +20,8 @@ export interface PendingPropagationSummary {
 
 export interface DriftItem {
   id: string;
+  /** Which system the access was found on. Every other field is a statement about it. */
+  target: string;
   user_id: string;
   project_id: string;
   role_keys: string[];

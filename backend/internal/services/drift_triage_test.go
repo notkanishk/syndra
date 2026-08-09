@@ -50,8 +50,8 @@ func TestDriftTriageQueue_OrdersByRiskThenAge(t *testing.T) {
 	old := time.Now().Add(-7 * 24 * time.Hour)
 	recent := time.Now().Add(-1 * 24 * time.Hour)
 	withTriageDeps(t, []models.DriftItem{
-		{ID: "wiki", UserID: "u1", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: old},
-		{ID: "laser", UserID: "u2", ProjectID: "p_laser", RoleKeys: []string{"operator"}, DetectedAt: recent},
+		{ID: "wiki", Target: db.TargetZitadel, UserID: "u1", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: old},
+		{ID: "laser", Target: db.TargetZitadel, UserID: "u2", ProjectID: "p_laser", RoleKeys: []string{"operator"}, DetectedAt: recent},
 	}, nil)
 
 	got, err := DriftTriageQueue(context.Background())
@@ -75,8 +75,8 @@ func TestDriftTriageQueue_OldestFirstWithinTier(t *testing.T) {
 	older := time.Now().Add(-9 * 24 * time.Hour)
 	newer := time.Now().Add(-2 * 24 * time.Hour)
 	withTriageDeps(t, []models.DriftItem{
-		{ID: "newer", UserID: "u1", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: newer},
-		{ID: "older", UserID: "u2", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: older},
+		{ID: "newer", Target: db.TargetZitadel, UserID: "u1", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: newer},
+		{ID: "older", Target: db.TargetZitadel, UserID: "u2", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: older},
 	}, nil)
 
 	got, err := DriftTriageQueue(context.Background())
@@ -93,8 +93,8 @@ func TestDriftTriageQueue_OldestFirstWithinTier(t *testing.T) {
 func TestDriftTriageQueue_UncataloguedRoleOutranksKnownRoutineRole(t *testing.T) {
 	same := time.Now().Add(-3 * 24 * time.Hour)
 	withTriageDeps(t, []models.DriftItem{
-		{ID: "known", UserID: "u1", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: same},
-		{ID: "retired", UserID: "u2", ProjectID: "p_wiki", RoleKeys: []string{"legacy-op"}, DetectedAt: same},
+		{ID: "known", Target: db.TargetZitadel, UserID: "u1", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: same},
+		{ID: "retired", Target: db.TargetZitadel, UserID: "u2", ProjectID: "p_wiki", RoleKeys: []string{"legacy-op"}, DetectedAt: same},
 	}, nil)
 
 	got, err := DriftTriageQueue(context.Background())
@@ -114,10 +114,10 @@ func TestDriftTriageQueue_UncataloguedRoleOutranksKnownRoutineRole(t *testing.T)
 func TestDriftTriageQueue_CountsOtherItemsForTheSamePerson(t *testing.T) {
 	now := time.Now()
 	withTriageDeps(t, []models.DriftItem{
-		{ID: "a", UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: now},
-		{ID: "b", UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read2"}, DetectedAt: now},
-		{ID: "c", UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read3"}, DetectedAt: now},
-		{ID: "d", UserID: "solo", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: now},
+		{ID: "a", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: now},
+		{ID: "b", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read2"}, DetectedAt: now},
+		{ID: "c", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read3"}, DetectedAt: now},
+		{ID: "d", Target: db.TargetZitadel, UserID: "solo", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: now},
 	}, nil)
 
 	got, err := DriftTriageQueue(context.Background())
@@ -139,7 +139,7 @@ func TestDriftTriageQueue_CountsOtherItemsForTheSamePerson(t *testing.T) {
 // integration re-creates on every deploy, so the row has to say what it is.
 func TestDriftTriageQueue_MarksServiceAccounts(t *testing.T) {
 	withTriageDeps(t,
-		[]models.DriftItem{{ID: "x", UserID: "svc1", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: time.Now()}},
+		[]models.DriftItem{{ID: "x", Target: db.TargetZitadel, UserID: "svc1", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: time.Now()}},
 		map[string]models.UserProfile{
 			"svc1": {ID: "svc1", Name: "svc-bookings", Email: "svc-bookings@makerspace.local", Status: "active"},
 		})
@@ -163,5 +163,58 @@ func TestDriftTriageQueue_EmptyReturnsEmptySlice(t *testing.T) {
 	}
 	if got == nil || len(got) != 0 {
 		t.Fatalf("want empty slice, got %#v", got)
+	}
+}
+
+// 1.13 — the catalogue is built from Zitadel projects and roles. A TrueNAS
+// dataset permission is not absent from it; it is not the kind of thing it
+// lists. Judged against it anyway, every add-on row would rank as a retired
+// role and the queue would sort by which system found the drift rather than by
+// how much it matters.
+func TestDriftTriageQueue_DoesNotJudgeAnAddOnRowAgainstZitadelsCatalogue(t *testing.T) {
+	older := time.Now().Add(-9 * 24 * time.Hour)
+	newer := time.Now().Add(-1 * 24 * time.Hour)
+	withTriageDeps(t, []models.DriftItem{
+		{ID: "zitadel-known", Target: db.TargetZitadel, UserID: "u1", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: older},
+		{ID: "addon", Target: "truenas", UserID: "u2", ProjectID: "", RoleKeys: []string{"tank/projects:rw"}, DetectedAt: newer},
+	}, nil)
+
+	got, err := DriftTriageQueue(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var addon models.DriftTriageItem
+	for _, item := range got {
+		if item.ID == "addon" {
+			addon = item
+		}
+	}
+	if addon.RoleCatalogueApplies {
+		t.Error("a target with no role catalogue must say so, or the UI reads role_in_catalogue=false as a retired role")
+	}
+	if addon.RoleInCatalogue || addon.RoleGroup != "" {
+		t.Errorf("an add-on row must not be enriched from Zitadel's catalogue, got in_catalogue=%v group=%q", addon.RoleInCatalogue, addon.RoleGroup)
+	}
+	// Both rows rank routine, so the older one leads. Ranked as retired, the
+	// newer add-on row would have jumped it.
+	if got[0].ID != "zitadel-known" {
+		t.Fatalf("an add-on row must not outrank routine drift; order was %q first", got[0].ID)
+	}
+}
+
+// The same row on a target that does have a catalogue is still judged by it —
+// the gate narrows the claim, it does not withdraw it.
+func TestDriftTriageQueue_StillJudgesZitadelRowsAgainstTheCatalogue(t *testing.T) {
+	same := time.Now().Add(-3 * 24 * time.Hour)
+	withTriageDeps(t, []models.DriftItem{
+		{ID: "known", Target: db.TargetZitadel, UserID: "u1", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: same},
+	}, nil)
+
+	got, err := DriftTriageQueue(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got[0].RoleCatalogueApplies || !got[0].RoleInCatalogue || got[0].RoleGroup != "Open bench" {
+		t.Fatalf("a Zitadel row must still be enriched from the catalogue, got %+v", got[0])
 	}
 }

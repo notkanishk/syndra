@@ -12,11 +12,22 @@ import (
 
 // DriftFilter narrows a drift listing. Empty fields are ignored.
 type DriftFilter struct {
+	Target          string
 	UserID          string
 	ProjectID       string
 	DetectionSource string // webhook | reconciliation_sweep
 	Status          string // defaults to pending_triage when empty (see GetDriftItems)
 }
+
+// Empty reports whether the filter narrows nothing.
+//
+// Written as a whole-struct comparison rather than a chain of field tests, so a
+// field added to DriftFilter is accounted for the moment it exists. The chain
+// this replaced named three of the four fields it had; the fourth narrowed the
+// query and not the branch that chose it, which is how a scoped request quietly
+// gets an unscoped answer. A field that cannot be compared this way breaks the
+// build, which is the right place to be told.
+func (f DriftFilter) Empty() bool { return f == DriftFilter{} }
 
 // UpsertDriftItem inserts a pending drift row, deduped by the partial-unique
 // index (target, user_id, project_id, drift_type, role_keys) WHERE
@@ -24,14 +35,13 @@ type DriftFilter struct {
 // role_keys); the role is part of the dedup key so a second drifting role on
 // the same pair is NOT swallowed. `target` is part of it for the same reason at
 // one level up: without it, two targets drifting on one user would silently
-// suppress each other. Every caller here writes Zitadel drift and leaves the
-// column to its default; add-on callers arrive with the sweep's target
-// threading (change `addon-platform` task 1.12).
+// suppress each other.
+//
 // Returns (id, inserted). On an existing identical pending row it returns
 // ("", false) — a re-detection of the same drift is a no-op, not a second entry.
-func UpsertDriftItem(ctx context.Context, userID, projectID string, roleKeys []string,
+func UpsertDriftItem(ctx context.Context, target, userID, projectID string, roleKeys []string,
 	zitadelGrantID, detectionSource, driftType string) (string, bool, error) {
-	return UpsertDriftItemWithEvidence(ctx, userID, projectID, roleKeys,
+	return UpsertDriftItemWithEvidence(ctx, target, userID, projectID, roleKeys,
 		zitadelGrantID, detectionSource, driftType, DriftEvidence{})
 }
 
@@ -48,12 +58,21 @@ type DriftEvidence struct {
 // triage row needs to explain itself. `last_seen_at` is stamped on every call —
 // including the deduped no-op — so "still there as of this morning's sweep" is
 // answerable for a row first found nine days ago.
-func UpsertDriftItemWithEvidence(ctx context.Context, userID, projectID string, roleKeys []string,
+//
+// The statement names `target` rather than leaning on the column default, and
+// the column carries no default any more (migration 000026). A default is an
+// answer the schema gives on the writer's behalf, and it is the right answer
+// for exactly one target — the detector that forgot to say what it was looking
+// at would have filed its finding against Zitadel and been believed.
+func UpsertDriftItemWithEvidence(ctx context.Context, target, userID, projectID string, roleKeys []string,
 	zitadelGrantID, detectionSource, driftType string, ev DriftEvidence) (string, bool, error) {
+	if target == "" {
+		return "", false, ErrDriftTargetRequired
+	}
 	const q = `
-		INSERT INTO drift_items (user_id, project_id, role_keys, zitadel_grant_id, detection_source, drift_type,
+		INSERT INTO drift_items (target, user_id, project_id, role_keys, zitadel_grant_id, detection_source, drift_type,
 		                         upstream_actor, upstream_created_at, last_seen_at)
-		VALUES ($1,$2,$3,NULLIF($4,''),$5,$6,NULLIF($7,''),$8,NOW())
+		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,NULLIF($8,''),$9,NOW())
 		ON CONFLICT (target, user_id, project_id, drift_type, role_keys) WHERE (status = 'pending_triage')
 		DO UPDATE SET
 			last_seen_at        = NOW(),
@@ -64,7 +83,7 @@ func UpsertDriftItemWithEvidence(ctx context.Context, userID, projectID string, 
 		RETURNING id, (xmax = 0) AS inserted`
 	var id string
 	var inserted bool
-	err := PG.QueryRow(ctx, q, userID, projectID, roleKeys, zitadelGrantID, detectionSource, driftType,
+	err := PG.QueryRow(ctx, q, target, userID, projectID, roleKeys, zitadelGrantID, detectionSource, driftType,
 		ev.UpstreamActor, ev.UpstreamCreatedAt).Scan(&id, &inserted)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, nil
@@ -83,17 +102,18 @@ func GetDriftItems(ctx context.Context, f DriftFilter) ([]models.DriftItem, erro
 		status = "pending_triage"
 	}
 	const q = `
-		SELECT id, user_id, project_id, role_keys, COALESCE(zitadel_grant_id,''),
+		SELECT id, target, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'), COALESCE(zitadel_grant_id,''),
 		       detected_at, detection_source, drift_type, status,
 		       resolved_at, COALESCE(resolved_by,''), COALESCE(resolution_payload_json::text,''),
 		       COALESCE(upstream_actor,''), upstream_created_at, last_seen_at
 		FROM drift_items
 		WHERE status = $1
-		  AND ($2 = '' OR user_id = $2)
-		  AND ($3 = '' OR project_id = $3)
-		  AND ($4 = '' OR detection_source = $4)
+		  AND ($2 = '' OR target = $2)
+		  AND ($3 = '' OR user_id = $3)
+		  AND ($4 = '' OR project_id = $4)
+		  AND ($5 = '' OR detection_source = $5)
 		ORDER BY detected_at DESC`
-	rows, err := PG.Query(ctx, q, status, f.UserID, f.ProjectID, f.DetectionSource)
+	rows, err := PG.Query(ctx, q, status, f.Target, f.UserID, f.ProjectID, f.DetectionSource)
 	if err != nil {
 		return nil, fmt.Errorf("get drift items: %w", err)
 	}
@@ -104,7 +124,7 @@ func GetDriftItems(ctx context.Context, f DriftFilter) ([]models.DriftItem, erro
 // GetDriftItem fetches one row by id (any status). ErrDriftNotFound on miss.
 func GetDriftItem(ctx context.Context, id string) (models.DriftItem, error) {
 	const q = `
-		SELECT id, user_id, project_id, role_keys, COALESCE(zitadel_grant_id,''),
+		SELECT id, target, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'), COALESCE(zitadel_grant_id,''),
 		       detected_at, detection_source, drift_type, status,
 		       resolved_at, COALESCE(resolved_by,''), COALESCE(resolution_payload_json::text,''),
 		       COALESCE(upstream_actor,''), upstream_created_at, last_seen_at
@@ -137,7 +157,7 @@ func scanDriftItems(rows pgx.Rows) ([]models.DriftItem, error) {
 	var out []models.DriftItem
 	for rows.Next() {
 		var d models.DriftItem
-		if err := rows.Scan(&d.ID, &d.UserID, &d.ProjectID, &d.RoleKeys, &d.ZitadelGrantID,
+		if err := rows.Scan(&d.ID, &d.Target, &d.UserID, &d.ProjectID, &d.RoleKeys, &d.ZitadelGrantID,
 			&d.DetectedAt, &d.DetectionSource, &d.DriftType, &d.Status,
 			&d.ResolvedAt, &d.ResolvedBy, &d.ResolutionPayload,
 			&d.UpstreamActor, &d.UpstreamCreatedAt, &d.LastSeenAt); err != nil {
@@ -154,6 +174,12 @@ func scanDriftItems(rows pgx.Rows) ([]models.DriftItem, error) {
 var (
 	ErrDriftNotFound   = errors.New("drift item not found")
 	ErrDriftNotPending = errors.New("drift item not pending")
+
+	// ErrDriftTargetRequired refuses a finding that does not say what it looked
+	// at. Reaching the FK with an empty string would refuse it too, but by then
+	// the refusal is a constraint violation quoting a value, not a statement
+	// about what the detector failed to supply.
+	ErrDriftTargetRequired = errors.New("drift item requires a target")
 )
 
 // AttributeDriftTx claims a pending drift (→attributed) and writes the

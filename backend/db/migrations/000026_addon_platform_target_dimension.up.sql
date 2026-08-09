@@ -91,6 +91,16 @@ ALTER TABLE propagation_outbox
 ALTER TABLE propagation_outbox
     ADD COLUMN IF NOT EXISTS target TEXT NOT NULL DEFAULT 'zitadel' REFERENCES targets(target);
 
+-- The default exists to backfill the rows already here, and is then taken away.
+-- Kept, it would be the schema answering "which target?" on the writer's
+-- behalf, and it answers 'zitadel' for every statement that forgot to say —
+-- which is the one answer that looks right in review and dispatches an add-on
+-- row down the Management API path. NOT NULL without a default makes the
+-- omission a failure at the statement rather than a plausible wrong value in
+-- the row. Same reasoning repeated on drift_items and external_grant_exclusions
+-- below.
+ALTER TABLE propagation_outbox ALTER COLUMN target DROP DEFAULT;
+
 -- Relaxing the NOT NULLs is what lets an add-on row exist; this CHECK is what
 -- stops that becoming a licence to write a half-formed Zitadel row. The columns
 -- stay mandatory for the target that actually has them.
@@ -269,6 +279,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_propagation_outbox_plan_subject
 -- (design §3).
 ALTER TABLE drift_items
     ADD COLUMN IF NOT EXISTS target TEXT NOT NULL DEFAULT 'zitadel' REFERENCES targets(target);
+ALTER TABLE drift_items ALTER COLUMN target DROP DEFAULT;
 
 ALTER TABLE drift_items
     ALTER COLUMN project_id DROP NOT NULL,
@@ -307,6 +318,7 @@ CREATE UNIQUE INDEX idx_drift_items_pending_unique
 -- (user, project, role) must be excludable independently.
 ALTER TABLE external_grant_exclusions
     ADD COLUMN IF NOT EXISTS target TEXT NOT NULL DEFAULT 'zitadel' REFERENCES targets(target);
+ALTER TABLE external_grant_exclusions ALTER COLUMN target DROP DEFAULT;
 
 ALTER TABLE external_grant_exclusions
     DROP CONSTRAINT IF EXISTS external_grant_exclusions_pkey;

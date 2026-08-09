@@ -26,12 +26,18 @@ import (
 func handleListDrift(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	filter := db.DriftFilter{
+		Target:          q.Get("target"),
 		UserID:          q.Get("user_id"),
 		ProjectID:       q.Get("project_id"),
 		DetectionSource: q.Get("source"),
 	}
 
-	if filter.UserID == "" && filter.ProjectID == "" && filter.DetectionSource == "" {
+	// The unfiltered branch is chosen by the filter being empty, so every field
+	// of it has to be consulted here. A field added to DriftFilter and not to
+	// this condition does not narrow anything — it is silently ignored, and the
+	// caller gets the whole queue back believing it was scoped. `filter.Empty()`
+	// keeps the two from drifting apart.
+	if filter.Empty() {
 		items, err := svcDriftTriageQueue(r.Context())
 		if err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())

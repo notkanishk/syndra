@@ -94,10 +94,15 @@ func NewOutboxIdempotencyKey() (string, error) { return newOutboxIdempotencyKey(
 // canonical UUID string.
 func InsertPendingPropagation(ctx context.Context, opType, userID, projectID string,
 	roleKeys []string, zitadelGrantID, payloadJSON, idempotencyKey, initiatedBy string) (string, error) {
+	// This is the Zitadel enqueue and the statement says so. Its columns are the
+	// Zitadel shape — a project, role keys, a grant id — so the target is not a
+	// parameter; there is no other target it could name. Add-on entitlement work
+	// goes through EnqueueEntitlementApplyTx, which derives its target from the
+	// approved plan.
 	const q = `
 		INSERT INTO propagation_outbox
-			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json, idempotency_key, initiated_by)
-		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8)
+			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json, idempotency_key, initiated_by, target)
+		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,'zitadel')
 		RETURNING id`
 	var id string
 	if err := PG.QueryRow(ctx, q, opType, userID, projectID, roleKeys, zitadelGrantID,
@@ -108,16 +113,23 @@ func InsertPendingPropagation(ctx context.Context, opType, userID, projectID str
 }
 
 // PendingOutboxAddExists reports whether an undrained add is already queued for
-// the (user, project, role) triple, so the drift sweep's syndra_only replay does
-// not pile a fresh duplicate every tick for a grant that stays missing in Zitadel.
-func PendingOutboxAddExists(ctx context.Context, userID, projectID, roleKey string) (bool, error) {
+// the (target, user, project, role) tuple, so the drift sweep's syndra_only
+// replay does not pile a fresh duplicate every tick for a grant that stays
+// missing on the target.
+//
+// The target belongs in the predicate, not in the caller's head. The question
+// this answers is "is something already queued that will fix this drift", and
+// queued work on another target fixes nothing here: without the scope, a row
+// waiting on an unreachable add-on would suppress the replay of a genuinely
+// missing Zitadel grant, and the sweep would report itself satisfied.
+func PendingOutboxAddExists(ctx context.Context, target, userID, projectID, roleKey string) (bool, error) {
 	const q = `SELECT EXISTS(
 		SELECT 1 FROM propagation_outbox
-		WHERE op_type='add' AND user_id=$1 AND project_id=$2
-		  AND $3 = ANY(role_keys) AND status IN ('pending','in_flight'))`
+		WHERE op_type='add' AND target=$1 AND user_id=$2 AND project_id=$3
+		  AND $4 = ANY(role_keys) AND status IN ('pending','in_flight'))`
 	var exists bool
-	if err := PG.QueryRow(ctx, q, userID, projectID, roleKey).Scan(&exists); err != nil {
-		return false, fmt.Errorf("pending outbox add exists (%s/%s/%s): %w", userID, projectID, roleKey, err)
+	if err := PG.QueryRow(ctx, q, target, userID, projectID, roleKey).Scan(&exists); err != nil {
+		return false, fmt.Errorf("pending outbox add exists (%s %s/%s/%s): %w", target, userID, projectID, roleKey, err)
 	}
 	return exists, nil
 }

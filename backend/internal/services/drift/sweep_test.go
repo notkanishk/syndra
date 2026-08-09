@@ -15,14 +15,14 @@ func stubSweep(t *testing.T) {
 	t.Cleanup(swap(&zitadelReachable, func(context.Context) bool { return true }))
 	t.Cleanup(swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) { return nil, nil }))
 	t.Cleanup(swap(&svcGetActiveMappingRules, func(context.Context) ([]models.MappingRule, error) { return nil, nil }))
-	t.Cleanup(swap(&svcGetExclusions, func(context.Context) ([]models.ExternalGrantExclusion, error) { return nil, nil }))
+	t.Cleanup(swap(&svcGetExclusions, func(context.Context, string) ([]models.ExternalGrantExclusion, error) { return nil, nil }))
 	t.Cleanup(swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
 		return &zitadel.SearchResult[zitadel.UserGrant]{}, nil
 	}))
-	t.Cleanup(swap(&upsertDriftItem, func(context.Context, string, string, []string, string, string, string) (string, bool, error) {
+	t.Cleanup(swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
 		return "d1", true, nil
 	}))
-	t.Cleanup(swap(&pendingOutboxAddExists, func(context.Context, string, string, string) (bool, error) { return false, nil }))
+	t.Cleanup(swap(&pendingOutboxAddExists, func(context.Context, string, string, string, string) (bool, error) { return false, nil }))
 	t.Cleanup(swap(&insertPending, func(context.Context, string, string, string, []string, string, string, string, string) (string, error) {
 		return "o1", nil
 	}))
@@ -37,7 +37,7 @@ func TestSweep_UnexplainedZitadelGrantBecomesDrift(t *testing.T) {
 		}, nil
 	})()
 	var driftType string
-	defer swap(&upsertDriftItem, func(_ context.Context, _, _ string, _ []string, _, _, dtype string) (string, bool, error) {
+	defer swap(&upsertDriftItem, func(_ context.Context, _, _, _ string, _ []string, _, _, dtype string) (string, bool, error) {
 		driftType = dtype
 		return "d1", true, nil
 	})()
@@ -68,7 +68,7 @@ func TestSweep_RuleDerivedGrantIsNotDrift(t *testing.T) {
 		}, nil
 	})()
 	var created int
-	defer swap(&upsertDriftItem, func(context.Context, string, string, []string, string, string, string) (string, bool, error) {
+	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
 		created++
 		return "d", true, nil
 	})()
@@ -107,7 +107,7 @@ func TestSweep_SyndraOnlySkipsReEnqueueWhenPendingOutboxAdd(t *testing.T) {
 	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{{UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
 	})()
-	defer swap(&pendingOutboxAddExists, func(context.Context, string, string, string) (bool, error) { return true, nil })()
+	defer swap(&pendingOutboxAddExists, func(context.Context, string, string, string, string) (bool, error) { return true, nil })()
 	var reEnqueued bool
 	defer swap(&insertPending, func(context.Context, string, string, string, []string, string, string, string, string) (string, error) {
 		reEnqueued = true
@@ -134,8 +134,8 @@ func TestSweep_HaltsWhenZitadelOffline(t *testing.T) {
 
 func TestSweep_ExcludedGrantIsNotDrift(t *testing.T) {
 	stubSweep(t)
-	defer swap(&svcGetExclusions, func(context.Context) ([]models.ExternalGrantExclusion, error) {
-		return []models.ExternalGrantExclusion{{UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
+	defer swap(&svcGetExclusions, func(_ context.Context, target string) ([]models.ExternalGrantExclusion, error) {
+		return []models.ExternalGrantExclusion{{Target: target, UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
 	})()
 	defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
 		return &zitadel.SearchResult[zitadel.UserGrant]{
@@ -143,7 +143,7 @@ func TestSweep_ExcludedGrantIsNotDrift(t *testing.T) {
 		}, nil
 	})()
 	var created int
-	defer swap(&upsertDriftItem, func(context.Context, string, string, []string, string, string, string) (string, bool, error) {
+	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
 		created++
 		return "d", true, nil
 	})()
@@ -153,5 +153,88 @@ func TestSweep_ExcludedGrantIsNotDrift(t *testing.T) {
 	}
 	if created != 0 {
 		t.Fatalf("marked-external triple must not drift, got %d", created)
+	}
+}
+
+// 1.13 — every write the sweep makes names the target it swept, and the result
+// says so too. Without this the findings of two sweeps are indistinguishable
+// once a second target exists, and the pending-dedupe index cannot tell a
+// re-detection from a new finding.
+func TestSweep_EveryWriteNamesTheTargetItSwept(t *testing.T) {
+	stubSweep(t)
+	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{UserID: "u2", ProjectID: "p2", RoleKey: "gone"}}, nil
+	})()
+	defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+		return &zitadel.SearchResult[zitadel.UserGrant]{
+			Items: []zitadel.UserGrant{{ID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}}, Total: 1,
+		}, nil
+	})()
+
+	var upsertTarget, exclusionTarget, queuedTarget string
+	defer swap(&upsertDriftItem, func(_ context.Context, tgt, _, _ string, _ []string, _, _, _ string) (string, bool, error) {
+		upsertTarget = tgt
+		return "d1", true, nil
+	})()
+	defer swap(&svcGetExclusions, func(_ context.Context, tgt string) ([]models.ExternalGrantExclusion, error) {
+		exclusionTarget = tgt
+		return nil, nil
+	})()
+	defer swap(&pendingOutboxAddExists, func(_ context.Context, tgt, _, _, _ string) (bool, error) {
+		queuedTarget = tgt
+		return false, nil
+	})()
+
+	res, err := Sweep(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, got := range map[string]string{
+		"drift finding":     upsertTarget,
+		"exclusion read":    exclusionTarget,
+		"queued-work check": queuedTarget,
+		"result":            res.Target,
+	} {
+		if got != "zitadel" {
+			t.Errorf("%s must name zitadel, got %q", name, got)
+		}
+	}
+}
+
+// A halted sweep still says what it failed to reconcile. "Nothing to report"
+// about an unnamed target reads as a clean bill of health for all of them.
+func TestSweep_HaltedResultStillNamesItsTarget(t *testing.T) {
+	stubSweep(t)
+	defer swap(&zitadelReachable, func(context.Context) bool { return false })()
+	res, _ := Sweep(context.Background())
+	if res.Target != "zitadel" {
+		t.Fatalf("a halted sweep must still name its target, got %+v", res)
+	}
+}
+
+// The scope lives in the comparison, not only in the read. Handed an exclusion
+// set that spans targets — which is what an unscoped read would return — the
+// sweep must still raise the Zitadel grant it cannot explain.
+func TestSweep_ExclusionOnAnotherTargetDoesNotSuppressDrift(t *testing.T) {
+	stubSweep(t)
+	defer swap(&svcGetExclusions, func(context.Context, string) ([]models.ExternalGrantExclusion, error) {
+		return []models.ExternalGrantExclusion{{Target: "truenas", UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
+	})()
+	defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+		return &zitadel.SearchResult[zitadel.UserGrant]{
+			Items: []zitadel.UserGrant{{ID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}}, Total: 1,
+		}, nil
+	})()
+	var created int
+	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
+		created++
+		return "d", true, nil
+	})()
+
+	if _, err := Sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if created != 1 {
+		t.Fatalf("an exclusion recorded against another target must not silence this one; drift rows created = %d", created)
 	}
 }

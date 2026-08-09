@@ -617,3 +617,62 @@ func TestBulkResolutions_AlwaysReturnARowPerRequestedID(t *testing.T) {
 		t.Fatalf("the summary must match the rows, got %+v", plan.Summary)
 	}
 }
+
+// 1.13 — the listing branch is chosen by "does this filter narrow anything".
+// A target filter that reached the query but not that question would return the
+// whole enriched queue to a caller who asked about one target, and the answer
+// would look right: it is a drift queue, just not theirs.
+func TestListDrift_ATargetFilterNarrowsTheListing(t *testing.T) {
+	resetDriftDeps(t)
+	origQueue := svcDriftTriageQueue
+	t.Cleanup(func() { svcDriftTriageQueue = origQueue })
+
+	queueUsed := false
+	svcDriftTriageQueue = func(context.Context) ([]models.DriftTriageItem, error) {
+		queueUsed = true
+		return nil, nil
+	}
+	var got db.DriftFilter
+	dbGetDriftItems = func(_ context.Context, f db.DriftFilter) ([]models.DriftItem, error) {
+		got = f
+		return nil, nil
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/governance/drift?target=truenas", nil)
+	w := httptest.NewRecorder()
+	handleListDrift(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	if queueUsed {
+		t.Fatal("a scoped request must not be answered with the whole enriched queue")
+	}
+	if got.Target != "truenas" {
+		t.Fatalf("the target filter must reach the listing, got %+v", got)
+	}
+}
+
+// And an unfiltered request still gets the enriched queue: the branch narrowed,
+// it did not move.
+func TestListDrift_UnfilteredStillGetsTheEnrichedQueue(t *testing.T) {
+	resetDriftDeps(t)
+	origQueue := svcDriftTriageQueue
+	t.Cleanup(func() { svcDriftTriageQueue = origQueue })
+
+	queueUsed := false
+	svcDriftTriageQueue = func(context.Context) ([]models.DriftTriageItem, error) {
+		queueUsed = true
+		return nil, nil
+	}
+	dbGetDriftItems = func(context.Context, db.DriftFilter) ([]models.DriftItem, error) {
+		t.Fatal("an unfiltered request must not fall through to the raw listing")
+		return nil, nil
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/governance/drift", nil)
+	handleListDrift(httptest.NewRecorder(), req)
+	if !queueUsed {
+		t.Fatal("the unfiltered branch must still serve the enriched queue")
+	}
+}

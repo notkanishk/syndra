@@ -89,7 +89,9 @@ function item(overrides: Partial<DriftTriageItem> = {}): DriftTriageItem {
     drift_type: "target_only",
     detection_source: "reconciliation_sweep",
     detected_at: "2026-07-22T06:00:00Z",
+    target: "zitadel",
     role_in_catalogue: true,
+    role_catalogue_applies: true,
     user_is_service_account: false,
     other_items_for_user: 0,
     ...overrides,
@@ -333,4 +335,21 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
     await waitFor(() => expect(bulk.applies).toBe(1));
     expect(await screen.findByRole("button", { name: "Close" })).toBeInTheDocument();
   });
+});
+
+// A finding on a target Syndra holds no role catalogue for is not a retired
+// role — nothing was retired, there was never a catalogue to retire it from.
+// The pill said otherwise for every add-on row, which is the loudest badge in
+// the queue applied to the one thing it cannot mean.
+it("does not call an add-on role retired", () => {
+  drift.data = [
+    item({
+      target: "truenas",
+      role_catalogue_applies: false,
+      role_in_catalogue: false,
+      role_keys: ["tank/projects:rw"],
+    }),
+  ];
+  renderTriage();
+  expect(screen.queryByText("Role not in catalogue")).not.toBeInTheDocument();
 });

@@ -467,7 +467,10 @@ function TriageRow({
  * are load-bearing here, and colour is never allowed to be the only signal.
  */
 function RiskPill({ item }: { item: DriftTriageItem }) {
-  if (!item.role_in_catalogue) {
+  // Only a target whose access Syndra catalogues can have a role missing from
+  // it. On one that has none, "not in catalogue" would be true of every row and
+  // informative about none.
+  if (item.role_catalogue_applies && !item.role_in_catalogue) {
     return (
       <span className="mt-1 inline-block rounded-pill bg-tint-2 px-2.5 py-0.5 text-[12px] font-semibold text-muted">
         Role not in catalogue

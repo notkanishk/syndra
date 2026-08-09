@@ -290,7 +290,7 @@ func detectWebhookDrift(ctx context.Context, event WebhookPayload) {
 		if expected {
 			continue
 		}
-		excluded, err := dbHasExclusion(ctx, event.UserID, event.SourceProject, role)
+		excluded, err := dbHasExclusion(ctx, db.TargetZitadel, event.UserID, event.SourceProject, role)
 		if err != nil {
 			log.Printf("[DRIFT] webhook exclusion-check failed user=%s role=%s: %v (skipping — not flagging on uncertainty)", event.UserID, role, err)
 			continue
@@ -298,7 +298,11 @@ func detectWebhookDrift(ctx context.Context, event WebhookPayload) {
 		if excluded {
 			continue
 		}
-		if _, _, err := dbUpsertDriftItemWithEvidence(ctx, event.UserID, event.SourceProject,
+		// The webhook is a Zitadel event, so the finding is about Zitadel and
+		// says so. It is the same statement the sweep makes about the same
+		// grant, and the pending-dedupe index only recognises them as the same
+		// finding if both name the target.
+		if _, _, err := dbUpsertDriftItemWithEvidence(ctx, db.TargetZitadel, event.UserID, event.SourceProject,
 			[]string{role}, event.GrantID, "webhook", "target_only",
 			db.DriftEvidence{UpstreamActor: event.EditorID, UpstreamCreatedAt: event.EventCreatedAt}); err != nil {
 			log.Printf("[DRIFT] webhook upsert failed user=%s role=%s: %v (non-fatal)", event.UserID, role, err)

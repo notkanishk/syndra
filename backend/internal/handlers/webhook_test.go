@@ -81,8 +81,8 @@ func resetWebhookDeps(t *testing.T) {
 	// Defaults for existing webhook tests that don't care about drift: never
 	// flag drift unless a test explicitly opts in.
 	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return false, nil }
-	dbHasExclusion = func(context.Context, string, string, string) (bool, error) { return false, nil }
-	dbUpsertDriftItemWithEvidence = func(context.Context, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
+	dbHasExclusion = func(context.Context, string, string, string, string) (bool, error) { return false, nil }
+	dbUpsertDriftItemWithEvidence = func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
 		return "", false, nil
 	}
 }
@@ -846,9 +846,9 @@ func TestProcessGrantAdded_UnexplainedGrantCreatesDrift(t *testing.T) {
 	setupNoopWebhookDeps(t)
 	// Downstream orchestration no-ops so the test isolates the drift hook.
 	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return false, nil }
-	dbHasExclusion = func(context.Context, string, string, string) (bool, error) { return false, nil }
+	dbHasExclusion = func(context.Context, string, string, string, string) (bool, error) { return false, nil }
 	var driftUser, driftType string
-	dbUpsertDriftItemWithEvidence = func(_ context.Context, u, _ string, _ []string, _, source, dtype string, _ db.DriftEvidence) (string, bool, error) {
+	dbUpsertDriftItemWithEvidence = func(_ context.Context, tgt, u, _ string, _ []string, _, source, dtype string, _ db.DriftEvidence) (string, bool, error) {
 		driftUser, driftType = u, dtype
 		if source != "webhook" {
 			t.Fatalf("detection_source must be webhook, got %q", source)
@@ -869,7 +869,7 @@ func TestProcessGrantAdded_ExpectedGrantNoDrift(t *testing.T) {
 	setupNoopWebhookDeps(t)
 	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return true, nil } // Syndra expects it
 	called := false
-	dbUpsertDriftItemWithEvidence = func(context.Context, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
+	dbUpsertDriftItemWithEvidence = func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
 		called = true
 		return "", false, nil
 	}

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"syndra/internal/db"
 	"syndra/internal/models"
 )
 
@@ -45,6 +46,11 @@ func DriftTriageQueue(ctx context.Context) ([]models.DriftTriageItem, error) {
 	// How many OTHER pending items each person has. "Marta has 2 more items"
 	// is the single piece of context most likely to change a revoke decision
 	// — one stray grant is a mistake, three is an offboarding that never ran.
+	//
+	// Counted across targets on purpose, unlike everything else here. The
+	// question it answers is about the person, not the system: unexplained
+	// access on the door controller AND in Zitadel is a stronger signal that
+	// something went wrong with them than either count alone.
 	perUser := make(map[string]int, len(items))
 	for _, item := range items {
 		perUser[item.UserID]++
@@ -53,10 +59,11 @@ func DriftTriageQueue(ctx context.Context) ([]models.DriftTriageItem, error) {
 	out := make([]models.DriftTriageItem, 0, len(items))
 	for _, item := range items {
 		enriched := models.DriftTriageItem{
-			DriftItem:         item,
-			OtherItemsForUser: perUser[item.UserID] - 1,
+			DriftItem:            item,
+			OtherItemsForUser:    perUser[item.UserID] - 1,
+			RoleCatalogueApplies: hasRoleCatalogue(item.Target),
 		}
-		if len(item.RoleKeys) > 0 {
+		if enriched.RoleCatalogueApplies && len(item.RoleKeys) > 0 {
 			key := item.ProjectID + ":" + item.RoleKeys[0]
 			enriched.RoleGroup = groups[key]
 			enriched.RoleInCatalogue = known[key]
@@ -78,6 +85,18 @@ func DriftTriageQueue(ctx context.Context) ([]models.DriftTriageItem, error) {
 	return out, nil
 }
 
+// hasRoleCatalogue reports whether the target's access is described by Syndra's
+// global role catalogue. Only Zitadel's is: the catalogue is built from Zitadel
+// projects and roles, so a TrueNAS dataset permission is not absent from it, it
+// is simply not the kind of thing it lists.
+//
+// One function, asked by both the enrichment and the ranking, so "this target
+// has no catalogue" cannot be true in one place and false in the other. A
+// target added to the platform is not added here until it genuinely has one.
+func hasRoleCatalogue(target string) bool {
+	return target == db.TargetZitadel
+}
+
 // driftRank is the risk half of "risk then age". Three tiers only: anything
 // finer would be a judgement the data cannot support, and an operator cannot
 // hold more than three levels in their head while triaging.
@@ -85,10 +104,16 @@ func driftRank(item models.DriftTriageItem) int {
 	switch {
 	case isSafetyGated(item.RoleGroup):
 		return 2
-	case !item.RoleInCatalogue:
+	case item.RoleCatalogueApplies && !item.RoleInCatalogue:
 		// A role Syndra no longer knows about. Adopting would recreate
 		// something somebody deliberately retired, which is worth surfacing
 		// above routine drift even though nothing physical is at stake.
+		//
+		// Gated on the catalogue applying at all. Without that gate every
+		// add-on row ranks here — not because anything was retired, but
+		// because a catalogue that never listed it cannot contain it, and
+		// the whole triage queue would sort by which system found the drift
+		// instead of by how much it matters.
 		return 1
 	default:
 		return 0

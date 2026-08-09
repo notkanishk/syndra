@@ -301,11 +301,35 @@ The drift type MUST NOT name a target inside its own value. `zitadel_only` becom
 - **THEN** the backend MUST insert a `drift_items` row (`detection_source='webhook'`, `drift_type='target_only'`, `target='zitadel'`, `status='pending_triage'`)
 - **AND** a duplicate detection for the same `(target, user_id, project_id, drift_type, role_keys)` while still `pending_triage` MUST NOT create a second row
 
+Every write that records a finding, and every read that answers a question about one, MUST name its target in the statement itself. The `target` columns MUST NOT carry a schema default beyond the migration that backfills them: a default is the schema answering "which target?" on behalf of a statement that forgot to say, and the answer it gives — `zitadel` — is the one that survives review, because it is what every row said before. With the default gone, an omission fails at the statement instead of producing a plausible wrong row. A detector that supplies no target MUST be refused before anything is opened.
+
+Scope MUST live in the predicate, never in the caller's discipline. This applies symmetrically to reads: an exclusion lookup, a queued-work lookup, and a drift listing MUST each narrow by target, and a filter that narrows the query MUST also be visible to whatever chooses between a scoped and an unscoped response — a field that reaches one but not the other returns everything to a caller who asked for one thing. A pure filter given a set that spans targets MUST compare the target too, since an exported function is handed whatever its caller loaded, and cross-target suppression is a finding silenced by a decision nobody made about it.
+
+A sweep MUST name the target it reconciled in its result, including when it halts: "nothing to report" about an unnamed target reads as a clean bill of health for all of them.
+
+Enrichment that only one target's data can support MUST be gated on the target having it. Syndra's role catalogue describes Zitadel projects and roles; a permission on another target is not absent from that catalogue, it is not the kind of thing the catalogue lists. Reporting it as absent MUST NOT happen, because "role not in catalogue" is the queue's loudest signal and would attach to every add-on row on the strength of a lookup that could never have succeeded. The surface MUST be able to tell "not in the catalogue" from "no catalogue applies", rather than inferring the second from a false first.
+
 #### Scenario: Two targets drifting on one user do not suppress each other
 
 - **WHEN** two registered targets each drift on the same user, project, and role
 - **THEN** both MUST produce their own `drift_items` row
 - **AND** marking one external MUST NOT suppress detection on the other
+- **AND** an exclusion recorded against one target MUST NOT satisfy the exclusion check for the other, even when the checking code is handed exclusions for both
+- **AND** queued work on one target MUST NOT be counted as work that will reconcile the other
+
+#### Scenario: A finding says what it looked at, or is refused
+
+- **WHEN** a detector records a drift finding
+- **THEN** the statement MUST name the target rather than relying on a column default
+- **AND** a finding submitted with no target MUST be refused before any write or transaction is opened
+- **AND** the drift listing MUST return the target on every row and MUST narrow by it when one is given
+
+#### Scenario: An add-on finding is not judged against Zitadel's role catalogue
+
+- **WHEN** the triage queue enriches a drift row whose target has no role catalogue
+- **THEN** the row MUST report that no catalogue applies, rather than reporting the role as missing from one
+- **AND** it MUST NOT be ranked above routine drift on the strength of that absence
+- **AND** a row on a target that does have a catalogue MUST still be enriched and ranked by it
 
 ### Requirement: Buffered propagations MUST drain only on explicit operator action, and `applied` MUST be the terminal success state
 

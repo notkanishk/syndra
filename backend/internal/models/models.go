@@ -406,7 +406,14 @@ type CascadeGroup struct {
 // the drift type — `zitadel_only` was the pre-add-on name and would be a false
 // statement on any target that is not Zitadel.
 type DriftItem struct {
-	ID                string     `json:"id"`
+	ID string `json:"id"`
+
+	// Target names what drifted. Every other field on this row is a statement
+	// about that target — a role key means nothing without knowing whose role
+	// catalogue it belongs to, and "unexplained access" is unexplained
+	// somewhere in particular.
+	Target string `json:"target"`
+
 	UserID            string     `json:"user_id"`
 	ProjectID         string     `json:"project_id"`
 	RoleKeys          []string   `json:"role_keys"`
@@ -441,7 +448,14 @@ type DriftTriageItem struct {
 
 	// RoleInCatalogue is false when the role no longer exists in Syndra.
 	// Adopting such a row would recreate a retired role, so the UI says so.
+	// Read it only together with RoleCatalogueApplies.
 	RoleInCatalogue bool `json:"role_in_catalogue"`
+
+	// RoleCatalogueApplies is false on a target that has no role catalogue at
+	// all. RoleInCatalogue is then meaningless rather than false: nothing was
+	// retired, because there was never a catalogue to retire it from. Without
+	// this the UI would report every add-on drift row as a retired role.
+	RoleCatalogueApplies bool `json:"role_catalogue_applies"`
 
 	// UserStatus mirrors the directory ("active", "departed", …) and
 	// UserIsServiceAccount marks machine accounts, for which "adopt" is the
@@ -464,6 +478,11 @@ type DriftSummary struct {
 // ExternalGrantExclusion is an operator "this is legitimately external" marker
 // keyed by (user, project, role) — future detections for the triple are filtered.
 type ExternalGrantExclusion struct {
+	// Target scopes the exclusion. "This grant is legitimately external" is
+	// true of one target at a time: the same triple on another target is a
+	// different grant, made by different hands, and silencing it here would
+	// silence a finding nobody looked at.
+	Target    string    `json:"target"`
 	UserID    string    `json:"user_id"`
 	ProjectID string    `json:"project_id"`
 	RoleKey   string    `json:"role_key"`

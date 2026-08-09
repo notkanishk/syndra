@@ -100,8 +100,8 @@ func enqueueCascadeRows(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, p
 	const insertOutbox = `
 		INSERT INTO propagation_outbox
 			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json,
-			 idempotency_key, initiated_by, source, source_ref, cascade_id)
-		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,NULLIF($10,''),$11)
+			 idempotency_key, initiated_by, source, source_ref, cascade_id, target)
+		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,NULLIF($10,''),$11,'zitadel')
 		RETURNING id`
 
 	// One id for the whole batch: these rows are the writes ONE triggering

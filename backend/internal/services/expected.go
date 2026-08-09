@@ -60,10 +60,19 @@ func UserExpectsRole(ctx context.Context, userID, projectID, role string) (bool,
 	return ok, nil
 }
 
-// IsExcluded reports whether the triple was marked legitimately-external.
-func IsExcluded(exclusions []models.ExternalGrantExclusion, userID, projectID, roleKey string) bool {
+// IsExcluded reports whether the tuple was marked legitimately-external on this
+// target.
+//
+// The target is compared here as well as filtered in the read that produced the
+// slice. That is not redundancy for its own sake: this function is exported and
+// pure, so the set it is handed is whatever its caller loaded, and a caller that
+// loads every exclusion would otherwise have a TrueNAS "known external" silence
+// an unexplained Zitadel grant — a finding suppressed by a decision nobody made
+// about it. Matching on the target makes the wrong set produce no answer rather
+// than a wrong one.
+func IsExcluded(exclusions []models.ExternalGrantExclusion, target, userID, projectID, roleKey string) bool {
 	for _, e := range exclusions {
-		if e.UserID == userID && e.ProjectID == projectID && e.RoleKey == roleKey {
+		if e.Target == target && e.UserID == userID && e.ProjectID == projectID && e.RoleKey == roleKey {
 			return true
 		}
 	}

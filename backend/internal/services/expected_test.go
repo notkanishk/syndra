@@ -25,11 +25,24 @@ func TestExpectedViaRule_UserHoldingSourceMakesTargetExpected(t *testing.T) {
 }
 
 func TestIsExcluded_MatchesTriple(t *testing.T) {
-	ex := []models.ExternalGrantExclusion{{UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}
-	if !IsExcluded(ex, "u1", "p1", "viewer") {
+	ex := []models.ExternalGrantExclusion{{Target: "zitadel", UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}
+	if !IsExcluded(ex, "zitadel", "u1", "p1", "viewer") {
 		t.Fatal("marked-external triple must be excluded")
 	}
-	if IsExcluded(ex, "u1", "p1", "editor") {
+	if IsExcluded(ex, "zitadel", "u1", "p1", "editor") {
 		t.Fatal("a different role must not be excluded")
+	}
+}
+
+// An exclusion is a decision about one target. Handed a set that spans targets
+// — which any caller may do, since this function is exported and pure — it must
+// not let a decision made about TrueNAS answer a question about Zitadel.
+func TestIsExcluded_DoesNotCrossTargets(t *testing.T) {
+	ex := []models.ExternalGrantExclusion{{Target: "truenas", UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}
+	if IsExcluded(ex, "zitadel", "u1", "p1", "viewer") {
+		t.Fatal("an exclusion recorded on another target must not silence this one")
+	}
+	if !IsExcluded(ex, "truenas", "u1", "p1", "viewer") {
+		t.Fatal("the exclusion must still hold on the target it was recorded against")
 	}
 }

@@ -124,12 +124,12 @@ var (
 	// (already past the self-mutation guard) that Syndra neither expects nor
 	// has excluded is out-of-band drift. See detectWebhookDrift in webhook.go.
 	dbUpsertDriftItemWithEvidence = db.UpsertDriftItemWithEvidence
-	dbHasExclusion                = func(ctx context.Context, u, p, r string) (bool, error) {
-		ex, err := db.GetExclusions(ctx)
+	dbHasExclusion                = func(ctx context.Context, target, u, p, r string) (bool, error) {
+		ex, err := db.GetExclusions(ctx, target)
 		if err != nil {
 			return false, err
 		}
-		return services.IsExcluded(ex, u, p, r), nil
+		return services.IsExcluded(ex, target, u, p, r), nil
 	}
 	// svcUserExpectsRole reports whether Syndra already expects (project,role)
 	// for the user — via direct grant, bundle, or mapping rule. Reuses the

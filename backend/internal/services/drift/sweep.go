@@ -5,12 +5,19 @@ import (
 	"fmt"
 	"log"
 
+	"syndra/internal/db"
 	"syndra/internal/services"
 	"syndra/internal/zitadel"
 )
 
 // DriftResult summarizes one sweep for logs + the [Reconcile now] response.
 type DriftResult struct {
+	// Target names what was reconciled. A result that does not say what it
+	// swept reads as a statement about everything, and "no drift" about
+	// everything is the one conclusion this sweep is not entitled to draw:
+	// it looked at one target.
+	Target string `json:"target"`
+
 	ZitadelGrants     int    `json:"zitadel_grants"`
 	DriftItemsCreated int    `json:"drift_items_created"` // target_only, deduped
 	ReEnqueued        int    `json:"re_enqueued"`         // syndra_only replays
@@ -27,9 +34,19 @@ type DriftResult struct {
 // Bundle/rule-derived expected roles that are ABSENT from Zitadel are NOT drift
 // in sub-phase 2 — cascade projection is sub-phase 3, so they are legitimately
 // unprojected. Only source-mediated direct grants can be syndra_only here.
+//
+// The target is a constant, not a parameter, and deliberately so: this function
+// pages the Zitadel Management API and compares role keys against Zitadel
+// projects. Accepting a target it cannot actually reach would be a signature
+// that promises something the body does not do. Add-on targets get their own
+// sweep, over their own reads, in group 4 — what they share is this one, which
+// every write below now names, so two sweeps can run against the same person
+// without either one's findings landing under the other's name.
 func Sweep(ctx context.Context) (DriftResult, error) {
+	const target = db.TargetZitadel
+
 	if !zitadelReachable(ctx) {
-		return DriftResult{Halted: true, Reason: "zitadel_offline"}, nil
+		return DriftResult{Target: target, Halted: true, Reason: "zitadel_offline"}, nil
 	}
 
 	direct, err := svcAllDirectGrants(ctx)
@@ -47,13 +64,13 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	if err != nil {
 		return DriftResult{}, fmt.Errorf("drift sweep: load rules: %w", err)
 	}
-	exclusions, err := svcGetExclusions(ctx)
+	exclusions, err := svcGetExclusions(ctx, target)
 	if err != nil {
 		return DriftResult{}, fmt.Errorf("drift sweep: load exclusions: %w", err)
 	}
 	holder := buildHolderSet(direct, zit)
 
-	res := DriftResult{ZitadelGrants: len(zit), Truncated: truncated}
+	res := DriftResult{Target: target, ZitadelGrants: len(zit), Truncated: truncated}
 
 	// --- target_only: unexplained live grants → drift_items ---
 	directSet := buildHolderSet(direct, nil) // Syndra's own direct intent
@@ -66,10 +83,10 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 			if expectedViaRule(holder, rules, g.UserID, g.ProjectID, rk) {
 				continue // expected_via_rule — not drift
 			}
-			if isExcluded(exclusions, g.UserID, g.ProjectID, rk) {
-				continue // marked external — silently filtered
+			if isExcluded(exclusions, target, g.UserID, g.ProjectID, rk) {
+				continue // marked external on THIS target — silently filtered
 			}
-			if _, inserted, err := upsertDriftItem(ctx, g.UserID, g.ProjectID,
+			if _, inserted, err := upsertDriftItem(ctx, target, g.UserID, g.ProjectID,
 				[]string{rk}, g.ID, "reconciliation_sweep", "target_only"); err != nil {
 				log.Printf("[DRIFT] upsert target_only failed user=%s project=%s role=%s: %v", g.UserID, g.ProjectID, rk, err)
 			} else if inserted {
@@ -89,7 +106,7 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 		// persistently-missing grant would pile a fresh duplicate outbox row every
 		// sweep tick. On a lookup error, log and proceed to re-enqueue rather than
 		// silently swallowing a real drift signal.
-		if queued, err := pendingOutboxAddExists(ctx, dg.UserID, dg.ProjectID, dg.RoleKey); err != nil {
+		if queued, err := pendingOutboxAddExists(ctx, target, dg.UserID, dg.ProjectID, dg.RoleKey); err != nil {
 			log.Printf("[DRIFT] pending outbox add lookup failed user=%s project=%s role=%s: %v", dg.UserID, dg.ProjectID, dg.RoleKey, err)
 		} else if queued {
 			continue
@@ -107,8 +124,8 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 		}
 	}
 
-	log.Printf("[DRIFT] Sweep complete: zitadel_grants=%d drift_created=%d re_enqueued=%d truncated=%v",
-		res.ZitadelGrants, res.DriftItemsCreated, res.ReEnqueued, res.Truncated)
+	log.Printf("[DRIFT] Sweep complete: target=%s zitadel_grants=%d drift_created=%d re_enqueued=%d truncated=%v",
+		res.Target, res.ZitadelGrants, res.DriftItemsCreated, res.ReEnqueued, res.Truncated)
 	return res, nil
 }
 

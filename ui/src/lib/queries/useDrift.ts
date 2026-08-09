@@ -25,6 +25,12 @@ export interface DriftTriageItem extends DriftItem {
   last_seen_at?: string | null;
   role_group?: string;
   role_in_catalogue: boolean;
+  /**
+   * False on a target with no role catalogue at all. `role_in_catalogue` is
+   * then meaningless rather than false — nothing was retired, because there was
+   * never a catalogue to retire it from. Always read the two together.
+   */
+  role_catalogue_applies: boolean;
   user_status?: string;
   user_is_service_account: boolean;
   other_items_for_user: number;

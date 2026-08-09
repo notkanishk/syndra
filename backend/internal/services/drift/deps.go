@@ -26,12 +26,12 @@ var (
 		return db.GetAllDirectGrants(ctx, false) // active grants only — expired grants are not expected in Zitadel
 	}
 	svcGetActiveMappingRules = db.GetActiveMappingRules
-	svcGetExclusions         = func(ctx context.Context) ([]models.ExternalGrantExclusion, error) {
-		return db.GetExclusions(ctx)
+	svcGetExclusions         = func(ctx context.Context, target string) ([]models.ExternalGrantExclusion, error) {
+		return db.GetExclusions(ctx, target)
 	}
-	upsertDriftItem        = db.UpsertDriftItem          // (ctx,user,project,roleKeys,grantID,source,type) (id,inserted,err)
-	pendingOutboxAddExists = db.PendingOutboxAddExists   // (ctx,user,project,role) (bool,err) — dedupes syndra_only replay
-	insertPending          = db.InsertPendingPropagation // re-enqueue path (syndra_only)
+	upsertDriftItem        = db.UpsertDriftItem          // (ctx,target,user,project,roleKeys,grantID,source,type) (id,inserted,err)
+	pendingOutboxAddExists = db.PendingOutboxAddExists   // (ctx,target,user,project,role) (bool,err) — dedupes syndra_only replay
+	insertPending          = db.InsertPendingPropagation // re-enqueue path (syndra_only) — Zitadel-shaped by construction
 
 	// Reachability + paginated grant listing. A nil MgmtClient means offline.
 	zitadelReachable     = func(ctx context.Context) bool { return zitadel.MgmtClient != nil }
