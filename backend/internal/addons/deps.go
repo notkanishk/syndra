@@ -16,6 +16,12 @@ var (
 	timeNow            = time.Now
 	fetchAddonManifest = httpFetchManifest
 
+	// refreshTimeout bounds ONE add-on's manifest read. Per target, never per
+	// pass: a shared budget means the first unreachable add-on spends it and
+	// every target behind it is cancelled before it is even asked, so one
+	// switched-off NAS would suppress the contract check on every other target.
+	refreshTimeout = 5 * time.Second
+
 	dbUpsertTarget               = db.UpsertTarget
 	dbDisableUnconfiguredTargets = db.DisableUnconfiguredTargets
 

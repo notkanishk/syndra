@@ -44,15 +44,39 @@ type Registration struct {
 	SigningKeyPath string
 }
 
-// mTLS reports whether this registration carries a complete client-certificate
-// pair. A half-configured pair is not a mode, it is a misconfiguration.
-func (r Registration) mTLS() bool { return r.ClientCertPath != "" && r.ClientKeyPath != "" }
+// mTLS reports whether this registration carries COMPLETE mutual-TLS material:
+// a client certificate, its key, and the private CA to verify the add-on with.
+//
+// The CA is not optional trimming. Omit it and the client verifies the add-on
+// against the system root store, which means an internal service on a private
+// CA would be authenticated by the public web PKI instead — the add-on's own
+// certificate would fail to verify, and any certificate a public CA issued
+// would pass. That is not weaker mutual TLS, it is a different and wrong trust
+// anchor, so an incomplete triple is not this mode.
+func (r Registration) mTLS() bool {
+	return r.ClientCertPath != "" && r.ClientKeyPath != "" && r.CAPath != ""
+}
+
+// partialMTLS reports material that was meant to be mutual TLS and is not
+// complete. Worth naming separately: it is the difference between "this
+// deployment chose signed requests" and "this deployment thinks it configured
+// mTLS", and only one of those should pass without a word.
+func (r Registration) partialMTLS() bool {
+	set := 0
+	for _, p := range []string{r.ClientCertPath, r.ClientKeyPath, r.CAPath} {
+		if p != "" {
+			set++
+		}
+	}
+	return set > 0 && set < 3
+}
 
 // signed reports whether this registration carries signing-key material.
 func (r Registration) signed() bool { return r.SigningKeyPath != "" }
 
 // AuthMode names how the backend authenticates to this add-on, for operator
-// surfaces and startup logging. mTLS wins when both are configured.
+// surfaces and startup logging. Complete mTLS wins; incomplete mTLS is not a
+// mode and never silently becomes one.
 func (r Registration) AuthMode() string {
 	switch {
 	case r.mTLS():
@@ -154,9 +178,18 @@ func Init(ctx context.Context) error {
 		// not register — and therefore gets no navigation entry promising an
 		// operator something that must never be called.
 		if r.AuthMode() == "none" {
-			log.Printf("[ADDON] %s configures neither %sCLIENT_CERT/%sCLIENT_KEY nor %sSIGNING_KEY; not registered",
-				target, prefix, prefix, prefix)
+			log.Printf("[ADDON] %s configures neither complete mTLS (%sCLIENT_CERT + %sCLIENT_KEY + %sCA_CERT) nor %sSIGNING_KEY; not registered",
+				target, prefix, prefix, prefix, prefix)
 			continue
+		}
+		// Incomplete mTLS material alongside a signing key is a working
+		// deployment, so it registers — but silently is the one way it must not
+		// happen. An operator who believes mutual TLS is on and is actually on
+		// signed requests has a wrong mental model of their own trust
+		// boundary, and nothing else in the system will ever tell them.
+		if r.partialMTLS() {
+			log.Printf("[ADDON] WARNING: %s has incomplete mTLS material (cert=%t key=%t ca=%t); proceeding with auth=%s",
+				target, r.ClientCertPath != "", r.ClientKeyPath != "", r.CAPath != "", r.AuthMode())
 		}
 		fresh[target] = &Addon{Registration: r}
 		log.Printf("[ADDON] Registered target=%s base=%s auth=%s", target, r.BaseURL, r.AuthMode())
@@ -284,19 +317,32 @@ func Refresh(ctx context.Context, target string) error {
 // RefreshAll refreshes every registered add-on and returns nil regardless of
 // individual failures.
 //
+// Concurrent, each under its own RefreshTimeout. Add-ons share nothing but the
+// registry lock, and refreshing them in sequence would make startup cost scale
+// with how many targets a deployment has rather than with how slow the slowest
+// one is.
+//
 // It never reports an error upward, and that is the fail-open posture rather
 // than laziness: one unreachable NAS must not mark the refresh pass failed and
 // pull an operator's attention away from the targets that ARE answering. Each
 // failure is logged and recorded on its own add-on, where the health surface
 // reads it. Shaped for periodic.Runner, which runs it once at startup and then
 // on each tick — without a refresh, a registered add-on stays permanently
-// uncallable, so this loop is what turns registration into capability.
+// uncallable, so this is what turns registration into capability.
 func RefreshAll(ctx context.Context) error {
+	var wg sync.WaitGroup
 	for _, r := range Registered() {
-		if err := Refresh(ctx, r.Target); err != nil {
-			log.Printf("[ADDON] refresh %s: %v", r.Target, err)
-		}
+		wg.Add(1)
+		go func(target string) {
+			defer wg.Done()
+			c, cancel := context.WithTimeout(ctx, refreshTimeout)
+			defer cancel()
+			if err := Refresh(c, target); err != nil {
+				log.Printf("[ADDON] refresh %s: %v", target, err)
+			}
+		}(r.Target)
 	}
+	wg.Wait()
 	return nil
 }
 

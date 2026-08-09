@@ -110,6 +110,7 @@ func registerTrueNAS(t *testing.T) *fakeTargetRegistry {
 		"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090/",
 		"ADDON_TRUENAS_CLIENT_CERT": "/run/secrets/c.crt",
 		"ADDON_TRUENAS_CLIENT_KEY":  "/run/secrets/c.key",
+		"ADDON_TRUENAS_CA_CERT":     "/run/secrets/ca.crt",
 	})
 	f := &fakeTargetRegistry{}
 	withTargetRegistry(t, f)
@@ -403,6 +404,7 @@ func TestMTLSWinsWhenBothModesAreConfigured(t *testing.T) {
 		"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090",
 		"ADDON_TRUENAS_CLIENT_CERT": "/run/secrets/c.crt",
 		"ADDON_TRUENAS_CLIENT_KEY":  "/run/secrets/c.key",
+		"ADDON_TRUENAS_CA_CERT":     "/run/secrets/ca.crt",
 		"ADDON_TRUENAS_SIGNING_KEY": "/run/secrets/s.key",
 	})
 	withTargetRegistry(t, &fakeTargetRegistry{})
@@ -429,6 +431,12 @@ func TestNoTransportAuthMeansNoRegistration(t *testing.T) {
 			"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090",
 			"ADDON_TRUENAS_CLIENT_CERT": "/run/secrets/c.crt",
 		},
+		"a certificate pair with no private CA": {
+			"ADDON_TARGETS":             "truenas",
+			"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090",
+			"ADDON_TRUENAS_CLIENT_CERT": "/run/secrets/c.crt",
+			"ADDON_TRUENAS_CLIENT_KEY":  "/run/secrets/c.key",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			resetRegistry(t)
@@ -445,5 +453,111 @@ func TestNoTransportAuthMeansNoRegistration(t *testing.T) {
 				t.Errorf("an unregistered target must not be activated in the database, upserted=%v", f.upserted)
 			}
 		})
+	}
+}
+
+// mTLS means a client certificate, its key, AND the private CA the add-on is
+// verified against. Without the CA the client falls back to the system root
+// store, so an internal service on a private CA would be authenticated by the
+// public web PKI — a different and wrong trust anchor, not a weaker version of
+// the right one. An incomplete triple must never be reported as mtls.
+func TestIncompleteMTLSIsNotMTLS(t *testing.T) {
+	cases := map[string]Registration{
+		"no CA":          {ClientCertPath: "c", ClientKeyPath: "k"},
+		"no client key":  {ClientCertPath: "c", CAPath: "ca"},
+		"no client cert": {ClientKeyPath: "k", CAPath: "ca"},
+	}
+	for name, r := range cases {
+		if r.AuthMode() == "mtls" {
+			t.Errorf("%s: incomplete material reported as mtls", name)
+		}
+	}
+	full := Registration{ClientCertPath: "c", ClientKeyPath: "k", CAPath: "ca"}
+	if full.AuthMode() != "mtls" {
+		t.Errorf("a complete triple must be mtls, got %q", full.AuthMode())
+	}
+}
+
+// Incomplete mTLS material alongside a signing key is a working deployment, so
+// it registers on the signing key — but an operator who believes mutual TLS is
+// on and is actually on signed requests has a wrong model of their own trust
+// boundary, so the downgrade is never silent.
+func TestPartialMTLSFallsBackToSignedAndIsFlagged(t *testing.T) {
+	r := Registration{ClientCertPath: "c", ClientKeyPath: "k", SigningKeyPath: "s"}
+	if r.AuthMode() != "signed" {
+		t.Errorf("incomplete mTLS with a signing key must resolve to signed, got %q", r.AuthMode())
+	}
+	if !r.partialMTLS() {
+		t.Error("the incomplete mTLS material must be detectable, or the downgrade is silent")
+	}
+	if (Registration{SigningKeyPath: "s"}).partialMTLS() {
+		t.Error("a deployment that chose signed requests has nothing incomplete to report")
+	}
+}
+
+// The refresh budget is per target, not per pass. A shared one means the first
+// unreachable add-on spends it and every target behind it is cancelled before
+// it is even asked — so one switched-off NAS would suppress the contract check
+// on every other target at startup, which is the check's whole purpose.
+func TestRefreshAllBoundsEachTargetSeparately(t *testing.T) {
+	resetRegistry(t)
+	// The names are ordered on purpose. Registered() sorts, so "aslow" is
+	// refreshed first: under a shared budget it drains the whole thing and
+	// "zfast" is cancelled unasked. Reverse the names and a sequential
+	// implementation passes this test by luck, which is worse than no test.
+	withEnv(t, map[string]string{
+		"ADDON_TARGETS":           "aslow,zfast",
+		"ADDON_ASLOW_BASE_URL":    "http://slow:8090",
+		"ADDON_ASLOW_SIGNING_KEY": "/run/secrets/s.key",
+		"ADDON_ZFAST_BASE_URL":    "http://fast:8090",
+		"ADDON_ZFAST_SIGNING_KEY": "/run/secrets/s.key",
+	})
+	withTargetRegistry(t, &fakeTargetRegistry{})
+	withClock(t, time.Unix(1770000000, 0))
+	if err := Init(context.Background()); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	// slowtarget hangs until its own context expires; fasttarget answers at
+	// once. Under a shared budget the slow one drains it and the fast one is
+	// cancelled unasked.
+	savedTimeout := refreshTimeout
+	refreshTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { refreshTimeout = savedTimeout })
+
+	saved := fetchAddonManifest
+	t.Cleanup(func() { fetchAddonManifest = saved })
+	fetchAddonManifest = func(ctx context.Context, r Registration) (Manifest, error) {
+		if r.Target == "aslow" {
+			<-ctx.Done()
+			return Manifest{}, ctx.Err()
+		}
+		// Respects its context, as any real HTTP call does: a request issued on
+		// an already-expired context fails without reaching the wire. Without
+		// this the fake would succeed on a dead context and a shared-budget
+		// implementation would pass by accident.
+		if err := ctx.Err(); err != nil {
+			return Manifest{}, err
+		}
+		return goodManifest(), nil
+	}
+
+	done := make(chan struct{})
+	go func() {
+		_ = RefreshAll(context.Background())
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("RefreshAll did not return; targets are not bounded independently")
+	}
+
+	if _, err := ResolveOperation("zfast", "health.get"); err != nil {
+		t.Errorf("the reachable target must still be refreshed alongside an unreachable one: %v", err)
+	}
+	slow, _ := Get("aslow")
+	if slow.LastError() == nil {
+		t.Error("the unreachable target must record its own failure")
 	}
 }
