@@ -6,6 +6,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -205,7 +206,7 @@ func TestAPlanRefusesToPersistWhatCannotBeApproved(t *testing.T) {
 			CreatedBy: "operator-1",
 			Lifetime:  15 * time.Minute,
 			Subjects: []NewPlanSubject{
-				{SubjectID: "u1", Fingerprint: "sha256:aaa", Outcome: PlanOutcome{Effect: "apply"}},
+				{SubjectID: "u1", Fingerprint: "sha256:aaa", Outcome: PlanOutcome{Effect: PlanEffectApply}},
 			},
 		}
 	}
@@ -254,36 +255,114 @@ func TestAPlanRefusesToPersistWhatCannotBeApproved(t *testing.T) {
 	}
 }
 
-// 2.21, 2.22 — the plan store holds no secret, and not because its writers are
-// careful. `outcome_json` is JSONB and would take anything, so the guarantee
-// has to be that no caller holds a route to it: every field the plan types
-// expose is a string the backend decided, and none is a map, an interface, or
-// anything else a submitted parameter set could be assigned to.
+// 2.21, 2.22 — no field of a plan outcome accepts a value the backend did not
+// choose. A closed struct of free strings was not that guarantee: a submitted
+// password IS a string, so `Detail` and `Consequence` were a route into
+// `outcome_json` however carefully their first writer avoided it, and no
+// character class separates a password from a role name.
 //
-// The realistic mistake is not malice. It is an apply that already holds
-// `params` in hand adding one field so the plan can "show what will be sent".
-func TestPlanTypesHoldNoFieldASubmittedValueCouldReach(t *testing.T) {
-	outcome := reflect.TypeOf(PlanOutcome{})
-	for _, typ := range []reflect.Type{outcome, reflect.TypeOf(NewPlanSubject{}), reflect.TypeOf(PlanSubject{})} {
-		for i := range typ.NumField() {
-			f := typ.Field(i)
-			if f.Type == outcome {
-				continue // checked on its own account
+// So the test is a sentinel, applied to every field in turn by reflection. A
+// field added later without a check fails here rather than quietly becoming the
+// next route — including a `string` one, which is the case this guard used to
+// wave through.
+func TestNoFieldOfAPlanOutcomeAcceptsAValueTheBackendDidNotChoose(t *testing.T) {
+	const sentinel = "correct-horse-battery-staple"
+
+	valid := PlanOutcome{Effect: PlanEffectApply, GrantIDs: []string{sampleUUID}}
+	if err := valid.validate(); err != nil {
+		t.Fatalf("the baseline outcome is invalid (%v) — every probe below would pass without proving anything", err)
+	}
+
+	typ := reflect.TypeOf(valid)
+	for i := range typ.NumField() {
+		f := typ.Field(i)
+		probe := valid
+		field := reflect.ValueOf(&probe).Elem().Field(i)
+
+		switch {
+		case f.Type.Kind() == reflect.String:
+			field.SetString(sentinel)
+		case f.Type.Kind() == reflect.Slice && f.Type.Elem().Kind() == reflect.String:
+			field.Set(reflect.ValueOf([]string{sentinel}))
+		default:
+			t.Errorf("PlanOutcome.%s is a %s: this guard cannot probe it, and JSONB will store whatever it holds",
+				f.Name, f.Type.Kind())
+			continue
+		}
+
+		if err := probe.validate(); !errors.Is(err, ErrInvalidPlan) {
+			t.Errorf("PlanOutcome.%s accepted a submitted value (%v) — a secret written there would be marshalled into outcome_json",
+				f.Name, err)
+		}
+		if err := probe.validate(); err != nil && strings.Contains(err.Error(), sentinel) {
+			t.Errorf("the refusal for PlanOutcome.%s echoed the value it refused: %v", f.Name, err)
+		}
+	}
+}
+
+// 2.21 — and the refusal happens before any database contact. `PG` is nil in
+// this package's tests, so a CreatePlan that validated after opening its
+// transaction would panic here rather than fail: the assertion is the ordering,
+// not just the error.
+func TestCreatePlanRefusesASubmittedValueBeforeItTouchesTheDatabase(t *testing.T) {
+	const sentinel = "correct-horse-battery-staple"
+
+	base := func() NewPlan {
+		return NewPlan{
+			Target: "truenas", Surface: "grants.bulk", CreatedBy: "operator-1", Lifetime: time.Minute,
+			Subjects: []NewPlanSubject{{SubjectID: "u1", Fingerprint: "sha256:aaa", Outcome: PlanOutcome{Effect: PlanEffectApply}}},
+		}
+	}
+	smuggle := map[string]func(*NewPlan){
+		"as the effect":     func(p *NewPlan) { p.Subjects[0].Outcome.Effect = sentinel },
+		"as a grant id":     func(p *NewPlan) { p.Subjects[0].Outcome.GrantIDs = []string{sentinel} },
+		"as a snapshot ref": func(p *NewPlan) { p.Subjects[0].SnapshotID = sentinel },
+	}
+	for name, mutate := range smuggle {
+		t.Run(name, func(t *testing.T) {
+			p := base()
+			mutate(&p)
+			_, err := CreatePlan(context.Background(), p)
+			if !errors.Is(err, ErrInvalidPlan) {
+				t.Fatalf("CreatePlan = %v, want ErrInvalidPlan", err)
 			}
-			switch f.Type.Kind() {
-			case reflect.String, reflect.Bool:
-			case reflect.Pointer:
-				if f.Type.Elem().Kind() != reflect.String {
-					t.Errorf("%s.%s is a pointer to %s", typ.Name(), f.Name, f.Type.Elem().Kind())
-				}
-			case reflect.Slice:
-				if f.Type.Elem().Kind() != reflect.String {
-					t.Errorf("%s.%s is a slice of %s", typ.Name(), f.Name, f.Type.Elem().Kind())
-				}
-			default:
-				t.Errorf("%s.%s is a %s — an open-ended field on a durable plan row is where a declared secret arrives, "+
-					"and the column it lands in is JSONB, which will accept it", typ.Name(), f.Name, f.Type.Kind())
+			if strings.Contains(err.Error(), sentinel) {
+				t.Errorf("the refusal echoed the value it refused: %v", err)
 			}
+		})
+	}
+}
+
+// 2.21 — the sentences a rehearsal shows are rendered, not recorded. Persisting
+// them would put backend-composed free text on a durable row for no benefit the
+// snapshot does not already give, and free text is the shape a secret fits.
+func TestAPlanRecordsTheDecisionAndNotItsRendering(t *testing.T) {
+	typ := reflect.TypeOf(PlanOutcome{})
+	for _, prose := range []string{"Detail", "Consequence", "Name", "Email", "Message", "Summary"} {
+		if _, ok := typ.FieldByName(prose); ok {
+			t.Errorf("PlanOutcome.%s is a rendering: it belongs to the read that displays a plan, not to the row that authorises one", prose)
+		}
+	}
+}
+
+// 2.17 — the plan's effect vocabulary and the rehearsal's are one vocabulary.
+// They cannot be one constant: internal/services imports this package.
+func TestPlanEffectsMatchTheRehearsalVocabulary(t *testing.T) {
+	src, err := os.ReadFile("../services/bulk.go")
+	if err != nil {
+		t.Fatalf("read bulk.go: %v", err)
+	}
+	for _, effect := range PlanEffects {
+		if !regexp.MustCompile(`Effect\w+\s*=\s*"` + effect + `"`).MatchString(string(src)) {
+			t.Errorf("a plan may record effect %q, which the rehearsal never produces", effect)
+		}
+	}
+	// A plan states what will happen. What became of it belongs to the outbox
+	// row: recording `applied` on an approval would make the approval claim an
+	// outcome it cannot know.
+	for _, after := range []string{"applied", "failed", "queued", "succeeded"} {
+		if slices.Contains(PlanEffects, after) {
+			t.Errorf("%q is what became of a plan, not what it approved", after)
 		}
 	}
 }

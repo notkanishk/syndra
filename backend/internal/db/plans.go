@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -41,24 +42,63 @@ var (
 	ErrInvalidPlan   = errors.New("db: invalid plan")
 )
 
-// PlanOutcome is what the operator was shown for one subject, in the shape the
-// existing rehearsal surfaces already speak.
+// Effects a rehearsal may record for a subject. Three, because a plan states
+// what WILL happen; `applied`, `failed`, and `queued` are what became of it and
+// belong to the outbox row, not to the approval.
 //
-// The type is the secret exclusion. `outcome_json` is JSONB and would accept
-// anything, so the guarantee cannot be "we agree not to write parameters
-// there": it is that no caller holds a route to. Every field here is a string
-// or a list of them, decided by the backend — there is no map, no `any`, and
-// nothing a submitted parameter set could be assigned to. A declared secret
-// rides the apply request and is discarded with it (design §5).
+// Duplicated from internal/services rather than imported — that package imports
+// this one — and held to the same vocabulary by a coherence guard.
+const (
+	PlanEffectApply    = "apply"
+	PlanEffectNoChange = "no_change"
+	PlanEffectBlocked  = "blocked"
+)
+
+// PlanEffects is the closed set a plan row's effect may take.
+var PlanEffects = []string{PlanEffectApply, PlanEffectNoChange, PlanEffectBlocked}
+
+// PlanOutcome is the decision recorded for one subject: what will be done, and
+// to which identified rows.
 //
-// Deliberately absent: name and email. They are read from the directory when a
-// plan is rendered. Persisting them would make the plan a second, stale copy of
-// a profile, and a plan is a record of intent, not of people.
+// It is not what the operator was SHOWN. The sentences a rehearsal displays —
+// "Gains this role", "Keeps the role via the Safety bundle" — are rendered from
+// the snapshot at read time and are not stored, for the same reason name and
+// email are not stored: a rendering persisted beside the thing it renders is a
+// second copy free to go stale, and the plan's authority is its fingerprint and
+// its snapshot, never its prose.
+//
+// That deletion is also the secret exclusion, and the earlier version of this
+// type got it wrong. `outcome_json` is JSONB and will take anything, so a
+// closed struct is not enough when its fields are free strings: a submitted
+// password IS a string, and `Detail: fmt.Sprintf(...)` is a route to the column
+// however carefully the first writer avoids it. No character class separates a
+// password from a role name either. What separates them is membership in a set
+// the backend owns: `Effect` is one of three constants and `GrantIDs` are
+// identifiers this database allocated, both refused at the write if they are
+// anything else. There is no field here a caller can put an arbitrary value in
+// (design §5).
 type PlanOutcome struct {
-	Effect      string   `json:"effect"`
-	Detail      string   `json:"detail"`
-	Consequence string   `json:"consequence,omitempty"`
-	GrantIDs    []string `json:"grant_ids,omitempty"`
+	Effect   string   `json:"effect"`
+	GrantIDs []string `json:"grant_ids,omitempty"`
+}
+
+func (o PlanOutcome) validate() error {
+	if !slices.Contains(PlanEffects, o.Effect) {
+		// The vocabulary, never the value: a rejected effect is by definition
+		// not one of three known constants, which makes it the likeliest thing
+		// here to be something that should never be written down.
+		return fmt.Errorf("%w: effect must be one of %v", ErrInvalidPlan, PlanEffects)
+	}
+	for i, id := range o.GrantIDs {
+		if !looksLikeUUID(id) {
+			// The position, never the value. A value failing this check is by
+			// definition not an identifier this database allocated, which makes
+			// it the likeliest thing in the struct to be a misplaced secret —
+			// and an error string is logged, returned, and traced.
+			return fmt.Errorf("%w: grant_ids[%d] is not an identifier this database allocated", ErrInvalidPlan, i)
+		}
+	}
+	return nil
 }
 
 // Plan is one approval.
@@ -167,6 +207,9 @@ func (p NewPlan) validate() error {
 			return fmt.Errorf("%w: subject %s has no fingerprint, and a row that cannot be verified verifies vacuously", ErrInvalidPlan, s.SubjectID)
 		case s.SnapshotID != "" && !looksLikeUUID(s.SnapshotID):
 			return fmt.Errorf("%w: subject %s cites a malformed snapshot id", ErrInvalidPlan, s.SubjectID)
+		}
+		if err := s.Outcome.validate(); err != nil {
+			return fmt.Errorf("%w (subject %s)", err, s.SubjectID)
 		}
 		if _, dup := seen[s.SubjectID]; dup {
 			return fmt.Errorf("%w: subject %s appears twice", ErrInvalidPlan, s.SubjectID)

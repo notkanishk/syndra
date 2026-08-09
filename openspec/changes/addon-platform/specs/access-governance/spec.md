@@ -14,6 +14,8 @@ A plan MUST be spent by at most one apply, and the transition that spends it MUS
 
 A plan MUST be citable only by the operator who approved it, and only on the surface and target it was issued for. An approval is a person's judgement about a specific diff on a specific screen, and an identifier read out of a log or a screenshot is not that judgement.
 
+A persisted plan row MUST record the decision and MUST NOT record its rendering. Every value it stores MUST be either a member of a closed vocabulary the backend owns or an identifier the backend allocated, and MUST be refused at the write if it is neither. Free text is not sufficient protection against a declared secret reaching durable storage: a submitted secret is itself a string, so a struct of free-text fields is a route to the column however carefully its first writer avoids it, and no character class distinguishes a password from a role name. The sentences a rehearsal displays MUST be rendered from the recorded decision when a plan is read, not stored beside it.
+
 Every per-subject row MUST record a fingerprint, and a plan MUST NOT be persisted with a row that has none. Verification compares a recorded fingerprint against a live read, so an absent recorded value would match an absent live one and the subject would pass verification precisely when the target could not be read.
 
 #### Scenario: An approval is spent once
@@ -27,6 +29,12 @@ Every per-subject row MUST record a fingerprint, and a plan MUST NOT be persiste
 - **WHEN** an admin cites a plan identifier approved by a different operator, or cites a plan on a surface or target other than the one it was issued for
 - **THEN** the backend MUST reject the apply
 - **AND** the refusal MUST distinguish "this is not your approval" from "this approval has expired", because they are different operator actions
+
+#### Scenario: A plan row cannot hold a submitted value
+
+- **WHEN** any value on a per-subject plan row is neither a member of the backend's closed vocabulary nor an identifier the backend allocated
+- **THEN** the backend MUST refuse to persist the plan before contacting the database
+- **AND** the refusal MUST NOT echo the rejected value, which is the likeliest thing on the row to be a misplaced secret
 
 #### Scenario: A plan cannot record an unverifiable subject
 
