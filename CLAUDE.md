@@ -15,7 +15,8 @@ Identity & Access Management orchestration layer for an academic makerspace. Com
 
 - **Backend:** Go, PostgreSQL, Redis (`backend/`)
 - **Frontend:** Next.js with Bun runtime (`ui/`)
-- **Sync Service:** Go, go-ldap/v3, separate container (`sync/`)
+- **Sync Service:** Go, go-ldap/v3, separate container (`sync/`) — **superseded** by `addons/`, deleted in `addon-platform` group 11
+- **Add-ons:** target adapters in their own containers, internal network only (`addons/truenas`)
 - **Deployment:** Docker Compose in Proxmox LXC
 
 ## Build & Test
@@ -24,6 +25,7 @@ Identity & Access Management orchestration layer for an academic makerspace. Com
 cd backend && go test ./... && go vet ./...
 cd ui && bun run test && bun run lint && bun run build
 cd sync && go test ./... && go vet ./...
+cd addons/truenas && go test ./... && go vet ./...
 ```
 
 ## Key Conventions

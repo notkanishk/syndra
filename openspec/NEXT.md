@@ -143,46 +143,47 @@ Everything else is healthy: index tracks HEAD, embeddings are local-semantic (`X
 
 ## 4a. Add-on platform — what is built and what is not
 
-The change `addon-platform` is 88 of 226 tasks done. The backend's IAM half is
-complete and green; the target half does not exist yet. Read this before
-picking any of it up, because the order is load-bearing.
+The change `addon-platform` is 138 of 226 tasks done, with 10 more partial. The
+backend's IAM half, the TrueNAS add-on, and the dispatcher joining them are all
+built and green. What is missing is mostly surfaces.
 
 **Done and committed.** The target dimension and its schema (§1.1–1.17), drain
 ordering with revocation priority and stale-version rejection (§1.20–1.27), the
 add-on registry, transport, policy, redaction, dispatch protocol and plan store
 (§2.1–2.22, 2.32–2.50), plan-then-apply as a backend guarantee on all four
-Zitadel surfaces including the UI (§3), role-to-target mappings with versioning
-and rollback (§7.1–7.5, 7.7, 7.8), and allowances with the subtractive resolver,
-the bounded-denial rule, the expiry sweep and the review-date surface
-(§8.1–8.10, 8.13, 8.14).
+Zitadel surfaces including the UI (§3), the **whole TrueNAS add-on** —
+transport, read path, stores, tamper-evident mutation log, lifecycle states,
+entitlement plane, username derivation and binding, and the five operations
+(§4, §5, §6 bar four tasks) — role-to-target mappings with versioning, rollback
+and a CRUD surface (§7.1–7.5, 7.7, 7.8), allowances end to end (§8.1–8.10, 8.13,
+8.14), and the add-on entitlement dispatcher that connects the backend to it.
 
 **Not built, in the order it has to happen:**
 
-1. **The TrueNAS add-on module (§4, §5, §6 — 56 tasks).** Nothing in the platform
-   reaches a target until this exists. `github.com/truenas/api_client_golang`
-   resolves at `v0.0.0-20250820184128-fc6edc0b6ebe` (untagged, so a pseudo-version)
-   and `go.etcd.io/bbolt` is available, so neither dependency blocks a start.
-2. **The add-on entitlement dispatcher.** Three placeholders wait on it and each
-   is marked in the source: the drain claims add-on rows nowhere (§1.10's Zitadel
-   pass is the only dispatcher), `expiry.SweepAllowances` re-converges by
-   resolving rather than enqueueing, and `addonsResolvesValue` in
-   `handlers/deps.go` accepts every mapping value because no add-on can answer
-   whether one resolves.
-3. **The lifecycle trigger and mapping plans (§7.9–7.12).** The reads exist —
-   `db.TargetsMappedToRole` and `db.MappingHolders` — and nothing calls them.
-4. **Provisional plans (§2.23–2.31).** The schema is in (`plans.provisional`,
-   `state_read_at`, and the lifetime CHECK that binds them); the code that issues
-   and resolves one is not.
-5. **Operator and member surfaces (§9, §10 — 37 tasks).** Including the
+1. **The lifecycle trigger (§7.9–7.12).** A grant change should look up the
+   targets that role is mapped to and enqueue an entitlement apply. Both reads
+   exist and nothing calls them — `db.TargetsMappedToRole` and
+   `db.MappingHolders`. It needs one design decision first: an add-on outbox row
+   cites a plan subject, and a cascade-triggered convergence has no operator
+   plan behind it, so either the trigger mints an implicit one or the citation
+   becomes optional for cascade-sourced rows.
+2. **Operator and member surfaces (§9, §10 — 37 tasks).** Including the
    unconfirmed-revocation surface, which is what §2.51's retry-budget escalation
-   has nowhere to escalate to.
-6. **Retiring LLDAP (§11) and the doc refresh (§12).** Deliberately last: the
+   has nowhere to escalate to, and the allowance authoring and carve-out
+   rendering §8.11–8.12's lineage band needs.
+3. **Provisional plans (§2.23–2.31).** The schema is in (`plans.provisional`,
+   `state_read_at`, and the CHECK binding them); the code that issues and
+   resolves one is not.
+4. **Retiring LLDAP (§11) and the doc refresh (§12).** Deliberately last: the
    vault reduction inside §11 is the point of no return.
 
-Two smaller gaps with no home yet: drift scoped to bound subjects and the
-unmanaged-account inventory (§1.18–1.19) need target account bindings, which
-arrive with §6.11; and the two snapshot read paths (§1.22–1.23) need something
-that dispatches a snapshot.
+Smaller gaps with no home yet: drift scoped to bound subjects and the
+unmanaged-account inventory (§1.18–1.19, and 6.8's adoption action with them);
+the periodic reconcile that resolves current state rather than replaying a
+snapshot (§1.22–1.23's other half); `/operations/{name}` deduplication on the
+add-on (§5.12 covers `/apply` only); and the add-on value oracle that would let
+mapping validation check a value resolves rather than accepting every one
+(`addonsResolvesValue` in `handlers/deps.go`).
 
 ## 4b. Test infrastructure debt
 
