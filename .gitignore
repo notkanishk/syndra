@@ -73,3 +73,6 @@ DEPLOY.local.md
 # Design-tool exports. Large binaries that belong in the design handoff, not
 # in git history.
 *.zip
+
+# Built add-on binaries.
+addons/*/truenas
