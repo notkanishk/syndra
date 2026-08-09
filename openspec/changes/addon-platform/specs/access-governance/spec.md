@@ -10,6 +10,29 @@ The fingerprint MUST cover the object the operator reviewed, not only the subjec
 
 The sole exemption is an operation scoped to `member` acting on the acting subject alone, which has no cohort and no diff to review and MUST be dispatched synchronously.
 
+A plan MUST be spent by at most one apply, and the transition that spends it MUST be the apply's authority rather than a check the caller performs. A lifetime bounds how long a plan may be cited but not how many times it may be cited, and while a first apply's rows are still waiting in the outbox the target has not moved, so fingerprint verification would not catch the repeat.
+
+A plan MUST be citable only by the operator who approved it, and only on the surface and target it was issued for. An approval is a person's judgement about a specific diff on a specific screen, and an identifier read out of a log or a screenshot is not that judgement.
+
+Every per-subject row MUST record a fingerprint, and a plan MUST NOT be persisted with a row that has none. Verification compares a recorded fingerprint against a live read, so an absent recorded value would match an absent live one and the subject would pass verification precisely when the target could not be read.
+
+#### Scenario: An approval is spent once
+
+- **WHEN** an apply cites a plan identifier that has already been applied
+- **THEN** the backend MUST reject it and MUST NOT enqueue or dispatch anything a second time
+- **AND** two applies citing one identifier concurrently MUST result in exactly one of them proceeding
+
+#### Scenario: An approval belongs to the operator who gave it
+
+- **WHEN** an admin cites a plan identifier approved by a different operator, or cites a plan on a surface or target other than the one it was issued for
+- **THEN** the backend MUST reject the apply
+- **AND** the refusal MUST distinguish "this is not your approval" from "this approval has expired", because they are different operator actions
+
+#### Scenario: A plan cannot record an unverifiable subject
+
+- **WHEN** a rehearsal would persist a subject row without a fingerprint of the state it reviewed
+- **THEN** the backend MUST refuse to persist the plan rather than store a row that verifies vacuously
+
 #### Scenario: Apply cites the plan the operator reviewed
 
 - **WHEN** an operator rehearses a bulk or drift-triage action and then applies it

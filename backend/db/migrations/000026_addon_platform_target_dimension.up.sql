@@ -196,6 +196,14 @@ CREATE TABLE IF NOT EXISTS plans (
     expires_at    TIMESTAMPTZ,
     provisional   BOOLEAN NOT NULL DEFAULT FALSE,
     state_read_at TIMESTAMPTZ,
+    -- An approval is spent once. Expiry alone bounds how long a plan may be
+    -- cited but not how MANY times: without this column an operator — or anyone
+    -- who read the id out of a log — could cite one reviewed diff repeatedly
+    -- and enqueue it again, and the fingerprint check would not notice, because
+    -- while the first apply's rows are still waiting in the outbox the target
+    -- has not moved yet. Set by a conditional UPDATE that is the apply's
+    -- authority, not by the applier's good behaviour.
+    applied_at    TIMESTAMPTZ,
     -- A confirmed plan MUST carry a lifetime; a provisional one MUST NOT.
     -- The ordinary lifetime bounds how long a *verified* plan may sit unexecuted,
     -- and applying it to a provisional plan would silently discard an approved
