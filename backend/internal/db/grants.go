@@ -315,14 +315,13 @@ var ErrGrantRenewed = errors.New("direct grant is no longer expired")
 // Returns the project and role read back from the deleted row, so every
 // downstream side effect names what actually went away rather than what the
 // sweep's snapshot said would.
-func DeleteExpiredDirectGrantAndEnqueue(ctx context.Context, actor, userID, grantID string,
+// It runs on the caller's transaction rather than opening its own, because the
+// delta it is handed was computed under that transaction's subject lock. Taking
+// the lock only around this write would serialise the writes and leave every
+// computation racing — the appearance of a fix over the failure it exists to
+// prevent.
+func DeleteExpiredDirectGrantAndEnqueueTx(ctx context.Context, tx pgx.Tx, actor, userID, grantID string,
 	params []EnqueueParams) (projectID, roleKey string, outboxIDs []string, err error) {
-	tx, err := PG.Begin(ctx)
-	if err != nil {
-		return "", "", nil, fmt.Errorf("begin expire grant tx: %w", err)
-	}
-	defer tx.Rollback(ctx) // no-op after a successful Commit
-
 	const deleteGrant = `
 		DELETE FROM direct_role_grants
 		WHERE id = $1 AND user_id = $2
@@ -331,7 +330,16 @@ func DeleteExpiredDirectGrantAndEnqueue(ctx context.Context, actor, userID, gran
 		RETURNING zitadel_project_id, zitadel_role_key`
 	if err := tx.QueryRow(ctx, deleteGrant, grantID, userID).Scan(&projectID, &roleKey); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return "", "", nil, ErrGrantRenewed
+			// Two different things produce no row here, and they are not the
+			// same news. The predicate that failed may have been the expiry one
+			// — the grant is alive again, which is normal and calls for nothing
+			// — or the row may simply not be there, which means something
+			// removed a grant this sweep was mid-way through expiring.
+			//
+			// The DELETE stays the authority; this read only explains its
+			// refusal, on the same transaction so the answer is about the same
+			// row the predicate just rejected.
+			return "", "", nil, explainExpiryRefusal(ctx, tx, userID, grantID)
 		}
 		return "", "", nil, fmt.Errorf("delete expired direct grant %s: %w", grantID, err)
 	}
@@ -343,11 +351,35 @@ func DeleteExpiredDirectGrantAndEnqueue(ctx context.Context, actor, userID, gran
 	if err != nil {
 		return "", "", nil, err
 	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return "", "", nil, fmt.Errorf("commit expire grant tx: %w", err)
-	}
 	return projectID, roleKey, ids, nil
+}
+
+// rowQuerier is the one method explainExpiryRefusal needs. Narrowed from pgx.Tx
+// so the verdict can be exercised against a fake row: which of two errors this
+// returns is the whole point of the function, and a source-level assertion that
+// both appear somewhere in it cannot tell them apart when they are swapped.
+type rowQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// explainExpiryRefusal names which predicate the delete failed on. A failure to
+// find out is reported as such rather than guessed at: reporting a renewal
+// Syndra did not observe would tell an operator that everything is fine.
+//
+// Scoped to the same (id, user) pair the delete used. Asking by id alone would
+// answer about a row belonging to somebody else and call it a renewal.
+func explainExpiryRefusal(ctx context.Context, q rowQuerier, userID, grantID string) error {
+	var exists bool
+	if err := q.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM direct_role_grants WHERE id = $1 AND user_id = $2)`,
+		grantID, userID).Scan(&exists); err != nil {
+		return fmt.Errorf("explain expiry refusal for %s: %w", grantID, err)
+	}
+	if exists {
+		// The row is there, so the predicate it failed was the expiry one.
+		return ErrGrantRenewed
+	}
+	return ErrGrantNotFound
 }
 
 // ErrGrantNotFound is returned when the (user, grant) pair names no row. The

@@ -82,6 +82,13 @@ func enqueueTx(ctx context.Context, p EnqueueParams, key string) (EnqueueResult,
 // ApproveRequestAndEnqueue, which also resolves the access request — can share
 // one transaction with the enqueue rather than splitting it across two.
 func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) (string, error) {
+	// The second of the two enqueue chokepoints. See enqueueCascadeRows: a
+	// writer that computed its delta under this lock is only protected while
+	// every other writer has to wait for it.
+	if err := LockSubjectAccessTx(ctx, tx, p.UserID); err != nil {
+		return "", err
+	}
+
 	source := p.Source
 	if source == "" {
 		source = "direct"

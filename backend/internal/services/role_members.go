@@ -1,6 +1,8 @@
 package services
 
 import (
+	"github.com/jackc/pgx/v5"
+
 	"context"
 	"sort"
 	"strings"
@@ -322,46 +324,65 @@ type ExpiredGrantRevocation struct {
 // find nothing to revoke. The one fact that distinguishes the two states is the
 // grant being expired, and that fact is the input, not something to rediscover.
 func ExpireDirectGrant(ctx context.Context, userID, grantID, projectID, role, actor string) (ExpiredGrantRevocation, error) {
-	rules, err := svcGetActiveMappingRules(ctx)
+	var out ExpiredGrantRevocation
+
+	// The lock is taken before the reads, not around the write. A delta is a
+	// statement about a world, and the window that matters runs from the read
+	// that observed that world to the commit that acts on it — a bundle
+	// assignment landing in the middle makes the revoke a statement about a
+	// world that no longer exists, and the add it queued lands first, so the
+	// subject ends up without access they are currently owed.
+	//
+	// The reads deliberately stay on the pool rather than on this transaction.
+	// What they need is not to see this transaction's own writes — there are
+	// none yet — but for nothing that could invalidate them to be able to
+	// commit while they run, and every enqueue must take this same lock.
+	err := svcInTxLockingSubject(ctx, userID, func(tx pgx.Tx) error {
+		rules, err := svcGetActiveMappingRules(ctx)
+		if err != nil {
+			return err
+		}
+		after, err := userBaseHoldingsExcludingGrant(ctx, userID, grantID)
+		if err != nil {
+			return err
+		}
+		lapsed := roleKey{projectID: projectID, roleKey: role}
+		before := make(map[roleKey]bool, len(after)+1)
+		for k := range after {
+			before[k] = true
+		}
+		before[lapsed] = true
+
+		afterClosure := effectiveClosure(after, rules)
+		_, revokes := closureDelta(effectiveClosure(before, rules), afterClosure)
+
+		retained := make([]string, 0, 1)
+		if afterClosure[lapsed] {
+			retained = append(retained, lapsed.projectID+"/"+lapsed.roleKey)
+		}
+
+		params := deltaParams(userID, nil, revokes, actor, "Grant expired", "direct", grantID)
+
+		deletedProject, deletedRole, ids, err := svcDeleteExpiredDirectGrantAndEnqueueTx(ctx, tx, actor, userID, grantID, params)
+		if err != nil {
+			return err
+		}
+
+		revoked := make([]string, 0, len(revokes))
+		for _, key := range revokes {
+			revoked = append(revoked, key.projectID+"/"+key.roleKey)
+		}
+		out = ExpiredGrantRevocation{
+			ProjectID: deletedProject,
+			RoleKey:   deletedRole,
+			OutboxIDs: ids,
+			Revoked:   revoked,
+			Retained:  retained,
+		}
+		return nil
+	})
 	if err != nil {
 		return ExpiredGrantRevocation{}, err
 	}
-
-	after, err := userBaseHoldingsExcludingGrant(ctx, userID, grantID)
-	if err != nil {
-		return ExpiredGrantRevocation{}, err
-	}
-	lapsed := roleKey{projectID: projectID, roleKey: role}
-	before := make(map[roleKey]bool, len(after)+1)
-	for k := range after {
-		before[k] = true
-	}
-	before[lapsed] = true
-
-	afterClosure := effectiveClosure(after, rules)
-	_, revokes := closureDelta(effectiveClosure(before, rules), afterClosure)
-
-	retained := make([]string, 0, 1)
-	if afterClosure[lapsed] {
-		retained = append(retained, lapsed.projectID+"/"+lapsed.roleKey)
-	}
-
-	params := deltaParams(userID, nil, revokes, actor, "Grant expired", "direct", grantID)
-
-	deletedProject, deletedRole, ids, err := svcDeleteExpiredDirectGrantAndEnqueue(ctx, actor, userID, grantID, params)
-	if err != nil {
-		return ExpiredGrantRevocation{}, err
-	}
-
-	revoked := make([]string, 0, len(revokes))
-	for _, key := range revokes {
-		revoked = append(revoked, key.projectID+"/"+key.roleKey)
-	}
-	return ExpiredGrantRevocation{
-		ProjectID: deletedProject,
-		RoleKey:   deletedRole,
-		OutboxIDs: ids,
-		Revoked:   revoked,
-		Retained:  retained,
-	}, nil
+	return out, nil
 }

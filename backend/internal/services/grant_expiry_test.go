@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+
 	"syndra/internal/db"
 	"syndra/internal/models"
 )
@@ -33,8 +35,18 @@ func expiryFixture(
 	t.Helper()
 	resetCascadeDeps(t)
 
-	orig := svcDeleteExpiredDirectGrantAndEnqueue
-	t.Cleanup(func() { svcDeleteExpiredDirectGrantAndEnqueue = orig })
+	orig := svcDeleteExpiredDirectGrantAndEnqueueTx
+	origTx := svcInTxLockingSubject
+	t.Cleanup(func() {
+		svcDeleteExpiredDirectGrantAndEnqueueTx = orig
+		svcInTxLockingSubject = origTx
+	})
+	// The real one opens a transaction and takes the subject lock; neither is
+	// reachable without a database. What the fake must preserve is the ordering
+	// the lock exists for, which the source guard in internal/db asserts.
+	svcInTxLockingSubject = func(_ context.Context, _ string, fn func(pgx.Tx) error) error {
+		return fn(nil)
+	}
 
 	svcGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) {
 		return directs, nil
@@ -47,8 +59,8 @@ func expiryFixture(
 	}
 
 	captured := &[]db.EnqueueParams{}
-	svcDeleteExpiredDirectGrantAndEnqueue = func(
-		_ context.Context, _, _, _ string, params []db.EnqueueParams,
+	svcDeleteExpiredDirectGrantAndEnqueueTx = func(
+		_ context.Context, _ pgx.Tx, _, _, _ string, params []db.EnqueueParams,
 	) (string, string, []string, error) {
 		*captured = params
 		if deleteErr != nil {
@@ -171,4 +183,71 @@ func contains(hay []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// A grant somebody else removed while this sweep was mid-way through expiring
+// it is not a renewal. Reporting it as one would tell the operator everything
+// is fine; it is the other verdict that says something is wrong.
+func TestExpireDirectGrant_MissingGrantIsNotARenewal(t *testing.T) {
+	expiryFixture(t, nil, nil, nil, db.ErrGrantNotFound)
+
+	_, err := ExpireDirectGrant(context.Background(), "u1", "g_88", "pLaser", "trained", "system:scheduler")
+	if !errors.Is(err, db.ErrGrantNotFound) {
+		t.Fatalf("an absent grant must surface as ErrGrantNotFound, got %v", err)
+	}
+	if errors.Is(err, db.ErrGrantRenewed) {
+		t.Error("absence must not be reported as a renewal")
+	}
+}
+
+// The delta is computed inside the transaction that takes the subject lock. A
+// bundle assignment landing between the read and the commit makes the revoke a
+// statement about a world that no longer exists — and the add it queued lands
+// first, so the subject ends up without access they are currently owed.
+func TestExpireDirectGrant_ComputesTheDeltaUnderTheSubjectLock(t *testing.T) {
+	resetCascadeDeps(t)
+	origTx := svcInTxLockingSubject
+	origDel := svcDeleteExpiredDirectGrantAndEnqueueTx
+	t.Cleanup(func() {
+		svcInTxLockingSubject = origTx
+		svcDeleteExpiredDirectGrantAndEnqueueTx = origDel
+	})
+
+	var order []string
+	svcInTxLockingSubject = func(_ context.Context, subject string, fn func(pgx.Tx) error) error {
+		if subject != "u1" {
+			t.Errorf("the lock must name the subject whose access is changing, got %q", subject)
+		}
+		order = append(order, "lock")
+		return fn(nil)
+	}
+	svcGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) {
+		order = append(order, "read:rules")
+		return nil, nil
+	}
+	svcGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) {
+		order = append(order, "read:grants")
+		return nil, nil
+	}
+	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) {
+		return nil, nil
+	}
+	svcDeleteExpiredDirectGrantAndEnqueueTx = func(
+		context.Context, pgx.Tx, string, string, string, []db.EnqueueParams,
+	) (string, string, []string, error) {
+		order = append(order, "write")
+		return "pLaser", "trained", nil, nil
+	}
+
+	if _, err := ExpireDirectGrant(context.Background(), "u1", "g_88", "pLaser", "trained", "system:scheduler"); err != nil {
+		t.Fatal(err)
+	}
+	if len(order) < 3 || order[0] != "lock" || order[len(order)-1] != "write" {
+		t.Fatalf("the lock must precede the reads and the write must follow them, got %v", order)
+	}
+	for _, step := range order[1 : len(order)-1] {
+		if step == "lock" {
+			t.Fatalf("the lock must be taken once, before the reads, got %v", order)
+		}
+	}
 }

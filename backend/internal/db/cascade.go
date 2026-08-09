@@ -97,6 +97,24 @@ type CascadeAudit struct {
 // grant index before the insert; a cache miss leaves it empty (the drain then fails just that
 // row, non-fatally — see GetGrantIndexByUserProject).
 func enqueueCascadeRows(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, params []EnqueueParams) ([]string, error) {
+	// Every access change passes through here or through enqueueWrites, which
+	// is what makes this the place to take the subject lock: a caller that
+	// forgot it would still be serialised against one that took it. Taken here
+	// the lock does not protect THIS caller's delta — that was computed before
+	// the call, and only a caller that locks before its own reads is safe — but
+	// it does hold every writer back for as long as such a caller holds it,
+	// which is what makes locking before the read worth anything at all.
+	subjects := make([]string, 0, len(params)+len(audits))
+	for _, p := range params {
+		subjects = append(subjects, p.UserID)
+	}
+	for _, a := range audits {
+		subjects = append(subjects, a.Target)
+	}
+	if err := LockSubjectAccessTx(ctx, tx, subjects...); err != nil {
+		return nil, err
+	}
+
 	const insertOutbox = `
 		INSERT INTO propagation_outbox
 			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json,
