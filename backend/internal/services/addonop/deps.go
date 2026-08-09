@@ -11,6 +11,8 @@ import (
 // observing when each step happens — which needs seams, not a database.
 var (
 	resolveOperation = addons.ResolveOperation
+	validateParams   = addons.ValidateParams
+	operationRecord  = addons.OperationRecord
 	callAddon        = addons.Call
 	beginOperation   = db.BeginAddonOperation
 	settleOperation  = db.SettleAddonOperation

@@ -36,6 +36,7 @@ var (
 	// down target is not being asked once per queued row.
 	breakerCooldown = 30 * time.Second
 
+	dbOpenAddonOperation         = db.LoadOpenAddonOperation
 	dbUpsertTarget               = db.UpsertTarget
 	dbDisableUnconfiguredTargets = db.DisableUnconfiguredTargets
 )

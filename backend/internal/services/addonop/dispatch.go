@@ -94,6 +94,13 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 	if op.Confirm && !req.Confirmed {
 		return Result{}, fmt.Errorf("%w: %s/%s", ErrConfirmationRequired, req.Target, req.Operation)
 	}
+	// Before the record, not after it. A request that does not satisfy backend
+	// policy's parameter schema is not an attempt at anything — recording it
+	// would put a row on the operator's surface for a call that was never
+	// legitimate and never left the process.
+	if err := validateParams(op, req.Params); err != nil {
+		return Result{}, err
+	}
 
 	id, err := beginOperation(ctx, db.AddonOperationParams{
 		Target:    req.Target,
@@ -107,10 +114,23 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 		return Result{}, fmt.Errorf("addonop: no record committed, nothing dispatched: %w", err)
 	}
 
+	// Read the record back and check it names this exact call. It was just
+	// written, so this is not doubt about the write — it is what mints the
+	// token the transport requires, and the token is what makes "a dispatch is
+	// authorised by a durable record" a property of the type system rather than
+	// of every caller's memory.
+	record, err := operationRecord(ctx, id, req.Target, req.Operation, req.SubjectID)
+	if err != nil {
+		// The record exists and cannot be verified, so nothing is dispatched
+		// and the row stays non-terminal — which is exactly what it is: an
+		// operation nobody can say happened, because it did not.
+		return Result{OperationID: id, Status: db.AddonOpDispatching}, fmt.Errorf("addonop: %w", err)
+	}
+
 	resp := callAddon(ctx, addons.CallRequest{
 		Target:    req.Target,
 		Operation: req.Operation,
-		CallID:    id,
+		Record:    record,
 		Subject:   req.SubjectID,
 		Params:    req.Params,
 	})

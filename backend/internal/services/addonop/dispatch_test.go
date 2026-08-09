@@ -30,6 +30,9 @@ type harness struct {
 	beginErr error
 	begun    []db.AddonOperationParams
 
+	verified  []string
+	recordErr error
+
 	resp      addons.CallResponse
 	calls     []addons.CallRequest
 	settleErr error
@@ -39,15 +42,40 @@ type harness struct {
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 	h := &harness{
-		op:      addons.EffectiveOperation{ID: "password.set", Scope: addons.ScopeMember, SecretParams: []string{"password"}, Available: true},
+		// Mirrors the real policy entry for password.set, schema included. A
+		// default operation with no declared parameters would make every test
+		// here fail validation, which is the validator working — but it would
+		// also mean nothing else in this file ever ran.
+		op: addons.EffectiveOperation{
+			ID: "password.set", Scope: addons.ScopeMember, Available: true,
+			SecretParams: []string{"password"},
+			Params:       []addons.ParamSpec{{Name: "password", Type: "string", Required: true, Secret: true}},
+		},
 		beginID: "rec-0001",
 		resp:    addons.CallResponse{Outcome: addons.OutcomeSucceeded, Status: 200},
 	}
 
-	sr, sb, sc, ss := resolveOperation, beginOperation, callAddon, settleOperation
+	sr, sv, sn, sb, sc, ss := resolveOperation, validateParams, operationRecord, beginOperation, callAddon, settleOperation
 	resolveOperation = func(target, id string) (addons.EffectiveOperation, error) {
 		h.record("resolve")
 		return h.op, h.resolveErr
+	}
+	validateParams = func(op addons.EffectiveOperation, params map[string]any) error {
+		h.record("validate")
+		return addons.ValidateParams(op, params)
+	}
+	// The success path returns the zero token. A test in this package cannot
+	// mint a real one — DispatchRecord's field is unexported, which is exactly
+	// the property under test — so what is asserted here is that the
+	// verification HAPPENS, with the right arguments, in the right place. That
+	// the token then carries the record id onto the wire is asserted where it
+	// can be: in the transport's own package.
+	operationRecord = func(_ context.Context, id, target, operation, subject string) (addons.DispatchRecord, error) {
+		h.record("verify")
+		h.mu.Lock()
+		h.verified = append(h.verified, strings.Join([]string{id, target, operation, subject}, "|"))
+		h.mu.Unlock()
+		return addons.DispatchRecord{}, h.recordErr
 	}
 	beginOperation = func(_ context.Context, p db.AddonOperationParams) (string, error) {
 		h.record("begin")
@@ -71,7 +99,7 @@ func newHarness(t *testing.T) *harness {
 		return h.settleErr
 	}
 	t.Cleanup(func() {
-		resolveOperation, beginOperation, callAddon, settleOperation = sr, sb, sc, ss
+		resolveOperation, validateParams, operationRecord, beginOperation, callAddon, settleOperation = sr, sv, sn, sb, sc, ss
 	})
 	return h
 }
@@ -109,14 +137,14 @@ func TestTheRecordIsCommittedBeforeTheCall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
-	if got := h.order(); got != "resolve -> begin -> call -> settle:succeeded" {
+	if got := h.order(); got != "resolve -> validate -> begin -> verify -> call -> settle:succeeded" {
 		t.Fatalf("protocol order = %q", got)
 	}
 	if res.OperationID != "rec-0001" {
 		t.Fatalf("result lost the record id: %+v", res)
 	}
-	if len(h.calls) != 1 || h.calls[0].CallID != "rec-0001" {
-		t.Fatalf("the record id must be sent as the deduplication key, got %+v", h.calls)
+	if len(h.verified) != 1 || h.verified[0] != "rec-0001|truenas|password.set|user-42" {
+		t.Fatalf("the record must be read back and checked against this exact call, got %v", h.verified)
 	}
 }
 
@@ -359,5 +387,71 @@ func TestUnresolvedIsExactlyTheTwoStatesWithNoAnswer(t *testing.T) {
 	}
 	if len(db.AddonUnresolvedStatuses) != 2 {
 		t.Fatalf("unresolved must be exactly the two states carrying no answer, got %v", db.AddonUnresolvedStatuses)
+	}
+}
+
+// 2.32, P1 — backend policy's parameter schema is enforced, and enforced before
+// the record is written. An unknown key, a wrong type, or a missing required
+// value is not an attempt at anything: recording it would put a row on the
+// operator's surface for a call that never left the process, and sending it
+// would let an add-on-specific input reach the target without passing the
+// boundary that is supposed to bound it.
+func TestParametersAreValidatedBeforeAnythingIsRecorded(t *testing.T) {
+	cases := []struct {
+		name   string
+		params map[string]any
+	}{
+		{"unknown key", map[string]any{"password": theSecret, "shell": "/bin/sh"}},
+		{"missing required", map[string]any{}},
+		{"wrong type", map[string]any{"password": 5}},
+		{"present but empty", map[string]any{"password": "   "}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			h.op = addons.EffectiveOperation{
+				ID: "password.set", Scope: addons.ScopeMember, Available: true,
+				SecretParams: []string{"password"},
+				Params:       []addons.ParamSpec{{Name: "password", Type: "string", Required: true, Secret: true}},
+			}
+			req := passwordSet()
+			req.Params = tc.params
+
+			_, err := Dispatch(context.Background(), req)
+			if !errors.Is(err, addons.ErrInvalidParams) {
+				t.Fatalf("err = %v, want ErrInvalidParams", err)
+			}
+			if len(h.begun) != 0 || len(h.calls) != 0 {
+				t.Fatalf("an invalid request wrote a record or dispatched: begun=%d calls=%d",
+					len(h.begun), len(h.calls))
+			}
+			if strings.Contains(err.Error(), theSecret) || strings.Contains(err.Error(), "/bin/sh") {
+				t.Fatalf("the refusal echoed a submitted value: %v", err)
+			}
+			if got := h.order(); strings.Contains(got, "begin") {
+				t.Fatalf("validation must run before the record: %q", got)
+			}
+		})
+	}
+}
+
+// P2 — the transport is authorised by a verified record, so a verification that
+// fails dispatches nothing and leaves the row exactly as unresolved as it is.
+func TestAnUnverifiableRecordDispatchesNothing(t *testing.T) {
+	h := newHarness(t)
+	h.recordErr = errors.New("no addon operation is open under this id")
+
+	res, err := Dispatch(context.Background(), passwordSet())
+	if err == nil {
+		t.Fatal("a record that cannot be verified must not dispatch")
+	}
+	if len(h.calls) != 0 {
+		t.Fatalf("the add-on was called under an unverified record: %+v", h.calls)
+	}
+	if res.Status != db.AddonOpDispatching {
+		t.Fatalf("status = %q; nothing was sent, so the row is still awaiting nothing at all", res.Status)
+	}
+	if len(h.settled) != 0 {
+		t.Fatal("a call that never happened must not be settled")
 	}
 }

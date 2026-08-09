@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -113,6 +114,34 @@ func insertAddonOperation(ctx context.Context, tx pgx.Tx, p AddonOperationParams
 		return "", fmt.Errorf("insert addon operation audit: %w", err)
 	}
 	return id, nil
+}
+
+// ErrAddonOperationNotOpen means no record with this id is awaiting an outcome:
+// it does not exist, or it has already settled.
+var ErrAddonOperationNotOpen = fmt.Errorf("no addon operation is open under this id")
+
+// LoadOpenAddonOperation reads back a record that is still awaiting its
+// outcome. The transport calls this to verify that the dispatch it is about to
+// make is described by a durable row — see addons.OperationRecord.
+//
+// Scoped to `dispatching` on purpose. A settled record must not authorise a
+// second dispatch: the settle is what closes the window, and the window is what
+// a replay would need.
+func LoadOpenAddonOperation(ctx context.Context, id string) (AddonOperation, error) {
+	const q = `
+		SELECT id, target, operation, actor_id, subject_id, status, created_at, settled_at
+		  FROM addon_operations
+		 WHERE id = $1 AND status = 'dispatching'`
+	var o AddonOperation
+	err := PG.QueryRow(ctx, q, id).Scan(&o.ID, &o.Target, &o.Operation, &o.ActorID,
+		&o.SubjectID, &o.Status, &o.CreatedAt, &o.SettledAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AddonOperation{}, fmt.Errorf("%w: %s", ErrAddonOperationNotOpen, id)
+	}
+	if err != nil {
+		return AddonOperation{}, fmt.Errorf("load addon operation: %w", err)
+	}
+	return o, nil
 }
 
 // ErrAddonOperationAlreadySettled means the row was not in `dispatching` when a

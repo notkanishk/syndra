@@ -34,7 +34,7 @@ An add-on MUST expose `GET /capabilities` returning an entitlement schema, an op
 
 ### Requirement: Backend policy MUST bound what a manifest can offer
 
-A manifest declares capability, not authorization. The backend MUST hold its own policy for each operation identifier — the scope it may be offered at, whether it requires confirmation, and its parameter schema — and the effective operation set MUST be the intersection of manifest and policy, with policy prevailing wherever they disagree. An operation identifier with no backend policy MUST be unavailable regardless of what the manifest declares.
+A manifest declares capability, not authorization. The backend MUST hold its own policy for each operation identifier — the scope it may be offered at, whether it requires confirmation, and its parameter schema — and the effective operation set MUST be the intersection of manifest and policy, with policy prevailing wherever they disagree. That parameter schema MUST be enforced on every invocation: a parameter the schema does not declare MUST be rejected rather than dropped, a declared required parameter MUST be present, and a value of the wrong type MUST be refused. A refusal MUST NOT contain any submitted value, since refusals are logged, returned, and captured in traces. An operation identifier with no backend policy MUST be unavailable regardless of what the manifest declares.
 
 #### Scenario: A manifest cannot widen an operation's scope
 
@@ -46,6 +46,12 @@ A manifest declares capability, not authorization. The backend MUST hold its own
 
 - **WHEN** a manifest declares an operation as requiring no confirmation and backend policy requires one
 - **THEN** the backend MUST require confirmation
+
+#### Scenario: An undeclared parameter does not reach the target
+
+- **WHEN** an invocation carries a parameter backend policy does not declare for that operation
+- **THEN** the backend MUST refuse the invocation
+- **AND** MUST NOT record it as an attempt or forward any part of it to the add-on
 
 #### Scenario: An unknown operation fails closed
 
@@ -381,7 +387,7 @@ The backend MUST NOT mutate an add-on target without first durably recording the
 
 ### Requirement: Secret-bearing operations MUST leave a pre-dispatch record without leaving the secret
 
-An operation declaring `secret_params` MUST NOT be queued in the outbox, because outbox rows are durable, retried, and retained for audit. It MUST still leave a trace before the call: the backend MUST commit an operation record — operation id, target, actor, subject, operation name, non-terminal status — before dispatching, carrying no value for any declared secret parameter, and MUST write the terminal status after the response. The record table MUST NOT contain any column able to hold a parameter value, including free-text or JSON columns intended for diagnostics: a column shaped to hold arbitrary content is where an add-on's echoed error payload — and with it a submitted secret — comes to rest, and a convention not to write one there is the part that fails. The record's status MUST be a closed vocabulary, and a terminal status MUST be writable only over a non-terminal one, so that a duplicated settle cannot resolve an unresolved operation on no evidence. The operation id MUST be sent to the add-on and used by it to deduplicate, so a re-submission cannot double-apply.
+An operation declaring `secret_params` MUST NOT be queued in the outbox, because outbox rows are durable, retried, and retained for audit. It MUST still leave a trace before the call: the backend MUST commit an operation record — operation id, target, actor, subject, operation name, non-terminal status — before dispatching, carrying no value for any declared secret parameter, and MUST write the terminal status after the response. The record table MUST NOT contain any column able to hold a parameter value, including free-text or JSON columns intended for diagnostics: a column shaped to hold arbitrary content is where an add-on's echoed error payload — and with it a submitted secret — comes to rest, and a convention not to write one there is the part that fails. The record's status MUST be a closed vocabulary, and a terminal status MUST be writable only over a non-terminal one, so that a duplicated settle cannot resolve an unresolved operation on no evidence. The operation id MUST be sent to the add-on and used by it to deduplicate, so a re-submission cannot double-apply. The transport MUST require evidence that the record exists and describes this exact call — its target, operation, and subject — rather than accepting an identifier as given: an identifier a caller can supply unverified makes the pre-dispatch record a convention that holds only where callers observe it, and a record that can be pointed at the wrong call produces an audit trail describing something that did not happen, which is worse than none because it will be believed. A record that has already settled MUST NOT authorise a further dispatch.
 
 #### Scenario: Record is committed before the add-on is called
 

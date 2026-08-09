@@ -268,3 +268,22 @@ func TestDownMigrationRefusesToDropUnresolvedOperations(t *testing.T) {
 		t.Error("the down migration must still drop the table once nothing is open")
 	}
 }
+
+// P2 — the record that authorises a dispatch must still be open. Scoped to
+// `dispatching`, so a settled record cannot authorise a second call: the settle
+// is what closes the window, and the window is what a replay would need.
+func TestLoadOpenAddonOperationIsScopedToDispatching(t *testing.T) {
+	src, err := os.ReadFile("addon_operations.go")
+	if err != nil {
+		t.Fatalf("read addon_operations.go: %v", err)
+	}
+	body := funcBody(t, string(src), "LoadOpenAddonOperation")
+
+	if !strings.Contains(body, "AND status = 'dispatching'") {
+		t.Fatal("the lookup must refuse a settled record, or a dispatch could be authorised twice " +
+			"under one record and the second would leave no trace of its own")
+	}
+	if !strings.Contains(body, "ErrAddonOperationNotOpen") {
+		t.Error("a missing or settled record must be reported as its own condition, not as a generic scan error")
+	}
+}

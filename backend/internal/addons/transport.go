@@ -11,7 +11,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 )
@@ -66,12 +65,6 @@ func (o Outcome) Retryable() bool { return o == OutcomeUnreached }
 // intact and the row stays queued.
 var ErrCircuitOpen = errors.New("addon: circuit is open for this target")
 
-// ErrNoCallRecord is the refusal to dispatch without an operation record id.
-// The record exists so a crash between dispatch and response leaves evidence;
-// dispatching without one would leave a mutation nothing in the database knows
-// was attempted.
-var ErrNoCallRecord = errors.New("addon: refusing to dispatch without an operation record id")
-
 // SignatureHeader carries the request signature in signed mode.
 const SignatureHeader = "X-Syndra-Addon-Signature"
 
@@ -88,9 +81,12 @@ const maxResponseBytes = 1 << 20
 type CallRequest struct {
 	Target    string
 	Operation string
-	// CallID is the addon_operations record id, committed before this call is
-	// made. It doubles as the add-on's idempotency key.
-	CallID  string
+	// Record is the verified durable row authorising this dispatch, obtained
+	// from OperationRecord. It is a token rather than an id because a
+	// non-empty string is not evidence that anything was committed: with a
+	// string, "the record exists before the call" holds only for callers who
+	// remember to make it hold.
+	Record  DispatchRecord
 	Subject string
 	// PlanID and Fingerprint bind an entitlement apply to what was reviewed.
 	// Empty for one-shot operations, which are approved by confirmation at the
@@ -105,7 +101,7 @@ type CallRequest struct {
 // A redaction that depends on every caller remembering to redact is not one.
 func (r CallRequest) String() string {
 	return fmt.Sprintf("addon call target=%s operation=%s call_id=%s subject=%s plan=%s params=%v",
-		r.Target, r.Operation, r.CallID, r.Subject, r.PlanID,
+		r.Target, r.Operation, r.Record.callID, r.Subject, r.PlanID,
 		RedactedParams(r.Target, r.Operation, r.Params))
 }
 
@@ -141,8 +137,9 @@ type callEnvelope struct {
 // Call dispatches one operation to its add-on.
 //
 // The order is not incidental. Callability is resolved first, so an operation
-// the effective set does not offer never reaches the network; the record id is
-// checked next, so a dispatch can never outrun its own audit trail; the breaker
+// the effective set does not offer never reaches the network; the parameters are
+// checked against backend policy before anything leaves; the durable record is
+// verified next, so a dispatch can never outrun its own audit trail; the breaker
 // is consulted before the credential is loaded, so an add-on that is known down
 // costs nothing.
 func Call(ctx context.Context, req CallRequest) CallResponse {
@@ -150,7 +147,13 @@ func Call(ctx context.Context, req CallRequest) CallResponse {
 	if err != nil {
 		return CallResponse{Outcome: OutcomeUnreached, Err: err}
 	}
-	if strings.TrimSpace(req.CallID) == "" {
+	// Re-checked here as well as at the caller. The caller validates so that an
+	// invalid request never becomes a durable record; this validates so that no
+	// path to an add-on exists that skipped the schema, whoever adds it later.
+	if err := ValidateParams(op, req.Params); err != nil {
+		return CallResponse{Outcome: OutcomeUnreached, Err: err}
+	}
+	if !req.Record.valid() {
 		return CallResponse{Outcome: OutcomeUnreached, Err: ErrNoCallRecord}
 	}
 	a, err := Get(req.Target)
@@ -167,7 +170,7 @@ func Call(ctx context.Context, req CallRequest) CallResponse {
 
 	body, err := json.Marshal(callEnvelope{
 		ContractVersion: ContractVersion,
-		CallID:          req.CallID,
+		CallID:          req.Record.callID,
 		Operation:       req.Operation,
 		Subject:         req.Subject,
 		PlanID:          req.PlanID,
@@ -190,7 +193,7 @@ func Call(ctx context.Context, req CallRequest) CallResponse {
 		// carries the secret; the response carries whatever the least trusted
 		// component chose to echo back, which may be the same secret.
 		log.Printf("[ADDON] %s/%s call_id=%s outcome=%s status=%d err=%v secret_params=%d",
-			req.Target, req.Operation, req.CallID, resp.Outcome, resp.Status, resp.Err, len(op.SecretParams))
+			req.Target, req.Operation, req.Record.callID, resp.Outcome, resp.Status, resp.Err, len(op.SecretParams))
 	}
 	return resp
 }

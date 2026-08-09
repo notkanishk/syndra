@@ -76,11 +76,20 @@ func signedAddon(t *testing.T, srvURL string, key []byte) {
 	installAddon(t, Registration{Target: "truenas", BaseURL: srvURL, SigningKeyPath: path}, goodManifest())
 }
 
+// passwordSet builds a dispatch that already satisfies backend policy's
+// parameter schema, since almost no test here is about the schema. A nil
+// argument means "valid, uninteresting" rather than "absent": password.set
+// declares one required string, and an absent one is now a refusal.
 func passwordSet(params map[string]any) CallRequest {
+	if params == nil {
+		params = map[string]any{"password": "a-value"}
+	}
 	return CallRequest{
-		Target:      "truenas",
-		Operation:   "password.set",
-		CallID:      "rec-0001",
+		Target:    "truenas",
+		Operation: "password.set",
+		// Constructed directly because this file is in the package. No caller
+		// outside it can do this, which is the entire point of the type.
+		Record:      DispatchRecord{callID: "rec-0001"},
 		Subject:     "user-42",
 		PlanID:      "plan-0001",
 		Fingerprint: "sha256:abc",
@@ -499,7 +508,7 @@ func TestDispatchWithoutAnOperationRecordIsRefused(t *testing.T) {
 
 	signedAddon(t, srv.URL, []byte("k"))
 	req := passwordSet(nil)
-	req.CallID = "   "
+	req.Record = DispatchRecord{}
 
 	resp := Call(context.Background(), req)
 	if !errors.Is(resp.Err, ErrNoCallRecord) {
