@@ -181,8 +181,111 @@ func PendingOutboxAddExists(ctx context.Context, target, userID, projectID, role
 	return exists, nil
 }
 
+// supersededByLaterVersion decides that a queued convergence has been overtaken.
+//
+// Desired state is snapshotted per (subject, target) with a monotonic version
+// (design §15), and an apply carrying a version older than the one the target
+// has already settled must not execute: applying it would walk the subject back
+// to a state a later decision replaced. The hazard is not hypothetical once
+// revocations drain on their own — a withdrawal can settle while the grant it
+// supersedes still waits for an operator to resume — and it is precisely the
+// case the deleted sync service carried `internal/worker/ordering.go` for.
+//
+// It reads the version off the row's own approval chain (outbox -> plan subject
+// -> snapshot) rather than taking it as an argument, for the reason
+// ReconcileLedgerOnApplied reads its tuple the same way: a version supplied
+// beside a row can describe a decision that never existed.
+//
+// Zitadel rows are naturally out of scope. Their plan subject carries no
+// snapshot, so the join drops them, and their ordering is held by the claim
+// below never inverting a subject's own intent order.
+const supersededByLaterVersion = `
+	EXISTS (
+	    SELECT 1
+	      FROM plan_subjects ps
+	      JOIN desired_state_snapshots s ON s.id = ps.snapshot_id
+	     WHERE ps.id = p.plan_subject_id
+	       AND EXISTS (
+	           SELECT 1
+	             FROM propagation_outbox q
+	             JOIN plan_subjects qps ON qps.id = q.plan_subject_id
+	             JOIN desired_state_snapshots qs ON qs.id = qps.snapshot_id
+	            WHERE q.status = 'applied'
+	              AND qs.subject_id = s.subject_id
+	              AND qs.target     = s.target
+	              AND qs.version    > s.version))`
+
+// supersededReason is what an operator reads on the row. It states the decision,
+// not a failure: nothing was attempted and nothing went wrong.
+const supersededReason = "a newer desired state for this subject has already been applied"
+
+// terminateSuperseded settles the overtaken rows of one target before the claim
+// runs, so a stale version is rejected WITHOUT dispatch. `onlyID` narrows it to
+// a single row for the targeted claim; empty means the whole target.
+//
+// It lives inside the claim rather than beside it. Both claim paths call it, so
+// no drain can reach an overtaken row, and there is no ordering for a future
+// caller to get wrong — the same reason the active-target join is a condition of
+// the claim rather than a check its caller performs.
+//
+// `superseded` is deliberately not `failed`. Revocation-first dispatch makes
+// this ordinary rather than exceptional, and labelling a deliberately discarded
+// row as failed shows the operator a phantom failure on the row class where real
+// failures matter most (design §15).
+//
+// ponytail: one sweep per claim over the target's unresolved rows. At makerspace
+// volume that queue is tens of rows; if it ever is not, scope the UPDATE to the
+// ids the claim is about to consider.
+func terminateSuperseded(ctx context.Context, target, onlyID string) error {
+	// One statement, so the audit row cannot come apart from the discard — the
+	// same reason deregistration abandons and records in one write. This is a
+	// change an operator approved being thrown away; the outbox row explaining
+	// it is pruned after the retention window, and the person's own timeline is
+	// where the explanation has to survive. A data-modifying CTE runs whether or
+	// not anything reads it, so "superseded" and "recorded as superseded" are
+	// the same write.
+	const q = `
+		WITH discarded AS (
+			UPDATE propagation_outbox p
+			   SET status = 'superseded', completed_at = NOW(), last_error = $2
+			 WHERE p.target = $1
+			   AND p.status IN ('pending', 'in_flight')
+			   AND p.plan_subject_id IS NOT NULL
+			   AND ($3::text = '' OR p.id::text = $3::text)
+			   AND ` + supersededByLaterVersion + `
+			RETURNING p.id, p.user_id
+		)
+		INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
+		SELECT 'system', d.user_id, $4, d.id FROM discarded d`
+	if _, err := PG.Exec(ctx, q, target, supersededReason, onlyID, "entitlement."+target+".superseded"); err != nil {
+		return fmt.Errorf("terminate superseded propagations for %s: %w", target, err)
+	}
+	return nil
+}
+
+// revocationFirst orders subjects holding an unresolved revocation ahead of
+// everyone else, while leaving each subject's own rows in intent order.
+//
+// A delayed grant is an inconvenience; a delayed revoke is retained access, so a
+// revocation must not sit behind ninety unrelated grants when the batch or the
+// retry budget runs out. What it must ALSO not do is overtake an older grant for
+// the same subject: dispatching the withdrawal first and the grant afterwards
+// restores exactly the access being withdrawn. Prioritising the subject rather
+// than the row buys the first property without ever costing the second.
+//
+// ponytail: a correlated EXISTS per candidate row, served by
+// idx_propagation_outbox_intent_seq. Fine for a queue of tens; a queue of
+// thousands wants the revocation subjects hoisted into a CTE.
+const revocationFirst = `
+	(EXISTS (SELECT 1 FROM propagation_outbox r
+	          WHERE r.target   = p.target
+	            AND r.user_id  = p.user_id
+	            AND r.op_type  = 'revoke'
+	            AND r.status IN ('pending', 'in_flight'))) DESC,
+	p.intent_seq`
+
 // ClaimPendingPropagations atomically transitions up to `limit` claimable rows
-// to in_flight and returns them in created_at order. FOR UPDATE SKIP LOCKED makes
+// to in_flight and returns them in dispatch order. FOR UPDATE SKIP LOCKED makes
 // concurrent drains safe (mirrors ClaimPendingIntents).
 //
 // It claims BOTH 'pending' AND 'in_flight' rows (design.md §Drain: "status in
@@ -197,6 +300,11 @@ func ClaimPendingPropagations(ctx context.Context, target string, limit int) ([]
 	if limit <= 0 {
 		limit = 100
 	}
+	// Rejected on version before anything is claimed, so an overtaken row never
+	// reaches a dispatcher.
+	if err := terminateSuperseded(ctx, target, ""); err != nil {
+		return nil, err
+	}
 	// Scoped to one target, and to a target that is still registered. A drain
 	// holds exactly one dispatcher, so claiming another target's rows would
 	// push them through machinery shaped for a system they are not for — a
@@ -210,11 +318,12 @@ func ClaimPendingPropagations(ctx context.Context, target string, limit int) ([]
 			SELECT p.id FROM propagation_outbox p
 			JOIN targets t ON t.target = p.target AND t.state = 'active'
 			WHERE p.status IN ('pending','in_flight') AND p.target = $2
-			-- Intent order, not transaction-start order: created_at is fixed at
-			-- BEGIN and the access lock is taken after it, so a serially-older
-			-- add can carry the earlier timestamp and be dispatched after the
-			-- revoke that overtook it.
-			ORDER BY p.intent_seq
+			-- Revocations first, by subject; then intent order, not
+			-- transaction-start order — created_at is fixed at BEGIN and the
+			-- access lock is taken after it, so a serially-older add can carry
+			-- the earlier timestamp and be dispatched after the revoke that
+			-- overtook it.
+			ORDER BY ` + revocationFirst + `
 			LIMIT $1
 			FOR UPDATE OF p SKIP LOCKED
 		)
@@ -253,6 +362,12 @@ func ClaimPendingPropagations(ctx context.Context, target string, limit int) ([]
 // reset but is scoped to a single id; no FOR UPDATE SKIP LOCKED is needed
 // because the drain advisory lock already serializes drains.
 func ClaimPropagationByID(ctx context.Context, target, id string) (*models.PendingPropagation, bool, error) {
+	// Same rejection-before-dispatch as the batch claim, narrowed to this row.
+	// An overtaken row is settled here and then not found, which is exactly what
+	// found=false already means to the caller: nothing to do.
+	if err := terminateSuperseded(ctx, target, id); err != nil {
+		return nil, false, err
+	}
 	const q = `
 		UPDATE propagation_outbox p
 		SET status='in_flight', started_at=NOW()
@@ -276,6 +391,68 @@ func ClaimPropagationByID(ctx context.Context, target, id string) (*models.Pendi
 		return nil, false, nil
 	}
 	return &out[0], true, nil
+}
+
+// ClaimPendingRevocations is the background revocation drain's claim: the same
+// transition as ClaimPendingPropagations, restricted to rows that only withdraw
+// access.
+//
+// Two restrictions, and both are the point of the function.
+//
+// `op_type = 'revoke'` and nothing else. `add` confers, and `replace` confers
+// and withdraws in one call — a background runner that dispatched either would
+// hand somebody access with no operator in the loop, which is the consent
+// property the operator-only drain rule exists to protect (design §7). `apply`
+// is excluded for the same reason until an add-on dispatcher can say which
+// direction a resolved snapshot moves in.
+//
+// And never ahead of older conferring intent for the same subject. A grant
+// queued BEFORE this revocation is the earlier decision and must land first; if
+// the runner dispatched the withdrawal now, the operator draining that grant
+// later would restore precisely the access being withdrawn — silently, because
+// both rows applied and neither failed. Waiting is the safe direction: the
+// revocation stays queued, visible, and ageing on the unconfirmed-revocation
+// surface, where a delay is something an operator can see rather than something
+// the system silently undid.
+func ClaimPendingRevocations(ctx context.Context, target string, limit int) ([]models.PendingPropagation, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if err := terminateSuperseded(ctx, target, ""); err != nil {
+		return nil, err
+	}
+	const q = `
+		WITH claimed AS (
+			SELECT p.id FROM propagation_outbox p
+			JOIN targets t ON t.target = p.target AND t.state = 'active'
+			WHERE p.status IN ('pending','in_flight') AND p.target = $2
+			  AND p.op_type = 'revoke'
+			  AND NOT EXISTS (
+			      SELECT 1 FROM propagation_outbox e
+			       WHERE e.target     = p.target
+			         AND e.user_id    = p.user_id
+			         AND e.project_id IS NOT DISTINCT FROM p.project_id
+			         AND e.op_type    IN ('add', 'replace')
+			         AND e.status     IN ('pending', 'in_flight')
+			         AND e.intent_seq < p.intent_seq)
+			ORDER BY p.intent_seq
+			LIMIT $1
+			FOR UPDATE OF p SKIP LOCKED
+		)
+		UPDATE propagation_outbox p
+		SET status = 'in_flight', started_at = NOW()
+		FROM claimed
+		WHERE p.id = claimed.id
+		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
+		          p.source, COALESCE(p.source_ref,''), COALESCE(p.cascade_id::text,''),
+		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
+		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at`
+	rows, err := PG.Query(ctx, q, limit, target)
+	if err != nil {
+		return nil, fmt.Errorf("claim pending revocations: %w", err)
+	}
+	defer rows.Close()
+	return scanPropagations(rows)
 }
 
 // TargetsAwaitingDispatch lists active targets holding unresolved outbox rows,
@@ -429,14 +606,16 @@ func CountPendingPropagations(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-// PruneTerminalPropagations deletes applied/failed rows older than retentionDays.
+// PruneTerminalPropagations deletes terminal rows older than retentionDays.
 // The outbox is ephemeral workflow state — canonical intent lives in
 // direct_role_grants — so terminal rows are safe to drop after the window.
 // `failed` rows are kept the full window as the audit trail of attention-needing
-// mutations. Returns the number of rows pruned.
+// mutations; `superseded` and `abandoned` rows likewise, and their durable
+// record is the audit log, which the window does not touch. Returns the number
+// of rows pruned.
 func PruneTerminalPropagations(ctx context.Context, retentionDays int) (int64, error) {
 	const q = `DELETE FROM propagation_outbox
-		WHERE status IN ('applied','failed')
+		WHERE status IN ('applied','failed','superseded','abandoned')
 		  AND completed_at IS NOT NULL
 		  AND completed_at < NOW() - ($1 || ' days')::interval`
 	tag, err := PG.Exec(ctx, q, retentionDays)

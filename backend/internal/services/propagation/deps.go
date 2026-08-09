@@ -22,7 +22,13 @@ import (
 
 // Injectable dependencies — save/swap/restore in tests (see expiry/deps.go).
 var (
-	claimPending     = db.ClaimPendingPropagations
+	claimPending = db.ClaimPendingPropagations
+	// claimRevocations is the background runner's claim. A separate seam, not a
+	// parameter on claimPending: the two differ in what they are ALLOWED to
+	// return, and a boolean would let a caller ask the operator claim for
+	// revocations or — the direction that matters — the runner's claim for
+	// everything.
+	claimRevocations = db.ClaimPendingRevocations
 	claimOne         = db.ClaimPropagationByID
 	undispatchable   = db.UndispatchableTarget
 	awaitingDispatch = db.TargetsAwaitingDispatch

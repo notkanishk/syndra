@@ -508,13 +508,27 @@ func TestIntentOrderIsAllocatedUnderTheLock(t *testing.T) {
 // Dispatch follows intent for the same reason precedence does: claiming in
 // timestamp order would dispatch a serially-older add after the revoke that
 // overtook it, and the target would settle on the wrong one.
+// Revocation priority (1.26) put a key in front of it, so what is asserted is
+// that intent order is the LAST key rather than the only one: a key after it
+// could reorder two rows of one subject.
 func TestTheClaimDispatchesInIntentOrder(t *testing.T) {
-	body := funcBody(t, readDBSource(t, "propagations.go"), "ClaimPendingPropagations")
-	if !strings.Contains(body, "ORDER BY p.intent_seq") {
-		t.Error("the claim must order by intent, not by transaction-start time")
-	}
-	if strings.Contains(body, "ORDER BY p.created_at") {
-		t.Error("transaction-start time is not the order the decisions were taken in")
+	src := readDBSource(t, "propagations.go")
+	for _, fn := range []string{"ClaimPendingPropagations", "ClaimPendingRevocations"} {
+		body := funcBody(t, src, fn)
+		order := regexp.MustCompile(`(?s)ORDER BY (.*?)\n\s*LIMIT`).FindStringSubmatch(body)
+		if order == nil {
+			t.Fatalf("%s: no ORDER BY found ahead of its LIMIT", fn)
+		}
+		keys := strings.TrimSpace(order[1])
+		if keys == "` + revocationFirst + `" {
+			keys = strings.TrimSpace(constValue(t, src, "revocationFirst"))
+		}
+		if !strings.HasSuffix(keys, "p.intent_seq") {
+			t.Errorf("%s must break ties on intent order, and nothing may come after it; got %q", fn, keys)
+		}
+		if strings.Contains(keys, "created_at") {
+			t.Errorf("%s: transaction-start time is not the order the decisions were taken in", fn)
+		}
 	}
 }
 

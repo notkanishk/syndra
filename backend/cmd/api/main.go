@@ -21,6 +21,7 @@ import (
 	"syndra/internal/services/drift"
 	"syndra/internal/services/expiry"
 	"syndra/internal/services/periodic"
+	"syndra/internal/services/propagation"
 	"syndra/internal/zitadel"
 )
 
@@ -147,6 +148,30 @@ func main() {
 		log.Println("[DRIFT] Disabled via DRIFT_SCHEDULER_ENABLED=false")
 	}
 
+	// Revocation drain: the one background drain in the system. Grants stay
+	// operator-gated — the drain rule protects a consent property, and nobody
+	// gains access without a human — but a queued revoke is retained access, so
+	// it must not wait on somebody opening the right page. Shares the operator
+	// drain's advisory lock, so the two never dispatch concurrently; a pass that
+	// cannot take it simply returns and the next tick tries again.
+	var revokeSched *periodic.Runner
+	if revocationDrainEnabled() {
+		revokeSched = periodic.New("REVOKE", revocationDrainInterval(), 5*time.Minute, func(ctx context.Context) error {
+			res, err := propagation.DrainRevocations(ctx)
+			if err != nil {
+				return err
+			}
+			if res.Applied+res.Failed+res.Requeued+res.Abandoned+res.Errored > 0 || res.Halted {
+				log.Printf("[REVOKE] applied=%d failed=%d requeued=%d abandoned=%d errored=%d halted=%v %s",
+					res.Applied, res.Failed, res.Requeued, res.Abandoned, res.Errored, res.Halted, res.Reason)
+			}
+			return nil
+		})
+		go revokeSched.Start(ctx)
+	} else {
+		log.Println("[REVOKE] Disabled via REVOCATION_DRAIN_ENABLED=false")
+	}
+
 	// Add-on manifest refresh: reads each registered add-on's /capabilities,
 	// checks the contract version, and resolves the effective operation set
 	// against backend policy. Registration alone makes nothing callable — this
@@ -195,6 +220,14 @@ func main() {
 		case <-driftSched.Done():
 		case <-shutdownCtx.Done():
 			log.Println("[DRIFT] Shutdown deadline exceeded waiting for scheduler; closing anyway")
+		}
+	}
+
+	if revokeSched != nil {
+		select {
+		case <-revokeSched.Done():
+		case <-shutdownCtx.Done():
+			log.Println("[REVOKE] Shutdown deadline exceeded waiting for drain; closing anyway")
 		}
 	}
 
@@ -264,6 +297,35 @@ func driftSchedulerEnabled() bool {
 		return true
 	}
 	return b
+}
+
+// Enabled by default, because a revocation nobody drains is retained access and
+// the safe default for that is to drain it. Disabling is for a deployment that
+// deliberately wants every dispatch operator-observed.
+func revocationDrainEnabled() bool {
+	v := os.Getenv("REVOCATION_DRAIN_ENABLED")
+	if v == "" {
+		return true
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		log.Printf("[REVOKE] Invalid REVOCATION_DRAIN_ENABLED=%q, defaulting to enabled", v)
+		return true
+	}
+	return b
+}
+
+func revocationDrainInterval() time.Duration {
+	v := os.Getenv("REVOCATION_DRAIN_INTERVAL")
+	if v == "" {
+		return 5 * time.Minute
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		log.Printf("[REVOKE] Invalid REVOCATION_DRAIN_INTERVAL=%q, defaulting to 5m", v)
+		return 5 * time.Minute
+	}
+	return d
 }
 
 func addonRefreshInterval() time.Duration {

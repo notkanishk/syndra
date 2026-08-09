@@ -150,12 +150,13 @@ An operation's affected-subject count MUST be computed and enforced by the backe
 
 ### Requirement: Unconfirmed revocations MUST drain ahead of grants and carry a containment path
 
-Revocations MUST be dispatched before grants for the same target, and MUST be eligible for background draining while grants remain operator-gated, because a delayed grant withholds access while a delayed revocation retains it. A revocation exhausting its retry budget MUST escalate onto the unconfirmed-revocation surface as a finding rather than silently halting a background pass, since no operator is watching a background loop. The background runner MUST back off rather than spin when it cannot take the drain lock, and MUST pre-flight target reachability so an unreachable target costs a probe rather than a retry budget. When a target is unreachable and access must end immediately, the escalation surface MUST carry the out-of-band procedure for that target, since the backend has no path to it. A change an operator makes out of band to contain an incident MUST be recognised by the drift sweep as reconciling the outstanding revocation, not raised as fresh drift.
+Revocations MUST be dispatched ahead of grants for the same target, and MUST be eligible for background draining while grants remain operator-gated, because a delayed grant withholds access while a delayed revocation retains it. That priority MUST be applied to the subject holding the revocation, never to the individual row: ordering by a row's own operation type overtakes an OLDER grant for the same subject, so the grant lands afterwards and restores precisely the access being withdrawn — both rows applied, neither failed, and nothing on any surface disagreeing. Within one subject, intent order MUST be preserved absolutely, and intent order MUST be the final ordering key so that nothing after it can reorder two rows of one subject. For the same reason a background runner MUST NOT claim a revocation while an older access-conferring row for that subject is still unresolved: waiting is the safe direction, because the delay is visible on the unconfirmed-revocation surface while the inversion is not visible anywhere. A revocation exhausting its retry budget MUST escalate onto the unconfirmed-revocation surface as a finding rather than silently halting a background pass, since no operator is watching a background loop. The background runner MUST back off rather than spin when it cannot take the drain lock, and MUST pre-flight target reachability so an unreachable target costs a probe rather than a retry budget. When a target is unreachable and access must end immediately, the escalation surface MUST carry the out-of-band procedure for that target, since the backend has no path to it. A change an operator makes out of band to contain an incident MUST be recognised by the drift sweep as reconciling the outstanding revocation, not raised as fresh drift.
 
 #### Scenario: Revocations are dispatched first
 
 - **WHEN** the drain has both revocations and grants queued for one target
-- **THEN** it MUST dispatch the revocations before the grants
+- **THEN** it MUST dispatch the revocations before the grants of any other subject
+- **AND** a grant queued for the revoked subject BEFORE that revocation MUST still be dispatched first, because dispatching it afterwards would restore the access being withdrawn
 
 #### Scenario: An exhausted retry budget escalates rather than halting silently
 
@@ -450,8 +451,9 @@ Exactly one transition out of `in_flight` originates outside the drain: deregist
 #### Scenario: A background runner drains revocations but never grants
 
 - **WHEN** the background revocation runner claims work
-- **THEN** it MUST claim only rows whose operation withdraws access
-- **AND** MUST leave access-conferring rows for the operator-triggered drain
+- **THEN** it MUST claim only rows whose operation withdraws access, and that restriction MUST live in the claim rather than in the runner, so no caller of the claim can widen it
+- **AND** MUST leave access-conferring rows for the operator-triggered drain, including a row that both confers and withdraws
+- **AND** MUST NOT claim a revocation while an older access-conferring row for that subject is still unresolved
 - **AND** MUST acquire the same advisory lock, so it cannot run concurrently with an operator drain
 
 #### Scenario: The apply surface states which rule applies
