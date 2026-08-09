@@ -252,7 +252,15 @@ func doAuthenticated(ctx context.Context, cred *credential, method, url string, 
 		out.Err = fmt.Errorf("addon returned %d with a body exceeding %d bytes", httpResp.StatusCode, maxResponseBytes)
 	}
 	if out.Outcome != OutcomeSucceeded && out.Err == nil {
-		out.Err = fmt.Errorf("addon returned %d", httpResp.StatusCode)
+		if httpResp.StatusCode >= 300 && httpResp.StatusCode < 400 {
+			// The Location is deliberately not echoed: it is attacker-chosen
+			// content, and a log line is the wrong place to reproduce one. The
+			// status alone tells an operator what to fix, and the add-on's own
+			// log holds where it tried to send them.
+			out.Err = fmt.Errorf("addon returned redirect %d; add-on responses are not followed", httpResp.StatusCode)
+		} else {
+			out.Err = fmt.Errorf("addon returned %d", httpResp.StatusCode)
+		}
 	}
 	return out
 }
@@ -265,6 +273,9 @@ func doAuthenticated(ctx context.Context, cred *credential, method, url string, 
 //     them apart from here.
 //   - 429: backpressure. It explicitly did not act and expects to be asked
 //     again, which makes this unreached rather than rejected.
+//   - 3xx: a contract violation, and it is surfaced rather than followed —
+//     see newAddonClient. The registered target did not act, and pointing the
+//     backend elsewhere will not make it act, so this is deterministic.
 //   - other 4xx: it validated the call and refused. Deterministic.
 func classifyStatus(code int) Outcome {
 	switch {

@@ -165,7 +165,7 @@ func loadCredential(r Registration, stamps map[string]time.Time) (*credential, e
 		}
 		tlsCfg.Certificates = []tls.Certificate{pair}
 		c.caNotAfter = tlsCfg.notAfter
-		c.client = &http.Client{Transport: &http.Transport{TLSClientConfig: tlsCfg.Config}}
+		c.client = newAddonClient(tlsCfg.Config)
 
 	case "signed":
 		key, err := readSigningKey(r.SigningKeyPath)
@@ -184,7 +184,7 @@ func loadCredential(r Registration, stamps map[string]time.Time) (*credential, e
 			return nil, err
 		}
 		c.caNotAfter = tlsCfg.notAfter
-		c.client = &http.Client{Transport: &http.Transport{TLSClientConfig: tlsCfg.Config}}
+		c.client = newAddonClient(tlsCfg.Config)
 
 	default:
 		// Init refuses to register an add-on with no transport mode, so this is
@@ -194,6 +194,35 @@ func loadCredential(r Registration, stamps map[string]time.Time) (*credential, e
 		return nil, fmt.Errorf("addon %s: no transport authentication configured", r.Target)
 	}
 	return c, nil
+}
+
+// newAddonClient builds the HTTP client for one add-on. Every add-on client is
+// built here so that no future mode can be added without the redirect refusal.
+//
+// Redirects are NOT followed, and that is a security property rather than
+// tidiness. Go's default follows up to ten of them and re-sends the body on 307
+// and 308, so an add-on answering a mutating call with a redirect would have the
+// backend replay the whole secret-bearing POST to a host of its choosing. Go
+// strips Authorization and Cookie across hosts; it does not strip a custom
+// header, so the request signature travels with the replayed body and
+// authenticates it to the new destination. In signed mode that destination may
+// verify against the system roots, meaning any publicly issued certificate is
+// enough to receive a member's password. Nor does Go block an https-to-http
+// downgrade on the way.
+//
+// The final 2xx would then be classified as success, hiding both the redirect
+// and the fact that the registered target may never have acted at all.
+//
+// ErrUseLastResponse stops at the 3xx and surfaces it, so nothing is ever sent
+// to a second host. The base URL is the only authority the backend will talk to,
+// which is what registering an authority was supposed to mean.
+func newAddonClient(tlsCfg *tls.Config) *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{TLSClientConfig: tlsCfg},
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }
 
 // trustConfig is a TLS client configuration plus the expiry of whatever anchors

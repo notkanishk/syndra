@@ -807,3 +807,80 @@ func TestPrivateCAAloneIsASignedModeAnchorNotAWarning(t *testing.T) {
 		t.Fatal("a client certificate with no key must still be flagged")
 	}
 }
+
+// 2.35 — an add-on's response never redirects the backend. Go follows redirects
+// by default and re-sends the body on 307/308, and it strips Authorization and
+// Cookie across hosts but not a custom header — so a compromised add-on could
+// have the whole secret-bearing POST replayed to a host of its choosing, signed
+// and therefore authenticated to that host. The final 2xx would then classify as
+// success while the registered target never acted.
+func TestARedirectIsRefusedAndNeverReplaysTheBody(t *testing.T) {
+	var (
+		secondHits atomic.Int32
+		secondBody atomic.Value
+	)
+	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		secondHits.Add(1)
+		b, _ := io.ReadAll(r.Body)
+		secondBody.Store(string(b))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer second.Close()
+
+	for _, code := range []int{http.StatusTemporaryRedirect, http.StatusPermanentRedirect, http.StatusFound} {
+		t.Run(http.StatusText(code), func(t *testing.T) {
+			secondHits.Store(0)
+			first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, second.URL+r.URL.Path, code)
+			}))
+			defer first.Close()
+
+			signedAddon(t, first.URL, []byte("k"))
+			withBreaker(t, 1000, time.Minute)
+
+			resp := Call(context.Background(), passwordSet(map[string]any{"password": theSecret}))
+			if resp.Outcome == OutcomeSucceeded {
+				t.Fatal("a redirect was followed and its 2xx reported as a completed mutation")
+			}
+			if resp.Outcome != OutcomeRejected {
+				t.Fatalf("outcome = %s, want rejected — the registered target did not act", resp.Outcome)
+			}
+			if resp.Status != code {
+				t.Fatalf("status = %d, want the redirect %d surfaced rather than swallowed", resp.Status, code)
+			}
+			if secondHits.Load() != 0 {
+				t.Fatalf("the redirect target received %d request(s)", secondHits.Load())
+			}
+			if body, _ := secondBody.Load().(string); strings.Contains(body, theSecret) {
+				t.Fatal("the secret-bearing body was replayed to a second host")
+			}
+			if resp.Err == nil || !strings.Contains(resp.Err.Error(), "redirect") {
+				t.Fatalf("the refusal did not name its cause: %v", resp.Err)
+			}
+		})
+	}
+
+	t.Run("the capability read does not follow one either", func(t *testing.T) {
+		secondHits.Store(0)
+		first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, second.URL+r.URL.Path, http.StatusTemporaryRedirect)
+		}))
+		defer first.Close()
+
+		path := filepath.Join(t.TempDir(), "sign.key")
+		writeFile(t, path, []byte("k"))
+		resetRegistry(t)
+		registryMu.Lock()
+		registry = map[string]*Addon{"truenas": {Registration: Registration{
+			Target: "truenas", BaseURL: first.URL, SigningKeyPath: path,
+		}}}
+		registryMu.Unlock()
+
+		if err := Refresh(context.Background(), "truenas"); err == nil {
+			t.Fatal("a redirected capability read was accepted")
+		}
+		if secondHits.Load() != 0 {
+			t.Fatal("the capability read followed a redirect to another host")
+		}
+	})
+}
