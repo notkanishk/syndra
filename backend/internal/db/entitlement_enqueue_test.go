@@ -572,6 +572,32 @@ func TestTheClaimIsScopedToOneActiveTarget(t *testing.T) {
 		}
 	}
 
+	// Both claims narrow to the one target being drained. The by-id claim needs
+	// it as much as the batch one: a row claimed and then found undispatchable
+	// has to be put back, and every way of putting it back costs something — a
+	// requeue spends a retry and records a dispatch failure for a dispatch that
+	// never happened. Not claiming it costs nothing.
+	byID := funcBody(t, body, "ClaimPropagationByID")
+	if !strings.Contains(byID, "p.target = $2") {
+		t.Error("ClaimPropagationByID must be scoped to the target the caller can dispatch, or the inline and batch apply paths hand add-on rows to the Zitadel dispatcher")
+	}
+
+	// The explanation the caller gets for a declined claim must be about a row
+	// this drain genuinely cannot dispatch: not its own target's (which would
+	// report every already-terminal row as waiting on something), and not a
+	// deregistered target's (nothing is waiting for those — deregistration
+	// abandoned them).
+	explain := funcBody(t, body, "UndispatchableTarget")
+	for _, frag := range []struct{ sql, why string }{
+		{"p.target <> $2", "a row on the drain's own target is not undispatchable — it was terminal, or gone"},
+		{"t.state = 'active'", "a deregistered target's rows are abandoned, not awaiting"},
+		{"p.status IN ('pending','in_flight')", "a settled row is waiting for nothing"},
+	} {
+		if !strings.Contains(explain, frag.sql) {
+			t.Errorf("UndispatchableTarget must require %q: %s", frag.sql, frag.why)
+		}
+	}
+
 	// The batch claim additionally narrows to the one target being drained.
 	at := strings.Index(body, "func ClaimPendingPropagations(")
 	end := strings.Index(body[at+1:], "\nfunc ")

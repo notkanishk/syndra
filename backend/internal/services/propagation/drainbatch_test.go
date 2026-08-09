@@ -17,7 +17,7 @@ import (
 func TestDrainBatch_ProcessesOnlyGivenIDs(t *testing.T) {
 	stubDrainDeps(t)
 	var claimed []string
-	claimOne = func(ctx context.Context, id string) (*models.PendingPropagation, bool, error) {
+	claimOne = func(ctx context.Context, _ string, id string) (*models.PendingPropagation, bool, error) {
 		claimed = append(claimed, id)
 		return &models.PendingPropagation{ID: id, Target: db.TargetZitadel, OpType: "add"}, true, nil
 	}
@@ -40,7 +40,7 @@ func TestDrainBatch_ProcessesOnlyGivenIDs(t *testing.T) {
 func TestDrainBatch_EmptyIDsIsNoop(t *testing.T) {
 	stubDrainDeps(t)
 	called := false
-	claimOne = func(ctx context.Context, id string) (*models.PendingPropagation, bool, error) {
+	claimOne = func(ctx context.Context, _ string, id string) (*models.PendingPropagation, bool, error) {
 		called = true
 		return nil, false, nil
 	}
@@ -59,7 +59,7 @@ func TestDrainBatch_EmptyIDsIsNoop(t *testing.T) {
 func TestDrainBatch_HaltsWhenLockHeld(t *testing.T) {
 	stubDrainDeps(t)
 	acquireDrainLock = func(ctx context.Context) (func(), bool, error) { return nil, false, nil }
-	claimOne = func(ctx context.Context, id string) (*models.PendingPropagation, bool, error) {
+	claimOne = func(ctx context.Context, _ string, id string) (*models.PendingPropagation, bool, error) {
 		t.Fatal("must not claim rows when the drain lock is held elsewhere")
 		return nil, false, nil
 	}
@@ -76,7 +76,7 @@ func TestDrainBatch_HaltsWhenLockHeld(t *testing.T) {
 func TestDrainBatch_HaltsWhenZitadelOffline(t *testing.T) {
 	stubDrainDeps(t)
 	zitadelReachable = func(ctx context.Context) bool { return false }
-	claimOne = func(ctx context.Context, id string) (*models.PendingPropagation, bool, error) {
+	claimOne = func(ctx context.Context, _ string, id string) (*models.PendingPropagation, bool, error) {
 		t.Fatal("must not claim rows when Zitadel is unreachable")
 		return nil, false, nil
 	}
@@ -92,7 +92,7 @@ func TestDrainBatch_HaltsWhenZitadelOffline(t *testing.T) {
 
 func TestDrainBatch_SkipsNotFoundIDs(t *testing.T) {
 	stubDrainDeps(t)
-	claimOne = func(ctx context.Context, id string) (*models.PendingPropagation, bool, error) {
+	claimOne = func(ctx context.Context, _ string, id string) (*models.PendingPropagation, bool, error) {
 		return nil, false, nil // already terminal, gone, or unclaimable
 	}
 	res, err := DrainBatch(context.Background(), []string{"gone"})

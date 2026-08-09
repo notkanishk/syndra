@@ -3,7 +3,6 @@ package propagation
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"syndra/internal/db"
@@ -30,12 +29,15 @@ func stubDrainDeps(t *testing.T) {
 		swap(&liveUserGrantRoles, func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{}, nil }),
 		swap(&pruneTerminal, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&awaitingDispatch, func(context.Context, string) ([]string, error) { return nil, nil }),
+		swap(&undispatchable, func(context.Context, string, string) (string, error) { return "", nil }),
 		swap(&markApplied, func(context.Context, string) error { return nil }),
 		swap(&markFailed, func(context.Context, string, string) error { return nil }),
 		swap(&requeue, func(context.Context, string, string) (int, error) { return 0, nil }),
 		swap(&reconcileLedger, func(context.Context, string, string, string, []string, string) error { return nil }),
 		swap(&acquireDrainLock, func(context.Context) (func(), bool, error) { return func() {}, true, nil }),
-		swap(&claimOne, func(context.Context, string) (*models.PendingPropagation, bool, error) { return nil, false, nil }),
+		swap(&claimOne, func(context.Context, string, string) (*models.PendingPropagation, bool, error) {
+			return nil, false, nil
+		}),
 		swap(&zitadelAddUserGrant, func(context.Context, string, string, []string) error { return nil }),
 		swap(&zitadelUpdateUserGrant, func(context.Context, string, string, []string) error { return nil }),
 		swap(&zitadelRemoveUserGrant, func(context.Context, string, string) error { return nil }),
@@ -276,7 +278,7 @@ func TestDrain_RequeuePersistFailureNotReportedRequeued(t *testing.T) {
 func TestDrainOne_ProcessesOnlyTargetRow(t *testing.T) {
 	stubDrainDeps(t)
 	var claimedID string
-	claimOne = func(_ context.Context, id string) (*models.PendingPropagation, bool, error) {
+	claimOne = func(_ context.Context, _ string, id string) (*models.PendingPropagation, bool, error) {
 		claimedID = id
 		return &models.PendingPropagation{ID: id, Target: db.TargetZitadel, OpType: "add", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}}, true, nil
 	}
@@ -298,7 +300,9 @@ func TestDrainOne_ProcessesOnlyTargetRow(t *testing.T) {
 
 func TestDrainOne_NotFoundIsNoop(t *testing.T) {
 	stubDrainDeps(t)
-	claimOne = func(context.Context, string) (*models.PendingPropagation, bool, error) { return nil, false, nil }
+	claimOne = func(context.Context, string, string) (*models.PendingPropagation, bool, error) {
+		return nil, false, nil
+	}
 
 	res, err := DrainOne(context.Background(), "gone")
 	if err != nil {
@@ -312,7 +316,7 @@ func TestDrainOne_NotFoundIsNoop(t *testing.T) {
 func TestDrainOne_SerializedByLock(t *testing.T) {
 	stubDrainDeps(t)
 	acquireDrainLock = func(context.Context) (func(), bool, error) { return func() {}, false, nil }
-	claimOne = func(context.Context, string) (*models.PendingPropagation, bool, error) {
+	claimOne = func(context.Context, string, string) (*models.PendingPropagation, bool, error) {
 		t.Fatal("DrainOne must not claim when another drain holds the lock")
 		return nil, false, nil
 	}
@@ -326,7 +330,7 @@ func TestDrainOne_SerializedByLock(t *testing.T) {
 func TestDrainOne_HaltsWhenZitadelOffline(t *testing.T) {
 	stubDrainDeps(t)
 	zitadelReachable = func(context.Context) bool { return false }
-	claimOne = func(context.Context, string) (*models.PendingPropagation, bool, error) {
+	claimOne = func(context.Context, string, string) (*models.PendingPropagation, bool, error) {
 		t.Fatal("DrainOne must not claim when Zitadel is offline")
 		return nil, false, nil
 	}
@@ -789,39 +793,101 @@ func TestDrain_SurvivesAFailedAwaitingLookup(t *testing.T) {
 	}
 }
 
-// 1.10 — the inline apply path refuses a row it cannot dispatch rather than
-// pushing it through the wrong machinery, and releases it rather than leaving
-// it in_flight, which would look like a dispatch nobody can account for.
-func TestDrainOne_ReleasesARowForAnotherTarget(t *testing.T) {
+// 1.10, P1 — the inline apply path never claims a row it cannot dispatch, so
+// there is nothing to put back.
+//
+// Claiming first and releasing after was the earlier shape and it cost twice:
+// the release spent a retry and recorded a dispatch failure for a dispatch that
+// never happened, so a handful of targeted applies would exhaust an add-on
+// row's budget before its dispatcher existed — and its first real transient
+// response would then halt it immediately.
+func TestDrainOne_NeverClaimsARowForAnotherTarget(t *testing.T) {
 	stubDrainDeps(t)
-	claimOne = func(context.Context, string) (*models.PendingPropagation, bool, error) {
-		return &models.PendingPropagation{ID: "ob-1", Target: "truenas", OpType: "apply", UserID: "u"}, true, nil
+	var askedFor string
+	claimOne = func(_ context.Context, target, _ string) (*models.PendingPropagation, bool, error) {
+		askedFor = target
+		return nil, false, nil // the claim itself declines: wrong target
 	}
-	var requeued string
-	requeue = func(_ context.Context, id, msg string) (int, error) {
-		requeued = id
-		if !strings.Contains(msg, "truenas") {
-			t.Errorf("the release note does not name the target: %q", msg)
+	undispatchable = func(_ context.Context, dispatcher, id string) (string, error) {
+		if dispatcher != db.TargetZitadel || id != "ob-1" {
+			t.Errorf("explained the wrong row: dispatcher=%q id=%q", dispatcher, id)
 		}
-		return 1, nil
+		return "truenas", nil
 	}
-	var dispatched bool
+	var dispatched, requeued bool
 	zitadelAddUserGrant = func(context.Context, string, string, []string) error { dispatched = true; return nil }
+	requeue = func(context.Context, string, string) (int, error) { requeued = true; return 1, nil }
 
 	res, err := DrainOne(context.Background(), "ob-1")
 	if err != nil {
 		t.Fatalf("DrainOne: %v", err)
 	}
+	if askedFor != db.TargetZitadel {
+		t.Errorf("the claim was asked for target %q, want the one this drain dispatches", askedFor)
+	}
 	if dispatched {
 		t.Error("a row for another target was dispatched through the Zitadel path")
 	}
-	if requeued != "ob-1" {
-		t.Error("the row was left in_flight rather than released")
+	if requeued {
+		t.Error("a retry was spent releasing a row that was never claimed and never dispatched")
 	}
-	if res.Applied != 0 || res.Failed != 0 {
+	if res.Applied != 0 || res.Failed != 0 || res.Requeued != 0 {
 		t.Errorf("an undispatchable row was counted as an outcome: %+v", res)
 	}
 	if len(res.Awaiting) != 1 || res.Awaiting[0] != "truenas" {
 		t.Errorf("awaiting = %v, want the target that has no dispatcher yet", res.Awaiting)
+	}
+}
+
+// 1.10 — and explaining is diagnostic. A row that is simply gone or already
+// terminal says nothing, and a failure to explain must not become a failure.
+func TestDrainOne_SaysNothingAboutARowThatIsSimplyGone(t *testing.T) {
+	stubDrainDeps(t)
+	claimOne = func(context.Context, string, string) (*models.PendingPropagation, bool, error) {
+		return nil, false, nil
+	}
+	undispatchable = func(context.Context, string, string) (string, error) {
+		return "", errors.New("db unavailable")
+	}
+
+	res, err := DrainOne(context.Background(), "ob-1")
+	if err != nil {
+		t.Fatalf("a failed explanation must not fail the apply: %v", err)
+	}
+	if len(res.Awaiting) != 0 {
+		t.Errorf("awaiting = %v, want nothing said", res.Awaiting)
+	}
+}
+
+// P1 — the batch path shares the scope. It hands whatever it claims to the
+// Zitadel dispatcher, which would mark an add-on entitlement (`op_type=apply`)
+// terminally failed as an unknown operation — with no way back from `failed`.
+func TestDrainBatch_NeverClaimsARowForAnotherTarget(t *testing.T) {
+	stubDrainDeps(t)
+	var targets []string
+	claimOne = func(_ context.Context, target, _ string) (*models.PendingPropagation, bool, error) {
+		targets = append(targets, target)
+		return nil, false, nil
+	}
+	undispatchable = func(context.Context, string, string) (string, error) { return "truenas", nil }
+	var dispatched bool
+	zitadelAddUserGrant = func(context.Context, string, string, []string) error { dispatched = true; return nil }
+
+	res, err := DrainBatch(context.Background(), []string{"a", "b"})
+	if err != nil {
+		t.Fatalf("DrainBatch: %v", err)
+	}
+	for _, target := range targets {
+		if target != db.TargetZitadel {
+			t.Errorf("the batch claim asked for %q", target)
+		}
+	}
+	if dispatched || res.Failed != 0 {
+		t.Errorf("an add-on row reached the Zitadel dispatcher: dispatched=%v res=%+v", dispatched, res)
+	}
+	// Named once, not once per row: two rows on one target are one thing the
+	// operator has to do something about.
+	if len(res.Awaiting) != 1 || res.Awaiting[0] != "truenas" {
+		t.Errorf("awaiting = %v, want the undispatchable target named once", res.Awaiting)
 	}
 }

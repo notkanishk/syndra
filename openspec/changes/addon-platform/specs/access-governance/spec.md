@@ -315,7 +315,16 @@ The operator-triggered drain MUST be triggered by the operator (`POST /api/v1/pr
 
 The claim step MUST select both `pending` AND `in_flight` rows (the pending worklist and count report the same set), so a drain that crashed after claiming but before recording a terminal state leaves no orphaned `in_flight` row that is visible yet never re-driven. Because claiming `in_flight` rows would otherwise let a second drain re-dispatch a row the first drain is still processing, drains MUST be serialized by a session-level advisory lock: a drain that cannot acquire the lock MUST halt with reason `drain_in_progress` and MUST NOT claim or dispatch any row. Serialization guarantees the only `in_flight` rows a claiming drain ever sees are those orphaned by a crashed drain (whose session, and therefore lock, is gone). Within the drain, marking a row terminal (`applied`/`failed`) or requeuing it MUST be the sole way a row leaves `in_flight`, and the drain MUST NOT report a row as `applied`/`failed`/`requeued` unless that state was actually persisted, so a state-write failure never masquerades as success.
 
+A claim MUST be scoped to the target its caller can dispatch, on every claim path including the ones that name specific rows. Claiming a row and then discovering it is undispatchable is not equivalent: releasing it costs something on every route — a requeue spends a retry and records a dispatch failure for a dispatch that never happened, so repeated targeted applies would exhaust an add-on row's budget before its dispatcher exists and its first genuine transient response would halt it. Not claiming it costs nothing. A drain MUST report the targets whose rows it declined, because a pass that silently dispatched nothing is indistinguishable from a pass with nothing to do, and that report MUST be diagnostic: failing to produce it MUST NOT fail the drain.
+
 Exactly one transition out of `in_flight` originates outside the drain: deregistering a target MUST abandon its unresolved rows, as required by "Every apply MUST cite a persisted plan, on every target including Zitadel". That is the reason every drain finalizer MUST be conditional on the row still being `in_flight` rather than on its identifier alone. A drain whose dispatch was in the air when its row was abandoned MUST leave that row terminal, MUST NOT requeue it — which would return it to `pending` on a target that no longer exists — and MUST count it as neither applied nor failed. An `applied` `revoke` or `replace` MUST reconcile the intent ledger (`direct_role_grants`) so Syndra stops treating removed roles as expected grants.
+
+#### Scenario: A drain never claims work it cannot dispatch
+
+- **WHEN** any drain path claims rows — the batch pass, an inline apply, or a named set of rows
+- **THEN** the claim MUST be scoped to the target that drain dispatches
+- **AND** a row for another target MUST NOT be claimed, dispatched, released, or counted as an outcome
+- **AND** no retry budget MUST be spent on a row that was never dispatched
 
 #### Scenario: Drain halts cleanly when Zitadel is unreachable
 

@@ -173,23 +173,34 @@ func ClaimPendingPropagations(ctx context.Context, target string, limit int) ([]
 
 // ClaimPropagationByID atomically transitions ONE row (pending or in_flight) to
 // in_flight and returns it — the targeted inline-apply claim behind DrainOne.
-// found=false when the row no longer exists or is already terminal
-// (applied/failed), which the caller treats as a no-op. It mirrors
-// ClaimPendingPropagations' claimable status set and started_at reset but is
-// scoped to a single id; no FOR UPDATE SKIP LOCKED is needed because the drain
-// advisory lock already serializes drains.
-func ClaimPropagationByID(ctx context.Context, id string) (*models.PendingPropagation, bool, error) {
+// found=false when the row no longer exists, is already terminal
+// (applied/failed), belongs to a target that is no longer registered, or
+// belongs to a target other than the one the caller can dispatch. Every one of
+// those is a no-op for the caller.
+//
+// Target-scoped for the same reason the batch claim is, and it matters more
+// here: a row claimed and then found undispatchable has to be put back, and
+// every way of putting it back costs something. A requeue spends a retry and
+// records a dispatch failure for a dispatch that never happened, so a handful
+// of targeted applies would exhaust an add-on row's budget before its
+// dispatcher exists — and its first real transient response would halt it. Not
+// claiming it costs nothing.
+//
+// It mirrors ClaimPendingPropagations' claimable status set and started_at
+// reset but is scoped to a single id; no FOR UPDATE SKIP LOCKED is needed
+// because the drain advisory lock already serializes drains.
+func ClaimPropagationByID(ctx context.Context, target, id string) (*models.PendingPropagation, bool, error) {
 	const q = `
 		UPDATE propagation_outbox p
 		SET status='in_flight', started_at=NOW()
 		FROM targets t
-		WHERE p.id=$1 AND p.status IN ('pending','in_flight')
+		WHERE p.id=$1 AND p.status IN ('pending','in_flight') AND p.target = $2
 		  AND t.target = p.target AND t.state = 'active'
 		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
 		          p.source, COALESCE(p.source_ref,''),
 		          COALESCE(p.cascade_id::text,''), COALESCE(p.zitadel_grant_id,''),
 		          p.status, p.attempts, COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at`
-	rows, err := PG.Query(ctx, q, id)
+	rows, err := PG.Query(ctx, q, id, target)
 	if err != nil {
 		return nil, false, fmt.Errorf("claim propagation %s: %w", id, err)
 	}
@@ -231,6 +242,29 @@ func TargetsAwaitingDispatch(ctx context.Context, drained string) ([]string, err
 		out = append(out, t)
 	}
 	return out, rows.Err()
+}
+
+// UndispatchableTarget reports the target of an unresolved row that a drain for
+// `dispatcher` may not dispatch, or "" when there is nothing to say.
+//
+// Used only after a claim declined a row, and only to explain it. A targeted
+// apply that quietly did nothing is worse than one that says which target it
+// could not reach — and the read is the cheapest way to say it, because the
+// alternative is claiming the row to find out and then paying to put it back.
+func UndispatchableTarget(ctx context.Context, dispatcher, id string) (string, error) {
+	const q = `
+		SELECT p.target
+		  FROM propagation_outbox p
+		  JOIN targets t ON t.target = p.target AND t.state = 'active'
+		 WHERE p.id = $1 AND p.target <> $2 AND p.status IN ('pending','in_flight')`
+	var target string
+	if err := PG.QueryRow(ctx, q, id, dispatcher).Scan(&target); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", fmt.Errorf("read undispatchable target for %s: %w", id, err)
+	}
+	return target, nil
 }
 
 // ErrPropagationNotInFlight means the row this drain was settling is no longer

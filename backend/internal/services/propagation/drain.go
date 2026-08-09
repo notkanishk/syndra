@@ -120,22 +120,17 @@ func DrainOne(ctx context.Context, outboxID string) (DrainResult, error) {
 	if !zitadelReachable(ctx) {
 		return DrainResult{Halted: true, Reason: "zitadel_offline"}, nil
 	}
-	row, found, err := claimOne(ctx, outboxID)
+	row, found, err := claimOne(ctx, db.TargetZitadel, outboxID)
 	if err != nil {
 		return DrainResult{}, fmt.Errorf("claim propagation %s: %w", outboxID, err)
 	}
 	var res DrainResult
 	if !found {
-		return res, nil // already terminal, gone, or on a target no longer active
-	}
-	if row.Target != db.TargetZitadel {
-		// Claimed but not dispatchable here. Put it back rather than pushing it
-		// through the Zitadel path, and say so: leaving it in_flight would make
-		// it look like a dispatch nobody can account for.
-		if _, err := requeue(ctx, row.ID, "no dispatcher for target "+row.Target); err != nil && !errors.Is(err, db.ErrPropagationNotInFlight) {
-			return res, fmt.Errorf("release %s: %w", row.ID, err)
-		}
-		res.Awaiting = []string{row.Target}
+		// Already terminal, gone, on a deregistered target, or on a target this
+		// drain cannot dispatch. Nothing was claimed, so nothing has to be put
+		// back — which is the point of scoping the claim rather than claiming
+		// first and releasing after. Only the last of those is worth saying.
+		res.Awaiting = undispatchableTargets(ctx, outboxID)
 		return res, nil
 	}
 	res.processRow(ctx, *row)
@@ -158,6 +153,21 @@ func (res *DrainResult) abandoned(id, step string, err error) bool {
 	log.Printf("[DRAIN] outbox=%s %s: the row was terminated while its dispatch was out; leaving it terminal", id, step)
 	res.Abandoned++
 	return true
+}
+
+// undispatchableTargets names the target of a row a claim declined because this
+// drain does not dispatch it. Diagnostic only: a failure to explain must not
+// become a failure to drain.
+func undispatchableTargets(ctx context.Context, id string) []string {
+	target, err := undispatchable(ctx, db.TargetZitadel, id)
+	if err != nil {
+		log.Printf("[PROPAGATION] could not identify the target of row=%s: %v (non-fatal)", id, err)
+		return nil
+	}
+	if target == "" {
+		return nil
+	}
+	return []string{target}
 }
 
 func (res *DrainResult) processRow(ctx context.Context, row models.PendingPropagation) (halt bool) {

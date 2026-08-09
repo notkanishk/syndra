@@ -24,6 +24,7 @@ import (
 var (
 	claimPending     = db.ClaimPendingPropagations
 	claimOne         = db.ClaimPropagationByID
+	undispatchable   = db.UndispatchableTarget
 	awaitingDispatch = db.TargetsAwaitingDispatch
 	markApplied      = db.MarkPropagationApplied
 	markFailed       = db.MarkPropagationFailed
