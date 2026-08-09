@@ -223,6 +223,27 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/v1/governance/drift/bulk-attribute", withCORS(withOperatorAuth(handleBulkAttributeDrift)))
 	// The second and last bulk resolution. Bulk revoke is deliberately absent —
 	// see handleBulkMarkDriftExternal.
+	// Role-to-target mappings (change `addon-platform` group 7). What a Zitadel
+	// role means on a target: a first-class versioned model with the same
+	// history a bundle edit gets, because a mapping edit silently changes what
+	// every holder of that role can reach.
+	mux.HandleFunc("GET /api/v1/targets/mappings", withCORS(withOperatorAuth(handleListRoleMappings)))
+	mux.HandleFunc("POST /api/v1/targets/mappings", withCORS(withOperatorAuth(handleCreateRoleMapping)))
+	mux.HandleFunc("PATCH /api/v1/targets/mappings/{id}", withCORS(withOperatorAuth(handleUpdateRoleMapping)))
+	mux.HandleFunc("DELETE /api/v1/targets/mappings/{id}", withCORS(withOperatorAuth(handleDeleteRoleMapping)))
+	// The blast radius, before anything lands.
+	mux.HandleFunc("GET /api/v1/targets/mappings/{id}/holders", withCORS(withOperatorAuth(handleMappingHolders)))
+	mux.HandleFunc("POST /api/v1/targets/mappings/versions", withCORS(withOperatorAuth(handlePublishMappingVersion)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/mappings/versions/{version}/rollback", withCORS(withOperatorAuth(handleRollbackMappingVersion)))
+
+	// Allowances (group 8): the per-user overlay beside role-derived access.
+	// Nothing here deletes — an allowance is lifted, and the row survives,
+	// because the reason and the actor stay attached to the person.
+	mux.HandleFunc("POST /api/v1/allowances", withCORS(withOperatorAuth(handleCreateAllowance)))
+	mux.HandleFunc("POST /api/v1/allowances/{id}/lift", withCORS(withOperatorAuth(handleLiftAllowance)))
+	mux.HandleFunc("GET /api/v1/users/{id}/allowances", withCORS(withOperatorAuth(handleSubjectAllowances)))
+	mux.HandleFunc("GET /api/v1/governance/allowances/review-due", withCORS(withOperatorAuth(handleAllowancesDueForReview)))
+
 	mux.HandleFunc("POST /api/v1/governance/drift/bulk-mark-external", withCORS(withOperatorAuth(handleBulkMarkDriftExternal)))
 	mux.HandleFunc("POST /api/v1/governance/drift/{id}/attribute", withCORS(withOperatorAuth(handleAttributeDrift)))
 	mux.HandleFunc("POST /api/v1/governance/drift/{id}/revoke", withCORS(withOperatorAuth(handleRevokeDrift)))

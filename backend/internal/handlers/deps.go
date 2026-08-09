@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"syndra/internal/addons"
 	"syndra/internal/auth"
 	"syndra/internal/cache"
 	"syndra/internal/db"
@@ -308,6 +309,35 @@ var (
 	// records nothing, and an apply that claims without verifying.
 	dbCreatePlan        = db.CreatePlan
 	dbClaimPlanVerified = db.ClaimPlanVerified
+
+	// Role-to-target mappings (group 7). Validation is split — Syndra checks
+	// structure, the add-on checks reference — so the two halves are two seams
+	// and a test can fail either.
+	dbListRoleMappings       = db.ListRoleMappings
+	dbGetRoleMapping         = db.GetRoleMapping
+	dbCreateRoleMapping      = db.CreateRoleMapping
+	dbUpdateRoleMappingValue = db.UpdateRoleMappingValue
+	dbDeleteRoleMapping      = db.DeleteRoleMapping
+	dbMappingHolders         = db.MappingHolders
+	dbPublishMappingVersion  = db.PublishMappingVersion
+	dbRollbackMappingVersion = db.RollbackMappingVersion
+	addonsEntitlementSchema  = addons.EntitlementSchema
+
+	// addonsResolvesValue is the add-on's half of mapping validation: whether
+	// `lab_makers` names anything on its target. Syndra cannot answer it — it
+	// does not know what the value means.
+	//
+	// ponytail: accepts every value until the add-on exposes the read (group 4
+	// ships `/capabilities` with an entitlement schema but no value oracle).
+	// Structure is enforced now; reference is enforced the day the add-on can
+	// answer, and this seam is where it lands.
+	addonsResolvesValue = func(context.Context, string, string, string) error { return nil }
+
+	// Allowances (group 8).
+	dbCreateAllowance        = db.CreateAllowance
+	dbLiftAllowance          = db.LiftAllowance
+	dbAllowancesForSubject   = db.AllowancesForSubject
+	dbAllowancesDueForReview = db.AllowancesDueForReview
 
 	// Review › Expiring access reads its own window rather than a slice of the
 	// governance summary, so a 30-day review and Today's 14-day queue can

@@ -171,10 +171,51 @@ func TestAllowanceAndMappingWritesMatchTheSchema(t *testing.T) {
 		for _, m := range re.FindAllStringSubmatch(src, -1) {
 			for _, col := range strings.Split(m[1], ",") {
 				col = strings.TrimSpace(col)
-				if !regexp.MustCompile(`(?m)^\s*`+regexp.QuoteMeta(col)+`\s`).MatchString(body) {
+				if !regexp.MustCompile(`(?m)^\s*` + regexp.QuoteMeta(col) + `\s`).MatchString(body) {
 					t.Errorf("%s writes column %q, which the migration does not declare", tc.table, col)
 				}
 			}
 		}
+	}
+}
+
+// The conflict target is named, so only the binding uniqueness is absorbed. A
+// bare `ON CONFLICT DO NOTHING` would swallow every future constraint too, and
+// a caller would get "already exists" for a row that failed something else.
+func TestTheDuplicateBindingAbsorptionNamesItsArbiter(t *testing.T) {
+	body := funcBody(t, readDBSource(t, "mappings.go"), "CreateRoleMapping")
+	if !strings.Contains(body, "ON CONFLICT (target, project_id, role_key, field) DO NOTHING") {
+		t.Fatal("the absorbed conflict must name the binding key, or a later constraint is absorbed with it")
+	}
+}
+
+// The blast radius a mapping edit would move. Direct grants alone would
+// understate it on exactly the mappings that matter most: a role held through a
+// bundle is held just as much as one granted by hand.
+func TestTheMappingCohortCountsEverySourceOfTheRole(t *testing.T) {
+	body := funcBody(t, readDBSource(t, "mappings.go"), "MappingHolders")
+	for _, frag := range []string{"FROM direct_role_grants", "user_bundle_assignments", "bundle_version_roles"} {
+		if !strings.Contains(body, frag) {
+			t.Errorf("the cohort read is missing %q — a holder it misses is a person an edit moves silently", frag)
+		}
+	}
+	// The UNION on its own line, not merely somewhere in the text: `-- UNION`
+	// contains the word and joins nothing, which would leave the bundle half
+	// present in the source and absent from the result.
+	if !regexp.MustCompile(`(?m)^\s*UNION\s*$`).MatchString(body) {
+		t.Error("the two halves must actually be unioned")
+	}
+}
+
+// Roles are matched in PAIRS. Two independent IN lists would cross-join, so a
+// role of one name in a project the subject holds nothing in would confer
+// whatever that name means somewhere else.
+func TestMappingsForRolesMatchesProjectAndRoleTogether(t *testing.T) {
+	body := funcBody(t, readDBSource(t, "mappings.go"), "MappingsForRoles")
+	if !strings.Contains(body, "unnest($2::text[], $3::text[])") {
+		t.Fatal("project and role must be unnested as pairs, not matched independently")
+	}
+	if !strings.Contains(body, "held.project_id = m.project_id AND held.role_key = m.role_key") {
+		t.Error("both halves of the pair must be compared")
 	}
 }

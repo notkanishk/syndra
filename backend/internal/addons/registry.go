@@ -431,6 +431,27 @@ func (a *Addon) Manifest() (Manifest, error) {
 	return *a.manifest, nil
 }
 
+// EntitlementSchema returns the fields a target declares it understands, for
+// the callers that need the schema and nothing else.
+//
+// Narrower than handing out the Addon: mapping validation asks one question —
+// "is this a field this target has" — and a caller holding the whole
+// registration could answer a different one by accident. It reports
+// ErrNotRegistered and ErrNoManifest distinctly, because a target the
+// deployment does not run and one that has not answered yet send an operator to
+// different places.
+func EntitlementSchema(target string) ([]EntitlementField, error) {
+	a, err := Get(target)
+	if err != nil {
+		return nil, err
+	}
+	m, err := a.Manifest()
+	if err != nil {
+		return nil, err
+	}
+	return m.EntitlementSchema, nil
+}
+
 // Operations returns the effective operation set for rendering, including the
 // unavailable ones. A surface shows those disabled with their reason; omitting
 // them would leave an operator wondering whether the feature exists.
