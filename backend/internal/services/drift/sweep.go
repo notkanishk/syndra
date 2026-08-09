@@ -175,10 +175,18 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 			log.Printf("[DRIFT] mint idempotency key failed user=%s: %v (skipping re-enqueue)", dg.UserID, kerr)
 			continue
 		}
-		if _, err := insertPending(ctx, "add", dg.UserID, dg.ProjectID, []string{dg.RoleKey},
-			"", "{}", key, "system:drift-sweep"); err != nil {
+		switch _, err := insertPending(ctx, "add", dg.UserID, dg.ProjectID, []string{dg.RoleKey},
+			"", "{}", key, "system:drift-sweep"); {
+		case errors.Is(err, db.ErrSupersededByRevocation):
+			// The role is absent because somebody asked for it to be. The
+			// ledger still carries it only because a revocation keeps its row
+			// until the target confirms, which is exactly what this comparison
+			// cannot tell apart from a grant the target lost.
+			log.Printf("[DRIFT] not replaying user=%s project=%s role=%s: a revocation for it is still in flight",
+				dg.UserID, dg.ProjectID, dg.RoleKey)
+		case err != nil:
 			log.Printf("[DRIFT] re-enqueue syndra_only failed user=%s project=%s role=%s: %v", dg.UserID, dg.ProjectID, dg.RoleKey, err)
-		} else {
+		default:
 			res.ReEnqueued++
 		}
 	}

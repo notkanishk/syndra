@@ -99,18 +99,65 @@ func InsertPendingPropagation(ctx context.Context, opType, userID, projectID str
 	// parameter; there is no other target it could name. Add-on entitlement work
 	// goes through EnqueueEntitlementApplyTx, which derives its target from the
 	// approved plan.
+	//
+	// The row is subordinate to an unresolved revocation of the same roles, and
+	// that is a condition of the write rather than a check its caller performs.
+	// The drift sweep's replay is the reason: it decides a grant is missing by
+	// comparing the intent ledger against the target, and the ledger keeps a
+	// row until the revocation is confirmed. So a revoke that has been
+	// dispatched and not yet settled looks exactly like a grant the target lost
+	// — Syndra expects it, Zitadel does not have it — and replaying it would
+	// queue an add whose intent order is newer than the revocation's. The
+	// reconciliation would then preserve the ledger row on the strength of that
+	// add, the drain would re-apply the access, and a revocation an operator
+	// asked for would be undone by a sweep that thought it was repairing drift.
+	//
+	// Deciding it in the caller would leave the read authoritative and the
+	// window open: a revocation queued between the look and the insert would
+	// still be overtaken. Under the access lock the NOT EXISTS is evaluated
+	// against a state no other access mutation can change before this commits.
 	const q = `
 		INSERT INTO propagation_outbox
 			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json, idempotency_key, initiated_by, target)
-		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,'zitadel')
+		SELECT $1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,'zitadel'
+		WHERE NOT EXISTS (
+		    SELECT 1 FROM propagation_outbox o
+		    WHERE o.user_id = $2 AND o.project_id = $3
+		      AND o.status IN ('pending', 'in_flight')
+		      AND (
+		          (o.op_type = 'revoke' AND o.role_keys && $4)
+		          -- A replace removes what its new set omits, so a role absent
+		          -- from that set is on its way out just as surely.
+		          OR (o.op_type = 'replace'
+		              AND EXISTS (SELECT 1 FROM unnest($4::text[]) rk
+		                          WHERE NOT (rk = ANY(o.role_keys))))
+		      ))
 		RETURNING id`
 	var id string
-	if err := PG.QueryRow(ctx, q, opType, userID, projectID, roleKeys, zitadelGrantID,
-		payloadJSON, idempotencyKey, initiatedBy).Scan(&id); err != nil {
-		return "", fmt.Errorf("insert propagation: %w", err)
+	err := InTxLockingAccess(ctx, func(ctx context.Context) error {
+		tx, ok := ctx.Value(txKey).(pgx.Tx)
+		if !ok || tx == nil {
+			return fmt.Errorf("insert propagation: no transaction")
+		}
+		if err := tx.QueryRow(ctx, q, opType, userID, projectID, roleKeys, zitadelGrantID,
+			payloadJSON, idempotencyKey, initiatedBy).Scan(&id); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrSupersededByRevocation
+			}
+			return fmt.Errorf("insert propagation: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
 	}
 	return id, nil
 }
+
+// ErrSupersededByRevocation refuses a replay that would undo a revocation still
+// in flight. Not a failure: the grant is absent because somebody asked for it to
+// be, and the sweep that noticed has nothing to repair.
+var ErrSupersededByRevocation = errors.New("an unresolved revocation covers these roles")
 
 // PendingOutboxAddExists reports whether an undrained add is already queued for
 // the (target, user, project, role) tuple, so the drift sweep's syndra_only

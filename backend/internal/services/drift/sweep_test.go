@@ -557,3 +557,27 @@ func TestSweep_ASyndraSideFailureIsNotTheTargetsFault(t *testing.T) {
 		})
 	}
 }
+
+// A revocation that has been dispatched and not yet settled looks exactly like
+// a grant the target lost: the ledger still carries it — revocations keep their
+// row until the target confirms — and the target no longer has it. Replaying
+// that would queue an add with a newer intent order than the revocation, the
+// reconciliation would preserve the ledger row on the strength of it, and the
+// drain would put back access an operator asked to remove.
+func TestSweep_DoesNotReplayARoleARevocationIsRemoving(t *testing.T) {
+	stubSweep(t)
+	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
+	})()
+	defer swap(&insertPending, func(context.Context, string, string, string, []string, string, string, string, string) (string, error) {
+		return "", db.ErrSupersededByRevocation
+	})()
+
+	res, err := Sweep(context.Background())
+	if err != nil {
+		t.Fatalf("a subordinated replay is not a sweep failure: %v", err)
+	}
+	if res.ReEnqueued != 0 {
+		t.Fatalf("nothing was replayed, so nothing may be counted as replayed: %+v", res)
+	}
+}

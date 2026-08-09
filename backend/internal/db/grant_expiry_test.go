@@ -517,3 +517,40 @@ func TestTheClaimDispatchesInIntentOrder(t *testing.T) {
 		t.Error("transaction-start time is not the order the decisions were taken in")
 	}
 }
+
+// The drift replay reads the intent ledger directly rather than through the
+// effective-access closure, so the subtraction that hides an unresolved
+// revocation from every delta does not reach it. The condition lives in its
+// write instead — deciding it in the caller would leave the read authoritative
+// and a revocation queued between the look and the insert would still be
+// overtaken.
+func TestTheDriftReplayIsSubordinateToAnUnresolvedRevocation(t *testing.T) {
+	body := funcBody(t, readDBSource(t, "propagations.go"), "InsertPendingPropagation")
+
+	if !strings.Contains(body, "InTxLockingAccess(ctx,") {
+		t.Error("the replay must be written under the access lock, or its NOT EXISTS is a stale read")
+	}
+	if !strings.Contains(body, "WHERE NOT EXISTS (") {
+		t.Fatal("the subordination must be a condition of the insert")
+	}
+	if !strings.Contains(body, "o.op_type = 'revoke' AND o.role_keys && $4") {
+		t.Error("a queued revocation of any of these roles must suppress the replay")
+	}
+	// A replace removes what its new set omits, so a role absent from that set
+	// is on its way out just as surely as one a revoke names.
+	if !strings.Contains(body, "o.op_type = 'replace'") ||
+		!strings.Contains(body, "WHERE NOT (rk = ANY(o.role_keys))") {
+		t.Error("a queued replace that omits one of these roles must suppress the replay too")
+	}
+	if !strings.Contains(body, "o.status IN ('pending', 'in_flight')") {
+		t.Error("only an unresolved revocation is one that has not happened yet")
+	}
+	// Refused, not failed: the grant is absent because somebody asked for it to
+	// be, and the sweep that noticed has nothing to repair.
+	// Asserted on the branch, not on the function: the sentinel is declared
+	// just below and funcBody's extent reaches it, so a containment check
+	// passes even when nothing returns it.
+	if !regexp.MustCompile(`(?s)errors\.Is\(err, pgx\.ErrNoRows\) \{\s*return ErrSupersededByRevocation`).MatchString(body) {
+		t.Error("an insert that matched nothing must return the sentinel, not silence")
+	}
+}
