@@ -3,6 +3,7 @@ package drift
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -447,6 +448,13 @@ func TestSweep_AFailedReadIsAnOutageAndSaysWhichKind(t *testing.T) {
 				items[i] = zitadel.UserGrant{ID: "g", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}
 			}
 			return &zitadel.SearchResult[zitadel.UserGrant]{Items: items, Total: zitadelPageSize * 4}, nil
+		}},
+		// The shape a revoked machine key actually arrives in: the token
+		// exchange answers 401 and doRequest wraps it. Asserting on a bare
+		// StatusError would have passed while this real path did not.
+		{"a revoked machine key", "zitadel_read_refused", db.UnreconciledReadRefused, func(int) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+			return nil, fmt.Errorf("obtain access token: %w",
+				&zitadel.StatusError{Code: 401, Message: `{"error":"invalid_client"}`})
 		}},
 		{"a later page", "zitadel_unreachable", db.UnreconciledUnreachable, func(call int) (*zitadel.SearchResult[zitadel.UserGrant], error) {
 			if call > 1 {

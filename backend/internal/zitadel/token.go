@@ -107,8 +107,19 @@ func (tm *tokenManager) refresh(ctx context.Context) error {
 		return fmt.Errorf("read token response: %w", err)
 	}
 
+	// Typed, because a non-200 here means Zitadel ANSWERED. This is where a
+	// revoked or expired machine key actually fails — before any Management API
+	// call — so a plain error made the commonest credential failure in the
+	// system indistinguishable from an unreachable host to everything that
+	// classifies on the way out. `doRequest` wraps this with %w, so callers
+	// reach it with errors.As.
+	//
+	// The body is truncated rather than embedded whole. It is a bounded
+	// diagnostic in a durable error that gets logged, and the token endpoint is
+	// the one endpoint whose request carried a signed assertion: an upstream
+	// that echoes it back should not be able to make Syndra copy it into a log.
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("token endpoint returned %d: %s", resp.StatusCode, body)
+		return &StatusError{Code: resp.StatusCode, Message: truncateDetail(string(body))}
 	}
 
 	var tokResp tokenResponse
@@ -161,4 +172,18 @@ func MintM2MToken(ctx context.Context, domain, keyPath string) (string, error) {
 	}
 	tm := newTokenManager(domain, saKey, privKey)
 	return tm.Token(ctx)
+}
+
+// detailLimit bounds server-provided detail carried into a StatusError.
+const detailLimit = 512
+
+// truncateDetail keeps an error readable in a log line. The limit is generous
+// enough for any real OAuth error body and short enough that a hostile or
+// broken upstream cannot dictate how much of a log Syndra writes.
+func truncateDetail(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= detailLimit {
+		return s
+	}
+	return s[:detailLimit] + "… (truncated)"
 }

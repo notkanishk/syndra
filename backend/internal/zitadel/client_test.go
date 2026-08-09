@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -551,4 +552,114 @@ func pemEncodeKey(key *rsa.PrivateKey) []byte {
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(key),
 	})
+}
+
+// A revoked or expired machine key fails HERE — at the token exchange, before
+// any Management API call is attempted. Returned as a plain error it was
+// indistinguishable, to everything downstream, from a host that never answered:
+// the drift sweep recorded an unreachable target and the operator waited out a
+// credential that was never going to fix itself.
+func TestTokenExchange_AnsweredFailureCarriesItsStatus(t *testing.T) {
+	resetDeps(t)
+	for _, tc := range []struct {
+		name string
+		code int
+		body string
+	}{
+		{"revoked key", http.StatusUnauthorized, `{"error":"invalid_client","error_description":"key not found"}`},
+		{"disabled service account", http.StatusForbidden, `{"error":"access_denied"}`},
+		{"zitadel failing on its own side", http.StatusInternalServerError, `upstream error`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			httpDo = func(_ *http.Client, req *http.Request) (*http.Response, error) {
+				if !strings.HasSuffix(req.URL.Path, "/oauth/v2/token") {
+					t.Fatalf("expected the token endpoint, got %s", req.URL.Path)
+				}
+				return &http.Response{
+					StatusCode: tc.code,
+					Body:       io.NopCloser(strings.NewReader(tc.body)),
+					Header:     http.Header{},
+				}, nil
+			}
+			tm := newTokenManager("test.zitadel.cloud", &ServiceAccountKey{KeyID: "kid-1", UserID: "sa-user"}, testRSAKey(t))
+
+			_, err := tm.Token(context.Background())
+			var status *StatusError
+			if !errors.As(err, &status) {
+				t.Fatalf("an answered token failure must carry its status, got %T: %v", err, err)
+			}
+			if status.Code != tc.code {
+				t.Fatalf("status = %d, want %d", status.Code, tc.code)
+			}
+		})
+	}
+}
+
+// The same failure reached through the Management API path a caller actually
+// uses. doRequest wraps the token error, so this asserts errors.As traverses
+// the wrapping rather than that the sentinel is returned bare.
+func TestManagementCall_SurfacesAnAnsweredTokenFailureAsStatus(t *testing.T) {
+	resetDeps(t)
+	c, tm := testClient(t)
+	tm.ForceRefresh() // force the next call through the token exchange
+
+	httpDo = func(_ *http.Client, req *http.Request) (*http.Response, error) {
+		if !strings.HasSuffix(req.URL.Path, "/oauth/v2/token") {
+			t.Fatalf("the token exchange must fail before any management call; got %s", req.URL.Path)
+		}
+		return &http.Response{
+			StatusCode: http.StatusUnauthorized,
+			Body:       io.NopCloser(strings.NewReader(`{"error":"invalid_client"}`)),
+			Header:     http.Header{},
+		}, nil
+	}
+
+	_, err := c.ListAllGrants(context.Background(), SearchParams{Limit: 10})
+	var status *StatusError
+	if !errors.As(err, &status) || status.Code != http.StatusUnauthorized {
+		t.Fatalf("a caller must be able to classify this as answered-401, got %T: %v", err, err)
+	}
+}
+
+// A transport failure is not an answered failure. Nothing came back, so nothing
+// may claim a status.
+func TestTokenExchange_ATransportFailureCarriesNoStatus(t *testing.T) {
+	resetDeps(t)
+	httpDo = func(*http.Client, *http.Request) (*http.Response, error) {
+		return nil, errors.New("dial tcp: connection refused")
+	}
+	tm := newTokenManager("test.zitadel.cloud", &ServiceAccountKey{KeyID: "kid-1", UserID: "sa-user"}, testRSAKey(t))
+
+	_, err := tm.Token(context.Background())
+	var status *StatusError
+	if errors.As(err, &status) {
+		t.Fatalf("a host that never answered must not be reported with a status: %v", err)
+	}
+	if err == nil {
+		t.Fatal("a transport failure must still be an error")
+	}
+}
+
+// The detail is a diagnostic, not a transcript. A broken or hostile upstream
+// must not dictate how much of a log Syndra writes — and the token request is
+// the one that carried a signed assertion.
+func TestTokenExchange_BoundsTheDetailItCarries(t *testing.T) {
+	resetDeps(t)
+	httpDo = func(*http.Client, *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Body:       io.NopCloser(strings.NewReader(strings.Repeat("x", 40_000))),
+			Header:     http.Header{},
+		}, nil
+	}
+	tm := newTokenManager("test.zitadel.cloud", &ServiceAccountKey{KeyID: "kid-1", UserID: "sa-user"}, testRSAKey(t))
+
+	_, err := tm.Token(context.Background())
+	var status *StatusError
+	if !errors.As(err, &status) {
+		t.Fatalf("want a StatusError, got %T", err)
+	}
+	if len(status.Message) > detailLimit+len("… (truncated)") {
+		t.Fatalf("detail must be bounded, got %d bytes", len(status.Message))
+	}
 }
