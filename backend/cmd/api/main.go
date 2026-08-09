@@ -129,6 +129,10 @@ func main() {
 		batch := schedulerBatchSize()
 		sched = periodic.New("SCHEDULER", schedulerInterval(), 5*time.Minute, func(ctx context.Context) error {
 			expiry.Sweep(ctx, batch)
+			// A separate pass on the same tick, not a second stage of the
+			// first: grant expiry removes access and this restores it, so a
+			// batch that aborted halfway through one must not skip the other.
+			expiry.SweepAllowances(ctx, batch)
 			return nil
 		})
 		go sched.Start(ctx)

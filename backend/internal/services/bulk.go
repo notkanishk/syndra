@@ -122,8 +122,8 @@ type BulkPlan struct {
 	Op string `json:"op"`
 	// PlanID is the approval this rehearsal became. An apply cites it instead
 	// of asking for the diff to be recomputed against a world that moved.
-	PlanID  string `json:"plan_id,omitempty"`
-	Applied bool   `json:"applied"`
+	PlanID   string        `json:"plan_id,omitempty"`
+	Applied  bool          `json:"applied"`
 	Outcomes []BulkOutcome `json:"outcomes"`
 	Summary  BulkSummary   `json:"summary"`
 }

@@ -62,7 +62,14 @@ var (
 	svcLatestVersionRoles     = db.LatestVersionRoles
 	svcVersionBelongsTo       = db.VersionBelongsTo
 	svcGetDirectGrantsForUser = db.GetDirectGrantsForUser
-	svcGetAllDirectGrants     = db.GetAllDirectGrants
+
+	// Entitlement resolution (design §4, §6). Three seams, because the
+	// resolver's whole content is how the three answers combine and a test has
+	// to be able to move each one independently.
+	svcEffectiveRoleRefs  = effectiveRoleRefs
+	dbMappingsForRoles    = db.MappingsForRoles
+	dbAllowancesInForce   = db.AllowancesInForce
+	svcGetAllDirectGrants = db.GetAllDirectGrants
 	// Direct-grant removal: ledger delete + audit + the caller-computed
 	// effective-access delta, in one transaction.
 	svcDeleteDirectGrantAndEnqueue        = db.DeleteDirectGrantAndEnqueue

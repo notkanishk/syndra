@@ -10,6 +10,7 @@
 package expiry
 
 import (
+	"context"
 	"syndra/internal/cache"
 	"syndra/internal/db"
 	"syndra/internal/services"
@@ -26,6 +27,29 @@ var (
 	svcExpireDirectGrant       = services.ExpireDirectGrant
 	svcEmitIntentFromScheduler = services.EmitProvisioningIntentFromScheduler
 	cacheInvalidateUser        = cache.InvalidateUser
+
+	// Allowance expiry. Its own seams and its own pass: grant expiry removes
+	// access and this restores it, and a batch that aborted halfway through the
+	// first would silently skip the second — on the half that gives access back
+	// to somebody who is owed it.
+	dbLapsedAllowances       = db.LapsedAllowances
+	dbResolveLapsedAllowance = db.ResolveLapsedAllowance
+
+	// reconvergeSubject tells the target that a suspension ended.
+	//
+	// Resolution is already correct the moment the date passes — the resolver
+	// compares the expiry in its predicate — so what this closes is the gap
+	// between Syndra being right and the target being told.
+	//
+	// ponytail: a placeholder until the add-on entitlement dispatcher exists
+	// (group 4). It resolves the set so a mapping or allowance error surfaces
+	// here rather than at the first apply, and the enqueue lands with the
+	// dispatcher that can drain it. Until then the drift sweep is what notices
+	// the target is behind.
+	reconvergeSubject = func(ctx context.Context, subjectID, target string) error {
+		_, err := services.ResolveEntitlements(ctx, subjectID, target)
+		return err
+	}
 )
 
 // expiryActor is the actor recorded on every row this sweep writes. Nobody
