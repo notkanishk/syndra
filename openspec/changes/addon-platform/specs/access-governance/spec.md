@@ -291,6 +291,10 @@ An effective-access delta MUST be computed under the same lock that its write is
 
 The lock MUST be a single lock rather than one per subject, because the subjects of a cascade are not always known before its reads: a mapping-rule change reaches every holder of the source role, and which holders those are is what the reads determine. A lock taken after that answer is a lock taken after the question it was meant to settle. It MUST be transaction-scoped, so a crashed holder cannot hold every access change in the deployment. It MUST NOT be held across a call to a target, in either direction: draining inside it would make one unreachable system serialise every access change behind it, and so would resolving a display name, since a directory lookup in live mode reaches the identity provider through a cache that can miss. A rehearsal that runs inside the lock MUST therefore compute state only; the names it renders MUST be filled in outside it. Presentation is not state.
 
+A queued revocation MUST be visible to effective-access computation from the moment it is queued, not from the moment the target confirms it. The intent ledger deliberately keeps a grant until the target confirms — so a failed dispatch never leaves the backend believing access is gone while the target still has it — which makes the ledger, on its own, a wrong answer to what a subject effectively holds for as long as the row waits. A delta computed from that answer concludes nothing is missing and queues nothing, and the revocation lands anyway: the subject holds the source and not the access, with no queued row disagreeing. Locking the reconciliation does not reach this, because the reconciliation runs after the target has already applied the revocation. A `replace` MUST be read as its complement — its named roles are the ones that survive, and taken as removals they would subtract exactly the access being kept.
+
+Reconciling a revocation MUST NOT retract a role an unresolved later intent is establishing. Once queued revocations are visible, a cascade that wants the role back queues an add behind the revoke, and that add's enqueue has already written the ledger row it needs.
+
 Every write that changes an effective-access source MUST take the lock, not only the ones a cascade issues. A drain reconciling the intent ledger after a confirmed revocation deletes such a source, and a cascade holding the lock can read that row while it is still present, conclude the role it was about to add is already covered, and commit an empty delta while the deletion lands behind it — with nobody left who believes anything is missing. Assigning a bundle MUST go through the same path as any other assignment, including automated onboarding: a bare insert changes what a subject holds without the lock, and it projects nothing, so the access the assignment confers exists in the backend and nowhere else until some later cascade happens to recompute it.
 
 The reads and the write MUST share one transaction, so that a write cannot be committed outside the lock its reads were taken under.
@@ -309,6 +313,7 @@ The outbox table is `propagation_outbox`. It was `pending_zitadel_propagations`,
 - **AND** a cascade that read before that change MUST NOT be able to commit an empty delta over a revocation that landed after its read
 - **AND** the ledger reconciliation a drain performs after a confirmed revocation MUST take the same lock
 - **AND** no call to a target or to the directory MUST happen while it is held
+- **AND** a role with an unresolved revocation MUST NOT count as held by any delta computed while it waits
 
 #### Scenario: A Zitadel outbox row cannot be written half-formed
 

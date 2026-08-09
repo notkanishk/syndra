@@ -69,6 +69,10 @@ var (
 	svcDeleteExpiredDirectGrantAndEnqueue = db.DeleteExpiredDirectGrantAndEnqueue
 	svcInTxLockingAccess                  = db.InTxLockingAccess
 	svcGetActiveMappingRules              = db.GetActiveMappingRules
+	// Queued revocations are decisions already taken; every effective-access
+	// read subtracts them so a delta cannot be computed from a ledger row that
+	// is on its way out.
+	svcQueuedRevocations = db.QueuedRevocations
 
 	// Role management
 	svcDbCreateRole               = db.CreateRole

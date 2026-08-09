@@ -439,8 +439,22 @@ func ReconcileLedgerOnApplied(ctx context.Context, opType, userID, projectID str
 		}
 		switch opType {
 		case "revoke":
+			// Not a role something is currently trying to establish. Once a
+			// queued revocation is visible to closure computation, a cascade
+			// that wants the role back queues an `add` behind it — and that
+			// add's enqueue has already written the ledger row it needs.
+			// Deleting here by triple would retract an intent newer than the
+			// one being reconciled, and the drain would then apply an add whose
+			// ledger row no longer exists.
 			const q = `DELETE FROM direct_role_grants
-				WHERE user_id=$1 AND zitadel_project_id=$2 AND zitadel_role_key = ANY($3) AND source=$4`
+				WHERE user_id=$1 AND zitadel_project_id=$2 AND zitadel_role_key = ANY($3) AND source=$4
+				  AND NOT EXISTS (
+				      SELECT 1 FROM propagation_outbox o
+				      WHERE o.user_id = direct_role_grants.user_id
+				        AND o.project_id = direct_role_grants.zitadel_project_id
+				        AND direct_role_grants.zitadel_role_key = ANY(o.role_keys)
+				        AND o.op_type = 'add'
+				        AND o.status IN ('pending', 'in_flight'))`
 			if _, err := tx.Exec(ctx, q, userID, projectID, roleKeys, source); err != nil {
 				return fmt.Errorf("reconcile ledger (revoke): %w", err)
 			}
@@ -479,4 +493,66 @@ func scanPropagations(rows pgx.Rows) ([]models.PendingPropagation, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// RoleRef is a (project, role) pair the outbox names.
+type RoleRef struct {
+	ProjectID string
+	RoleKey   string
+}
+
+// QueuedRevocations lists the roles a subject has an unresolved revocation for.
+//
+// A queued revocation is a decision already taken. Until the drain reaches it
+// the intent ledger still carries the grant — it is deleted only after the
+// target confirms, so that a failed dispatch never leaves Syndra believing
+// access is gone while the target still has it. That makes the ledger, on its
+// own, a wrong answer to "what does this person effectively hold" for exactly
+// as long as the row waits.
+//
+// A closure computed from that wrong answer decides nothing is missing and
+// queues nothing, and the revocation then lands anyway: the subject ends up
+// holding the source and not the access, with no queued row disagreeing. So the
+// effective-access reads subtract these, which makes the transition visible to
+// every delta from the moment it is queued rather than from the moment it is
+// confirmed.
+func QueuedRevocations(ctx context.Context, userID string) ([]RoleRef, error) {
+	// `replace` names the roles that SURVIVE, not the ones being taken away, so
+	// it cannot be unioned with revoke's role_keys. Its removals are the
+	// direct-sourced ledger roles on that project which the new set omits —
+	// the same predicate ReconcileLedgerOnApplied deletes by, asked ahead of
+	// time instead of after.
+	const q = `
+		SELECT project_id, UNNEST(role_keys) AS role_key
+		FROM propagation_outbox
+		WHERE user_id = $1
+		  AND op_type = 'revoke'
+		  AND status IN ('pending', 'in_flight')
+		  AND project_id IS NOT NULL AND role_keys IS NOT NULL
+		UNION
+		SELECT g.zitadel_project_id, g.zitadel_role_key
+		FROM propagation_outbox o
+		JOIN direct_role_grants g
+		  ON g.user_id = o.user_id
+		 AND g.zitadel_project_id = o.project_id
+		 AND g.source = 'direct'
+		WHERE o.user_id = $1
+		  AND o.op_type = 'replace'
+		  AND o.status IN ('pending', 'in_flight')
+		  AND o.project_id IS NOT NULL AND o.role_keys IS NOT NULL
+		  AND NOT (g.zitadel_role_key = ANY(o.role_keys))`
+	rows, err := PG.Query(ctx, q, userID)
+	if err != nil {
+		return nil, fmt.Errorf("queued revocations for %s: %w", userID, err)
+	}
+	defer rows.Close()
+	var out []RoleRef
+	for rows.Next() {
+		var r RoleRef
+		if err := rows.Scan(&r.ProjectID, &r.RoleKey); err != nil {
+			return nil, fmt.Errorf("scan queued revocation: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }

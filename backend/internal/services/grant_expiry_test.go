@@ -246,3 +246,70 @@ func TestExpireDirectGrant_ComputesTheDeltaUnderTheAccessLock(t *testing.T) {
 		}
 	}
 }
+
+// The intent ledger keeps a grant until the target confirms it is gone, so for
+// as long as a revocation waits in the queue the ledger says the subject still
+// holds the role while the decision to remove it has already been taken.
+//
+// A cascade computing a delta from that answer concludes nothing is missing and
+// queues nothing, and the revocation lands anyway: the subject ends up holding
+// the source and not the access, with no queued row disagreeing. Locking the
+// reconciliation does not help — it runs after the target has already applied
+// the revoke.
+func TestClosureTreatsAQueuedRevocationAsAlreadyGone(t *testing.T) {
+	resetCascadeDeps(t)
+	svcGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{ID: "g1", UserID: "u1", ProjectID: "pLaser", RoleKey: "trained"}}, nil
+	}
+	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) {
+		return nil, nil
+	}
+
+	// Nothing queued: the ledger row is the answer.
+	base, err := userBaseHoldings(context.Background(), "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !base[roleKey{projectID: "pLaser", roleKey: "trained"}] {
+		t.Fatal("a live grant with nothing queued against it is held")
+	}
+
+	// A revocation waiting in the outbox is a decision already taken.
+	svcQueuedRevocations = func(context.Context, string) ([]db.RoleRef, error) {
+		return []db.RoleRef{{ProjectID: "pLaser", RoleKey: "trained"}}, nil
+	}
+	base, err = userBaseHoldings(context.Background(), "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if base[roleKey{projectID: "pLaser", roleKey: "trained"}] {
+		t.Fatal("a role with an unresolved revocation must not count as held — the delta that follows would queue nothing and the revoke would land anyway")
+	}
+
+	// And a cascade that wants the role therefore queues it, behind the revoke.
+	captured := expiryFixture(t, nil, nil, nil, nil)
+	svcQueuedRevocations = func(context.Context, string) ([]db.RoleRef, error) {
+		return []db.RoleRef{{ProjectID: "pLaser", RoleKey: "trained"}}, nil
+	}
+	_ = captured
+	// The exclusion applies to every base read, not only the plain one.
+	svcGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{ID: "g1", UserID: "u1", ProjectID: "pLaser", RoleKey: "trained"}}, nil
+	}
+	for name, read := range map[string]func() (map[roleKey]bool, error){
+		"excluding bundle": func() (map[roleKey]bool, error) {
+			return userBaseHoldingsExcludingBundle(context.Background(), "u1", "b_other")
+		},
+		"excluding grant": func() (map[roleKey]bool, error) {
+			return userBaseHoldingsExcludingGrant(context.Background(), "u1", "g_other")
+		},
+	} {
+		got, err := read()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got[roleKey{projectID: "pLaser", roleKey: "trained"}] {
+			t.Errorf("%s: a queued revocation must be subtracted from every effective-access read", name)
+		}
+	}
+}

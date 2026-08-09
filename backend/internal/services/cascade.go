@@ -158,6 +158,33 @@ func sortRoleKeys(ks []roleKey) {
 }
 
 // userBaseHoldings returns a user's PRE-rule base = direct grants ∪ bundle literal roles.
+// subtractQueuedRevocations removes roles the subject has an unresolved
+// revocation for.
+//
+// The intent ledger keeps a grant until the target confirms it is gone — so
+// that a failed dispatch never leaves Syndra believing access is removed while
+// the target still has it. For as long as the row waits, the ledger is a wrong
+// answer to "what does this person effectively hold": the decision is taken,
+// the row is not yet gone. A delta computed from it concludes nothing is
+// missing and queues nothing, and the revocation lands anyway.
+//
+// Subtracting them makes the transition visible from the moment it is queued
+// rather than the moment it is confirmed, which is the only point at which
+// another cascade can still do something about it. A revocation that later
+// fails and is requeued leaves the role absent from the closure, and a cascade
+// that wants it queues an add behind the revoke — the final state is the one
+// the newer decision asked for.
+func subtractQueuedRevocations(ctx context.Context, userID string, base map[roleKey]bool) error {
+	queued, err := svcQueuedRevocations(ctx, userID)
+	if err != nil {
+		return err
+	}
+	for _, r := range queued {
+		delete(base, roleKey{projectID: r.ProjectID, roleKey: r.RoleKey})
+	}
+	return nil
+}
+
 func userBaseHoldings(ctx context.Context, userID string) (map[roleKey]bool, error) {
 	return userBaseHoldingsExcludingBundle(ctx, userID, "")
 }
@@ -186,6 +213,9 @@ func userBaseHoldingsExcludingBundle(ctx context.Context, userID, excludeBundleI
 			base[roleKey{projectID: ro.ProjectID, roleKey: ro.RoleKey}] = true
 		}
 	}
+	if err := subtractQueuedRevocations(ctx, userID, base); err != nil {
+		return nil, err
+	}
 	return base, nil
 }
 
@@ -208,6 +238,9 @@ func userBaseHoldingsWithBundleAt(
 	}
 	for _, ro := range roles {
 		base[roleKey{projectID: ro.ProjectID, roleKey: ro.RoleKey}] = true
+	}
+	if err := subtractQueuedRevocations(ctx, userID, base); err != nil {
+		return nil, err
 	}
 	return base, nil
 }
@@ -608,6 +641,9 @@ func userBaseHoldingsExcludingGrant(ctx context.Context, userID, excludeGrantID 
 		for _, ro := range roles {
 			base[roleKey{projectID: ro.ProjectID, roleKey: ro.RoleKey}] = true
 		}
+	}
+	if err := subtractQueuedRevocations(ctx, userID, base); err != nil {
+		return nil, err
 	}
 	return base, nil
 }

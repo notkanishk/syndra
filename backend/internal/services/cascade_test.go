@@ -14,6 +14,10 @@ import (
 // resetCascadeDeps captures and restores every cascade injectable, mirroring
 // resetOnboardingDeps's t.Cleanup idiom.
 func resetCascadeDeps(t *testing.T) {
+	// Nothing is queued unless a test says so; the real read needs a database.
+	origQueued := svcQueuedRevocations
+	t.Cleanup(func() { svcQueuedRevocations = origQueued })
+	svcQueuedRevocations = func(context.Context, string) ([]db.RoleRef, error) { return nil, nil }
 	// The real one opens a transaction and takes the access lock, neither of
 	// which exists without a database. Tests exercise what runs inside it.
 	origLock := svcInTxLockingAccess

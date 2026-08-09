@@ -387,3 +387,32 @@ func indicesOf(hay, needle string) []int {
 		i += j + len(needle)
 	}
 }
+
+// `replace` names the roles that SURVIVE, not the ones being taken away. Read
+// as removals they would subtract exactly the access being kept, and every
+// cascade would queue an add for roles nothing was removing.
+func TestQueuedRevocationsReadsReplaceAsItsComplement(t *testing.T) {
+	body := funcBody(t, readDBSource(t, "propagations.go"), "QueuedRevocations")
+	if regexp.MustCompile(`op_type IN \('revoke', 'replace'\)`).MatchString(body) {
+		t.Fatal("replace's role_keys are the surviving set; unioning them with revoke's subtracts the wrong roles")
+	}
+	if !strings.Contains(body, "o.op_type = 'replace'") || !strings.Contains(body, "NOT (g.zitadel_role_key = ANY(o.role_keys))") {
+		t.Error("a queued replace removes the direct-sourced roles its new set omits — the same predicate the reconciliation deletes by")
+	}
+	// Both branches, counted: a mutation that resolves only one of them leaves
+	// the other's predicate intact and passes a containment check.
+	if n := strings.Count(body, "status IN ('pending', 'in_flight')"); n != 2 {
+		t.Errorf("both branches must count only unresolved rows, found %d", n)
+	}
+}
+
+// Once a queued revocation is visible to closure computation, a cascade that
+// wants the role back queues an add behind the revoke — and that add's enqueue
+// has already written the ledger row it needs. Reconciling the older revocation
+// must not retract it.
+func TestReconciliationDoesNotRetractANewerIntent(t *testing.T) {
+	body := funcBody(t, readDBSource(t, "propagations.go"), "ReconcileLedgerOnApplied")
+	if !strings.Contains(body, "NOT EXISTS") || !strings.Contains(body, "o.op_type = 'add'") {
+		t.Error("the revoke reconciliation must leave alone a role an unresolved add is establishing")
+	}
+}
