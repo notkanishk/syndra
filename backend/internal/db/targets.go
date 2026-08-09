@@ -10,6 +10,14 @@ import (
 // add-on registry reconciliation below must never touch it.
 const TargetZitadel = "zitadel"
 
+// The two states the registry recognises. A target is disabled, never deleted:
+// propagation and drift history keeps pointing at the row and must keep
+// resolving.
+const (
+	TargetActive   = "active"
+	TargetDisabled = "disabled"
+)
+
 // UpsertTarget records a target as registered and active.
 //
 // Every table carrying a target resolves it against this registry by foreign

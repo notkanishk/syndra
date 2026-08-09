@@ -54,6 +54,23 @@ Every per-subject row MUST record a fingerprint, and a plan MUST NOT be persiste
 - **WHEN** a rehearsal would persist a subject row without a fingerprint of the state it reviewed
 - **THEN** the backend MUST refuse to persist the plan rather than store a row that verifies vacuously
 
+An accepted apply MUST spend the plan and queue its work in one transaction, so that a failure partway through leaves neither. It MUST NOT queue work for a target whose registration is not active: that target was removed from the deployment, so nothing will drain those rows, and a row that never drains is counted as queued — which reads as recorded. That is distinct from a target that is merely unreachable, which is still deployed and whose work MUST queue.
+
+Every value on a queued row MUST be read from the claimed plan rather than from the request citing it. The two agree because the claim requires it, but a row written from request fields trusts the caller for facts the approval already holds.
+
+#### Scenario: An apply queues work and spends the plan together
+
+- **WHEN** any part of an accepted apply fails after the plan has been claimed
+- **THEN** no work MUST remain queued
+- **AND** the plan MUST remain unspent, so the operator can apply the approval they still hold
+
+#### Scenario: A target the deployment dropped takes no work
+
+- **WHEN** an apply cites a plan for a target whose registration is not active
+- **THEN** the backend MUST refuse it
+- **AND** MUST NOT spend the plan, so the approval survives the target being re-registered
+- **AND** the refusal MUST be distinguishable from a target that is deployed and unreachable
+
 #### Scenario: Apply cites the plan the operator reviewed
 
 - **WHEN** an operator rehearses a bulk or drift-triage action and then applies it
