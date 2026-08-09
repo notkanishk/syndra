@@ -230,6 +230,17 @@ CREATE TABLE IF NOT EXISTS plan_subjects (
 ALTER TABLE propagation_outbox
     ADD COLUMN IF NOT EXISTS plan_subject_id UUID REFERENCES plan_subjects(id);
 
+-- One approval, one queued convergence. The enqueue refuses a second row for an
+-- approval that already has one, but a predicate cannot refuse what a
+-- concurrent transaction has not committed yet: without this index, two callers
+-- racing on one plan subject both see no existing row and both insert. The
+-- approval is the unit of review, so two rows under it would be one reviewed
+-- change dispatched twice.
+--
+-- Partial because Zitadel rows predate plan citation and carry NULL here.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_propagation_outbox_plan_subject
+    ON propagation_outbox (plan_subject_id) WHERE plan_subject_id IS NOT NULL;
+
 -- 1.6 --------------------------------------------------------------------
 -- No foreign key above carries ON DELETE CASCADE, deliberately. Plan expiry
 -- MUST NOT reach a snapshot: snapshots are audit records that outlive the plan

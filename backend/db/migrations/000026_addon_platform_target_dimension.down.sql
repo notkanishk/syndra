@@ -50,6 +50,7 @@ ALTER TABLE drift_items
 ALTER TABLE drift_items DROP COLUMN IF EXISTS target;
 
 -- 1.5 --------------------------------------------------------------------
+DROP INDEX IF EXISTS idx_propagation_outbox_plan_subject;
 ALTER TABLE propagation_outbox DROP COLUMN IF EXISTS plan_subject_id;
 DROP TABLE IF EXISTS plan_subjects;
 DROP TABLE IF EXISTS plans;

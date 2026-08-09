@@ -19,17 +19,27 @@ type harness struct {
 	steps     []string
 	committed bool
 
-	state       string
-	stateErr    error
-	plan        db.Plan
-	subjects    []db.PlanSubject
-	claimErr    error
-	citation    db.PlanCitation
-	enqueued    []db.EntitlementApply
-	enqueueErr  map[string]error
-	rolledBack  bool
-	txOpened    bool
-	outboxSeqNo int
+	state      string
+	stateErr   error
+	plan       db.Plan
+	subjects   []db.PlanSubject
+	claimErr   error
+	citation   db.PlanCitation
+	enqueued   []db.EntitlementApply
+	enqueueErr map[string]error
+	rolledBack bool
+	txOpened   bool
+}
+
+// subjectOf resolves an approval to its subject the way the enqueue's own
+// statement does — from the plan subject row, never from a caller's field.
+func (h *harness) subjectOf(planSubjectID string) string {
+	for _, s := range h.subjects {
+		if s.ID == planSubjectID {
+			return s.SubjectID
+		}
+	}
+	return "unknown:" + planSubjectID
 }
 
 func install(t *testing.T, h *harness) {
@@ -60,13 +70,15 @@ func install(t *testing.T, h *harness) {
 		return h.plan, h.subjects, h.claimErr
 	}
 	enqueue = func(_ context.Context, _ pgx.Tx, p db.EntitlementApply) (string, error) {
-		h.steps = append(h.steps, "enqueue:"+p.SubjectID)
+		// The approval is all the gate passes, so the fake resolves the subject
+		// from it exactly as the real INSERT ... SELECT does.
+		subject := h.subjectOf(p.PlanSubjectID)
+		h.steps = append(h.steps, "enqueue:"+subject)
 		h.enqueued = append(h.enqueued, p)
-		if err := h.enqueueErr[p.SubjectID]; err != nil {
+		if err := h.enqueueErr[subject]; err != nil {
 			return "", err
 		}
-		h.outboxSeqNo++
-		return "outbox-" + p.SubjectID, nil
+		return "outbox-" + subject, nil
 	}
 }
 
@@ -136,31 +148,19 @@ func TestThePlanIsClaimedBeforeAnyWorkIsQueued(t *testing.T) {
 	}
 }
 
-// 2.9 — the queued row is built from the CLAIMED PLAN, not from the request
-// that cited it.
-//
-// The two agree in production: the claim's predicate matches on target and on
-// created_by, so a plan whose fields differ from the citation is never
-// returned. This test hands back one anyway, because "these are equal" and
-// "this is where the value comes from" are different statements, and only the
-// second survives a future change to the claim. A row written from request
-// fields is a row that trusts the caller for facts the approval already holds.
-func TestQueuedRowsAreBuiltFromTheClaimedPlanRatherThanTheRequest(t *testing.T) {
+// 2.9 — the gate passes the approval and nothing else. Every other field on a
+// queued row is derived from that approval by the write itself, so there is no
+// second value here that could disagree with it.
+func TestTheGatePassesOnlyTheApproval(t *testing.T) {
 	h := working()
-	h.plan.Target = "from-the-plan"
-	h.plan.CreatedBy = "approver-from-the-plan"
 	install(t, h)
 
-	req := Request{PlanID: "plan-1", Target: "from-the-request", Surface: "entitlements", Actor: "actor-from-the-request"}
-	if _, err := Apply(context.Background(), req); err != nil {
+	if _, err := Apply(context.Background(), request()); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	for i, e := range h.enqueued {
-		if e.Target != "from-the-plan" {
-			t.Errorf("queued row %d took its target from %q — the approval is what says which target was reviewed", i, e.Target)
-		}
-		if e.InitiatedBy != "approver-from-the-plan" {
-			t.Errorf("queued row %d records %q as the initiator — the row that knows who approved it is the plan", i, e.InitiatedBy)
+		if (e != db.EntitlementApply{PlanSubjectID: h.subjects[i].ID}) {
+			t.Errorf("queued row %d carries caller-supplied fields beside the approval: %+v", i, e)
 		}
 	}
 }
@@ -172,12 +172,11 @@ func TestTheCitationReachesTheClaimUnchanged(t *testing.T) {
 	h := working()
 	install(t, h)
 
-	req := Request{PlanID: "plan-9", Target: "truenas", Surface: "drift.triage", Actor: "operator-7"}
-	h.plan.ID = "plan-9"
+	req := Request{PlanID: "plan-1", Target: "truenas", Surface: "drift.triage", Actor: "operator-7"}
 	if _, err := Apply(context.Background(), req); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	want := db.PlanCitation{PlanID: "plan-9", Target: "truenas", Surface: "drift.triage", Actor: "operator-7"}
+	want := db.PlanCitation{PlanID: "plan-1", Target: "truenas", Surface: "drift.triage", Actor: "operator-7"}
 	if h.citation != want {
 		t.Errorf("citation = %+v, want %+v", h.citation, want)
 	}

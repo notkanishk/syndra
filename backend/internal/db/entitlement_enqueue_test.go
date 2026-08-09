@@ -5,7 +5,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -45,17 +47,38 @@ func outboxColumns(t *testing.T) map[string]bool {
 	return cols
 }
 
+// insertShape splits the entitlement INSERT into its column list and the
+// expressions selected into it.
+func insertShape(t *testing.T) (columns, selected []string) {
+	t.Helper()
+	src, err := os.ReadFile("entitlement_enqueue.go")
+	if err != nil {
+		t.Fatalf("read entitlement_enqueue.go: %v", err)
+	}
+	m := regexp.MustCompile(`(?s)INSERT INTO propagation_outbox\s*\n\s*\((.*?)\)\s*\n\s*SELECT (.*?)\n`).FindStringSubmatch(string(src))
+	if m == nil {
+		t.Fatal("could not isolate the entitlement INSERT's column and select lists")
+	}
+	for _, c := range strings.Split(m[1], ",") {
+		columns = append(columns, strings.TrimSpace(c))
+	}
+	for _, v := range strings.Split(m[2], ",") {
+		selected = append(selected, strings.TrimSpace(v))
+	}
+	return columns, selected
+}
+
 func entitlementInsert(t *testing.T) string {
 	t.Helper()
 	src, err := os.ReadFile("entitlement_enqueue.go")
 	if err != nil {
 		t.Fatalf("read entitlement_enqueue.go: %v", err)
 	}
-	m := regexp.MustCompile(`(?s)INSERT INTO propagation_outbox\s*\n\s*\((.*?)\)\s*\n\s*VALUES \((.*?)\)`).FindStringSubmatch(string(src))
+	m := regexp.MustCompile(`(?s)INSERT INTO propagation_outbox(.*?)RETURNING`).FindStringSubmatch(string(src))
 	if m == nil {
 		t.Fatal("could not isolate the entitlement outbox INSERT")
 	}
-	return m[1] + " || " + m[2]
+	return m[1]
 }
 
 // 2.9 — the row is written to the target it is for. `target` carries
@@ -64,12 +87,22 @@ func entitlementInsert(t *testing.T) string {
 // find no project and no roles.
 func TestAnEntitlementRowNamesItsTargetAndItsApproval(t *testing.T) {
 	insert := entitlementInsert(t)
+	columns, selected := insertShape(t)
 
-	if !strings.Contains(insert, "target") {
-		t.Error("the entitlement enqueue must write `target` explicitly — the column defaults to zitadel, so leaving it out is a wrong write that raises nothing")
+	// The COLUMN LIST, not merely the statement text. `p.target` appears in the
+	// SELECT whether or not the row has a target column to land in, so a
+	// substring check over the whole statement passes while the write is
+	// malformed — or, worse, well-formed and defaulting to zitadel.
+	for _, col := range []string{"target", "plan_subject_id"} {
+		if !slices.Contains(columns, col) {
+			t.Errorf("the entitlement enqueue must write %q explicitly: `target` defaults to zitadel, so omitting it is a wrong write that raises nothing, and without the plan subject the drain has no fingerprint to re-verify", col)
+		}
 	}
-	if !strings.Contains(insert, "plan_subject_id") {
-		t.Error("the entitlement enqueue must cite the plan subject: without it the drain has no fingerprint to re-verify and no record of what was approved")
+	// And the two halves line up. A column list and a select list of different
+	// lengths is a statement that fails the moment it is prepared, inside an
+	// apply that has already claimed the plan.
+	if len(columns) != len(selected) {
+		t.Errorf("the insert names %d columns and selects %d values: %v vs %v", len(columns), len(selected), columns, selected)
 	}
 	// The op_type is a literal in the statement, not a parameter, so there is
 	// no caller able to queue an entitlement change as something else.
@@ -149,27 +182,124 @@ func TestApplyIsAnAcceptedOpType(t *testing.T) {
 	}
 }
 
+// 2.9 — every bound field of the row comes from the approval, not from a
+// caller. A foreign key would have proved only that the plan subject exists:
+// not that it is this person's, not that its plan was ever claimed, and not
+// that its target still takes work. Each of those is in the predicate, so a row
+// that should not exist is never written rather than written and argued about.
+func TestTheOutboxRowIsDerivedFromTheApproval(t *testing.T) {
+	insert := entitlementInsert(t)
+
+	// Derived, not parameterised. A $n in any of these positions is a value a
+	// caller chose, and a caller that chooses the subject can queue one
+	// person's work under another person's approval.
+	for _, derived := range []string{"ps.subject_id", "p.created_by", "p.target", "ps.id"} {
+		if !strings.Contains(insert, derived) {
+			t.Errorf("the row must take its %s from the approval, not from a parameter", derived)
+		}
+	}
+	for _, predicate := range []struct{ frag, why string }{
+		{"p.applied_at IS NOT NULL", "work may only be queued under an approval that was actually claimed"},
+		{"t.state = 'active'", "a target the deployment dropped must take no work, enforced at the write and not only at the caller"},
+		{"p.target <> $3", "the built-in target's rows carry project and role columns this path cannot fill"},
+		{"NOT EXISTS", "one approval, one queued convergence"},
+	} {
+		if !strings.Contains(insert, predicate.frag) {
+			t.Errorf("the insert must require %q: %s", predicate.frag, predicate.why)
+		}
+	}
+	// And the caller supplies nothing that identifies a person or a target.
+	for _, field := range []string{"SubjectID", "Target", "InitiatedBy"} {
+		if _, ok := reflect.TypeOf(EntitlementApply{}).FieldByName(field); ok {
+			t.Errorf("EntitlementApply.%s lets a caller name what the approval already names", field)
+		}
+	}
+}
+
+// 2.9 — the predicate is the authority and the pure explainer only says why it
+// matched nothing, so the two must refuse on the same set of conditions.
+func TestTheEnqueuePredicateAndItsExplainerRefuseTheSameThings(t *testing.T) {
+	insert := entitlementInsert(t)
+
+	queueable := approvalRef{found: true, target: "truenas", targetState: TargetActive, claimed: true}
+	if err := enqueueRefusal(queueable, sampleUUID); err != nil {
+		t.Fatalf("the baseline approval is not queueable (%v) — every case below would pass vacuously", err)
+	}
+
+	for _, tc := range []struct {
+		name      string
+		mutate    func(*approvalRef)
+		want      error
+		predicate string
+	}{
+		{"no such approval", func(r *approvalRef) { r.found = false }, ErrNoClaimedApproval, "ps.id = $4"},
+		{"the plan was never claimed", func(r *approvalRef) { r.claimed = false }, ErrNoClaimedApproval, "p.applied_at IS NOT NULL"},
+		{"the target was dropped", func(r *approvalRef) { r.targetState = TargetDisabled }, ErrTargetNotActive, "t.state = 'active'"},
+		{"the built-in target", func(r *approvalRef) { r.target = TargetZitadel }, ErrNotAnEntitlementTarget, "p.target <> $3"},
+		{"already queued", func(r *approvalRef) { r.alreadyQueued = true }, ErrAlreadyQueued, "NOT EXISTS"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := queueable
+			tc.mutate(&r)
+			if err := enqueueRefusal(r, sampleUUID); !errors.Is(err, tc.want) {
+				t.Errorf("enqueueRefusal = %v, want %v", err, tc.want)
+			}
+			if !strings.Contains(insert, tc.predicate) {
+				t.Errorf("the insert does not require %q, so the database would write what the explainer calls a refusal", tc.predicate)
+			}
+		})
+	}
+}
+
+// 2.9 — a second row under one approval is refused by a predicate for a clean
+// answer and by an index for the concurrent case a predicate cannot see. Two
+// callers racing on one plan subject both read no existing row.
+func TestOneApprovalCanQueueOnlyOneRow(t *testing.T) {
+	up, down := addonMigrationSQL(t)
+
+	if !regexp.MustCompile(`(?is)CREATE UNIQUE INDEX IF NOT EXISTS idx_propagation_outbox_plan_subject\s+ON propagation_outbox \(plan_subject_id\) WHERE plan_subject_id IS NOT NULL`).MatchString(up) {
+		t.Error("a unique index must back the NOT EXISTS: without it two concurrent applies each see no row and each insert one, dispatching one reviewed change twice")
+	}
+	if !strings.Contains(down, "idx_propagation_outbox_plan_subject") {
+		t.Error("the down migration must drop the index it added")
+	}
+}
+
+// P1 — the target state is read under a row lock. An unlocked read races the
+// registry reconciliation: it can return active, the reconciliation can commit
+// a disable, and the apply can then commit the permanently undrainable row the
+// check exists to refuse.
+func TestTheTargetStateIsReadUnderALock(t *testing.T) {
+	src, err := os.ReadFile("entitlement_enqueue.go")
+	if err != nil {
+		t.Fatalf("read entitlement_enqueue.go: %v", err)
+	}
+	if !regexp.MustCompile(`SELECT state FROM targets WHERE target = \$1 FOR UPDATE`).MatchString(string(src)) {
+		t.Error("LockTargetStateTx must hold the target row, or an apply and a disable can interleave")
+	}
+
+	// And the reconciliation it races is the write that takes that lock.
+	tgt, err := os.ReadFile("targets.go")
+	if err != nil {
+		t.Fatalf("read targets.go: %v", err)
+	}
+	if !strings.Contains(string(tgt), "UPDATE targets SET state = 'disabled'") {
+		t.Error("the disable this lock serialises against is missing — the lock may be guarding nothing")
+	}
+}
+
 // 2.9 — what an entitlement row refuses to become, decided before the database
 // is touched. The nil transaction is the proof: a check that ran after the
 // first statement would panic here rather than fail.
 func TestAnEntitlementEnqueueRefusesAnUnqueueableRow(t *testing.T) {
-	good := EntitlementApply{
-		Target:        "truenas",
-		SubjectID:     "u1",
-		PlanSubjectID: sampleUUID,
-		InitiatedBy:   "operator-1",
-	}
+	good := EntitlementApply{PlanSubjectID: sampleUUID}
 
 	cases := []struct {
 		name   string
 		mutate func(*EntitlementApply)
 	}{
-		{"no target", func(p *EntitlementApply) { p.Target = " " }},
-		{"the built-in target", func(p *EntitlementApply) { p.Target = TargetZitadel }},
-		{"no subject", func(p *EntitlementApply) { p.SubjectID = "" }},
 		{"no approval behind it", func(p *EntitlementApply) { p.PlanSubjectID = "" }},
 		{"a malformed approval reference", func(p *EntitlementApply) { p.PlanSubjectID = "plan-subject-7" }},
-		{"nobody initiating it", func(p *EntitlementApply) { p.InitiatedBy = "" }},
 		{"a source the database would refuse", func(p *EntitlementApply) { p.Source = "whatever" }},
 	}
 	for _, tc := range cases {
@@ -189,11 +319,9 @@ func TestAnEntitlementEnqueueRefusesAnUnqueueableRow(t *testing.T) {
 // table's shape CHECK would refuse the write, and learning that as a constraint
 // violation mid-apply is worse than being told.
 func TestTheEntitlementPathCannotWriteAZitadelRow(t *testing.T) {
-	_, err := EnqueueEntitlementApplyTx(context.Background(), nil, EntitlementApply{
-		Target: TargetZitadel, SubjectID: "u1", PlanSubjectID: sampleUUID, InitiatedBy: "operator-1",
-	})
-	if !errors.Is(err, ErrInvalidEnqueue) {
-		t.Fatalf("err = %v, want ErrInvalidEnqueue", err)
+	err := enqueueRefusal(approvalRef{found: true, target: TargetZitadel, targetState: TargetActive, claimed: true}, sampleUUID)
+	if !errors.Is(err, ErrNotAnEntitlementTarget) {
+		t.Fatalf("err = %v, want ErrNotAnEntitlementTarget", err)
 	}
 	if !strings.Contains(err.Error(), TargetZitadel) {
 		t.Errorf("the refusal does not name the target it refused: %v", err)

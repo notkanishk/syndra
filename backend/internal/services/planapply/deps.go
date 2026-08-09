@@ -8,7 +8,7 @@ import "syndra/internal/db"
 // swap these for recorders and read the sequence back.
 var (
 	inTx        = db.InTx
-	targetState = db.TargetStateTx
+	targetState = db.LockTargetStateTx
 	claimPlan   = db.ClaimPlanTx
 	enqueue     = db.EnqueueEntitlementApplyTx
 )

@@ -18,6 +18,14 @@ A persisted plan row MUST record the decision and MUST NOT record its rendering.
 
 Every per-subject row MUST record a fingerprint, and a plan MUST NOT be persisted with a row that has none. Verification compares a recorded fingerprint against a live read, so an absent recorded value would match an absent live one and the subject would pass verification precisely when the target could not be read.
 
+An accepted apply MUST spend the plan and queue its work in one transaction, so that a failure partway through leaves neither. It MUST NOT queue work for a target whose registration is not active: that target was removed from the deployment, so nothing will drain those rows, and a row that never drains is counted as queued — which reads as recorded. That is distinct from a target that is merely unreachable, which is still deployed and whose work MUST queue.
+
+Every bound value on a queued row — the subject, the target, and the operator who approved it — MUST be derived from the approval by the write itself rather than supplied alongside it. A reference that is only checked for existence proves the approval exists and nothing more: not that it is this subject's, not that its plan was ever claimed, and not that its target still takes work. Each of those MUST be a condition of the write, so a row that should not exist is never written rather than written and then argued about.
+
+An approval MUST authorise at most one queued row, enforced by a uniqueness constraint and not only by a predicate, because a predicate cannot see what a concurrent transaction has not yet committed and two callers racing on one approval would each find no existing row.
+
+The target's registration MUST be read under a lock that serialises against the reconciliation which disables targets. An unlocked read can return active, be overtaken by a committed disable, and let the apply commit the permanently undrainable row the check exists to refuse.
+
 #### Scenario: An approval is spent once
 
 - **WHEN** an apply cites a plan identifier that has already been applied
@@ -54,10 +62,6 @@ Every per-subject row MUST record a fingerprint, and a plan MUST NOT be persiste
 - **WHEN** a rehearsal would persist a subject row without a fingerprint of the state it reviewed
 - **THEN** the backend MUST refuse to persist the plan rather than store a row that verifies vacuously
 
-An accepted apply MUST spend the plan and queue its work in one transaction, so that a failure partway through leaves neither. It MUST NOT queue work for a target whose registration is not active: that target was removed from the deployment, so nothing will drain those rows, and a row that never drains is counted as queued — which reads as recorded. That is distinct from a target that is merely unreachable, which is still deployed and whose work MUST queue.
-
-Every value on a queued row MUST be read from the claimed plan rather than from the request citing it. The two agree because the claim requires it, but a row written from request fields trusts the caller for facts the approval already holds.
-
 #### Scenario: An apply queues work and spends the plan together
 
 - **WHEN** any part of an accepted apply fails after the plan has been claimed
@@ -70,6 +74,14 @@ Every value on a queued row MUST be read from the claimed plan rather than from 
 - **THEN** the backend MUST refuse it
 - **AND** MUST NOT spend the plan, so the approval survives the target being re-registered
 - **AND** the refusal MUST be distinguishable from a target that is deployed and unreachable
+- **AND** a target disabled concurrently with an in-flight apply MUST NOT leave queued work behind
+
+#### Scenario: Work cannot be queued under another subject's approval
+
+- **WHEN** work is enqueued citing an approval
+- **THEN** the subject, target, and approving operator recorded on it MUST come from that approval
+- **AND** an approval whose plan was never claimed MUST queue nothing
+- **AND** a second row under an approval that already has one MUST be refused, including under a concurrent second caller
 
 #### Scenario: Apply cites the plan the operator reviewed
 

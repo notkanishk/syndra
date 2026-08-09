@@ -99,15 +99,12 @@ func Apply(ctx context.Context, req Request) (Result, error) {
 
 		queued := make([]QueuedSubject, 0, len(subjects))
 		for _, s := range subjects {
-			// InitiatedBy is the plan's author, taken from the claimed row
-			// rather than from the request. They are the same person — the
-			// claim refuses otherwise — and the row is the one that knows it.
-			outboxID, err := enqueue(ctx, tx, db.EntitlementApply{
-				Target:        plan.Target,
-				SubjectID:     s.SubjectID,
-				PlanSubjectID: s.ID,
-				InitiatedBy:   plan.CreatedBy,
-			})
+			// The approval is the only thing passed. Subject, target, and the
+			// operator who approved it are read from it by the insert itself:
+			// values a caller supplies are values a caller can supply
+			// inconsistently, and "this work is for the person the approval
+			// named" would then hold only where the caller made it hold.
+			outboxID, err := enqueue(ctx, tx, db.EntitlementApply{PlanSubjectID: s.ID})
 			if err != nil {
 				return fmt.Errorf("queue %s: %w", s.SubjectID, err)
 			}
