@@ -250,6 +250,14 @@ func CreatePlan(ctx context.Context, p NewPlan) (Plan, error) {
 		return Plan{}, err
 	}
 
+	// Canonicalise before anything compares or stores an identifier. Postgres
+	// writes uuids in lowercase, so an uppercase citation matches the row in SQL
+	// — where the comparison happens after a parse — and then fails to match the
+	// id that comes back, which would refuse a legitimate plan as fabricated.
+	// Normalising the value rather than the check also keeps the stored row
+	// comparable: every later reader compares against what the database returns.
+	subjects := canonicalSubjects(p.Subjects)
+
 	tx, err := PG.Begin(ctx)
 	if err != nil {
 		return Plan{}, fmt.Errorf("begin plan tx: %w", err)
@@ -258,8 +266,11 @@ func CreatePlan(ctx context.Context, p NewPlan) (Plan, error) {
 
 	// Provenance before persistence. Shape was checked above and shape is not
 	// provenance: a uuid is a syntax, and a value in that syntax that names no
-	// grant is not a reference to anything the apply can act on.
-	if err := verifyGrantProvenance(ctx, tx, p.Subjects); err != nil {
+	// row is not a reference to anything the apply can act on.
+	if err := verifyGrantProvenance(ctx, tx, subjects); err != nil {
+		return Plan{}, err
+	}
+	if err := verifySnapshotProvenance(ctx, tx, p.Target, subjects); err != nil {
 		return Plan{}, err
 	}
 
@@ -292,7 +303,7 @@ func CreatePlan(ctx context.Context, p NewPlan) (Plan, error) {
 	const insertSubject = `
 		INSERT INTO plan_subjects (plan_id, subject_id, snapshot_id, fingerprint, outcome_json)
 		VALUES ($1, $2, $3, $4, $5)`
-	for _, s := range p.Subjects {
+	for _, s := range subjects {
 		outcome, err := json.Marshal(s.Outcome)
 		if err != nil {
 			return Plan{}, fmt.Errorf("marshal plan outcome for %s: %w", s.SubjectID, err)
@@ -346,7 +357,13 @@ func verifyGrantProvenance(ctx context.Context, tx pgx.Tx, subjects []NewPlanSub
 		if err := rows.Scan(&id, &userID); err != nil {
 			return fmt.Errorf("scan cited grant: %w", err)
 		}
-		owner[id] = userID
+		// Lowercased on the way in as well as on the way out. Postgres renders
+		// uuids canonically, so under Postgres this is a no-op and no test can
+		// tell it from its absence — it is here because the whole bug class is
+		// two halves of one comparison disagreeing about text, and paying a
+		// ToLower to stop that recurring on a driver or database that renders
+		// differently is cheaper than the refusal it would otherwise produce.
+		owner[strings.ToLower(id)] = userID
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("read cited grants: %w", err)
@@ -377,6 +394,99 @@ func matchGrantOwners(subjects []NewPlanSubject, owner map[string]string) error 
 		}
 	}
 	return nil
+}
+
+// verifySnapshotProvenance refuses a plan citing a snapshot that is not this
+// subject's desired state for this target.
+//
+// The foreign key proves the snapshot exists and nothing more. Existence was
+// never the property: one approval, one durable object means the snapshot and
+// the fingerprint that verifies it describe the same person on the same target.
+// A snapshot taken for somebody else, stored under this subject's heading, is a
+// desired state the operator did not approve for the person it will be applied
+// to — and the fingerprint beside it would verify a subject the snapshot does
+// not describe.
+//
+// Checking here also keeps a fabricated id away from the foreign key, whose
+// violation message quotes the value that broke it.
+func verifySnapshotProvenance(ctx context.Context, tx pgx.Tx, target string, subjects []NewPlanSubject) error {
+	var cited []string
+	for _, s := range subjects {
+		if s.SnapshotID != "" {
+			cited = append(cited, s.SnapshotID)
+		}
+	}
+	if len(cited) == 0 {
+		return nil
+	}
+
+	const q = `SELECT id, subject_id, target FROM desired_state_snapshots WHERE id = ANY($1::text[]::uuid[])`
+
+	rows, err := tx.Query(ctx, q, cited)
+	if err != nil {
+		return fmt.Errorf("read cited snapshots: %w", err)
+	}
+	defer rows.Close()
+
+	taken := make(map[string]snapshotRef, len(cited))
+	for rows.Next() {
+		var id string
+		var ref snapshotRef
+		if err := rows.Scan(&id, &ref.subject, &ref.target); err != nil {
+			return fmt.Errorf("scan cited snapshot: %w", err)
+		}
+		taken[strings.ToLower(id)] = ref // no-op under Postgres; see verifyGrantProvenance
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read cited snapshots: %w", err)
+	}
+	return matchSnapshotSubjects(subjects, target, taken)
+}
+
+// snapshotRef is who and what a desired-state snapshot was taken for.
+type snapshotRef struct{ subject, target string }
+
+// matchSnapshotSubjects is the judgement half, kept out of the database so the
+// rule it enforces can be tested.
+func matchSnapshotSubjects(subjects []NewPlanSubject, target string, taken map[string]snapshotRef) error {
+	for _, s := range subjects {
+		if s.SnapshotID == "" {
+			continue
+		}
+		switch ref, known := taken[s.SnapshotID]; {
+		case !known:
+			return fmt.Errorf("%w: subject %s cites a snapshot this database did not record", ErrInvalidPlan, s.SubjectID)
+		case ref.subject != s.SubjectID:
+			// Not naming whose it is: a refusal is not a lookup service for
+			// other people's desired state.
+			return fmt.Errorf("%w: subject %s cites a snapshot taken for a different person", ErrInvalidPlan, s.SubjectID)
+		case ref.target != target:
+			return fmt.Errorf("%w: subject %s cites a snapshot taken for a different target", ErrInvalidPlan, s.SubjectID)
+		}
+	}
+	return nil
+}
+
+// canonicalSubjects returns the rows with every cited identifier in the form
+// the database stores, leaving the caller's slice untouched.
+//
+// Uppercase uuid text is legitimate input — it is the same identifier — but it
+// is not the text Postgres returns, and every check downstream compares Go
+// strings against what Postgres returned.
+func canonicalSubjects(subjects []NewPlanSubject) []NewPlanSubject {
+	out := make([]NewPlanSubject, len(subjects))
+	for i, s := range subjects {
+		s.SnapshotID = strings.ToLower(s.SnapshotID)
+		if len(s.Outcome.GrantIDs) > 0 {
+			ids := make([]string, len(s.Outcome.GrantIDs))
+			for j, id := range s.Outcome.GrantIDs {
+				ids[j] = strings.ToLower(id)
+			}
+			s.Outcome.GrantIDs = ids
+		}
+		out[i] = s
+	}
+	return out
 }
 
 // ClaimPlanTx spends an approval and returns what it approved.
@@ -513,6 +623,12 @@ func scanPlan(row pgx.Row) (Plan, error) {
 
 // looksLikeUUID reports whether s is shaped like the ids these tables allocate.
 // Shape only — existence is the database's answer, not this function's.
+//
+// Case-insensitive, because uppercase uuid text names the same identifier. That
+// is safe only in company: Postgres returns the lowercase form, so anything
+// compared or stored must go through canonicalSubjects first, or an uppercase
+// citation would match its row in SQL and then fail to match the id that came
+// back — a legitimate plan refused as fabricated.
 func looksLikeUUID(s string) bool {
 	if len(s) != 36 {
 		return false

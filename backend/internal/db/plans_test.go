@@ -444,6 +444,98 @@ func TestAPlanMayOnlyCiteGrantsThisDatabaseAllocatedToThatSubject(t *testing.T) 
 	}
 }
 
+// 2.21 — an uppercase citation is the same identifier, and must not be refused
+// as a fabricated one. Postgres compares uuids after parsing and returns the
+// lowercase form, so the SQL lookup finds the row and the Go map misses it: the
+// two halves of the check would disagree about a legitimate grant.
+//
+// Normalising the value rather than the comparison is the part that matters —
+// the row is written from the same normalised copy, so every later reader
+// compares against what the database returns.
+func TestAnUppercaseCitationNamesTheSameGrant(t *testing.T) {
+	const lower = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
+	upper := strings.ToUpper(lower)
+
+	subjects := canonicalSubjects([]NewPlanSubject{{
+		SubjectID:   "u1",
+		Fingerprint: "sha256:aaa",
+		SnapshotID:  upper,
+		Outcome:     PlanOutcome{Effect: PlanEffectApply, GrantIDs: []string{upper}},
+	}})
+
+	if got := subjects[0].Outcome.GrantIDs[0]; got != lower {
+		t.Errorf("grant id stored as %q, want the form the database returns", got)
+	}
+	if got := subjects[0].SnapshotID; got != lower {
+		t.Errorf("snapshot id stored as %q, want the form the database returns", got)
+	}
+	// And so the judgement agrees with the lookup that found the row.
+	if err := matchGrantOwners(subjects, map[string]string{lower: "u1"}); err != nil {
+		t.Errorf("an uppercase citation of a real grant was refused: %v", err)
+	}
+	if err := matchSnapshotSubjects(subjects, "truenas", map[string]snapshotRef{lower: {subject: "u1", target: "truenas"}}); err != nil {
+		t.Errorf("an uppercase citation of a real snapshot was refused: %v", err)
+	}
+
+	// The caller's slice is untouched: normalisation is a copy, or a rehearsal
+	// would find its own outcome rewritten under it.
+	original := []NewPlanSubject{{SubjectID: "u1", Outcome: PlanOutcome{GrantIDs: []string{upper}}}}
+	_ = canonicalSubjects(original)
+	if original[0].Outcome.GrantIDs[0] != upper {
+		t.Error("canonicalSubjects mutated the caller's rows")
+	}
+}
+
+// 2.21 — a snapshot must be this subject's desired state for this target. The
+// foreign key proves only that the row exists, and existence was never the
+// property: one approval, one durable object means the snapshot and the
+// fingerprint verifying it describe the same person on the same target.
+func TestAPlanMayOnlyCiteASnapshotTakenForThatSubjectAndTarget(t *testing.T) {
+	const (
+		mine       = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
+		theirs     = "3f2504e0-4f89-11d3-9a0c-0305e82c3302"
+		otherTgt   = "3f2504e0-4f89-11d3-9a0c-0305e82c3303"
+		fabricated = "3f2504e0-4f89-11d3-9a0c-0305e82c3304"
+	)
+	taken := map[string]snapshotRef{
+		mine:     {subject: "u1", target: "truenas"},
+		theirs:   {subject: "u2", target: "truenas"},
+		otherTgt: {subject: "u1", target: "zitadel"},
+	}
+	subject := func(snapshot string) []NewPlanSubject {
+		return []NewPlanSubject{{SubjectID: "u1", Fingerprint: "sha256:aaa", SnapshotID: snapshot, Outcome: PlanOutcome{Effect: PlanEffectApply}}}
+	}
+
+	if err := matchSnapshotSubjects(subject(mine), "truenas", taken); err != nil {
+		t.Fatalf("a subject citing their own snapshot for this target was refused: %v", err)
+	}
+	// Zitadel plans cite none, and that is not a refusal.
+	if err := matchSnapshotSubjects(subject(""), "truenas", taken); err != nil {
+		t.Fatalf("a subject citing no snapshot was refused: %v", err)
+	}
+
+	for _, tc := range []struct{ name, snapshot, want string }{
+		{"a snapshot that was never recorded", fabricated, "did not record"},
+		{"another person's desired state", theirs, "different person"},
+		{"the same person on another target", otherTgt, "different target"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := matchSnapshotSubjects(subject(tc.snapshot), "truenas", taken)
+			if !errors.Is(err, ErrInvalidPlan) {
+				t.Fatalf("accepted %s: %v", tc.name, err)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("refused for the wrong reason: %v", err)
+			}
+			for _, leak := range []string{"u2", "zitadel", tc.snapshot} {
+				if strings.Contains(err.Error(), leak) {
+					t.Errorf("the refusal disclosed %q: %v", leak, err)
+				}
+			}
+		})
+	}
+}
+
 // 2.21 — and the lookup runs before anything is written, on the plan's own
 // transaction: a plan whose citations cannot be verified must leave no row.
 func TestGrantProvenanceIsVerifiedBeforeThePlanIsWritten(t *testing.T) {
@@ -452,23 +544,38 @@ func TestGrantProvenanceIsVerifiedBeforeThePlanIsWritten(t *testing.T) {
 		t.Fatalf("read plans.go: %v", err)
 	}
 	body := string(src)
-	verify := strings.Index(body, "verifyGrantProvenance(ctx, tx,")
 	insert := strings.Index(body, "INSERT INTO plans")
-	if verify < 0 || insert < 0 {
-		t.Fatal("could not locate the provenance check and the plan INSERT")
+	if insert < 0 {
+		t.Fatal("could not locate the plan INSERT")
 	}
-	if verify > insert {
-		t.Error("the provenance check must run before the plan is written, or an unverifiable citation leaves a row behind")
+
+	for _, tc := range []struct{ call, query string }{
+		{"verifyGrantProvenance(ctx, tx,", `SELECT id, user_id FROM direct_role_grants WHERE id = ANY\(\$1`},
+		{"verifySnapshotProvenance(ctx, tx,", `SELECT id, subject_id, target FROM desired_state_snapshots WHERE id = ANY\(\$1`},
+	} {
+		at := strings.Index(body, tc.call)
+		if at < 0 {
+			t.Errorf("could not locate %s", tc.call)
+			continue
+		}
+		if at > insert {
+			t.Errorf("%s must run before the plan is written, or an unverifiable citation leaves a row behind", tc.call)
+		}
+		// The read must exist and be scoped to the ids the plan cites. A lookup
+		// that returns nothing makes every citation unknown, which refuses
+		// every plan; one that ignores its argument makes the judgement
+		// meaningless in whichever direction its rows happen to fall.
+		if !regexp.MustCompile(tc.query).MatchString(body) {
+			t.Errorf("the lookup behind %s must read the cited rows, keyed on the cited identifiers", tc.call)
+		}
 	}
-	if !strings.Contains(body, "SELECT id, user_id FROM direct_role_grants") {
-		t.Error("provenance must be read from the grants table — a check that does not read cannot know")
-	}
-	// And the read must be scoped to the ids the plan cites. A lookup that
-	// returns nothing makes every citation unknown, which refuses every plan;
-	// one that ignores its argument makes the judgement below meaningless in
-	// whichever direction its rows happen to fall.
-	if !regexp.MustCompile(`SELECT id, user_id FROM direct_role_grants WHERE id = ANY\(\$1`).MatchString(body) {
-		t.Error("the provenance lookup must be keyed on the cited identifiers")
+
+	// Canonicalisation has to happen before either lookup, not inside one:
+	// the same normalised rows are what get written.
+	canon := strings.Index(body, "subjects := canonicalSubjects(")
+	first := strings.Index(body, "verifyGrantProvenance(ctx, tx,")
+	if canon < 0 || canon > first {
+		t.Error("identifiers must be canonicalised before they are compared against what the database returns")
 	}
 }
 
