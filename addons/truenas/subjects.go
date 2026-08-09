@@ -26,10 +26,10 @@ const subjectReadCap = 5000
 // fields. Deliberately not a map: a map would carry whatever the middleware
 // returned, including the two fields this file exists to keep out.
 type nasUser struct {
-	Username string `json:"username"`
-	UID      int64  `json:"uid"`
-	Locked   bool   `json:"locked"`
-	SMB      bool   `json:"smb"`
+	Username string  `json:"username"`
+	UID      int64   `json:"uid"`
+	Locked   bool    `json:"locked"`
+	SMB      bool    `json:"smb"`
 	Groups   []int64 `json:"groups"`
 }
 

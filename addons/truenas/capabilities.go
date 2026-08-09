@@ -42,6 +42,16 @@ type Operation struct {
 	UnavailableReason string   `json:"unavailable_reason,omitempty"`
 }
 
+// Field names the backend and this add-on must agree on. Written out rather
+// than imported: the two are separately deployed binaries, and a shared
+// constant would be a shared module — the version skew that module would hide
+// is exactly what the contract version exists to surface.
+const (
+	FieldGroup      = "group"
+	FieldEnabled    = "enabled"
+	FieldSMBEnabled = "smb_enabled"
+)
+
 // entitlementSchema is the desired state this add-on converges.
 //
 // `enabled` and `smb_enabled` are here rather than in the operation set, and
@@ -54,9 +64,9 @@ type Operation struct {
 // nothing special-cases restoration because nothing special-cased suspension.
 func entitlementSchema() []EntitlementField {
 	return []EntitlementField{
-		{Name: "group", Type: "string[]"},
-		{Name: "enabled", Type: "bool", Lifecycle: true},
-		{Name: "smb_enabled", Type: "bool", Lifecycle: true},
+		{Name: FieldGroup, Type: "string[]"},
+		{Name: FieldEnabled, Type: "bool", Lifecycle: true},
+		{Name: FieldSMBEnabled, Type: "bool", Lifecycle: true},
 	}
 }
 

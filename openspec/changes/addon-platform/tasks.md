@@ -117,36 +117,36 @@
 
 ## 5. TrueNAS add-on: entitlement plane
 
-- [ ] 5.1 `POST /apply`: accept a resolved entitlement set for one subject, converge via `user.update({groups})`, level-triggered
-- [ ] 5.2 `/apply` creates the account when absent as part of convergence and reports the derived name, so no separate creation operation has to be sequenced before it
-- [ ] 5.3 Declare `enabled` and `smb_enabled` as entitlement-schema fields and converge them via `user.update({locked, smb})` on the same apply path
-- [ ] 5.4 Tests: a set resolving both to disabled locks the account and clears SMB; a later set resolving them to enabled restores it with no second account created; neither path uses a creation operation
-- [ ] 5.5 Tests: re-applying an unchanged set is a no-op with no mutating call; a reduced set converges to exactly the remaining groups
-- [ ] 5.6 Per-request subject cap: refuse a request affecting more subjects than the configured limit without an explicit scope acknowledgement — defence in depth only, since a per-subject call cannot see a cohort
-- [ ] 5.7 Tests: an oversized request is refused and returns the count it computed; the authoritative cohort guard is asserted backend-side in group 2, not here
-- [ ] 5.8 `POST /plan`: returns `BulkPlan`/`BulkOutcome`-shaped outcomes with `Detail` and `Consequence`, plus a per-subject target-state fingerprint, mutating nothing
-- [ ] 5.9 Tests: planning issues no mutating call, returns the apply path's shape, and produces a fingerprint that changes when the subject's target state changes
-- [ ] 5.10 Fingerprint re-verification on apply: refuse the call if any supplied fingerprint no longer matches live target state
-- [ ] 5.11 Tests: a subject mutated out of band between plan and apply causes refusal with that subject named, and nothing is applied
-- [ ] 5.12 Operation-id deduplication for `/apply` and `/op/{name}`, backed by the idempotency store; the path segment is the operation name, the dedup token is the operation id, and they are never the same value
-- [ ] 5.13 Tests: replaying an operation id returns the original outcome without a second mutating call
-- [ ] 5.14 Absence handling: a subject missing from the expected set is reported as drift and never deleted or locked
-- [ ] 5.15 Tests: a missing subject produces a drift report and no mutation
+- [x] 5.1 Level-triggered convergence. `user.update({groups})` is a full replace, which is what makes retry safe by construction and makes "revoke partial" the same call as "grant partial" with a different set. A field the request does not name is **left alone** rather than converged to a zero value: converging it would invent an instruction, and the instruction it invents is "remove them from every group"
+- [x] 5.2 Creation is part of convergence, which dissolves the ordering problem rather than answering it: as its own call it had nothing sequencing it against the apply, so an apply could reach a subject whose account did not exist. The derived name comes back on the outcome
+- [x] 5.3 Declared lifecycle-flagged in the manifest, so the backend refuses a mapping naming one, and converged on the same call as everything else
+- [x] 5.4 Both directions through the same path, and the restoration asserted to create nothing
+- [x] 5.5 No mutating call at all on an unchanged set — not an optimisation: the drain re-drives rows, so an apply that wrote every time would rewrite every account on every pass and fill the mutation log with events that changed nothing. An empty list is asserted to be an instruction rather than an omission
+- [x] 5.6 A per-request cap on `/plan`, reporting the count it computed, and explicitly not the cohort guard: `/apply` is per subject, so this add-on can never observe a cohort spanning several requests
+- [x] 5.7 Refused with the count, nothing written. The authoritative guard is 2.39, backend-side
+- [x] 5.8 The same per-subject shape `/apply` returns, so the diff an operator reads is written in the same words as the result they get. One state read for the whole cohort — planning forty subjects must not be forty reads through a single rate-limited WebSocket. The fingerprint is of what was **read**, not of what would result, because that is what the apply re-verifies against
+- [x] 5.9 No mutating call, the apply's shape with a consequence, and a fingerprint that moves when the subject does. Plus the property that matters more: the plan and the apply **derive the same name** and **reach the same conflict verdict** — a plan that predicts a name the apply does not produce is worse than no plan, because an operator approves the creation of one account and a different one appears
+- [x] 5.10 Verified against what was just read, immediately before the write. Checked earlier it would be a statement about a moment that has already passed. Absence has its own token in the digest, so "no account" and "an account with no groups" cannot verify against each other
+- [x] 5.11 Refused with the subject named and nothing written, plus the other half — a matching fingerprint proceeds — without which the first would pass for an apply that refuses everything
+- [~] 5.12 `/apply` deduplicates on `call_id` against the bbolt store, **before** the lifecycle gate: a replay during a maintenance window returns what it returned rather than being refused, since the call already happened and refusing it now would report a completed mutation as queued. The cached outcome is decoded and re-encoded rather than echoed, so a replay is byte-identical to the original — a caller comparing the two to decide whether its retry duplicated anything must not be told they differ because one went through a different encoder. **Remaining:** `/operations/{name}`, which lands with the operation set in group 6
+- [x] 5.13 One create across two identical requests, and the two responses byte-identical
+- [x] 5.14 Nothing in the add-on calls `user.delete` or `group.delete`, and a guard scans for both. Deletion by absence would be catastrophic and the design forbids it outright: tombstones only
+- [x] 5.15 The source guard above, which is stronger than a behavioural test for this property: it fails on the day somebody adds the call rather than on the day something reaches it
 
 ## 6. TrueNAS add-on: operations
 
-- [ ] 6.1 Account creation inside `/apply`: query-then-create with a deterministic username derivation, reporting the created name; no standalone creation operation exists
-- [ ] 6.2 Tests: applying twice creates no duplicate account and reports the same name; a subject with no account is planned as absent and created on apply
-- [ ] 6.3 Username derivation from the email localpart: lowercase, strip sub-addressing, replace characters outside `/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*[$]?$/`, enforce a valid leading character, truncate to 32; collision suffix from a stable hash of the Zitadel user ID
-- [ ] 6.4 Tests: derivation is deterministic and always pattern-valid; non-ASCII, sub-addressed, leading-dot, and over-length localparts normalize; a forced collision resolves reproducibly and never reuses another subject's name
-- [ ] 6.5 Normalization fallbacks: a localpart that normalizes to nothing usable falls back to a name derived from the Zitadel user id; the collision suffix is reserved before truncation, never appended after
-- [ ] 6.6 Tests: an all-invalid and an empty-after-normalization localpart both yield deterministic valid names; a name needing both truncation and a suffix stays within the limit and still disambiguates
-- [ ] 6.7 Binding conflict handling: an unbound account already holding the derived name halts the operation and surfaces **the same adoption action** the unmanaged inventory offers — one decision, two entry points, never a second code path that fires mid-convergence
-- [ ] 6.8 Tests: a colliding unbound account causes no create, adopt, or modify, and surfaces the existing account for decision; adopting from the conflict and adopting from the inventory reach the same code and leave identical state
-- [ ] 6.9 Binding recovery in reconcile: an account whose name changed out of band beneath a recorded binding is reported as a rename, not as a missing account
-- [ ] 6.10 Tests: an out-of-band rename reports against the existing binding and creates no replacement account
-- [ ] 6.11 Record the derived name against the subject as the authoritative binding; a later email change MUST NOT rename an existing account
-- [ ] 6.12 Tests: an email change after creation leaves the account name unchanged and the binding still resolves the subject
+- [x] 6.1 Query-then-create inside the apply, reporting the name. No standalone creation route exists
+- [x] 6.2 Covered by the replay test and by the plan/apply agreement test
+- [x] 6.3 Out-of-pattern characters are **replaced, never dropped** — dropping merges two people whose localparts differ only there — and that holds at the end of a name too, which is why the truncation trims `.` and `-` but deliberately not `_`. A leading character outside the narrower first-character class is **prefixed rather than trimmed**, since trimming `.ada` and `..ada` gives one name for two people. The suffix is a hash of the subject id, never a counter: a counter depends on creation order, so re-deriving after losing the store would hand somebody else's suffix to this person
+- [x] 6.4 Every case asserted deterministic and pattern-valid, with the merge hazard tested in both positions. 13 mutations, 13 killed
+- [x] 6.5 Usability is judged on what the **localpart** produced, before anything is prefixed — checking afterwards finds the prefix's own letter and calls `---` usable, which then clamps to a single `u` every such subject shares. The suffix is reserved before truncation: appended after it either overflows the limit or, if the truncation is redone, collides with the name it was meant to disambiguate
+- [x] 6.6 Four unusable localparts, each deterministic and each distinct per subject; a name needing both truncation and a suffix asserted to fit and to disambiguate
+- [x] 6.7 An unbound account holding the derived name **halts**. The suffix resolves collisions with accounts this add-on manages and nothing else: suffixing past an unbound one would leave two accounts for one person, with the older still holding the home directory every share points at — and adopting it silently would hand a subject's entitlements to whoever already owns it. The conflict carries the uid and whether it is adoptable, which is what an operator needs to decide
+- [~] 6.8 No create, no adopt, no modify, nothing bound, and the plan reaching the same verdict as the apply. **Remaining:** the adoption action itself, which is 1.18/1.19's unmanaged inventory and lands with it
+- [x] 6.9 A stable uid whose username moved is followed rather than recreated, and the recorded name is updated to match. Reporting it as missing would create a replacement while the original kept the home data
+- [x] 6.10 No create, the moved name reported, and the binding updated
+- [x] 6.11 The binding is looked up **before** derivation is even attempted, so the recorded name is authoritative and derivation is a recovery path. A create whose binding fails to record is reported as a failure rather than a silent success: the next apply would derive the same name, find it unbound, and halt as a conflict — recoverable, but it needs an operator, so it is said now rather than discovered then
+- [x] 6.12 The name unchanged, no second account, no `username` in any update, and the binding still resolving
 - [ ] 6.13 `password.set`: `user.update({password})`, forwarded and never persisted, declared with `secret_params`
 - [ ] 6.14 Tests: the plaintext appears in no store, snapshot, or log; the mutation log records that a password was set
 - [ ] 6.15 `password.rotate`: mint and apply a new credential without returning or retaining it; the credential half of a revocation

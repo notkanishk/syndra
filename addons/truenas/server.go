@@ -35,6 +35,8 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /capabilities", s.auth.authenticated(s.handleCapabilities))
 	mux.HandleFunc("GET /health", s.auth.authenticated(s.handleHealth))
 	mux.HandleFunc("GET /subjects", s.auth.authenticated(s.handleSubjects))
+	mux.HandleFunc("POST /apply", s.auth.authenticated(s.handleApply))
+	mux.HandleFunc("POST /plan", s.auth.authenticated(s.handlePlan))
 	return mux
 }
 
@@ -138,7 +140,7 @@ type SubjectsResponse struct {
 	// sweep consumes only current reads: comparing desired state against an
 	// ageing mirror would report every intervening change as out-of-band, so an
 	// outage would manufacture findings rather than reporting itself.
-	Current bool `json:"current"`
+	Current bool   `json:"current"`
 	TakenAt string `json:"taken_at"`
 	// Truncated says the read hit its cap. A capped read is current and still
 	// unusable for concluding an ABSENCE, which is what half the drift diff
@@ -185,6 +187,17 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	if err := json.NewEncoder(w).Encode(body); err != nil {
 		log.Printf("[HTTP] could not write response: %v", err)
 	}
+}
+
+// logStoreFailure records a local-state write that did not land.
+//
+// Loud, and never fatal to a mutation that already happened: refusing to report
+// a completed change because its cache entry failed would lose the only account
+// of it the caller gets. What makes these visible rather than merely logged is
+// the head digest the backend anchors and the binding conflict the next apply
+// would raise.
+func logStoreFailure(what, key string, err error) {
+	log.Printf("[STORE] %s write failed for %s: %v", what, key, err)
 }
 
 // logRefusal records an authentication failure.

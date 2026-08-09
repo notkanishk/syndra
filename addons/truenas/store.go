@@ -18,6 +18,7 @@ import (
 var (
 	bucketIdempotency = []byte("idempotency")
 	bucketSnapshot    = []byte("snapshot")
+	bucketBindings    = []byte("bindings")
 )
 
 // idempotencyTTL is the actual replay window, and saying so is the point.
@@ -44,7 +45,7 @@ func OpenStore(path string) (*Store, error) {
 		return nil, fmt.Errorf("open store: %w", err)
 	}
 	err = db.Update(func(tx *bolt.Tx) error {
-		for _, b := range [][]byte{bucketIdempotency, bucketSnapshot} {
+		for _, b := range [][]byte{bucketIdempotency, bucketSnapshot, bucketBindings} {
 			if _, err := tx.CreateBucketIfNotExists(b); err != nil {
 				return err
 			}
@@ -202,4 +203,75 @@ func (s *Store) GetSnapshot() (Snapshot, bool, error) {
 		return nil
 	})
 	return snap, found, err
+}
+
+// Binding is which account on the target belongs to which subject.
+//
+// Recorded at creation and authoritative thereafter. Derivation is a RECOVERY
+// path, not the answer: renaming a TrueNAS account disturbs its home directory,
+// its ACL entries and its SMB identity, so a later email change must not rename
+// an existing account — and re-deriving from the new email would name an
+// account that does not exist while the real one sat there unbound.
+//
+// The uid is recorded beside the name because the name can change out of band.
+// A stable uid whose username moved is a RENAME, and reporting it as a missing
+// account would create a replacement while the original kept the home data.
+type Binding struct {
+	SubjectID string    `json:"subject_id"`
+	Username  string    `json:"username"`
+	UID       int64     `json:"uid"`
+	BoundAt   time.Time `json:"bound_at"`
+	// BoundBy records whether an operator adopted an existing account or the
+	// apply created one. Adoption hands somebody else's account to a subject if
+	// it is wrong, so who decided it survives.
+	BoundBy string `json:"bound_by"`
+}
+
+func (s *Store) PutBinding(b Binding) error {
+	if b.BoundAt.IsZero() {
+		b.BoundAt = s.now().UTC()
+	}
+	encoded, err := json.Marshal(b)
+	if err != nil {
+		return fmt.Errorf("encode binding: %w", err)
+	}
+	return s.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(bucketBindings).Put([]byte(b.SubjectID), encoded)
+	})
+}
+
+func (s *Store) GetBinding(subjectID string) (Binding, bool, error) {
+	var b Binding
+	var found bool
+	err := s.db.View(func(tx *bolt.Tx) error {
+		raw := tx.Bucket(bucketBindings).Get([]byte(subjectID))
+		if raw == nil {
+			return nil
+		}
+		if err := json.Unmarshal(raw, &b); err != nil {
+			return fmt.Errorf("stored binding for %s is unreadable: %w", subjectID, err)
+		}
+		found = true
+		return nil
+	})
+	return b, found, err
+}
+
+// BoundUsernames is every name this add-on has claimed, so a collision check
+// can tell "taken by somebody we manage" from "taken by an account we have
+// never seen" — which are an ordinary rename and an operator decision
+// respectively.
+func (s *Store) BoundUsernames() (map[string]string, error) {
+	out := map[string]string{}
+	err := s.db.View(func(tx *bolt.Tx) error {
+		return tx.Bucket(bucketBindings).ForEach(func(_, v []byte) error {
+			var b Binding
+			if err := json.Unmarshal(v, &b); err != nil {
+				return nil
+			}
+			out[b.Username] = b.SubjectID
+			return nil
+		})
+	})
+	return out, err
 }
