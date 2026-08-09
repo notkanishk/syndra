@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"syndra/internal/db"
 )
 
 // withEnv swaps the getenv seam for a map, restoring it afterwards.
@@ -104,6 +106,26 @@ func installAddon(t *testing.T, r Registration, m Manifest) *Addon {
 	registryMu.Lock()
 	registry = map[string]*Addon{r.Target: a}
 	registryMu.Unlock()
+
+	// Every dispatch now claims a durable row at the moment it sends, so a test
+	// that calls without a database needs one. This default accepts any id once
+	// and echoes the call back, which is what the real claim does when the
+	// record matches; tests about the claim itself override it.
+	savedClaim := dbClaimAddonOperation
+	var mu sync.Mutex
+	claimed := map[string]bool{}
+	dbClaimAddonOperation = func(_ context.Context, id, target, operation, subject string) (db.AddonOperation, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if claimed[id] {
+			return db.AddonOperation{}, db.ErrAddonOperationNotOpen
+		}
+		claimed[id] = true
+		return db.AddonOperation{ID: id, Target: target, Operation: operation, SubjectID: subject,
+			Status: db.AddonOpDispatching}, nil
+	}
+	t.Cleanup(func() { dbClaimAddonOperation = savedClaim })
+
 	return a
 }
 

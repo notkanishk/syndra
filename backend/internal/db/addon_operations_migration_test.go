@@ -338,3 +338,29 @@ func TestNoLaterMigrationAltersTheRecordTable(t *testing.T) {
 			"so the guard can see it.")
 	}
 }
+
+// P2 — an unclaimed row may only settle as `unreached`, in the query and in the
+// table. `succeeded` or `rejected` on a row that was never claimed asserts an
+// answer from a target nobody asked; `indeterminate` raises a question about a
+// call that never left. Only `unreached` describes an unclaimed row.
+//
+// Both places, because a predicate in one function is a rule for that function
+// and a CHECK is a rule for the table — and the point of this one is the path
+// that does not exist yet.
+func TestAnUnclaimedRowMaySettleOnlyAsUnreached(t *testing.T) {
+	src, err := os.ReadFile("addon_operations.go")
+	if err != nil {
+		t.Fatalf("read addon_operations.go: %v", err)
+	}
+	body := funcBody(t, string(src), "SettleAddonOperation")
+	if !strings.Contains(body, "AND (claimed_at IS NOT NULL OR $2 = 'unreached')") {
+		t.Error("the settle must refuse a terminal status a never-claimed row cannot support")
+	}
+
+	up, _ := addonOpsMigrationSQL(t)
+	sql := stripSQLComments(up)
+	if !strings.Contains(sql, "claimed_at IS NOT NULL OR status IN ('dispatching', 'unreached')") {
+		t.Error("the same invariant must hold as a CHECK, or a future writer that does not go through " +
+			"SettleAddonOperation can record an answer from a target that was never asked")
+	}
+}

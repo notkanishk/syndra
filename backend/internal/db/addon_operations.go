@@ -174,17 +174,28 @@ func ClaimAddonOperation(ctx context.Context, id, target, operation, subject str
 // terminal status was written.
 var ErrAddonOperationAlreadySettled = fmt.Errorf("addon operation is not awaiting an outcome")
 
-// SettleAddonOperation writes the terminal status, and only from `dispatching`.
+// SettleAddonOperation writes the terminal status, and only from `dispatching`,
+// and only to an outcome the row's claim state can support.
 //
-// The WHERE clause is the guard: an outcome may be recorded once. Without it a
-// late or duplicated settle could overwrite `indeterminate` with `succeeded`,
-// which is the one direction that must never happen — it would resolve, on no
-// evidence, the exact question the unresolved surface exists to raise.
+// The status predicate is the first guard: an outcome may be recorded once.
+// Without it a late or duplicated settle could overwrite `indeterminate` with
+// `succeeded`, which is the one direction that must never happen — it would
+// resolve, on no evidence, the exact question the unresolved surface exists to
+// raise.
+//
+// The claim predicate is the second. A row that was never claimed was never
+// sent, so `succeeded` and `rejected` would assert an answer from a target
+// nobody asked, and `indeterminate` would raise a question about a call that
+// never left. Only `unreached` describes an unclaimed row, and it describes it
+// exactly. The database carries the same rule as a CHECK, because a predicate
+// in one function is a rule for that function and a constraint is a rule for
+// the table.
 func SettleAddonOperation(ctx context.Context, id, status string) error {
 	const q = `
 		UPDATE addon_operations
 		   SET status = $2, settled_at = NOW()
-		 WHERE id = $1 AND status = 'dispatching'`
+		 WHERE id = $1 AND status = 'dispatching'
+		   AND (claimed_at IS NOT NULL OR $2 = 'unreached')`
 	tag, err := PG.Exec(ctx, q, id, status)
 	if err != nil {
 		return fmt.Errorf("settle addon operation: %w", err)

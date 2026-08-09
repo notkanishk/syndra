@@ -56,7 +56,7 @@ func TestFailedCallLoggingCarriesNoSecret(t *testing.T) {
 	t.Cleanup(func() { log.SetOutput(saved) })
 
 	// No server: the call fails at dial, which is the path that logs.
-	installAddon(t, Registration{Target: "truenas", BaseURL: "http://127.0.0.1:1", SigningKeyPath: mustKeyFile(t)}, goodManifest())
+	installAddon(t, Registration{Target: "truenas", BaseURL: "https://127.0.0.1:1", SigningKeyPath: mustKeyFile(t)}, goodManifest())
 	resp := Call(context.Background(), passwordSet(map[string]any{"password": theSecret}))
 	if resp.Outcome == OutcomeSucceeded {
 		t.Fatal("setup: the call was supposed to fail")

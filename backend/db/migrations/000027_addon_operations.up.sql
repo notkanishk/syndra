@@ -69,6 +69,16 @@ CREATE TABLE IF NOT EXISTS addon_operations (
     -- row that was settled and then reopened, which nothing may do.
     CONSTRAINT addon_operations_settled_check CHECK (
         (status = 'dispatching') = (settled_at IS NULL)
+    ),
+    -- An unclaimed row may only settle as `unreached`, and that is the same
+    -- statement as "unclaimed means nothing was sent" written where it cannot
+    -- be forgotten. `succeeded` or `rejected` on a row that was never claimed
+    -- would assert an answer from a target that was never asked; `indeterminate`
+    -- would raise a question about a call that never left. `unreached` is not
+    -- an exception to the rule, it is the rule: the outcome for a dispatch that
+    -- did not happen, which is exactly what an unclaimed record describes.
+    CONSTRAINT addon_operations_claim_check CHECK (
+        claimed_at IS NOT NULL OR status IN ('dispatching', 'unreached')
     )
 );
 

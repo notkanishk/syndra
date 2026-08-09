@@ -80,6 +80,8 @@ func signedAddon(t *testing.T, srvURL string, key []byte) {
 // parameter schema, since almost no test here is about the schema. A nil
 // argument means "valid, uninteresting" rather than "absent": password.set
 // declares one required string, and an absent one is now a refusal.
+var recordSeq atomic.Int64
+
 func passwordSet(params map[string]any) CallRequest {
 	if params == nil {
 		params = map[string]any{"password": "a-value"}
@@ -89,7 +91,9 @@ func passwordSet(params map[string]any) CallRequest {
 		Operation: "password.set",
 		// Constructed directly because this file is in the package. No caller
 		// outside it can do this, which is the entire point of the type.
-		Record:      DispatchRecord{callID: "rec-0001", target: "truenas", operation: "password.set", subject: "user-42"},
+		// A fresh record id per call, as a real dispatch has: each attempt
+		// commits its own row, and a record authorises exactly one dispatch.
+		Record:      OperationRecord(fmt.Sprintf("rec-%04d", recordSeq.Add(1)), "truenas", "password.set", "user-42"),
 		Subject:     "user-42",
 		PlanID:      "plan-0001",
 		Fingerprint: "sha256:abc",
@@ -136,7 +140,8 @@ func TestCallCarriesPlanFingerprintAndOperationIdUnderSignature(t *testing.T) {
 	defer srv.Close()
 
 	signedAddon(t, srv.URL, key)
-	resp := Call(context.Background(), passwordSet(map[string]any{"password": "hunter2"}))
+	req := passwordSet(map[string]any{"password": "hunter2"})
+	resp := Call(context.Background(), req)
 
 	if resp.Outcome != OutcomeSucceeded {
 		t.Fatalf("outcome = %s (err %v), want succeeded", resp.Outcome, resp.Err)
@@ -149,9 +154,12 @@ func TestCallCarriesPlanFingerprintAndOperationIdUnderSignature(t *testing.T) {
 	if sigE != nil {
 		t.Fatalf("add-on could not verify the signature: %v", sigE)
 	}
-	if env.Operation != "password.set" || env.CallID != "rec-0001" ||
+	if env.Operation != "password.set" || env.CallID != req.Record.CallID() ||
 		env.PlanID != "plan-0001" || env.Fingerprint != "sha256:abc" || env.Subject != "user-42" {
 		t.Fatalf("envelope lost binding fields: %+v", env)
+	}
+	if env.CallID == "" {
+		t.Fatal("the record id must travel as the deduplication key")
 	}
 	if env.ContractVersion != ContractVersion {
 		t.Fatalf("envelope contract version = %d, want %d", env.ContractVersion, ContractVersion)

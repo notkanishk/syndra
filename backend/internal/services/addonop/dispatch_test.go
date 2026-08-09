@@ -30,8 +30,7 @@ type harness struct {
 	beginErr error
 	begun    []db.AddonOperationParams
 
-	verified  []string
-	recordErr error
+	verified []string
 
 	resp      addons.CallResponse
 	calls     []addons.CallRequest
@@ -64,18 +63,17 @@ func newHarness(t *testing.T) *harness {
 		h.record("validate")
 		return addons.ValidateParams(op, params)
 	}
-	// The success path returns the zero token. A test in this package cannot
-	// mint a real one — DispatchRecord's field is unexported, which is exactly
-	// the property under test — so what is asserted here is that the
-	// verification HAPPENS, with the right arguments, in the right place. That
-	// the token then carries the record id onto the wire is asserted where it
-	// can be: in the transport's own package.
-	operationRecord = func(_ context.Context, id, target, operation, subject string) (addons.DispatchRecord, error) {
-		h.record("verify")
+	// Returns the zero token. A test in this package cannot mint a real one —
+	// DispatchRecord's fields are unexported, which is exactly the property
+	// under test — so what is asserted here is that the token is minted for the
+	// right call, in the right place. That it is then claimed at the moment of
+	// dispatch, once, is asserted where it can be: in the transport's package.
+	operationRecord = func(id, target, operation, subject string) addons.DispatchRecord {
+		h.record("mint")
 		h.mu.Lock()
 		h.verified = append(h.verified, strings.Join([]string{id, target, operation, subject}, "|"))
 		h.mu.Unlock()
-		return addons.DispatchRecord{}, h.recordErr
+		return addons.DispatchRecord{}
 	}
 	beginOperation = func(_ context.Context, p db.AddonOperationParams) (string, error) {
 		h.record("begin")
@@ -137,7 +135,7 @@ func TestTheRecordIsCommittedBeforeTheCall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
-	if got := h.order(); got != "resolve -> validate -> begin -> verify -> call -> settle:succeeded" {
+	if got := h.order(); got != "resolve -> validate -> begin -> mint -> call -> settle:succeeded" {
 		t.Fatalf("protocol order = %q", got)
 	}
 	if res.OperationID != "rec-0001" {
@@ -435,23 +433,21 @@ func TestParametersAreValidatedBeforeAnythingIsRecorded(t *testing.T) {
 	}
 }
 
-// P2 — the transport is authorised by a verified record, so a verification that
-// fails dispatches nothing and leaves the row exactly as unresolved as it is.
-func TestAnUnverifiableRecordDispatchesNothing(t *testing.T) {
+// P1 — a record that cannot be claimed surfaces as an unreached dispatch and
+// settles as one, because that is what it is: nothing was sent. Minting itself
+// can no longer fail, since it touches nothing — the claim lives at the call.
+func TestAnUnclaimableRecordSettlesAsUnreached(t *testing.T) {
 	h := newHarness(t)
-	h.recordErr = errors.New("no addon operation is open under this id")
+	h.resp = addons.CallResponse{Outcome: addons.OutcomeUnreached, Err: addons.ErrNoCallRecord}
 
 	res, err := Dispatch(context.Background(), passwordSet())
-	if err == nil {
-		t.Fatal("a record that cannot be verified must not dispatch")
+	if err != nil {
+		t.Fatalf("Dispatch: %v", err)
 	}
-	if len(h.calls) != 0 {
-		t.Fatalf("the add-on was called under an unverified record: %+v", h.calls)
+	if res.Status != db.AddonOpUnreached {
+		t.Fatalf("status = %q, want %q", res.Status, db.AddonOpUnreached)
 	}
-	if res.Status != db.AddonOpDispatching {
-		t.Fatalf("status = %q; nothing was sent, so the row is still awaiting nothing at all", res.Status)
-	}
-	if len(h.settled) != 0 {
-		t.Fatal("a call that never happened must not be settled")
+	if h.settled[0] != "rec-0001="+db.AddonOpUnreached {
+		t.Fatalf("settled as %v", h.settled)
 	}
 }

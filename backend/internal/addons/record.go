@@ -6,25 +6,24 @@ import (
 	"fmt"
 )
 
-// DispatchRecord is proof that a durable record exists for the call about to be
-// made, that it names that exact call, and that no other call may use it.
+// DispatchRecord authorises exactly one dispatch, and spends its authority at
+// the moment the request goes out rather than at the moment it was obtained.
 //
-// It replaces what used to be a string. "Commit the record before the call" was
-// enforced by Call refusing an empty CallID, which is not the same property: any
-// caller could satisfy it with a generated UUID and mutate a target with nothing
-// in the database aware the attempt existed.
+// The distinction is the whole design, and it took three attempts to get right:
 //
-// It carries the binding rather than only the id, and that is the second half.
-// A token that remembered only which record it came from would have its
-// verification evaporate at the moment of minting: a caller could mint against
-// one record and then send an entirely different call under it, and the check
-// that ran would have checked the call that was not made.
+//   - A plain string was not evidence of anything. Any caller could satisfy
+//     "the record exists" with a generated UUID.
+//   - A token verified only when minted verified a call that might not be the
+//     one sent: claim against a health check, dispatch a password.
+//   - A token whose durable state was claimed when minted still authorised any
+//     number of dispatches, because a Go value is copyable and comparing its
+//     stored binding is not the same as spending it. One legitimate mint could
+//     be replayed through Call, concurrently or after settlement.
 //
-// The fields are unexported, so this type cannot be constructed or edited
-// outside this package. The only way to obtain one is a constructor that claims
-// the record, which means "a call is authorised by a durable record describing
-// it" stops being a thing callers must remember and becomes a thing they cannot
-// avoid.
+// So the token holds no claimed state. It holds the binding and a one-shot
+// consume, and the transport calls consume immediately before the request. The
+// authority lives in the database row, where copying a Go value cannot reach
+// it: the second attempt finds `claimed_at` already set and is refused.
 type DispatchRecord struct {
 	// callID is what travels to the add-on as the deduplication key.
 	callID string
@@ -32,6 +31,8 @@ type DispatchRecord struct {
 	target    string
 	operation string
 	subject   string
+	// consume takes the durable claim. Exactly one caller can succeed, ever.
+	consume func(context.Context) error
 }
 
 // CallID is the deduplication key the add-on will see. Exposed for logging and
@@ -39,47 +40,45 @@ type DispatchRecord struct {
 // because a string cannot be turned back into a DispatchRecord.
 func (d DispatchRecord) CallID() string { return d.callID }
 
-func (d DispatchRecord) valid() bool { return d.callID != "" }
+func (d DispatchRecord) valid() bool { return d.callID != "" && d.consume != nil }
 
 // authorises reports whether this token was minted for exactly this call.
 func (d DispatchRecord) authorises(target, operation, subject string) bool {
 	return d.target == target && d.operation == operation && d.subject == subject
 }
 
-// ErrNoCallRecord is the refusal to dispatch without a claimed durable record.
-var ErrNoCallRecord = errors.New("addon: refusing to dispatch without a durable operation record")
+// ErrNoCallRecord is the refusal to dispatch without a durable record that can
+// be claimed for this call.
+var ErrNoCallRecord = errors.New("addon: refusing to dispatch without a claimable operation record")
 
 // ErrRecordMismatch means the token authorises a different call from the one
 // being made.
 var ErrRecordMismatch = errors.New("addon: the operation record does not authorise this call")
 
-// OperationRecord claims the addon_operations row for this call and returns the
-// token authorising the dispatch.
+// OperationRecord names the addon_operations row that will authorise a
+// dispatch. It touches nothing: the row is claimed by the transport, at the
+// moment of the call.
 //
-// A claim, not a lookup. A lookup can be repeated: two callers could obtain the
-// same record concurrently, and a caller could re-read a settled record and
-// dispatch under it a second time. The claim is a single conditional UPDATE, so
-// a record authorises exactly one call, once, and the window closes the instant
-// it is taken rather than when the outcome is finally written.
+// Deliberately not "read it now and claim it now". A capability claimed when it
+// is obtained is still spendable more than once, because what the caller then
+// holds is an ordinary Go value that copies freely — and a check that compares
+// the copy's contents is a check the copy always passes. Deferring the claim to
+// the point of use puts the one-shot where the shot is.
 //
-// The record must also name this target, operation, and subject. Existence
-// alone would let a caller holding any real record id authorise a different call
-// with it, leaving an audit trail that describes something that did not happen —
-// worse than no trail, because it will be believed. The comparison lives in the
-// claim's own predicate, so an attempt that does not match consumes nothing and
-// the legitimate dispatch behind it is unharmed.
-func OperationRecord(ctx context.Context, id, target, operation, subject string) (DispatchRecord, error) {
-	row, err := dbClaimAddonOperation(ctx, id, target, operation, subject)
-	if err != nil {
-		return DispatchRecord{}, fmt.Errorf("%w: %s: %w", ErrNoCallRecord, id, err)
-	}
-	// Built from the row the database returned, not from the arguments. The
-	// token's binding is then a fact about a committed record rather than an
-	// echo of what the caller asked for.
+// The claim carries the call's identity in its own predicate, so a row that
+// does not describe this call is not claimed at all: a mismatched attempt
+// consumes nothing and the legitimate dispatch behind it is unharmed.
+func OperationRecord(id, target, operation, subject string) DispatchRecord {
 	return DispatchRecord{
-		callID:    row.ID,
-		target:    row.Target,
-		operation: row.Operation,
-		subject:   row.SubjectID,
-	}, nil
+		callID:    id,
+		target:    target,
+		operation: operation,
+		subject:   subject,
+		consume: func(ctx context.Context) error {
+			if _, err := dbClaimAddonOperation(ctx, id, target, operation, subject); err != nil {
+				return fmt.Errorf("%w: %s: %w", ErrNoCallRecord, id, err)
+			}
+			return nil
+		},
+	}
 }

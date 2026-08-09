@@ -192,6 +192,16 @@ func Call(ctx context.Context, req CallRequest) CallResponse {
 		return CallResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: encode call: %w", req.Target, err)}
 	}
 
+	// The claim, immediately before the request and after every other refusal.
+	// Here rather than when the token was obtained, because a token is a Go
+	// value and a Go value copies: the durable row is the only thing a copy
+	// cannot duplicate. Here rather than earlier in this function, because a
+	// call refused by the breaker or by a missing credential never left, and a
+	// record it consumed would say otherwise.
+	if err := req.Record.consume(ctx); err != nil {
+		return CallResponse{Outcome: OutcomeUnreached, Err: err}
+	}
+
 	url := a.Registration.BaseURL + "/operations/" + req.Operation
 	resp := doAuthenticated(ctx, cred, http.MethodPost, url, body, callTimeout)
 	a.br.record(timeNow(), resp.Outcome)
