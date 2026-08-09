@@ -93,8 +93,18 @@ function useBulkDriftMutation<B>(path: string, apply: boolean) {
  * body serves both passes; the apply pass always sets it, and the backend
  * refuses an apply without one.
  */
-type AdoptBody = { ids: string[]; source: AttributionSource; plan_id?: string };
-type ExternalBody = { ids: string[]; reason: string; plan_id?: string };
+type AdoptBody = {
+  ids: string[];
+  source: AttributionSource;
+  plan_id?: string;
+  acknowledge_scope?: boolean;
+};
+type ExternalBody = {
+  ids: string[];
+  reason: string;
+  plan_id?: string;
+  acknowledge_scope?: boolean;
+};
 
 export const useRehearseAdoptDrift = () =>
   useBulkDriftMutation<AdoptBody>("/governance/drift/bulk-attribute", false);

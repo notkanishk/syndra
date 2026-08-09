@@ -32,6 +32,12 @@ export interface BulkGrantInput {
   reason: string;
   duration_days?: number;
   /** Cites the rehearsal being applied. Set by the apply pass, never composed by hand. */
+  /**
+   * The operator confirming an affected-subject count above the configured
+   * limit. Sent on the rehearsal, never on the apply: it unlocks issuing the
+   * approval rather than changing what the approval does.
+   */
+  acknowledge_scope?: boolean;
   plan_id?: string;
   /**
    * Narrows `extend` to specific grants. Omit it to extend every expiring direct grant the named

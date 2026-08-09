@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -544,5 +546,117 @@ func TestApplyActsOnTheApprovedGrantRows(t *testing.T) {
 	}
 	if len(deleted) != 1 || deleted[0] != "g_reviewed" {
 		t.Fatalf("the apply must delete the reviewed grant row, got %v", deleted)
+	}
+}
+
+// 2.39/2.40 — the cohort guard, at the only place the cohort exists.
+//
+// A per-subject apply cannot know how many subjects an operation touches, so a
+// guard specified there would sit in the component unable to implement it. It
+// lives in `issuePlan`, which is every planned surface's one way to become an
+// approval — including the ones added later.
+func TestAnOversizedCohortIsRefusedBeforeAnythingIsRecorded(t *testing.T) {
+	t.Setenv("PLAN_COHORT_LIMIT", "3")
+	store := stubPlanStore(t)
+
+	outcomes := make([]services.BulkOutcome, 0, 6)
+	for _, id := range []string{"u1", "u2", "u3", "u4", "u5", "u_no"} {
+		effect := services.EffectApply
+		if id == "u_no" {
+			effect = services.EffectNoChange
+		}
+		outcomes = append(outcomes, services.BulkOutcome{UserID: id, Effect: effect})
+	}
+	stubRehearsal(t, services.BulkPlan{
+		Op:       services.BulkOpAssignRole,
+		Outcomes: outcomes,
+		Summary:  services.BulkSummary{Total: 6, Apply: 5, NoChange: 1},
+	})
+	writes := stubNoWrites(t)
+
+	const body = `{"op":"assign_role","user_ids":["u1","u2","u3","u4","u5","u_no"],"project_id":"p","role_key":"r","reason":"x"}`
+	rr := httptest.NewRecorder()
+	handleBulkGrants(rr, httptest.NewRequest(http.MethodPost, "/api/v1/grants/bulk", strings.NewReader(body)))
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("an unacknowledged oversized cohort must be refused, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	// The number it computed, not "too large": an operator told only that
+	// something is big has to guess what they are being warned about.
+	if !strings.Contains(rr.Body.String(), `"affected":"5"`) || !strings.Contains(rr.Body.String(), `"limit":"3"`) {
+		t.Errorf("the refusal must report the computed count and the limit: %s", rr.Body.String())
+	}
+	if len(store.plans) != 0 || *writes != 0 {
+		t.Error("a refused rehearsal must record no approval and write nothing")
+	}
+
+	// Acknowledged, it proceeds — and the acknowledgement is not bound to the
+	// plan, since it unlocks issuing the approval rather than changing what the
+	// approval does. An apply that omits it must still be accepted.
+	ack := httptest.NewRecorder()
+	handleBulkGrants(ack, httptest.NewRequest(http.MethodPost, "/api/v1/grants/bulk",
+		strings.NewReader(`{"op":"assign_role","user_ids":["u1","u2","u3","u4","u5","u_no"],"project_id":"p","role_key":"r","reason":"x","acknowledge_scope":true}`)))
+	if ack.Code != http.StatusOK {
+		t.Fatalf("an acknowledged cohort must be planned, got %d (%s)", ack.Code, ack.Body.String())
+	}
+	var issued services.BulkPlan
+	_ = json.Unmarshal(ack.Body.Bytes(), &issued)
+
+	apply := httptest.NewRecorder()
+	handleBulkGrants(apply, httptest.NewRequest(http.MethodPost, "/api/v1/grants/bulk?apply=true",
+		strings.NewReader(`{"op":"assign_role","user_ids":["u1","u2","u3","u4","u5","u_no"],"project_id":"p","role_key":"r","reason":"x","plan_id":"`+issued.PlanID+`"}`)))
+	if apply.Code != http.StatusAccepted {
+		t.Fatalf("the acknowledgement must not have to be repeated on apply: %d (%s)", apply.Code, apply.Body.String())
+	}
+}
+
+// It counts the subjects that would CHANGE, not the ones selected. A selection
+// of two hundred that grants three of them a role is a small change reviewed as
+// a large one, and refusing it teaches operators to acknowledge everything.
+func TestTheCohortGuardCountsWhatWouldChange(t *testing.T) {
+	t.Setenv("PLAN_COHORT_LIMIT", "3")
+	stubPlanStore(t)
+
+	outcomes := make([]services.BulkOutcome, 0, 40)
+	for i := range 40 {
+		effect := services.EffectNoChange
+		if i < 2 {
+			effect = services.EffectApply
+		}
+		outcomes = append(outcomes, services.BulkOutcome{UserID: fmt.Sprintf("u%d", i), Effect: effect})
+	}
+	stubRehearsal(t, services.BulkPlan{
+		Op:       services.BulkOpAssignRole,
+		Outcomes: outcomes,
+		Summary:  services.BulkSummary{Total: 40, Apply: 2, NoChange: 38},
+	})
+	stubNoWrites(t)
+
+	rr := httptest.NewRecorder()
+	handleBulkGrants(rr, httptest.NewRequest(http.MethodPost, "/api/v1/grants/bulk",
+		strings.NewReader(`{"op":"assign_role","user_ids":["u0"],"project_id":"p","role_key":"r","reason":"x"}`)))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("a wide selection with a narrow effect must not need an acknowledgement: %d (%s)", rr.Code, rr.Body.String())
+	}
+}
+
+// Every planned surface gets it, because it lives in the one function they all
+// go through rather than in each of them.
+func TestTheCohortGuardCoversEverySurface(t *testing.T) {
+	src, err := os.ReadFile("plan_gate.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`(?s)func issuePlan\([^)]*\) error \{.*?cohortTooLarge\{`).Match(src) {
+		t.Fatal("the guard must live in issuePlan: a copy per surface is a surface that will be added without one")
+	}
+	for _, f := range []string{"bulk.go", "drift.go", "requests_bulk.go"} {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(b), "cohortLimit()") {
+			t.Errorf("%s must not enforce the cohort limit itself", f)
+		}
 	}
 }

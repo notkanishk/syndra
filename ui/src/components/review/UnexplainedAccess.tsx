@@ -851,10 +851,10 @@ function BulkResolutionDialog({
       title={op === "adopt" ? "Adopt in Syndra" : "Mark as owned elsewhere"}
       lede={composition}
       noun={["item", "items"]}
-      onRehearse={() =>
+      onRehearse={(acknowledgeScope) =>
         op === "adopt"
-          ? rehearseAdopt.mutateAsync(adoptBody)
-          : rehearseExternal.mutateAsync(externalBody)
+          ? rehearseAdopt.mutateAsync({ ...adoptBody, acknowledge_scope: acknowledgeScope })
+          : rehearseExternal.mutateAsync({ ...externalBody, acknowledge_scope: acknowledgeScope })
       }
       onApply={async (planId) => {
         const plan =

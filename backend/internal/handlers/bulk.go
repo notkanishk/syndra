@@ -32,6 +32,11 @@ type BulkGrantRequest struct {
 	GrantIDs []string `json:"grant_ids,omitempty"`
 	// PlanID cites the rehearsal being applied. Required with ?apply=true.
 	PlanID string `json:"plan_id,omitempty"`
+	// AcknowledgeScope is the operator saying the affected-subject count out
+	// loud. Required only above the configured limit, and never bound to the
+	// plan: it unlocks issuing the approval, it does not change what the
+	// approval does.
+	AcknowledgeScope bool `json:"acknowledge_scope,omitempty"`
 }
 
 // handleBulkGrants rehearses a bulk access change and, on ?apply=true, executes
@@ -78,11 +83,8 @@ func handleBulkGrants(w http.ResponseWriter, r *http.Request) {
 			jsonErrorResponse(w, http.StatusInternalServerError, "BULK_REHEARSAL_ERROR", err.Error())
 			return
 		}
-		if err := issuePlan(r.Context(), planSurfaceBulkGrants, actor, requestFP, &plan); err != nil {
-			// A rehearsal that could not be recorded must not be returned as
-			// one: the operator would review a diff they cannot then apply, and
-			// the surface would offer them the button.
-			jsonErrorResponse(w, http.StatusInternalServerError, "PLAN_NOT_RECORDED", err.Error())
+		if err := issuePlan(r.Context(), planSurfaceBulkGrants, actor, requestFP, req.AcknowledgeScope, &plan); err != nil {
+			writePlanIssueError(w, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, plan)

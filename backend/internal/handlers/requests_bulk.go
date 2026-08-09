@@ -30,6 +30,8 @@ type bulkDecisionRequest struct {
 	ReviewNote string   `json:"review_note"`
 	// PlanID cites the rehearsal being applied. Required with ?apply=true.
 	PlanID string `json:"plan_id,omitempty"`
+	// AcknowledgeScope is the operator saying the affected-request count out loud.
+	AcknowledgeScope bool `json:"acknowledge_scope,omitempty"`
 }
 
 func handleBulkDecideRequests(w http.ResponseWriter, r *http.Request) {
@@ -72,8 +74,8 @@ func handleBulkDecideRequests(w http.ResponseWriter, r *http.Request) {
 
 	if r.URL.Query().Get("apply") != "true" {
 		plan := rehearseDecisionBatch(r.Context(), ids, status)
-		if err := issuePlan(r.Context(), planSurfaceBulkDecision, actor, requestFP, &plan); err != nil {
-			jsonErrorResponse(w, http.StatusInternalServerError, "PLAN_NOT_RECORDED", err.Error())
+		if err := issuePlan(r.Context(), planSurfaceBulkDecision, actor, requestFP, req.AcknowledgeScope, &plan); err != nil {
+			writePlanIssueError(w, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, plan)

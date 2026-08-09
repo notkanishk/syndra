@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,6 +54,38 @@ func (s *staleSubjects) Error() string {
 }
 func (s *staleSubjects) Unwrap() error { return ErrPlanStale }
 
+// ErrCohortTooLarge refuses to issue an approval whose blast radius the
+// operator has not acknowledged.
+//
+// The guard lives at plan time because the backend is the only component that
+// holds a cohort — a per-subject apply cannot know how many subjects an
+// operation touches, so specifying it there would put it in the one place
+// unable to implement it (design, Risks). And it lives in `issuePlan` rather
+// than in each surface, so it covers every planned operation including the ones
+// added later.
+type cohortTooLarge struct{ Affected, Limit int }
+
+func (e *cohortTooLarge) Error() string {
+	return fmt.Sprintf("this affects %d subjects, above the %d that may be approved without acknowledging the scope", e.Affected, e.Limit)
+}
+
+// cohortLimit is the affected-subject count above which an approval needs the
+// operator to say the number out loud.
+//
+// It counts the subjects that would CHANGE, not the ones selected — a selection
+// of two hundred people that turns out to grant three of them a role is a small
+// change reviewed as a large one, and refusing it would train operators to
+// acknowledge everything. `BulkMaxUsers` is the different, cruder ceiling on
+// how many may be selected at all, and it stays.
+func cohortLimit() int {
+	if v := os.Getenv("PLAN_COHORT_LIMIT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 25
+}
+
 // planLifetime bounds how long a reviewed diff may be cited.
 //
 // Short on purpose. It is not a session timeout: it is how long the backend is
@@ -77,7 +110,14 @@ func planLifetime() time.Duration {
 // re-verifying a blocked row is meaningful in its own right, since an account
 // that was departed at review time and is active now is exactly the case the
 // block existed for.
-func issuePlan(ctx context.Context, surface, actor, requestFP string, plan *services.BulkPlan) error {
+func issuePlan(ctx context.Context, surface, actor, requestFP string, ack bool, plan *services.BulkPlan) error {
+	// Refused before anything is written, and reported with the number it
+	// computed: an operator told only that the change is "too large" has to
+	// guess at what they are being warned about.
+	if limit := cohortLimit(); !ack && plan.Summary.Apply > limit {
+		return &cohortTooLarge{Affected: plan.Summary.Apply, Limit: limit}
+	}
+
 	subjects := make([]db.NewPlanSubject, 0, len(plan.Outcomes))
 	for _, out := range plan.Outcomes {
 		effect, ok := planEffect(out.Effect)
@@ -198,6 +238,30 @@ func indexOutcomes(outcomes []services.BulkOutcome) map[string]services.BulkOutc
 // on. Each one is a different operator action, so each one is its own code —
 // a single 400 would tell an operator to "check the request" when what they
 // need to do is re-plan, or ask the person who approved it.
+// writePlanIssueError answers a rehearsal that could not become an approval.
+//
+// The blast-radius refusal is 422 rather than 400: the request is well formed
+// and the backend understood it perfectly — it is declining to approve it at
+// this size without being asked twice.
+func writePlanIssueError(w http.ResponseWriter, err error) {
+	var oversized *cohortTooLarge
+	if errors.As(err, &oversized) {
+		jsonResponse(w, http.StatusUnprocessableEntity, ErrorResponse{
+			Error:   "COHORT_ACKNOWLEDGEMENT_REQUIRED",
+			Message: oversized.Error(),
+			Details: map[string]string{
+				"affected": strconv.Itoa(oversized.Affected),
+				"limit":    strconv.Itoa(oversized.Limit),
+			},
+		})
+		return
+	}
+	// A rehearsal that could not be recorded must not be returned as one: the
+	// operator would review a diff they cannot then apply, and the surface would
+	// offer them the button anyway.
+	jsonErrorResponse(w, http.StatusInternalServerError, "PLAN_NOT_RECORDED", err.Error())
+}
+
 func writePlanCitationError(w http.ResponseWriter, err error) {
 	var stale *staleSubjects
 	switch {

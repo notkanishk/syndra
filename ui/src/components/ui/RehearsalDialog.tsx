@@ -67,7 +67,11 @@ interface RehearsalDialogProps {
   ready?: boolean;
   /** Solid destructive confirm rather than accent. */
   destructive?: boolean;
-  onRehearse: () => Promise<BulkPlan>;
+  /**
+   * Computes the plan. Takes the scope acknowledgement rather than reading it
+   * from the caller, so a surface cannot acknowledge on the operator's behalf.
+   */
+  onRehearse: (acknowledgeScope: boolean) => Promise<BulkPlan>;
   /**
    * Applies the approval the rehearsal issued. The id is passed in rather than
    * captured by the caller so there is exactly one place it can come from: the
@@ -97,6 +101,16 @@ function stalePlanError(error: unknown): ApiError | null {
   return error instanceof ApiError && STALE_PLAN_CODES.has(error.code) ? error : null;
 }
 
+/**
+ * The backend declining to approve a change of this size without being asked
+ * twice. It carries the count it computed, which is the whole point: "too
+ * large" leaves an operator guessing at what they are being warned about.
+ */
+function cohortRefusal(error: unknown): { affected: string; limit: string } | null {
+  if (!(error instanceof ApiError) || error.code !== "COHORT_ACKNOWLEDGEMENT_REQUIRED") return null;
+  return { affected: error.details?.affected ?? "?", limit: error.details?.limit ?? "?" };
+}
+
 export function RehearsalDialog({
   title,
   lede,
@@ -111,23 +125,38 @@ export function RehearsalDialog({
   // With no compose step there is nothing to fill in, so the dialog opens
   // straight into the rehearsal rather than making the operator press a button
   // whose only effect is to reveal the thing they came to see.
-  const [step, setStep] = useState<"compose" | "review" | "result">(compose ? "compose" : "review");
+  const [step, setStep] = useState<"compose" | "scope" | "review" | "result">(
+    compose ? "compose" : "review",
+  );
   const [plan, setPlan] = useState<BulkPlan | null>(null);
   const [busy, setBusy] = useState(false);
   const [autoRan, setAutoRan] = useState(false);
   /** Subjects the backend named as moved, so the re-plan says which rows to look at. */
   const [moved, setMoved] = useState<string[]>([]);
+  /** Set when the backend refuses to approve a change of this size unasked. */
+  const [scope, setScope] = useState<{ affected: string; limit: string } | null>(null);
 
-  async function run(fn: () => Promise<BulkPlan>, next: "review" | "result") {
+  /**
+   * Rehearse. A blast-radius refusal is not a failure — it is the backend
+   * asking the operator to say the number out loud — so it stops on its own
+   * step rather than closing the dialog with a toast.
+   */
+  async function rehearse(acknowledgeScope: boolean) {
     setBusy(true);
     try {
-      const result = await fn();
+      const result = await onRehearse(acknowledgeScope);
       setPlan(result);
       setMoved([]);
-      setStep(next);
-      if (next === "result") toast[resultTone(result)](resultMessage(result, noun));
+      setScope(null);
+      setStep("review");
       return result;
     } catch (error) {
+      const oversized = cohortRefusal(error);
+      if (oversized) {
+        setScope(oversized);
+        setStep("scope");
+        return null;
+      }
       toast.error(error instanceof Error ? error.message : "That didn't go through.");
       throw error;
     } finally {
@@ -160,7 +189,10 @@ export function RehearsalDialog({
       }
       toast.warning(stale.message);
       try {
-        const replanned = await onRehearse();
+        // Already acknowledged once if it needed to be: the cohort has not
+        // grown, and making the operator confirm the size again to see what
+        // moved buries the thing they actually need to read.
+        const replanned = await onRehearse(true);
         setPlan(replanned);
         setMoved(Object.keys(stale.details ?? {}));
         setStep("review");
@@ -179,7 +211,7 @@ export function RehearsalDialog({
   useEffect(() => {
     if (compose || autoRan) return;
     setAutoRan(true);
-    void run(onRehearse, "review").catch(() => onClose());
+    void rehearse(false).catch(() => onClose());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compose, autoRan]);
 
@@ -191,14 +223,32 @@ export function RehearsalDialog({
         lede={
           step === "compose"
             ? lede
-            : step === "review"
-              ? "Rehearsed against live state. Nothing has changed yet."
-              : "Done. This is what happened."
+            : step === "scope"
+              ? "This is bigger than the usual change. Nothing has been computed yet."
+              : step === "review"
+                ? "Rehearsed against live state. Nothing has changed yet."
+                : "Done. This is what happened."
         }
       />
 
       {step === "compose" ? (
         <div className="flex flex-col gap-4 px-6">{compose}</div>
+      ) : step === "scope" ? (
+        <div className="px-6">
+          <div
+            role="status"
+            className="rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-[13.5px] text-warn-text"
+          >
+            <p className="font-medium">
+              This would change access for {scope?.affected} {noun[1]}.
+            </p>
+            <p className="mt-1">
+              Anything above {scope?.limit} is confirmed separately, because a number is the one
+              part of a bulk change that is easy to get wrong and hard to see. Confirming computes
+              the plan — it still writes nothing.
+            </p>
+          </div>
+        </div>
       ) : (
         <>
           {moved.length > 0 && (
@@ -233,11 +283,26 @@ export function RehearsalDialog({
               variant="accent"
               isPending={busy}
               disabled={!ready}
-              onClick={() => void run(onRehearse, "review").catch(() => {})}
+              onClick={() => void rehearse(false).catch(() => {})}
             >
               Rehearse
             </Button>
             <Button onClick={onClose}>Cancel</Button>
+          </>
+        )}
+
+        {step === "scope" && (
+          <>
+            <Button
+              variant="dangerConfirm"
+              isPending={busy}
+              onClick={() => void rehearse(true).catch(() => {})}
+            >
+              Yes, plan for {scope?.affected} {noun[1]}
+            </Button>
+            <Button onClick={compose ? () => setStep("compose") : onClose}>
+              {compose ? "Back" : "Cancel"}
+            </Button>
           </>
         )}
 

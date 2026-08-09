@@ -219,6 +219,8 @@ type bulkAttributeRequest struct {
 	Source string   `json:"source"`
 	// PlanID cites the rehearsal being applied. Required with ?apply=true.
 	PlanID string `json:"plan_id,omitempty"`
+	// AcknowledgeScope is the operator saying the affected-row count out loud.
+	AcknowledgeScope bool `json:"acknowledge_scope,omitempty"`
 }
 
 func handleBulkAttributeDrift(w http.ResponseWriter, r *http.Request) {
@@ -242,8 +244,8 @@ func handleBulkAttributeDrift(w http.ResponseWriter, r *http.Request) {
 
 	if r.URL.Query().Get("apply") != "true" {
 		plan := rehearseDriftBatch(r.Context(), req.IDs, driftOpAdopt)
-		if err := issuePlan(r.Context(), planSurfaceDriftAdopt, actor, requestFP, &plan); err != nil {
-			jsonErrorResponse(w, http.StatusInternalServerError, "PLAN_NOT_RECORDED", err.Error())
+		if err := issuePlan(r.Context(), planSurfaceDriftAdopt, actor, requestFP, req.AcknowledgeScope, &plan); err != nil {
+			writePlanIssueError(w, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, plan)
@@ -264,6 +266,8 @@ type bulkMarkExternalRequest struct {
 	Reason string   `json:"reason"`
 	// PlanID cites the rehearsal being applied. Required with ?apply=true.
 	PlanID string `json:"plan_id,omitempty"`
+	// AcknowledgeScope is the operator saying the affected-row count out loud.
+	AcknowledgeScope bool `json:"acknowledge_scope,omitempty"`
 }
 
 // handleBulkMarkDriftExternal is the second of exactly two bulk resolutions.
@@ -290,8 +294,8 @@ func handleBulkMarkDriftExternal(w http.ResponseWriter, r *http.Request) {
 
 	if r.URL.Query().Get("apply") != "true" {
 		plan := rehearseDriftBatch(r.Context(), req.IDs, driftOpExternal)
-		if err := issuePlan(r.Context(), planSurfaceDriftExternal, actor, requestFP, &plan); err != nil {
-			jsonErrorResponse(w, http.StatusInternalServerError, "PLAN_NOT_RECORDED", err.Error())
+		if err := issuePlan(r.Context(), planSurfaceDriftExternal, actor, requestFP, req.AcknowledgeScope, &plan); err != nil {
+			writePlanIssueError(w, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, plan)

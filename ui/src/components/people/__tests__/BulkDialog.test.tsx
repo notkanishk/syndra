@@ -147,7 +147,12 @@ describe("BulkDialog", () => {
     // The body is the same operation, and it now names the approval. The
     // backend binds the two, so a body that drifted from the reviewed one is
     // refused rather than applied under an approval it does not belong to.
-    expect(api.applied[0]).toEqual({ ...(api.rehearsed[0] as object), plan_id: "plan_1" });
+    //
+    // `acknowledge_scope` is the one field that does not travel: it unlocks
+    // issuing the approval, it does not change what the approval does, so it
+    // is deliberately outside the binding and outside the apply.
+    const { acknowledge_scope: _ack, ...rehearsed } = api.rehearsed[0] as Record<string, unknown>;
+    expect(api.applied[0]).toEqual({ ...rehearsed, plan_id: "plan_1" });
   });
 
   it("cannot apply a rehearsal the backend did not record", async () => {
