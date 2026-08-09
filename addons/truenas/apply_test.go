@@ -444,9 +444,14 @@ func TestNothingInTheApplyPathDeletesAnAccount(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// Matched as an INVOCATION, not as a mention. The capability probe
+		// declares which methods each operation depends on, and a guard that
+		// fired on the declaration would be weakened until it fired on nothing.
 		for _, forbidden := range []string{"user.delete", "group.delete"} {
-			if strings.Contains(src, forbidden) {
-				t.Errorf("%s calls %s — deletion by absence is the failure this design forbids outright", f, forbidden)
+			for _, form := range []string{`call("` + forbidden, `Call("` + forbidden} {
+				if strings.Contains(src, form) {
+					t.Errorf("%s calls %s — deletion by absence is the failure this design forbids outright", f, forbidden)
+				}
 			}
 		}
 	}

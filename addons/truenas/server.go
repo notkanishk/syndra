@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -62,42 +63,73 @@ func (s *server) handleCapabilities(w http.ResponseWriter, r *http.Request, _ []
 	writeJSON(w, http.StatusOK, manifest(s.product, s.nas.Version(), s))
 }
 
-// availability answers the capability probe for one operation.
+// availability answers the capability probe for one operation (4.7).
 //
-// Two reasons an operation is unavailable, and they read differently to an
-// operator: the target's major is outside the tested range, or the operation
-// needs a privilege this add-on's credential deliberately excludes.
+// Per operation rather than per target version, because a supported release may
+// still lack a specific method: the research behind this design found methods
+// moving across TrueNAS releases, and UniFi Access carries per-feature floors
+// throughout. An operation the target cannot perform is declared unavailable
+// with a reason and rendered disabled-and-explained, rather than omitted —
+// which leaves an operator wondering whether the feature exists — or left to
+// fail on use.
+//
+// The reasons read differently to an operator and are kept apart for that:
+// an untested major is "we will not", a missing method is "it cannot".
 func (s *server) availability(operationID string) (bool, string) {
 	if supported, why := s.nas.MajorSupported(); !supported {
 		return false, why
 	}
-	if operationID == "account.purge" {
-		// The add-on's own key cannot delete. Purge runs on a second elevated
-		// credential the backend injects into that single call, so a compromised
-		// add-on can misassign, disable and rotate but cannot delete an account
-		// on its own (design §10).
-		return true, ""
+	for _, method := range methodsFor(operationID) {
+		if !s.nas.MethodPresent(method) {
+			return false, fmt.Sprintf("this target does not expose %s", method)
+		}
 	}
 	return true, ""
 }
 
+// methodsFor names the target methods an operation depends on.
+//
+// A table rather than a probe per call site, so adding an operation without
+// declaring what it needs is visible here instead of surfacing as a runtime
+// failure on the day somebody uses it against an older release.
+func methodsFor(operationID string) []string {
+	switch operationID {
+	case "password.set", "password.rotate":
+		return []string{"user.update"}
+	case "account.purge":
+		return []string{"user.delete"}
+	case "activity.get":
+		// Both, because a report that could read the audit log but not the
+		// share list would be the silently-incomplete answer this operation
+		// exists to avoid giving.
+		return []string{"audit.query", "sharing.smb.query"}
+	case "health.get":
+		return []string{"system.info", "alert.list", "pool.query", "service.query"}
+	}
+	return nil
+}
+
 // Health is what an operator reads and what the backend anchors.
 type Health struct {
-	Reachable      bool      `json:"reachable"`
-	Product        string    `json:"product"`
-	ProductVersion string    `json:"product_version"`
-	VersionTested  bool      `json:"version_tested"`
-	VersionNote    string    `json:"version_note,omitempty"`
-	LastReadAt     *string   `json:"last_read_at,omitempty"`
-	KeyExpiresAt   *string   `json:"key_expires_at,omitempty"`
-	Lifecycle      string    `json:"lifecycle"`
-	LifecycleNote  string    `json:"lifecycle_note,omitempty"`
-	InFlight       int64     `json:"in_flight"`
-	Drained        bool      `json:"drained"`
-	LogHead        string    `json:"log_head"`
-	LogRecords     uint64    `json:"log_records"`
-	SnapshotAge    *string   `json:"snapshot_taken_at,omitempty"`
-	CheckedAt      time.Time `json:"checked_at"`
+	Reachable      bool    `json:"reachable"`
+	Product        string  `json:"product"`
+	ProductVersion string  `json:"product_version"`
+	VersionTested  bool    `json:"version_tested"`
+	VersionNote    string  `json:"version_note,omitempty"`
+	LastReadAt     *string `json:"last_read_at,omitempty"`
+	KeyExpiresAt   *string `json:"key_expires_at,omitempty"`
+	// CircuitOpen says the add-on is refusing its own calls. Distinct from
+	// unreachable: an operator seeing only "unreachable" looks at the network,
+	// when what happened is that this backed off to avoid a lockout.
+	CircuitOpen   bool      `json:"circuit_open"`
+	Lifecycle     string    `json:"lifecycle"`
+	LifecycleNote string    `json:"lifecycle_note,omitempty"`
+	InFlight      int64     `json:"in_flight"`
+	Drained       bool      `json:"drained"`
+	LogHead       string    `json:"log_head"`
+	LogRecords    uint64    `json:"log_records"`
+	SnapshotAge   *string   `json:"snapshot_taken_at,omitempty"`
+	CheckedAt     time.Time `json:"checked_at"`
 }
 
 // handleHealth composes the operator shape, degrading per source rather than
@@ -116,6 +148,7 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request, _ []byte) 
 		ProductVersion: s.nas.Version(),
 		VersionTested:  supported,
 		VersionNote:    versionNote,
+		CircuitOpen:    s.nas.CircuitOpen(),
 		Lifecycle:      state,
 		LifecycleNote:  note,
 		InFlight:       s.life.InFlight(),

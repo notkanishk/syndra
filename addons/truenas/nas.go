@@ -25,6 +25,16 @@ const (
 	// rate limit even if every attempt failed, which is the point: the limit
 	// must be unreachable by this code, not merely usually avoided.
 	reconnectCooldown = 15 * time.Second
+
+	// The breaker. It exists for one specific failure: TrueNAS locks an account
+	// out for ten minutes after 20 failed authentications in 60 seconds, and
+	// every operation this add-on performs shares one session. Retrying into
+	// that is how a transient problem becomes a ten-minute outage for everybody.
+	//
+	// The cooldown is longer than the lockout, so a breaker that opened because
+	// of one has certainly cleared it before allowing again.
+	breakerThreshold = 5
+	breakerCooldown  = 11 * time.Minute
 )
 
 var (
@@ -68,6 +78,16 @@ type NAS struct {
 
 	lastRead time.Time
 	now      func() time.Time
+
+	// failures and openUntil are the breaker. Held here rather than in their
+	// own type because they guard exactly one thing — this session — and a
+	// breaker that could be shared would be a breaker somebody shares.
+	failures  int
+	openUntil time.Time
+
+	// methods is what the target exposes, or nil for "not read". Nil reads as
+	// everything-present, so a failed enumeration never withdraws the surface.
+	methods map[string]bool
 }
 
 func newNAS(dial dialer, supportedMajors []string) *NAS {
@@ -89,6 +109,13 @@ func (n *NAS) session() (rpc, error) {
 	if n.client != nil {
 		return n.client, nil
 	}
+	if n.now().Before(n.openUntil) {
+		// Open. Refusing here rather than at the call site is deliberate: the
+		// thing being protected is the login, and a breaker checked after the
+		// session is established protects nothing.
+		return nil, fmt.Errorf("%w: the circuit is open until %s",
+			ErrTargetUnreachable, n.openUntil.UTC().Format(time.RFC3339))
+	}
 	if since := n.now().Sub(n.lastTry); since < reconnectCooldown {
 		return nil, fmt.Errorf("%w: waiting out the reconnect cooldown", ErrTargetUnreachable)
 	}
@@ -96,10 +123,41 @@ func (n *NAS) session() (rpc, error) {
 
 	c, err := n.dial()
 	if err != nil {
+		n.recordFailureLocked(err)
 		return nil, fmt.Errorf("%w: %v", ErrTargetUnreachable, err)
 	}
+	// A successful login clears the count outright rather than decrementing it.
+	// The failure this guards is a burst, so one working connection means the
+	// burst is over.
+	n.failures, n.openUntil = 0, time.Time{}
 	n.client = c
 	return c, nil
+}
+
+// recordFailureLocked counts a failed connection and opens the circuit at the
+// threshold. Caller holds the lock.
+//
+// Rate limiting counts double — it is the target saying, in as many words, that
+// the next attempt is the one that locks the account — so it opens the circuit
+// immediately rather than after five more tries.
+func (n *NAS) recordFailureLocked(err error) {
+	if errors.Is(classifyNASError(err), ErrRateLimited) {
+		n.failures = breakerThreshold
+	} else {
+		n.failures++
+	}
+	if n.failures >= breakerThreshold {
+		n.openUntil = n.now().Add(breakerCooldown)
+	}
+}
+
+// CircuitOpen reports whether the breaker is holding, for `/health`. An add-on
+// that is refusing its own calls must say so, or an operator sees an unreachable
+// target and looks at the network.
+func (n *NAS) CircuitOpen() bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.now().Before(n.openUntil)
 }
 
 // drop closes and forgets the session so the next call reconnects.
@@ -124,12 +182,22 @@ func (n *NAS) call(method string, params any, out any) error {
 	}
 	raw, err := c.Call(method, callTimeoutSeconds, params)
 	if err != nil {
-		if classifyNASError(err) == ErrTargetUnreachable {
+		classified := classifyNASError(err)
+		switch classified {
+		case ErrTargetUnreachable:
 			// A dead socket must not be reused for the next call, or every
 			// subsequent one fails on a connection nothing will reopen.
 			n.drop()
+		case ErrRateLimited:
+			// Backpressure on a live session still counts: the next reconnect
+			// is what would trip the lockout, and the breaker has to be holding
+			// before that reconnect is attempted.
+			n.mu.Lock()
+			n.recordFailureLocked(err)
+			n.mu.Unlock()
+			n.drop()
 		}
-		return fmt.Errorf("%s: %w", method, classifyNASError(err))
+		return fmt.Errorf("%s: %w", method, classified)
 	}
 	n.mu.Lock()
 	n.lastRead = n.now()
@@ -193,6 +261,44 @@ func (n *NAS) LastRead() time.Time {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	return n.lastRead
+}
+
+// MethodPresent reports whether the target exposes a method.
+//
+// Read once per connection from `core.get_methods` and cached, because it is a
+// fact about a release rather than a moment — and because asking per call would
+// spend a round trip through a rate-limited session to learn something that
+// cannot change until the NAS is upgraded.
+//
+// Unknown is treated as PRESENT. A target that will not enumerate its methods
+// is not a target with none, and declaring every operation unavailable on the
+// strength of one failed read would withdraw the whole surface during an
+// outage — the same mistake as concluding an absence from a read that could not
+// happen.
+func (n *NAS) MethodPresent(method string) bool {
+	n.mu.Lock()
+	known := n.methods
+	n.mu.Unlock()
+	if known == nil {
+		return true
+	}
+	return known[method]
+}
+
+// loadMethods reads the target's method list. Best-effort by construction: a
+// failure leaves the cache nil, which reads as "everything present".
+func (n *NAS) loadMethods() {
+	var listing map[string]json.RawMessage
+	if err := n.call("core.get_methods", []any{}, &listing); err != nil {
+		return
+	}
+	known := make(map[string]bool, len(listing))
+	for name := range listing {
+		known[name] = true
+	}
+	n.mu.Lock()
+	n.methods = known
+	n.mu.Unlock()
 }
 
 // MajorSupported reports whether the observed version is one this add-on has

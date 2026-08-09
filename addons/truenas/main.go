@@ -151,6 +151,11 @@ func main() {
 		if ok, why := nas.MajorSupported(); !ok {
 			log.Printf("[STARTUP] WARNING: %s — mutations will be refused, reads continue", why)
 		}
+		// Which methods this release actually has, so the manifest can mark an
+		// operation unavailable with a reason rather than letting it fail on
+		// use. Best-effort: a target that will not enumerate is not a target
+		// with no methods.
+		nas.loadMethods()
 	}
 
 	life := newLifecycle(cfg.lifecycle)
