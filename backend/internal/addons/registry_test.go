@@ -155,7 +155,7 @@ func registerTrueNAS(t *testing.T) *fakeTargetRegistry {
 	resetRegistry(t)
 	withEnv(t, map[string]string{
 		"ADDON_TARGETS":             "truenas",
-		"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090/",
+		"ADDON_TRUENAS_BASE_URL":    "https://addon-truenas:8090/",
 		"ADDON_TRUENAS_CLIENT_CERT": "/run/secrets/c.crt",
 		"ADDON_TRUENAS_CLIENT_KEY":  "/run/secrets/c.key",
 		"ADDON_TRUENAS_CA_CERT":     "/run/secrets/ca.crt",
@@ -184,7 +184,7 @@ func TestInitRegistersFromConfigWithoutFetching(t *testing.T) {
 	if len(reg) != 1 || reg[0].Target != "truenas" {
 		t.Fatalf("expected truenas registered, got %+v", reg)
 	}
-	if reg[0].BaseURL != "http://addon-truenas:8090" {
+	if reg[0].BaseURL != "https://addon-truenas:8090" {
 		t.Errorf("trailing slash must be trimmed so paths do not double up, got %q", reg[0].BaseURL)
 	}
 	if reg[0].ClientCertPath != "/run/secrets/c.crt" {
@@ -388,7 +388,7 @@ func TestInitDisablesTargetsTheDeploymentNoLongerConfigures(t *testing.T) {
 	resetRegistry(t)
 	withEnv(t, map[string]string{
 		"ADDON_TARGETS":             "truenas",
-		"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090",
+		"ADDON_TRUENAS_BASE_URL":    "https://addon-truenas:8090",
 		"ADDON_TRUENAS_SIGNING_KEY": "/run/secrets/s.key",
 	})
 	f := &fakeTargetRegistry{active: []string{"truenas", "unifi"}}
@@ -408,7 +408,7 @@ func TestInitReportsARegistryFailure(t *testing.T) {
 	resetRegistry(t)
 	withEnv(t, map[string]string{
 		"ADDON_TARGETS":             "truenas",
-		"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090",
+		"ADDON_TRUENAS_BASE_URL":    "https://addon-truenas:8090",
 		"ADDON_TRUENAS_SIGNING_KEY": "/run/secrets/s.key",
 	})
 	withTargetRegistry(t, &fakeTargetRegistry{upsertErr: errors.New("connection refused")})
@@ -424,7 +424,7 @@ func TestSigningKeyIsAValidTransportMode(t *testing.T) {
 	resetRegistry(t)
 	withEnv(t, map[string]string{
 		"ADDON_TARGETS":             "truenas",
-		"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090",
+		"ADDON_TRUENAS_BASE_URL":    "https://addon-truenas:8090",
 		"ADDON_TRUENAS_SIGNING_KEY": "/run/secrets/truenas-signing.key",
 	})
 	withTargetRegistry(t, &fakeTargetRegistry{})
@@ -449,7 +449,7 @@ func TestMTLSWinsWhenBothModesAreConfigured(t *testing.T) {
 	resetRegistry(t)
 	withEnv(t, map[string]string{
 		"ADDON_TARGETS":             "truenas",
-		"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090",
+		"ADDON_TRUENAS_BASE_URL":    "https://addon-truenas:8090",
 		"ADDON_TRUENAS_CLIENT_CERT": "/run/secrets/c.crt",
 		"ADDON_TRUENAS_CLIENT_KEY":  "/run/secrets/c.key",
 		"ADDON_TRUENAS_CA_CERT":     "/run/secrets/ca.crt",
@@ -472,16 +472,16 @@ func TestNoTransportAuthMeansNoRegistration(t *testing.T) {
 	for name, env := range map[string]map[string]string{
 		"neither": {
 			"ADDON_TARGETS":          "truenas",
-			"ADDON_TRUENAS_BASE_URL": "http://addon-truenas:8090",
+			"ADDON_TRUENAS_BASE_URL": "https://addon-truenas:8090",
 		},
 		"half a certificate pair": {
 			"ADDON_TARGETS":             "truenas",
-			"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090",
+			"ADDON_TRUENAS_BASE_URL":    "https://addon-truenas:8090",
 			"ADDON_TRUENAS_CLIENT_CERT": "/run/secrets/c.crt",
 		},
 		"a certificate pair with no private CA": {
 			"ADDON_TARGETS":             "truenas",
-			"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090",
+			"ADDON_TRUENAS_BASE_URL":    "https://addon-truenas:8090",
 			"ADDON_TRUENAS_CLIENT_CERT": "/run/secrets/c.crt",
 			"ADDON_TRUENAS_CLIENT_KEY":  "/run/secrets/c.key",
 		},
@@ -555,9 +555,9 @@ func TestRefreshAllBoundsEachTargetSeparately(t *testing.T) {
 	// implementation passes this test by luck, which is worse than no test.
 	withEnv(t, map[string]string{
 		"ADDON_TARGETS":           "aslow,zfast",
-		"ADDON_ASLOW_BASE_URL":    "http://slow:8090",
+		"ADDON_ASLOW_BASE_URL":    "https://slow:8090",
 		"ADDON_ASLOW_SIGNING_KEY": "/run/secrets/s.key",
-		"ADDON_ZFAST_BASE_URL":    "http://fast:8090",
+		"ADDON_ZFAST_BASE_URL":    "https://fast:8090",
 		"ADDON_ZFAST_SIGNING_KEY": "/run/secrets/s.key",
 	})
 	withTargetRegistry(t, &fakeTargetRegistry{})

@@ -1,6 +1,7 @@
 package addons
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -630,5 +631,179 @@ func TestManifestReadIsAuthenticated(t *testing.T) {
 	}
 	if sigErr != nil {
 		t.Fatalf("the manifest read carried no valid signature: %v", sigErr)
+	}
+}
+
+// 2.35 — an http:// base URL means no handshake, which means the client
+// certificate is never presented and the private CA is never consulted. The
+// registration would report auth=mtls with nothing authenticating the
+// connection: the same wrong mental model an incomplete certificate triple
+// creates, reached through a URL scheme instead.
+func TestNonHTTPSBaseURLDoesNotRegister(t *testing.T) {
+	cases := []struct {
+		name, url string
+	}{
+		{"plain http", "http://addon-truenas:8090"},
+		{"no scheme at all", "addon-truenas:8090"},
+		{"scheme with no host", "https://"},
+		{"not a URL", "://nonsense"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resetRegistry(t)
+			withEnv(t, map[string]string{
+				"ADDON_TARGETS":             "truenas",
+				"ADDON_TRUENAS_BASE_URL":    tc.url,
+				"ADDON_TRUENAS_CLIENT_CERT": "/run/secrets/c.crt",
+				"ADDON_TRUENAS_CLIENT_KEY":  "/run/secrets/c.key",
+				"ADDON_TRUENAS_CA_CERT":     "/run/secrets/ca.crt",
+			})
+			withTargetRegistry(t, &fakeTargetRegistry{})
+			if err := Init(context.Background()); err != nil {
+				t.Fatalf("Init: %v", err)
+			}
+			if got := Registered(); len(got) != 0 {
+				t.Fatalf("%q registered despite not being https: %+v", tc.url, got)
+			}
+		})
+	}
+
+	t.Run("https registers", func(t *testing.T) {
+		registerTrueNAS(t)
+		if len(Registered()) != 1 {
+			t.Fatal("the https case must still register, or this guard rejects everything")
+		}
+	})
+}
+
+// 2.6 — io.LimitReader signals its limit with EOF, not an error, so a body
+// larger than the bound reads back as a clean short body. Without an explicit
+// overflow check an oversized 2xx is reported as success, which is exactly the
+// silent-success this outcome type exists to prevent.
+func TestOversizedResponseIsNotASuccess(t *testing.T) {
+	oversized := bytes.Repeat([]byte("a"), maxResponseBytes+64)
+
+	t.Run("an oversized 2xx is indeterminate", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(oversized)
+		}))
+		defer srv.Close()
+		signedAddon(t, srv.URL, []byte("k"))
+		withBreaker(t, 1000, time.Minute)
+
+		resp := Call(context.Background(), passwordSet(nil))
+		if resp.Outcome != OutcomeIndeterminate {
+			t.Fatalf("outcome = %s, want indeterminate — the body was not read whole", resp.Outcome)
+		}
+		if len(resp.Body) > maxResponseBytes {
+			t.Fatalf("body of %d bytes exceeds the bound", len(resp.Body))
+		}
+	})
+
+	t.Run("an oversized refusal stays a refusal", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write(oversized)
+		}))
+		defer srv.Close()
+		signedAddon(t, srv.URL, []byte("k"))
+		withBreaker(t, 1000, time.Minute)
+
+		// A 4xx is decided by its status. Reclassifying it because the
+		// diagnostic body was long would turn a deterministic refusal into a
+		// row that never settles.
+		resp := Call(context.Background(), passwordSet(nil))
+		if resp.Outcome != OutcomeRejected {
+			t.Fatalf("outcome = %s, want rejected", resp.Outcome)
+		}
+		if resp.Err == nil || !strings.Contains(resp.Err.Error(), "exceeding") {
+			t.Fatalf("the truncation went unrecorded: %v", resp.Err)
+		}
+	})
+
+	t.Run("an oversized manifest is refused rather than parsed", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write(oversized)
+		}))
+		defer srv.Close()
+		path := filepath.Join(t.TempDir(), "sign.key")
+		writeFile(t, path, []byte("k"))
+		resetRegistry(t)
+		registryMu.Lock()
+		registry = map[string]*Addon{"truenas": {Registration: Registration{
+			Target: "truenas", BaseURL: srv.URL, SigningKeyPath: path,
+		}}}
+		registryMu.Unlock()
+
+		if err := Refresh(context.Background(), "truenas"); err == nil {
+			t.Fatal("an oversized capability response was accepted")
+		}
+	})
+}
+
+// 2.35 — signing a request says nothing about the response. Signed mode still
+// verifies the add-on's server certificate, against the private CA when one is
+// configured, or a forged 2xx is recorded as a completed mutation.
+func TestSignedModeVerifiesTheAddonsServerCertificate(t *testing.T) {
+	pki := newTestPKI(t, time.Now().Add(365*24*time.Hour))
+	keyPath := filepath.Join(t.TempDir(), "sign.key")
+	writeFile(t, keyPath, []byte("a-real-signing-key"))
+
+	serve := func(cert tls.Certificate) *httptest.Server {
+		s := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		s.TLS = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS13}
+		s.StartTLS()
+		return s
+	}
+
+	t.Run("a server the private CA issued is accepted", func(t *testing.T) {
+		srv := serve(pki.serverCert)
+		defer srv.Close()
+		installAddon(t, Registration{
+			Target: "truenas", BaseURL: srv.URL, CAPath: pki.caPath, SigningKeyPath: keyPath,
+		}, goodManifest())
+
+		if resp := Call(context.Background(), passwordSet(nil)); resp.Outcome != OutcomeSucceeded {
+			t.Fatalf("outcome = %s (err %v), want succeeded", resp.Outcome, resp.Err)
+		}
+	})
+
+	t.Run("a server from another CA is refused", func(t *testing.T) {
+		impostor := newTestPKI(t, time.Now().Add(365*24*time.Hour))
+		srv := serve(impostor.serverCert)
+		defer srv.Close()
+		installAddon(t, Registration{
+			Target: "truenas", BaseURL: srv.URL, CAPath: pki.caPath, SigningKeyPath: keyPath,
+		}, goodManifest())
+
+		resp := Call(context.Background(), passwordSet(nil))
+		if resp.Outcome == OutcomeSucceeded {
+			t.Fatal("a signed-mode call trusted a server the configured CA never issued")
+		}
+	})
+}
+
+// 2.2 — a private CA alone is a deliberate signed-mode anchor, not half-built
+// mutual TLS. Warning about it would train an operator to ignore the warning
+// that does matter.
+func TestPrivateCAAloneIsASignedModeAnchorNotAWarning(t *testing.T) {
+	r := Registration{
+		Target: "truenas", BaseURL: "https://addon:8090",
+		CAPath: "/run/secrets/ca.crt", SigningKeyPath: "/run/secrets/s.key",
+	}
+	if r.AuthMode() != "signed" {
+		t.Fatalf("auth mode = %q, want signed", r.AuthMode())
+	}
+	if r.partialMTLS() {
+		t.Fatal("a CA with no client certificate was reported as incomplete mTLS")
+	}
+
+	// A certificate without its key still is.
+	half := Registration{Target: "truenas", ClientCertPath: "/c.crt", SigningKeyPath: "/s.key"}
+	if !half.partialMTLS() {
+		t.Fatal("a client certificate with no key must still be flagged")
 	}
 }

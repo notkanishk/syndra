@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -62,14 +63,13 @@ func (r Registration) mTLS() bool {
 // complete. Worth naming separately: it is the difference between "this
 // deployment chose signed requests" and "this deployment thinks it configured
 // mTLS", and only one of those should pass without a word.
+//
+// A private CA on its own is NOT incomplete mutual TLS. In signed mode it is
+// the anchor the add-on's server certificate is verified against — a deliberate
+// and recommended configuration, not a half-finished one — so warning about it
+// would train an operator to ignore the warning that matters.
 func (r Registration) partialMTLS() bool {
-	set := 0
-	for _, p := range []string{r.ClientCertPath, r.ClientKeyPath, r.CAPath} {
-		if p != "" {
-			set++
-		}
-	}
-	return set > 0 && set < 3
+	return (r.ClientCertPath != "" || r.ClientKeyPath != "") && !r.mTLS()
 }
 
 // signed reports whether this registration carries signing-key material.
@@ -155,7 +155,7 @@ var (
 // Env shape, matching the flat style the rest of the backend uses:
 //
 //	ADDON_TARGETS=truenas
-//	ADDON_TRUENAS_BASE_URL=http://syndra-addon-truenas:8090
+//	ADDON_TRUENAS_BASE_URL=https://syndra-addon-truenas:8090
 //	ADDON_TRUENAS_CLIENT_CERT=/run/secrets/truenas-client.crt
 //	ADDON_TRUENAS_CLIENT_KEY=/run/secrets/truenas-client.key
 //	ADDON_TRUENAS_CA_CERT=/run/secrets/addon-ca.crt
@@ -168,6 +168,10 @@ func Init(ctx context.Context) error {
 		base := strings.TrimSpace(getenv(prefix + "BASE_URL"))
 		if base == "" {
 			log.Printf("[ADDON] %s named in ADDON_TARGETS but %sBASE_URL is empty; not registered", target, prefix)
+			continue
+		}
+		if err := requireHTTPS(base); err != nil {
+			log.Printf("[ADDON] %s: %sBASE_URL %v; not registered", target, prefix, err)
 			continue
 		}
 		r := Registration{
@@ -238,6 +242,39 @@ func syncTargetRegistry(ctx context.Context, reg map[string]*Addon) error {
 	}
 	for _, t := range disabled {
 		log.Printf("[ADDON] target=%s is no longer configured; registry state set to disabled (history retained)", t)
+	}
+	return nil
+}
+
+// requireHTTPS refuses any base URL that is not HTTPS.
+//
+// This is not defence in depth over the transport authentication — it is what
+// makes that authentication happen at all. A client's TLS configuration is
+// consulted only when a TLS handshake occurs, so an `http://` base URL means
+// the client certificate is never presented, the private CA is never used, and
+// the registration reports auth=mtls while nothing whatsoever authenticates the
+// connection. It is the same wrong mental model an incomplete certificate
+// triple creates, reachable through a URL scheme instead.
+//
+// Signed mode needs it just as much for the other two properties. The signature
+// authenticates the request; it does nothing for the response, and nothing for
+// confidentiality. Over plain HTTP a secret-bearing body is readable by
+// anything on the Compose network, and an on-path peer can forge a 2xx that the
+// backend records as a completed mutation — or forge a capability set the
+// backend then makes authorization decisions against.
+//
+// There is deliberately no development escape hatch. An exemption for localhost
+// is an exemption that ships.
+func requireHTTPS(base string) error {
+	u, err := url.Parse(base)
+	if err != nil {
+		return fmt.Errorf("is not a URL (%v)", err)
+	}
+	if u.Host == "" {
+		return errors.New("names no host")
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("uses scheme %q; add-on transport requires https, because a client certificate is never presented and a private CA is never consulted on a connection that performs no handshake", u.Scheme)
 	}
 	return nil
 }
@@ -430,11 +467,6 @@ func ResolveOperation(target, id string) (EffectiveOperation, error) {
 	return EffectiveOperation{}, fmt.Errorf("%w: %s/%s", ErrUnknownOperation, target, id)
 }
 
-// maxManifestBytes bounds the manifest read. The add-on is the least trusted
-// component in the system and an unbounded read from it is a denial of service
-// against the backend that governs every other target.
-const maxManifestBytes = 1 << 20
-
 // httpFetchManifest reads GET {base}/capabilities over the add-on's own
 // authenticated transport — the same mutual TLS or request signing every
 // mutating call uses.
@@ -467,7 +499,11 @@ func httpFetchManifest(ctx context.Context, r Registration) (Manifest, error) {
 		return Manifest{}, resp.Err
 	}
 
-	dec := json.NewDecoder(io.LimitReader(bytes.NewReader(resp.Body), maxManifestBytes))
+	// Already bounded: doAuthenticated caps every response at maxResponseBytes
+	// and reports an oversized one as a non-success, so a manifest too large to
+	// read whole has been refused above. A second limit here would look
+	// load-bearing while guarding nothing.
+	dec := json.NewDecoder(bytes.NewReader(resp.Body))
 	dec.DisallowUnknownFields()
 	var m Manifest
 	if err := dec.Decode(&m); err != nil {

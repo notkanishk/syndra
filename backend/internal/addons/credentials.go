@@ -159,26 +159,13 @@ func loadCredential(r Registration, stamps map[string]time.Time) (*credential, e
 		}
 		c.clientCertNotAfter = leaf.NotAfter
 
-		caPEM, err := os.ReadFile(r.CAPath)
+		tlsCfg, err := serverTrust(r.CAPath)
 		if err != nil {
-			return nil, fmt.Errorf("private CA: %w", err)
+			return nil, err
 		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(caPEM) {
-			return nil, errors.New("private CA: no certificate found in PEM")
-		}
-		c.caNotAfter = earliestNotAfter(caPEM)
-
-		c.client = &http.Client{Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				Certificates: []tls.Certificate{pair},
-				RootCAs:      pool,
-				// Both ends of this connection are ours and ship together.
-				// There is no legacy peer to accommodate, so there is no
-				// reason to negotiate anything older.
-				MinVersion: tls.VersionTLS13,
-			},
-		}}
+		tlsCfg.Certificates = []tls.Certificate{pair}
+		c.caNotAfter = tlsCfg.notAfter
+		c.client = &http.Client{Transport: &http.Transport{TLSClientConfig: tlsCfg.Config}}
 
 	case "signed":
 		key, err := readSigningKey(r.SigningKeyPath)
@@ -186,7 +173,18 @@ func loadCredential(r Registration, stamps map[string]time.Time) (*credential, e
 			return nil, err
 		}
 		c.signingKey = key
-		c.client = &http.Client{}
+		// Signed mode is still TLS. The signature authenticates the request and
+		// does nothing for the response or for confidentiality: without TLS the
+		// secret-bearing body is readable on the wire and a forged 2xx is
+		// recorded as a completed mutation. Where a private CA is configured it
+		// is the anchor; otherwise the system roots are, which is weaker but is
+		// a real check rather than none.
+		tlsCfg, err := serverTrust(r.CAPath)
+		if err != nil {
+			return nil, err
+		}
+		c.caNotAfter = tlsCfg.notAfter
+		c.client = &http.Client{Transport: &http.Transport{TLSClientConfig: tlsCfg.Config}}
 
 	default:
 		// Init refuses to register an add-on with no transport mode, so this is
@@ -196,6 +194,43 @@ func loadCredential(r Registration, stamps map[string]time.Time) (*credential, e
 		return nil, fmt.Errorf("addon %s: no transport authentication configured", r.Target)
 	}
 	return c, nil
+}
+
+// trustConfig is a TLS client configuration plus the expiry of whatever anchors
+// it, so the caller does not have to re-read and re-parse the CA to report it.
+type trustConfig struct {
+	*tls.Config
+	notAfter time.Time
+}
+
+// serverTrust builds the client TLS configuration used to verify the ADD-ON.
+// Shared by both modes, because both need it: mutual TLS adds a client
+// certificate on top, it does not replace this.
+//
+// An empty caPath falls back to the system roots. That is the honest weaker
+// option for signed mode, and it is never reachable for mutual TLS, where
+// AuthMode requires the CA before it will call the mode mTLS at all.
+func serverTrust(caPath string) (trustConfig, error) {
+	cfg := trustConfig{Config: &tls.Config{
+		// Both ends of this connection are ours and ship together. There is no
+		// legacy peer to accommodate, so there is no reason to negotiate
+		// anything older.
+		MinVersion: tls.VersionTLS13,
+	}}
+	if caPath == "" {
+		return cfg, nil
+	}
+	caPEM, err := os.ReadFile(caPath)
+	if err != nil {
+		return cfg, fmt.Errorf("private CA: %w", err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caPEM) {
+		return cfg, errors.New("private CA: no certificate found in PEM")
+	}
+	cfg.RootCAs = pool
+	cfg.notAfter = earliestNotAfter(caPEM)
+	return cfg, nil
 }
 
 // readSigningKey reads the HMAC key, rejecting an empty one.

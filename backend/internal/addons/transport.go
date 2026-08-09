@@ -225,12 +225,31 @@ func doAuthenticated(ctx context.Context, cred *credential, method, url string, 
 	}
 	defer httpResp.Body.Close()
 
-	respBody, readErr := io.ReadAll(io.LimitReader(httpResp.Body, maxResponseBytes))
+	// One byte past the bound, because io.LimitReader signals its limit with EOF
+	// and not with an error: reading exactly maxResponseBytes cannot tell a body
+	// that ended from one that was cut off, and would report an oversized
+	// response as a clean success.
+	respBody, readErr := io.ReadAll(io.LimitReader(httpResp.Body, maxResponseBytes+1))
+	oversized := len(respBody) > maxResponseBytes
+	if oversized {
+		respBody = respBody[:maxResponseBytes]
+	}
+
 	out := CallResponse{Status: httpResp.StatusCode, Body: respBody, Outcome: classifyStatus(httpResp.StatusCode)}
-	if readErr != nil && out.Outcome == OutcomeSucceeded {
+	switch {
+	case readErr != nil && out.Outcome == OutcomeSucceeded:
 		// A 2xx whose body was cut off says the add-on acted but not what it
 		// did. Not a success the backend can record.
 		out.Outcome, out.Err = OutcomeIndeterminate, readErr
+	case oversized && out.Outcome == OutcomeSucceeded:
+		out.Outcome = OutcomeIndeterminate
+		out.Err = fmt.Errorf("response exceeds %d bytes and was not read whole", maxResponseBytes)
+	case oversized:
+		// A refusal is decided by its status, so an oversized body does not
+		// make it ambiguous — reclassifying it would turn a deterministic
+		// refusal into a row that never settles. The truncation is still
+		// recorded, because the body is the diagnostic and it is incomplete.
+		out.Err = fmt.Errorf("addon returned %d with a body exceeding %d bytes", httpResp.StatusCode, maxResponseBytes)
 	}
 	if out.Outcome != OutcomeSucceeded && out.Err == nil {
 		out.Err = fmt.Errorf("addon returned %d", httpResp.StatusCode)
