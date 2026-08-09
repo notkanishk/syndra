@@ -6,7 +6,6 @@ import (
 	"os"
 	"reflect"
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -352,7 +351,10 @@ func TestPlanEffectsMatchTheRehearsalVocabulary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read bulk.go: %v", err)
 	}
-	for _, effect := range PlanEffects {
+	for _, effect := range []string{PlanEffectApply, PlanEffectNoChange, PlanEffectBlocked} {
+		if !validPlanEffect(effect) {
+			t.Errorf("%q is declared as a plan effect and refused as one", effect)
+		}
 		if !regexp.MustCompile(`Effect\w+\s*=\s*"` + effect + `"`).MatchString(string(src)) {
 			t.Errorf("a plan may record effect %q, which the rehearsal never produces", effect)
 		}
@@ -361,9 +363,112 @@ func TestPlanEffectsMatchTheRehearsalVocabulary(t *testing.T) {
 	// row: recording `applied` on an approval would make the approval claim an
 	// outcome it cannot know.
 	for _, after := range []string{"applied", "failed", "queued", "succeeded"} {
-		if slices.Contains(PlanEffects, after) {
+		if validPlanEffect(after) {
 			t.Errorf("%q is what became of a plan, not what it approved", after)
 		}
+	}
+}
+
+// 2.17 — the vocabulary is closed at compile time, not merely small at the
+// moment it was written. An exported `var PlanEffects = []string{...}` was
+// neither: a slice is a mutable package variable, so any package could append
+// to it before CreatePlan ran and validation would then admit whatever had been
+// added — and the refusal message, spelled from the same slice, would name it
+// as legitimate.
+func TestTheEffectVocabularyCannotBeWidenedByAnotherPackage(t *testing.T) {
+	src, err := os.ReadFile("plans.go")
+	if err != nil {
+		t.Fatalf("read plans.go: %v", err)
+	}
+	// Package-level `var Name = []T{...}` / `map[...]`. The error sentinels are
+	// vars too, but they are of an interface type with no contents to widen.
+	mutable := regexp.MustCompile(`(?m)^var\s+(\w+)\s*=\s*(\[\]|map\[)`)
+	for _, m := range mutable.FindAllStringSubmatch(string(src), -1) {
+		t.Errorf("package-level %s is a mutable collection: any package can rewrite it before a validation reads it, "+
+			"which is not what a closed vocabulary means", m[1])
+	}
+}
+
+// 2.21 — a uuid is a syntax, not a provenance. The shape check cannot tell a
+// grant this database allocated from a value that merely looks like one, so the
+// rule that matters is tested where it lives: against the rows the lookup
+// actually returned.
+func TestAPlanMayOnlyCiteGrantsThisDatabaseAllocatedToThatSubject(t *testing.T) {
+	const (
+		mine       = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
+		theirs     = "3f2504e0-4f89-11d3-9a0c-0305e82c3302"
+		fabricated = "3f2504e0-4f89-11d3-9a0c-0305e82c3303"
+	)
+	owner := map[string]string{mine: "u1", theirs: "u2"}
+	subject := func(ids ...string) []NewPlanSubject {
+		return []NewPlanSubject{{SubjectID: "u1", Fingerprint: "sha256:aaa", Outcome: PlanOutcome{Effect: PlanEffectApply, GrantIDs: ids}}}
+	}
+
+	if err := matchGrantOwners(subject(mine), owner); err != nil {
+		t.Fatalf("a subject citing their own grant was refused: %v", err)
+	}
+	if err := matchGrantOwners(subject(), owner); err != nil {
+		t.Fatalf("a subject citing no grant was refused: %v", err)
+	}
+
+	// A uuid-shaped value that names nothing. This is the sentinel the shape
+	// check waved through: well-formed, and a reference to no grant at all.
+	//
+	// The message is asserted, not just the sentinel: "no such grant" and "not
+	// this person's grant" are different findings, and reporting the second for
+	// the first sends an operator looking for a conflict that does not exist.
+	fabricatedErr := matchGrantOwners(subject(fabricated), owner)
+	if !errors.Is(fabricatedErr, ErrInvalidPlan) {
+		t.Errorf("a fabricated identifier was accepted: %v", fabricatedErr)
+	} else if !strings.Contains(fabricatedErr.Error(), "did not allocate") {
+		t.Errorf("a fabricated identifier was refused for the wrong reason: %v", fabricatedErr)
+	}
+	// Someone else's grant, on this subject's row. The apply acts on the rows
+	// the plan names, so this is an instruction to mutate a person the operator
+	// was never shown.
+	err := matchGrantOwners(subject(theirs), owner)
+	if !errors.Is(err, ErrInvalidPlan) {
+		t.Errorf("a subject citing another person's grant was accepted: %v", err)
+	} else if !strings.Contains(err.Error(), "different person") {
+		t.Errorf("another person's grant was refused for the wrong reason: %v", err)
+	}
+	// And the refusal does not disclose whose it was.
+	for _, leak := range []string{"u2", theirs} {
+		if err != nil && strings.Contains(err.Error(), leak) {
+			t.Errorf("the refusal disclosed the other subject's grant: %v", err)
+		}
+	}
+	// One good citation does not license a bad one beside it.
+	if err := matchGrantOwners(subject(mine, fabricated), owner); !errors.Is(err, ErrInvalidPlan) {
+		t.Errorf("a fabricated identifier passed when cited alongside a real one: %v", err)
+	}
+}
+
+// 2.21 — and the lookup runs before anything is written, on the plan's own
+// transaction: a plan whose citations cannot be verified must leave no row.
+func TestGrantProvenanceIsVerifiedBeforeThePlanIsWritten(t *testing.T) {
+	src, err := os.ReadFile("plans.go")
+	if err != nil {
+		t.Fatalf("read plans.go: %v", err)
+	}
+	body := string(src)
+	verify := strings.Index(body, "verifyGrantProvenance(ctx, tx,")
+	insert := strings.Index(body, "INSERT INTO plans")
+	if verify < 0 || insert < 0 {
+		t.Fatal("could not locate the provenance check and the plan INSERT")
+	}
+	if verify > insert {
+		t.Error("the provenance check must run before the plan is written, or an unverifiable citation leaves a row behind")
+	}
+	if !strings.Contains(body, "SELECT id, user_id FROM direct_role_grants") {
+		t.Error("provenance must be read from the grants table — a check that does not read cannot know")
+	}
+	// And the read must be scoped to the ids the plan cites. A lookup that
+	// returns nothing makes every citation unknown, which refuses every plan;
+	// one that ignores its argument makes the judgement below meaningless in
+	// whichever direction its rows happen to fall.
+	if !regexp.MustCompile(`SELECT id, user_id FROM direct_role_grants WHERE id = ANY\(\$1`).MatchString(body) {
+		t.Error("the provenance lookup must be keyed on the cited identifiers")
 	}
 }
 

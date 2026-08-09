@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -54,8 +53,22 @@ const (
 	PlanEffectBlocked  = "blocked"
 )
 
-// PlanEffects is the closed set a plan row's effect may take.
-var PlanEffects = []string{PlanEffectApply, PlanEffectNoChange, PlanEffectBlocked}
+// validPlanEffect reports whether e is one of the three effects a plan may
+// record.
+//
+// A switch over the constants, not a lookup in a slice. An exported slice would
+// have been a mutable package variable: any package could append to it — or
+// replace it — before CreatePlan ran, and the "closed" vocabulary would then be
+// open to precisely the callers this check exists to bound. A constant cannot
+// be reassigned, and a switch over constants cannot be widened at runtime.
+func validPlanEffect(e string) bool {
+	switch e {
+	case PlanEffectApply, PlanEffectNoChange, PlanEffectBlocked:
+		return true
+	default:
+		return false
+	}
+}
 
 // PlanOutcome is the decision recorded for one subject: what will be done, and
 // to which identified rows.
@@ -73,29 +86,37 @@ var PlanEffects = []string{PlanEffectApply, PlanEffectNoChange, PlanEffectBlocke
 // password IS a string, and `Detail: fmt.Sprintf(...)` is a route to the column
 // however carefully the first writer avoids it. No character class separates a
 // password from a role name either. What separates them is membership in a set
-// the backend owns: `Effect` is one of three constants and `GrantIDs` are
-// identifiers this database allocated, both refused at the write if they are
-// anything else. There is no field here a caller can put an arbitrary value in
-// (design §5).
+// the backend owns: `Effect` is one of three constants, and every entry in
+// `GrantIDs` must be a grant this database allocated to the subject the row is
+// about — looked up, not pattern-matched, because a uuid shape is a syntax and
+// not a provenance, and a fabricated uuid is not a grant. There is no field
+// here a caller can put an arbitrary value in (design §5).
 type PlanOutcome struct {
 	Effect   string   `json:"effect"`
 	GrantIDs []string `json:"grant_ids,omitempty"`
 }
 
 func (o PlanOutcome) validate() error {
-	if !slices.Contains(PlanEffects, o.Effect) {
+	if !validPlanEffect(o.Effect) {
 		// The vocabulary, never the value: a rejected effect is by definition
 		// not one of three known constants, which makes it the likeliest thing
-		// here to be something that should never be written down.
-		return fmt.Errorf("%w: effect must be one of %v", ErrInvalidPlan, PlanEffects)
+		// here to be something that should never be written down. Spelled from
+		// the constants, so the message cannot be widened either.
+		return fmt.Errorf("%w: effect must be one of %s, %s, %s",
+			ErrInvalidPlan, PlanEffectApply, PlanEffectNoChange, PlanEffectBlocked)
 	}
 	for i, id := range o.GrantIDs {
 		if !looksLikeUUID(id) {
+			// Shape only, and shape is not provenance — CreatePlan verifies
+			// that separately against the grants table. This check earns its
+			// place by refusing before the database: an id that is not uuid
+			// text would fail the cast in that lookup instead of being answered.
+			//
 			// The position, never the value. A value failing this check is by
-			// definition not an identifier this database allocated, which makes
-			// it the likeliest thing in the struct to be a misplaced secret —
-			// and an error string is logged, returned, and traced.
-			return fmt.Errorf("%w: grant_ids[%d] is not an identifier this database allocated", ErrInvalidPlan, i)
+			// definition not an identifier at all, which makes it the likeliest
+			// thing in the struct to be a misplaced secret — and an error
+			// string is logged, returned, and traced.
+			return fmt.Errorf("%w: grant_ids[%d] is not shaped like an identifier", ErrInvalidPlan, i)
 		}
 	}
 	return nil
@@ -235,6 +256,13 @@ func CreatePlan(ctx context.Context, p NewPlan) (Plan, error) {
 	}
 	defer tx.Rollback(ctx) // no-op after a successful Commit
 
+	// Provenance before persistence. Shape was checked above and shape is not
+	// provenance: a uuid is a syntax, and a value in that syntax that names no
+	// grant is not a reference to anything the apply can act on.
+	if err := verifyGrantProvenance(ctx, tx, p.Subjects); err != nil {
+		return Plan{}, err
+	}
+
 	// The lifetime is measured by the database clock, because the expiry
 	// predicate is evaluated by the database clock. Computing the deadline here
 	// would make a plan's validity depend on the difference between two clocks.
@@ -283,6 +311,72 @@ func CreatePlan(ctx context.Context, p NewPlan) (Plan, error) {
 		return Plan{}, fmt.Errorf("commit plan tx: %w", err)
 	}
 	return plan, nil
+}
+
+// verifyGrantProvenance reads the grants a plan names and hands the judgement
+// to matchGrantOwners.
+//
+// Split that way on purpose: the lookup is the only part that needs a database,
+// so the rule it enforces stays testable. It runs on the plan's own
+// transaction, so the rows it read are the rows the plan is written against.
+func verifyGrantProvenance(ctx context.Context, tx pgx.Tx, subjects []NewPlanSubject) error {
+	var cited []string
+	for _, s := range subjects {
+		cited = append(cited, s.Outcome.GrantIDs...)
+	}
+	if len(cited) == 0 {
+		return nil
+	}
+
+	// text[] cast to uuid[] rather than a uuid[] parameter: pgx sends a
+	// []string in binary and has no binary encoding for uuid[], so the typed
+	// form fails at dispatch time. Every element is already known to be uuid
+	// text, which is what makes the cast safe.
+	const q = `SELECT id, user_id FROM direct_role_grants WHERE id = ANY($1::text[]::uuid[])`
+
+	rows, err := tx.Query(ctx, q, cited)
+	if err != nil {
+		return fmt.Errorf("read cited grants: %w", err)
+	}
+	defer rows.Close()
+
+	owner := make(map[string]string, len(cited))
+	for rows.Next() {
+		var id, userID string
+		if err := rows.Scan(&id, &userID); err != nil {
+			return fmt.Errorf("scan cited grant: %w", err)
+		}
+		owner[id] = userID
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read cited grants: %w", err)
+	}
+	return matchGrantOwners(subjects, owner)
+}
+
+// matchGrantOwners refuses a plan citing a grant this database did not
+// allocate, or one that belongs to somebody else.
+//
+// The second half is not pedantry. A plan row is what the apply acts on, so a
+// subject's row naming another person's grant is an instruction to mutate that
+// person — reviewed under a heading with somebody else's name on it, and
+// fingerprinted against a subject whose state it does not describe.
+func matchGrantOwners(subjects []NewPlanSubject, owner map[string]string) error {
+	for _, s := range subjects {
+		for i, id := range s.Outcome.GrantIDs {
+			switch holder, known := owner[id]; {
+			case !known:
+				// Position, not value: an id naming no grant is exactly the
+				// case where the value might be something else entirely.
+				return fmt.Errorf("%w: subject %s cites grant_ids[%d], which this database did not allocate", ErrInvalidPlan, s.SubjectID, i)
+			case holder != s.SubjectID:
+				// And not the holder's id either — naming the other person
+				// discloses one subject's grants on another's refusal.
+				return fmt.Errorf("%w: subject %s cites grant_ids[%d], which belongs to a different person", ErrInvalidPlan, s.SubjectID, i)
+			}
+		}
+	}
+	return nil
 }
 
 // ClaimPlanTx spends an approval and returns what it approved.
