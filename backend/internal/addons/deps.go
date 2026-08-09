@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"syndra/internal/db"
 )
 
 // Injectable dependencies. Mirrors the save-swap-restore pattern used across
@@ -13,6 +15,9 @@ var (
 	getenv             = os.Getenv
 	timeNow            = time.Now
 	fetchAddonManifest = httpFetchManifest
+
+	dbUpsertTarget               = db.UpsertTarget
+	dbDisableUnconfiguredTargets = db.DisableUnconfiguredTargets
 
 	// manifestHTTPClient is the plain client used to read /capabilities. The
 	// mutually-authenticated client that carries plan ids and operation ids on

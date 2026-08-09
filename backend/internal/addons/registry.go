@@ -29,12 +29,39 @@ type Registration struct {
 	// no host port: one memory disclosure in the process holding the TrueNAS API
 	// key must not also expose the Zitadel service account.
 	BaseURL string
-	// Transport material for the mutually-authenticated client (task 2.35).
-	// Read here so a deployment misconfiguration is visible at startup rather
-	// than at the first mutating call.
+	// Transport material for the mutually-authenticated client. Read here so a
+	// deployment misconfiguration is visible at startup rather than at the
+	// first mutating call.
+	//
+	// Two modes, and a registration MUST configure one of them. mTLS with a
+	// private CA is the default; signed requests carrying a timestamp and a
+	// body hash are the fallback where mTLS is impractical. A bare shared
+	// secret is neither, and is not offered: it authenticates the caller but
+	// binds nothing to the request, so an intercepted call replays verbatim.
 	ClientCertPath string
 	ClientKeyPath  string
 	CAPath         string
+	SigningKeyPath string
+}
+
+// mTLS reports whether this registration carries a complete client-certificate
+// pair. A half-configured pair is not a mode, it is a misconfiguration.
+func (r Registration) mTLS() bool { return r.ClientCertPath != "" && r.ClientKeyPath != "" }
+
+// signed reports whether this registration carries signing-key material.
+func (r Registration) signed() bool { return r.SigningKeyPath != "" }
+
+// AuthMode names how the backend authenticates to this add-on, for operator
+// surfaces and startup logging. mTLS wins when both are configured.
+func (r Registration) AuthMode() string {
+	switch {
+	case r.mTLS():
+		return "mtls"
+	case r.signed():
+		return "signed"
+	default:
+		return "none"
+	}
 }
 
 // Addon is a registration plus whatever the backend has since learned about it.
@@ -81,9 +108,18 @@ var (
 	registry   = map[string]*Addon{}
 )
 
-// Init reads the deployment configuration and records every registered add-on.
-// It performs no network I/O: an add-on that is switched off must not delay
-// backend startup, and an add-on that is unreachable must still appear.
+// Init reads the deployment configuration, records every registered add-on in
+// process memory, and reconciles the database's `targets` registry to match.
+//
+// It contacts no add-on. An add-on that is switched off must not delay backend
+// startup, and an add-on that is unreachable must still be registered, because
+// operator navigation derives from the deployment rather than from what happens
+// to be answering.
+//
+// It does reach the database, and must. Every table carrying a target resolves
+// it by foreign key against `targets`, so an add-on registered only in memory
+// is one whose first snapshot, plan, outbox, or drift row the database refuses.
+// Configuration and the registry row are two halves of the same registration.
 //
 // Env shape, matching the flat style the rest of the backend uses:
 //
@@ -92,10 +128,9 @@ var (
 //	ADDON_TRUENAS_CLIENT_CERT=/run/secrets/truenas-client.crt
 //	ADDON_TRUENAS_CLIENT_KEY=/run/secrets/truenas-client.key
 //	ADDON_TRUENAS_CA_CERT=/run/secrets/addon-ca.crt
-func Init() {
-	registryMu.Lock()
-	defer registryMu.Unlock()
-	registry = map[string]*Addon{}
+//	ADDON_TRUENAS_SIGNING_KEY=/run/secrets/truenas-signing.key   # instead of the pair
+func Init(ctx context.Context) error {
+	fresh := map[string]*Addon{}
 
 	for _, target := range splitTargets(getenv("ADDON_TARGETS")) {
 		prefix := "ADDON_" + strings.ToUpper(target) + "_"
@@ -104,18 +139,66 @@ func Init() {
 			log.Printf("[ADDON] %s named in ADDON_TARGETS but %sBASE_URL is empty; not registered", target, prefix)
 			continue
 		}
-		registry[target] = &Addon{Registration: Registration{
+		r := Registration{
 			Target:         target,
 			BaseURL:        strings.TrimSuffix(base, "/"),
-			ClientCertPath: getenv(prefix + "CLIENT_CERT"),
-			ClientKeyPath:  getenv(prefix + "CLIENT_KEY"),
-			CAPath:         getenv(prefix + "CA_CERT"),
-		}}
-		log.Printf("[ADDON] Registered target=%s base=%s", target, base)
+			ClientCertPath: strings.TrimSpace(getenv(prefix + "CLIENT_CERT")),
+			ClientKeyPath:  strings.TrimSpace(getenv(prefix + "CLIENT_KEY")),
+			CAPath:         strings.TrimSpace(getenv(prefix + "CA_CERT")),
+			SigningKeyPath: strings.TrimSpace(getenv(prefix + "SIGNING_KEY")),
+		}
+		// Fail closed on transport authentication. An add-on holds the target
+		// credential and reaches physical infrastructure; calling one over an
+		// unauthenticated channel is worse than not having it. A deployment
+		// that configures neither mode has not deployed an add-on, so it does
+		// not register — and therefore gets no navigation entry promising an
+		// operator something that must never be called.
+		if r.AuthMode() == "none" {
+			log.Printf("[ADDON] %s configures neither %sCLIENT_CERT/%sCLIENT_KEY nor %sSIGNING_KEY; not registered",
+				target, prefix, prefix, prefix)
+			continue
+		}
+		fresh[target] = &Addon{Registration: r}
+		log.Printf("[ADDON] Registered target=%s base=%s auth=%s", target, r.BaseURL, r.AuthMode())
 	}
-	if len(registry) == 0 {
-		log.Println("[ADDON] No add-ons registered (ADDON_TARGETS empty)")
+
+	registryMu.Lock()
+	registry = fresh
+	registryMu.Unlock()
+
+	if len(fresh) == 0 {
+		log.Println("[ADDON] No add-ons registered")
 	}
+	return syncTargetRegistry(ctx, fresh)
+}
+
+// syncTargetRegistry makes the database agree with the configuration: every
+// configured target active, every add-on target the deployment has dropped
+// disabled.
+//
+// Disabling on absence is what makes "remove it from the configuration" mean
+// "unregister it", which is the rollback the design specifies. It is never a
+// delete: propagation and drift history still points at these rows, the foreign
+// key would correctly refuse, and that history is the record of what the target
+// was asked to do while it was live.
+func syncTargetRegistry(ctx context.Context, reg map[string]*Addon) error {
+	configured := make([]string, 0, len(reg))
+	for target := range reg {
+		if err := dbUpsertTarget(ctx, target); err != nil {
+			return fmt.Errorf("addon registry: %w", err)
+		}
+		configured = append(configured, target)
+	}
+	sort.Strings(configured)
+
+	disabled, err := dbDisableUnconfiguredTargets(ctx, configured)
+	if err != nil {
+		return fmt.Errorf("addon registry: %w", err)
+	}
+	for _, t := range disabled {
+		log.Printf("[ADDON] target=%s is no longer configured; registry state set to disabled (history retained)", t)
+	}
+	return nil
 }
 
 // splitTargets accepts a comma-separated list, tolerating spaces and empties so

@@ -35,6 +35,42 @@ func withClock(t *testing.T, at time.Time) {
 	t.Cleanup(func() { timeNow = saved })
 }
 
+// withTargetRegistry swaps the database registry calls for an in-memory record
+// of what Init asked the database to do.
+type fakeTargetRegistry struct {
+	upserted []string
+	disabled []string
+	// keep is what the fake pretends is already active and add-on-owned, so
+	// "disable what is no longer configured" has something to disable.
+	active    []string
+	upsertErr error
+}
+
+func withTargetRegistry(t *testing.T, f *fakeTargetRegistry) {
+	t.Helper()
+	savedUp, savedDis := dbUpsertTarget, dbDisableUnconfiguredTargets
+	dbUpsertTarget = func(_ context.Context, target string) error {
+		if f.upsertErr != nil {
+			return f.upsertErr
+		}
+		f.upserted = append(f.upserted, target)
+		return nil
+	}
+	dbDisableUnconfiguredTargets = func(_ context.Context, configured []string) ([]string, error) {
+		keep := map[string]bool{}
+		for _, c := range configured {
+			keep[c] = true
+		}
+		for _, a := range f.active {
+			if !keep[a] {
+				f.disabled = append(f.disabled, a)
+			}
+		}
+		return f.disabled, nil
+	}
+	t.Cleanup(func() { dbUpsertTarget, dbDisableUnconfiguredTargets = savedUp, savedDis })
+}
+
 // resetRegistry clears package state between tests, since the registry is a
 // process-wide singleton like the rest of the backend's clients.
 func resetRegistry(t *testing.T) {
@@ -66,15 +102,21 @@ func goodManifest() Manifest {
 	}
 }
 
-func registerTrueNAS(t *testing.T) {
+func registerTrueNAS(t *testing.T) *fakeTargetRegistry {
 	t.Helper()
 	resetRegistry(t)
 	withEnv(t, map[string]string{
 		"ADDON_TARGETS":             "truenas",
 		"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090/",
 		"ADDON_TRUENAS_CLIENT_CERT": "/run/secrets/c.crt",
+		"ADDON_TRUENAS_CLIENT_KEY":  "/run/secrets/c.key",
 	})
-	Init()
+	f := &fakeTargetRegistry{}
+	withTargetRegistry(t, f)
+	if err := Init(context.Background()); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	return f
 }
 
 // 2.2 — registration is deployment configuration, read without touching the
@@ -107,7 +149,10 @@ func TestInitRegistersFromConfigWithoutFetching(t *testing.T) {
 func TestInitSkipsTargetWithNoBaseURL(t *testing.T) {
 	resetRegistry(t)
 	withEnv(t, map[string]string{"ADDON_TARGETS": "truenas, ,unifi"})
-	Init()
+	withTargetRegistry(t, &fakeTargetRegistry{})
+	if err := Init(context.Background()); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
 	if got := Registered(); len(got) != 0 {
 		t.Errorf("no target has a base URL, so none may register; got %+v", got)
 	}
@@ -272,5 +317,133 @@ func TestUnavailableWithoutReasonStillExplains(t *testing.T) {
 	})
 	if len(ops) != 1 || ops[0].UnavailableReason == "" {
 		t.Errorf("an unavailable operation must always carry a reason, got %+v", ops)
+	}
+}
+
+// A target that exists only in process memory is a target whose first
+// snapshot, plan, outbox, or drift row the database refuses: every one of those
+// tables resolves `target` by foreign key against the registry. Configuration
+// and the registry row are two halves of one registration.
+func TestInitRegistersTheTargetInTheDatabase(t *testing.T) {
+	f := registerTrueNAS(t)
+	if len(f.upserted) != 1 || f.upserted[0] != "truenas" {
+		t.Errorf("Init must record the configured target in the database registry, upserted=%v", f.upserted)
+	}
+}
+
+// Removing a target from the configuration is how an operator unregisters one,
+// and unregistering is disabling — never deleting, because propagation and
+// drift history still points at the row and is the record of what the target
+// was asked to do while it was live.
+func TestInitDisablesTargetsTheDeploymentNoLongerConfigures(t *testing.T) {
+	resetRegistry(t)
+	withEnv(t, map[string]string{
+		"ADDON_TARGETS":             "truenas",
+		"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090",
+		"ADDON_TRUENAS_SIGNING_KEY": "/run/secrets/s.key",
+	})
+	f := &fakeTargetRegistry{active: []string{"truenas", "unifi"}}
+	withTargetRegistry(t, f)
+	if err := Init(context.Background()); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if len(f.disabled) != 1 || f.disabled[0] != "unifi" {
+		t.Errorf("a target no longer configured must be disabled, not left active; disabled=%v", f.disabled)
+	}
+}
+
+// A database failure during registration is fatal to the caller, not swallowed.
+// The alternative is a backend that believes a target is registered while every
+// write naming it will be refused.
+func TestInitReportsARegistryFailure(t *testing.T) {
+	resetRegistry(t)
+	withEnv(t, map[string]string{
+		"ADDON_TARGETS":             "truenas",
+		"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090",
+		"ADDON_TRUENAS_SIGNING_KEY": "/run/secrets/s.key",
+	})
+	withTargetRegistry(t, &fakeTargetRegistry{upsertErr: errors.New("connection refused")})
+	if err := Init(context.Background()); err == nil {
+		t.Fatal("a registry write failure must be reported, not logged and ignored")
+	}
+}
+
+// 2.2 / 2.35 — either transport mode may be configured. A shared secret is not
+// offered as a third: it authenticates the caller but binds nothing to the
+// request, so an intercepted call replays verbatim.
+func TestSigningKeyIsAValidTransportMode(t *testing.T) {
+	resetRegistry(t)
+	withEnv(t, map[string]string{
+		"ADDON_TARGETS":             "truenas",
+		"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090",
+		"ADDON_TRUENAS_SIGNING_KEY": "/run/secrets/truenas-signing.key",
+	})
+	withTargetRegistry(t, &fakeTargetRegistry{})
+	if err := Init(context.Background()); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	reg := Registered()
+	if len(reg) != 1 {
+		t.Fatalf("a signing key alone must be enough to register, got %+v", reg)
+	}
+	if reg[0].AuthMode() != "signed" {
+		t.Errorf("expected signed transport, got %q", reg[0].AuthMode())
+	}
+	if reg[0].SigningKeyPath != "/run/secrets/truenas-signing.key" {
+		t.Errorf("the signing key reference must be read, got %q", reg[0].SigningKeyPath)
+	}
+}
+
+// mTLS is the default and wins when both are configured, so a deployment
+// migrating between modes does not silently drop to the weaker one.
+func TestMTLSWinsWhenBothModesAreConfigured(t *testing.T) {
+	resetRegistry(t)
+	withEnv(t, map[string]string{
+		"ADDON_TARGETS":             "truenas",
+		"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090",
+		"ADDON_TRUENAS_CLIENT_CERT": "/run/secrets/c.crt",
+		"ADDON_TRUENAS_CLIENT_KEY":  "/run/secrets/c.key",
+		"ADDON_TRUENAS_SIGNING_KEY": "/run/secrets/s.key",
+	})
+	withTargetRegistry(t, &fakeTargetRegistry{})
+	if err := Init(context.Background()); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if got := Registered()[0].AuthMode(); got != "mtls" {
+		t.Errorf("expected mtls to win, got %q", got)
+	}
+}
+
+// An add-on holds the target credential and reaches physical infrastructure.
+// Calling one over an unauthenticated channel is worse than not having it, so a
+// deployment configuring neither mode has not deployed an add-on — and gets no
+// navigation entry promising an operator something that must never be called.
+func TestNoTransportAuthMeansNoRegistration(t *testing.T) {
+	for name, env := range map[string]map[string]string{
+		"neither": {
+			"ADDON_TARGETS":          "truenas",
+			"ADDON_TRUENAS_BASE_URL": "http://addon-truenas:8090",
+		},
+		"half a certificate pair": {
+			"ADDON_TARGETS":             "truenas",
+			"ADDON_TRUENAS_BASE_URL":    "http://addon-truenas:8090",
+			"ADDON_TRUENAS_CLIENT_CERT": "/run/secrets/c.crt",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			resetRegistry(t)
+			withEnv(t, env)
+			f := &fakeTargetRegistry{}
+			withTargetRegistry(t, f)
+			if err := Init(context.Background()); err != nil {
+				t.Fatalf("Init: %v", err)
+			}
+			if got := Registered(); len(got) != 0 {
+				t.Errorf("expected no registration, got %+v", got)
+			}
+			if len(f.upserted) != 0 {
+				t.Errorf("an unregistered target must not be activated in the database, upserted=%v", f.upserted)
+			}
+		})
 	}
 }

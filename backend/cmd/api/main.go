@@ -79,11 +79,29 @@ func main() {
 	// demo fallback otherwise). Emits the [DIRECTORY] Source=... log line.
 	directory.Init()
 
-	// Read the add-on registry from deployment configuration. No network I/O:
-	// an add-on that is switched off must not delay startup, and one that is
-	// unreachable must still be registered, because operator navigation derives
-	// from this list rather than from what happens to be answering.
-	addons.Init()
+	// Read the add-on registry from deployment configuration and reconcile the
+	// database's targets registry to match. No add-on is contacted here: one
+	// that is switched off must not delay startup, and one that is unreachable
+	// must still be registered, because operator navigation derives from the
+	// deployment rather than from what happens to be answering. A failure here
+	// is a database failure, not an add-on failure, so it is fatal — every
+	// target-carrying table resolves its foreign key against that registry.
+	if err := addons.Init(context.Background()); err != nil {
+		log.Fatalf("[STARTUP] Add-on registry initialisation failed: %v", err)
+	}
+
+	// First manifest read, synchronously and time-bounded, before the server
+	// accepts anything. A contract-version mismatch is a registration refusal
+	// and belongs in the startup log where an operator looks after a deploy,
+	// not discovered minutes later on a tick. It is deliberately NOT fatal:
+	// refusing to boot the backend that governs every other target because one
+	// NAS add-on shipped ahead of it would be the fail-open rule inverted. The
+	// bound is what keeps a switched-off add-on from costing more than a pause.
+	if len(addons.Registered()) > 0 {
+		firstRefresh, cancelFirst := context.WithTimeout(context.Background(), addonFirstRefreshTimeout)
+		_ = addons.RefreshAll(firstRefresh)
+		cancelFirst()
+	}
 
 	if err := seed.EnsureDemoData(context.Background()); err != nil {
 		log.Fatalf("Demo seed failed: %v", err)
@@ -250,6 +268,12 @@ func driftSchedulerEnabled() bool {
 	}
 	return b
 }
+
+// addonFirstRefreshTimeout bounds the synchronous startup manifest read across
+// all registered add-ons. Long enough that a healthy add-on always answers
+// within it, short enough that a switched-off one costs a pause rather than an
+// outage of the backend that governs everything else.
+const addonFirstRefreshTimeout = 5 * time.Second
 
 func addonRefreshInterval() time.Duration {
 	v := os.Getenv("ADDON_MANIFEST_REFRESH_INTERVAL")
