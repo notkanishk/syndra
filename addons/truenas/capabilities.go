@@ -91,6 +91,10 @@ func operationSet(probe capabilityProbe) []Operation {
 		{ID: "password.rotate", Scope: "admin"},
 		{
 			ID: "account.purge", Scope: "admin", Confirm: true,
+			// The delete-capable key the backend injects for this one call.
+			// Declared secret so every redaction rule that covers a member's
+			// password covers it too — it is a far more dangerous value.
+			SecretParams: []string{"elevated_key"},
 		},
 		{ID: "activity.get", Scope: "admin"},
 		{ID: "health.get", Scope: "admin"},

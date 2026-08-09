@@ -1,0 +1,489 @@
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// 6.13–6.24 — the one-shot operations.
+//
+// Most of what is asserted here is a NEGATIVE: the value a member submitted
+// must not appear in a store, a snapshot, a log line, a response, or an error.
+// Those are the paths a secret escapes through in practice, and each of them is
+// code somebody adds later for debugging.
+
+const theSecret = "correct-horse-battery-staple"
+
+func opServer(t *testing.T) (*server, *mutatingRPC) {
+	t.Helper()
+	s, m := applyServer(t, `[{"username":"ada","uid":3001,"locked":false,"smb":true,"groups":[900]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+		t.Fatal(err)
+	}
+	return s, m
+}
+
+func postOperation(t *testing.T, s *server, name, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/operations/"+name, strings.NewReader(body))
+	r.SetPathValue("name", name)
+	s.handleOperation(rr, r, []byte(body))
+	return rr
+}
+
+// 6.13/6.14 — the plaintext reaches the target and appears nowhere durable.
+func TestASubmittedCredentialReachesTheTargetAndIsKeptNowhere(t *testing.T) {
+	s, m := opServer(t)
+	logDir := filepath.Dir(mutationLogPath(t, s))
+
+	rr := postOperation(t, s, "password.set",
+		`{"call_id":"c1","subject":"sub-1","actor":"sub-1","params":{"password":"`+theSecret+`"}}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+
+	// It reached the target — a test that only checked the negatives would pass
+	// for an operation that did nothing at all.
+	if len(m.updates) != 1 || m.updates[0]["password"] != theSecret {
+		t.Fatalf("the credential must reach the target: %v", m.updates)
+	}
+	// `user.update`, never `user.set_password`: the latter needs FULL_ADMIN
+	// when the target is another user, which this add-on's identity is not.
+	for _, method := range m.fakeRPC.calls {
+		if method == "user.set_password" {
+			t.Error("must use user.update({password}), which needs only ACCOUNT_WRITE")
+		}
+	}
+
+	// And nowhere else. Each of these is a path a secret escapes through in
+	// practice.
+	if strings.Contains(rr.Body.String(), theSecret) {
+		t.Error("the response carries the credential")
+	}
+	scanTreeForSecret(t, logDir, theSecret)
+	snap, _, _ := s.store.GetSnapshot()
+	encoded, _ := json.Marshal(snap)
+	if strings.Contains(string(encoded), theSecret) {
+		t.Error("the snapshot carries the credential")
+	}
+	cached, found, _ := s.store.Recall("c1")
+	if !found {
+		t.Fatal("the outcome must be recorded for replay")
+	}
+	if strings.Contains(string(cached), theSecret) {
+		t.Error("the idempotency entry carries the credential")
+	}
+
+	// The mutation log records that a password was set.
+	data, err := os.ReadFile(mutationLogPath(t, s))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"operation":"password.set"`) {
+		t.Error("the log must record the event even though it records no value")
+	}
+}
+
+// A failure is where an echoed payload lands. The target's response body must
+// not become this add-on's error text.
+func TestAFailedCredentialChangeDoesNotEchoTheTarget(t *testing.T) {
+	s, m := opServer(t)
+	m.fakeRPC.err = errors.New("update failed for password=" + theSecret)
+
+	rr := postOperation(t, s, "password.set",
+		`{"call_id":"c1","subject":"sub-1","params":{"password":"`+theSecret+`"}}`)
+	if rr.Code == http.StatusOK {
+		t.Fatal("a refused change must not report success")
+	}
+	if strings.Contains(rr.Body.String(), theSecret) {
+		t.Fatalf("the failure echoed the credential: %s", rr.Body.String())
+	}
+}
+
+// The refusal names the parameter and says nothing about the value — not even
+// about its shape. "Must be at least 8 characters" is a fact about a password
+// somebody submitted, and an error string is logged, returned, and traced.
+func TestAMissingSecretIsRefusedWithoutDescribingIt(t *testing.T) {
+	s, m := opServer(t)
+
+	rr := postOperation(t, s, "password.set", `{"call_id":"c1","subject":"sub-1","params":{}}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "password is required") {
+		t.Errorf("the refusal must name the parameter: %s", rr.Body.String())
+	}
+	if len(m.updates) != 0 {
+		t.Error("nothing may be sent")
+	}
+}
+
+// 6.15/6.16 — rotation persists, caches and logs no value, and records that a
+// rotation occurred.
+func TestRotationMintsAValueNobodyEverSees(t *testing.T) {
+	s, m := opServer(t)
+
+	rr := postOperation(t, s, "password.rotate", `{"call_id":"c1","subject":"sub-1","actor":"op_1"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(m.updates) != 1 {
+		t.Fatalf("want one update, got %d", len(m.updates))
+	}
+	minted, ok := m.updates[0]["password"].(string)
+	if !ok || len(minted) < 32 {
+		t.Fatalf("a rotation must set a substantial value, got %q", minted)
+	}
+
+	// The whole point: it is applied and never handed back.
+	if strings.Contains(rr.Body.String(), minted) {
+		t.Fatal("the response carries the minted credential — rotation as a revocation depends on it not being handed out")
+	}
+	cached, _, _ := s.store.Recall("c1")
+	if strings.Contains(string(cached), minted) {
+		t.Fatal("the idempotency entry carries the minted credential")
+	}
+	scanTreeForSecret(t, filepath.Dir(mutationLogPath(t, s)), minted)
+
+	// It says a rotation happened, with the surface's copy about sessions.
+	var out OperationResult
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if !out.Rotated {
+		t.Error("the result must record that a rotation occurred")
+	}
+	if !strings.Contains(out.Detail, "reconnect") {
+		t.Error("the copy must say sessions end on reconnect, not immediately — TrueNAS has no session-close method")
+	}
+}
+
+// Two rotations mint two different values, or the "new" credential is the old
+// one and the revocation revoked nothing.
+func TestTwoRotationsMintDifferentCredentials(t *testing.T) {
+	s, m := opServer(t)
+	postOperation(t, s, "password.rotate", `{"call_id":"c1","subject":"sub-1"}`)
+	postOperation(t, s, "password.rotate", `{"call_id":"c2","subject":"sub-1"}`)
+
+	if len(m.updates) != 2 {
+		t.Fatalf("want two rotations, got %d", len(m.updates))
+	}
+	if m.updates[0]["password"] == m.updates[1]["password"] {
+		t.Fatal("a rotation that mints the same value revokes nothing")
+	}
+}
+
+// 6.19/6.20 — purge runs on a credential injected for that call alone. The
+// add-on's own session must never become delete-capable.
+func TestPurgeUsesTheInjectedCredentialAndKeepsItNowhere(t *testing.T) {
+	s, m := opServer(t)
+	const elevated = "elevated-delete-key"
+
+	var elevatedCalls []string
+	var closed bool
+	var usedKey string
+	s.elevated = func(apiKey string) (rpc, error) {
+		usedKey = apiKey
+		return &recordingRPC{onCall: func(method string) { elevatedCalls = append(elevatedCalls, method) },
+			onClose: func() { closed = true }}, nil
+	}
+
+	rr := postOperation(t, s, "account.purge",
+		`{"call_id":"c1","subject":"sub-1","actor":"op_1","params":{"elevated_key":"`+elevated+`"}}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if usedKey != elevated {
+		t.Fatalf("the injected key must be the one used, got %q", usedKey)
+	}
+	if len(elevatedCalls) != 1 || elevatedCalls[0] != "user.delete" {
+		t.Fatalf("the elevated session must be used for the delete and nothing else: %v", elevatedCalls)
+	}
+	if !closed {
+		t.Fatal("the elevated session must be closed: it must not outlive the call it was injected for")
+	}
+
+	// The add-on's own long-lived session must never carry a delete.
+	for _, method := range m.fakeRPC.calls {
+		if method == "user.delete" {
+			t.Fatal("the shared session must never be delete-capable")
+		}
+	}
+
+	// And the key is nowhere durable.
+	if strings.Contains(rr.Body.String(), elevated) {
+		t.Error("the response carries the elevated key")
+	}
+	cached, _, _ := s.store.Recall("c1")
+	if strings.Contains(string(cached), elevated) {
+		t.Error("the idempotency entry carries the elevated key")
+	}
+	scanTreeForSecret(t, filepath.Dir(mutationLogPath(t, s)), elevated)
+}
+
+// Purge without the injected credential is refused, not attempted on the
+// add-on's own key — which the target would refuse for want of privilege, but
+// only after a delete had been asked for.
+func TestPurgeWithoutTheInjectedCredentialIsRefusedBeforeAnyCall(t *testing.T) {
+	s, m := opServer(t)
+	var elevatedOpened bool
+	s.elevated = func(string) (rpc, error) { elevatedOpened = true; return nil, errors.New("should not be called") }
+
+	rr := postOperation(t, s, "account.purge", `{"call_id":"c1","subject":"sub-1","params":{}}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if elevatedOpened {
+		t.Error("no session may be opened without the credential")
+	}
+	for _, method := range m.fakeRPC.calls {
+		if method == "user.delete" {
+			t.Fatal("nothing may be deleted")
+		}
+	}
+}
+
+// 6.21/6.22 — an empty result names the unaudited shares rather than implying
+// no activity. SMB auditing is per share, so a quiet answer means either
+// nothing happened or nobody was watching.
+func TestAnEmptyActivityResultNamesWhatWasNotWatched(t *testing.T) {
+	s, m := opServer(t)
+	m.fakeRPC.audit = `[]`
+	m.fakeRPC.shares = `[{"name":"lab","audit":{"enable":false}},{"name":"archive","audit":{"enable":true}}]`
+
+	rr := postOperation(t, s, "activity.get", `{"call_id":"c1","subject":"sub-1"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	var out OperationResult
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Activity == nil {
+		t.Fatal("want an activity report")
+	}
+	if len(out.Activity.Events) != 0 {
+		t.Fatalf("the fixture has no events: %+v", out.Activity.Events)
+	}
+	if len(out.Activity.UnauditedShares) != 1 || out.Activity.UnauditedShares[0] != "lab" {
+		t.Fatalf("an empty result must name the shares that were not being watched: %v", out.Activity.UnauditedShares)
+	}
+}
+
+// 6.23/6.24 — health composes four sources and degrades per source rather than
+// failing whole.
+func TestHealthComposesFourSourcesAndDegradesPerSource(t *testing.T) {
+	s, m := opServer(t)
+	m.fakeRPC.health = map[string]string{
+		"system.info":   `{"version":"25.04.2"}`,
+		"pool.query":    `[{"name":"tank"}]`,
+		"service.query": `[{"service":"cifs"}]`,
+		// alert.list deliberately absent: one source failing must not take the
+		// other three with it.
+	}
+
+	rr := postOperation(t, s, "health.get", `{"call_id":"c1","subject":"-"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	var out OperationResult
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Health == nil || out.Health.System == nil || out.Health.Pools == nil {
+		t.Fatalf("the sources that answered must be present: %+v", out.Health)
+	}
+	if len(out.Health.Degraded) != 1 || out.Health.Degraded[0] != "alerts" {
+		t.Fatalf("the source that failed must be named: %v", out.Health.Degraded)
+	}
+}
+
+// All four failing is an unreachable target, not a health report with four
+// holes in it.
+func TestHealthWithNoSourceAnsweringIsAnOutageNotAReport(t *testing.T) {
+	s, m := opServer(t)
+	m.fakeRPC.health = map[string]string{}
+
+	rr := postOperation(t, s, "health.get", `{"call_id":"c1","subject":"-"}`)
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d (%s)", rr.Code, rr.Body.String())
+	}
+}
+
+// An operation naming a subject with no account refuses rather than falling
+// back to derivation — derivation names an account that may not exist, and
+// setting a password on the wrong one is the whole hazard.
+func TestAnOperationOnAnUnboundSubjectRefusesRatherThanGuessing(t *testing.T) {
+	s, m := opServer(t)
+
+	rr := postOperation(t, s, "password.set",
+		`{"call_id":"c1","subject":"sub-unknown","params":{"password":"`+theSecret+`"}}`)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(m.updates) != 0 {
+		t.Fatal("nothing may be sent")
+	}
+}
+
+// Replay returns the recorded outcome and mutates nothing a second time.
+func TestAReplayedOperationDoesNotMutateTwice(t *testing.T) {
+	s, m := opServer(t)
+	const body = `{"call_id":"c1","subject":"sub-1","params":{"password":"` + theSecret + `"}}`
+
+	first := postOperation(t, s, "password.set", body)
+	second := postOperation(t, s, "password.set", body)
+	if len(m.updates) != 1 {
+		t.Fatalf("a replay must not set the credential twice, got %d", len(m.updates))
+	}
+	if first.Body.String() != second.Body.String() {
+		t.Errorf("a replay must return the original outcome:\n%s\n%s", first.Body.String(), second.Body.String())
+	}
+}
+
+// A read is never gated by lifecycle state; a mutation always is.
+func TestMaintenanceGatesMutationsAndNotReads(t *testing.T) {
+	s, m := opServer(t)
+	m.fakeRPC.audit = `[]`
+	m.fakeRPC.shares = `[]`
+	_ = s.life.Set(LifecycleReadOnly, "maintenance")
+
+	mutation := postOperation(t, s, "password.set",
+		`{"call_id":"c1","subject":"sub-1","params":{"password":"`+theSecret+`"}}`)
+	if mutation.Code != http.StatusServiceUnavailable || mutation.Header().Get("Retry-After") == "" {
+		t.Fatalf("a mutation must be refused as retryable, got %d", mutation.Code)
+	}
+	if len(m.updates) != 0 {
+		t.Fatal("nothing may be sent")
+	}
+
+	read := postOperation(t, s, "activity.get", `{"call_id":"c2","subject":"sub-1"}`)
+	if read.Code != http.StatusOK {
+		t.Fatalf("a read must still be served during maintenance, got %d (%s)", read.Code, read.Body.String())
+	}
+}
+
+// Unknown ids fail closed. The backend's policy is the authority on what
+// exists; this is the second gate.
+func TestAnUnknownOperationFailsClosed(t *testing.T) {
+	s, _ := opServer(t)
+	rr := postOperation(t, s, "account.exfiltrate", `{"call_id":"c1","subject":"sub-1"}`)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("want 404, got %d (%s)", rr.Code, rr.Body.String())
+	}
+}
+
+// recordingRPC is the elevated session: it records what it was asked and
+// whether it was closed.
+type recordingRPC struct {
+	onCall  func(string)
+	onClose func()
+}
+
+func (r *recordingRPC) Call(method string, _ int64, _ any) (json.RawMessage, error) {
+	r.onCall(method)
+	return json.RawMessage(`null`), nil
+}
+func (r *recordingRPC) Ping() (string, error) { return "pong", nil }
+func (r *recordingRPC) Close() error          { r.onClose(); return nil }
+
+func mutationLogPath(t *testing.T, s *server) string {
+	t.Helper()
+	return filepath.Join(s.log.dir, logFileName)
+}
+
+// scanTreeForSecret walks every file under dir and fails if the value appears
+// in any of them. Broader than checking the one file this code writes: the
+// point is that the value is nowhere on the volume, including in whatever a
+// future path starts writing there.
+func scanTreeForSecret(t *testing.T, dir, secret string) {
+	t.Helper()
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil
+		}
+		if strings.Contains(string(data), secret) {
+			t.Errorf("%s contains the secret", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The target's own text never leaves the client wrapper, which is where the
+// guarantee actually lives — the operation's own message above it is defence in
+// depth over this, not the thing doing the work.
+//
+// TrueNAS builds its errors from the middleware's text, and a failed
+// `user.update({password})` is a call whose parameters include the password.
+// Classifying rather than wrapping is what stops that reaching a log line.
+func TestTheClientWrapperNeverSurfacesTheTargetsOwnText(t *testing.T) {
+	m := &mutatingRPC{fakeRPC: fakeRPC{err: errors.New("update failed for password=" + theSecret)}}
+	n := newNAS(func() (rpc, error) { return m, nil }, []string{"25.04"})
+
+	err := n.call("user.update", []any{1, map[string]any{"password": theSecret}}, nil)
+	if err == nil {
+		t.Fatal("the failure must be reported")
+	}
+	if strings.Contains(err.Error(), theSecret) {
+		t.Fatalf("the target's text reached the caller: %v", err)
+	}
+	// It must still be actionable: the method, and a classification the caller
+	// can branch on.
+	if !strings.Contains(err.Error(), "user.update") {
+		t.Errorf("the error must name the method: %v", err)
+	}
+	if !errors.Is(err, ErrTargetRefused) && !errors.Is(err, ErrTargetUnreachable) && !errors.Is(err, ErrRateLimited) {
+		t.Errorf("the error must carry a classification: %v", err)
+	}
+}
+
+// The injected delete key is declared secret, or every redaction rule that
+// covers a member's password steps around the far more dangerous value.
+func TestEveryValueThatIsASecretIsDeclaredOne(t *testing.T) {
+	byID := map[string]Operation{}
+	for _, op := range operationSet(alwaysAvailable{}) {
+		byID[op.ID] = op
+	}
+	for _, want := range []struct{ id, param string }{
+		{"password.set", "password"},
+		{"account.purge", "elevated_key"},
+	} {
+		op, ok := byID[want.id]
+		if !ok {
+			t.Fatalf("%s is not in the manifest", want.id)
+		}
+		var declared bool
+		for _, p := range op.SecretParams {
+			if p == want.param {
+				declared = true
+			}
+		}
+		if !declared {
+			t.Errorf("%s must declare %q as a secret parameter: %v", want.id, want.param, op.SecretParams)
+		}
+	}
+	// And the manifest names a confirmation on the one irreversible operation.
+	if !byID["account.purge"].Confirm {
+		t.Error("account.purge is the one irreversible operation and must require confirmation")
+	}
+}
+
+// alwaysAvailable is a probe that answers yes, so the manifest's declarations
+// can be read without a target.
+type alwaysAvailable struct{}
+
+func (alwaysAvailable) availability(string) (bool, string) { return true, "" }

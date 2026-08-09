@@ -166,6 +166,12 @@ func main() {
 		life:      life,
 		keyExpiry: cfg.keyExpiry,
 		product:   "truenas_scale",
+		// A fresh session per purge, under the injected key, closed immediately
+		// after. Never the shared one: an elevated credential must not outlive
+		// the single call it was injected for.
+		elevated: func(apiKey string) (rpc, error) {
+			return dialTrueNAS(cfg.nasURL, apiKey, cfg.nasVerify)()
+		},
 	}
 
 	tlsConf, err := serverTLS(cfg)

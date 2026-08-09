@@ -28,6 +28,13 @@ type server struct {
 	life      *lifecycle
 	keyExpiry time.Time
 	product   string
+
+	// elevated opens a one-off session under a credential the backend injects
+	// for a single call. A seam because a test must be able to observe that the
+	// key is used once and kept nowhere — and because the long-lived session
+	// must never become delete-capable, which is the property the separate
+	// dialer exists to hold.
+	elevated func(apiKey string) (rpc, error)
 }
 
 func (s *server) routes() http.Handler {
@@ -37,6 +44,11 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /subjects", s.auth.authenticated(s.handleSubjects))
 	mux.HandleFunc("POST /apply", s.auth.authenticated(s.handleApply))
 	mux.HandleFunc("POST /plan", s.auth.authenticated(s.handlePlan))
+	// The path segment is the operation NAME. The dedup token is the call id,
+	// inside the body. They were briefly the same word and that would have cost
+	// a debugging session, so nothing here lets one be passed where the other
+	// is meant.
+	mux.HandleFunc("POST /operations/{name}", s.auth.authenticated(s.handleOperation))
 	return mux
 }
 

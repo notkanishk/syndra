@@ -21,9 +21,14 @@ type fakeRPC struct {
 	users   string
 	groups  string
 	version string
-	err     error
-	calls   []string
-	params  []any
+	audit   string
+	shares  string
+	// health answers the four health reads by method name. A method absent
+	// from the map fails, which is how a per-source degradation is exercised.
+	health map[string]string
+	err    error
+	calls  []string
+	params []any
 }
 
 func (f *fakeRPC) Call(method string, _ int64, params any) (json.RawMessage, error) {
@@ -39,8 +44,28 @@ func (f *fakeRPC) Call(method string, _ int64, params any) (json.RawMessage, err
 		return json.RawMessage(f.groups), nil
 	case "system.version":
 		return json.RawMessage(`"` + f.version + `"`), nil
+	case "audit.query":
+		return json.RawMessage(orEmptyList(f.audit)), nil
+	case "sharing.smb.query":
+		return json.RawMessage(orEmptyList(f.shares)), nil
+	case "system.info", "alert.list", "pool.query", "service.query":
+		if f.health == nil {
+			return json.RawMessage(`{}`), nil
+		}
+		body, ok := f.health[method]
+		if !ok {
+			return nil, errors.New("method unavailable on this target")
+		}
+		return json.RawMessage(body), nil
 	}
 	return json.RawMessage(`null`), nil
+}
+
+func orEmptyList(s string) string {
+	if s == "" {
+		return "[]"
+	}
+	return s
 }
 func (f *fakeRPC) Ping() (string, error) { return "pong", f.err }
 func (f *fakeRPC) Close() error          { return nil }

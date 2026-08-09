@@ -1,0 +1,422 @@
+package main
+
+import (
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+)
+
+// One-shot operations (design §4, §10).
+//
+// Everything here is an EVENT: it happens once, it is never queued, and it is
+// never retried. That is not an omission — a retry needs the parameters, the
+// parameters are the secret, and keeping the secret to enable the retry is the
+// vault this whole design exists to avoid. Recovery is the member resubmitting,
+// which is safe because the call id deduplicates and because setting the same
+// credential twice converges anyway.
+
+// OperationRequest is one invocation.
+//
+// `Params` carries the secret and nothing else does. It reaches the target and
+// is discarded; no field of it is written to the store, the snapshot, or the
+// mutation log, none of which has anywhere to put one.
+type OperationRequest struct {
+	CallID  string         `json:"call_id"`
+	Subject string         `json:"subject"`
+	Actor   string         `json:"actor"`
+	Params  map[string]any `json:"params,omitempty"`
+}
+
+// OperationResult is what the caller learns.
+//
+// Deliberately thin. There is no field for the target's error payload, because
+// that payload is the likeliest place for a submitted password to be echoed
+// back at us — the same reason the backend's `addon_operations` row has no
+// free-text column.
+type OperationResult struct {
+	Operation string `json:"operation"`
+	Subject   string `json:"subject"`
+	Outcome   string `json:"outcome"`
+	Detail    string `json:"detail,omitempty"`
+	// Rotated says a new credential was minted and applied. The value is not
+	// here and is nowhere else either: rotation is the credential half of a
+	// revocation, and returning what it minted would defeat the point.
+	Rotated bool `json:"rotated,omitempty"`
+	// Activity and Health are the read-only operations' payloads.
+	Activity *ActivityReport `json:"activity,omitempty"`
+	Health   *TargetHealth   `json:"health,omitempty"`
+}
+
+// handleOperation dispatches one named operation.
+func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []byte) {
+	name := r.PathValue("name")
+	var req OperationRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
+		return
+	}
+	if strings.TrimSpace(req.CallID) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
+		return
+	}
+
+	// The same dedup the apply uses, and universal for the same reason: §16
+	// declines a separate nonce store on the grounds that the call id already
+	// prevents replay, and that argument only holds if nothing is exempt.
+	if cached, found, err := s.store.Recall(req.CallID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "STORE_UNREADABLE"})
+		return
+	} else if found {
+		var previous OperationResult
+		if err := json.Unmarshal(cached, &previous); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "STORE_UNREADABLE"})
+			return
+		}
+		writeJSON(w, http.StatusOK, previous)
+		return
+	}
+
+	// Reads are never gated by lifecycle state; mutations always are.
+	if mutatingOperation(name) {
+		done, err := s.life.Begin()
+		if err != nil {
+			state, _ := s.life.State()
+			writeLifecycleRefusal(w, state)
+			return
+		}
+		defer done()
+
+		if supported, why := s.nas.MajorSupported(); !supported {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
+				"error": "TARGET_VERSION_UNSUPPORTED", "detail": why,
+			})
+			return
+		}
+	}
+
+	result, status, err := s.runOperation(name, req)
+	if err != nil {
+		// The error's text is this add-on's own, never the target's response
+		// body: that body is where a submitted password comes back.
+		writeJSON(w, status, map[string]string{"error": "OPERATION_FAILED", "detail": err.Error()})
+		return
+	}
+	if err := s.store.Remember(req.CallID, result); err != nil {
+		logStoreFailure("idempotency", req.CallID, err)
+	}
+	writeJSON(w, status, result)
+}
+
+func mutatingOperation(name string) bool {
+	switch name {
+	case "password.set", "password.rotate", "account.purge":
+		return true
+	}
+	return false
+}
+
+func (s *server) runOperation(name string, req OperationRequest) (OperationResult, int, error) {
+	switch name {
+	case "password.set":
+		return s.setPassword(req)
+	case "password.rotate":
+		return s.rotatePassword(req)
+	case "account.purge":
+		return s.purgeAccount(req)
+	case "activity.get":
+		return s.smbActivity(req)
+	case "health.get":
+		return s.targetHealth(req)
+	}
+	// Unknown ids fail closed. The backend's policy is the authority on what
+	// exists and this is the second gate, not the first.
+	return OperationResult{}, http.StatusNotFound, fmt.Errorf("no such operation")
+}
+
+// boundAccount resolves the subject's account, refusing rather than guessing.
+//
+// An operation that could not find its subject must not fall back to
+// derivation: derivation names an account that may not exist, and setting a
+// password on the wrong one is the whole hazard.
+func (s *server) boundAccount(subject string) (Binding, error) {
+	b, bound, err := s.store.GetBinding(subject)
+	if err != nil {
+		return Binding{}, err
+	}
+	if !bound {
+		return Binding{}, fmt.Errorf("no account is bound to this subject yet")
+	}
+	return b, nil
+}
+
+// setPassword forwards a member's credential and keeps nothing.
+//
+// `user.update({password})`, never `user.set_password`: the latter rejects the
+// call unless the session is FULL_ADMIN when the target is another user, and
+// the former needs only ACCOUNT_WRITE — which is what this add-on's identity
+// has and all it should have.
+//
+// Plaintext is mandatory. No TrueNAS API accepts an NT or unix hash, which is
+// why Syndra's vault stops storing them: a hash it could store is a hash this
+// could not use.
+func (s *server) setPassword(req OperationRequest) (OperationResult, int, error) {
+	password, err := requireSecret(req.Params, "password")
+	if err != nil {
+		return OperationResult{}, http.StatusBadRequest, err
+	}
+	binding, err := s.boundAccount(req.Subject)
+	if err != nil {
+		return OperationResult{}, http.StatusUnprocessableEntity, err
+	}
+	if err := s.nas.call("user.update", []any{binding.UID, map[string]any{"password": password}}, nil); err != nil {
+		// A sentence an operator can read, not the security boundary. The
+		// client wrapper already classifies rather than wraps, so the target's
+		// own text — built from a call whose parameters include the password —
+		// never reaches here at all. That guarantee is pinned where it lives,
+		// on `NAS.call`; this is only the difference between a readable failure
+		// and "user.update: the target refused the call".
+		return OperationResult{}, statusFor(err), fmt.Errorf("the target refused the credential change")
+	}
+	// The event, never the value. There is no field on a Record for one.
+	s.record("password.set", req.Subject, req.CallID, "succeeded")
+	return OperationResult{
+		Operation: "password.set", Subject: req.Subject, Outcome: "succeeded",
+		Detail: "The credential was set on " + binding.Username + ".",
+	}, http.StatusOK, nil
+}
+
+// rotatePassword mints a new credential, applies it, and returns nothing.
+//
+// The credential half of a revocation. Established SMB sessions survive until
+// they reconnect — TrueNAS exposes no session-close method at all — which is
+// why the operator surface must say so rather than implying immediacy.
+func (s *server) rotatePassword(req OperationRequest) (OperationResult, int, error) {
+	binding, err := s.boundAccount(req.Subject)
+	if err != nil {
+		return OperationResult{}, http.StatusUnprocessableEntity, err
+	}
+	minted, err := mintCredential()
+	if err != nil {
+		return OperationResult{}, http.StatusInternalServerError, fmt.Errorf("could not mint a credential")
+	}
+	if err := s.nas.call("user.update", []any{binding.UID, map[string]any{"password": minted}}, nil); err != nil {
+		return OperationResult{}, statusFor(err), fmt.Errorf("the target refused the rotation")
+	}
+	s.record("password.rotate", req.Subject, req.CallID, "succeeded")
+	return OperationResult{
+		Operation: "password.rotate", Subject: req.Subject, Outcome: "succeeded", Rotated: true,
+		Detail: "A new credential was set on " + binding.Username +
+			". Established sessions end when they next reconnect, not immediately.",
+	}, http.StatusOK, nil
+}
+
+// mintCredential produces a value nobody ever sees.
+//
+// 32 bytes of crypto/rand, base64. It is applied and discarded — not returned,
+// not logged, not stored — because the whole point of rotation as a revocation
+// is that the old credential stops working and no new one is handed out.
+func mintCredential() (string, error) {
+	var b [32]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b[:]), nil
+}
+
+// purgeAccount deletes, on a credential this add-on does not hold.
+//
+// The add-on's own TrueNAS identity has ACCOUNT_WRITE and SYSTEM_AUDIT_READ and
+// deliberately not deletion, so a compromised add-on can misassign, disable and
+// rotate but cannot delete an account on its own. The elevated key is held by
+// the backend and injected into this single call — never stored here, never
+// cached, and never reused for the session this add-on keeps open.
+//
+// The alternative, having an operator supply it at the moment of use, was
+// rejected: it contradicts the rule that operators read target health without
+// being handed target credentials, and it has no good source — either somebody
+// types a personal admin password into a form, or a shared key lives in a
+// password manager until it ends up in a browser.
+func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error) {
+	elevated, err := requireSecret(req.Params, "elevated_key")
+	if err != nil {
+		return OperationResult{}, http.StatusBadRequest, err
+	}
+	binding, err := s.boundAccount(req.Subject)
+	if err != nil {
+		return OperationResult{}, http.StatusUnprocessableEntity, err
+	}
+
+	// A session of its own, closed immediately. Not the long-lived one: an
+	// elevated credential must not outlive the single call it was injected for,
+	// and reusing the shared session would leave a delete-capable connection
+	// open for everything else this add-on does.
+	client, err := s.elevated(elevated)
+	if err != nil {
+		return OperationResult{}, http.StatusBadGateway, fmt.Errorf("the elevated session could not be established")
+	}
+	defer client.Close()
+
+	if _, err := client.Call("user.delete", callTimeoutSeconds, []any{binding.UID}); err != nil {
+		return OperationResult{}, statusFor(classifyNASError(err)), fmt.Errorf("the target refused the deletion")
+	}
+	s.record("account.purge", req.Subject, req.CallID, "succeeded")
+	return OperationResult{
+		Operation: "account.purge", Subject: req.Subject, Outcome: "succeeded",
+		Detail: "Deleted " + binding.Username + ".",
+	}, http.StatusOK, nil
+}
+
+// ActivityReport is SMB activity, and what it could not see.
+type ActivityReport struct {
+	Events []ActivityEvent `json:"events"`
+	// UnauditedShares names the shares with auditing switched off. Without it
+	// an empty result reads as "no activity", which is a different and much
+	// more reassuring statement than "we were not watching".
+	UnauditedShares []string `json:"unaudited_shares,omitempty"`
+}
+
+type ActivityEvent struct {
+	At      string `json:"at"`
+	Event   string `json:"event"`
+	Share   string `json:"share,omitempty"`
+	Success bool   `json:"success"`
+}
+
+// smbActivity reads the audit log and says what it could not see.
+func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error) {
+	binding, err := s.boundAccount(req.Subject)
+	if err != nil {
+		return OperationResult{}, http.StatusUnprocessableEntity, err
+	}
+
+	var rows []struct {
+		Timestamp string `json:"message_timestamp"`
+		Event     string `json:"event"`
+		Success   bool   `json:"success"`
+		EventData struct {
+			Share string `json:"share"`
+		} `json:"event_data"`
+	}
+	query := []any{
+		map[string]any{
+			"services": []string{"SMB"},
+			"query-filters": [][]any{
+				{"username", "=", binding.Username},
+			},
+			"query-options": map[string]any{"limit": 200, "order_by": []string{"-message_timestamp"}},
+		},
+	}
+	if err := s.nas.call("audit.query", query, &rows); err != nil {
+		return OperationResult{}, statusFor(err), fmt.Errorf("the audit log could not be read")
+	}
+
+	report := ActivityReport{Events: make([]ActivityEvent, 0, len(rows))}
+	for _, r := range rows {
+		report.Events = append(report.Events, ActivityEvent{
+			At: r.Timestamp, Event: r.Event, Share: r.EventData.Share, Success: r.Success,
+		})
+	}
+	// Reported whether or not there were events, because the case that matters
+	// is the empty one.
+	if unaudited, err := s.unauditedShares(); err != nil {
+		report.UnauditedShares = []string{"(the share list could not be read, so coverage is unknown)"}
+	} else {
+		report.UnauditedShares = unaudited
+	}
+
+	return OperationResult{
+		Operation: "activity.get", Subject: req.Subject, Outcome: "succeeded",
+		Activity: &report,
+	}, http.StatusOK, nil
+}
+
+// unauditedShares lists shares with auditing switched off.
+//
+// SMB auditing is per share, so a quiet result means either nothing happened or
+// nobody was watching, and only this tells them apart.
+func (s *server) unauditedShares() ([]string, error) {
+	var shares []struct {
+		Name  string `json:"name"`
+		Audit struct {
+			Enable bool `json:"enable"`
+		} `json:"audit"`
+	}
+	if err := s.nas.call("sharing.smb.query", []any{[]any{}, map[string]any{"select": []string{"name", "audit"}}}, &shares); err != nil {
+		return nil, err
+	}
+	var off []string
+	for _, sh := range shares {
+		if !sh.Audit.Enable {
+			off = append(off, sh.Name)
+		}
+	}
+	return off, nil
+}
+
+// TargetHealth is the operator's view of the NAS itself.
+//
+// Every field is optional and each carries its own error, because this composes
+// four independent reads and one of them failing tells an operator nothing about
+// the other three — which are usually the ones that would have explained it.
+type TargetHealth struct {
+	System   json.RawMessage `json:"system,omitempty"`
+	Alerts   json.RawMessage `json:"alerts,omitempty"`
+	Pools    json.RawMessage `json:"pools,omitempty"`
+	Services json.RawMessage `json:"services,omitempty"`
+	// Degraded names the sources that could not be read, so a partial answer
+	// says which part is missing rather than looking whole.
+	Degraded []string `json:"degraded,omitempty"`
+}
+
+// targetHealth composes four sources and degrades per source.
+func (s *server) targetHealth(req OperationRequest) (OperationResult, int, error) {
+	h := TargetHealth{}
+	for _, source := range []struct {
+		name   string
+		method string
+		params any
+		into   *json.RawMessage
+	}{
+		{"system", "system.info", []any{}, &h.System},
+		{"alerts", "alert.list", []any{}, &h.Alerts},
+		{"pools", "pool.query", []any{}, &h.Pools},
+		{"services", "service.query", []any{}, &h.Services},
+	} {
+		var raw json.RawMessage
+		if err := s.nas.call(source.method, source.params, &raw); err != nil {
+			h.Degraded = append(h.Degraded, source.name)
+			continue
+		}
+		*source.into = raw
+	}
+	// All four failing is an unreachable target, not a health report with four
+	// holes in it — the distinction an operator needs is "the NAS is down"
+	// rather than "four things are wrong with it".
+	if len(h.Degraded) == 4 {
+		return OperationResult{}, http.StatusServiceUnavailable, fmt.Errorf("the target answered none of the health reads")
+	}
+	return OperationResult{
+		Operation: "health.get", Subject: req.Subject, Outcome: "succeeded", Health: &h,
+	}, http.StatusOK, nil
+}
+
+// requireSecret pulls a declared secret parameter out of the request.
+//
+// The refusal names the PARAMETER and never the value, and never says anything
+// about the value's shape either: an error string is logged, returned, and
+// captured in traces, and "must be at least 8 characters" is a fact about a
+// password somebody submitted.
+func requireSecret(params map[string]any, name string) (string, error) {
+	raw, present := params[name]
+	if !present {
+		return "", fmt.Errorf("%s is required", name)
+	}
+	value, ok := raw.(string)
+	if !ok || strings.TrimSpace(value) == "" {
+		return "", fmt.Errorf("%s is required", name)
+	}
+	return value, nil
+}

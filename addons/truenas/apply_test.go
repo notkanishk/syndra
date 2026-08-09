@@ -24,6 +24,13 @@ type mutatingRPC struct {
 }
 
 func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMessage, error) {
+	// The error flag applies to writes as well as reads. A fake whose failure
+	// switch covers only half its methods is a fake that quietly passes the
+	// tests about the other half.
+	if m.fakeRPC.err != nil {
+		m.fakeRPC.calls = append(m.fakeRPC.calls, method)
+		return nil, m.fakeRPC.err
+	}
 	switch method {
 	case "user.update":
 		args, _ := params.([]any)
