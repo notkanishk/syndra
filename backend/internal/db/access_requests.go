@@ -137,11 +137,13 @@ func ApproveRequestAndEnqueue(ctx context.Context, requestID, reviewer, reviewNo
 	if err != nil {
 		return EnqueueResult{}, err
 	}
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return EnqueueResult{}, fmt.Errorf("begin approve tx: %w", err)
 	}
-	defer tx.Rollback(ctx) // no-op after a successful Commit
+	if owned {
+		defer tx.Rollback(ctx) // no-op after a successful Commit
+	}
 
 	const resolveQ = `
 		UPDATE access_requests
@@ -160,8 +162,10 @@ func ApproveRequestAndEnqueue(ctx context.Context, requestID, reviewer, reviewNo
 		return EnqueueResult{}, err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return EnqueueResult{}, fmt.Errorf("commit approve tx: %w", err)
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return EnqueueResult{}, fmt.Errorf("commit approve tx: %w", err)
+		}
 	}
 	return EnqueueResult{OutboxID: outboxID, IdempotencyKey: key, Status: "pending"}, nil
 }

@@ -116,11 +116,13 @@ func GetWelcomeBundle(ctx context.Context) (string, error) {
 // is set, so the partial unique index never trips. Returns pgx.ErrNoRows if
 // bundleID does not exist.
 func SetWelcomeBundle(ctx context.Context, bundleID string) error {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin set-welcome-bundle: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	if owned {
+		defer func() { _ = tx.Rollback(ctx) }()
+	}
 
 	if _, err := tx.Exec(ctx, `UPDATE bundles SET is_welcome = FALSE WHERE is_welcome = TRUE`); err != nil {
 		return fmt.Errorf("clear previous welcome bundle: %w", err)
@@ -132,8 +134,10 @@ func SetWelcomeBundle(ctx context.Context, bundleID string) error {
 	if tag.RowsAffected() == 0 {
 		return pgx.ErrNoRows
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit set-welcome-bundle: %w", err)
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit set-welcome-bundle: %w", err)
+		}
 	}
 	return nil
 }

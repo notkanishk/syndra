@@ -104,14 +104,7 @@ func enqueueCascadeRows(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, p
 	// the call, and only a caller that locks before its own reads is safe — but
 	// it does hold every writer back for as long as such a caller holds it,
 	// which is what makes locking before the read worth anything at all.
-	subjects := make([]string, 0, len(params)+len(audits))
-	for _, p := range params {
-		subjects = append(subjects, p.UserID)
-	}
-	for _, a := range audits {
-		subjects = append(subjects, a.Target)
-	}
-	if err := LockSubjectAccessTx(ctx, tx, subjects...); err != nil {
+	if err := LockAccessMutationTx(ctx, tx); err != nil {
 		return nil, err
 	}
 
@@ -229,11 +222,13 @@ func scanUserIDs(ctx context.Context, q string, args ...any) ([]string, error) {
 // It reports `assigned = false` when the person already held the bundle, in
 // which case NOTHING is written: no outbox rows, no audit row, no repin.
 func AssignBundleAndEnqueue(ctx context.Context, actor, userID, bundleID, versionID string, params []EnqueueParams) (ids []string, assigned bool, err error) {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return nil, false, err
 	}
-	defer tx.Rollback(ctx)
+	if owned {
+		defer tx.Rollback(ctx)
+	}
 
 	// Pinned to the version the CALLER projected, not to whatever is latest at
 	// this instant. Re-resolving "latest" here would race a concurrent publish:
@@ -272,8 +267,10 @@ func AssignBundleAndEnqueue(ctx context.Context, actor, userID, bundleID, versio
 	if err != nil {
 		return nil, false, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, false, err
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, false, err
+		}
 	}
 	return ids, true, nil
 }
@@ -281,11 +278,13 @@ func AssignBundleAndEnqueue(ctx context.Context, actor, userID, bundleID, versio
 // AddRoleToBundleAndEnqueue adds a role to a bundle and enqueues the per-member cascade in one
 // tx (design pivot: NO direct_role_grants write — the grant already lives in bundle_roles).
 func AddRoleToBundleAndEnqueue(ctx context.Context, actor, bundleID, projectID, roleKey string, params []EnqueueParams) ([]string, error) {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	if owned {
+		defer tx.Rollback(ctx)
+	}
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO bundle_roles (bundle_id, zitadel_project_id, zitadel_role_key) VALUES ($1,$2,$3)
 		 ON CONFLICT DO NOTHING`, bundleID, projectID, roleKey); err != nil {
@@ -297,8 +296,10 @@ func AddRoleToBundleAndEnqueue(ctx context.Context, actor, bundleID, projectID, 
 	if err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return ids, nil
 }
@@ -309,11 +310,13 @@ func AddRoleToBundleAndEnqueue(ctx context.Context, actor, bundleID, projectID, 
 // SourceRef left empty (the rule id does not exist yet); this stamps SourceRef = the new rule id
 // on every param right after the INSERT ... RETURNING, before enqueueing.
 func CreateMappingRuleAndEnqueue(ctx context.Context, actor, sourceProject, sourceRole, targetProject, targetRole, mode string, params []EnqueueParams) (string, []string, error) {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return "", nil, err
 	}
-	defer tx.Rollback(ctx)
+	if owned {
+		defer tx.Rollback(ctx)
+	}
 
 	const insertRule = `
 		INSERT INTO mapping_rules
@@ -335,8 +338,10 @@ func CreateMappingRuleAndEnqueue(ctx context.Context, actor, sourceProject, sour
 	if err != nil {
 		return "", nil, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return "", nil, err
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return "", nil, err
+		}
 	}
 	return ruleID, ids, nil
 }
@@ -346,11 +351,13 @@ func CreateMappingRuleAndEnqueue(ctx context.Context, actor, sourceProject, sour
 // be empty (every role stayed covered by another source) — the assignment is still deleted; an
 // empty enqueue is a no-op.
 func RemoveBundleFromUserAndEnqueue(ctx context.Context, actor, userID, bundleID string, params []EnqueueParams) ([]string, error) {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	if owned {
+		defer tx.Rollback(ctx)
+	}
 	if _, err := tx.Exec(ctx,
 		`DELETE FROM user_bundle_assignments WHERE user_id=$1 AND bundle_id=$2`, userID, bundleID); err != nil {
 		return nil, err
@@ -361,8 +368,10 @@ func RemoveBundleFromUserAndEnqueue(ctx context.Context, actor, userID, bundleID
 	if err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return ids, nil
 }
@@ -371,11 +380,13 @@ func RemoveBundleFromUserAndEnqueue(ctx context.Context, actor, userID, bundleID
 // (mirrors AddRoleToBundleAndEnqueue). params may be empty (every holder stayed covered) — the
 // bundle_role is still deleted.
 func RemoveRoleFromBundleAndEnqueue(ctx context.Context, actor, bundleID, projectID, roleKey string, params []EnqueueParams) ([]string, error) {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	if owned {
+		defer tx.Rollback(ctx)
+	}
 	if _, err := tx.Exec(ctx,
 		`DELETE FROM bundle_roles WHERE bundle_id=$1 AND zitadel_project_id=$2 AND zitadel_role_key=$3`,
 		bundleID, projectID, roleKey); err != nil {
@@ -387,8 +398,10 @@ func RemoveRoleFromBundleAndEnqueue(ctx context.Context, actor, bundleID, projec
 	if err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return ids, nil
 }
@@ -526,11 +539,13 @@ func GetCascadeGroups(ctx context.Context, limit int, cascadeID string) ([]model
 // cascade rows in ONE tx (mirrors CreateMappingRuleAndEnqueue). Uses the real
 // source_zitadel_*/target_zitadel_* columns.
 func UpdateMappingRuleAndEnqueue(ctx context.Context, actor, id, sp, sr, tp, tr string, params []EnqueueParams) ([]string, error) {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	if owned {
+		defer tx.Rollback(ctx)
+	}
 	if _, err := tx.Exec(ctx,
 		`UPDATE mapping_rules
 		 SET source_zitadel_project_id=$2, source_zitadel_role_key=$3,
@@ -544,8 +559,10 @@ func UpdateMappingRuleAndEnqueue(ctx context.Context, actor, id, sp, sr, tp, tr 
 	if err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return ids, nil
 }
@@ -560,11 +577,13 @@ func UpdateMappingRuleAndEnqueue(ctx context.Context, actor, id, sp, sr, tp, tr 
 // foreign key, deliberately: it records what caused the write, and the cause having since been
 // deleted is exactly what a reader of the change history needs to know.
 func DeleteMappingRuleAndEnqueue(ctx context.Context, actor, id string, params []EnqueueParams) ([]string, error) {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	if owned {
+		defer tx.Rollback(ctx)
+	}
 	tag, err := tx.Exec(ctx, `DELETE FROM mapping_rules WHERE id=$1`, id)
 	if err != nil {
 		return nil, err
@@ -581,8 +600,10 @@ func DeleteMappingRuleAndEnqueue(ctx context.Context, actor, id string, params [
 	if err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return ids, nil
 }

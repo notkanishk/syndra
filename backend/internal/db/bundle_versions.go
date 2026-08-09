@@ -269,11 +269,13 @@ func PublishVersionAndEnqueue(
 ) (models.BundleVersion, []string, error) {
 	var out models.BundleVersion
 
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return out, nil, err
 	}
-	defer tx.Rollback(ctx)
+	if owned {
+		defer tx.Rollback(ctx)
+	}
 
 	// Next version number is computed inside the tx. Two operators publishing
 	// at once would otherwise both read the same max and collide on the unique
@@ -319,8 +321,10 @@ func PublishVersionAndEnqueue(
 	if err != nil {
 		return out, nil, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return out, nil, err
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return out, nil, err
+		}
 	}
 	return out, ids, nil
 }
@@ -334,11 +338,13 @@ func MoveHoldersAndEnqueue(
 	userIDs []string,
 	params []EnqueueParams,
 ) ([]string, error) {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	if owned {
+		defer tx.Rollback(ctx)
+	}
 
 	// The version must belong to this bundle. Repinning somebody onto another
 	// bundle's version would resolve their access through roles that bundle
@@ -372,8 +378,10 @@ func MoveHoldersAndEnqueue(
 	if err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return ids, nil
 }

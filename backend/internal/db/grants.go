@@ -193,11 +193,13 @@ func GetExpiringDirectGrantsWithAcknowledgements(ctx context.Context, within tim
 // One row per grant: acknowledging again replaces the previous one. The table holds the current
 // annotation; audit_logs holds every decision.
 func AcknowledgeGrantExpiry(ctx context.Context, grantID string, expiresAt time.Time, actor, note string) (string, error) {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return "", err
 	}
-	defer tx.Rollback(ctx)
+	if owned {
+		defer tx.Rollback(ctx)
+	}
 
 	// Read the current date under the transaction, so the comparison the caller is relying on
 	// cannot be overtaken by an extension committing alongside it.
@@ -231,8 +233,10 @@ func AcknowledgeGrantExpiry(ctx context.Context, grantID string, expiresAt time.
 		return "", fmt.Errorf("acknowledge grant expiry %s: %w", grantID, err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return "", err
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return "", err
+		}
 	}
 	return userID, nil
 }
@@ -315,13 +319,19 @@ var ErrGrantRenewed = errors.New("direct grant is no longer expired")
 // Returns the project and role read back from the deleted row, so every
 // downstream side effect names what actually went away rather than what the
 // sweep's snapshot said would.
-// It runs on the caller's transaction rather than opening its own, because the
-// delta it is handed was computed under that transaction's subject lock. Taking
-// the lock only around this write would serialise the writes and leave every
-// computation racing — the appearance of a fix over the failure it exists to
-// prevent.
-func DeleteExpiredDirectGrantAndEnqueueTx(ctx context.Context, tx pgx.Tx, actor, userID, grantID string,
+// It joins the caller's access-mutation transaction when there is one, because
+// the delta it is handed was computed under that transaction's lock. Opening
+// its own would put the lock around the write only, which serialises the
+// commits and leaves every computation racing.
+func DeleteExpiredDirectGrantAndEnqueue(ctx context.Context, actor, userID, grantID string,
 	params []EnqueueParams) (projectID, roleKey string, outboxIDs []string, err error) {
+	tx, owned, err := beginOrJoin(ctx)
+	if err != nil {
+		return "", "", nil, err
+	}
+	if owned {
+		defer tx.Rollback(ctx)
+	}
 	const deleteGrant = `
 		DELETE FROM direct_role_grants
 		WHERE id = $1 AND user_id = $2
@@ -350,6 +360,11 @@ func DeleteExpiredDirectGrantAndEnqueueTx(ctx context.Context, tx pgx.Tx, actor,
 		params)
 	if err != nil {
 		return "", "", nil, err
+	}
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return "", "", nil, fmt.Errorf("commit expire grant tx: %w", err)
+		}
 	}
 	return projectID, roleKey, ids, nil
 }
@@ -407,11 +422,13 @@ var ErrGrantNotFound = errors.New("direct grant not found")
 // (DELETE /zitadel/users/{id}/grants/{grantId}) removes a different object and
 // leaves this row behind, so the next cache compile would restore the access.
 func DeleteDirectGrantAndEnqueue(ctx context.Context, actor, userID, grantID string, params []EnqueueParams) ([]string, error) {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin delete grant tx: %w", err)
 	}
-	defer tx.Rollback(ctx) // no-op after a successful Commit
+	if owned {
+		defer tx.Rollback(ctx) // no-op after a successful Commit
+	}
 
 	// Delete and read back in one statement: the returned project/role are what
 	// the audit row names, and taking them from the deleted row makes the record
@@ -435,8 +452,10 @@ func DeleteDirectGrantAndEnqueue(ctx context.Context, actor, userID, grantID str
 		return nil, err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit delete grant tx: %w", err)
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("commit delete grant tx: %w", err)
+		}
 	}
 	return ids, nil
 }

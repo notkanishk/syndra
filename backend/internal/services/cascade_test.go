@@ -14,6 +14,13 @@ import (
 // resetCascadeDeps captures and restores every cascade injectable, mirroring
 // resetOnboardingDeps's t.Cleanup idiom.
 func resetCascadeDeps(t *testing.T) {
+	// The real one opens a transaction and takes the access lock, neither of
+	// which exists without a database. Tests exercise what runs inside it.
+	origLock := svcInTxLockingAccess
+	t.Cleanup(func() { svcInTxLockingAccess = origLock })
+	svcInTxLockingAccess = func(ctx context.Context, fn func(context.Context) error) error {
+		return fn(ctx)
+	}
 	t.Helper()
 	origGetBundle := svcGetBundleByID
 	origGetRoles := svcCascGetRolesForBundle

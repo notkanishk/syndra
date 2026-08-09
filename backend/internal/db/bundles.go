@@ -21,11 +21,13 @@ import (
 // uninteresting row in a history. v1 is honest: the bundle existed and granted
 // nothing, which is what the empty-bundle copy has always said.
 func CreateBundle(ctx context.Context, name string, description string, confirmationMode string) (string, error) {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return "", err
 	}
-	defer tx.Rollback(ctx)
+	if owned {
+		defer tx.Rollback(ctx)
+	}
 
 	var id string
 	if err := tx.QueryRow(ctx,
@@ -38,8 +40,10 @@ func CreateBundle(ctx context.Context, name string, description string, confirma
 		 VALUES ($1, 1, 'Created empty.', 'system')`, id); err != nil {
 		return "", fmt.Errorf("failed to publish initial bundle version: %w", err)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return "", err
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return "", err
+		}
 	}
 	return id, nil
 }
@@ -74,11 +78,13 @@ func UpdateBundle(ctx context.Context, id, name, description string) error {
 // params may be empty: a bundle nobody holds, or one whose every role each holder also gets
 // somewhere else, deletes cleanly and enqueues nothing.
 func DeleteBundleAndEnqueue(ctx context.Context, actor, bundleID string, params []EnqueueParams) ([]string, error) {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	if owned {
+		defer tx.Rollback(ctx)
+	}
 
 	tag, err := tx.Exec(ctx, `DELETE FROM bundles WHERE id = $1`, bundleID)
 	if err != nil {
@@ -93,8 +99,10 @@ func DeleteBundleAndEnqueue(ctx context.Context, actor, bundleID string, params 
 	if err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return ids, nil
 }

@@ -5,8 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
-
 	"syndra/internal/db"
 	"syndra/internal/models"
 )
@@ -35,17 +33,17 @@ func expiryFixture(
 	t.Helper()
 	resetCascadeDeps(t)
 
-	orig := svcDeleteExpiredDirectGrantAndEnqueueTx
-	origTx := svcInTxLockingSubject
+	orig := svcDeleteExpiredDirectGrantAndEnqueue
+	origTx := svcInTxLockingAccess
 	t.Cleanup(func() {
-		svcDeleteExpiredDirectGrantAndEnqueueTx = orig
-		svcInTxLockingSubject = origTx
+		svcDeleteExpiredDirectGrantAndEnqueue = orig
+		svcInTxLockingAccess = origTx
 	})
 	// The real one opens a transaction and takes the subject lock; neither is
 	// reachable without a database. What the fake must preserve is the ordering
 	// the lock exists for, which the source guard in internal/db asserts.
-	svcInTxLockingSubject = func(_ context.Context, _ string, fn func(pgx.Tx) error) error {
-		return fn(nil)
+	svcInTxLockingAccess = func(ctx context.Context, fn func(context.Context) error) error {
+		return fn(ctx)
 	}
 
 	svcGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) {
@@ -59,8 +57,8 @@ func expiryFixture(
 	}
 
 	captured := &[]db.EnqueueParams{}
-	svcDeleteExpiredDirectGrantAndEnqueueTx = func(
-		_ context.Context, _ pgx.Tx, _, _, _ string, params []db.EnqueueParams,
+	svcDeleteExpiredDirectGrantAndEnqueue = func(
+		_ context.Context, _, _, _ string, params []db.EnqueueParams,
 	) (string, string, []string, error) {
 		*captured = params
 		if deleteErr != nil {
@@ -204,22 +202,19 @@ func TestExpireDirectGrant_MissingGrantIsNotARenewal(t *testing.T) {
 // bundle assignment landing between the read and the commit makes the revoke a
 // statement about a world that no longer exists — and the add it queued lands
 // first, so the subject ends up without access they are currently owed.
-func TestExpireDirectGrant_ComputesTheDeltaUnderTheSubjectLock(t *testing.T) {
+func TestExpireDirectGrant_ComputesTheDeltaUnderTheAccessLock(t *testing.T) {
 	resetCascadeDeps(t)
-	origTx := svcInTxLockingSubject
-	origDel := svcDeleteExpiredDirectGrantAndEnqueueTx
+	origTx := svcInTxLockingAccess
+	origDel := svcDeleteExpiredDirectGrantAndEnqueue
 	t.Cleanup(func() {
-		svcInTxLockingSubject = origTx
-		svcDeleteExpiredDirectGrantAndEnqueueTx = origDel
+		svcInTxLockingAccess = origTx
+		svcDeleteExpiredDirectGrantAndEnqueue = origDel
 	})
 
 	var order []string
-	svcInTxLockingSubject = func(_ context.Context, subject string, fn func(pgx.Tx) error) error {
-		if subject != "u1" {
-			t.Errorf("the lock must name the subject whose access is changing, got %q", subject)
-		}
+	svcInTxLockingAccess = func(ctx context.Context, fn func(context.Context) error) error {
 		order = append(order, "lock")
-		return fn(nil)
+		return fn(ctx)
 	}
 	svcGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) {
 		order = append(order, "read:rules")
@@ -232,8 +227,8 @@ func TestExpireDirectGrant_ComputesTheDeltaUnderTheSubjectLock(t *testing.T) {
 	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) {
 		return nil, nil
 	}
-	svcDeleteExpiredDirectGrantAndEnqueueTx = func(
-		context.Context, pgx.Tx, string, string, string, []db.EnqueueParams,
+	svcDeleteExpiredDirectGrantAndEnqueue = func(
+		context.Context, string, string, string, []db.EnqueueParams,
 	) (string, string, []string, error) {
 		order = append(order, "write")
 		return "pLaser", "trained", nil, nil

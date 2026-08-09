@@ -88,3 +88,56 @@ func TestInTxCommitsOnlyWhatSucceeded(t *testing.T) {
 		}
 	})
 }
+
+// A write that runs inside an access-mutation transaction must join it, not
+// open a second one. Two transactions mean the reads that decided the write are
+// in one and the write is in the other — the lock spans the first, and the
+// second is free to commit after everything it assumed has changed.
+func TestBeginOrJoinJoinsTheAmbientTransaction(t *testing.T) {
+	ambient := &recordingTx{}
+	fresh := &recordingTx{}
+	withBegin(t, fresh, nil)
+
+	ctx := context.WithValue(context.Background(), txKey, pgx.Tx(ambient))
+	tx, owned, err := beginOrJoin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tx != pgx.Tx(ambient) {
+		t.Fatal("the caller's transaction must be the one used")
+	}
+	if owned {
+		t.Fatal("a joiner does not own the transaction and must not settle it")
+	}
+	if fresh.committed || fresh.rolledBack {
+		t.Fatal("no second transaction may be opened at all")
+	}
+}
+
+// Without an ambient transaction it opens its own and says so, because then it
+// is the only thing that can commit it.
+func TestBeginOrJoinOwnsWhatItOpens(t *testing.T) {
+	fresh := &recordingTx{}
+	withBegin(t, fresh, nil)
+
+	tx, owned, err := beginOrJoin(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tx != pgx.Tx(fresh) || !owned {
+		t.Fatalf("an unwrapped caller opens and owns its own transaction, got owned=%v", owned)
+	}
+}
+
+// A nil in the context is not a transaction. Treating it as one would hand a
+// nil transaction to every write in the package.
+func TestBeginOrJoinIgnoresANilAmbientTransaction(t *testing.T) {
+	fresh := &recordingTx{}
+	withBegin(t, fresh, nil)
+
+	ctx := context.WithValue(context.Background(), txKey, pgx.Tx(nil))
+	tx, owned, err := beginOrJoin(ctx)
+	if err != nil || tx != pgx.Tx(fresh) || !owned {
+		t.Fatalf("a nil ambient transaction must be ignored, got tx=%v owned=%v err=%v", tx, owned, err)
+	}
+}

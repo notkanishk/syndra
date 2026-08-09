@@ -59,19 +59,23 @@ func EnqueueDirectGrantPropagation(ctx context.Context, p EnqueueParams) (Enqueu
 // rollback path) can pin a fixed key. All writes share one transaction: a
 // failure on any insert rolls back the ledger, audit, and outbox together.
 func enqueueTx(ctx context.Context, p EnqueueParams, key string) (EnqueueResult, error) {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return EnqueueResult{}, fmt.Errorf("begin enqueue tx: %w", err)
 	}
-	defer tx.Rollback(ctx) // no-op after a successful Commit
+	if owned {
+		defer tx.Rollback(ctx) // no-op after a successful Commit
+	}
 
 	outboxID, err := enqueueWrites(ctx, tx, p, key)
 	if err != nil {
 		return EnqueueResult{}, err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return EnqueueResult{}, fmt.Errorf("commit enqueue tx: %w", err)
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return EnqueueResult{}, fmt.Errorf("commit enqueue tx: %w", err)
+		}
 	}
 	return EnqueueResult{OutboxID: outboxID, IdempotencyKey: key, Status: "pending"}, nil
 }
@@ -85,7 +89,7 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) 
 	// The second of the two enqueue chokepoints. See enqueueCascadeRows: a
 	// writer that computed its delta under this lock is only protected while
 	// every other writer has to wait for it.
-	if err := LockSubjectAccessTx(ctx, tx, p.UserID); err != nil {
+	if err := LockAccessMutationTx(ctx, tx); err != nil {
 		return "", err
 	}
 

@@ -207,11 +207,13 @@ var (
 // disagrees with Zitadel, the next reconcile raises it as syndra_only drift, and
 // a human triages it. Surfacing that beats silently re-granting it.
 func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) error {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin attribute tx: %w", err)
 	}
-	defer tx.Rollback(ctx) // no-op after Commit
+	if owned {
+		defer tx.Rollback(ctx) // no-op after Commit
+	}
 	if _, err := claimDriftTx(ctx, tx, driftID, TargetZitadel, "attributed", p.GrantedBy, p.PayloadJSON); err != nil {
 		return err
 	}
@@ -223,6 +225,9 @@ func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) erro
 	if _, err := enqueueWrites(ctx, tx, p, key); err != nil {
 		return fmt.Errorf("attribute ledger writes: %w", err)
 	}
+	if !owned {
+		return nil
+	}
 	return tx.Commit(ctx)
 }
 
@@ -231,11 +236,13 @@ func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) erro
 // upsert for revoke). Returns the outbox id so the handler can drain it
 // best-effort AFTER commit. ErrDriftNotPending on a lost race.
 func RevokeDriftAndEnqueue(ctx context.Context, driftID string, p EnqueueParams) (string, error) {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("begin revoke tx: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	if owned {
+		defer tx.Rollback(ctx)
+	}
 	if _, err := claimDriftTx(ctx, tx, driftID, TargetZitadel, "revoked", p.GrantedBy, "{}"); err != nil {
 		return "", err
 	}
@@ -247,8 +254,10 @@ func RevokeDriftAndEnqueue(ctx context.Context, driftID string, p EnqueueParams)
 	if err != nil {
 		return "", fmt.Errorf("revoke enqueue writes: %w", err)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return "", fmt.Errorf("commit revoke tx: %w", err)
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return "", fmt.Errorf("commit revoke tx: %w", err)
+		}
 	}
 	return outboxID, nil
 }
@@ -257,11 +266,13 @@ func RevokeDriftAndEnqueue(ctx context.Context, driftID string, p EnqueueParams)
 // exclusion rows in ONE tx. ErrDriftNotPending on a lost race (no exclusion written).
 func MarkDriftExternalTx(ctx context.Context, driftID, userID, projectID string,
 	roleKeys []string, markedBy, reason, payloadJSON string) error {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin mark-external tx: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	if owned {
+		defer tx.Rollback(ctx)
+	}
 	// Target-generic on purpose: an exclusion is written against the target of
 	// the row it resolves, so it says something true whichever target that is.
 	target, err := claimDriftTx(ctx, tx, driftID, "", "marked_external", markedBy, payloadJSON)
@@ -278,6 +289,9 @@ func MarkDriftExternalTx(ctx context.Context, driftID, userID, projectID string,
 		if _, err := tx.Exec(ctx, ins, target, userID, projectID, rk, markedBy, reason); err != nil {
 			return fmt.Errorf("insert exclusion in tx: %w", err)
 		}
+	}
+	if !owned {
+		return nil
 	}
 	return tx.Commit(ctx)
 }

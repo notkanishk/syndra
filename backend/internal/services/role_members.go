@@ -1,8 +1,6 @@
 package services
 
 import (
-	"github.com/jackc/pgx/v5"
-
 	"context"
 	"sort"
 	"strings"
@@ -241,35 +239,43 @@ type DirectGrantRemoval struct {
 // puts the access straight back. Deleting the ledger row is what actually ends
 // the access; the outbox rows are what carry it upstream.
 func DeleteDirectGrant(ctx context.Context, userID, grantID, actor string) (DirectGrantRemoval, error) {
-	rules, err := svcGetActiveMappingRules(ctx)
-	if err != nil {
-		return DirectGrantRemoval{}, err
-	}
+	var ids, retained []string
+	var revokes []roleKey
 
-	before, err := userBaseHoldings(ctx, userID)
-	if err != nil {
-		return DirectGrantRemoval{}, err
-	}
-	after, err := userBaseHoldingsExcludingGrant(ctx, userID, grantID)
-	if err != nil {
-		return DirectGrantRemoval{}, err
-	}
+	// Read and write under one lock, for the same reason expiry does: a delta
+	// computed while another cascade is mid-flight is a statement about a world
+	// neither of them ends up in.
+	if err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
+		rules, err := svcGetActiveMappingRules(ctx)
+		if err != nil {
+			return err
+		}
 
-	afterClosure := effectiveClosure(after, rules)
-	_, revokes := closureDelta(effectiveClosure(before, rules), afterClosure)
+		before, err := userBaseHoldings(ctx, userID)
+		if err != nil {
+			return err
+		}
+		after, err := userBaseHoldingsExcludingGrant(ctx, userID, grantID)
+		if err != nil {
+			return err
+		}
 
-	// Retained is the dialog's exact claim: the role this grant carried, still
-	// effective afterwards because a bundle or a rule also covers it. Reported,
-	// never enqueued — it is precisely the role that must NOT be revoked.
-	retained := make([]string, 0, 1)
-	if target, found := directGrantRoleKey(ctx, userID, grantID); found && afterClosure[target] {
-		retained = append(retained, target.projectID+"/"+target.roleKey)
-	}
+		afterClosure := effectiveClosure(after, rules)
+		_, revokes = closureDelta(effectiveClosure(before, rules), afterClosure)
 
-	params := deltaParams(userID, nil, revokes, actor, "Direct access removal", "direct", grantID)
+		// Retained is the dialog's exact claim: the role this grant carried, still
+		// effective afterwards because a bundle or a rule also covers it. Reported,
+		// never enqueued — it is precisely the role that must NOT be revoked.
+		retained = make([]string, 0, 1)
+		if target, found := directGrantRoleKey(ctx, userID, grantID); found && afterClosure[target] {
+			retained = append(retained, target.projectID+"/"+target.roleKey)
+		}
 
-	ids, err := svcDeleteDirectGrantAndEnqueue(ctx, actor, userID, grantID, params)
-	if err != nil {
+		params := deltaParams(userID, nil, revokes, actor, "Direct access removal", "direct", grantID)
+
+		ids, err = svcDeleteDirectGrantAndEnqueue(ctx, actor, userID, grantID, params)
+		return err
+	}); err != nil {
 		return DirectGrantRemoval{}, err
 	}
 
@@ -337,7 +343,7 @@ func ExpireDirectGrant(ctx context.Context, userID, grantID, projectID, role, ac
 	// What they need is not to see this transaction's own writes — there are
 	// none yet — but for nothing that could invalidate them to be able to
 	// commit while they run, and every enqueue must take this same lock.
-	err := svcInTxLockingSubject(ctx, userID, func(tx pgx.Tx) error {
+	err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
 		rules, err := svcGetActiveMappingRules(ctx)
 		if err != nil {
 			return err
@@ -363,7 +369,7 @@ func ExpireDirectGrant(ctx context.Context, userID, grantID, projectID, role, ac
 
 		params := deltaParams(userID, nil, revokes, actor, "Grant expired", "direct", grantID)
 
-		deletedProject, deletedRole, ids, err := svcDeleteExpiredDirectGrantAndEnqueueTx(ctx, tx, actor, userID, grantID, params)
+		deletedProject, deletedRole, ids, err := svcDeleteExpiredDirectGrantAndEnqueue(ctx, actor, userID, grantID, params)
 		if err != nil {
 			return err
 		}
