@@ -44,6 +44,15 @@ const (
 	OutcomeIndeterminate Outcome = "indeterminate"
 )
 
+// AllOutcomes is every outcome Call can return. It exists so that anything
+// mapping outcomes onto another vocabulary — a persisted status, a summary
+// column — can be checked for completeness by a test rather than by reading.
+// A fifth outcome added without a mapping fails closed somewhere; the point is
+// that it fails in CI instead.
+var AllOutcomes = []Outcome{
+	OutcomeSucceeded, OutcomeRejected, OutcomeUnreached, OutcomeIndeterminate,
+}
+
 // Terminal reports whether the outcome settles the call. Indeterminate is not
 // terminal: it is the unresolved surface, awaiting a human.
 func (o Outcome) Terminal() bool { return o == OutcomeSucceeded || o == OutcomeRejected }

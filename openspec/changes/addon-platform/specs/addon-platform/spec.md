@@ -381,7 +381,7 @@ The backend MUST NOT mutate an add-on target without first durably recording the
 
 ### Requirement: Secret-bearing operations MUST leave a pre-dispatch record without leaving the secret
 
-An operation declaring `secret_params` MUST NOT be queued in the outbox, because outbox rows are durable, retried, and retained for audit. It MUST still leave a trace before the call: the backend MUST commit an operation record — operation id, target, actor, subject, operation name, non-terminal status — before dispatching, carrying no value for any declared secret parameter, and MUST write the terminal status after the response. The operation id MUST be sent to the add-on and used by it to deduplicate, so a re-submission cannot double-apply.
+An operation declaring `secret_params` MUST NOT be queued in the outbox, because outbox rows are durable, retried, and retained for audit. It MUST still leave a trace before the call: the backend MUST commit an operation record — operation id, target, actor, subject, operation name, non-terminal status — before dispatching, carrying no value for any declared secret parameter, and MUST write the terminal status after the response. The record table MUST NOT contain any column able to hold a parameter value, including free-text or JSON columns intended for diagnostics: a column shaped to hold arbitrary content is where an add-on's echoed error payload — and with it a submitted secret — comes to rest, and a convention not to write one there is the part that fails. The record's status MUST be a closed vocabulary, and a terminal status MUST be writable only over a non-terminal one, so that a duplicated settle cannot resolve an unresolved operation on no evidence. The operation id MUST be sent to the add-on and used by it to deduplicate, so a re-submission cannot double-apply.
 
 #### Scenario: Record is committed before the add-on is called
 
@@ -461,6 +461,21 @@ A live state fingerprint cannot be obtained from an unreachable target, so plann
 - **WHEN** a change is held under a provisional plan
 - **THEN** the operator surface MUST present it as recorded and awaiting the target
 - **AND** MUST NOT count it as applied
+
+### Requirement: Unresolved operations MUST be counted apart from both outcomes
+
+An operation whose result the backend does not know MUST be presented and counted as unresolved, never folded into either succeeded or failed. Counting it as succeeded asserts something nobody knows; counting it as failed tells a member to try again against a target that may already hold their new credential. A record awaiting an answer MUST NOT be surfaced as unresolved until it can no longer be in flight, since a dispatch in progress and a dispatch whose backend died are indistinguishable by status alone.
+
+#### Scenario: An unresolved operation is in neither total
+
+- **WHEN** an operation record is non-terminal or records a lost answer
+- **THEN** the summary MUST report it as unresolved
+- **AND** MUST exclude it from both the succeeded and the failed counts
+
+#### Scenario: An in-flight dispatch is not yet an open question
+
+- **WHEN** an operation was dispatched moments ago and has not yet answered
+- **THEN** it MUST NOT appear on the unresolved surface until it has outlived the dispatch timeout
 
 ### Requirement: An unreachable add-on MUST fail open with queued accounting
 
