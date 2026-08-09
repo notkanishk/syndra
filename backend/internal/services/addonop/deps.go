@@ -15,5 +15,8 @@ var (
 	operationRecord  = addons.OperationRecord
 	callAddon        = addons.Call
 	beginOperation   = db.BeginAddonOperation
-	settleOperation  = db.SettleAddonOperation
+	// The rate limit counts the record table itself, so the thing bounded and
+	// the thing counted cannot drift apart.
+	countRecentOperations = db.CountRecentAddonOperations
+	settleOperation       = db.SettleAddonOperation
 )

@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -657,6 +660,87 @@ func TestTheCohortGuardCoversEverySurface(t *testing.T) {
 		}
 		if strings.Contains(string(b), "cohortLimit()") {
 			t.Errorf("%s must not enforce the cohort limit itself", f)
+		}
+	}
+}
+
+// 2.47/2.48 — the paths a declared secret escapes through in practice are not
+// the stores. They are request-logging middleware that dumps bodies, error
+// responses that echo the offending request, and panic captures (design §17).
+//
+// Asserted against a real panic through the real router, with a sentinel in the
+// body: the standard library's own recovery prints the request it was serving,
+// and this replaces it precisely so that stops happening.
+func TestAPanicNeitherEchoesTheRequestNorLogsIt(t *testing.T) {
+	const sentinel = "hunter2-correct-horse"
+
+	var logged bytes.Buffer
+	prevOut, prevFlags := log.Writer(), log.Flags()
+	log.SetOutput(&logged)
+	t.Cleanup(func() { log.SetOutput(prevOut); log.SetFlags(prevFlags) })
+
+	panicking := withPanicGuard(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("deliberate")
+	}))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/anything",
+		strings.NewReader(`{"password":"`+sentinel+`"}`))
+	panicking.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("a panic must become a 500 rather than a closed connection, got %d", rr.Code)
+	}
+	if strings.Contains(rr.Body.String(), sentinel) {
+		t.Error("the response must not echo the request that caused it")
+	}
+	if strings.Contains(logged.String(), sentinel) {
+		t.Error("the log line must not carry the body: the body is where a member's credential is")
+	}
+	// It must still be a usable diagnostic, or somebody will add one that is.
+	if !strings.Contains(logged.String(), "/api/v1/anything") || !strings.Contains(logged.String(), "deliberate") {
+		t.Errorf("the log must name the path and the panic: %q", logged.String())
+	}
+}
+
+// The guard is on the router itself, not on individual handlers. One handler
+// wrapped and the next one not is the arrangement that fails on the route
+// somebody adds in a hurry.
+func TestThePanicGuardWrapsEveryRoute(t *testing.T) {
+	src, err := os.ReadFile("router.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`return withPanicGuard\(`).Match(src) {
+		t.Fatal("NewRouter must return the mux wrapped in withPanicGuard")
+	}
+}
+
+// A request body must never reach a log line. There is no request-logging
+// middleware today, and this exists so that the day somebody adds one for
+// debugging, it fails here rather than in production.
+func TestNoHandlerLogsARequestBody(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// String literals are stripped first, so a log MESSAGE mentioning the word
+	// "payload" is not mistaken for a log ARGUMENT carrying one. A guard that
+	// fires on prose gets weakened until it fires on nothing.
+	literal := regexp.MustCompile(`"(\\.|[^"\\])*"`)
+	// Reading a body into a variable is ordinary; logging one is not. The
+	// identifiers below are the shapes that actually appear when somebody does.
+	forbidden := regexp.MustCompile(`log\.(Printf|Println|Print)\([^)]*\b(r\.Body|body|payload|reqBody|rawBody)\b`)
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m := forbidden.FindString(literal.ReplaceAllString(string(src), `""`)); m != "" {
+			t.Errorf("%s logs a request body (%q) — a submitted credential is a request body", f, m)
 		}
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
@@ -30,6 +31,13 @@ type harness struct {
 	beginErr error
 	begun    []db.AddonOperationParams
 
+	// recentOps is what the rate limiter sees. Zero by default: every test in
+	// this file is about something else, and a limiter that fired would make
+	// them all pass for the wrong reason.
+	recentOps    int
+	recentOpsErr error
+	rateQueries  []string
+
 	verified []string
 
 	resp      addons.CallResponse
@@ -50,11 +58,20 @@ func newHarness(t *testing.T) *harness {
 			SecretParams: []string{"password"},
 			Params:       []addons.ParamSpec{{Name: "password", Type: "string", Required: true, Secret: true}},
 		},
-		beginID: "rec-0001",
-		resp:    addons.CallResponse{Outcome: addons.OutcomeSucceeded, Status: 200},
+		recentOps: 0,
+		beginID:   "rec-0001",
+		resp:      addons.CallResponse{Outcome: addons.OutcomeSucceeded, Status: 200},
 	}
 
 	sr, sv, sn, sb, sc, ss := resolveOperation, validateParams, operationRecord, beginOperation, callAddon, settleOperation
+	scr := countRecentOperations
+	countRecentOperations = func(_ context.Context, subject, operation string, _ time.Duration) (int, error) {
+		h.record("rate")
+		h.mu.Lock()
+		h.rateQueries = append(h.rateQueries, subject+"|"+operation)
+		h.mu.Unlock()
+		return h.recentOps, h.recentOpsErr
+	}
 	resolveOperation = func(target, id string) (addons.EffectiveOperation, error) {
 		h.record("resolve")
 		return h.op, h.resolveErr
@@ -98,6 +115,7 @@ func newHarness(t *testing.T) *harness {
 	}
 	t.Cleanup(func() {
 		resolveOperation, validateParams, operationRecord, beginOperation, callAddon, settleOperation = sr, sv, sn, sb, sc, ss
+		countRecentOperations = scr
 	})
 	return h
 }
@@ -135,7 +153,7 @@ func TestTheRecordIsCommittedBeforeTheCall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
-	if got := h.order(); got != "resolve -> validate -> begin -> mint -> call -> settle:succeeded" {
+	if got := h.order(); got != "resolve -> validate -> rate -> begin -> mint -> call -> settle:succeeded" {
 		t.Fatalf("protocol order = %q", got)
 	}
 	if res.OperationID != "rec-0001" {
@@ -449,5 +467,171 @@ func TestAnUnclaimableRecordSettlesAsUnreached(t *testing.T) {
 	}
 	if h.settled[0] != "rec-0001="+db.AddonOpUnreached {
 		t.Fatalf("settled as %v", h.settled)
+	}
+}
+
+// 2.43/2.44 — scope decides who may invoke an operation, and it must also
+// decide on whom.
+//
+// Without this, "scoped to member" means only "a member may call this", and
+// `password.set` with somebody else's subject id resets their storage
+// credential. The check is here rather than in the manifest (the least trusted
+// input in the system) or the policy table (which describes operations, not
+// requests): "who is this call about" is a property of the request and exists
+// nowhere else.
+func TestAMemberScopedOperationActsOnlyOnTheActor(t *testing.T) {
+	// Each case asserts the REASON as well as the refusal. A blank identifier
+	// that falls through to the mismatch comparison is refused by accident —
+	// correct today, and silently wrong the moment somebody makes the
+	// comparison tolerant of an empty value. The distinct reasons are also what
+	// an operator reading the log needs: "nobody was authenticated" and "you
+	// named somebody else" are different incidents.
+	for _, tc := range []struct {
+		name           string
+		actor, subject string
+		reason         string
+		why            string
+	}{
+		{"another member's subject", "user-42", "user-99", "may only act on the person invoking it",
+			"this is the whole attack: one member resetting another's credential"},
+		{"no authenticated actor", "", "user-99", "no authenticated actor",
+			"an unauthenticated caller must not be able to name anybody"},
+		{"no subject", "user-42", "", "no subject",
+			"two absences matching is not a match"},
+		{"neither", "", "", "no authenticated actor",
+			"and least of all when both are absent"},
+		{"an actor that is only whitespace", "   ", "user-99", "no authenticated actor",
+			"a blank is a blank however it is spelled"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			req := passwordSet()
+			req.ActorID, req.SubjectID = tc.actor, tc.subject
+
+			res, err := Dispatch(context.Background(), req)
+			if !errors.Is(err, ErrSubjectNotActor) {
+				t.Fatalf("want ErrSubjectNotActor, got %v — %s", err, tc.why)
+			}
+			if !strings.Contains(err.Error(), tc.reason) {
+				t.Errorf("want the refusal to say %q, got %q", tc.reason, err.Error())
+			}
+			// Refused before the record and therefore before the network: an
+			// illegitimate call must leave no row on an operator's surface and
+			// must certainly not reach the add-on.
+			if h.order() != "resolve" {
+				t.Errorf("nothing may happen after the refusal, got %q", h.order())
+			}
+			if res.OperationID != "" || len(h.calls) != 0 || len(h.begun) != 0 {
+				t.Error("a refused call must record nothing and send nothing")
+			}
+			// Neither identifier is echoed: a refusal is not a lookup service
+			// for which subject ids exist.
+			for _, id := range []string{tc.actor, tc.subject} {
+				if id != "" && strings.Contains(err.Error(), id) {
+					t.Errorf("the refusal must not name %q", id)
+				}
+			}
+		})
+	}
+}
+
+// An admin-scoped operation is about somebody else by definition — that is what
+// admin scope means — so the binding must not reach it.
+func TestAnAdminScopedOperationMayNameAnotherSubject(t *testing.T) {
+	h := newHarness(t)
+	h.op.Scope = addons.ScopeAdmin
+	req := passwordSet()
+	req.SubjectID = "user-99"
+
+	if _, err := Dispatch(context.Background(), req); err != nil {
+		t.Fatalf("an admin-scoped operation must be able to act on another subject: %v", err)
+	}
+	if len(h.calls) != 1 || h.calls[0].Subject != "user-99" {
+		t.Fatalf("the named subject must reach the add-on: %+v", h.calls)
+	}
+}
+
+// A manifest cannot defeat the check by declaring no subject constraint, and it
+// cannot reach it by declaring itself member-scoped either: the effective scope
+// is policy ∩ manifest with policy winning, so a manifest can only narrow.
+func TestAManifestCannotWidenOrEvadeTheSubjectBinding(t *testing.T) {
+	// Policy says admin; a manifest claiming member resolves to admin, which is
+	// asserted in the addons package. What is asserted here is that the binding
+	// reads the RESOLVED scope rather than anything a manifest supplies.
+	resolved := addons.ResolveOperation
+	_ = resolved
+
+	h := newHarness(t)
+	h.op.Scope = addons.ScopeMember
+	req := passwordSet()
+	req.SubjectID = "user-99"
+	if _, err := Dispatch(context.Background(), req); !errors.Is(err, ErrSubjectNotActor) {
+		t.Fatalf("the binding must apply wherever the resolved scope is member: %v", err)
+	}
+}
+
+// 2.49/2.50 — a member can drive the credential path at will, and it terminates
+// in a single rate-limited session the add-on shares with every other
+// operation. Repeated resets are a cheap way to wedge the target for everybody.
+func TestAMemberIsRateLimitedPerSubjectBeforeAnythingIsSent(t *testing.T) {
+	t.Setenv("ADDON_MEMBER_OP_LIMIT", "3")
+	h := newHarness(t)
+	h.recentOps = 3
+
+	res, err := Dispatch(context.Background(), passwordSet())
+	if !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("want ErrRateLimited, got %v", err)
+	}
+	if res.OperationID != "" || len(h.begun) != 0 || len(h.calls) != 0 {
+		t.Fatal("the refusal must come before the record and therefore before the network")
+	}
+	// Per subject and per operation. A global counter would let one member's
+	// retries lock out everybody else's first attempt.
+	if len(h.rateQueries) != 1 || h.rateQueries[0] != "user-42|password.set" {
+		t.Errorf("the count must be scoped to this subject and this operation: %v", h.rateQueries)
+	}
+}
+
+func TestOrdinaryUseDoesNotReachTheLimit(t *testing.T) {
+	t.Setenv("ADDON_MEMBER_OP_LIMIT", "3")
+	h := newHarness(t)
+	h.recentOps = 2
+
+	if _, err := Dispatch(context.Background(), passwordSet()); err != nil {
+		t.Fatalf("below the limit must dispatch: %v", err)
+	}
+	if len(h.calls) != 1 {
+		t.Fatal("the call must be sent")
+	}
+}
+
+// Fail closed. The limit exists because the path terminates in a shared,
+// rate-limited session on the target; letting it through because the counter
+// could not be read spends exactly the resource the limit protects.
+func TestAnUnreadableCounterRefusesRatherThanWavesThrough(t *testing.T) {
+	h := newHarness(t)
+	h.recentOpsErr = errors.New("db down")
+
+	if _, err := Dispatch(context.Background(), passwordSet()); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("want ErrRateLimited, got %v", err)
+	}
+	if len(h.calls) != 0 {
+		t.Fatal("nothing may be sent when the budget is unknown")
+	}
+}
+
+// An operator path is behind operator authentication and is rate-limited by
+// there being an operator on the other end. Counting it would spend a database
+// read per admin operation to enforce a limit nobody can reach.
+func TestAnAdminScopedOperationIsNotCounted(t *testing.T) {
+	h := newHarness(t)
+	h.op.Scope = addons.ScopeAdmin
+	h.recentOps = 9999
+
+	if _, err := Dispatch(context.Background(), passwordSet()); err != nil {
+		t.Fatalf("an admin operation must not be rate-limited per subject: %v", err)
+	}
+	if len(h.rateQueries) != 0 {
+		t.Errorf("and must not even ask: %v", h.rateQueries)
 	}
 }

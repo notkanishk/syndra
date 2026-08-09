@@ -303,6 +303,8 @@ func TestFailureModesMapToTheirOutcome(t *testing.T) {
 		{"request timeout", 408, OutcomeIndeterminate, false, false, "may have arrived"},
 		{"server error", 500, OutcomeIndeterminate, false, false, "may have acted before failing"},
 		{"bad gateway", 502, OutcomeIndeterminate, false, false, "may have acted"},
+		// No Retry-After: an add-on that fell over may have got halfway.
+		{"service unavailable", 503, OutcomeIndeterminate, false, false, "may have acted before failing"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -900,4 +902,97 @@ func TestARedirectIsRefusedAndNeverReplaysTheBody(t *testing.T) {
 			t.Fatal("the capability read followed a redirect to another host")
 		}
 	})
+}
+
+// 2.41/2.42 — a lifecycle refusal accounts as queued, never as failed.
+//
+// A refusal is a terminal-looking response, and treating it as one would mean a
+// deliberate maintenance window converted every pending change into a failed
+// row — manufacturing exactly the false finality the queued accounting exists
+// to prevent, during the window when an operator is least able to notice.
+func TestALifecycleRefusalIsQueuedAndLeavesTheTargetHealthy(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		status     int
+		retryAfter string
+		want       Outcome
+		lifecycle  bool
+		why        string
+	}{
+		{"draining", http.StatusServiceUnavailable, "30", OutcomeUnreached, true,
+			"the add-on declined before doing anything, so the row stays queued and resumes"},
+		{"an add-on that fell over", http.StatusServiceUnavailable, "", OutcomeIndeterminate, false,
+			"a 5xx with no Retry-After is a service that may have got halfway"},
+		{"an ordinary refusal", http.StatusBadRequest, "", OutcomeRejected, false,
+			"a 4xx is a healthy add-on saying no, and it is terminal"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := classifyStatus(tc.status, tc.lifecycle); got != tc.want {
+				t.Errorf("classify(%d, retry-after=%q) = %q, want %q — %s", tc.status, tc.retryAfter, got, tc.want, tc.why)
+			}
+		})
+	}
+}
+
+// The header, not just the classifier. Asserted end to end because that is
+// where the distinction is actually made: a unit test on classifyStatus passes
+// a bool somebody chose, and the bug worth catching is the transport deciding
+// that bool from nothing.
+func TestOnlyA503ThatSaysRetryAfterIsALifecycleRefusal(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		retryAfter string
+		want       Outcome
+		lifecycle  bool
+		why        string
+	}{
+		{"draining", "30", OutcomeUnreached, true,
+			"a deliberate refusal declines before doing anything, so the row stays queued"},
+		{"fell over", "", OutcomeIndeterminate, false,
+			"a 5xx with nothing to say is a service that may have got halfway"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.retryAfter != "" {
+					w.Header().Set("Retry-After", tc.retryAfter)
+				}
+				w.WriteHeader(http.StatusServiceUnavailable)
+			}))
+			defer srv.Close()
+			signedAddon(t, srv.URL, []byte("k"))
+			withBreaker(t, 1000, time.Minute)
+
+			resp := Call(context.Background(), passwordSet(nil))
+			if resp.Outcome != tc.want {
+				t.Errorf("outcome = %s, want %s — %s", resp.Outcome, tc.want, tc.why)
+			}
+			if resp.LifecycleRefusal != tc.lifecycle {
+				t.Errorf("lifecycle = %t, want %t", resp.LifecycleRefusal, tc.lifecycle)
+			}
+			if resp.Outcome.Retryable() != tc.lifecycle {
+				t.Errorf("only a lifecycle refusal is safe to send again: retryable=%t", resp.Outcome.Retryable())
+			}
+		})
+	}
+}
+
+// The breaker is a health signal. A draining add-on is healthy and answering,
+// and tripping on a maintenance window would report it as unreachable —
+// replacing a state an operator set on purpose with one they did not.
+func TestTheBreakerIgnoresALifecycleRefusal(t *testing.T) {
+	b := &breaker{}
+	now := time.Now()
+	for range breakerThreshold + 2 {
+		b.record(now, CallResponse{Outcome: OutcomeUnreached, Status: 503, LifecycleRefusal: true})
+	}
+	if !b.allow(now) {
+		t.Fatal("a maintenance window must not take the target offline for everybody")
+	}
+	// And a real outage still does.
+	for range breakerThreshold {
+		b.record(now, CallResponse{Outcome: OutcomeUnreached})
+	}
+	if b.allow(now) {
+		t.Fatal("a genuine outage must still open the circuit")
+	}
 }

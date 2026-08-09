@@ -117,6 +117,16 @@ type CallResponse struct {
 	Status  int
 	Body    []byte
 	Err     error
+	// LifecycleRefusal is the add-on saying it is draining or read-only and
+	// declined to act — not that it is unwell (design §18).
+	//
+	// Carried apart from the outcome because the two answer different
+	// questions. The outcome says what may have happened to the work: nothing,
+	// so the row stays queued. This says whether the target is healthy: it is,
+	// and tripping the breaker on a maintenance window would report an add-on
+	// that is answering as unreachable, hiding the state an operator set on
+	// purpose behind one they did not.
+	LifecycleRefusal bool
 }
 
 // callEnvelope is the wire body. Everything that binds the call to an approval
@@ -204,7 +214,7 @@ func Call(ctx context.Context, req CallRequest) CallResponse {
 
 	url := a.Registration.BaseURL + "/operations/" + req.Operation
 	resp := doAuthenticated(ctx, cred, http.MethodPost, url, body, callTimeout)
-	a.br.record(timeNow(), resp.Outcome)
+	a.br.record(timeNow(), resp)
 
 	if resp.Outcome != OutcomeSucceeded {
 		// Neither the request body nor the response body is logged. The request
@@ -265,7 +275,14 @@ func doAuthenticated(ctx context.Context, cred *credential, method, url string, 
 		respBody = respBody[:maxResponseBytes]
 	}
 
-	out := CallResponse{Status: httpResp.StatusCode, Body: respBody, Outcome: classifyStatus(httpResp.StatusCode)}
+	lifecycle := httpResp.StatusCode == http.StatusServiceUnavailable &&
+		httpResp.Header.Get("Retry-After") != ""
+	out := CallResponse{
+		Status:           httpResp.StatusCode,
+		Body:             respBody,
+		Outcome:          classifyStatus(httpResp.StatusCode, lifecycle),
+		LifecycleRefusal: lifecycle,
+	}
 	switch {
 	case readErr != nil && out.Outcome == OutcomeSucceeded:
 		// A 2xx whose body was cut off says the add-on acted but not what it
@@ -307,7 +324,7 @@ func doAuthenticated(ctx context.Context, cred *credential, method, url string, 
 //     see newAddonClient. The registered target did not act, and pointing the
 //     backend elsewhere will not make it act, so this is deterministic.
 //   - other 4xx: it validated the call and refused. Deterministic.
-func classifyStatus(code int) Outcome {
+func classifyStatus(code int, retryAfter bool) Outcome {
 	switch {
 	case code >= 200 && code < 300:
 		return OutcomeSucceeded
@@ -315,6 +332,21 @@ func classifyStatus(code int) Outcome {
 		return OutcomeUnreached
 	case code == http.StatusRequestTimeout:
 		return OutcomeIndeterminate
+	// A lifecycle refusal: the add-on is draining or read-only and declined to
+	// act (design §18). It is the standard way an HTTP service says "not now,
+	// come back", and it is exactly what the accounting needs — nothing was
+	// applied, the row stays queued, and it resumes when the state returns to
+	// active.
+	//
+	// Distinguished from an ordinary 503 by `Retry-After`, because the two mean
+	// opposite things about what may have happened: a deliberate refusal
+	// declines before doing anything, while an add-on that fell over mid-apply
+	// answers 5xx with no idea how far it got. Treating a maintenance window as
+	// indeterminate would manufacture exactly the false finality the queued
+	// accounting exists to prevent, and at the moment an operator is least able
+	// to notice.
+	case code == http.StatusServiceUnavailable && retryAfter:
+		return OutcomeUnreached
 	case code >= 500:
 		return OutcomeIndeterminate
 	default:
@@ -368,10 +400,14 @@ func (b *breaker) allow(now time.Time) bool {
 // A rejection does not count. A 4xx is a healthy add-on refusing a specific
 // request, and letting one badly-formed operation open the breaker would turn a
 // single operator's mistake into an outage for the whole target.
-func (b *breaker) record(now time.Time, o Outcome) {
+func (b *breaker) record(now time.Time, resp CallResponse) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if o == OutcomeSucceeded || o == OutcomeRejected {
+	// Healthy answers, all three of them. A 4xx is a healthy add-on saying no;
+	// a lifecycle refusal is a healthy add-on saying not now, and counting it
+	// as a failure would take a target offline for everybody because somebody
+	// put it into a maintenance window on purpose.
+	if resp.Outcome == OutcomeSucceeded || resp.Outcome == OutcomeRejected || resp.LifecycleRefusal {
 		b.failures, b.openUntil = 0, time.Time{}
 		return
 	}

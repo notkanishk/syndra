@@ -246,7 +246,7 @@ func TestARefusedCallDoesNotConsumeTheRecord(t *testing.T) {
 	claims := withClaimableRecord(t, openRow(), nil)
 
 	a, _ := Get("truenas")
-	a.br.record(timeNow(), OutcomeIndeterminate)
+	a.br.record(timeNow(), CallResponse{Outcome: OutcomeIndeterminate})
 	if !a.CircuitOpen() {
 		t.Fatal("setup: the circuit should be open")
 	}

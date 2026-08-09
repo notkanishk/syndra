@@ -3,9 +3,11 @@ package handlers
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"runtime/debug"
 	"strings"
 )
 
@@ -232,7 +234,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/action/inject",
 		withCORS(withZitadelActionSignature("ZITADEL_ACTION_SIGNING_KEY", HandleActionInject)))
 
-	return withMaxBody(withSecurityHeaders(mux))
+	return withPanicGuard(withMaxBody(withSecurityHeaders(mux)))
 }
 
 // withUserAuth is the primary authorization middleware for all admin API routes.
@@ -374,6 +376,46 @@ func withCORS(next http.HandlerFunc) http.HandlerFunc {
 
 		next(w, r)
 	}
+}
+
+// withPanicGuard turns a panicking handler into a 500 that says nothing about
+// the request that caused it.
+//
+// Two reasons, and the second is the one this change owes. A panic in a handler
+// otherwise closes the connection with no response, which a client cannot tell
+// from a network fault. And the standard library's own recovery prints the
+// request that was being served — a panic capture is one of the paths a
+// declared secret escapes through in practice, alongside request-logging
+// middleware and error responses that echo the offending payload (design §17).
+//
+// So the log line here is deliberately narrow: method, path, the panic value
+// and the stack. Never the body, never the headers, never the parameters. The
+// body is where a member's credential is, and a diagnostic that has to be
+// redacted before it is safe is a diagnostic somebody will forget to redact.
+//
+// The client is told nothing beyond "this failed", for the same reason: an
+// error response that echoes the offending request is the second path on that
+// list.
+func withPanicGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			rec := recover()
+			if rec == nil {
+				return
+			}
+			// The documented way for a handler to abandon a response, and not
+			// a bug. Asserted rather than compared with errors.Is, which would
+			// itself panic on a non-error value — inside a recovery, that turns
+			// one handler's bug into a crash.
+			if err, ok := rec.(error); ok && errors.Is(err, http.ErrAbortHandler) {
+				panic(rec)
+			}
+			log.Printf("[PANIC] %s %s: %v\n%s", r.Method, r.URL.Path, rec, debug.Stack())
+			jsonErrorResponse(w, http.StatusInternalServerError, "INTERNAL_ERROR",
+				"Something went wrong handling that request.")
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
 
 // withSecurityHeaders adds standard security response headers to all responses.

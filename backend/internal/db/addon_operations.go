@@ -266,3 +266,32 @@ func CountAddonOperations(ctx context.Context, target string) (AddonOperationCou
 	}
 	return c, nil
 }
+
+// ErrSubjectRateLimited refuses a member driving a secret-bearing operation
+// harder than any honest member would.
+var ErrSubjectRateLimited = errors.New("db: too many recent operations for this subject")
+
+// CountRecentAddonOperations counts a subject's records for one operation
+// inside a window.
+//
+// The counter is the record table itself rather than a new store, and that is
+// not only frugality: these rows already are the durable evidence that a
+// secret-bearing call may have happened, so the thing being limited and the
+// thing being counted cannot drift apart. A separate counter could be lost on a
+// restart while the calls it was bounding stayed on the record.
+//
+// Only recorded attempts count. A call refused before the record — an unknown
+// operation, a member naming somebody else, a parameter that failed validation
+// — never reached the target and never cost it anything, so counting it would
+// let one malformed client lock a member out of a path that was working.
+func CountRecentAddonOperations(ctx context.Context, subjectID, operation string, window time.Duration) (int, error) {
+	const q = `
+		SELECT COUNT(*) FROM addon_operations
+		 WHERE subject_id = $1 AND operation = $2
+		   AND created_at > NOW() - ($3 || ' seconds')::interval`
+	var n int
+	if err := PG.QueryRow(ctx, q, subjectID, operation, int64(window/time.Second)).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count recent addon operations: %w", err)
+	}
+	return n, nil
+}
