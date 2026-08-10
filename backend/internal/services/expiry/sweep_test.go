@@ -18,12 +18,10 @@ func resetSweepDeps(t *testing.T) {
 	t.Helper()
 	origGet := svcGetExpiredDirectGrants
 	origExpire := svcExpireDirectGrant
-	origEmit := svcEmitIntentFromScheduler
 	origCache := cacheInvalidateUser
 	t.Cleanup(func() {
 		svcGetExpiredDirectGrants = origGet
 		svcExpireDirectGrant = origExpire
-		svcEmitIntentFromScheduler = origEmit
 		cacheInvalidateUser = origCache
 	})
 }
@@ -34,16 +32,18 @@ type recorder struct {
 	// expiredCalls records "user|grant|project|role" in call order — the whole
 	// argument list, because a sweep that expires the right grant against the
 	// wrong user's holdings is the bug this ordering exists to prevent.
-	expiredCalls   []string
-	emitted        []string // grantIDs in order of emit call
-	emitActions    map[string]string
+	expiredCalls []string
+	// succeeded records the grant ids whose expiry committed, in order. It used
+	// to record the LLDAP intent emitted after one; the bridge is gone, and what
+	// it was ever standing in for was "this grant got all the way through".
+	succeeded      []string
 	invalidatedFor []string // userIDs in order
 	// outcome decides, per grant id, what expiring it does.
 	outcome map[string]error
 }
 
 func newRecorder() *recorder {
-	return &recorder{emitActions: map[string]string{}, outcome: map[string]error{}}
+	return &recorder{outcome: map[string]error{}}
 }
 
 func (r *recorder) install() {
@@ -54,18 +54,12 @@ func (r *recorder) install() {
 		if err := r.outcome[grantID]; err != nil {
 			return services.ExpiredGrantRevocation{}, err
 		}
+		r.succeeded = append(r.succeeded, grantID)
 		return services.ExpiredGrantRevocation{
 			ProjectID: projectID, RoleKey: role,
 			OutboxIDs: []string{"ob-" + grantID},
 			Revoked:   []string{projectID + "/" + role},
 		}, nil
-	}
-	svcEmitIntentFromScheduler = func(_ context.Context, uid, action, proj, role, grantID string) error {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		r.emitted = append(r.emitted, grantID)
-		r.emitActions[grantID] = action
-		return nil
 	}
 	cacheInvalidateUser = func(_ context.Context, uid string) error {
 		r.mu.Lock()
@@ -98,7 +92,7 @@ func TestSweep_NoExpired_NoOp(t *testing.T) {
 
 	Sweep(context.Background(), 100)
 
-	if len(r.expiredCalls) != 0 || len(r.emitted) != 0 || len(r.invalidatedFor) != 0 {
+	if len(r.expiredCalls) != 0 || len(r.succeeded) != 0 || len(r.invalidatedFor) != 0 {
 		t.Fatalf("nothing expired; nothing may happen: %+v", r)
 	}
 }
@@ -114,11 +108,8 @@ func TestSweep_SingleExpired_FullFlow(t *testing.T) {
 	if len(r.expiredCalls) != 1 || r.expiredCalls[0] != "u1|g1|proj-a|role-x" {
 		t.Fatalf("the grant must be expired with its own identifiers, got %v", r.expiredCalls)
 	}
-	if len(r.emitted) != 1 || r.emitted[0] != "g1" {
-		t.Fatalf("the provisioning intent must name the grant, got %v", r.emitted)
-	}
-	if r.emitActions["g1"] != "remove" {
-		t.Errorf("intent action = %q, want remove", r.emitActions["g1"])
+	if len(r.succeeded) != 1 || r.succeeded[0] != "g1" {
+		t.Fatalf("the expiry must name the grant, got %v", r.succeeded)
 	}
 	if len(r.invalidatedFor) != 1 || r.invalidatedFor[0] != "u1" {
 		t.Fatalf("the user's cache must be invalidated once, got %v", r.invalidatedFor)
@@ -138,8 +129,8 @@ func TestSweep_GrantRenewedMidSweep_NoDownstreamWork(t *testing.T) {
 
 	Sweep(context.Background(), 100)
 
-	if len(r.emitted) != 0 {
-		t.Fatalf("a renewed grant must emit no removal intent, got %v", r.emitted)
+	if len(r.succeeded) != 0 {
+		t.Fatalf("a renewed grant must not be expired, got %v", r.succeeded)
 	}
 	// The cache is still invalidated: it is per-user and cheap, and a rebuild
 	// that finds nothing changed costs nothing. What must not happen is a
@@ -167,8 +158,8 @@ func TestSweep_PartialRenewal_OnlyTheLapsedProgress(t *testing.T) {
 	if len(r.expiredCalls) != 3 {
 		t.Fatalf("every candidate must be attempted, got %v", r.expiredCalls)
 	}
-	if len(r.emitted) != 2 || contains(r.emitted, "g2") {
-		t.Fatalf("only the still-lapsed grants progress, got %v", r.emitted)
+	if len(r.succeeded) != 2 || contains(r.succeeded, "g2") {
+		t.Fatalf("only the still-lapsed grants progress, got %v", r.succeeded)
 	}
 }
 
@@ -185,8 +176,8 @@ func TestSweep_OneFailure_DoesNotStopTheRest(t *testing.T) {
 
 	Sweep(context.Background(), 100)
 
-	if len(r.emitted) != 1 || r.emitted[0] != "g2" {
-		t.Fatalf("the healthy grant must still expire, got %v", r.emitted)
+	if len(r.succeeded) != 1 || r.succeeded[0] != "g2" {
+		t.Fatalf("the healthy grant must still expire, got %v", r.succeeded)
 	}
 }
 
@@ -200,21 +191,20 @@ func TestSweep_ExpiryFails_NoSideEffects(t *testing.T) {
 
 	Sweep(context.Background(), 100)
 
-	if len(r.emitted) != 0 {
-		t.Fatalf("a failed expiry must emit no intent, got %v", r.emitted)
+	if len(r.succeeded) != 0 {
+		t.Fatalf("a failed expiry must not report the grant as gone, got %v", r.succeeded)
 	}
 }
 
-// The ledger delete, audit row and revocations commit together. The LLDAP
-// intent is a different system's queue and cannot join that transaction, so its
-// failure leaves a group membership behind — not an access decision half-made.
-func TestSweep_IntentFailsAfterExpiry_CacheStillInvalidated(t *testing.T) {
+// The ledger delete, the audit row, the revocations and any target convergence
+// the lapsed role reached now commit together — there is no second queue left
+// outside that transaction, which is what the LLDAP intent used to be and what
+// this test used to be about. What survives is the property that outlived it:
+// a committed expiry invalidates the cache.
+func TestSweep_ACommittedExpiryInvalidatesTheCache(t *testing.T) {
 	resetSweepDeps(t)
 	r := newRecorder()
 	r.install()
-	svcEmitIntentFromScheduler = func(context.Context, string, string, string, string, string) error {
-		return errors.New("sync service down")
-	}
 	fetchReturns(mkGrant("g1", "u1", "proj-a", "role-x"))
 
 	Sweep(context.Background(), 100)
@@ -350,8 +340,8 @@ func TestSweep_IntentIdempotencyAcrossReGrants(t *testing.T) {
 	fetchReturns(mkGrant("g2", "u1", "proj-a", "role-x")) // re-granted, new row
 	Sweep(context.Background(), 100)
 
-	if len(r.emitted) != 2 || r.emitted[0] == r.emitted[1] {
-		t.Fatalf("each sweep must emit against its own grant id, got %v", r.emitted)
+	if len(r.succeeded) != 2 || r.succeeded[0] == r.succeeded[1] {
+		t.Fatalf("each sweep must act on its own grant id, got %v", r.succeeded)
 	}
 }
 

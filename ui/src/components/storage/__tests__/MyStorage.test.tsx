@@ -116,3 +116,26 @@ describe("a member's storage view", () => {
     expect(screen.getByText(/not answering right now/i)).toBeInTheDocument();
   });
 });
+
+// 11.9 — a member with pre-cutover metadata renders as needing enrolment, not
+// as enrolled. Their hash was dropped with the vault it lived in, so telling
+// them they have a password would send them to a connection that fails.
+describe("the re-enrolment cutover", () => {
+  it("tells somebody who enrolled before the change that they must set a new one", () => {
+    state.targets = [
+      view({ credential: { set: false, needs_re_enrolment: true } }),
+    ];
+    renderStorage();
+
+    expect(screen.getByText(/no longer works/i)).toBeInTheDocument();
+    // The form says "set", not "change": they have nothing to change.
+    expect(screen.getByText("Set a storage password")).toBeInTheDocument();
+  });
+
+  it("says nothing about it to somebody who has never enrolled", () => {
+    state.targets = [view({ credential: { set: false } })];
+    renderStorage();
+
+    expect(screen.queryByText(/no longer works/i)).toBeNull();
+  });
+});

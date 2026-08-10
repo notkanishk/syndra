@@ -15,41 +15,30 @@ import (
 // Shadow Password Vault
 // ---------------------------------------------------------------------------
 
-// UpsertShadowCredential inserts or replaces a user's shadow credential.
-// On conflict (same user_id), the credential is updated and rotated_at is set.
-func UpsertShadowCredential(ctx context.Context, userID, hash, algorithm, saltParams string) (string, error) {
+// RecordCredentialSet notes that a member has set a credential on a target,
+// and when (change `addon-platform` group 11).
+//
+// It takes no credential and there is nowhere to put one. The member's password
+// is forwarded to the target by the operation that received it and is kept
+// nowhere: no API in this system accepts a hash, so the only thing a stored one
+// could ever do is leak. What survives is the metadata the member's own view
+// renders and the answer to "have they enrolled".
+func RecordCredentialSet(ctx context.Context, userID string) (string, error) {
 	var id string
 	err := PG.QueryRow(ctx, `
-		INSERT INTO shadow_credentials (user_id, credential_hash, algorithm, salt_params)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO shadow_credentials (user_id)
+		VALUES ($1)
 		ON CONFLICT (user_id) DO UPDATE SET
-			credential_hash = EXCLUDED.credential_hash,
-			algorithm       = EXCLUDED.algorithm,
-			salt_params     = EXCLUDED.salt_params,
-			updated_at      = NOW(),
-			rotated_at      = NOW()
-		RETURNING id`,
-		userID, hash, algorithm, saltParams).Scan(&id)
+			updated_at              = NOW(),
+			rotated_at              = NOW(),
+			-- Setting one through the new path is what clears the mark: the
+			-- member has now enrolled against the system that exists.
+			enrolled_before_cutover = FALSE
+		RETURNING id`, userID).Scan(&id)
 	if err != nil {
-		return "", fmt.Errorf("upsert shadow credential (user=%s): %w", userID, err)
+		return "", fmt.Errorf("record credential for %s: %w", userID, err)
 	}
 	return id, nil
-}
-
-// GetShadowCredential returns the full credential row including the hash.
-// Intended for the sync service only — never expose the hash to user-facing APIs.
-func GetShadowCredential(ctx context.Context, userID string) (models.ShadowCredential, error) {
-	var c models.ShadowCredential
-	err := PG.QueryRow(ctx, `
-		SELECT id, user_id, credential_hash, algorithm, salt_params,
-		       created_at, updated_at, rotated_at, expires_at
-		FROM shadow_credentials WHERE user_id = $1`, userID).
-		Scan(&c.ID, &c.UserID, &c.CredentialHash, &c.Algorithm, &c.SaltParams,
-			&c.CreatedAt, &c.UpdatedAt, &c.RotatedAt, &c.ExpiresAt)
-	if err != nil {
-		return c, fmt.Errorf("get shadow credential (user=%s): %w", userID, err)
-	}
-	return c, nil
 }
 
 // DeleteShadowCredential removes a user's shadow credential.
@@ -64,17 +53,19 @@ func DeleteShadowCredential(ctx context.Context, userID string) error {
 	return nil
 }
 
-// HasShadowCredential checks whether a user has a shadow credential.
-// The hash is deliberately excluded from the SELECT.
+// HasShadowCredential answers whether a member has enrolled, and when.
+//
+// There is nothing else it could answer: the table holds no credential, and
+// this SELECT names every column that survives.
 func HasShadowCredential(ctx context.Context, userID string) (models.ShadowCredentialStatus, error) {
 	var s models.ShadowCredentialStatus
-	var algorithm string
 	var createdAt, updatedAt time.Time
 	var rotatedAt, expiresAt *time.Time
+	var beforeCutover bool
 	err := PG.QueryRow(ctx, `
-		SELECT algorithm, created_at, updated_at, rotated_at, expires_at
+		SELECT created_at, updated_at, rotated_at, expires_at, enrolled_before_cutover
 		FROM shadow_credentials WHERE user_id = $1`, userID).
-		Scan(&algorithm, &createdAt, &updatedAt, &rotatedAt, &expiresAt)
+		Scan(&createdAt, &updatedAt, &rotatedAt, &expiresAt, &beforeCutover)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return models.ShadowCredentialStatus{HasCredential: false}, nil
@@ -82,12 +73,16 @@ func HasShadowCredential(ctx context.Context, userID string) (models.ShadowCrede
 		return s, fmt.Errorf("check shadow credential (user=%s): %w", userID, err)
 	}
 	return models.ShadowCredentialStatus{
-		HasCredential: true,
-		Algorithm:     algorithm,
-		CreatedAt:     &createdAt,
-		UpdatedAt:     &updatedAt,
-		RotatedAt:     rotatedAt,
-		ExpiresAt:     expiresAt,
+		// A pre-cutover row is NOT a credential the member can use. The hash it
+		// described is gone and the system it was for does not exist, so
+		// reporting it as set would tell somebody they had enrolled when the
+		// next connection attempt will fail (task 11.9).
+		HasCredential:    !beforeCutover,
+		NeedsReEnrolment: beforeCutover,
+		CreatedAt:        &createdAt,
+		UpdatedAt:        &updatedAt,
+		RotatedAt:        rotatedAt,
+		ExpiresAt:        expiresAt,
 	}, nil
 }
 

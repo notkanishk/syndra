@@ -165,18 +165,10 @@ var (
 	svcGetActiveMappingRulesRecon = db.GetActiveMappingRules
 	svcGetExclusions              = db.GetExclusions
 
-	// Provisioning intent injectable vars.
-	webhookEmitProvisioningIntent = services.EmitProvisioningIntent
-	dbGetProvisioningIntents      = db.GetProvisioningIntents
-	dbClaimPendingIntents         = db.ClaimPendingIntents
-	dbCompleteIntent              = db.CompleteIntent
-	dbFailIntent                  = db.FailIntent
-
 	// Shadow Password Vault injectable vars.
-	svcSetShadowPassword       = services.SetShadowPassword
+	svcRecordCredentialSet     = services.RecordCredentialSet
 	svcClearShadowPassword     = services.ClearShadowPassword
 	dbHasShadowCredential      = db.HasShadowCredential
-	dbGetShadowCredential      = db.GetShadowCredential
 	dbGetShadowCredentialAudit = db.GetShadowCredentialAudit
 
 	// Zitadel discovery injectable vars.

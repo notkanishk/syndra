@@ -56,8 +56,9 @@ and where physical door access and digital SSO have to agree with each other.
 - **Drift detection** — every Syndra-mediated change leaves a trace before the
   Management API call. A Zitadel-side change with no matching trace is surfaced
   for triage rather than silently absorbed.
-- **A legacy bridge** — an optional worker reflecting identity into LLDAP, for
-  the equipment that still speaks LDAP and nothing else.
+- **Target add-ons** — a separate container per system Syndra provisions into,
+  reaching it through its own management API. Syndra decides who and what; the
+  add-on decides how.
 
 ## Architecture
 
@@ -82,9 +83,10 @@ Three planes, split by how much thinking each is allowed to do:
    └──────────────────────────────────────────────────────────────┘
 
    ┌──────────────────────────────────────────────────────────────┐
-   │  BRIDGE PLANE — provisioning                                 │
-   │  Go sync worker  →  LLDAP  (Samba, UniFi, door controllers)  │
-   │  No exposed ports; acts only on verified backend intents      │
+   │  TARGET PLANE — add-ons, one container per system            │
+   │  TrueNAS SCALE (SMB storage)  ·  more as they are written     │
+   │  No exposed ports; mutually authenticated; applies approved   │
+   │  desired state and reports what it did                        │
    └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -137,7 +139,7 @@ reference; this table is only the orientation.
 | Zitadel M2M | Management API access for live orchestration |
 | Actions v2 | Signing keys for claim injection and the event listener |
 | Schedulers | Grant expiry, drift reconciliation, outbox drain |
-| Sync / LLDAP | The optional bridge worker |
+| Add-on targets | One block per target: base URL and its client certificate or signing key |
 
 Do not hand-adapt `.env.example` for production. Run
 [`scripts/gen-prod-env.sh`](scripts/gen-prod-env.sh) on the production host — it
@@ -150,7 +152,7 @@ refuses to overwrite an existing `.env`.
 |---|---|
 | [`backend/`](backend/) | Go API, policy engine, Zitadel client, migrations |
 | [`ui/`](ui/) | Next.js console (App Router, Bun) |
-| [`sync/`](sync/) | Standalone LLDAP provisioning worker |
+| [`addons/`](addons/) | One container per target system, plus the wire contract both ends are held to |
 | [`zitadel/`](zitadel/) | Actions v2 target manifests and registration scripts |
 | [`scripts/`](scripts/) | Env generation, smoke tests, data reset |
 | [`openspec/`](openspec/) | Specifications — the authoritative record of intent |

@@ -169,6 +169,13 @@ function CredentialForm({ view }: { view: MyTargetView }) {
         set.mutate(password, { onSuccess: () => setPassword("") });
       }}
     >
+      {view.credential.needs_re_enrolment && (
+        <p className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] p-3 text-sm">
+          You set a storage password before this system changed. That password no
+          longer works — set a new one below. Nothing else about your access
+          changed.
+        </p>
+      )}
       <label className="text-sm" htmlFor="storage-password">
         {view.credential.set ? "Change your storage password" : "Set a storage password"}
       </label>

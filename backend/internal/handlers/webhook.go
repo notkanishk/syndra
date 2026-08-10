@@ -158,7 +158,7 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 			event.RoleKeys = []string{event.RoleKey}
 		}
 		// Filter blank/whitespace-only entries — invalid roles must never reach
-		// downstream orchestration or provisioning (could emit malformed LLDAP groups).
+		// downstream orchestration (could converge a subject against a malformed role).
 		filtered := make([]string, 0, len(event.RoleKeys))
 		for _, rk := range event.RoleKeys {
 			if trimmedNonEmpty(rk) {
@@ -245,7 +245,7 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 
 // processGrantAdded handles grant_added and grant_changed events:
 // rebuild cache, enforce mapping rules per role, trigger onboarding for new_user,
-// and emit a provisioning intent for LLDAP sync per role.
+// per role, which is what carries the change to any mapped target.
 func processGrantAdded(ctx context.Context, event WebhookPayload, eventID string) error {
 	if len(event.ProjectIDs) > 0 {
 		cacheRebuildUser(ctx, event.UserID, event.ProjectIDs)
@@ -264,10 +264,6 @@ func processGrantAdded(ctx context.Context, event WebhookPayload, eventID string
 			if err := webhookTriggerOnboarding(ctx, event.UserID, "webhook", idempotencyKey); err != nil {
 				log.Printf("[WEBHOOK] Onboarding trigger failed for user=%s: %v", event.UserID, err)
 			}
-		}
-
-		if err := webhookEmitProvisioningIntent(ctx, event.UserID, "add", event.SourceProject, role, eventID); err != nil {
-			log.Printf("[WEBHOOK] Provisioning intent emission failed: %v", err)
 		}
 	}
 
@@ -312,15 +308,14 @@ func detectWebhookDrift(ctx context.Context, event WebhookPayload) {
 
 // processGrantRemoved handles grant_removed events:
 // invalidate cache, revoke derived grants per role through mapping rules,
-// and emit a provisioning intent per role for LLDAP sync.
+// The target side follows from the role change itself: the closure diff every
+// cascade computes fires the lifecycle trigger, which converges whatever
+// targets that role is mapped to. There is no second queue to write to.
 func processGrantRemoved(ctx context.Context, event WebhookPayload, eventID string) error {
 	_ = cacheInvalidateUser(ctx, event.UserID)
 	for _, role := range event.RoleKeys {
 		if err := webhookRevokeMappingRules(ctx, event.UserID, event.SourceProject, role); err != nil {
 			return fmt.Errorf("revocation failure for role=%s: %w", role, err)
-		}
-		if err := webhookEmitProvisioningIntent(ctx, event.UserID, "remove", event.SourceProject, role, eventID); err != nil {
-			log.Printf("[WEBHOOK] Provisioning intent emission failed: %v", err)
 		}
 	}
 	return nil

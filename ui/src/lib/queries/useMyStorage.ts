@@ -22,7 +22,17 @@ export interface MyTargetView {
   resources?: Record<string, string[]>;
   /** What an operator has withheld, with the reason, so "no access" is never unexplained. */
   suspended?: Array<{ field: string; value: string; reason: string; actor_id: string }>;
-  credential: { set: boolean; last_changed_at?: string };
+  credential: {
+    set: boolean;
+    /**
+     * Enrolled before the LLDAP bridge was retired. Their old credential is
+     * gone with the system it was for, so they have to set a new one — and
+     * "you enrolled before the change" is a different sentence from "you have
+     * never set one" to somebody who remembers doing it.
+     */
+    needs_re_enrolment?: boolean;
+    last_changed_at?: string;
+  };
   /** The add-on answered. A member whose target is down is told, not shown a form that fails. */
   reachable: boolean;
 }

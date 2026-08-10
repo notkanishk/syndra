@@ -593,35 +593,16 @@ type Role struct {
 	UpdatedAt         time.Time `json:"updated_at"`
 }
 
-// ProvisioningIntent represents a pending infrastructure mutation
-// to be consumed by the Sync Service for LLDAP group management.
-type ProvisioningIntent struct {
-	ID             string     `json:"id"`
-	TargetUID      string     `json:"target_uid"`
-	Action         string     `json:"action"`
-	LLDAPGroup     string     `json:"lldap_group"`
-	SourceProject  string     `json:"source_project"`
-	SourceRole     string     `json:"source_role"`
-	WebhookEventID string     `json:"webhook_event_id,omitempty"`
-	IdempotencyKey string     `json:"idempotency_key"`
-	Status         string     `json:"status"`
-	ErrorMessage   string     `json:"error_message,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	AcknowledgedAt *time.Time `json:"acknowledged_at,omitempty"`
-	CompletedAt    *time.Time `json:"completed_at,omitempty"`
-}
-
-// ShadowCredential stores a secondary Argon2id-hashed password for LLDAP/Samba access.
+// ShadowCredential is the record that a member has set a credential on a
+// target, and when. It holds no credential: the value is forwarded to the
+// target and kept nowhere (change `addon-platform` group 11).
 type ShadowCredential struct {
-	ID             string     `json:"id"`
-	UserID         string     `json:"user_id"`
-	CredentialHash string     `json:"credential_hash,omitempty"`
-	Algorithm      string     `json:"algorithm"`
-	SaltParams     string     `json:"salt_params,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
-	RotatedAt      *time.Time `json:"rotated_at,omitempty"`
-	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+	ID        string     `json:"id"`
+	UserID    string     `json:"user_id"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	RotatedAt *time.Time `json:"rotated_at,omitempty"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 // ShadowCredentialAudit records credential lifecycle events.
@@ -636,12 +617,16 @@ type ShadowCredentialAudit struct {
 
 // ShadowCredentialStatus is the user-facing view (no hash exposed).
 type ShadowCredentialStatus struct {
-	HasCredential bool       `json:"has_credential"`
-	Algorithm     string     `json:"algorithm,omitempty"`
-	CreatedAt     *time.Time `json:"created_at,omitempty"`
-	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
-	RotatedAt     *time.Time `json:"rotated_at,omitempty"`
-	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
+	HasCredential bool `json:"has_credential"`
+	// NeedsReEnrolment is a member who enrolled before the bridge was retired.
+	// Their hash is gone and the system it was for does not exist, so they have
+	// to set a new one — and "you enrolled before the change" is a different
+	// sentence from "you have never set one" to somebody who remembers doing it.
+	NeedsReEnrolment bool       `json:"needs_re_enrolment,omitempty"`
+	CreatedAt        *time.Time `json:"created_at,omitempty"`
+	UpdatedAt        *time.Time `json:"updated_at,omitempty"`
+	RotatedAt        *time.Time `json:"rotated_at,omitempty"`
+	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
 }
 
 // CatalogRole is the computed view for the global role inventory.

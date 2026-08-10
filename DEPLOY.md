@@ -525,15 +525,22 @@ All commands run from `/opt/syndra` as the `runner` user.
   ROLE syndra WITH PASSWORD ...`) and then in `.env`. Editing only `.env` locks
   the backend out of its own data.
 
-### The sync service
+### Add-on targets
 
-`sync` sits behind a Compose profile and does **not** start by default. Without
-a reachable LLDAP it crash-loops, and a permanently restarting container hides
-real failures. Once LLDAP exists, fill the `LLDAP_*` block in `.env` and:
+Each add-on sits behind a Compose profile and does **not** start by default: it
+holds a credential for the system it provisions, and a container nobody asked
+for holding one is a container nobody is watching. Fill its block in `.env` —
+base URL, and either a client certificate with the private CA or a signing key —
+and start it:
 
 ```bash
-docker compose --profile sync up -d
+docker compose --profile truenas up -d
 ```
+
+Registration and callability are separate states. The backend registers a
+configured add-on whether or not it answers, so navigation reflects the
+deployment rather than the weather; what turns registration into capability is
+the first successful manifest read.
 
 ---
 

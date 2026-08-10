@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -70,6 +71,12 @@ type myCredentialStatus struct {
 	// Tracked as metadata rather than by holding the value, so this is the whole
 	// of what can be said about it.
 	Set bool `json:"set"`
+	// NeedsReEnrolment is somebody who set a credential before the LLDAP bridge
+	// was retired. Their hash was dropped with the vault and the system it was
+	// for no longer exists, so they have to set a new one — and "you enrolled
+	// before the change" is a different sentence from "you have never set one"
+	// to somebody who remembers doing it (group 11, tasks 11.8/11.9).
+	NeedsReEnrolment bool `json:"needs_re_enrolment,omitempty"`
 	// LastChangedAt is the last time this member set or rotated it.
 	LastChangedAt *time.Time `json:"last_changed_at,omitempty"`
 }
@@ -126,7 +133,10 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 
 	status, err := dbHasShadowCredential(r.Context(), subject)
 	if err == nil {
-		view.Credential = myCredentialStatus{Set: status.HasCredential}
+		view.Credential = myCredentialStatus{
+			Set:              status.HasCredential,
+			NeedsReEnrolment: status.NeedsReEnrolment,
+		}
 		if status.RotatedAt != nil {
 			view.Credential.LastChangedAt = status.RotatedAt
 		} else if status.UpdatedAt != nil {
@@ -193,6 +203,15 @@ func handleSetMyCredential(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Complexity is checked HERE, before the value leaves the process. Checking
+	// it after dispatch would mean a rejected password had already reached the
+	// target, and checking it in the frontend alone would mean it had not been
+	// checked.
+	if err := services.ValidatePasswordComplexity(req.Password); err != nil {
+		jsonValidationErrorResponse(w, err.Error(), map[string]string{"password": "complexity"})
+		return
+	}
+
 	res, err := svcDispatchOperation(r.Context(), addonop.Request{
 		Target: target, Operation: "password.set",
 		ActorID: subject, SubjectID: subject,
@@ -213,6 +232,13 @@ func handleSetMyCredential(w http.ResponseWriter, r *http.Request) {
 			"detail":    "The system did not confirm the change. Try connecting with the new password; if it does not work, set it again.",
 		})
 		return
+	}
+
+	// Recorded only after the target confirmed it. Metadata, never a value —
+	// and a failure to write it does not un-set the password, so it is logged
+	// through the audit path rather than reported as a failed change.
+	if err := svcRecordCredentialSet(r.Context(), subject, subject, r.RemoteAddr); err != nil {
+		log.Printf("[VAULT] %s set a credential on %s and it was not recorded: %v", subject, target, err)
 	}
 
 	jsonResponse(w, http.StatusOK, map[string]any{

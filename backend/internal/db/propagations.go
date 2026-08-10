@@ -66,7 +66,7 @@ func GetPropagationStatus(ctx context.Context, id string) (string, error) {
 //
 // propagation_outbox buffers every Syndra-mediated Zitadel grant
 // mutation so the operator drains them explicitly (services/propagation).
-// It mirrors the provisioning_intents claim-and-process pattern: rows move
+// It is a claim-and-process pattern: rows move
 // pending -> in_flight -> applied|failed. `applied` is terminal success; there
 // is NO `confirmed` state (design Decision 1).
 

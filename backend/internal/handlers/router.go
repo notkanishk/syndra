@@ -144,22 +144,18 @@ func NewRouter() http.Handler {
 	// carries its access sources so removal can be named after its own source.
 	mux.HandleFunc("GET /api/v1/projects/{id}/roles/{key}/members", withCORS(withOperatorAuth(handleGetRoleMembers)))
 
-	// Provisioning Intents (operator view)
-	mux.HandleFunc("GET /api/v1/intents", withCORS(withUserAuth(handleGetProvisioningIntents)))
-
-	// Provisioning Intents (sync service API — internal, API-key auth)
-	mux.HandleFunc("POST /api/v1/intents/claim", withCORS(withAPIKeyAuth(handleClaimIntents)))
-	mux.HandleFunc("POST /api/v1/intents/{id}/complete", withCORS(withAPIKeyAuth(handleCompleteIntent)))
-	mux.HandleFunc("POST /api/v1/intents/{id}/fail", withCORS(withAPIKeyAuth(handleFailIntent)))
+	// The provisioning-intent routes stood here. They were the LLDAP bridge's
+	// queue — one for the operator to watch and three for the sync service to
+	// claim, complete and fail against. Both ends are gone: a target's changes
+	// live in the propagation outbox beside Zitadel's, dispatched by the add-on
+	// that owns the target rather than by a service polling for work.
 
 	// Shadow Password Vault (user-facing, self-only)
-	mux.HandleFunc("PUT /api/v1/users/{uid}/shadow-credential", withCORS(withUserAuth(handleSetShadowCredential)))
 	mux.HandleFunc("DELETE /api/v1/users/{uid}/shadow-credential", withCORS(withUserAuth(handleClearShadowCredential)))
 	mux.HandleFunc("GET /api/v1/users/{uid}/shadow-credential/status", withCORS(withUserAuth(handleGetShadowCredentialStatus)))
 	mux.HandleFunc("GET /api/v1/users/{uid}/shadow-credential/audit", withCORS(withUserAuth(handleGetShadowCredentialAudit)))
 
 	// Shadow Password Vault (sync service — internal, API-key auth)
-	mux.HandleFunc("GET /api/v1/shadow-credentials/{uid}/hash", withCORS(withAPIKeyAuth(handleGetShadowCredentialHash)))
 
 	// User Profile (sync service — internal, API-key auth)
 	mux.HandleFunc("GET /api/v1/users/{uid}/profile", withCORS(withAPIKeyAuth(handleGetUserProfile)))

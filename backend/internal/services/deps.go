@@ -108,11 +108,8 @@ var (
 		return directory.Default.FindUser(ctx, id)
 	}
 
-	// Provisioning intents
-	svcInsertProvisioningIntent = db.InsertProvisioningIntent
-
 	// Shadow Password Vault
-	svcUpsertShadowCredential      = db.UpsertShadowCredential
+	svcRecordCredentialSet         = db.RecordCredentialSet
 	svcDeleteShadowCredential      = db.DeleteShadowCredential
 	svcHasShadowCredential         = db.HasShadowCredential
 	svcInsertShadowCredentialAudit = db.InsertShadowCredentialAudit

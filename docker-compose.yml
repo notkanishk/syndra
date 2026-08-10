@@ -125,39 +125,13 @@ services:
     networks: [edge]
     restart: unless-stopped
 
-  sync:
-    build:
-      context: ./sync
-      dockerfile: Dockerfile
-    container_name: syndra_sync
-    # Opt-in. Without a reachable LLDAP the service crash-loops, and a restarting
-    # container in `docker ps` is noise that hides a real failure. Start it with
-    # `docker compose --profile sync up -d` once LLDAP_* are filled in.
-    profiles: ["sync"]
-    environment:
-      - BACKEND_URL=http://backend:8080
-      - SYNDRA_API_KEY=${SYNDRA_API_KEY:-dev_auth_token_secret}
-      - LLDAP_URL=${LLDAP_URL:-ldaps://lldap:636}
-      - LLDAP_BIND_DN=${LLDAP_BIND_DN:-cn=admin,ou=people,dc=example,dc=com}
-      - LLDAP_BIND_PASSWORD=${LLDAP_BIND_PASSWORD:-}
-      - LLDAP_BASE_DN=${LLDAP_BASE_DN:-dc=example,dc=com}
-      - LLDAP_INSECURE_SKIP_VERIFY=${LLDAP_INSECURE_SKIP_VERIFY:-false}
-      - SYNC_POLL_INTERVAL=${SYNC_POLL_INTERVAL:-10s}
-      - SYNC_WORKER_COUNT=${SYNC_WORKER_COUNT:-5}
-      - SYNC_INTENT_LIMIT=${SYNC_INTENT_LIMIT:-50}
-    # With the backend and the add-ons, never with the datastores: it polls the
-    # backend for intents and talks to an LDAP server outside the deployment.
-    networks: [addons]
-    depends_on:
-      - backend
-    restart: unless-stopped
-
   truenas-addon:
     build:
       context: ./addons/truenas
       dockerfile: Dockerfile
     container_name: syndra_truenas_addon
-    # Opt-in, like sync was, and for a sharper reason: this container holds the
+    # Opt-in, and for a sharper reason than an unreachable dependency: this
+    # container holds the
     # NAS API key, so a deployment with no NAS must not be running it at all.
     # Start it with `docker compose --profile truenas up -d` once TRUENAS_* and
     # the transport material are in place, and register it with

@@ -1,11 +1,12 @@
 // Package expiry contains the backend-side scheduler that sweeps expired
 // direct role grants and performs the end-to-end cleanup side effects
-// (LLDAP provisioning intent, hard-delete, cache invalidation, audit, and
+// (hard-delete, the closure delta and the convergences it queues, cache
+// invalidation, audit, and
 // best-effort Zitadel derived-grant cascade).
 //
 // Effective access for expired grants is already correct at query time via
 // GetDirectGrantsForUser(..., includeExpired=false). This package closes the
-// *cleanup* gap: without it, expired rows linger in the DB, LLDAP groups keep
+// *cleanup* gap: without it, expired rows linger in the DB, target access keeps
 // stale members, and Zitadel derived grants remain authoritative-looking.
 package expiry
 
@@ -24,9 +25,8 @@ var (
 	// One grant's whole expiry: closure delta, guarded ledger delete, audit and
 	// outbox rows, in one transaction. The sweep decides WHICH grants and in
 	// what order; it does not decide what expiring one means.
-	svcExpireDirectGrant       = services.ExpireDirectGrant
-	svcEmitIntentFromScheduler = services.EmitProvisioningIntentFromScheduler
-	cacheInvalidateUser        = cache.InvalidateUser
+	svcExpireDirectGrant = services.ExpireDirectGrant
+	cacheInvalidateUser  = cache.InvalidateUser
 
 	// Allowance expiry. Its own seams and its own pass: grant expiry removes
 	// access and this restores it, and a batch that aborted halfway through the

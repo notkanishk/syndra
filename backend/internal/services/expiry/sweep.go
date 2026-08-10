@@ -96,15 +96,10 @@ func expireOne(ctx context.Context, userID string, candidate models.DirectGrant)
 		return
 	}
 
-	// The ledger delete, the audit row and the revocations committed together.
-	// What remains is the LLDAP intent, which is a different system's queue and
-	// cannot join that transaction; a failure here leaves a group membership
-	// behind for the reconciler, not an access decision half-made.
-	if err := svcEmitIntentFromScheduler(ctx, userID, "remove", res.ProjectID, res.RoleKey, candidate.ID); err != nil {
-		log.Printf("[SCHEDULER] Intent emit failed after expiry user=%s grant=%s project=%s role=%s err=%v — LLDAP orphan possible; reconciler will reap",
-			userID, candidate.ID, res.ProjectID, res.RoleKey, err)
-	}
-
+	// The ledger delete, the audit row, the revocations AND any target
+	// convergence the lapsed role reached committed together — the lifecycle
+	// trigger runs inside the same closure diff, so there is no second queue
+	// left to write to and no window in which one could be half-written.
 	log.Printf("[SCHEDULER] Grant expired user=%s grant=%s %s/%s revoked=%v retained=%v queued=%d",
 		userID, candidate.ID, res.ProjectID, res.RoleKey, res.Revoked, res.Retained, len(res.OutboxIDs))
 }
