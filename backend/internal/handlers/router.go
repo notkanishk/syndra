@@ -233,6 +233,11 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/targets/mappings/{id}", withCORS(withOperatorAuth(handleDeleteRoleMapping)))
 	// The blast radius, before anything lands.
 	mux.HandleFunc("GET /api/v1/targets/mappings/{id}/holders", withCORS(withOperatorAuth(handleMappingHolders)))
+	// And the approval for it. Two surfaces rather than one flag: an edit and a
+	// delete reach the same cohort and do opposite things to it, so a citation
+	// must not be able to cross between them.
+	mux.HandleFunc("POST /api/v1/targets/mappings/{id}/rehearse-edit", withCORS(withOperatorAuth(handleRehearseMappingEdit)))
+	mux.HandleFunc("POST /api/v1/targets/mappings/{id}/rehearse-delete", withCORS(withOperatorAuth(handleRehearseMappingDelete)))
 	mux.HandleFunc("POST /api/v1/targets/mappings/versions", withCORS(withOperatorAuth(handlePublishMappingVersion)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/mappings/versions/{version}/rollback", withCORS(withOperatorAuth(handleRollbackMappingVersion)))
 

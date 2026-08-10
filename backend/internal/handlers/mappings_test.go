@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,6 +20,14 @@ type mappingHarness struct {
 	created  []db.RoleMapping
 	resolved []string
 	valueErr error
+
+	// The apply half: who holds the role, what the edit did, and what it queued.
+	holders   []string
+	claimed   []db.PlanCitation
+	claimErr  error
+	updated   []string
+	deleted   []string
+	converged []db.SystemConvergence
 }
 
 func stubMappingDeps(t *testing.T, schema []addons.EntitlementField) *mappingHarness {
@@ -44,7 +53,43 @@ func stubMappingDeps(t *testing.T, schema []addons.EntitlementField) *mappingHar
 		h.resolved = append(h.resolved, target+"|"+field+"|"+value)
 		return h.valueErr
 	}
+	stubMappingApplyPath(t, h)
 	return h
+}
+
+// stubMappingApplyPath fakes the half an edit runs after validation: the cohort
+// read, the transaction it all happens in, and the convergences it queues.
+//
+// The default cohort is empty, which is the case that needs no citation — a
+// mapping nobody holds is a definition, and there is nothing to review. A test
+// about the citation sets holders and gets the plan path.
+func stubMappingApplyPath(t *testing.T, h *mappingHarness) {
+	t.Helper()
+	holders, inTx, claim, record := dbMappingHolders, svcInTxLockingAccess, dbClaimPlanVerified, dbRecordSystemConvergence
+	update, del := dbUpdateRoleMappingValue, dbDeleteRoleMapping
+	t.Cleanup(func() {
+		dbMappingHolders, svcInTxLockingAccess, dbClaimPlanVerified, dbRecordSystemConvergence = holders, inTx, claim, record
+		dbUpdateRoleMappingValue, dbDeleteRoleMapping = update, del
+	})
+
+	dbMappingHolders = func(context.Context, string, string) ([]string, error) { return h.holders, nil }
+	svcInTxLockingAccess = func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
+	dbClaimPlanVerified = func(_ context.Context, c db.PlanCitation, _ func([]db.PlanSubject) error) (db.Plan, []db.PlanSubject, error) {
+		h.claimed = append(h.claimed, c)
+		return db.Plan{ID: c.PlanID}, nil, h.claimErr
+	}
+	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
+		h.converged = append(h.converged, c)
+		return "plan_1", "outbox_1", nil
+	}
+	dbUpdateRoleMappingValue = func(_ context.Context, id, value, actor string) error {
+		h.updated = append(h.updated, id+"="+value)
+		return nil
+	}
+	dbDeleteRoleMapping = func(_ context.Context, id string) error {
+		h.deleted = append(h.deleted, id)
+		return nil
+	}
 }
 
 func postMapping(body string) *httptest.ResponseRecorder {
@@ -352,5 +397,251 @@ func TestAnAllowanceOnAnUnregisteredTargetIsRefusedBeforeTheForeignKey(t *testin
 			`"direction":"deny","reason":"r","expires_at":"2026-12-01T00:00:00Z"}`)))
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d (%s)", rr.Code, rr.Body.String())
+	}
+}
+
+// 7.11/7.12 — a mapping edit is the highest-leverage change in the system, and
+// it used to be one PATCH. What is asserted here is that the leverage is now
+// visible before it lands, and that the change and the convergences it causes
+// are one transaction.
+
+func mappingWithHolders(t *testing.T, h *mappingHarness, holders ...string) db.RoleMapping {
+	t.Helper()
+	m := db.RoleMapping{ID: "m1", Target: "truenas", ProjectID: "pLab", RoleKey: "trained",
+		Field: "group", Value: "lab_makers"}
+	get := dbGetRoleMapping
+	t.Cleanup(func() { dbGetRoleMapping = get })
+	dbGetRoleMapping = func(context.Context, string) (db.RoleMapping, error) { return m, nil }
+	h.holders = holders
+	return m
+}
+
+func patchMapping(body string) *httptest.ResponseRecorder {
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPatch, "/api/v1/targets/mappings/m1", strings.NewReader(body))
+	r.SetPathValue("id", "m1")
+	handleUpdateRoleMapping(rr, r)
+	return rr
+}
+
+// An edit reaching people needs the approval that showed who they are. Without
+// this the plan path is a screen an operator can skip.
+func TestAnEditThatReachesPeopleNeedsTheApprovalThatShowedThem(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	mappingWithHolders(t, h, "u1", "u2")
+
+	rr := patchMapping(`{"value":"lab_users"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("want the edit refused, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(h.updated) != 0 {
+		t.Error("nothing may be edited without the approval")
+	}
+	if len(h.converged) != 0 {
+		t.Error("nothing may be queued without the approval")
+	}
+}
+
+// A mapping nobody holds needs no citation: there is nothing to review, and
+// demanding one would make defining a new binding a two-step ceremony.
+func TestAnEditReachingNobodyNeedsNoApproval(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	mappingWithHolders(t, h)
+
+	rr := patchMapping(`{"value":"lab_users"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(h.updated) != 1 {
+		t.Errorf("the edit must land: %v", h.updated)
+	}
+	if len(h.claimed) != 0 {
+		t.Error("no approval should have been spent")
+	}
+}
+
+// The cited approval reaches the claim with every dimension the predicate needs,
+// and the convergences are queued for the cohort read AFTER the edit.
+func TestAnApprovedEditConvergesEveryHolder(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	m := mappingWithHolders(t, h, "u1", "u2")
+	stubResolvedIntent(t)
+
+	rr := patchMapping(`{"value":"lab_users","plan_id":"plan_1"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(h.claimed) != 1 {
+		t.Fatalf("want one claim, got %d", len(h.claimed))
+	}
+	got := h.claimed[0]
+	if got.PlanID != "plan_1" || got.Target != m.Target || got.Surface != planSurfaceMappingEdit {
+		t.Errorf("the citation arrived wrong: %+v", got)
+	}
+	// The value being moved TO is inside the binding, or an approval to change
+	// `lab_makers` → `lab_users` would be spendable on a change to anything.
+	if got.RequestFingerprint != mappingRequestFingerprint(m, planSurfaceMappingEdit, "lab_users") {
+		t.Error("the approval is not bound to the value it was reviewed for")
+	}
+	if len(h.converged) != 2 {
+		t.Fatalf("every holder must be converged, got %d", len(h.converged))
+	}
+	for _, c := range h.converged {
+		if c.Target != "truenas" || c.Actor == "" {
+			t.Errorf("convergence queued wrong: %+v", c)
+		}
+	}
+}
+
+// A plan issued to change a value must not be spendable to withdraw it. Two
+// surfaces, and the claim predicate is what separates them.
+func TestAnEditApprovalCannotBeSpentOnADelete(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	mappingWithHolders(t, h, "u1")
+	stubResolvedIntent(t)
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodDelete, "/api/v1/targets/mappings/m1", strings.NewReader(`{"plan_id":"plan_1"}`))
+	r.SetPathValue("id", "m1")
+	handleDeleteRoleMapping(rr, r)
+
+	if len(h.claimed) != 1 {
+		t.Fatalf("want one claim, got %d", len(h.claimed))
+	}
+	if h.claimed[0].Surface != planSurfaceMappingDelete {
+		t.Errorf("a delete must cite its own surface, got %q", h.claimed[0].Surface)
+	}
+}
+
+// The blast-radius guard, on the surface where the blast radius is largest.
+func TestAMappingEditAffectingManyNeedsTheAcknowledgement(t *testing.T) {
+	t.Setenv("PLAN_COHORT_LIMIT", "2")
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	mappingWithHolders(t, h, "u1", "u2", "u3")
+
+	created := 0
+	orig := dbCreatePlan
+	t.Cleanup(func() { dbCreatePlan = orig })
+	dbCreatePlan = func(_ context.Context, p db.NewPlan) (db.Plan, error) {
+		created++
+		return db.Plan{ID: "plan_1"}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/mappings/m1/rehearse-edit",
+		strings.NewReader(`{"value":"lab_users"}`))
+	r.SetPathValue("id", "m1")
+	handleRehearseMappingEdit(rr, r)
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if created != 0 {
+		t.Error("an unacknowledged edit must not become an approval")
+	}
+	if !strings.Contains(rr.Body.String(), "COHORT_ACKNOWLEDGEMENT_REQUIRED") {
+		t.Errorf("the refusal must name itself: %s", rr.Body.String())
+	}
+
+	// Acknowledged, it is approvable — and the plan names every person it moves.
+	rr = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, "/api/v1/targets/mappings/m1/rehearse-edit",
+		strings.NewReader(`{"value":"lab_users","acknowledge_scope":true}`))
+	r.SetPathValue("id", "m1")
+	handleRehearseMappingEdit(rr, r)
+	if rr.Code != http.StatusOK || created != 1 {
+		t.Fatalf("an acknowledged edit must be approvable: %d (%s)", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "u3") {
+		t.Errorf("the plan must name everyone it moves: %s", rr.Body.String())
+	}
+}
+
+func stubResolvedIntent(t *testing.T) {
+	t.Helper()
+	orig := svcResolveEntitlementsFor
+	t.Cleanup(func() { svcResolveEntitlementsFor = orig })
+	svcResolveEntitlementsFor = func(context.Context, string, string) (map[string]json.RawMessage, error) {
+		return map[string]json.RawMessage{"enabled": json.RawMessage(`true`)}, nil
+	}
+}
+
+// 7.6 — a rollback restores the bindings AND re-resolves the people they reach.
+//
+// Restoring alone is the failure worth naming: it changes what the roles mean
+// and leaves every account converged under the reverted version, with nothing
+// that would ever notice — a drift sweep sees the target holding exactly what
+// Syndra last told it to hold.
+func TestARollbackReResolvesEveryoneItReaches(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	stubResolvedIntent(t)
+	h.holders = []string{"u1", "u2"}
+
+	list, roll := dbListRoleMappings, dbRollbackMappingVersion
+	t.Cleanup(func() { dbListRoleMappings, dbRollbackMappingVersion = list, roll })
+
+	var rolledBack []string
+	dbRollbackMappingVersion = func(_ context.Context, target string, version int, actor string) error {
+		rolledBack = append(rolledBack, target)
+		return nil
+	}
+	// Two mappings on ONE role: the same holders reached twice, and the
+	// convergence must still be one per person.
+	dbListRoleMappings = func(context.Context, string) ([]db.RoleMapping, error) {
+		return []db.RoleMapping{
+			{ID: "m1", Target: "truenas", ProjectID: "pLab", RoleKey: "trained", Field: "group", Value: "lab_makers"},
+			{ID: "m2", Target: "truenas", ProjectID: "pLab", RoleKey: "trained", Field: "group", Value: "fabrication"},
+		}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/truenas/mappings/versions/2/rollback", nil)
+	r.SetPathValue("target", "truenas")
+	r.SetPathValue("version", "2")
+	handleRollbackMappingVersion(rr, r)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(rolledBack) != 1 {
+		t.Fatalf("the restore must happen: %v", rolledBack)
+	}
+	if len(h.converged) != 2 {
+		t.Fatalf("want one convergence per person reached, got %d: %+v", len(h.converged), h.converged)
+	}
+	for _, c := range h.converged {
+		if !strings.Contains(c.Reason, "v2") {
+			t.Errorf("the convergence must say what caused it: %q", c.Reason)
+		}
+	}
+	if !strings.Contains(rr.Body.String(), "queued_convergences") {
+		t.Errorf("the response must say the target has not moved yet: %s", rr.Body.String())
+	}
+}
+
+// A rollback whose restore fails queues nothing. The two are one transaction,
+// and convergences queued against a set that was not restored would converge
+// everybody to the version the operator was trying to leave.
+func TestARollbackThatDidNotRestoreQueuesNothing(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h.holders = []string{"u1"}
+
+	roll := dbRollbackMappingVersion
+	t.Cleanup(func() { dbRollbackMappingVersion = roll })
+	dbRollbackMappingVersion = func(context.Context, string, int, string) error {
+		return db.ErrMappingNotFound
+	}
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/truenas/mappings/versions/9/rollback", nil)
+	r.SetPathValue("target", "truenas")
+	r.SetPathValue("version", "9")
+	handleRollbackMappingVersion(rr, r)
+
+	if rr.Code == http.StatusOK {
+		t.Fatalf("a failed restore must not report success: %s", rr.Body.String())
+	}
+	if len(h.converged) != 0 {
+		t.Error("nothing may be queued for a restore that did not happen")
 	}
 }

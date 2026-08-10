@@ -72,6 +72,10 @@ func handleCreateRoleMapping(w http.ResponseWriter, r *http.Request) {
 
 type mappingValueRequest struct {
 	Value string `json:"value"`
+	// PlanID cites the rehearsal that showed who this moves. Required whenever
+	// the mapping has holders — an edit that reaches nobody is a change to a
+	// definition and there is nothing to review.
+	PlanID string `json:"plan_id,omitempty"`
 }
 
 func handleUpdateRoleMapping(w http.ResponseWriter, r *http.Request) {
@@ -93,19 +97,50 @@ func handleUpdateRoleMapping(w http.ResponseWriter, r *http.Request) {
 		writeMappingError(w, err)
 		return
 	}
-	if err := dbUpdateRoleMappingValue(r.Context(), existing.ID, req.Value, resolveActor(r, "")); err != nil {
-		writeMappingError(w, err)
-		return
-	}
-	jsonResponse(w, http.StatusOK, map[string]any{"status": "updated"})
+	applyMappingRequest(w, r, existing, planSurfaceMappingEdit, req.PlanID, req.Value, "updated")
+}
+
+type mappingDeleteRequest struct {
+	PlanID string `json:"plan_id,omitempty"`
 }
 
 func handleDeleteRoleMapping(w http.ResponseWriter, r *http.Request) {
-	if err := dbDeleteRoleMapping(r.Context(), r.PathValue("id")); err != nil {
+	// A DELETE with a body, because the citation has to travel somewhere and a
+	// query parameter is a place approvals end up in browser history and access
+	// logs. An empty body is tolerated: a mapping nobody holds needs no citation.
+	var req mappingDeleteRequest
+	if r.Body != nil {
+		_ = decodeJSONStrict(r.Body, &req)
+	}
+	existing, err := dbGetRoleMapping(r.Context(), r.PathValue("id"))
+	if err != nil {
 		writeMappingError(w, err)
 		return
 	}
-	jsonResponse(w, http.StatusOK, map[string]any{"status": "deleted"})
+	applyMappingRequest(w, r, existing, planSurfaceMappingDelete, req.PlanID, "", "deleted")
+}
+
+// applyMappingRequest is the shared half: count the cohort, spend the approval
+// if there is one to spend, make the change, and queue the convergences.
+func applyMappingRequest(w http.ResponseWriter, r *http.Request, m db.RoleMapping, surface, planID, newValue, verb string) {
+	holders, err := dbMappingHolders(r.Context(), m.ProjectID, m.RoleKey)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+
+	converged, err := applyMappingChange(r.Context(), m, surface, resolveActor(r, ""), planID, newValue, len(holders))
+	if err != nil {
+		writeMappingPlanError(w, err)
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"status": verb,
+		// What was queued, not what was applied. The convergences wait for the
+		// drain like every other add-on row, and reporting them as done is the
+		// one thing a surface must not say.
+		"queued_convergences": converged,
+	})
 }
 
 // handleMappingHolders reports the cohort a mapping edit or delete would move,
@@ -166,11 +201,21 @@ func handleRollbackMappingVersion(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "version must be a positive integer", map[string]string{"version": "invalid"})
 		return
 	}
-	if err := dbRollbackMappingVersion(r.Context(), target, version, resolveActor(r, "")); err != nil {
+	actor := resolveActor(r, "")
+	converged, err := rollbackAndConverge(r.Context(), target, version, actor)
+	if err != nil {
 		writeMappingError(w, err)
 		return
 	}
-	jsonResponse(w, http.StatusOK, map[string]any{"status": "rolled_back", "target": target, "version": version})
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"status": "rolled_back", "target": target, "version": version,
+		// Restoring the bindings is only half of a rollback. The people who
+		// hold the affected roles are still converged to what the reverted set
+		// said, and nothing else would ever notice: a rollback that changed the
+		// definition and left the target alone is the definition and the world
+		// disagreeing, silently, which is exactly what a rollback is for undoing.
+		"queued_convergences": converged,
+	})
 }
 
 // validateMappingAgainstTarget runs both halves of the split, structure first.

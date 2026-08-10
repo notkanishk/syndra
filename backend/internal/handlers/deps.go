@@ -361,3 +361,11 @@ var (
 	svcRehearseEntitlements = services.RehearseEntitlements
 	svcApplyEntitlements    = planapply.Apply
 )
+
+// The mapping-edit plan path (7.11). `svcInTxLockingAccess` is here rather than
+// called directly so a test can assert the edit and its convergences share one
+// transaction — the property, not the call.
+var (
+	svcInTxLockingAccess      = db.InTxLockingAccess
+	dbRecordSystemConvergence = db.RecordSystemConvergence
+)
