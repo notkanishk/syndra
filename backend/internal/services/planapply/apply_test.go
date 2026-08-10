@@ -358,3 +358,35 @@ func TestTheCitationCarriesTheRequestFingerprint(t *testing.T) {
 		t.Fatalf("the citation must carry it: %+v", h.citation)
 	}
 }
+
+// 2.30/2.31 — the accounting an add-on target makes load-bearing.
+//
+// Nothing this endpoint does reaches a target: the rows are written to the
+// outbox and an add-on row waits for an operator to resume the drain. So the
+// summary has a `queued` column and a `succeeded` column, and the second one is
+// always zero — present precisely so a client cannot default it into existence.
+func TestAnAcceptedApplyCountsQueuedAndNeverSucceeded(t *testing.T) {
+	h := working()
+	h.subjects = []db.PlanSubject{
+		{ID: "ps-1", SubjectID: "u1", Outcome: db.PlanOutcome{Effect: db.PlanEffectApply}},
+		{ID: "ps-2", SubjectID: "u2", Outcome: db.PlanOutcome{Effect: db.PlanEffectApply}},
+		{ID: "ps-3", SubjectID: "u3", Outcome: db.PlanOutcome{Effect: db.PlanEffectNoChange}},
+		{ID: "ps-4", SubjectID: "u4", Outcome: db.PlanOutcome{Effect: db.PlanEffectBlocked}},
+	}
+	install(t, h)
+
+	res, err := Apply(context.Background(), request())
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	want := ApplySummary{Total: 4, Queued: 2, NoChange: 1, Blocked: 1}
+	if res.Summary != want {
+		t.Fatalf("summary = %+v, want %+v", res.Summary, want)
+	}
+	if res.Summary.Succeeded != 0 {
+		t.Error("nothing has reached the target; a non-zero succeeded count is a change reported that has not left the database")
+	}
+	if res.Summary.Total != res.Summary.Queued+res.Summary.NoChange+res.Summary.Blocked {
+		t.Error("the counts must add up, or an operator is left wondering where the difference went")
+	}
+}

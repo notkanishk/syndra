@@ -66,6 +66,35 @@ type Result struct {
 	// be re-fingerprinted.
 	Provisional bool            `json:"provisional"`
 	Queued      []QueuedSubject `json:"queued"`
+	// Summary counts what this apply did, in the vocabulary every other bulk
+	// surface reports in — and its whole point is which column the rows land in.
+	// Nothing here has reached the target: the drain has not run, and an add-on
+	// row waits for an operator to resume it. Counting them as succeeded would
+	// tell an operator a change landed that has not left the database.
+	Summary ApplySummary `json:"summary"`
+}
+
+// ApplySummary is the queued-accounting shape (design §7; 2.30).
+//
+// `Queued` and `Succeeded` are separate fields and only one of them is ever
+// non-zero here. That is not redundancy — it is the whole guarantee: a surface
+// that renders `succeeded` finds a zero, and cannot round a recorded intent into
+// a completed one.
+type ApplySummary struct {
+	// Total is every subject the approval named, including the ones it said
+	// would not change.
+	Total int `json:"total"`
+	// Queued is what this apply wrote to the outbox. Waiting, not applied.
+	Queued int `json:"queued"`
+	// NoChange and Blocked are the approved rows that queued nothing, carried so
+	// the counts add up to Total and an operator is not left wondering where the
+	// difference went.
+	NoChange int `json:"no_change"`
+	Blocked  int `json:"blocked"`
+	// Succeeded is always zero from this endpoint, and is present for exactly
+	// that reason: its absence would let a client default it, and a defaulted
+	// success is the failure this field exists to prevent.
+	Succeeded int `json:"succeeded"`
 }
 
 // Apply spends a plan and queues the work it approved.
@@ -106,8 +135,15 @@ func Apply(ctx context.Context, req Request) (Result, error) {
 		}
 
 		queued := make([]QueuedSubject, 0, len(subjects))
+		summary := ApplySummary{Total: len(subjects)}
 		for _, s := range subjects {
 			if s.Outcome.Effect != db.PlanEffectApply {
+				switch s.Outcome.Effect {
+				case db.PlanEffectNoChange:
+					summary.NoChange++
+				case db.PlanEffectBlocked:
+					summary.Blocked++
+				}
 				// The rehearsal recorded `blocked` and `no_change` on purpose,
 				// and queueing them would dispatch convergence for subjects the
 				// plan said would not change — or refused outright. The claim is
@@ -126,9 +162,11 @@ func Apply(ctx context.Context, req Request) (Result, error) {
 				return fmt.Errorf("queue %s: %w", s.SubjectID, err)
 			}
 			queued = append(queued, QueuedSubject{SubjectID: s.SubjectID, OutboxID: outboxID})
+			summary.Queued++
 		}
 
-		res = Result{PlanID: plan.ID, Target: plan.Target, Provisional: plan.Provisional, Queued: queued}
+		res = Result{PlanID: plan.ID, Target: plan.Target, Provisional: plan.Provisional,
+			Queued: queued, Summary: summary}
 		return nil
 	})
 	if err != nil {

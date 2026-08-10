@@ -294,3 +294,77 @@ func Subjects(ctx context.Context, target string) SubjectsResult {
 	}
 	return out
 }
+
+// TargetHealth is what an add-on says about itself and its target.
+//
+// Decoded field by field rather than passed through as a blob, because two of
+// these are read by machinery and not only by people: `LogHead` and `LogRecords`
+// are what the backend anchors, and a shape it does not understand is a shape it
+// cannot anchor.
+type TargetHealth struct {
+	Reachable      bool   `json:"reachable"`
+	Product        string `json:"product"`
+	ProductVersion string `json:"product_version"`
+	VersionTested  bool   `json:"version_tested"`
+	VersionNote    string `json:"version_note,omitempty"`
+	// CircuitOpen is the ADD-ON's own breaker against its target, which is a
+	// different thing from the backend's breaker against the add-on. Both exist
+	// and an operator reading only one would look in the wrong place.
+	CircuitOpen   bool   `json:"circuit_open"`
+	Lifecycle     string `json:"lifecycle"`
+	LifecycleNote string `json:"lifecycle_note,omitempty"`
+	InFlight      int64  `json:"in_flight"`
+	Drained       bool   `json:"drained"`
+	// LogHead and LogRecords are the mutation log's chain head and length. The
+	// backend anchors them: a chain verifies its own contents and cannot notice
+	// its own truncation, so somebody outside has to remember where the head was.
+	LogHead    string `json:"log_head"`
+	LogRecords int64  `json:"log_records"`
+	// SnapshotTakenAt dates the add-on's mirror, which is what it serves a read
+	// from when its target is unreachable.
+	SnapshotTakenAt string `json:"snapshot_taken_at,omitempty"`
+	LastReadAt      string `json:"last_read_at,omitempty"`
+	KeyExpiresAt    string `json:"key_expires_at,omitempty"`
+
+	Outcome Outcome `json:"-"`
+	Status  int     `json:"-"`
+	Err     error   `json:"-"`
+}
+
+// Health reads one add-on's own account of itself.
+//
+// Served by the add-on even when its target is unreachable, deliberately: a
+// health endpoint that fails whole because one of five reads failed tells an
+// operator nothing about the other four, which are the ones that would have
+// explained it.
+func Health(ctx context.Context, target string) TargetHealth {
+	a, err := Get(target)
+	if err != nil {
+		return TargetHealth{Outcome: OutcomeUnreached, Err: err}
+	}
+	// The breaker is consulted, and a health read does NOT clear it on success
+	// any differently from another call — it goes through the same record. An
+	// operator watching a target come back reads this; letting it bypass the
+	// breaker would make the surface disagree with what every other call gets.
+	if !a.br.allow(timeNow()) {
+		return TargetHealth{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %s", ErrCircuitOpen, target)}
+	}
+	cred, err := credentialFor(a.Registration)
+	if err != nil {
+		return TargetHealth{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: %w", target, err)}
+	}
+
+	resp := doAuthenticated(ctx, cred, http.MethodGet, a.Registration.BaseURL+"/health", nil, callTimeout)
+	a.br.record(timeNow(), resp)
+
+	out := TargetHealth{Outcome: resp.Outcome, Status: resp.Status, Err: resp.Err}
+	if resp.Outcome != OutcomeSucceeded {
+		return out
+	}
+	if err := json.Unmarshal(resp.Body, &out); err != nil {
+		out.Outcome, out.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: decode health: %w", target, err)
+		return out
+	}
+	out.Outcome, out.Status = OutcomeSucceeded, resp.Status
+	return out
+}

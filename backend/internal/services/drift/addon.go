@@ -53,6 +53,11 @@ type AddonReconcileResult struct {
 	// Truncated says the read hit the add-on's cap, so the inventory is what was
 	// seen rather than everything there is.
 	Truncated bool `json:"truncated,omitempty"`
+	// LogVerdict is what the add-on's mutation-log head said when compared
+	// against the anchor. Carried on the reconcile result because this is the
+	// pass that reads it, and because a finding that lives only in a log line is
+	// a finding nobody is looking at.
+	LogVerdict string `json:"log_verdict,omitempty"`
 	// Halted says the pass stopped before concluding anything, with Reason
 	// naming which of the target's failures it was.
 	Halted bool   `json:"halted,omitempty"`
@@ -135,6 +140,11 @@ func ReconcileAddon(ctx context.Context, target string) (AddonReconcileResult, e
 	// add-on refuses that one itself, at the point the cap is known.
 	res.Unmanaged = unmanaged(read.Accounts, bindings)
 	res.Truncated = read.Truncated
+
+	// Before the convergences, because it is a statement about the record of
+	// everything the add-on has already done — and because if the log has been
+	// trimmed, that is what an operator needs to see first.
+	res.LogVerdict = anchorLog(ctx, target)
 
 	queued, convergeErr := convergeBound(ctx, target, bindings)
 	res.Queued = queued
@@ -277,3 +287,32 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 // asks who decided this, and "nobody, it was a sweep" is a real answer that the
 // empty string does not give.
 const reconcileActor = "system:reconcile"
+
+// anchorLog reads the add-on's chain head and compares it against what the
+// backend remembers.
+//
+// Non-fatal in both directions, and deliberately so. A health read that failed
+// says nothing about the log — the pass has no evidence either way — and a
+// violation must not stop the convergences, because access being correct and the
+// forensic record being intact are two separate promises and neither is a reason
+// to break the other.
+//
+// What a violation IS is loud: it means records that existed are gone, or the
+// same number of them now hash to something else. The row carries it for the
+// surface; this line carries it for whoever is reading logs at the time.
+func anchorLog(ctx context.Context, target string) string {
+	health := addonHealth(ctx, target)
+	if health.Outcome != addons.OutcomeSucceeded || health.LogHead == "" {
+		return ""
+	}
+	_, verdict, err := anchorLogHead(ctx, target, health.LogHead, health.LogRecords)
+	if err != nil {
+		log.Printf("[ADDON-RECONCILE] could not anchor %s's log: %v (non-fatal)", target, err)
+		return ""
+	}
+	if db.AnchorViolation(verdict) {
+		log.Printf("[ADDON-RECONCILE] SECURITY: %s reported a mutation log that is not an extension of the anchored one (%s)",
+			target, verdict)
+	}
+	return verdict
+}

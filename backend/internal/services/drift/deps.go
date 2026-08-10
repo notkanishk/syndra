@@ -74,6 +74,13 @@ var (
 
 	recordConvergence = db.RecordSystemConvergence
 
+	// The mutation-log anchor (2.28). Two seams rather than one, because the
+	// read and the comparison fail differently: a health read that did not
+	// happen is no evidence, and a comparison that says the chain was trimmed is
+	// the strongest evidence this system produces.
+	addonHealth   = addons.Health
+	anchorLogHead = db.RecordLogHead
+
 	resolveIntent = func(ctx context.Context, subjectID, target string) (map[string]json.RawMessage, error) {
 		set, err := services.ResolveEntitlements(ctx, subjectID, target)
 		if err != nil {
