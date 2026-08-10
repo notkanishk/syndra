@@ -752,13 +752,6 @@ func ReconcileLedgerOnApplied(ctx context.Context, outboxID string) error {
 	})
 }
 
-func execPropagation(ctx context.Context, id, q string) error {
-	if _, err := PG.Exec(ctx, q, id); err != nil {
-		return fmt.Errorf("update propagation %s: %w", id, err)
-	}
-	return nil
-}
-
 func scanPropagations(rows pgx.Rows) ([]models.PendingPropagation, error) {
 	var out []models.PendingPropagation
 	for rows.Next() {

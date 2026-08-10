@@ -112,12 +112,21 @@ func TestDrainRevocations_UnreachableTargetCostsAProbeNotABudget(t *testing.T) {
 	}
 }
 
-// The retry-budget halt is inherited from the operator drain and matters more
-// here, because nobody is watching. It stops the pass rather than grinding the
-// remaining rows down to zero attempts each.
-func TestDrainRevocations_HaltsOnRetryBudgetAndLeavesTheRestQueued(t *testing.T) {
+// The retry budget matters more here than in the operator drain, because
+// nobody is watching. A spent row that halted the pass without going terminal
+// was re-claimed first on every tick — so every revocation queued behind it
+// never drained, for ever, on the one row class where delay IS the exposure.
+func TestDrainRevocations_ASpentRowDoesNotBlockTheOnesBehindIt(t *testing.T) {
 	stubDrainDeps(t)
-	t.Cleanup(swap(&claimRevocations, revokeRows("r1", "r2")))
+	rows := revokeRows("r1", "r2")
+	t.Cleanup(swap(&claimRevocations, func(ctx context.Context, target string, limit int) ([]models.PendingPropagation, error) {
+		out, err := rows(ctx, target, limit)
+		if err != nil {
+			return nil, err
+		}
+		out[0].Attempts = maxRetries
+		return out, nil
+	}))
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
 		return map[string]bool{"r": true}, nil
 	}
@@ -125,18 +134,23 @@ func TestDrainRevocations_HaltsOnRetryBudgetAndLeavesTheRestQueued(t *testing.T)
 	var requeued []string
 	requeue = func(_ context.Context, id, _ string) (int, error) {
 		requeued = append(requeued, id)
-		return maxRetries + 1, nil
+		return 1, nil
 	}
+	failed := map[string]string{}
+	markFailed = func(_ context.Context, id, msg string) error { failed[id] = msg; return nil }
 
 	res, err := DrainRevocations(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Halted || res.Reason != "max_retries_exceeded" {
-		t.Fatalf("want halted/max_retries_exceeded, got %+v", res)
+	if res.Halted {
+		t.Fatalf("a spent revocation must not stop the runner: %+v", res)
 	}
-	if len(requeued) != 1 || requeued[0] != "r1" {
-		t.Fatalf("the halt must stop the pass, not walk the rest of the batch: %v", requeued)
+	if res.Exhausted != 1 || failed["r1"] == "" {
+		t.Fatalf("the spent row must be terminal with a reason: %+v %v", res, failed)
+	}
+	if len(requeued) != 1 || requeued[0] != "r2" {
+		t.Fatalf("the revocation behind it must still be attempted: %v", requeued)
 	}
 }
 

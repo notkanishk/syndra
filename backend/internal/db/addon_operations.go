@@ -284,13 +284,13 @@ var ErrSubjectRateLimited = errors.New("db: too many recent operations for this 
 // operation, a member naming somebody else, a parameter that failed validation
 // — never reached the target and never cost it anything, so counting it would
 // let one malformed client lock a member out of a path that was working.
-func CountRecentAddonOperations(ctx context.Context, subjectID, operation string, window time.Duration) (int, error) {
+func CountRecentAddonOperations(ctx context.Context, target, subjectID, operation string, window time.Duration) (int, error) {
 	const q = `
 		SELECT COUNT(*) FROM addon_operations
-		 WHERE subject_id = $1 AND operation = $2
-		   AND created_at > NOW() - ($3 || ' seconds')::interval`
+		 WHERE target = $1 AND subject_id = $2 AND operation = $3
+		   AND created_at > NOW() - ($4 || ' seconds')::interval`
 	var n int
-	if err := PG.QueryRow(ctx, q, subjectID, operation, int64(window/time.Second)).Scan(&n); err != nil {
+	if err := PG.QueryRow(ctx, q, target, subjectID, operation, int64(window/time.Second)).Scan(&n); err != nil {
 		return 0, fmt.Errorf("count recent addon operations: %w", err)
 	}
 	return n, nil

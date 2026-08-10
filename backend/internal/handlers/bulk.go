@@ -130,6 +130,11 @@ func handleBulkGrants(w http.ResponseWriter, r *http.Request) {
 
 	plan := planApprovedRows(input.Op, subjects, current)
 	applyBulkPlan(r, &plan, input)
+	// 202, not 200, and the rule is the same everywhere in this API: 202 when
+	// the write is RECORDED and something else has to carry it to the target,
+	// 200 when it is done by the time the response is written. A bulk grant
+	// lands in the outbox, so the honest code is the one that says "accepted"
+	// — the drift resolutions below answer 200 because their write is finished.
 	jsonResponse(w, http.StatusAccepted, plan)
 }
 

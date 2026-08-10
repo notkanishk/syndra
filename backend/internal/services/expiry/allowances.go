@@ -19,6 +19,20 @@ import (
 // passes. What is NOT correct is the target: nothing has told it, and it will
 // keep the person out until something re-resolves them.
 //
+// And today NOTHING tells it. `reconvergeSubject` resolves the set and stops
+// there, because queueing an apply needs a plan subject to cite and a
+// system-initiated re-convergence has no plan — the open design question
+// NEXT.md item 1 names. The drift sweep is not the fallback either: it is
+// `const target = db.TargetZitadel`, and add-on drift is unbuilt, so for the
+// only target class this change adds there is no second path.
+//
+// So the accurate claim is: the suspension ends here, Syndra's answer is right
+// from this moment, and the TARGET stays as it was until an operator drives a
+// change through the entitlement plane. Said plainly because the two weaker
+// versions of this sentence — "the access actually comes back", then "the drift
+// sweep tells it" — were both wrong, and a doc that is confidently wrong about
+// what restores somebody's access is worse than one that says nothing.
+//
 // Deliberately NOT the same pass as grant expiry. That one removes access and
 // this one restores it, they have different failure directions, and a batch
 // that aborted halfway through the first would silently skip the second — on

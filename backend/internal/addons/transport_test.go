@@ -6,11 +6,13 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -26,7 +28,7 @@ import (
 // performs. Deliberately not calling ComputeSignature: a verifier built from
 // the producer proves the producer agrees with itself, which is the one thing
 // that was never in doubt.
-func verifySignature(header string, body, key []byte, tolerance time.Duration, now time.Time) error {
+func verifySignature(header, method, path string, body, key []byte, tolerance time.Duration, now time.Time) error {
 	var ts int64
 	var sig []byte
 	for _, pair := range strings.Split(header, ",") {
@@ -60,7 +62,10 @@ func verifySignature(header string, body, key []byte, tolerance time.Duration, n
 		return errors.New("timestamp outside tolerance")
 	}
 	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(strconv.FormatInt(ts, 10) + "."))
+	// The request line is inside the MAC as well as the body: the operation
+	// name lives in the path and in nothing else, and an empty-bodied GET
+	// signed without it has a MAC that is a function of the timestamp alone.
+	mac.Write([]byte(strconv.FormatInt(ts, 10) + "." + method + "." + path + "."))
 	mac.Write(body)
 	if !hmac.Equal(mac.Sum(nil), sig) {
 		return errors.New("signature does not match")
@@ -133,7 +138,7 @@ func TestCallCarriesPlanFingerprintAndOperationIdUnderSignature(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		seen = true
-		sigE = verifySignature(r.Header.Get(SignatureHeader), body, key, time.Minute, time.Now())
+		sigE = verifySignature(r.Header.Get(SignatureHeader), r.Method, r.URL.Path, body, key, time.Minute, time.Now())
 		_ = json.Unmarshal(body, &env)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -193,7 +198,7 @@ func TestSignatureBindsBodyAndTimestamp(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	now := time.Now()
-	if err := verifySignature(header, body, key, time.Minute, now); err != nil {
+	if err := verifySignature(header, http.MethodPost, "/operations/password.set", body, key, time.Minute, now); err != nil {
 		t.Fatalf("captured signature should verify as sent: %v", err)
 	}
 
@@ -203,7 +208,7 @@ func TestSignatureBindsBodyAndTimestamp(t *testing.T) {
 		if len(tampered) != len(body) {
 			t.Fatal("test built a tampered body of a different length; the point is content, not length")
 		}
-		if err := verifySignature(header, tampered, key, time.Minute, now); err == nil {
+		if err := verifySignature(header, http.MethodPost, "/operations/password.set", tampered, key, time.Minute, now); err == nil {
 			t.Fatal("a rewritten subject verified under the original signature")
 		}
 	})
@@ -213,7 +218,7 @@ func TestSignatureBindsBodyAndTimestamp(t *testing.T) {
 		// extends a captured call's life.
 		_, v1, _ := strings.Cut(header, ",")
 		stretched := fmt.Sprintf("t=%d,%s", now.Add(time.Hour).Unix(), v1)
-		if err := verifySignature(stretched, body, key, 2*time.Hour, now.Add(time.Hour)); err == nil {
+		if err := verifySignature(stretched, http.MethodPost, "/operations/password.set", body, key, 2*time.Hour, now.Add(time.Hour)); err == nil {
 			t.Fatal("a signature verified under a timestamp it was not computed over")
 		}
 	})
@@ -221,7 +226,7 @@ func TestSignatureBindsBodyAndTimestamp(t *testing.T) {
 	t.Run("the header is not a reusable constant", func(t *testing.T) {
 		// A bare shared secret would produce the same header every time and
 		// replay forever. This one must not.
-		second := ComputeSignature(now.Add(time.Second), body, key)
+		second := ComputeSignature(now.Add(time.Second), http.MethodPost, "/operations/password.set", body, key)
 		if second == header {
 			t.Fatal("two calls at different times produced an identical credential")
 		}
@@ -625,7 +630,7 @@ func TestManifestReadIsAuthenticated(t *testing.T) {
 		body, _ := io.ReadAll(r.Body)
 		mu.Lock()
 		saw = true
-		sigErr = verifySignature(r.Header.Get(SignatureHeader), body, key, time.Minute, time.Now())
+		sigErr = verifySignature(r.Header.Get(SignatureHeader), r.Method, r.URL.Path, body, key, time.Minute, time.Now())
 		mu.Unlock()
 		_ = json.NewEncoder(w).Encode(goodManifest())
 	}))
@@ -1030,13 +1035,13 @@ func TestApplyConsultsTheBreakerBeforeSending(t *testing.T) {
 	signedAddon(t, srv.URL, []byte("k"))
 	withBreaker(t, 1, time.Hour)
 
-	req := ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c1"}
+	req := ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c1", Fingerprint: "fp-1"}
 	if out := Apply(context.Background(), req); out.Outcome == OutcomeSucceeded {
 		t.Fatal("the first call must fail")
 	}
 	before := calls
 
-	second := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c2"})
+	second := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c2", Fingerprint: "fp-1"})
 	if !errors.Is(second.Err, ErrCircuitOpen) {
 		t.Fatalf("want the circuit refusing, got %v", second.Err)
 	}
@@ -1057,7 +1062,7 @@ func TestAnUndecodableApplySuccessIsIndeterminate(t *testing.T) {
 	signedAddon(t, srv.URL, []byte("k"))
 	withBreaker(t, 1000, time.Minute)
 
-	resp := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c1"})
+	resp := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c1", Fingerprint: "fp-1"})
 	if resp.Outcome != OutcomeIndeterminate {
 		t.Fatalf("want indeterminate, got %s", resp.Outcome)
 	}
@@ -1078,7 +1083,7 @@ func TestASuccessfulApplyCarriesBackWhatTheAddonDid(t *testing.T) {
 	signedAddon(t, srv.URL, []byte("k"))
 	withBreaker(t, 1000, time.Minute)
 
-	resp := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c1"})
+	resp := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c1", Fingerprint: "fp-1"})
 	if resp.Outcome != OutcomeSucceeded {
 		t.Fatalf("want succeeded, got %s / %v", resp.Outcome, resp.Err)
 	}
@@ -1095,7 +1100,7 @@ func TestApplyIsSignedLikeEveryOtherLeg(t *testing.T) {
 	var seenBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seenBody, _ = io.ReadAll(r.Body)
-		verified = verifySignature(r.Header.Get(SignatureHeader), seenBody, key, time.Minute, time.Now())
+		verified = verifySignature(r.Header.Get(SignatureHeader), r.Method, r.URL.Path, seenBody, key, time.Minute, time.Now())
 		_, _ = w.Write([]byte(`{"effect":"applied"}`))
 	}))
 	defer srv.Close()
@@ -1116,5 +1121,122 @@ func TestApplyIsSignedLikeEveryOtherLeg(t *testing.T) {
 		if !strings.Contains(string(seenBody), want) {
 			t.Errorf("the signed body must carry %s: %s", want, seenBody)
 		}
+	}
+}
+
+// Certificate expiry is a certainty, not a hypothesis — the credential surface
+// exists to warn about it — and a handshake that failed delivered nothing.
+// Classified as indeterminate it became the one outcome that is never retried
+// and never counted, so an expired certificate turned the whole queue into rows
+// nobody could resolve.
+func TestAHandshakeFailureIsUnreachedRatherThanIndeterminate(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"dial refused", &net.OpError{Op: "dial", Err: errors.New("connection refused")}, true},
+		{"our CA does not trust theirs", &tls.CertificateVerificationError{Err: x509.UnknownAuthorityError{}}, true},
+		{"expired server certificate", x509.CertificateInvalidError{Reason: x509.Expired}, true},
+		{"wrong hostname", x509.HostnameError{Host: "addon-truenas"}, true},
+		{"they refused our certificate", tls.AlertError(42), true},
+		{"not TLS at all on that port", tls.RecordHeaderError{Msg: "first record does not look like a TLS handshake"}, true},
+		{"handshake deadline", errors.New(`Post "https://x": net/http: TLS handshake timeout`), true},
+
+		// The other side of the line: these happened at or after the point the
+		// request could have been delivered, and the pessimistic reading is the
+		// only safe one.
+		{"response deadline", context.DeadlineExceeded, false},
+		{"reset mid-response", &net.OpError{Op: "read", Err: errors.New("connection reset by peer")}, false},
+	} {
+		if got := dialFailed(tc.err); got != tc.want {
+			t.Errorf("%s: dialFailed = %t, want %t", tc.name, got, tc.want)
+		}
+	}
+}
+
+// The operation name is in the URL and in nothing else, so an empty-bodied GET
+// signed over the timestamp and body alone had a MAC that was a function of the
+// timestamp — valid for any zero-body request inside the window, whichever path
+// it was replayed at.
+func TestTheSignatureCoversTheRequestLineNotOnlyTheBody(t *testing.T) {
+	key := []byte("k")
+	now := time.Unix(1_700_000_000, 0)
+
+	capabilities := ComputeSignature(now, http.MethodGet, "/capabilities", nil, key)
+	if err := verifySignature(capabilities, http.MethodPost, "/operations/password.set", nil, key, time.Minute, now); err == nil {
+		t.Fatal("a capabilities signature verified a credential reset")
+	}
+	if err := verifySignature(capabilities, http.MethodGet, "/capabilities", nil, key, time.Minute, now); err != nil {
+		t.Fatalf("and it must still verify the request it was made for: %v", err)
+	}
+
+	// Two zero-body reads at the same instant on different paths must not share
+	// a signature, which is the property the old construction did not have.
+	health := ComputeSignature(now, http.MethodGet, "/health", nil, key)
+	if health == capabilities {
+		t.Fatal("two different requests produced one credential")
+	}
+}
+
+// %v and %#v were carefully redacting while json.Marshal emitted the secret in
+// full — and a structured log line is the most likely of the three to be
+// written by somebody who never read this type.
+func TestMarshallingACallRequestRedactsTheSecret(t *testing.T) {
+	installAddon(t, Registration{Target: "truenas", BaseURL: "https://addon", SigningKeyPath: keyFile(t)}, goodManifest())
+
+	req := CallRequest{
+		Target: "truenas", Operation: "password.set", Subject: "u1",
+		Params: map[string]any{"password": "hunter2"},
+	}
+	encoded, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "hunter2") {
+		t.Fatalf("json.Marshal emitted the secret: %s", encoded)
+	}
+	if !strings.Contains(string(encoded), "password") {
+		t.Errorf("the parameter name must survive so a diagnostic still says what was sent: %s", encoded)
+	}
+	// The other two verbs, still.
+	for _, rendered := range []string{fmt.Sprintf("%v", req), fmt.Sprintf("%#v", req)} {
+		if strings.Contains(rendered, "hunter2") {
+			t.Errorf("rendered secret: %s", rendered)
+		}
+	}
+}
+
+func keyFile(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "sign.key")
+	writeFile(t, path, []byte("k"))
+	return path
+}
+
+// `LifecycleRefusal` is derived entirely from add-on-controlled output — a 503
+// plus a Retry-After header — so a refusal that CLEARED the failure count let a
+// broken add-on alternate 5xx with 503+Retry-After and keep the breaker shut
+// for ever. The window pauses the count; it does not forgive it.
+func TestALifecycleRefusalDoesNotClearTheBreaker(t *testing.T) {
+	b := &breaker{}
+	now := time.Unix(1_700_000_000, 0)
+
+	for range breakerThreshold - 1 {
+		b.record(now, CallResponse{Outcome: OutcomeIndeterminate, Status: 500})
+		b.record(now, CallResponse{Outcome: OutcomeUnreached, Status: 503, LifecycleRefusal: true})
+	}
+	if !b.allow(now) {
+		t.Fatal("the breaker must still be closed below the threshold")
+	}
+	b.record(now, CallResponse{Outcome: OutcomeIndeterminate, Status: 500})
+	if b.allow(now) {
+		t.Fatal("a maintenance window must not reset the count a failing add-on is accumulating")
+	}
+
+	// And an answer that proves the add-on is working still clears it.
+	b.record(now, CallResponse{Outcome: OutcomeRejected, Status: 422})
+	if !b.allow(now) {
+		t.Fatal("a 4xx is a healthy add-on saying no, and must close the breaker")
 	}
 }

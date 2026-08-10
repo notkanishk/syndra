@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"syndra/internal/addons"
+	"syndra/internal/auth"
 	"syndra/internal/db"
 )
 
@@ -205,6 +206,7 @@ func TestADuplicateBindingIsAConflict(t *testing.T) {
 // allowance whose author is whoever the client said is one nobody can be asked
 // about, which is the whole thing this layer exists for.
 func TestAnAllowanceRecordsTheAuthenticatedOperator(t *testing.T) {
+	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
 	create := dbCreateAllowance
 	t.Cleanup(func() { dbCreateAllowance = create })
 	var seen db.Allowance
@@ -215,8 +217,12 @@ func TestAnAllowanceRecordsTheAuthenticatedOperator(t *testing.T) {
 	}
 
 	rr := httptest.NewRecorder()
-	handleCreateAllowance(rr, httptest.NewRequest(http.MethodPost, "/api/v1/allowances", strings.NewReader(
-		`{"subject_id":"u1","target":"truenas","field":"group","value":"lab_makers","direction":"deny","reason":"safety review","expires_at":"2026-12-01T00:00:00Z"}`)))
+	// Authenticated, so the assertion below is about the PRINCIPAL rather than
+	// about whichever fallback the surface happens to use.
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/allowances", strings.NewReader(
+		`{"subject_id":"u1","target":"truenas","field":"group","value":"lab_makers","direction":"deny","reason":"safety review","expires_at":"2026-12-01T00:00:00Z"}`))
+	req = req.WithContext(withPrincipal(req.Context(), &auth.Principal{Subject: "op_7"}))
+	handleCreateAllowance(rr, req)
 
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("want 201, got %d (%s)", rr.Code, rr.Body.String())
@@ -224,7 +230,7 @@ func TestAnAllowanceRecordsTheAuthenticatedOperator(t *testing.T) {
 	// The actor is exactly the resolved principal, and nothing else on the
 	// request can become it. Asserting "not empty" would pass for any field the
 	// caller controls.
-	if seen.ActorID != resolveActor(httptest.NewRequest(http.MethodPost, "/", nil), "operator") {
+	if seen.ActorID != "op_7" {
 		t.Fatalf("the actor must be the authenticated operator, got %q", seen.ActorID)
 	}
 	for _, supplied := range []string{seen.Reason, seen.SubjectID, seen.Value, seen.Field} {
@@ -237,6 +243,7 @@ func TestAnAllowanceRecordsTheAuthenticatedOperator(t *testing.T) {
 // An additive allowance is well formed and unimplemented. A 400 would send an
 // operator looking for their own mistake.
 func TestAnAdditiveAllowanceIsNotImplementedRatherThanInvalid(t *testing.T) {
+	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
 	create := dbCreateAllowance
 	t.Cleanup(func() { dbCreateAllowance = create })
 	dbCreateAllowance = func(context.Context, db.Allowance) (db.Allowance, error) {
@@ -259,5 +266,91 @@ func TestTheAllowanceSurfaceOffersNoDelete(t *testing.T) {
 	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodDelete, "/api/v1/allowances/a1", nil))
 	if rr.Code != http.StatusMethodNotAllowed && rr.Code != http.StatusNotFound {
 		t.Fatalf("an allowance must not be deletable: %d", rr.Code)
+	}
+}
+
+// The failure this validation exists for: `resolveLifecycle` honours a
+// lifecycle denial only when the value is exactly "true", so `enabled=false` —
+// the way most people would write "disable this account" — was recorded, shown
+// in the lineage band as in force with an actor and a reason, and suppressed
+// nothing at all. An allowance the resolver ignores is worse than a rejected
+// one, because the operator has evidence they suspended somebody.
+func TestALifecycleDenialWrittenAsFalseIsRefused(t *testing.T) {
+	stubMappingDeps(t, []addons.EntitlementField{
+		{Name: "group", Type: "string[]"},
+		{Name: "enabled", Type: "bool", Lifecycle: true},
+	})
+	create := dbCreateAllowance
+	t.Cleanup(func() { dbCreateAllowance = create })
+	var stored int
+	dbCreateAllowance = func(context.Context, db.Allowance) (db.Allowance, error) {
+		stored++
+		return db.Allowance{ID: "a1"}, nil
+	}
+
+	for _, value := range []string{"false", "1", "True", ""} {
+		rr := httptest.NewRecorder()
+		handleCreateAllowance(rr, httptest.NewRequest(http.MethodPost, "/api/v1/allowances", strings.NewReader(
+			`{"subject_id":"u1","target":"truenas","field":"enabled","value":"`+value+`",`+
+				`"direction":"deny","reason":"safety review","expires_at":"2026-12-01T00:00:00Z"}`)))
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("value %q must be refused, got %d (%s)", value, rr.Code, rr.Body.String())
+		}
+	}
+	if stored != 0 {
+		t.Fatalf("nothing may be stored for a denial the resolver would ignore, stored %d", stored)
+	}
+
+	// And the one spelling that does something is accepted.
+	rr := httptest.NewRecorder()
+	handleCreateAllowance(rr, httptest.NewRequest(http.MethodPost, "/api/v1/allowances", strings.NewReader(
+		`{"subject_id":"u1","target":"truenas","field":"enabled","value":"true",`+
+			`"direction":"deny","reason":"safety review","expires_at":"2026-12-01T00:00:00Z"}`)))
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("want 201 for enabled=true, got %d (%s)", rr.Code, rr.Body.String())
+	}
+}
+
+// A misspelled field is the same failure with a different spelling.
+func TestAnAllowanceOnAFieldTheTargetLacksIsRefused(t *testing.T) {
+	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	create := dbCreateAllowance
+	t.Cleanup(func() { dbCreateAllowance = create })
+	dbCreateAllowance = func(context.Context, db.Allowance) (db.Allowance, error) {
+		t.Fatal("nothing may be stored for a field the target does not have")
+		return db.Allowance{}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	handleCreateAllowance(rr, httptest.NewRequest(http.MethodPost, "/api/v1/allowances", strings.NewReader(
+		`{"subject_id":"u1","target":"truenas","field":"groups","value":"lab_makers",`+
+			`"direction":"deny","reason":"r","expires_at":"2026-12-01T00:00:00Z"}`)))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	// The declared set is named, so an operator whose field is not in the schema
+	// learns what is.
+	if !strings.Contains(rr.Body.String(), "group") {
+		t.Errorf("the refusal must name what the target does declare: %s", rr.Body.String())
+	}
+}
+
+// An unregistered target reaches the foreign key otherwise, and returns 500
+// with raw constraint text — the failure the mapping surface refuses early.
+func TestAnAllowanceOnAnUnregisteredTargetIsRefusedBeforeTheForeignKey(t *testing.T) {
+	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	create := dbCreateAllowance
+	t.Cleanup(func() { dbCreateAllowance = create })
+	dbCreateAllowance = func(context.Context, db.Allowance) (db.Allowance, error) {
+		t.Fatal("nothing may reach the database for a target the deployment does not run")
+		return db.Allowance{}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	handleCreateAllowance(rr, httptest.NewRequest(http.MethodPost, "/api/v1/allowances", strings.NewReader(
+		`{"subject_id":"u1","target":"unifi","field":"group","value":"x",`+
+			`"direction":"deny","reason":"r","expires_at":"2026-12-01T00:00:00Z"}`)))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d (%s)", rr.Code, rr.Body.String())
 	}
 }

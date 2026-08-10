@@ -1,5 +1,7 @@
 package addons
 
+import "encoding/json"
+
 // redactedValue replaces a secret parameter's value everywhere the parameter
 // set leaves the request path — audit rows, outbox payloads, log lines, error
 // strings. It is a fixed token rather than a length-preserving mask: a mask
@@ -9,7 +11,10 @@ const redactedValue = "[REDACTED]"
 
 // RedactedParams returns a copy of params safe to persist or log.
 //
-// The secret set is resolved from the effective operation — policy ∩ manifest —
+// The secret set is resolved from the effective operation — the more
+// restrictive of policy and manifest on every dimension, which on THIS one is
+// their union: a manifest that omits a secret declaration must not thereby make
+// the value loggable, and it may add names the backend does not know about —
 // not taken from the caller. That is the whole point: a caller that forgot to
 // list its secret parameter is exactly the caller whose secret would otherwise
 // be written, and the backend already knows which parameters are secret because
@@ -72,7 +77,23 @@ func redactValue(v any, names map[string]struct{}, all bool) any {
 			inner[i] = redactValue(iv, names, all)
 		}
 		return inner
-	default:
+	case string, bool, nil,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64,
+		float32, float64, json.Number:
+		// A scalar has no keys to hide behind, so it passes through whole. It
+		// was already checked against the secret names by its own key.
 		return v
+	default:
+		// Everything else is walked structurally or not at all — and "not at
+		// all" is the wrong answer here. This arm was the one place in the file
+		// that failed OPEN: it handled `map[string]any` and `[]any` and let a
+		// `map[string]string`, a `[]string`, or a struct through untouched, so
+		// a nested secret survived a redaction whose whole job is that it does
+		// not have to be right about the shape.
+		//
+		// The keys of the parent map still name what was present, which is what
+		// a diagnostic needs; the value is gone.
+		return redactedValue
 	}
 }

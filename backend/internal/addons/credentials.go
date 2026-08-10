@@ -1,6 +1,7 @@
 package addons
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -273,24 +275,12 @@ func readSigningKey(path string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("signing key: %w", err)
 	}
-	key := trimTrailingSpace(raw)
+	// TrimRight over the same cut set the twelve hand-written lines covered.
+	key := bytes.TrimRight(raw, "\r\n\t ")
 	if len(key) == 0 {
 		return nil, errors.New("signing key: file is empty")
 	}
 	return key, nil
-}
-
-func trimTrailingSpace(b []byte) []byte {
-	end := len(b)
-	for end > 0 {
-		switch b[end-1] {
-		case '\n', '\r', '\t', ' ':
-			end--
-		default:
-			return b[:end]
-		}
-	}
-	return b[:0]
 }
 
 // earliestNotAfter returns the soonest expiry among the certificates in a PEM
@@ -387,7 +377,40 @@ func soonest(a, b time.Time) time.Time {
 
 // dialFailed reports whether an error means the request never reached the
 // add-on. Used to separate "nothing happened" from "something may have".
+//
+// Three families, all of them strictly before the first byte of the request is
+// written:
+//
+//   - the dial itself,
+//   - the TLS handshake, which is the most predictable failure this transport
+//     has. Certificate expiry is a certainty, not a hypothesis — the credential
+//     surface exists to warn about it — and a handshake that fails delivered
+//     nothing. Classified as indeterminate it became the one outcome that is
+//     never retried and never counted, so an expired certificate turned the
+//     whole queue into rows nobody could resolve.
+//   - the alert the peer sends when it refuses OUR certificate, which is the
+//     other half of a rotation gone wrong.
+//
+// Every one of them is typed, deliberately. A general timeout is NOT here: a
+// deadline that expired mid-response means the request was delivered, and the
+// pessimistic reading is the only safe one for those.
 func dialFailed(err error) bool {
 	var op *net.OpError
-	return errors.As(err, &op) && op.Op == "dial"
+	if errors.As(err, &op) && op.Op == "dial" {
+		return true
+	}
+	var verify *tls.CertificateVerificationError
+	var alert tls.AlertError
+	var record tls.RecordHeaderError
+	var authority x509.UnknownAuthorityError
+	var hostname x509.HostnameError
+	var certInvalid x509.CertificateInvalidError
+	switch {
+	case errors.As(err, &verify), errors.As(err, &alert), errors.As(err, &record),
+		errors.As(err, &authority), errors.As(err, &hostname), errors.As(err, &certInvalid):
+		return true
+	}
+	// net/http's own handshake deadline, which has no typed form and is the one
+	// timeout that certainly delivered nothing.
+	return strings.Contains(err.Error(), "TLS handshake timeout")
 }

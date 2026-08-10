@@ -65,10 +65,12 @@ func newHarness(t *testing.T) *harness {
 
 	sr, sv, sn, sb, sc, ss := resolveOperation, validateParams, operationRecord, beginOperation, callAddon, settleOperation
 	scr := countRecentOperations
-	countRecentOperations = func(_ context.Context, subject, operation string, _ time.Duration) (int, error) {
+	countRecentOperations = func(_ context.Context, target, subject, operation string, _ time.Duration) (int, error) {
 		h.record("rate")
 		h.mu.Lock()
-		h.rateQueries = append(h.rateQueries, subject+"|"+operation)
+		// The target is part of the key: one add-on's retries must not consume
+		// another add-on's budget for the same person.
+		h.rateQueries = append(h.rateQueries, target+"|"+subject+"|"+operation)
 		h.mu.Unlock()
 		return h.recentOps, h.recentOpsErr
 	}
@@ -553,7 +555,7 @@ func TestAnAdminScopedOperationMayNameAnotherSubject(t *testing.T) {
 
 // A manifest cannot defeat the check by declaring no subject constraint, and it
 // cannot reach it by declaring itself member-scoped either: the effective scope
-// is policy ∩ manifest with policy winning, so a manifest can only narrow.
+// is the more restrictive of policy and manifest, so a manifest can only narrow.
 func TestAManifestCannotWidenOrEvadeTheSubjectBinding(t *testing.T) {
 	// Policy says admin; a manifest claiming member resolves to admin, which is
 	// asserted in the addons package. What is asserted here is that the binding
@@ -585,10 +587,13 @@ func TestAMemberIsRateLimitedPerSubjectBeforeAnythingIsSent(t *testing.T) {
 	if res.OperationID != "" || len(h.begun) != 0 || len(h.calls) != 0 {
 		t.Fatal("the refusal must come before the record and therefore before the network")
 	}
-	// Per subject and per operation. A global counter would let one member's
-	// retries lock out everybody else's first attempt.
-	if len(h.rateQueries) != 1 || h.rateQueries[0] != "user-42|password.set" {
-		t.Errorf("the count must be scoped to this subject and this operation: %v", h.rateQueries)
+	// Per target, per subject and per operation. A global counter would let one
+	// member's retries lock out everybody else's first attempt — and a counter
+	// that ignored the target would let a loop against the NAS lock the same
+	// person out of the door controller, a different system with a different
+	// session and a different reason for the limit.
+	if len(h.rateQueries) != 1 || h.rateQueries[0] != "truenas|user-42|password.set" {
+		t.Errorf("the count must be scoped to this target, subject and operation: %v", h.rateQueries)
 	}
 }
 

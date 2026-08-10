@@ -28,9 +28,14 @@ type DrainResult struct {
 	// NOT be persisted (mark-applied/failed, requeue, or ledger reconcile failed).
 	// Such a row is left non-terminal (in_flight) and is neither applied nor
 	// failed for this pass — the next drain reclaims and re-drives it.
-	Errored int    `json:"errored"`
-	Halted  bool   `json:"halted"`
-	Reason  string `json:"reason,omitempty"`
+	Errored int `json:"errored"`
+	// Exhausted counts rows this pass made terminal because their retry budget
+	// ran out. A subset of Failed, reported apart from it because the reason
+	// differs in what an operator does next: an ordinary failure names what the
+	// target said, and this one says nobody will try again.
+	Exhausted int    `json:"exhausted,omitempty"`
+	Halted    bool   `json:"halted"`
+	Reason    string `json:"reason,omitempty"`
 }
 
 // persistErr records a row whose Zitadel outcome was decided but whose state
@@ -202,8 +207,32 @@ func (res *DrainResult) processRow(ctx context.Context, row models.PendingPropag
 		}
 		res.Failed++
 	case ackTransient:
-		attempts, err := requeue(ctx, row.ID, errMsg)
-		if err != nil {
+		if row.Attempts >= maxRetries {
+			// The budget is spent. TERMINAL, and the pass continues.
+			//
+			// Halting without terminating was a poison pill. The row goes back
+			// to pending, the claim orders it first, and every pass re-claims
+			// it, requeues it and halts in the same place — so everything
+			// behind it never drains, silently and for ever. In the operator
+			// drain that is a visible stall; in the background revocation
+			// runner it is retained access nobody is told about, which is the
+			// one case §7 built the runner to prevent.
+			//
+			// Escalation (task 2.51) is where this row goes next. Until that
+			// exists it is a failed row with a reason, which an operator can
+			// see and re-enqueue — unlike a row that quietly blocks a queue.
+			reason := fmt.Sprintf("out of retries after %d attempts: %s", row.Attempts, errMsg)
+			if err := markFailed(ctx, row.ID, reason); err != nil {
+				if !res.abandoned(row.ID, "mark failed", err) {
+					res.persistErr(row.ID, "mark failed", err)
+				}
+				return false
+			}
+			res.Failed++
+			res.Exhausted++
+			return false
+		}
+		if _, err := requeue(ctx, row.ID, errMsg); err != nil {
 			// The requeue is the dangerous one: unguarded it would return an
 			// abandoned row to `pending` on a deregistered target, recreating
 			// the undrainable row the deregistration had just resolved.
@@ -213,11 +242,6 @@ func (res *DrainResult) processRow(ctx context.Context, row models.PendingPropag
 			return false
 		}
 		res.Requeued++
-		if attempts > maxRetries {
-			res.Halted = true
-			res.Reason = "max_retries_exceeded"
-			return true
-		}
 	}
 	return false
 }
@@ -321,10 +345,14 @@ func classifyDispatch(ctx context.Context, row models.PendingPropagation) (ackCl
 		if liveErr != nil {
 			// Can't confirm what would survive. Removing/updating blind here is
 			// the exact data-loss path this fix exists to close, so the
-			// least-destructive choice is to treat this as transient and let the
-			// next drain retry once the live list is readable again — never
-			// guess and never fall through to an unconditional Remove.
-			return ackTransient, fmt.Sprintf("revoke: could not read live grant roles: %v", liveErr)
+			// least-destructive choice is never to guess and never to fall
+			// through to an unconditional Remove.
+			//
+			// Classified like every other Zitadel error rather than assumed
+			// transient: a user deleted in Zitadel answers 404 for ever, and
+			// retrying that until the budget runs out is how the revocation
+			// queue acquires a row that can never settle.
+			return classifyZitadelError(liveErr), fmt.Sprintf("revoke: could not read live grant roles: %v", liveErr)
 		}
 		revoked := make(map[string]bool, len(row.RoleKeys))
 		for _, rk := range row.RoleKeys {

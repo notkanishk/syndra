@@ -54,6 +54,15 @@ func DrainAddon(ctx context.Context, target string) (DrainResult, error) {
 	}
 	defer release()
 
+	// One probe, before any row is claimed, exactly as the Zitadel passes do.
+	// A batch dispatched into an outage spends one retry per row to learn what
+	// a single call establishes — and an exhausted budget is terminal, so the
+	// rows an operator approved would be failed by the target being switched
+	// off rather than left queued for it coming back.
+	if !addonReachable(ctx, target) {
+		return DrainResult{Halted: true, Reason: "target_unreachable"}, nil
+	}
+
 	rows, err := claimPending(ctx, target, claimBatch)
 	if err != nil {
 		return DrainResult{}, fmt.Errorf("claim pending: %w", err)
@@ -91,6 +100,13 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 
 	intent, err := readIntent(ctx, row.ID)
 	if err != nil {
+		if !errors.Is(err, db.ErrNoApprovedIntent) {
+			// The read failed, not the citation. A connection blip must not
+			// permanently fail an approved entitlement change — `failed` has no
+			// way back — so the row stays claimable and this pass records why.
+			res.persistErr(row.ID, "read intent", err)
+			return false
+		}
 		// A row with no approved snapshot must not be dispatched. Dispatching
 		// an empty desired state would converge the subject to nothing, which
 		// is the most destructive possible reading of a missing citation.
@@ -103,10 +119,41 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		return false
 	}
 
+	// The two ways a citation can be present and still say nothing. `Desired`
+	// returns nil for an absent or unparseable snapshot precisely so this
+	// decision is made here — and the decision is to refuse, because nil sent
+	// as a desired state is zero managed fields, which the add-on answers with
+	// `no_change` and this drain would record as converged. An approval that
+	// did nothing, marked applied.
+	//
+	// A missing fingerprint is the same shape of nothing: the add-on's check
+	// against live state has nothing to compare, and "the diff you approved is
+	// the diff that lands" stops being a property of the system.
+	switch {
+	case intent.Desired() == nil:
+		if markErr := markFailed(ctx, row.ID, "the approved desired state could not be read"); markErr != nil {
+			res.settleFailure(row.ID, "mark failed", markErr)
+			return false
+		}
+		res.Failed++
+		return false
+	case intent.Fingerprint == "":
+		if markErr := markFailed(ctx, row.ID, "the cited plan subject carries no fingerprint to verify against"); markErr != nil {
+			res.settleFailure(row.ID, "mark failed", markErr)
+			return false
+		}
+		res.Failed++
+		return false
+	}
+
 	resp := applyEntitlement(ctx, addons.ApplyRequest{
 		Target:      intent.Target,
 		Subject:     intent.SubjectID,
 		Fingerprint: intent.Fingerprint,
+		PlanID:      intent.PlanID,
+		// Who decided this, carried through to the add-on's mutation log. That
+		// log promises who did what to whom, and the add-on knows only the whom.
+		Actor: row.InitiatedBy,
 		// The outbox row's id is the deduplication token. Reusing it rather
 		// than minting one is what makes a re-drive safe: the add-on returns
 		// the original outcome instead of converging twice, and the row that
@@ -149,23 +196,38 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		res.Failed++
 
 	case resp.Outcome == addons.OutcomeUnreached:
-		attempts, err := requeue(ctx, row.ID, "the target could not be reached")
-		if err != nil {
+		if row.Attempts >= maxRetries {
+			// Terminal, and the pass continues — the same rule the Zitadel
+			// drain follows, and for the same reason: a row left non-terminal
+			// at the head of the queue is one every later pass re-claims and
+			// halts on, which stops everything behind it without saying so.
+			reason := fmt.Sprintf("out of retries after %d attempts: the target could not be reached", row.Attempts)
+			if err := markFailed(ctx, row.ID, reason); err != nil {
+				res.settleFailure(row.ID, "mark failed", err)
+				return false
+			}
+			res.Failed++
+			res.Exhausted++
+			return false
+		}
+		if _, err := requeue(ctx, row.ID, "the target could not be reached"); err != nil {
 			res.settleFailure(row.ID, "requeue", err)
 			return false
 		}
 		res.Requeued++
-		if attempts > maxRetries {
-			res.Halted, res.Reason = true, "max_retries_exceeded"
-			return true
-		}
 
 	default:
 		// Indeterminate: sent, answer lost, may have applied. Neither success
-		// nor failure, and emphatically not retryable — retrying duplicates a
-		// mutation the target may already hold. Left non-terminal and counted
-		// as errored, which is the honest state and the one the unresolved
-		// surface is built to show.
+		// nor failure, so it is left non-terminal and counted as errored — the
+		// honest state, and the one the unresolved surface is built to show.
+		//
+		// Left CLAIMABLE, deliberately, and this is where an entitlement apply
+		// parts company with a one-shot operation. An operation carries a secret
+		// and cannot be re-sent, so an indeterminate one waits for a human. An
+		// apply carries level-triggered desired state under a stable call id:
+		// re-driving it either learns the original outcome from the add-on's
+		// dedup or converges to the same state. The next pass is the resolution
+		// path, not a duplicated mutation.
 		res.persistErr(row.ID, "dispatch", errIndeterminate)
 	}
 	return false
@@ -186,6 +248,14 @@ func (res *DrainResult) settleFailure(id, step string, err error) {
 // The body is whatever the least trusted component chose to send back, and this
 // string lands in `last_error`, which an operator reads and a surface renders.
 func refusalReason(resp addons.ApplyResponse) string {
+	if resp.Code == addons.CodePlanStale {
+		// Named, because it is the one refusal whose next step is a re-plan
+		// rather than a fix. §8's proper answer here is a distinct stale-plan
+		// outcome that names the subjects that moved; the plan is already spent
+		// by the time this row is dispatched, so what the drain can do is say
+		// which of the two things happened in a form a surface can match on.
+		return "PLAN_STALE: the subject moved on the target since the plan was approved; re-plan and re-approve"
+	}
 	if resp.Detail != "" {
 		return "the target refused it: " + resp.Detail
 	}

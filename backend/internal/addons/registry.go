@@ -286,6 +286,19 @@ func requireHTTPS(base string) error {
 	if u.Scheme != "https" {
 		return fmt.Errorf("uses scheme %q; add-on transport requires https, because a client certificate is never presented and a private CA is never consulted on a connection that performs no handshake", u.Scheme)
 	}
+	if u.User != nil {
+		// Credentials in the URL. This value is logged at registration and
+		// appears in every error naming the base URL, so a password here is a
+		// password in the log — and the transport authenticates with a client
+		// certificate or a signature, so it would not even be used.
+		return errors.New("carries credentials in the URL; the transport authenticates with a certificate or a signature, and a URL is logged")
+	}
+	if u.RawQuery != "" || u.Fragment != "" {
+		// The base URL is concatenated with "/apply" and "/operations/<name>".
+		// A query string or fragment would land before the path and produce a
+		// request to something else entirely.
+		return errors.New("carries a query string or fragment; the base URL is joined with a path and would not survive it")
+	}
 	return nil
 }
 

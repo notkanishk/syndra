@@ -114,6 +114,16 @@ type EffectiveOperation struct {
 // shipped an add-on ahead of its backend, and it fails closed. Dropped ids are
 // returned separately so registration can log them once.
 func resolveOperations(m Manifest) (ops []EffectiveOperation, unknown []string) {
+	// Folded by id, most-restrictively, because a manifest may declare one id
+	// twice. Emitting a row per declaration and letting the first match win
+	// would let the least trusted component in the system pick which of its own
+	// declarations applies — declare `password.set` unavailable and then
+	// available, and which one the backend honours comes down to the order two
+	// equal keys happen to land in after a non-stable sort.
+	//
+	// The rule is the same one every dimension follows, applied once more: two
+	// declarations of one id resolve to the more restrictive of the two.
+	byID := map[string]EffectiveOperation{}
 	for _, mo := range m.Operations {
 		p, ok := operationPolicy[mo.ID]
 		if !ok {
@@ -133,11 +143,62 @@ func resolveOperations(m Manifest) (ops []EffectiveOperation, unknown []string) 
 		if !eff.Available && eff.UnavailableReason == "" {
 			eff.UnavailableReason = "the add-on reported this operation unavailable without a reason"
 		}
+		if previous, seen := byID[mo.ID]; seen {
+			eff = mostRestrictiveOperation(previous, eff)
+		}
+		byID[mo.ID] = eff
+	}
+	for _, eff := range byID {
 		ops = append(ops, eff)
 	}
+	// Stable, not merely sorted: `sort.Slice` is not stable, and a total order
+	// on the key it sorts by is what makes that irrelevant. Duplicates are
+	// folded above, so every remaining id is unique.
 	sort.Slice(ops, func(i, j int) bool { return ops[i].ID < ops[j].ID })
 	sort.Strings(unknown)
-	return ops, unknown
+	return ops, dedupeStrings(unknown)
+}
+
+// mostRestrictiveOperation resolves two declarations of one id.
+func mostRestrictiveOperation(a, b EffectiveOperation) EffectiveOperation {
+	out := EffectiveOperation{
+		ID:      a.ID,
+		Scope:   mostRestrictiveScope(a.Scope, b.Scope),
+		Confirm: a.Confirm || b.Confirm,
+		Params:  a.Params,
+		// Union, for the reason the policy/manifest union exists: a second
+		// declaration that omits a secret parameter must not make the value
+		// loggable.
+		SecretParams: unionStrings(a.SecretParams, b.SecretParams),
+		Available:    a.Available && b.Available,
+	}
+	switch {
+	case !a.Available && a.UnavailableReason != "":
+		out.UnavailableReason = a.UnavailableReason
+	case !b.Available:
+		out.UnavailableReason = b.UnavailableReason
+	}
+	return out
+}
+
+func unionStrings(a, b []string) []string {
+	return dedupeStrings(append(append([]string(nil), a...), b...))
+}
+
+func dedupeStrings(in []string) []string {
+	if len(in) == 0 {
+		return in
+	}
+	seen := make(map[string]bool, len(in))
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // mostRestrictiveScope returns whichever of the two admits fewer principals.

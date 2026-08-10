@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -116,7 +117,7 @@ func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
 	}
-	if err := attributeOneDrift(r.Context(), item, req, resolveActor(r, "operator")); err != nil {
+	if err := attributeOneDrift(r.Context(), item, req, resolveActor(r, "")); err != nil {
 		writeDriftActionError(w, err)
 		return
 	}
@@ -165,7 +166,7 @@ func handleRevokeDrift(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
 	}
-	actor := resolveActor(r, "operator")
+	actor := resolveActor(r, "")
 	// ONE tx: guard-transition to 'revoked' AND enqueue the revoke outbox row
 	// together. A lost race 409s with nothing written; a write failure rolls the
 	// resolution back too. Drain is best-effort AFTER commit — the durable revoke
@@ -207,7 +208,7 @@ func handleMarkDriftExternal(w http.ResponseWriter, r *http.Request) {
 	// together. A lost race 409s with no exclusion written; a write failure rolls
 	// the resolution back too.
 	if err := dbMarkDriftExternalTx(r.Context(), id, item.UserID, item.ProjectID,
-		item.RoleKeys, resolveActor(r, "operator"), req.Reason, string(payload)); err != nil {
+		item.RoleKeys, resolveActor(r, ""), req.Reason, string(payload)); err != nil {
 		writeDriftActionError(w, err) // ErrDriftNotPending → 409, else 500
 		return
 	}
@@ -229,6 +230,10 @@ func handleBulkAttributeDrift(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
 	}
+	if err := boundBulkIDs(req.IDs); err != nil {
+		jsonValidationErrorResponse(w, err.Error(), map[string]string{"ids": fmt.Sprintf("max %d", services.BulkMaxUsers)})
+		return
+	}
 	// Same source gate as the single-item endpoint: an empty/invalid source must
 	// not slip through to enqueueWrites and default to "direct" for the whole batch.
 	if !validAttributionSource(req.Source) {
@@ -239,7 +244,7 @@ func handleBulkAttributeDrift(w http.ResponseWriter, r *http.Request) {
 	// The attribution source changes what adopting DOES, so it is bound to the
 	// plan. The cohort is bound with it: an apply that widened the id list under
 	// one approval would resolve rows nobody looked at.
-	actor := resolveActor(r, "operator")
+	actor := resolveActor(r, "")
 	requestFP := services.FingerprintIDCohort(driftOpAdopt, req.IDs, "source", req.Source)
 
 	if r.URL.Query().Get("apply") != "true" {
@@ -285,11 +290,16 @@ func handleBulkMarkDriftExternal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := boundBulkIDs(req.IDs); err != nil {
+		jsonValidationErrorResponse(w, err.Error(), map[string]string{"ids": fmt.Sprintf("max %d", services.BulkMaxUsers)})
+		return
+	}
+
 	// `Reason` is deliberately absent from the binding: it is recorded beside
 	// the exclusion and changes nothing about which rows are excluded, so making
 	// a typo cost a re-plan would only teach operators to click through the
 	// stale-plan dialog.
-	actor := resolveActor(r, "operator")
+	actor := resolveActor(r, "")
 	requestFP := services.FingerprintIDCohort(driftOpExternal, req.IDs)
 
 	if r.URL.Query().Get("apply") != "true" {
@@ -341,4 +351,19 @@ func writeDriftActionError(w http.ResponseWriter, err error) {
 	default:
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 	}
+}
+
+// boundBulkIDs caps one bulk resolution at the same ceiling every other bulk
+// surface uses.
+//
+// Its siblings cap and these two did not, so one request could rehearse and
+// resolve an unbounded cohort — a plan nobody can read, a fingerprint over a
+// list nobody can check, and one transaction holding as many rows as the
+// caller felt like sending.
+func boundBulkIDs(ids []string) error {
+	if len(ids) > services.BulkMaxUsers {
+		return fmt.Errorf("a bulk resolution is capped at %d rows; this one names %d",
+			services.BulkMaxUsers, len(ids))
+	}
+	return nil
 }

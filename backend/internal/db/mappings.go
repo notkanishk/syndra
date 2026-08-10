@@ -226,16 +226,33 @@ func TargetsMappedToRole(ctx context.Context, projectID, roleKey string) ([]stri
 // alone, because a role held through a bundle or derived by a rule is held just
 // as much as one granted by hand, and a blast-radius count that missed those
 // would understate the change on exactly the mappings that matter most.
+// The rule arm is the one this comment promised and the query did not have.
+// Direct grants carry an expiry; a lapsed one is not held, and counting it
+// overstated the cohort in the other direction.
+//
+// Rules are followed ONE hop. A rule chain would need a recursive walk, and the
+// resolver does not follow one either — so a deeper count would report a
+// blast radius the product cannot actually produce.
 func MappingHolders(ctx context.Context, projectID, roleKey string) ([]string, error) {
 	const q = `
-		SELECT DISTINCT user_id FROM (
-			SELECT user_id FROM direct_role_grants
-			 WHERE zitadel_project_id = $1 AND zitadel_role_key = $2
+		WITH held AS (
+			SELECT user_id, zitadel_project_id AS project_id, zitadel_role_key AS role_key
+			  FROM direct_role_grants
+			 WHERE expires_at IS NULL OR expires_at > NOW()
 			UNION
-			SELECT ba.user_id
+			SELECT ba.user_id, bvr.zitadel_project_id, bvr.zitadel_role_key
 			  FROM user_bundle_assignments ba
 			  JOIN bundle_version_roles bvr ON bvr.version_id = ba.version_id
-			 WHERE bvr.zitadel_project_id = $1 AND bvr.zitadel_role_key = $2
+		)
+		SELECT DISTINCT user_id FROM (
+			SELECT user_id FROM held WHERE project_id = $1 AND role_key = $2
+			UNION
+			SELECT h.user_id
+			  FROM held h
+			  JOIN mapping_rules r
+			    ON r.source_zitadel_project_id = h.project_id
+			   AND r.source_zitadel_role_key = h.role_key
+			 WHERE r.target_zitadel_project_id = $1 AND r.target_zitadel_role_key = $2
 		) holders
 		ORDER BY user_id`
 	rows, err := PG.Query(ctx, q, projectID, roleKey)
@@ -277,6 +294,15 @@ func scanRoleMappings(rows pgx.Rows) ([]RoleMapping, error) {
 func PublishMappingVersion(ctx context.Context, target, note, actor string) (int, error) {
 	var version int
 	err := InTx(ctx, func(tx pgx.Tx) error {
+		// Serialised per target before the number is read. `MAX(version)+1` is
+		// a read and a write with a gap in the middle, and two publishes of one
+		// target that overlapped in that gap would both compute the same next
+		// version — the thing the comment above says cannot happen. Migration
+		// 000026's snapshot trigger takes this same lock for this same reason;
+		// this is that pattern, reused rather than reinvented.
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "mapping_version:"+target); err != nil {
+			return fmt.Errorf("lock mapping versions for %s: %w", target, err)
+		}
 		const insertVersion = `
 			INSERT INTO target_mapping_versions (target, version, note, published_by)
 			SELECT $1, COALESCE(MAX(version), 0) + 1, $2, $3
@@ -309,6 +335,14 @@ func PublishMappingVersion(ctx context.Context, target, note, actor string) (int
 // operator is usually rolling back.
 func RollbackMappingVersion(ctx context.Context, target string, version int, actor string) error {
 	return InTx(ctx, func(tx pgx.Tx) error {
+		// The same lock a publish takes, and on the same key. A rollback
+		// DELETEs the whole working set and re-inserts it; a publish reads that
+		// set to snapshot it. Overlapping, one target could be published
+		// mid-rollback and the resulting version would be a set that never
+		// existed.
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "mapping_version:"+target); err != nil {
+			return fmt.Errorf("lock mapping versions for %s: %w", target, err)
+		}
 		var versionID string
 		err := tx.QueryRow(ctx,
 			`SELECT id FROM target_mapping_versions WHERE target = $1 AND version = $2`,

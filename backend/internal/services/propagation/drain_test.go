@@ -3,6 +3,7 @@ package propagation
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"syndra/internal/db"
@@ -167,15 +168,39 @@ func TestDrain_RequeuesOn503AndTimeout(t *testing.T) {
 	}
 }
 
-func TestDrain_HaltsWhenRetriesExhausted(t *testing.T) {
+// A row whose retry budget is spent goes TERMINAL, and the pass carries on.
+//
+// Halting without terminating was a poison pill: the row returns to pending,
+// the claim orders it first, and every later pass re-claims it, requeues it and
+// halts in the same place — so every row behind it never drains, silently.
+func TestDrain_ExhaustedRowGoesTerminalAndThePassContinues(t *testing.T) {
 	stubDrainDeps(t)
-	claimPending = oneRow("loop", "add")
+	spent := models.PendingPropagation{ID: "loop", Target: db.TargetZitadel, OpType: "add",
+		UserID: "u1", ProjectID: "p1", RoleKeys: []string{"r"}, Attempts: maxRetries}
+	next := models.PendingPropagation{ID: "behind", Target: db.TargetZitadel, OpType: "add",
+		UserID: "u2", ProjectID: "p1", RoleKeys: []string{"r"}}
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
+		return []models.PendingPropagation{spent, next}, nil
+	}
 	zitadelAddUserGrant = func(context.Context, string, string, []string) error { return statusErr(500) }
-	requeue = func(context.Context, string, string) (int, error) { return maxRetries + 1, nil }
+	var failed map[string]string = map[string]string{}
+	markFailed = func(_ context.Context, id, msg string) error { failed[id] = msg; return nil }
+	var requeued []string
+	requeue = func(_ context.Context, id, _ string) (int, error) { requeued = append(requeued, id); return 1, nil }
 
 	res, _ := Drain(context.Background())
-	if !res.Halted || res.Reason != "max_retries_exceeded" {
-		t.Fatalf("exceeding the retry budget must halt the drain, got %+v", res)
+	if res.Halted {
+		t.Fatalf("one spent row must not stop the queue: %+v", res)
+	}
+	if res.Failed != 1 || res.Exhausted != 1 {
+		t.Fatalf("the spent row must be terminal and counted as such: %+v", res)
+	}
+	if !strings.Contains(failed["loop"], "out of retries") {
+		t.Errorf("the reason must say nobody will try again: %q", failed["loop"])
+	}
+	// And the row behind it was attempted, which is the whole point.
+	if len(requeued) != 1 || requeued[0] != "behind" {
+		t.Fatalf("the pass must reach the rows behind it: %v", requeued)
 	}
 }
 

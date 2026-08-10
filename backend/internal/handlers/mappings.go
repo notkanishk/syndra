@@ -61,7 +61,7 @@ func handleCreateRoleMapping(w http.ResponseWriter, r *http.Request) {
 
 	created, err := dbCreateRoleMapping(r.Context(), db.RoleMapping{
 		Target: req.Target, ProjectID: req.ProjectID, RoleKey: req.RoleKey,
-		Field: req.Field, Value: req.Value, CreatedBy: resolveActor(r, "operator"),
+		Field: req.Field, Value: req.Value, CreatedBy: resolveActor(r, ""),
 	})
 	if err != nil {
 		writeMappingError(w, err)
@@ -93,7 +93,7 @@ func handleUpdateRoleMapping(w http.ResponseWriter, r *http.Request) {
 		writeMappingError(w, err)
 		return
 	}
-	if err := dbUpdateRoleMappingValue(r.Context(), existing.ID, req.Value, resolveActor(r, "operator")); err != nil {
+	if err := dbUpdateRoleMappingValue(r.Context(), existing.ID, req.Value, resolveActor(r, "")); err != nil {
 		writeMappingError(w, err)
 		return
 	}
@@ -142,7 +142,16 @@ func handlePublishMappingVersion(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "target is required", map[string]string{"target": "required"})
 		return
 	}
-	version, err := dbPublishMappingVersion(r.Context(), req.Target, req.Note, resolveActor(r, "operator"))
+	// The same guard its sibling runs, and skipped here it let an unregistered
+	// target reach the foreign key — which answers 500 with raw constraint text,
+	// the failure validateMappingAgainstTarget exists to prevent.
+	if _, err := addonsEntitlementSchema(req.Target); errors.Is(err, addons.ErrNotRegistered) {
+		jsonValidationErrorResponse(w,
+			fmt.Sprintf("%s is not a registered add-on target", req.Target),
+			map[string]string{"target": "unregistered"})
+		return
+	}
+	version, err := dbPublishMappingVersion(r.Context(), req.Target, req.Note, resolveActor(r, ""))
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -157,7 +166,7 @@ func handleRollbackMappingVersion(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "version must be a positive integer", map[string]string{"version": "invalid"})
 		return
 	}
-	if err := dbRollbackMappingVersion(r.Context(), target, version, resolveActor(r, "operator")); err != nil {
+	if err := dbRollbackMappingVersion(r.Context(), target, version, resolveActor(r, "")); err != nil {
 		writeMappingError(w, err)
 		return
 	}

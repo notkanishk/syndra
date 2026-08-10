@@ -3,6 +3,7 @@ package propagation
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -21,6 +22,7 @@ func addonRow(id string) models.PendingPropagation {
 }
 
 type addonHarness struct {
+	reachable  bool
 	dispatched []addons.ApplyRequest
 	resp       addons.ApplyResponse
 	intent     db.EntitlementIntent
@@ -36,8 +38,9 @@ func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarne
 	t.Helper()
 	stubDrainDeps(t)
 	h := &addonHarness{
-		failed: map[string]string{},
-		resp:   addons.ApplyResponse{Outcome: addons.OutcomeSucceeded},
+		reachable: true,
+		failed:    map[string]string{},
+		resp:      addons.ApplyResponse{Outcome: addons.OutcomeSucceeded},
 		intent: db.EntitlementIntent{
 			OutboxID: "o1", Target: "truenas", SubjectID: "sub-1",
 			Fingerprint: "fp-1", Version: 3,
@@ -50,6 +53,7 @@ func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarne
 		}
 		return rows, nil
 	}))
+	t.Cleanup(swap(&addonReachable, func(context.Context, string) bool { return h.reachable }))
 	t.Cleanup(swap(&readIntent, func(context.Context, string) (db.EntitlementIntent, error) {
 		return h.intent, h.intentErr
 	}))
@@ -207,18 +211,27 @@ func TestARefusalRecordsTheAddonsAnswerAndNotItsBody(t *testing.T) {
 	}
 }
 
-// The retry budget halts the pass, as it does on the Zitadel side.
-func TestTheAddonDrainHaltsOnTheRetryBudget(t *testing.T) {
-	h := stubAddonDrain(t, addonRow("o1"), addonRow("o2"))
+// A spent row goes terminal and the pass continues, as it does on the Zitadel
+// side. A row left non-terminal at the head of the queue is one every later
+// pass re-claims and halts on, which stops everything behind it in silence.
+func TestTheAddonDrainTerminatesASpentRowAndKeepsGoing(t *testing.T) {
+	spent := addonRow("o1")
+	spent.Attempts = maxRetries
+	h := stubAddonDrain(t, spent, addonRow("o2"))
 	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeUnreached}
-	h.attempts = maxRetries
 
 	res, _ := DrainAddon(context.Background(), "truenas")
-	if !res.Halted || res.Reason != "max_retries_exceeded" {
-		t.Fatalf("want a halt, got %+v", res)
+	if res.Halted {
+		t.Fatalf("one spent row must not stop the queue: %+v", res)
 	}
-	if len(h.requeued) != 1 {
-		t.Fatalf("the halt must stop the pass: %v", h.requeued)
+	if res.Failed != 1 || res.Exhausted != 1 {
+		t.Fatalf("the spent row must be terminal and counted as such: %+v", res)
+	}
+	if !strings.Contains(h.failed["o1"], "out of retries") {
+		t.Errorf("the reason must say nobody will try again: %q", h.failed["o1"])
+	}
+	if len(h.requeued) != 1 || h.requeued[0] != "o2" {
+		t.Fatalf("the pass must reach the rows behind it: %v", h.requeued)
 	}
 }
 
@@ -260,5 +273,96 @@ func TestAnUnreadableSnapshotSendsNothingRatherThanAnEmptySet(t *testing.T) {
 	empty := db.EntitlementIntent{}
 	if got := empty.Desired(); got != nil {
 		t.Fatalf("an absent snapshot must not decode to an empty set, got %v", got)
+	}
+}
+
+// The decode returning nil is only half the guard. Nothing read it: the
+// dispatcher sent `intent.Desired()` straight out, and nil desired state is
+// zero managed fields — which the add-on answers `no_change` and this drain
+// records as applied. An approval marked converged having done nothing.
+func TestAnUnreadableSnapshotIsRefusedBeforeItIsDispatched(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.intent.DesiredJSON = []byte(`{not json`)
+
+	res, err := DrainAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(h.dispatched) != 0 {
+		t.Fatalf("nothing may be dispatched for a snapshot nobody can read: %+v", h.dispatched)
+	}
+	if res.Failed != 1 || h.failed["o1"] == "" {
+		t.Fatalf("the row must be failed with a reason: %+v %v", res, h.failed)
+	}
+}
+
+// A plan subject with no fingerprint verifies vacuously at the add-on. The row
+// is refused here rather than spending a dispatch and a retry to learn it.
+func TestARowWithNoFingerprintIsNotDispatched(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.intent.Fingerprint = ""
+
+	res, err := DrainAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(h.dispatched) != 0 {
+		t.Fatal("an apply that could not verify anything must not be sent")
+	}
+	if res.Failed != 1 {
+		t.Fatalf("want the row failed: %+v", res)
+	}
+}
+
+// A read that failed is not a citation that is missing. `failed` has no way
+// back, so a connection blip must not permanently fail an approved change.
+func TestATransientIntentReadFailureDoesNotFailTheRowTerminally(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.intentErr = errors.New("connection reset by peer")
+
+	res, err := DrainAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(h.failed) != 0 {
+		t.Fatalf("a transient read must not be terminal: %v", h.failed)
+	}
+	if res.Failed != 0 || res.Errored != 1 {
+		t.Fatalf("it must be recorded as an error on this pass: %+v", res)
+	}
+}
+
+// The add-on's mutation log promises who did what to whom, and the add-on knows
+// only the whom.
+func TestTheDispatchCarriesWhoDecidedIt(t *testing.T) {
+	row := addonRow("o1")
+	row.InitiatedBy = "op_7"
+	h := stubAddonDrain(t, row)
+
+	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.dispatched) != 1 || h.dispatched[0].Actor != "op_7" {
+		t.Fatalf("the actor must travel with the apply: %+v", h.dispatched)
+	}
+}
+
+// One probe before any row is claimed, like the Zitadel passes. Without it an
+// outage spends one retry per row to learn what a single call establishes — and
+// a spent budget is terminal, so the target being switched off would FAIL work
+// an operator approved instead of leaving it queued for the target coming back.
+func TestTheAddonDrainProbesBeforeItSpendsARetry(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"), addonRow("o2"))
+	h.reachable = false
+
+	res, err := DrainAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Halted || res.Reason != "target_unreachable" {
+		t.Fatalf("want a clean halt, got %+v", res)
+	}
+	if len(h.dispatched) != 0 || len(h.requeued) != 0 || len(h.failed) != 0 {
+		t.Fatalf("nothing may be claimed or spent: %+v %v %v", h.dispatched, h.requeued, h.failed)
 	}
 }

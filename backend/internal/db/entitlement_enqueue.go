@@ -268,8 +268,12 @@ func LockTargetStateTx(ctx context.Context, tx pgx.Tx, target string) (string, e
 // separate reads they can describe a decision that never existed, which is the
 // same reason `ReconcileLedgerOnApplied` reads its tuple off the row.
 type EntitlementIntent struct {
-	OutboxID  string
-	Target    string
+	OutboxID string
+	Target   string
+	// PlanID is the approval this row executes. It travels to the add-on inside
+	// the signed body so a call intercepted and replayed cannot be re-aimed at
+	// another approval, and so the add-on's own record names what authorised it.
+	PlanID    string
 	SubjectID string
 	// Fingerprint is what the add-on re-verifies against live state
 	// immediately before writing.
@@ -311,14 +315,14 @@ func (i EntitlementIntent) Desired() map[string]json.RawMessage {
 // loop reverts an intentional edit.)
 func ReadEntitlementIntent(ctx context.Context, outboxID string) (EntitlementIntent, error) {
 	const q = `
-		SELECT p.id, p.target, s.subject_id, ps.fingerprint, s.state_json, s.version
+		SELECT p.id, p.target, ps.plan_id, s.subject_id, ps.fingerprint, s.state_json, s.version
 		  FROM propagation_outbox p
 		  JOIN plan_subjects ps ON ps.id = p.plan_subject_id
 		  JOIN desired_state_snapshots s ON s.id = ps.snapshot_id
 		 WHERE p.id = $1`
 	var out EntitlementIntent
 	err := PG.QueryRow(ctx, q, outboxID).Scan(
-		&out.OutboxID, &out.Target, &out.SubjectID, &out.Fingerprint, &out.DesiredJSON, &out.Version)
+		&out.OutboxID, &out.Target, &out.PlanID, &out.SubjectID, &out.Fingerprint, &out.DesiredJSON, &out.Version)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// A row with no approval chain is not a row this drain may dispatch.
 		// Reported rather than defaulted: dispatching an empty desired state

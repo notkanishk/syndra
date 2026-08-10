@@ -19,12 +19,17 @@ type DriftResult struct {
 	// it looked at one target.
 	Target string `json:"target"`
 
-	ZitadelGrants     int    `json:"zitadel_grants"`
-	DriftItemsCreated int    `json:"drift_items_created"` // target_only, deduped
-	ReEnqueued        int    `json:"re_enqueued"`         // syndra_only replays
-	Truncated         bool   `json:"truncated"`
-	Halted            bool   `json:"halted"`
-	Reason            string `json:"reason,omitempty"`
+	ZitadelGrants     int  `json:"zitadel_grants"`
+	DriftItemsCreated int  `json:"drift_items_created"` // target_only, deduped
+	ReEnqueued        int  `json:"re_enqueued"`         // syndra_only replays
+	Truncated         bool `json:"truncated"`
+	// WriteFailures counts findings this pass reached and could not write down.
+	// Each one is logged and skipped so a single bad row cannot cost the rest
+	// of the sweep — but a pass that lost a finding has not reconciled the
+	// target, whatever its read managed.
+	WriteFailures int    `json:"write_failures,omitempty"`
+	Halted        bool   `json:"halted"`
+	Reason        string `json:"reason,omitempty"`
 
 	// Reconciliation is how current Syndra's picture of the target now is —
 	// when it last saw the target for itself, and since when it has not. A
@@ -133,6 +138,7 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 			if _, inserted, err := upsertDriftItem(ctx, target, g.UserID, g.ProjectID,
 				[]string{rk}, g.ID, "reconciliation_sweep", "target_only"); err != nil {
 				log.Printf("[DRIFT] upsert target_only failed user=%s project=%s role=%s: %v", g.UserID, g.ProjectID, rk, err)
+				res.WriteFailures++
 			} else if inserted {
 				res.DriftItemsCreated++
 			}
@@ -173,6 +179,7 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 		key, kerr := newIdempotencyKey()
 		if kerr != nil {
 			log.Printf("[DRIFT] mint idempotency key failed user=%s: %v (skipping re-enqueue)", dg.UserID, kerr)
+			res.WriteFailures++
 			continue
 		}
 		switch _, err := insertPending(ctx, "add", dg.UserID, dg.ProjectID, []string{dg.RoleKey},
@@ -186,6 +193,7 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 				dg.UserID, dg.ProjectID, dg.RoleKey)
 		case err != nil:
 			log.Printf("[DRIFT] re-enqueue syndra_only failed user=%s project=%s role=%s: %v", dg.UserID, dg.ProjectID, dg.RoleKey, err)
+			res.WriteFailures++
 		default:
 			res.ReEnqueued++
 		}
@@ -194,7 +202,17 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	// Only here: a complete read, consumed in full, both halves concluded. This
 	// is the one moment that entitles Syndra to say it has seen the target for
 	// itself, and it ends any unreconciled period in the same statement.
-	res.Reconciliation = recordReconciled(ctx, target)
+	//
+	// And only if every finding this pass reached actually landed. A write that
+	// failed above is logged and skipped so one bad row cannot cost the rest of
+	// the sweep — but declaring the target reconciled on top of that clears
+	// `unreconciled_since` and claims a picture the surface does not have. The
+	// read was current; the record of what it found is not.
+	if res.WriteFailures > 0 {
+		res.Reconciliation = recordUnreconciled(ctx, target, db.UnreconciledFindingsUnrecorded)
+	} else {
+		res.Reconciliation = recordReconciled(ctx, target)
+	}
 
 	log.Printf("[DRIFT] Sweep complete: target=%s zitadel_grants=%d drift_created=%d re_enqueued=%d truncated=%v",
 		res.Target, res.ZitadelGrants, res.DriftItemsCreated, res.ReEnqueued, res.Truncated)

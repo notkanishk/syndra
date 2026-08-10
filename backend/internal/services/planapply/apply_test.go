@@ -87,8 +87,8 @@ func working() *harness {
 		state: db.TargetActive,
 		plan:  db.Plan{ID: "plan-1", Target: "truenas", Surface: "entitlements", CreatedBy: "operator-1"},
 		subjects: []db.PlanSubject{
-			{ID: "ps-1", SubjectID: "u1", Fingerprint: "sha256:a"},
-			{ID: "ps-2", SubjectID: "u2", Fingerprint: "sha256:b"},
+			{ID: "ps-1", SubjectID: "u1", Fingerprint: "sha256:a", Outcome: db.PlanOutcome{Effect: db.PlanEffectApply}},
+			{ID: "ps-2", SubjectID: "u2", Fingerprint: "sha256:b", Outcome: db.PlanOutcome{Effect: db.PlanEffectApply}},
 		},
 		enqueueErr: map[string]error{},
 	}
@@ -310,5 +310,51 @@ func TestTheGateReachesNoTarget(t *testing.T) {
 	}
 	if checked == 0 {
 		t.Fatal("no source files were examined, so this guard proved nothing")
+	}
+}
+
+// The rehearsal records `blocked` and `no_change` on purpose. Queueing them
+// dispatches convergence for subjects the plan said would not change — or
+// refused outright — which is the gate approving work nobody reviewed.
+func TestOnlySubjectsThePlanSaidWouldChangeAreQueued(t *testing.T) {
+	h := working()
+	h.subjects = []db.PlanSubject{
+		{ID: "ps-1", SubjectID: "u1", Outcome: db.PlanOutcome{Effect: db.PlanEffectApply}},
+		{ID: "ps-2", SubjectID: "u2", Outcome: db.PlanOutcome{Effect: db.PlanEffectNoChange}},
+		{ID: "ps-3", SubjectID: "u3", Outcome: db.PlanOutcome{Effect: db.PlanEffectBlocked}},
+	}
+	install(t, h)
+
+	res, err := Apply(context.Background(), request())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Queued) != 1 || res.Queued[0].SubjectID != "u1" {
+		t.Fatalf("only the changing subject may be queued: %+v", res.Queued)
+	}
+	if len(h.enqueued) != 1 {
+		t.Fatalf("nothing may be enqueued for a subject the rehearsal refused: %+v", h.enqueued)
+	}
+	// The approval is still spent on the whole plan: the operator approved this
+	// plan, and the rows it said would do nothing do nothing.
+	if !h.committed {
+		t.Fatal("the claim must still commit")
+	}
+}
+
+// The claim predicates on the request fingerprint, so a gate that always sent
+// "" could only ever claim plans stored with no fingerprint — every plan bound
+// to a request would refuse its own apply.
+func TestTheCitationCarriesTheRequestFingerprint(t *testing.T) {
+	h := working()
+	install(t, h)
+
+	req := request()
+	req.RequestFingerprint = "sha256:body"
+	if _, err := Apply(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	if h.citation.RequestFingerprint != "sha256:body" {
+		t.Fatalf("the citation must carry it: %+v", h.citation)
 	}
 }

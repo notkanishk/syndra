@@ -99,18 +99,26 @@ func (a *authenticator) verify(r *http.Request) ([]byte, error) {
 		}
 		return body, nil
 	}
-	if err := a.verifySignature(r.Header.Get(SignatureHeader), body); err != nil {
+	if err := a.verifySignature(r.Header.Get(SignatureHeader), r.Method, r.URL.Path, body); err != nil {
 		return nil, err
 	}
 	return body, nil
 }
 
-// verifySignature checks "t=<unix>,v1=<hex>" over "<unix>.<body>".
+// verifySignature checks "t=<unix>,v1=<hex>" over
+// "<unix>.<method>.<path>.<body>".
 //
 // The timestamp is inside the MAC input rather than merely beside it, so it
 // cannot be edited to extend a captured signature's life; the body is inside
 // it, so the signature authenticates what was asked and not only who asked.
-func (a *authenticator) verifySignature(header string, body []byte) error {
+//
+// The method and path are inside it because the OPERATION NAME is in the path
+// and in nothing else. `GET /capabilities` carries an empty body, so its MAC
+// was a function of the timestamp alone — valid for any zero-body request
+// inside the two-minute window, whichever path it was replayed at. The call-id
+// dedup happened to block the sequential version of that, which is a mitigation
+// standing where a check should be.
+func (a *authenticator) verifySignature(header, method, path string, body []byte) error {
 	if strings.TrimSpace(header) == "" {
 		return errNoSignature
 	}
@@ -143,7 +151,7 @@ func (a *authenticator) verifySignature(header string, body []byte) error {
 		return errStaleSignature
 	}
 
-	want := computeMAC(seconds, body, a.signingKey)
+	want := computeMAC(seconds, method, path, body, a.signingKey)
 	got, err := hex.DecodeString(mac)
 	if err != nil {
 		return errBadSignature
@@ -156,9 +164,17 @@ func (a *authenticator) verifySignature(header string, body []byte) error {
 	return nil
 }
 
-func computeMAC(unix int64, body, key []byte) []byte {
+// computeMAC must stay byte-identical to the backend's ComputeSignature. The
+// two are separately deployed binaries and the constant is written out on both
+// sides on purpose — a shared module would hide the version skew the contract
+// version exists to surface — so a change to one is a change to both.
+func computeMAC(unix int64, method, path string, body, key []byte) []byte {
 	m := hmac.New(sha256.New, key)
 	fmt.Fprintf(m, "%d", unix)
+	m.Write([]byte("."))
+	m.Write([]byte(method))
+	m.Write([]byte("."))
+	m.Write([]byte(path))
 	m.Write([]byte("."))
 	m.Write(body)
 	return m.Sum(nil)

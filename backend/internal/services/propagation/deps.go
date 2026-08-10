@@ -102,6 +102,20 @@ var (
 	readIntent       = db.ReadEntitlementIntent
 	applyEntitlement = addons.Apply
 
+	// addonReachable is the add-on pass's pre-flight, matching the one the
+	// Zitadel passes take. Without it an outage spends a whole batch's retry
+	// budgets learning the same thing once per row — and a spent budget is now
+	// terminal, so an unreachable target would fail approved work rather than
+	// leaving it queued.
+	//
+	// The manifest read doubles as the probe: it is the call the backend
+	// already makes, and an add-on that cannot serve it cannot serve an apply.
+	// A refusal leaves the previous manifest in place, so probing costs nothing
+	// but a round trip.
+	addonReachable = func(ctx context.Context, target string) bool {
+		return addons.Refresh(ctx, target) == nil
+	}
+
 	maxRetries    = outboxMaxRetries()    // OUTBOX_MAX_RETRIES (default 5)
 	retentionDays = outboxRetentionDays() // OUTBOX_RETENTION_DAYS (default 30)
 )

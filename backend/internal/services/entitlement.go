@@ -222,6 +222,52 @@ func sortedKeys(m map[string]struct{}) []string {
 	return out
 }
 
+// ValidateAllowanceTerm refuses an allowance that would suppress nothing.
+//
+// The failure this exists for is silent and total: `resolveLifecycle` honours a
+// lifecycle denial only when the value is exactly "true", and nothing else
+// reads an allowance's field at all. So `enabled=false` — the way most people
+// would write "disable this account" — is recorded, rendered in the lineage
+// band as in force with an actor and a reason attached, reviewed on its review
+// date, and suppresses precisely nothing. A misspelled field is the same
+// failure with a different spelling.
+//
+// An allowance the resolver cannot act on is worse than a rejected one, because
+// the operator has evidence they suspended somebody.
+func ValidateAllowanceTerm(declared []string, field, value string) error {
+	field, value = strings.TrimSpace(field), strings.TrimSpace(value)
+	if field == "" || value == "" {
+		return fmt.Errorf("%w: an allowance needs a field and a value", db.ErrAllowanceInvalid)
+	}
+	declares := false
+	for _, d := range declared {
+		if d == field {
+			declares = true
+			break
+		}
+	}
+	if !declares {
+		// The declared set is named, not the rejected field: an operator whose
+		// field is not in the schema needs to know what is.
+		return fmt.Errorf("%w: this target has no %s to deny — it declares %s",
+			db.ErrAllowanceInvalid, field, strings.Join(declared, ", "))
+	}
+	if IsLifecycleField(field) && value != "true" {
+		// The rejected value IS echoed here, unlike the mapping refusals a few
+		// lines down and unlike anything on the operation path. The never-echo
+		// rule is scoped to values that can be SECRETS — an operation's declared
+		// secret parameters, where an error string is logged, returned and
+		// captured in traces. An allowance value is a lifecycle state or a group
+		// name, chosen by an operator from a schema, and showing them what they
+		// typed is most of what makes this refusal actionable. Stated so the next
+		// reader does not "correct" it in either direction.
+		return fmt.Errorf(
+			"%w: a %s denial is written %s=true, because the value names the state being refused; %q denies nothing",
+			db.ErrAllowanceInvalid, field, field, value)
+	}
+	return nil
+}
+
 // ValidateMappingField refuses a mapping the backend can judge structurally,
 // before the add-on is asked anything.
 //

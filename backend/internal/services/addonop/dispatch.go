@@ -12,6 +12,7 @@ package addonop
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -53,6 +54,37 @@ type Request struct {
 	SubjectID string
 	Confirmed bool
 	Params    map[string]any
+}
+
+// String, GoString and MarshalJSON all redact, because this type carries a
+// member's password in `Params` and the three verbs a caller reaches for
+// without thinking are %v, %#v and json.Marshal. A redaction that depends on
+// every caller remembering to redact is not one — and this type had none at
+// all, while the transport request one layer down had two of the three.
+//
+// The secret set comes from the effective operation, which fails closed: a
+// target that cannot be resolved redacts everything rather than nothing.
+func (r Request) String() string {
+	return fmt.Sprintf("addon operation target=%s operation=%s actor=%s subject=%s confirmed=%t params=%v",
+		r.Target, r.Operation, r.ActorID, r.SubjectID, r.Confirmed,
+		addons.RedactedParams(r.Target, r.Operation, r.Params))
+}
+
+func (r Request) GoString() string { return r.String() }
+
+func (r Request) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Target    string         `json:"target"`
+		Operation string         `json:"operation"`
+		ActorID   string         `json:"actor_id"`
+		SubjectID string         `json:"subject_id"`
+		Confirmed bool           `json:"confirmed"`
+		Params    map[string]any `json:"params,omitempty"`
+	}{
+		Target: r.Target, Operation: r.Operation, ActorID: r.ActorID,
+		SubjectID: r.SubjectID, Confirmed: r.Confirmed,
+		Params: addons.RedactedParams(r.Target, r.Operation, r.Params),
+	})
 }
 
 // Result is what the backend knows afterwards.
@@ -111,7 +143,12 @@ func withinSubjectRate(ctx context.Context, op addons.EffectiveOperation, req Re
 	if op.Scope != addons.ScopeMember {
 		return nil
 	}
-	n, err := countRecentOperations(ctx, req.SubjectID, req.Operation, memberOpWindow)
+	// Per TARGET as well as per subject and operation. Without the target, one
+	// add-on's retries consumed every other add-on's budget for the same
+	// person — so a member locked out of the NAS by a loop in a browser tab
+	// was also locked out of the door controller, which is a different system
+	// with a different session and a different reason for the limit.
+	n, err := countRecentOperations(ctx, req.Target, req.SubjectID, req.Operation, memberOpWindow)
 	if err != nil {
 		// Fail closed. The reason this limit exists is that the path terminates
 		// in a shared, rate-limited session on the target; letting it through
@@ -128,7 +165,8 @@ func withinSubjectRate(ctx context.Context, op addons.EffectiveOperation, req Re
 // bindSubjectToActor enforces that a `member`-scoped operation acts only on the
 // authenticated actor.
 //
-// It reads the EFFECTIVE scope, which is policy ∩ manifest with policy winning,
+// It reads the EFFECTIVE scope, which is the more restrictive of policy and
+// manifest with policy winning,
 // so a manifest cannot reach this check by declaring itself member-scoped: it
 // can only ever narrow. The rule is still enforced here rather than left to
 // either of them, because the manifest is the least trusted input in the system

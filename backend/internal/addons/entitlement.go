@@ -3,6 +3,7 @@ package addons
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -23,6 +24,11 @@ import (
 // redirect. That is `doAuthenticated`, and both legs go through it, so no
 // second authentication story can grow beside the first.
 
+// ErrNoFingerprint is the refusal to dispatch an apply that verifies nothing.
+// An absent fingerprint passes the add-on's check vacuously, which turns "the
+// diff you approved is the diff that lands" into a property callers opt into.
+var ErrNoFingerprint = errors.New("addon: refusing to dispatch an apply with no fingerprint to verify")
+
 // ApplyRequest is one subject's resolved desired state, on its way to a target.
 type ApplyRequest struct {
 	Target  string
@@ -37,6 +43,13 @@ type ApplyRequest struct {
 	// here: the outbox row IS the durable intent, and minting a second record
 	// beside it would be two accounts of one decision, free to disagree.
 	CallID string
+	// PlanID is the approval this apply executes. Inside the signed body like
+	// everything else that binds the call: a call replayed against another plan
+	// must fail verification rather than succeed under somebody else's approval.
+	PlanID string
+	// Actor is who decided this, carried through to the add-on's mutation log.
+	// That log promises who did what to whom and the add-on knows only the whom.
+	Actor string
 	// Desired is the resolved set, by field. Encoded as raw JSON so this layer
 	// stays ignorant of what any field means — Syndra decides who and what, the
 	// add-on decides how.
@@ -57,11 +70,21 @@ type ApplyResponse struct {
 	// Fingerprint is the subject's state afterwards, so the next plan starts
 	// from something current rather than from a read the backend has to make.
 	Fingerprint string `json:"fingerprint"`
+	// Code is the add-on's own error code on a refusal, from a closed set it
+	// declares. Read for one reason: `PLAN_STALE` is the refusal that means the
+	// subject moved since the diff was approved, and the operator action for it
+	// is a re-plan somebody reads — not "fix it and retry", which is what every
+	// other refusal means.
+	Code string `json:"error"`
 	// LifecycleRefusal says the add-on is draining or read-only. Carried apart
 	// from the outcome for the reason `CallResponse` carries it apart: one says
 	// what happened to the work, the other says whether the target is healthy.
 	LifecycleRefusal bool
 }
+
+// CodePlanStale is the add-on refusing because live state no longer matches the
+// fingerprint the plan was computed against.
+const CodePlanStale = "PLAN_STALE"
 
 // applyEnvelope is the wire body. Everything binding the call to an approval
 // travels inside it rather than in headers, so in signed mode the signature
@@ -73,6 +96,8 @@ type applyEnvelope struct {
 	Subject         string                     `json:"subject"`
 	Email           string                     `json:"email,omitempty"`
 	Fingerprint     string                     `json:"fingerprint,omitempty"`
+	PlanID          string                     `json:"plan_id,omitempty"`
+	Actor           string                     `json:"actor,omitempty"`
 	Desired         map[string]json.RawMessage `json:"desired"`
 }
 
@@ -93,6 +118,12 @@ func Apply(ctx context.Context, req ApplyRequest) ApplyResponse {
 		// and that argument only holds if nothing dispatches without one.
 		return ApplyResponse{Outcome: OutcomeUnreached, Err: ErrNoCallRecord}
 	}
+	if req.Fingerprint == "" {
+		// The add-on refuses this too, and both ends check on purpose: the
+		// add-on's refusal protects the target, and this one keeps a row that
+		// could never verify from spending a dispatch and a retry to learn it.
+		return ApplyResponse{Outcome: OutcomeUnreached, Err: ErrNoFingerprint}
+	}
 	if !a.br.allow(timeNow()) {
 		return ApplyResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %s", ErrCircuitOpen, req.Target)}
 	}
@@ -107,6 +138,8 @@ func Apply(ctx context.Context, req ApplyRequest) ApplyResponse {
 		Subject:         req.Subject,
 		Email:           req.Email,
 		Fingerprint:     req.Fingerprint,
+		PlanID:          req.PlanID,
+		Actor:           req.Actor,
 		Desired:         req.Desired,
 	})
 	if err != nil {
@@ -126,6 +159,19 @@ func Apply(ctx context.Context, req ApplyRequest) ApplyResponse {
 		// definition of indeterminate.
 		if err := json.Unmarshal(resp.Body, &out); err != nil {
 			out.Outcome, out.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: decode apply outcome: %w", req.Target, err)
+		}
+	}
+	if resp.Outcome == OutcomeRejected {
+		// Only the code and the detail, and only into fields that already
+		// exist. A refusal body is whatever the least trusted component chose
+		// to send; a failure to decode one leaves the refusal exactly as
+		// classified rather than reclassifying it.
+		var refusal struct {
+			Code   string `json:"error"`
+			Detail string `json:"detail"`
+		}
+		if err := json.Unmarshal(resp.Body, &refusal); err == nil {
+			out.Code, out.Detail = refusal.Code, refusal.Detail
 		}
 	}
 	if out.Outcome != OutcomeSucceeded {

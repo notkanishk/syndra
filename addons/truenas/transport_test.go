@@ -25,8 +25,13 @@ func signedAuth(now time.Time) *authenticator {
 
 func signedRequest(t *testing.T, body string, ts time.Time, key string) *http.Request {
 	t.Helper()
-	mac := computeMAC(ts.Unix(), []byte(body), []byte(key))
-	r := httptest.NewRequest(http.MethodPost, "/operations/password.set", strings.NewReader(body))
+	return signedRequestTo(t, http.MethodPost, "/operations/password.set", body, ts, key)
+}
+
+func signedRequestTo(t *testing.T, method, path, body string, ts time.Time, key string) *http.Request {
+	t.Helper()
+	mac := computeMAC(ts.Unix(), method, path, []byte(body), []byte(key))
+	r := httptest.NewRequest(method, path, strings.NewReader(body))
 	// Built independently of the header the producer writes, so a test that
 	// agrees with the producer about a wrong format still fails.
 	r.Header.Set(SignatureHeader, "t="+strconv.FormatInt(ts.Unix(), 10)+",v1="+hex.EncodeToString(mac))
@@ -158,5 +163,37 @@ func TestAnUnauthenticatedResponseExplainsNothing(t *testing.T) {
 		if strings.Contains(strings.ToLower(rr.Body.String()), leak) {
 			t.Errorf("the response must not mention %q: %s", leak, rr.Body.String())
 		}
+	}
+}
+
+// The operation name is in the PATH and in nothing else. `GET /capabilities`
+// carries an empty body, so a MAC over the timestamp and body alone was a
+// function of the timestamp — valid for any zero-body request in the window,
+// whichever path it was replayed at. The call-id dedup blocked the sequential
+// version of that, which is a mitigation standing where a check should be.
+func TestASignatureIsBoundToTheMethodAndPath(t *testing.T) {
+	now := time.Now()
+	a := signedAuth(now)
+
+	// Signed for the capabilities read, replayed at the credential reset.
+	captured := signedRequestTo(t, http.MethodGet, "/capabilities", "", now, testKey)
+	replayed := httptest.NewRequest(http.MethodPost, "/operations/password.set", strings.NewReader(""))
+	replayed.Header.Set(SignatureHeader, captured.Header.Get(SignatureHeader))
+
+	if _, err := a.verify(replayed); !errors.Is(err, errBadSignature) {
+		t.Fatalf("a signature must not travel between paths: %v", err)
+	}
+
+	// The same body and timestamp under a different method is equally not it.
+	sameBody := signedRequestTo(t, http.MethodPost, "/apply", `{"call_id":"c1"}`, now, testKey)
+	otherMethod := httptest.NewRequest(http.MethodGet, "/apply", strings.NewReader(`{"call_id":"c1"}`))
+	otherMethod.Header.Set(SignatureHeader, sameBody.Header.Get(SignatureHeader))
+	if _, err := a.verify(otherMethod); !errors.Is(err, errBadSignature) {
+		t.Fatalf("a signature must not travel between methods: %v", err)
+	}
+
+	// And the request it was actually made for still verifies.
+	if _, err := a.verify(signedRequestTo(t, http.MethodGet, "/capabilities", "", now, testKey)); err != nil {
+		t.Fatalf("the signed request must still be accepted: %v", err)
 	}
 }

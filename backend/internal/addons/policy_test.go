@@ -135,3 +135,59 @@ func TestPurgeRequiresConfirmationInPolicy(t *testing.T) {
 		t.Errorf("account.purge must be admin-scoped and confirmed in policy, got %+v", p)
 	}
 }
+
+// §13's whole argument is that the least trusted component must not widen its
+// own authority. A manifest declaring one id twice — once withheld, once
+// offered — resolved to whichever row a non-stable sort happened to put first,
+// which is the add-on choosing which of its own declarations the backend
+// honours.
+func TestADuplicateOperationIdResolvesToTheMoreRestrictiveDeclaration(t *testing.T) {
+	for _, order := range [][]Operation{
+		{
+			{ID: "password.set", Scope: ScopeMember, Available: false, UnavailableReason: "this target does not expose user.update"},
+			{ID: "password.set", Scope: ScopeMember, Available: true},
+		},
+		// The other order must give the same answer, which is the property a
+		// non-stable sort took away.
+		{
+			{ID: "password.set", Scope: ScopeMember, Available: true},
+			{ID: "password.set", Scope: ScopeMember, Available: false, UnavailableReason: "this target does not expose user.update"},
+		},
+	} {
+		ops, unknown := resolveOperations(Manifest{ContractVersion: ContractVersion, Operations: order})
+		if len(unknown) != 0 {
+			t.Fatalf("nothing should be unknown: %v", unknown)
+		}
+		if len(ops) != 1 {
+			t.Fatalf("one id must resolve to one operation, got %d", len(ops))
+		}
+		if ops[0].Available {
+			t.Errorf("a withheld declaration must win: %+v", ops[0])
+		}
+		if ops[0].UnavailableReason == "" {
+			t.Errorf("and it must carry its reason: %+v", ops[0])
+		}
+	}
+}
+
+// The same rule on every other dimension, so a duplicate cannot be used to
+// widen scope, drop a confirmation, or unmark a secret either.
+func TestADuplicateOperationCannotWidenAnyDimension(t *testing.T) {
+	ops, _ := resolveOperations(Manifest{ContractVersion: ContractVersion, Operations: []Operation{
+		{ID: "password.set", Scope: ScopeAdmin, Confirm: true, Available: true, SecretParams: []string{"password"}},
+		{ID: "password.set", Scope: ScopeMember, Confirm: false, Available: true},
+	}})
+	if len(ops) != 1 {
+		t.Fatalf("one id must resolve to one operation, got %d", len(ops))
+	}
+	got := ops[0]
+	if got.Scope != ScopeAdmin {
+		t.Errorf("scope must stay admin: %+v", got)
+	}
+	if !got.Confirm {
+		t.Errorf("confirmation must stay required: %+v", got)
+	}
+	if !reflect.DeepEqual(got.SecretParams, []string{"password"}) {
+		t.Errorf("a secret parameter must not be unmarked by a second declaration: %+v", got.SecretParams)
+	}
+}

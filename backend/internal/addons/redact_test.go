@@ -3,6 +3,7 @@ package addons
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -132,5 +133,40 @@ func TestRedactionDoesNotMutateTheCallersParams(t *testing.T) {
 	_ = RedactedParams("truenas", "password.set", params)
 	if params["password"] != theSecret {
 		t.Fatalf("redaction mutated the caller's map: %v", params["password"])
+	}
+}
+
+// The default arm was the one place in this file that failed OPEN. It walked
+// `map[string]any` and `[]any` and let everything else through — a
+// `map[string]string`, a `[]string`, a struct — so a nested secret survived a
+// redactor whose whole purpose is not having to be right about the shape.
+func TestRedactionFailsClosedOnAShapeItCannotWalk(t *testing.T) {
+	type credential struct {
+		Password string
+	}
+	out := redactParams(map[string]any{
+		"nested_typed_map": map[string]string{"password": "hunter2"},
+		"nested_slice":     []string{"hunter2"},
+		"struct":           credential{Password: "hunter2"},
+		"note":             "a plain string is fine",
+		"count":            7,
+	}, []string{"password"}, false)
+
+	encoded, err := json.Marshal(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "hunter2") {
+		t.Fatalf("a shape the redactor cannot walk must not pass through: %s", encoded)
+	}
+	// The keys survive, so a diagnostic still shows what was present.
+	for _, key := range []string{"nested_typed_map", "nested_slice", "struct", "note", "count"} {
+		if !strings.Contains(string(encoded), key) {
+			t.Errorf("the key %q must survive: %s", key, encoded)
+		}
+	}
+	// And scalars are not needlessly destroyed.
+	if out["note"] != "a plain string is fine" || out["count"] != 7 {
+		t.Errorf("a scalar checked by its own key passes through whole: %v", out)
 	}
 }

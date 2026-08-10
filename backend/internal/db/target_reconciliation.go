@@ -31,11 +31,18 @@ const (
 	// fix, and an outage that is really an expired service-account key would
 	// otherwise be waited out rather than repaired.
 	UnreconciledReadRefused = "read_refused"
+	// UnreconciledFindingsUnrecorded — the read was complete and consumed, and
+	// something the sweep concluded from it could not be written down. The
+	// picture is current and the RECORD of it is not, which is a different
+	// failure from every one above and the same operator consequence: what is
+	// on the surface understates what the sweep saw.
+	UnreconciledFindingsUnrecorded = "findings_unrecorded"
 )
 
 func validUnreconciledReason(r string) bool {
 	switch r {
-	case UnreconciledUnreachable, UnreconciledStaleRead, UnreconciledTruncated, UnreconciledReadRefused:
+	case UnreconciledUnreachable, UnreconciledStaleRead, UnreconciledTruncated,
+		UnreconciledReadRefused, UnreconciledFindingsUnrecorded:
 		return true
 	default:
 		return false
@@ -46,7 +53,7 @@ func validUnreconciledReason(r string) bool {
 // vocabulary and never the value, so a caller that reached here holding
 // something it should not cannot write it into the error either.
 var ErrUnreconciledReason = errors.New(
-	"unreconciled reason must be one of: target_unreachable, read_stale, read_truncated, read_refused")
+	"unreconciled reason must be one of: target_unreachable, read_stale, read_truncated, read_refused, findings_unrecorded")
 
 // TargetReconciliation is how current Syndra's picture of a target is.
 //

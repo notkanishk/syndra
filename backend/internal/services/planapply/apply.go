@@ -40,6 +40,13 @@ type Request struct {
 	Target  string
 	Surface string
 	Actor   string
+	// RequestFingerprint is recomputed from the body submitted alongside the
+	// citation, and is a citation dimension rather than a check performed here:
+	// a request that does not match loses in the database, without spending the
+	// approval. Empty only where the plan bound no request — and it must be
+	// carried either way, because the claim predicates on it, so a gate that
+	// always sent "" could only ever claim plans stored with no fingerprint.
+	RequestFingerprint string
 }
 
 // QueuedSubject is one person's queued work.
@@ -88,10 +95,11 @@ func Apply(ctx context.Context, req Request) (Result, error) {
 		}
 
 		plan, subjects, err := claimPlan(ctx, tx, db.PlanCitation{
-			PlanID:  req.PlanID,
-			Target:  req.Target,
-			Surface: req.Surface,
-			Actor:   req.Actor,
+			PlanID:             req.PlanID,
+			Target:             req.Target,
+			Surface:            req.Surface,
+			Actor:              req.Actor,
+			RequestFingerprint: req.RequestFingerprint,
 		})
 		if err != nil {
 			return err
@@ -99,6 +107,15 @@ func Apply(ctx context.Context, req Request) (Result, error) {
 
 		queued := make([]QueuedSubject, 0, len(subjects))
 		for _, s := range subjects {
+			if s.Outcome.Effect != db.PlanEffectApply {
+				// The rehearsal recorded `blocked` and `no_change` on purpose,
+				// and queueing them would dispatch convergence for subjects the
+				// plan said would not change — or refused outright. The claim is
+				// still spent on the whole plan, which is correct: the operator
+				// approved this plan, and the rows it said would do nothing do
+				// nothing.
+				continue
+			}
 			// The approval is the only thing passed. Subject, target, and the
 			// operator who approved it are read from it by the insert itself:
 			// values a caller supplies are values a caller can supply

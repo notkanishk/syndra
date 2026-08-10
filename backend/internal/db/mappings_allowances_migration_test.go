@@ -69,8 +69,16 @@ func TestMappingLookupsAreIndexedInBothDirections(t *testing.T) {
 // record that can be edited is a comparison against nothing.
 func TestPublishedMappingVersionsAreImmutable(t *testing.T) {
 	up, _ := readMigrationPair(t, "000029_target_role_mappings")
-	if !regexp.MustCompile(`(?s)CREATE TRIGGER target_mapping_versions_immutable\s+BEFORE UPDATE ON target_mapping_versions`).MatchString(up) {
-		t.Fatal("a published mapping version must be immutable")
+	// Both directions, and the second migration is where DELETE arrived: 000029
+	// guarded UPDATE only, so a published version could be deleted outright —
+	// and deleting the row erases more than editing one field of it, entries
+	// cascading away with it.
+	guard, _ := readMigrationPair(t, "000031_mapping_version_delete_guard")
+	if !regexp.MustCompile(`(?s)CREATE TRIGGER target_mapping_versions_immutable\s+BEFORE UPDATE OR DELETE ON target_mapping_versions`).MatchString(guard) {
+		t.Fatal("a published mapping version must be immutable against UPDATE and DELETE")
+	}
+	if !regexp.MustCompile(`(?s)CREATE TRIGGER target_mapping_version_entries_immutable\s+BEFORE UPDATE OR DELETE ON target_mapping_version_entries`).MatchString(guard) {
+		t.Fatal("the version's entries are its content and must be immutable too")
 	}
 	if !strings.Contains(up, "UNIQUE (target, version)") {
 		t.Error("versions are per target: a global sequence makes \"TrueNAS v2\" meaningless")
@@ -194,7 +202,13 @@ func TestTheDuplicateBindingAbsorptionNamesItsArbiter(t *testing.T) {
 // bundle is held just as much as one granted by hand.
 func TestTheMappingCohortCountsEverySourceOfTheRole(t *testing.T) {
 	body := funcBody(t, readDBSource(t, "mappings.go"), "MappingHolders")
-	for _, frag := range []string{"FROM direct_role_grants", "user_bundle_assignments", "bundle_version_roles"} {
+	for _, frag := range []string{"FROM direct_role_grants", "user_bundle_assignments", "bundle_version_roles",
+		// The rule arm, which the comment above the query promised and the
+		// query did not have: a role a rule derives is held just as much.
+		"mapping_rules",
+		// And a lapsed grant is not held, so counting it overstates the cohort
+		// in the other direction.
+		"expires_at IS NULL OR expires_at > NOW()"} {
 		if !strings.Contains(body, frag) {
 			t.Errorf("the cohort read is missing %q — a holder it misses is a person an edit moves silently", frag)
 		}
@@ -217,5 +231,34 @@ func TestMappingsForRolesMatchesProjectAndRoleTogether(t *testing.T) {
 	}
 	if !strings.Contains(body, "held.project_id = m.project_id AND held.role_key = m.role_key") {
 		t.Error("both halves of the pair must be compared")
+	}
+}
+
+// `MAX(version)+1` is a read and a write with a gap in the middle, under a
+// comment claiming two concurrent publishes "cannot both claim the same one".
+// Migration 000026's snapshot trigger takes an advisory lock for exactly this;
+// the pattern was not reused until it was pointed at.
+func TestTheMappingVersionAllocationIsSerialised(t *testing.T) {
+	src := readDBSource(t, "mappings.go")
+	for _, fn := range []string{"PublishMappingVersion", "RollbackMappingVersion"} {
+		body := funcBody(t, src, fn)
+		if !strings.Contains(body, "pg_advisory_xact_lock") {
+			t.Errorf("%s must serialise per target, or the version it allocates is not the one it stores", fn)
+		}
+	}
+	// And the lock must be taken BEFORE the number is read, or it serialises
+	// nothing that matters.
+	body := funcBody(t, src, "PublishMappingVersion")
+	if strings.Index(body, "pg_advisory_xact_lock") > strings.Index(body, "COALESCE(MAX(version), 0)") {
+		t.Error("the lock must precede the allocation")
+	}
+}
+
+// A finalizer nothing calls, taking a raw query string, with no in_flight
+// guard, sitting under the comment "Every finalizer below is guarded". The
+// next person to need one would have found it and used it.
+func TestNoUnguardedPropagationFinalizerSurvives(t *testing.T) {
+	if strings.Contains(readDBSource(t, "propagations.go"), "func execPropagation(") {
+		t.Fatal("execPropagation is dead, unguarded, and takes a query string — it must not exist")
 	}
 }

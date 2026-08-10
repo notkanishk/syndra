@@ -76,7 +76,8 @@ const maxResponseBytes = 1 << 20
 // CallRequest is one dispatch to an add-on.
 //
 // It does NOT carry the secret parameter list. That comes from the effective
-// operation — policy ∩ manifest — resolved inside Call, so a caller cannot
+// operation — the union of policy's secret names and the manifest's, which is
+// the more protective reading of both — resolved inside Call, so a caller cannot
 // widen what is loggable by omitting a name.
 type CallRequest struct {
 	Target    string
@@ -107,6 +108,26 @@ func (r CallRequest) String() string {
 
 // GoString mirrors String so %#v is no more revealing than %v.
 func (r CallRequest) GoString() string { return r.String() }
+
+// MarshalJSON is the third verb, and the one the other two miss. `Params` is
+// exported and untagged, so `json.Marshal(req)` — a structured log line, an
+// error payload, a debug dump — emitted the secret in full while %v and %#v
+// were carefully redacting it.
+func (r CallRequest) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Target      string         `json:"target"`
+		Operation   string         `json:"operation"`
+		CallID      string         `json:"call_id"`
+		Subject     string         `json:"subject,omitempty"`
+		PlanID      string         `json:"plan_id,omitempty"`
+		Fingerprint string         `json:"fingerprint,omitempty"`
+		Params      map[string]any `json:"params,omitempty"`
+	}{
+		Target: r.Target, Operation: r.Operation, CallID: r.Record.callID,
+		Subject: r.Subject, PlanID: r.PlanID, Fingerprint: r.Fingerprint,
+		Params: RedactedParams(r.Target, r.Operation, r.Params),
+	})
+}
 
 // CallResponse is deliberately the only return value of Call: there is no error
 // to check, because "err == nil" is a wrong proxy for success here and a wrong
@@ -250,7 +271,10 @@ func doAuthenticated(ctx context.Context, cred *credential, method, url string, 
 		req.Header.Set("Content-Type", "application/json")
 	}
 	if cred.mode == "signed" {
-		req.Header.Set(SignatureHeader, ComputeSignature(timeNow(), body, cred.signingKey))
+		// req.URL.Path rather than the string this was built from: it is what
+		// the add-on will see after its own parse, and signing anything else
+		// would be signing a value the two ends could disagree about.
+		req.Header.Set(SignatureHeader, ComputeSignature(timeNow(), method, req.URL.Path, body, cred.signingKey))
 	}
 
 	httpResp, err := cred.client.Do(req)
@@ -355,20 +379,33 @@ func classifyStatus(code int, retryAfter bool) Outcome {
 }
 
 // ComputeSignature returns the full SignatureHeader value: HMAC-SHA256 over
-// "<unix_seconds>.<body>" under key, formatted "t=<ts>,v1=<hex>".
+// "<unix_seconds>.<method>.<path>.<body>" under key, formatted "t=<ts>,v1=<hex>".
 //
 // The timestamp is inside the MAC input, not merely beside it, so it cannot be
-// edited to extend a captured signature's life; the body is inside it, so the
-// signature authenticates what was asked and not only who asked. This is the
-// same construction the Zitadel Actions leg already verifies — one algorithm in
-// the system, not two.
+// edited to extend a captured signature's life. The body is inside it, so the
+// signature authenticates what was asked and not only who asked.
+//
+// The METHOD and PATH are inside it because the operation name is in the URL
+// and nothing else carried it: `GET /capabilities` has an empty body, so its
+// MAC was a function of the timestamp alone and verified for any zero-body
+// request inside the two-minute window — including a mutating one. Signing the
+// request line is what SigV4 does, for this reason.
+//
+// The path is the URL's path only, never the full URL: the host is already
+// pinned by the registration and by TLS, and including it would make a
+// deployment that reaches the same add-on by two names fail to authenticate
+// against itself.
 //
 // A bare shared secret in a header is deliberately not offered as an
 // alternative: it identifies the caller and binds nothing, so an intercepted
 // call replays verbatim, forever.
-func ComputeSignature(ts time.Time, body, key []byte) string {
+func ComputeSignature(ts time.Time, method, path string, body, key []byte) string {
 	mac := hmac.New(sha256.New, key)
 	fmt.Fprintf(mac, "%d", ts.Unix())
+	mac.Write([]byte("."))
+	mac.Write([]byte(method))
+	mac.Write([]byte("."))
+	mac.Write([]byte(path))
 	mac.Write([]byte("."))
 	mac.Write(body)
 	return fmt.Sprintf("t=%d,v1=%x", ts.Unix(), mac.Sum(nil))
@@ -403,12 +440,21 @@ func (b *breaker) allow(now time.Time) bool {
 func (b *breaker) record(now time.Time, resp CallResponse) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	// Healthy answers, all three of them. A 4xx is a healthy add-on saying no;
-	// a lifecycle refusal is a healthy add-on saying not now, and counting it
-	// as a failure would take a target offline for everybody because somebody
-	// put it into a maintenance window on purpose.
-	if resp.Outcome == OutcomeSucceeded || resp.Outcome == OutcomeRejected || resp.LifecycleRefusal {
+	// A 2xx and a 4xx are the add-on demonstrably working: it read the request
+	// and decided. Those clear the count.
+	if resp.Outcome == OutcomeSucceeded || resp.Outcome == OutcomeRejected {
 		b.failures, b.openUntil = 0, time.Time{}
+		return
+	}
+	// A lifecycle refusal is not counted — a maintenance window must not take a
+	// target offline for everybody — but it does not CLEAR the count either,
+	// and the difference is the whole difference between a breaker and a
+	// suggestion. `LifecycleRefusal` is derived entirely from add-on-controlled
+	// output (a 503 plus a Retry-After header), so a clearing one let a broken
+	// add-on alternate 5xx with 503+Retry-After and keep the breaker shut for
+	// ever. Skipped, not reset: the window pauses the count, it does not
+	// forgive it.
+	if resp.LifecycleRefusal {
 		return
 	}
 	b.failures++
