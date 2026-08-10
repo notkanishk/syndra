@@ -1,6 +1,6 @@
 # Syndra — Next Steps
 
-> Single pickup point. Everything open, in one place, as of **2026-07-31**.
+> Single pickup point. Everything open, in one place, as of **2026-08-10**.
 > Sources consolidated here: `ROADMAP.md` phases 4–6, `docs/AUDIT.md` deferrals, open `changes/*/tasks.md`, and tooling debt.
 > [< Index](INDEX.md) · [Architecture](changes/syndra-core-architecture/design.md) · [Roadmap](changes/syndra-core-architecture/ROADMAP.md)
 
@@ -17,20 +17,21 @@ Four buckets, in the order they actually unblock each other:
 
 ## 1. Code
 
-### LDAP / sync (the known parked track) — **superseded, not resuming**
+### LDAP / sync — **gone**
 
-**Abandoned by [`changes/addon-platform`](changes/addon-platform/proposal.md)** (2026-08-08), which reaches TrueNAS SCALE and UniFi Access through their own management APIs instead of an intermediate directory. Nothing in this subsection is picked up again; `sync/` is deleted in that change's group 11, which is deliberately last because the vault reduction inside it is the point of no return. The items stay listed because a parked track that vanishes reads as forgotten rather than decided.
+Deleted on 2026-08-10 by [`changes/addon-platform`](changes/addon-platform/proposal.md),
+group 11. `sync/`, the `provisioning_intents` queue, the four intent routes and
+the Argon2id password vault are removed; migration `000034` drops the tables and
+the credential columns. The items that used to be listed here — SC2's error
+classification, SC6's per-UID routing, SC7's bounded context, LLDAP integration,
+LLDAP reconciliation, OE7/OE13/OE14 — are not open work any more. There is
+nothing to resume.
 
-**Active pickup point for that work is [`changes/addon-platform/tasks.md`](changes/addon-platform/tasks.md).** Group 1 (the target dimension: `targets` registry, `propagation_outbox` rename and reshape, `desired_state_snapshots`, plan storage, drift target dimension — migration `000026`) is done and stands alone. Group 2 begins at 2.1; 2.17 onward and all of group 3 depend on group 1's plan storage, which now exists.
-
-Paused pending research on real LLDAP password-propagation and credential semantics. Listed for completeness — you already know this one.
-
-- **SC2 — top priority when sync resumes.** `IsConnectionError` doesn't classify `ErrorNetwork`, so a network-class LDAP failure isn't treated as a reconnect trigger. [`sync/internal/ldap/client.go`]
-- **SC6** — per-UID worker routing (same-UID ordering guarantee).
-- **SC7** — fresh bounded context for drain-time backend calls.
-- **LLDAP Integration** — end-to-end wiring against the real external LLDAP (separate Proxmox LXC), production connectivity validation.
-- **LLDAP Reconciliation** — periodic full sync comparing Syndra provisioning state to LLDAP group membership, overwriting drift per the one-way authority rule.
-- **OE7 / OE13 / OE14** — cosmetic sync cleanups; do them while you're in there, not as their own errand.
+**One consequence outlives it:** every member who enrolled before the cutover
+must set a new storage credential. Their hash went with the vault, and it could
+not have been converted anyway — TrueNAS takes plaintext and nothing else. The
+member view renders the re-enrolment state; the operator communication is the
+thing to do before this deploys.
 
 ### Basic / Advanced IA — what the redesign left open
 
@@ -106,8 +107,8 @@ None of these are code. All need a live instance and a human.
 | `advanced-role-crud` | no `specs/` |
 | `codebase-audit-and-hardening` | no `specs/` |
 | `live-webhook-listener` | no `specs/` |
-| `provisioning-intents` | no `specs/` |
-| `shadow-password-vault` | no `specs/` |
+| `provisioning-intents` | no `specs/` — **and now superseded**: the pipeline it describes is deleted. Archive it with a supersession note rather than authoring a spec for a subsystem that no longer exists. |
+| `shadow-password-vault` | no `specs/` — **and now partly superseded**: the hash, the algorithm and the salt parameters are gone (migration 000034); existence and rotation metadata survive. |
 | `zitadel-management-client` | no `specs/` |
 
 Archiving them with `--skip-specs` would clear `changes/` but permanently lose the requirements — don't. Each needs spec deltas authored from the shipped code first (`## ADDED Requirements` + `### Requirement:` + `#### Scenario:`). `backend-owned-onboarding-and-security-boundary` had this exact problem and was fixed by reformatting its existing spec to delta headers; the other six need the content written, not just reformatted.
@@ -141,66 +142,40 @@ Everything else is healthy: index tracks HEAD, embeddings are local-semantic (`X
 
 ---
 
-## 4a. Add-on platform — what is built and what is not
+## 4a. Add-on platform — complete, with one handover
 
-The change `addon-platform` is 140 of 226 tasks done, with 11 more partial —
-plus §13/§14's 64 post-review fixes, all applied, and §15's 6 gaps stated
-rather than implied. The backend's IAM half, the TrueNAS add-on, and the
-dispatcher joining them are all built and green. What is missing is mostly
-surfaces.
+`changes/addon-platform` is done. The backend's IAM half, the TrueNAS add-on,
+the dispatcher joining them, the lifecycle trigger that fires it, the unmanaged
+inventory, provisional plans, the mutation-log anchor, and the retirement of the
+LLDAP bridge are all in and green. What remains is a **visual pass on three
+screens**, handed to the design agent with
+[`HANDOVER-UI.md`](changes/addon-platform/HANDOVER-UI.md).
 
-**Read §13 first if you are picking this up.** A branch audit found that the
-TrueNAS add-on had never spoken to a real NAS and would have done nothing
-against one: `truenas_api.Client.Call` returns the whole JSON-RPC message and
-the add-on decoded it as the result, so every version read failed, the version
-gate that failure left empty refused every mutation, and — the half that would
-have bitten later — every refused mutation would have been reported as applied
-the moment the first bug was fixed alone. Both are fixed together, with a
-contract test against recorded middleware responses. The lesson worth keeping:
-574 lines of tests passed against a shape TrueNAS never sends, because the fake
-and the code agreed with each other.
+**Read §13 and §17 first if you are picking this up.** Both record the same
+class of defect, found twice: the add-on had never spoken to a real NAS (§13),
+and the backend and the add-on had never spoken to each other (§17) — the
+backend's envelopes carried fields the add-on's strict decoders never declared,
+so every real `/apply` and `/operations/*` call would have been answered 400.
+Neither suite could see it, because each was written against its own fake and
+the two fakes agreed with each other. The contract is an artifact now
+(`addons/contract/*.json`), asserted from both ends.
 
-**Done and committed.** The target dimension and its schema (§1.1–1.17), drain
-ordering with revocation priority and stale-version rejection (§1.20–1.27), the
-add-on registry, transport, policy, redaction, dispatch protocol and plan store
-(§2.1–2.22, 2.32–2.50), plan-then-apply as a backend guarantee on all four
-Zitadel surfaces including the UI (§3), the **whole TrueNAS add-on** —
-transport, read path, stores, tamper-evident mutation log, lifecycle states,
-entitlement plane, username derivation and binding, and the five operations
-(§4, §5, §6 bar four tasks) — role-to-target mappings with versioning, rollback
-and a CRUD surface (§7.1–7.5, 7.7, 7.8), allowances end to end (§8.1–8.10, 8.13,
-8.14), and the add-on entitlement dispatcher that connects the backend to it.
+**What the handover covers, and nothing else does yet.** Each has a backend
+endpoint and no screen:
 
-**Not built, in the order it has to happen:**
+1. **Entitlement plan-then-apply UI** (9.3–9.6) — `POST /targets/{t}/entitlements/rehearse` and `.../apply`. The apply carries the plan id, never the original submission.
+2. **Mapping management with version history** (9.7–9.8) — `rehearse-edit`, `rehearse-delete`, and `PATCH`/`DELETE` citing a plan id. The blast-radius acknowledgement is enforced by the backend; the UI has to show the number.
+3. **Dormant-account housekeeping** (9.11–9.12) — the only one that also needs a listing endpoint.
+4. **Allowance authoring and review-date surfacing** (9.22, 9.25).
+5. **Connection instructions** (10.8) — the account name is already on the member page; the mount instructions are not.
+6. **A button for the revocation composition** (6.17) — `POST /targets/{t}/users/{id}/revoke-access` exists and nothing calls it. Its copy is fixed by the backend and must be shown verbatim: this target cannot end a session.
 
-1. **The lifecycle trigger (§7.9–7.12).** A grant change should look up the
-   targets that role is mapped to and enqueue an entitlement apply. Both reads
-   exist and nothing calls them — `db.TargetsMappedToRole` and
-   `db.MappingHolders`. It needs one design decision first: an add-on outbox row
-   cites a plan subject, and a cascade-triggered convergence has no operator
-   plan behind it, so either the trigger mints an implicit one or the citation
-   becomes optional for cascade-sourced rows.
-2. **Operator and member surfaces (§9, §10 — 37 tasks).** Including the
-   unconfirmed-revocation surface, which is what §2.51's retry-budget escalation
-   has nowhere to escalate to — note that 13.15 changed what that escalation is
-   for: a spent row is now terminal with a reason rather than a silent stop, so
-   the surface reports a finding rather than rescuing a stuck queue. Also the
-   allowance authoring §8.11–8.12's lineage band needs; the *carve-out
-   rendering* half landed early as 14.30, because without it a role-holder list
-   read as full access while an allowance withheld the entitlement.
-3. **Provisional plans (§2.23–2.31).** The schema is in (`plans.provisional`,
-   `state_read_at`, and the CHECK binding them); the code that issues and
-   resolves one is not.
-4. **Retiring LLDAP (§11) and the doc refresh (§12).** Deliberately last: the
-   vault reduction inside §11 is the point of no return.
-
-Smaller gaps with no home yet: drift scoped to bound subjects and the
-unmanaged-account inventory (§1.18–1.19, and 6.8's adoption action with them);
-the periodic reconcile that resolves current state rather than replaying a
-snapshot (§1.22–1.23's other half); `/operations/{name}` deduplication on the
-add-on (§5.12 covers `/apply` only); and the add-on value oracle that would let
-mapping validation check a value resolves rather than accepting every one
-(`addonsResolvesValue` in `handlers/deps.go`).
+**Operator-gated, and new.** The add-on platform has never run against a real
+deployment end to end. Specifically: register the TrueNAS add-on, watch the
+first manifest read turn registration into capability, rehearse a convergence
+for one subject, apply it, resume the drain, and confirm the account it creates
+is named from the email localpart rather than from a digest. Then the same
+against an unreachable NAS, to see a provisional plan issued and resolved.
 
 ## 4b. Test infrastructure debt
 
@@ -215,6 +190,8 @@ mapping validation check a value resolves rather than accepting every one
 - **The unreconciled-target record has no dashboard.** `target_reconciliation` (migration 000026, change `addon-platform` 1.14) records when Syndra last saw each target for itself and since when it has not. The on-demand sweep returns it on `DriftResult`, so [Reconcile now] shows it; the scheduled sweep writes it and nothing reads it back. `db.GetUnreconciledTargets` exists for that consumer and currently has none.
 
   This matters most in exactly the case it was built for: a nightly sweep that has been unable to reach a target for a week looks, on every surface an operator actually opens, like a week with no drift. The natural home is the governance summary beside the drift count — which needs `TargetReconciliation` moved to `internal/models` first, since `models` must not import `db`. Deliberately not done inline with 1.14: a backend field with no rendering is not "saying so" to anybody, and inventing the callout unprompted is a design decision the IA change owns (`basic-advanced-ia`).
+
+- **The log-integrity finding has no dashboard either.** `addon_log_anchors` (migration 000033) records where each add-on's mutation-log head was, and refuses to move past a truncation or a rewrite. `db.ListCompromisedLogs` exists and has no consumer. This is the strongest evidence this system produces and it currently lives in a log line and a table.
 
 ## 5. Declined / deliberately kept
 

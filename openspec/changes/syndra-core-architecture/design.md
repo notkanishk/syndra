@@ -26,14 +26,19 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   **Version Pinning:** Actions v1 is deprecated and MUST NOT be used. All custom JWT logic MUST reside in the modern v2 flow.
 *   **Compatibility Rule:** All source-of-truth-facing claim and event assumptions MUST remain compatible with Zitadel Actions v2. Syndra MUST NOT introduce an alternate Zitadel-facing contract model outside that boundary.
 
-### The Bridge Plane (Provisioning)
-*   **Components:** LLDAP Sync Service (Go), external LLDAP Server.
-*   **Orchestrated Flow:** Zitadel webhooks are received ONLY by the **Syndra Backend**. The Backend validates the change against its policy engine and, if a sync is required, emits a **Provisioning Intent** to the Sync Service via an internal encrypted channel.
-*   **Isolation:** The Sync Service is a private worker that does not expose external ports; it only reacts to verified Backend commands to manage LLDAP groups and user passwords.
-*   **Credential Bridge Requirement:** Syndra MUST support a Samba/LLDAP-specific secondary credential because certain makerspace infrastructure still requires password-based authentication now. This is a necessary bridge capability, not a general identity model.
-*   **Identity Reflection:** Syndra manages the "Shadow Password" vault as an infrastructure credential bridge; these secrets are pushed to the Sync Service only during the physical propagation event.
-*   **Isolation Rule:** Samba/LLDAP password handling MUST remain logically isolated from normal Zitadel/OIDC identity flows, independently auditable, and narrowly scoped to infrastructure access only.
-*   **Internal Contract Rule:** Frontend-to-Backend and Backend-to-Sync communication may use self-defined Syndra structures, but those internal contracts MUST be explicit, authenticated, validated, and kept separate from Zitadel-facing Actions v2 compatibility assumptions.
+### The Target Plane (Add-ons)
+
+*Superseded the Bridge Plane on 2026-08-10. Change `addon-platform` replaced the
+LLDAP sync service with one add-on container per target; the bridge, its
+provisioning-intent queue and the password vault that fed it are deleted. What
+follows describes what exists.*
+
+*   **Components:** one add-on container per system Syndra provisions into (`addons/truenas` today), each reaching its target through that target's own management API. No intermediate directory.
+*   **Orchestrated Flow:** Zitadel webhooks are received ONLY by the **Syndra Backend**. A role change runs the closure diff every cascade computes, and that diff fires the lifecycle trigger: the backend resolves the subject's desired state on every target the changed role is mapped to, records it as an immutable snapshot, and queues one outbox row per subject beside its Zitadel rows. An add-on never decides anything — Syndra decides who and what, the add-on decides how.
+*   **Isolation:** an add-on exposes no host port and is reachable only on the internal network. Calls are mutually authenticated (mTLS with a private CA, or signed requests carrying a timestamp and a body hash) over TLS, and the registered base URL is the only authority — a redirect is refused rather than followed.
+*   **Credential Requirement:** certain makerspace infrastructure still requires password-based authentication. A member sets that credential in Syndra and it is **forwarded to the target and kept nowhere** — no store, no hash, no vault. The bridge's Argon2id vault was deleted with the bridge: no API on this path accepts a hash, so the only thing a stored one could do is leak.
+*   **The add-on is the least trusted component.** It holds the target credential and talks to a third-party API, so its manifest is a CEILING the backend intersects with its own policy rather than a grant — an operation absent from backend policy is unavailable whatever the manifest says.
+*   **Internal Contract Rule:** Frontend-to-Backend and Backend-to-add-on communication may use self-defined Syndra structures, but those contracts MUST be explicit, authenticated, validated, and kept separate from Zitadel-facing Actions v2 assumptions. The add-on contract is held to a committed artifact (`addons/contract/*.json`) asserted from both ends, because the two are separately compiled modules and each was once tested only against its own fake.
 
 ## 3. The Logic Engine & Policy Rules
 *   **Explicit Mapping Rules:** Instead of fragile deep inheritance trees, Syndra uses flat conditional rules (e.g., `IF project:printing role:user THEN ADD project:door_access role:3d_lab_pin`).
@@ -58,12 +63,12 @@ The system is divided into two distinct planes to balance complex logic with ult
 *   **Audit Logging & Self-Service:** Strict timeline tracking of Who granted What, and When. Temporary/Semester roles auto-expire, and users can trigger self-service permission requests for admin approval.
 
 ## 6. Technical Stack & Deployment
-*   **Deployment:** Docker Compose running inside a Proxmox LXC (Linux Container). This provides a robust 1-command installation and update mechanism via an `update.sh` script that pulls GitHub changes and restarts the stack without downtime. The Syndra stack uses **Separate Containers** for Frontend, Backend, and the LLDAP Sync Service to ensure isolation and security. The LLDAP server itself MAY run outside this Compose stack, such as in a separate Proxmox LXC, with the Sync Service connecting to it over the network via `LLDAP_URL`.
+*   **Deployment:** Docker Compose running inside a Proxmox LXC (Linux Container). This provides a robust 1-command installation and update mechanism via an `update.sh` script that pulls GitHub changes and restarts the stack without downtime. The Syndra stack uses **Separate Containers** for Frontend, Backend, and one per add-on target, to ensure isolation and security. Each add-on sits behind a Compose profile and does not start by default: it holds a credential for the system it provisions, and a container nobody asked for holding one is a container nobody is watching.
 *   **Authentication & Identity:**
     *   **Backend:** Uses a high-scoped **Machine-to-Machine (Service Account)** token from Zitadel only for backend-owned Management API operations after authorization succeeds. Privileged frontend-originated requests are authorized from a Zitadel-issued user access token validated by the backend.
     *   **Frontend:** **User Session (OIDC)** backed by Zitadel-issued user access tokens. The PKCE authorization code flow is implemented: the UI performs login via Zitadel, stores the access token in an `syndra_session` cookie (discriminated union: `demo | oidc`), and forwards it as `Authorization: Bearer <token>` on all backend requests — both through the proxy route and SSR server-component fetches. Demo cookie sessions with Admin/User view differentiation remain active as a local-dev fallback when `ZITADEL_DOMAIN` is unset.
     *   **Internal API Key Rule:** A shared internal API key MAY remain as defense-in-depth for service-to-service traffic, but it MUST NOT be treated as sufficient production authorization for privileged actions.
-    *   **Sync Service:** A dedicated worker that synchronizes identity state from Syndra/Zitadel into the LLDAP server. The worker is deployment-agnostic about where LLDAP runs, as long as it can reach the configured LDAP endpoint.
+    *   **Add-ons:** one container per target, each speaking that target's own management API. It converges a subject onto the desired state the backend approved, reports what it did, and keeps an append-only mutation log the backend anchors — a chain cannot notice its own truncation, so somebody outside remembers where the head was.
 *   **Backend / Orchestrator:** Go (Golang).
 *   **Frontend Dashboard:** Next.js (React).
 
@@ -96,13 +101,14 @@ Before Syndra widens its live Zitadel and provisioning surface, the immediate ne
 | backend grant or revoke operations in Zitadel | service user account | Management API path; backend-owned only |
 | mapping-rule propagation back into Zitadel | service user account | requires server-side control-plane mutation rights |
 | welcome-bundle assignment and similar onboarding mutations | backend service account path after validated event intake | Syndra Backend remains the single mutation authority for audit, retries, and idempotency |
-| webhook reception and verification | backend endpoint with validated Zitadel event contract | external intake stays on backend; sync service remains private |
-| Backend -> Sync provisioning intents | internal Syndra contract | self-defined, authenticated, and isolated from Zitadel-facing contracts |
-| Zitadel mutation traceability | outbox (`pending_zitadel_propagations`) before every Management API call; intent ledger (`direct_role_grants`) for direct/operator grants | every Syndra-mediated mutation leaves a record before it reaches Zitadel; a Zitadel-side change with no such record is not trusted after the fact — it is detected as drift and triaged (Wave 2 · Part 4, `wave-2-part-4-zitadel-state-projection-and-drift-control`) |
+| webhook reception and verification | backend endpoint with validated Zitadel event contract | external intake stays on backend; add-ons are reachable only on the internal network and never receive one |
+| Backend -> add-on entitlement convergence | internal Syndra contract over mTLS or signed requests | self-defined, authenticated, isolated from Zitadel-facing contracts, and held to a committed wire artifact both ends assert against |
+| Backend -> add-on one-shot operation | same transport, plus a durable record minted before the dispatch | an operation carries a secret and is never queued or retried: a retry needs the parameters, and keeping them is the vault this design removed |
+| mutation traceability, every target | outbox (`propagation_outbox`, renamed from `pending_zitadel_propagations` when a second target appeared) before every Management API call; intent ledger (`direct_role_grants`) for direct/operator grants | every Syndra-mediated mutation leaves a record before it reaches Zitadel; a Zitadel-side change with no such record is not trusted after the fact — it is detected as drift and triaged (Wave 2 · Part 4, `wave-2-part-4-zitadel-state-projection-and-drift-control`) |
 
 ## 10. IdP Chain: Google Workspace -> Zitadel
 
 Google Workspace is the sole Identity Provider. Users authenticate via Google, which federates into Zitadel as a configured external IdP. Syndra never sees Google credentials directly.
 
-* **Account Lifecycle Gap**: Zitadel does not auto-detect when a Google Workspace account is suspended or deleted. A future dedicated service (Phase 6, separate Docker container) will poll Google Workspace monthly via the Admin SDK Directory API to verify all Zitadel users still have active Google accounts. Suspended or deleted accounts trigger user deactivation in Zitadel via the Management API, which cascades through Syndra's existing webhook pipeline (`user_deactivated` -> cache invalidation -> LLDAP membership revocation).
+* **Account Lifecycle Gap**: Zitadel does not auto-detect when a Google Workspace account is suspended or deleted. A future dedicated service (Phase 6, separate Docker container) will poll Google Workspace monthly via the Admin SDK Directory API to verify all Zitadel users still have active Google accounts. Suspended or deleted accounts trigger user deactivation in Zitadel via the Management API, which cascades through Syndra's existing webhook pipeline (`user_deactivated` -> cache invalidation -> the closure diff -> a convergence queued for every mapped target).
 * **Scope Boundary**: Syndra does not manage the Google Workspace -> Zitadel federation configuration. That is a Zitadel admin console concern. Syndra's responsibility begins at the Zitadel webhook boundary.

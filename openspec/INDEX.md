@@ -18,8 +18,10 @@ Each capability has one canonical spec. **Status** lets you skip specs that aren
 | Application Claims | Integrated, **operator-editable token shape applied to real tokens** (shared shaper, per-app overrides) | [spec](changes/syndra-core-architecture/specs/application-claims/spec.md) | core-architecture + backend-onboarding + actions-v2-deployment + live-directory-identity-completeness + live-only-production-ui + dashboard-ux-elevation |
 | Service Catalog | Integrated, inline modal Request Access flow (service-to-bundle mapping deferred P5) | [spec](changes/syndra-core-architecture/specs/service-catalog/spec.md) | core-architecture + live-zitadel-data-source + live-directory-identity-completeness + live-only-production-ui + dashboard-ux-elevation |
 | Automation Policies | Integrated, mapping-rule live preview + cycle warning (welcome bundle config UI deferred P5) | [spec](changes/syndra-core-architecture/specs/automation-policies/spec.md) | core-architecture + backend-onboarding + dashboard-ux-elevation |
-| LDAP Sync | Partial (reconciliation deferred P5, password compat unresolved) | [spec](changes/syndra-core-architecture/specs/ldap-sync/spec.md) | core-architecture |
-| Provisioning | Partial (reconciliation, compensating revocations deferred P5) | [spec](changes/syndra-core-architecture/specs/provisioning/spec.md) | core-architecture |
+| ~~LDAP Sync~~ | **Superseded** by Add-on Platform (2026-08-10). The bridge, its intent queue and its password vault are deleted. | [spec](changes/syndra-core-architecture/specs/ldap-sync/spec.md) (historical) | addon-platform |
+| ~~Provisioning~~ | **Superseded** by Add-on Platform. A role change now queues a convergence per mapped target in the same outbox Zitadel uses. | [spec](changes/syndra-core-architecture/specs/provisioning/spec.md) (historical) | addon-platform |
+| Add-on Platform | Complete bar the handed-over UI pass | [spec](changes/addon-platform/specs/addon-platform/spec.md) | addon-platform |
+| TrueNAS Add-on | Complete | [spec](changes/addon-platform/specs/truenas-addon/spec.md) | addon-platform |
 | Demo Catalog | Integrated (local-dev fallback; bypassed when live Zitadel is configured; UI MUST NOT serialize demo entities in production) | [spec](changes/syndra-core-architecture/specs/demo-catalog/spec.md) | core-architecture + live-zitadel-data-source + live-only-production-ui |
 | Topology Graph | Integrated, pan/zoom + node deeplinks | [spec](changes/syndra-core-architecture/specs/topology-graph/spec.md) | core-architecture + dashboard-ux-elevation |
 | Operational Readiness | Integrated, toast + ConfirmModal + ErrorBoundary + theme toggle + sidebar activity badges + system/mode (LXC observability deferred P5) | [spec](changes/syndra-core-architecture/specs/operational-readiness/spec.md) | core-architecture + live-only-production-ui + dashboard-ux-elevation |
@@ -87,7 +89,7 @@ Every change directory has: `proposal.md` (why), `design.md` (how), `tasks.md` (
 | 1: UI Baseline | Complete | core-architecture, bun-migration |
 | 2: Contract Hardening | Complete | contract-hardening |
 | 3: Security Boundary | Complete | backend-onboarding, codebase-audit, zitadel-mgmt-client, webhook-listener, role-crud |
-| 4: Infrastructure Bridge | In Progress | provisioning-intents, shadow-vault, sync-service |
+| 4: Target Plane (was Infrastructure Bridge) | Complete | addon-platform (supersedes provisioning-intents, shadow-vault, sync-service) |
 | 5: Automation & Governance | In Progress | zitadel-actions-v2-deployment, grant-expiration-scheduler, live-zitadel-data-source, live-directory-identity-completeness, live-only-production-ui, dashboard-ux-elevation, zitadel-event-trigger-propagation; [remaining items](changes/syndra-core-architecture/ROADMAP.md) |
 | 5.5: Audit-Resolution Waves | In Progress | wave-1-production-trust-hardening, wave-2-part-1-frontend-palette-finalization, wave-2-part-2-backend-coherence, wave-2-part-3-operational-polish, wave-2-part-4-zitadel-state-projection-and-drift-control, wave-3-frontend-remainder-and-consolidation |
 | 5.5: Deployment | In Progress | production-environment-and-rename — production LXC `syndra`, generated secrets, runner-based deploy, MkAuth -> Syndra |
