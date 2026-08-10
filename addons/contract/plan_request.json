@@ -1,0 +1,15 @@
+{
+  "contract_version": 1,
+  "subjects": [
+    {
+      "subject": "289471021834760193",
+      "email": "maya.chen@example.edu",
+      "desired": {
+        "group": ["lab_makers", "fabrication"],
+        "enabled": true,
+        "smb_enabled": true
+      }
+    }
+  ],
+  "acknowledge_scope": true
+}

@@ -1,0 +1,12 @@
+{
+  "contract_version": 1,
+  "call_id": "5a2d9e30-1b44-4f7c-9e08-6d3a2c1b0f95",
+  "operation": "password.set",
+  "subject": "289471021834760193",
+  "actor": "289471021834760193",
+  "plan_id": "3c9e2f81-44ab-4d0e-8f21-77aa10bb33cd",
+  "fingerprint": "sha256:9d1c4f0b7e2a",
+  "params": {
+    "password": "fixture-value-not-a-credential"
+  }
+}

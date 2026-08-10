@@ -28,8 +28,14 @@ import (
 
 // ApplyRequest is one subject's resolved desired state.
 type ApplyRequest struct {
-	CallID  string `json:"call_id"`
-	Subject string `json:"subject"`
+	// ContractVersion is the wire version the caller speaks. Declared here
+	// because `decodeStrict` refuses what it does not understand, so a field the
+	// backend sends and this struct omits is not a tolerated extra — it is a
+	// 400 on every call, which is precisely how this arrived: both sides were
+	// tested against their own fake and the two fakes agreed with each other.
+	ContractVersion int    `json:"contract_version"`
+	CallID          string `json:"call_id"`
+	Subject         string `json:"subject"`
 	// Email is what a username is derived from, and only when an account has to
 	// be created. An existing binding is authoritative: a later email change
 	// MUST NOT rename an account, because renaming disturbs its home directory,
@@ -172,6 +178,9 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 	var req ApplyRequest
 	if err := decodeStrict(body, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
+		return
+	}
+	if !writeContractRefusal(w, req.ContractVersion) {
 		return
 	}
 	if strings.TrimSpace(req.CallID) == "" || strings.TrimSpace(req.Subject) == "" {

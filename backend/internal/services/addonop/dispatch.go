@@ -270,7 +270,11 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 		Operation: req.Operation,
 		Record:    record,
 		Subject:   req.SubjectID,
-		Params:    req.Params,
+		// The add-on's mutation log is an independent forensic record, and it
+		// knows only the subject. Without this it would answer "who did what to
+		// whom" with the whom alone — on the one path that carries a credential.
+		Actor:  req.ActorID,
+		Params: req.Params,
 	})
 
 	status, ok := statusFor[resp.Outcome]

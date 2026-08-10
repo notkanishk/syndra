@@ -126,9 +126,24 @@ func applyServer(t *testing.T, users string) (*server, *mutatingRPC) {
 	return s, m
 }
 
+// planInto and applyInto drive a handler with the body a real caller would have
+// sent: the wire version is declared on every body-carrying route, and a test
+// about something else should not have to restate it.
+func planInto(t *testing.T, s *server, rr *httptest.ResponseRecorder, body string) {
+	t.Helper()
+	body = withContractVersion(t, body)
+	s.handlePlan(rr, httptest.NewRequest(http.MethodPost, "/plan", strings.NewReader(body)), []byte(body))
+}
+
+func applyInto(t *testing.T, s *server, rr *httptest.ResponseRecorder, body string) {
+	t.Helper()
+	body = withContractVersion(t, body)
+	s.handleApply(rr, httptest.NewRequest(http.MethodPost, "/apply", strings.NewReader(body)), []byte(body))
+}
+
 func postApply(t *testing.T, s *server, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	body = withFingerprint(t, s, body)
+	body = withContractVersion(t, withFingerprint(t, s, body))
 	rr := httptest.NewRecorder()
 	s.handleApply(rr, httptest.NewRequest(http.MethodPost, "/apply", strings.NewReader(body)), []byte(body))
 	return rr
@@ -452,7 +467,7 @@ func TestPlanningMutatesNothingAndFingerprintsWhatItRead(t *testing.T) {
 	const body = `{"subjects":[{"subject":"sub-1","email":"ada@x.edu","desired":{"group":["builtin_users"]}}]}`
 
 	rr := httptest.NewRecorder()
-	s.handlePlan(rr, httptest.NewRequest(http.MethodPost, "/plan", strings.NewReader(body)), []byte(body))
+	planInto(t, s, rr, body)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
 	}
@@ -478,7 +493,7 @@ func TestPlanningMutatesNothingAndFingerprintsWhatItRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	rr2 := httptest.NewRecorder()
-	moved.handlePlan(rr2, httptest.NewRequest(http.MethodPost, "/plan", strings.NewReader(body)), []byte(body))
+	planInto(t, moved, rr2, body)
 	var after PlanResponse
 	if err := json.Unmarshal(rr2.Body.Bytes(), &after); err != nil {
 		t.Fatal(err)
@@ -507,7 +522,7 @@ func TestAnOversizedRequestIsRefusedWithTheCountItComputed(t *testing.T) {
 	b.WriteString(`]}`)
 
 	rr := httptest.NewRecorder()
-	s.handlePlan(rr, httptest.NewRequest(http.MethodPost, "/plan", strings.NewReader(b.String())), []byte(b.String()))
+	planInto(t, s, rr, b.String())
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("want 422, got %d (%s)", rr.Code, rr.Body.String())
 	}
@@ -605,7 +620,7 @@ func TestThePlanAndTheApplyAgreeOnTheDerivedName(t *testing.T) {
 	}
 	const planBody = `{"subjects":[{"subject":"sub-1","email":"ada@example.edu","desired":{"group":["lab_makers"]}}]}`
 	rr := httptest.NewRecorder()
-	s.handlePlan(rr, httptest.NewRequest(http.MethodPost, "/plan", strings.NewReader(planBody)), []byte(planBody))
+	planInto(t, s, rr, planBody)
 	var plan PlanResponse
 	if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil {
 		t.Fatal(err)
@@ -634,7 +649,7 @@ func TestThePlanReportsAConflictRatherThanPlanningAroundIt(t *testing.T) {
 
 	const body = `{"subjects":[{"subject":"sub-1","email":"ada@example.edu","desired":{"group":["lab_makers"]}}]}`
 	rr := httptest.NewRecorder()
-	s.handlePlan(rr, httptest.NewRequest(http.MethodPost, "/plan", strings.NewReader(body)), []byte(body))
+	planInto(t, s, rr, body)
 
 	var plan PlanResponse
 	if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil {
@@ -670,7 +685,7 @@ func TestAnApplyWithoutAFingerprintIsRefused(t *testing.T) {
 
 	const body = `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu","desired":{"enabled":false}}`
 	rr := httptest.NewRecorder()
-	s.handleApply(rr, httptest.NewRequest(http.MethodPost, "/apply", strings.NewReader(body)), []byte(body))
+	applyInto(t, s, rr, body)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("want a refusal, got %d (%s)", rr.Code, rr.Body.String())
@@ -738,7 +753,7 @@ func TestAnUnknownRequestFieldIsRefused(t *testing.T) {
 
 	const body = `{"call_id":"c1","subject":"sub-1","fingerprint":"x","desired":{},"escalate":true}`
 	rr := httptest.NewRecorder()
-	s.handleApply(rr, httptest.NewRequest(http.MethodPost, "/apply", strings.NewReader(body)), []byte(body))
+	applyInto(t, s, rr, body)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("want a refusal, got %d (%s)", rr.Code, rr.Body.String())

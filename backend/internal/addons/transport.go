@@ -89,6 +89,12 @@ type CallRequest struct {
 	// remember to make it hold.
 	Record  DispatchRecord
 	Subject string
+	// Actor is who decided this. The add-on's mutation log promises who did what
+	// to whom, and it knows only the whom — a record naming the subject alone
+	// answers two thirds of the question the log exists to answer. Carried for
+	// the same reason the apply carries it, and it is not a secret: it is the
+	// operator id already on the `addon_operations` row.
+	Actor string
 	// PlanID and Fingerprint bind an entitlement apply to what was reviewed.
 	// Empty for one-shot operations, which are approved by confirmation at the
 	// moment of invocation rather than rehearsed against a state read.
@@ -101,8 +107,8 @@ type CallRequest struct {
 // caller reaches for without thinking — %v and %#v — cannot print a password.
 // A redaction that depends on every caller remembering to redact is not one.
 func (r CallRequest) String() string {
-	return fmt.Sprintf("addon call target=%s operation=%s call_id=%s subject=%s plan=%s params=%v",
-		r.Target, r.Operation, r.Record.callID, r.Subject, r.PlanID,
+	return fmt.Sprintf("addon call target=%s operation=%s call_id=%s subject=%s actor=%s plan=%s params=%v",
+		r.Target, r.Operation, r.Record.callID, r.Subject, r.Actor, r.PlanID,
 		RedactedParams(r.Target, r.Operation, r.Params))
 }
 
@@ -119,12 +125,13 @@ func (r CallRequest) MarshalJSON() ([]byte, error) {
 		Operation   string         `json:"operation"`
 		CallID      string         `json:"call_id"`
 		Subject     string         `json:"subject,omitempty"`
+		Actor       string         `json:"actor,omitempty"`
 		PlanID      string         `json:"plan_id,omitempty"`
 		Fingerprint string         `json:"fingerprint,omitempty"`
 		Params      map[string]any `json:"params,omitempty"`
 	}{
 		Target: r.Target, Operation: r.Operation, CallID: r.Record.callID,
-		Subject: r.Subject, PlanID: r.PlanID, Fingerprint: r.Fingerprint,
+		Subject: r.Subject, Actor: r.Actor, PlanID: r.PlanID, Fingerprint: r.Fingerprint,
 		Params: RedactedParams(r.Target, r.Operation, r.Params),
 	})
 }
@@ -160,6 +167,7 @@ type callEnvelope struct {
 	CallID          string         `json:"call_id"`
 	Operation       string         `json:"operation"`
 	Subject         string         `json:"subject,omitempty"`
+	Actor           string         `json:"actor,omitempty"`
 	PlanID          string         `json:"plan_id,omitempty"`
 	Fingerprint     string         `json:"fingerprint,omitempty"`
 	Params          map[string]any `json:"params,omitempty"`
@@ -212,6 +220,7 @@ func Call(ctx context.Context, req CallRequest) CallResponse {
 		CallID:          req.Record.callID,
 		Operation:       req.Operation,
 		Subject:         req.Subject,
+		Actor:           req.Actor,
 		PlanID:          req.PlanID,
 		Fingerprint:     req.Fingerprint,
 		Params:          req.Params,

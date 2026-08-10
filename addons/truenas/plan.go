@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -15,9 +16,26 @@ import (
 // fingerprint per subject, which is what makes the approval mean anything: the
 // apply carries it back and refuses if the subject moved.
 
+// PlanSubject is one subject inside a proposed change.
+//
+// Deliberately not `ApplyRequest`. A plan has no call id to deduplicate on, no
+// fingerprint to verify against — it is where the fingerprint comes FROM — and
+// no plan id, because the plan being computed is what will get one. Reusing the
+// apply's shape here would have meant either the backend sending four fields
+// that mean nothing, or this add-on accepting a body it cannot honour.
+type PlanSubject struct {
+	Subject string `json:"subject"`
+	// Email is what a username is derived from, for a subject with no account
+	// yet. The derivation must match the apply's exactly or the plan predicts a
+	// name the apply does not produce.
+	Email   string                     `json:"email"`
+	Desired map[string]json.RawMessage `json:"desired"`
+}
+
 // PlanRequest is a proposed change across a cohort.
 type PlanRequest struct {
-	Subjects []ApplyRequest `json:"subjects"`
+	ContractVersion int           `json:"contract_version"`
+	Subjects        []PlanSubject `json:"subjects"`
 	// AcknowledgeScope is the caller confirming an oversized request. Defence in
 	// depth only — this add-on sees one request and cannot observe a cohort
 	// spanning several, so the authoritative guard is the backend's at plan
@@ -41,6 +59,9 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 	var req PlanRequest
 	if err := decodeStrict(body, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
+		return
+	}
+	if !writeContractRefusal(w, req.ContractVersion) {
 		return
 	}
 	if n := len(req.Subjects); n > perRequestSubjectCap && !req.AcknowledgeScope {
@@ -78,7 +99,7 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 }
 
 // planOne says what would happen to one subject, and issues no mutating call.
-func (s *server) planOne(req ApplyRequest, byName map[string]*Subject, claimed map[string]string) ApplyOutcome {
+func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed map[string]string) ApplyOutcome {
 	desired, err := decodeDesired(req.Desired)
 	if err != nil {
 		return ApplyOutcome{

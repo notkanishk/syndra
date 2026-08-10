@@ -640,3 +640,32 @@ func TestAnAdminScopedOperationIsNotCounted(t *testing.T) {
 		t.Errorf("and must not even ask: %v", h.rateQueries)
 	}
 }
+
+// The actor reaches the add-on, because the add-on's mutation log is the one
+// record of a secret-bearing call that survives loss or tampering of Syndra's
+// audit tables — and it knows only the subject. Without this the log answers
+// "who did what to whom" with the whom alone, on the one path that carries a
+// credential.
+//
+// Asserted on the request the transport receives rather than on the wire body,
+// because the body is where it would be redacted out of the assertion: the
+// actor is not a secret, and this is the seam where a caller could drop it.
+func TestTheActorTravelsToTheAddon(t *testing.T) {
+	h := newHarness(t)
+
+	req := passwordSet()
+	req.ActorID = "operator-7"
+	req.SubjectID = "operator-7"
+	if _, err := Dispatch(context.Background(), req); err != nil {
+		t.Fatalf("Dispatch: %v", err)
+	}
+	if len(h.calls) != 1 {
+		t.Fatalf("want exactly one dispatch, got %d", len(h.calls))
+	}
+	if h.calls[0].Actor != "operator-7" {
+		t.Errorf("the add-on was told the subject and not who decided it: actor=%q", h.calls[0].Actor)
+	}
+	if h.calls[0].Subject != "operator-7" {
+		t.Errorf("subject = %q", h.calls[0].Subject)
+	}
+}

@@ -254,6 +254,31 @@ func decodeStrict(body []byte, into any) error {
 	return nil
 }
 
+// writeContractRefusal enforces the wire version on every request that carries
+// a body, and reports whether the caller may proceed.
+//
+// Registration already refuses an add-on whose manifest declares an unsupported
+// version, so this is the second half of the same check rather than the only
+// one — and it is the half that survives a deployment where the backend was
+// upgraded without a re-registration. It names BOTH versions because "the
+// add-on is newer" and "the backend is newer" send an operator to different
+// binaries, and a refusal that says only "mismatch" makes them guess.
+//
+// An absent field reads as version 0 and is refused like any other mismatch: a
+// caller that omits it is a caller from before the field existed, which is
+// exactly the skew being checked for.
+func writeContractRefusal(w http.ResponseWriter, declared int) (ok bool) {
+	if declared == ContractVersion {
+		return true
+	}
+	writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+		"error":          "CONTRACT_VERSION_MISMATCH",
+		"caller_version": declared,
+		"addon_version":  ContractVersion,
+	})
+	return false
+}
+
 // writeRecallFailure separates "the store is broken" from "this call id was
 // minted for something else". The second is the caller's mistake and a retry
 // will not fix it, so it must not read as a transient failure.

@@ -24,10 +24,24 @@ import (
 // is discarded; no field of it is written to the store, the snapshot, or the
 // mutation log, none of which has anywhere to put one.
 type OperationRequest struct {
-	CallID  string         `json:"call_id"`
-	Subject string         `json:"subject"`
-	Actor   string         `json:"actor"`
-	Params  map[string]any `json:"params,omitempty"`
+	ContractVersion int    `json:"contract_version"`
+	CallID          string `json:"call_id"`
+	// Operation is the name, repeated from the path. It is inside the body
+	// because in signed mode the MAC covers the body and the request line, and
+	// the two must agree — a name accepted from the path while a different one
+	// travelled in the signed body would let an operator's approval for one
+	// operation be spent on another.
+	Operation string `json:"operation"`
+	Subject   string `json:"subject"`
+	Actor     string `json:"actor"`
+	// PlanID and Fingerprint are empty for the one-shot operations this add-on
+	// declares — they are approved by confirmation at the moment of invocation
+	// rather than rehearsed against a state read. Declared anyway, because the
+	// backend's envelope carries them for every call and a field this struct
+	// does not name is a 400 rather than an ignored extra.
+	PlanID      string         `json:"plan_id,omitempty"`
+	Fingerprint string         `json:"fingerprint,omitempty"`
+	Params      map[string]any `json:"params,omitempty"`
 }
 
 // OperationResult is what the caller learns.
@@ -58,8 +72,23 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
 		return
 	}
+	if !writeContractRefusal(w, req.ContractVersion) {
+		return
+	}
 	if strings.TrimSpace(req.CallID) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
+		return
+	}
+	// The path decides which operation runs; the body says which one the caller
+	// signed for. A disagreement is refused rather than resolved in either
+	// direction — picking the path would let a body signed for `health.get`
+	// drive `account.purge`, and picking the body would let the route the
+	// operator authorised be swapped underneath them.
+	if req.Operation != "" && req.Operation != name {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":  "OPERATION_MISMATCH",
+			"detail": "the operation named in the body is not the one this route runs",
+		})
 		return
 	}
 

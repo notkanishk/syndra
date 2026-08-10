@@ -31,11 +31,38 @@ func opServer(t *testing.T) (*server, *mutatingRPC) {
 
 func postOperation(t *testing.T, s *server, name, body string) *httptest.ResponseRecorder {
 	t.Helper()
+	body = withContractVersion(t, body)
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/operations/"+name, strings.NewReader(body))
 	r.SetPathValue("name", name)
 	s.handleOperation(rr, r, []byte(body))
 	return rr
+}
+
+// withContractVersion fills in the field every real caller sends.
+//
+// Every body-carrying route refuses a request that does not declare the wire
+// version, absent included — an omitted field reads as version 0, which is
+// exactly what a caller from before the field existed looks like. A test about
+// anything else should not have to restate it, and a test about the version
+// itself supplies its own and this leaves it alone.
+func withContractVersion(t *testing.T, body string) string {
+	t.Helper()
+	var fields map[string]any
+	if err := json.Unmarshal([]byte(body), &fields); err != nil {
+		// A body this test means to be malformed. Handed through untouched, or
+		// the assertion would be about a document the test did not write.
+		return body
+	}
+	if _, present := fields["contract_version"]; present {
+		return body
+	}
+	fields["contract_version"] = ContractVersion
+	out, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatalf("re-encode body: %v", err)
+	}
+	return string(out)
 }
 
 // 6.13/6.14 — the plaintext reaches the target and appears nowhere durable.
