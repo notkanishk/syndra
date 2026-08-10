@@ -298,3 +298,72 @@ func TestTheSyncPrecedesTheReturn(t *testing.T) {
 		t.Fatal("Append must fsync before it returns the record")
 	}
 }
+
+// A restart in the window between a rotation and the first record after it must
+// not reset the sequence to zero. That reset is indistinguishable, to the
+// anchor, from the tail truncation it exists to detect — so the add-on's own
+// restart would manufacture the alarm.
+func TestARestartAfterARotationKeepsTheSequenceAndHead(t *testing.T) {
+	dir := t.TempDir()
+	l, err := OpenMutationLog(dir, 1, 4) // rotates on every append
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"c1", "c2", "c3"} {
+		if _, err := l.Append("password.set", "u1", "op_1", id, "succeeded"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	head, count := l.Head()
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := OpenMutationLog(dir, 1, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	gotHead, gotCount := reopened.Head()
+	if gotCount != count || gotHead != head {
+		t.Fatalf("recovery must find the last record wherever it lives: want %q/%d, got %q/%d",
+			head, count, gotHead, gotCount)
+	}
+
+	// And the chain continues across the boundary rather than restarting.
+	next, err := reopened.Append("password.set", "u1", "op_1", "c4", "succeeded")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Seq != count+1 || next.Prev != head {
+		t.Fatalf("the next record must chain onto the recovered head: %+v", next)
+	}
+	if err := VerifyLog(dir); err != nil {
+		t.Fatalf("the whole log must verify across its rotations: %v", err)
+	}
+}
+
+// A rotated segment opens at whatever sequence was live when the file rolled
+// over. Demanding record 1 reported this log's own rotation as tampering.
+func TestARotatedSegmentVerifiesOnItsOwn(t *testing.T) {
+	dir := t.TempDir()
+	l, err := OpenMutationLog(dir, 1, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	for _, id := range []string{"c1", "c2", "c3"} {
+		if _, err := l.Append("password.set", "u1", "op_1", id, "succeeded"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rotated, err := filepath.Glob(filepath.Join(dir, logFileName+".*"))
+	if err != nil || len(rotated) == 0 {
+		t.Fatalf("want rotated segments: %v %v", rotated, err)
+	}
+	for _, path := range rotated {
+		if err := VerifyChain(path); err != nil {
+			t.Errorf("%s: %v", filepath.Base(path), err)
+		}
+	}
+}

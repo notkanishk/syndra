@@ -21,6 +21,40 @@ type mutatingRPC struct {
 	updates []map[string]any
 	creates []map[string]any
 	nextUID int64
+	// nextID is deliberately not nextUID. The record key and the unix uid are
+	// different numbers on a real target, and a fake that used one for both
+	// would agree with the bug where a write lands on the wrong account.
+	nextID int64
+}
+
+// remember adds a created account to the fixture the next read serves.
+func (m *mutatingRPC) remember(params any) {
+	args, _ := params.([]any)
+	if len(args) != 1 {
+		return
+	}
+	create, ok := args[0].(map[string]any)
+	if !ok {
+		return
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(orEmptyList(m.fakeRPC.users)), &rows); err != nil {
+		return
+	}
+	locked, _ := create["locked"].(bool)
+	smb, _ := create["smb"].(bool)
+	row := map[string]any{
+		"id": m.nextID, "username": create["username"], "uid": m.nextUID,
+		"locked": locked, "smb": smb, "groups": create["groups"],
+	}
+	if row["groups"] == nil {
+		row["groups"] = []apiID{}
+	}
+	encoded, err := json.Marshal(append(rows, row))
+	if err != nil {
+		return
+	}
+	m.fakeRPC.users = string(encoded)
 }
 
 func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMessage, error) {
@@ -31,6 +65,10 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 		m.fakeRPC.calls = append(m.fakeRPC.calls, method)
 		return nil, m.fakeRPC.err
 	}
+	// Recorded like every other call, so an assertion about WHICH account a
+	// write addressed has something to read.
+	m.fakeRPC.calls = append(m.fakeRPC.calls, method)
+	m.fakeRPC.params = append(m.fakeRPC.params, params)
 	switch method {
 	case "user.update":
 		args, _ := params.([]any)
@@ -39,7 +77,7 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 				m.updates = append(m.updates, u)
 			}
 		}
-		return json.RawMessage(`null`), nil
+		return envelope(`null`), nil
 	case "user.create":
 		args, _ := params.([]any)
 		if len(args) == 1 {
@@ -50,8 +88,19 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 		if m.nextUID == 0 {
 			m.nextUID = 4001
 		}
-		return json.RawMessage(strconvI(m.nextUID)), nil
+		if m.nextID == 0 {
+			m.nextID = 71
+		}
+		// The created account joins the fixture, because the apply reads it back
+		// — `user.create` answers with the record key and the binding needs the
+		// unix uid, which are different numbers. A fake that forgot the account
+		// it had just made would make that read-back untestable.
+		m.remember(params)
+		return envelope(strconvI(m.nextID)), nil
 	}
+	// Already recorded above; the embedded fake records the rest.
+	m.fakeRPC.calls = m.fakeRPC.calls[:len(m.fakeRPC.calls)-1]
+	m.fakeRPC.params = m.fakeRPC.params[:len(m.fakeRPC.params)-1]
 	return m.fakeRPC.Call(method, timeout, params)
 }
 
@@ -73,15 +122,50 @@ func applyServer(t *testing.T, users string) (*server, *mutatingRPC) {
 	s := testServer(t, &m.fakeRPC)
 	// The NAS must route through the recording wrapper, not the bare fake.
 	s.nas = newNAS(func() (rpc, error) { return m, nil }, []string{"25.04"})
-	s.nas.version = "25.04.2"
+	s.nas.version, s.nas.probed = "25.04.2", true
 	return s, m
 }
 
 func postApply(t *testing.T, s *server, body string) *httptest.ResponseRecorder {
 	t.Helper()
+	body = withFingerprint(t, s, body)
 	rr := httptest.NewRecorder()
 	s.handleApply(rr, httptest.NewRequest(http.MethodPost, "/apply", strings.NewReader(body)), []byte(body))
 	return rr
+}
+
+// withFingerprint fills in the one a real caller would have got from the plan.
+//
+// The apply refuses a request without one — an absent fingerprint verifies
+// vacuously, which is not a guarantee — so a test about anything else has to
+// carry a current one. A test about the fingerprint itself supplies its own and
+// this leaves it alone.
+func withFingerprint(t *testing.T, s *server, body string) string {
+	t.Helper()
+	var fields map[string]any
+	if err := json.Unmarshal([]byte(body), &fields); err != nil {
+		return body
+	}
+	if _, present := fields["fingerprint"]; present {
+		return body
+	}
+	var req ApplyRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		return body
+	}
+	current, _, _, err := s.locate(req)
+	if err != nil {
+		// The target is unreadable in this test; the request never gets as far
+		// as the comparison, so any value will do.
+		fields["fingerprint"] = "unreadable"
+	} else {
+		fields["fingerprint"] = fingerprintSubject(current)
+	}
+	encoded, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(encoded)
 }
 
 func decodeOutcome(t *testing.T, rr *httptest.ResponseRecorder) ApplyOutcome {
@@ -128,7 +212,7 @@ func TestAnAbsentAccountIsCreatedByTheApplyItself(t *testing.T) {
 // optimisation: the drain re-drives rows, so an apply that wrote every time
 // would rewrite every account on every pass.
 func TestReApplyingAnUnchangedSetIssuesNoMutatingCall(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada","uid":3001,"locked":false,"smb":true,"groups":[900]}]`)
+	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +232,7 @@ func TestReApplyingAnUnchangedSetIssuesNoMutatingCall(t *testing.T) {
 // resolving both lifecycle fields to disabled locks and clears SMB. Then the
 // same path restores it, with no second account.
 func TestConvergenceIsLevelTriggeredInBothDirections(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada","uid":3001,"locked":false,"smb":true,"groups":[545,900]}]`)
+	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41,42]}]`)
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +248,7 @@ func TestConvergenceIsLevelTriggeredInBothDirections(t *testing.T) {
 	u := m.updates[0]
 	// An empty list is an instruction, not an omission: it means "in no managed
 	// group", which is different from the field being absent.
-	if groups, ok := u["groups"].([]string); !ok || len(groups) != 0 {
+	if groups, ok := u["groups"].([]apiID); !ok || len(groups) != 0 {
 		t.Errorf("groups must be set to empty, got %v", u["groups"])
 	}
 	if u["locked"] != true || u["smb"] != false {
@@ -172,7 +256,7 @@ func TestConvergenceIsLevelTriggeredInBothDirections(t *testing.T) {
 	}
 
 	// And back, through the same path, with no second account created.
-	s2, m2 := applyServer(t, `[{"username":"ada","uid":3001,"locked":true,"smb":false,"groups":[]}]`)
+	s2, m2 := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":true,"smb":false,"groups":[]}]`)
 	if err := s2.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +277,7 @@ func TestConvergenceIsLevelTriggeredInBothDirections(t *testing.T) {
 // surfaces the decision. Adopting silently would hand a subject's entitlements
 // to whoever already owns that account.
 func TestACollidingUnboundAccountHaltsAndSurfacesTheDecision(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada","uid":9001,"locked":false,"smb":false,"groups":[]}]`)
+	s, m := applyServer(t, `[{"username":"ada","id":19,"uid":9001,"locked":false,"smb":false,"groups":[]}]`)
 
 	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu",
 		"desired":{"group":["lab_makers"],"enabled":true}}`)
@@ -219,7 +303,7 @@ func TestACollidingUnboundAccountHaltsAndSurfacesTheDecision(t *testing.T) {
 // 6.11/6.12 — a later email change must not rename an existing account.
 // Renaming disturbs its home directory, its ACL entries and its SMB identity.
 func TestAnEmailChangeDoesNotRenameAnExistingAccount(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada","uid":3001,"locked":false,"smb":true,"groups":[900]}]`)
+	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +333,7 @@ func TestAnEmailChangeDoesNotRenameAnExistingAccount(t *testing.T) {
 // missing account. Reporting it as missing would create a replacement while the
 // original kept the home data.
 func TestAnOutOfBandRenameIsRecognisedRatherThanRecreated(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada_renamed","uid":3001,"locked":false,"smb":true,"groups":[900]}]`)
+	s, m := applyServer(t, `[{"username":"ada_renamed","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +356,7 @@ func TestAnOutOfBandRenameIsRecognisedRatherThanRecreated(t *testing.T) {
 // 5.10/5.11 — a subject mutated out of band between plan and apply causes
 // refusal with that subject named, and nothing is applied.
 func TestAMovedSubjectRefusesTheApplyAndMutatesNothing(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada","uid":3001,"locked":false,"smb":true,"groups":[900]}]`)
+	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +377,7 @@ func TestAMovedSubjectRefusesTheApplyAndMutatesNothing(t *testing.T) {
 // A fingerprint from the plan matches and the apply proceeds — the other half,
 // without which the test above would pass for an apply that refuses everything.
 func TestAMatchingFingerprintProceeds(t *testing.T) {
-	s, _ := applyServer(t, `[{"username":"ada","uid":3001,"locked":false,"smb":true,"groups":[900]}]`)
+	s, _ := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
@@ -361,7 +445,7 @@ func TestAnUnknownDesiredFieldIsRefused(t *testing.T) {
 // 5.9 — planning issues no mutating call, returns the apply path's shape, and
 // produces a fingerprint that changes when the subject's target state changes.
 func TestPlanningMutatesNothingAndFingerprintsWhatItRead(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada","uid":3001,"locked":false,"smb":true,"groups":[900]}]`)
+	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
@@ -389,7 +473,7 @@ func TestPlanningMutatesNothingAndFingerprintsWhatItRead(t *testing.T) {
 	before := plan.Outcomes[0].Fingerprint
 
 	// The subject moves on the target; the fingerprint must move with it.
-	moved, _ := applyServer(t, `[{"username":"ada","uid":3001,"locked":true,"smb":true,"groups":[900]}]`)
+	moved, _ := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":true,"smb":true,"groups":[42]}]`)
 	if err := moved.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
@@ -466,7 +550,7 @@ func readSource(name string) (string, error) {
 // subject. Converging it to a zero value would be inventing an instruction —
 // and the instruction it invents is "remove them from every group".
 func TestAnUnnamedFieldIsLeftAloneRatherThanZeroed(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada","uid":3001,"locked":false,"smb":true,"groups":[545,900]}]`)
+	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41,42]}]`)
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
@@ -491,7 +575,9 @@ func TestAnUnnamedFieldIsLeftAloneRatherThanZeroed(t *testing.T) {
 // continue — this is the half that could break something.
 func TestAnUntestedMajorRefusesTheApplyWithoutWriting(t *testing.T) {
 	s, m := applyServer(t, `[]`)
-	s.nas.version = "27.10.0"
+	// On the NAS as well as in the cache: every connection re-probes, so a
+	// version set only here would be read back over on the first call.
+	m.fakeRPC.version, s.nas.version = "27.10.0", "27.10.0"
 
 	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu","desired":{"group":["lab_makers"]}}`)
 	if rr.Code != http.StatusUnprocessableEntity {
@@ -511,7 +597,7 @@ func TestAnUntestedMajorRefusesTheApplyWithoutWriting(t *testing.T) {
 func TestThePlanAndTheApplyAgreeOnTheDerivedName(t *testing.T) {
 	// A subject we manage already holds `ada`, so the derivation must suffix
 	// past it — on both paths, identically.
-	const users = `[{"username":"ada","uid":3001,"locked":false,"smb":true,"groups":[900]}]`
+	const users = `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`
 
 	s, _ := applyServer(t, users)
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-other", Username: "ada", UID: 3001}); err != nil {
@@ -544,7 +630,7 @@ func TestThePlanAndTheApplyAgreeOnTheDerivedName(t *testing.T) {
 // it would plan a second account for one person while the older one keeps the
 // home directory every share points at.
 func TestThePlanReportsAConflictRatherThanPlanningAroundIt(t *testing.T) {
-	s, _ := applyServer(t, `[{"username":"ada","uid":9001,"locked":false,"smb":false,"groups":[]}]`)
+	s, _ := applyServer(t, `[{"username":"ada","id":19,"uid":9001,"locked":false,"smb":false,"groups":[]}]`)
 
 	const body = `{"subjects":[{"subject":"sub-1","email":"ada@example.edu","desired":{"group":["lab_makers"]}}]}`
 	rr := httptest.NewRecorder()
@@ -571,4 +657,102 @@ func TestThePlanReportsAConflictRatherThanPlanningAroundIt(t *testing.T) {
 	if applied.Code != http.StatusConflict {
 		t.Fatalf("the apply must halt on the same conflict, got %d (%s)", applied.Code, applied.Body.String())
 	}
+}
+
+// An absent fingerprint verifies vacuously. §8's guarantee is that the diff an
+// operator approved is the diff that lands, and a check a caller can opt out of
+// by omitting a field is not that.
+func TestAnApplyWithoutAFingerprintIsRefused(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+		t.Fatal(err)
+	}
+
+	const body = `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu","desired":{"enabled":false}}`
+	rr := httptest.NewRecorder()
+	s.handleApply(rr, httptest.NewRequest(http.MethodPost, "/apply", strings.NewReader(body)), []byte(body))
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("want a refusal, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(m.updates) != 0 {
+		t.Fatal("nothing may be written for a call that verified nothing")
+	}
+}
+
+// Groups are written as the ids the read resolved names FROM. A write in names
+// against a read in ids leaves an account in the wrong groups and the next read
+// calls it converged.
+func TestGroupsAreWrittenAsTheIdsTheReadResolves(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu","desired":{"group":["lab_makers"]}}`)
+	if decodeOutcome(t, rr).Effect != EffectApplied {
+		t.Fatalf("want applied: %s", rr.Body.String())
+	}
+	if len(m.updates) != 1 {
+		t.Fatalf("want one update, got %d", len(m.updates))
+	}
+	groups, ok := m.updates[0]["groups"].([]apiID)
+	if !ok || len(groups) != 1 || groups[0].String() != "42" {
+		t.Fatalf("want the record id of lab_makers, got %#v", m.updates[0]["groups"])
+	}
+
+	// And the account is addressed by its record key, not by its unix uid. Root
+	// is id 1 and uid 0; pass one where the other is meant and the write lands
+	// on somebody else.
+	args, _ := lastCallParams(m, "user.update").([]any)
+	if len(args) != 2 {
+		t.Fatalf("want two arguments to user.update, got %v", args)
+	}
+	if id, ok := args[0].(apiID); !ok || id.String() != "11" {
+		t.Fatalf("want the record id, got %#v", args[0])
+	}
+}
+
+// A group the target does not have is refused, not dropped. Dropping it applies
+// a smaller set than the one that was approved and reports it as converged.
+func TestAnUnknownGroupIsRefusedRatherThanDropped(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu","desired":{"group":["no_such_group"]}}`)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want a refusal, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(m.updates) != 0 {
+		t.Fatal("nothing may be written when a named group could not be resolved")
+	}
+}
+
+// A field this add-on does not understand is refused at the boundary, not
+// dropped. Two separately deployed binaries disagreeing about a field is the
+// skew the contract version exists to surface.
+func TestAnUnknownRequestFieldIsRefused(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+
+	const body = `{"call_id":"c1","subject":"sub-1","fingerprint":"x","desired":{},"escalate":true}`
+	rr := httptest.NewRecorder()
+	s.handleApply(rr, httptest.NewRequest(http.MethodPost, "/apply", strings.NewReader(body)), []byte(body))
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("want a refusal, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(m.creates) != 0 {
+		t.Fatal("nothing may be written for a body that was not fully understood")
+	}
+}
+
+func lastCallParams(m *mutatingRPC, method string) any {
+	for i := len(m.fakeRPC.calls) - 1; i >= 0; i-- {
+		if m.fakeRPC.calls[i] == method {
+			return m.fakeRPC.params[i]
+		}
+	}
+	return nil
 }

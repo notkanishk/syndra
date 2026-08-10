@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -62,22 +63,32 @@ func OpenStore(path string) (*Store, error) {
 func (s *Store) Close() error { return s.db.Close() }
 
 // idempotencyEntry is one recorded result.
+//
+// Kind is what the result IS. One namespace covers every endpoint, so a call id
+// reused anywhere is caught — but a cached `/apply` outcome decoded as an
+// operation result is a zero-valued success, so the kind is compared before the
+// bytes are handed back. Same id, different endpoint, is a refusal rather than
+// either a silent re-run or a fabricated 200.
 type idempotencyEntry struct {
 	StoredAt time.Time       `json:"stored_at"`
+	Kind     string          `json:"kind"`
 	Result   json.RawMessage `json:"result"`
 }
+
+// errKindMismatch is a call id replayed at an endpoint it was not minted for.
+var errKindMismatch = errors.New("this call id was already used for a different operation")
 
 // Remember records the outcome of a mutating call against its operation id.
 //
 // Every mutating call, not a chosen few. §16 declines a nonce store because the
 // operation id already prevents replay, and that argument is only true if
 // nothing is exempt from this.
-func (s *Store) Remember(callID string, result any) error {
+func (s *Store) Remember(callID, kind string, result any) error {
 	encoded, err := json.Marshal(result)
 	if err != nil {
 		return fmt.Errorf("encode idempotent result: %w", err)
 	}
-	entry, err := json.Marshal(idempotencyEntry{StoredAt: s.now().UTC(), Result: encoded})
+	entry, err := json.Marshal(idempotencyEntry{StoredAt: s.now().UTC(), Kind: kind, Result: encoded})
 	if err != nil {
 		return fmt.Errorf("encode idempotency entry: %w", err)
 	}
@@ -91,7 +102,7 @@ func (s *Store) Remember(callID string, result any) error {
 // An expired entry is reported as absent rather than deleted here: a read path
 // that writes turns a replay storm into a write storm, and the sweep below is
 // where removal belongs.
-func (s *Store) Recall(callID string) (result json.RawMessage, found bool, err error) {
+func (s *Store) Recall(callID, kind string) (result json.RawMessage, found bool, err error) {
 	err = s.db.View(func(tx *bolt.Tx) error {
 		raw := tx.Bucket(bucketIdempotency).Get([]byte(callID))
 		if raw == nil {
@@ -106,6 +117,13 @@ func (s *Store) Recall(callID string) (result json.RawMessage, found bool, err e
 		}
 		if s.now().Sub(entry.StoredAt) > idempotencyTTL {
 			return nil
+		}
+		// An entry stored before kinds existed carries none. Treated as
+		// matching, because the alternative is refusing every replay across one
+		// upgrade — and the shapes it could confuse are the ones this add-on
+		// has only ever written one of per id.
+		if entry.Kind != "" && entry.Kind != kind {
+			return fmt.Errorf("%w: %s", errKindMismatch, callID)
 		}
 		result, found = entry.Result, true
 		return nil
@@ -168,6 +186,10 @@ type Snapshot struct {
 // credential — so the query passes an explicit `select` and this type has
 // nowhere for one to land even if that select were edited.
 type Subject struct {
+	// ID is the middleware's record key, which is what a write takes as its
+	// first argument. Distinct from UID, which is the unix identity a binding
+	// recognises an account by across a rename.
+	ID         apiID    `json:"id"`
 	Username   string   `json:"username"`
 	UID        int64    `json:"uid"`
 	Groups     []string `json:"groups"`
@@ -237,6 +259,18 @@ func (s *Store) PutBinding(b Binding) error {
 	}
 	return s.db.Update(func(tx *bolt.Tx) error {
 		return tx.Bucket(bucketBindings).Put([]byte(b.SubjectID), encoded)
+	})
+}
+
+// DeleteBinding forgets which account belonged to a subject.
+//
+// Called when the account itself is gone. A binding that outlives its account
+// is not a harmless leftover: the apply path reads bound-but-absent as an
+// out-of-band deletion and re-creates under the recorded name, which is right
+// for an account somebody else deleted and exactly wrong for one we purged.
+func (s *Store) DeleteBinding(subjectID string) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(bucketBindings).Delete([]byte(subjectID))
 	})
 }
 

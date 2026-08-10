@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -224,6 +226,43 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 		Subjects: cached.Subjects, Current: false,
 		TakenAt: cached.TakenAt.UTC().Format(time.RFC3339), Truncated: cached.Truncated,
 	})
+}
+
+// The idempotency namespace's type tags. One namespace so a call id reused
+// anywhere is caught, and a tag so a cached result is never decoded as the
+// wrong shape — which is a zero-valued success, the worst answer available.
+const (
+	kindApply     = "apply"
+	kindOperation = "operation:"
+)
+
+// decodeStrict parses a request body and refuses what it does not understand.
+//
+// The project's rule for its own mutation endpoints, applied here for a sharper
+// reason: this boundary is between two separately deployed binaries, and a
+// field the sender thinks it is honouring and this one silently drops is
+// exactly the skew the contract version exists to surface.
+func decodeStrict(body []byte, into any) error {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(into); err != nil {
+		return err
+	}
+	if dec.More() {
+		return errors.New("the body carries more than one JSON document")
+	}
+	return nil
+}
+
+// writeRecallFailure separates "the store is broken" from "this call id was
+// minted for something else". The second is the caller's mistake and a retry
+// will not fix it, so it must not read as a transient failure.
+func writeRecallFailure(w http.ResponseWriter, err error) {
+	if errors.Is(err, errKindMismatch) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "CALL_ID_REUSED"})
+		return
+	}
+	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "STORE_UNREADABLE"})
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

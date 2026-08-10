@@ -25,6 +25,15 @@ const (
 	// rate limit even if every attempt failed, which is the point: the limit
 	// must be unreachable by this code, not merely usually avoided.
 	reconnectCooldown = 15 * time.Second
+	// probeCooldown is the floor between version probes on a LIVE session.
+	//
+	// A failed probe leaves the version empty, which is what the gate needs, and
+	// it must be retried — a target that answers `system.version` a minute later
+	// should not need a reconnect to be usable. But retried on every call it
+	// doubles the traffic on the one rate-limited session this whole design is
+	// built around, against a target that answers everything else and refuses or
+	// lacks that one method. So the probe gets the floor the dial already has.
+	probeCooldown = 30 * time.Second
 
 	// The breaker. It exists for one specific failure: TrueNAS locks an account
 	// out for ten minutes after 20 failed authentications in 60 seconds, and
@@ -71,10 +80,24 @@ type NAS struct {
 	client  rpc
 	lastTry time.Time
 
+	// callMu serialises the wire. The client writes its request frame with
+	// `conn.WriteJSON` outside its own mutex, and gorilla panics outright on a
+	// concurrent write — so two requests arriving together take down the
+	// process rather than interleaving. One session was always the design; this
+	// is the part that makes it one at a time.
+	callMu sync.Mutex
+
 	// version is read once per successful connect. Majors break, and an
 	// untested one is refused rather than attempted (§Risks).
 	version       string
 	supportedMajs map[string]bool
+	// probed says the version and method list have been read for the CURRENT
+	// connection. Reset by every dial, because a reconnect may land on an
+	// upgraded target — and because a version read once at startup leaves an
+	// add-on that started before its NAS refusing every mutation forever.
+	probed bool
+	// lastProbe bounds how often a FAILED probe is retried on a live session.
+	lastProbe time.Time
 
 	lastRead time.Time
 	now      func() time.Time
@@ -130,8 +153,61 @@ func (n *NAS) session() (rpc, error) {
 	// The failure this guards is a burst, so one working connection means the
 	// burst is over.
 	n.failures, n.openUntil = 0, time.Time{}
-	n.client = c
+	// A new connection probes immediately: the cooldown exists to bound retries
+	// on a live session, not to delay the first read on a fresh one.
+	n.client, n.probed, n.lastProbe = c, false, time.Time{}
 	return c, nil
+}
+
+// ensureProbed reads the version and method list once per connection.
+//
+// Per connection rather than once per process. The version gate refuses every
+// mutation until a version has been read, so an add-on that came up while its
+// NAS was down — the ordinary case on a host reboot — would refuse every write
+// until somebody restarted the container, against a target that was answering
+// perfectly.
+//
+// Best-effort in both directions: a failed probe leaves the version empty,
+// which the gate reads as "not tested" and refuses mutations on, and leaves
+// `probed` false so the next call tries again rather than waiting for a
+// reconnect that may never be needed.
+func (n *NAS) ensureProbed() {
+	n.mu.Lock()
+	if n.probed || n.client == nil || n.now().Sub(n.lastProbe) < probeCooldown {
+		n.mu.Unlock()
+		return
+	}
+	// Both set before probing, not after. The flag because the probe calls back
+	// into `call` and one set afterwards would recurse until the stack ran out;
+	// the timestamp because a probe that FAILS clears the flag again, and
+	// without a time beside it every subsequent call would re-probe — doubling
+	// the traffic on the one session the rate limit is about.
+	n.probed, n.lastProbe = true, n.now()
+	n.mu.Unlock()
+
+	if _, err := n.SystemVersion(); err != nil {
+		n.mu.Lock()
+		n.version, n.probed = "", false
+		n.mu.Unlock()
+		return
+	}
+	n.loadMethods()
+}
+
+// Probe forces a connection and reads what the gates depend on.
+//
+// Used at startup so `/capabilities` can answer with a version straight away.
+// Not required for correctness — every call probes what it needs — which is why
+// its failure is not fatal.
+func (n *NAS) Probe() error {
+	if _, err := n.session(); err != nil {
+		return err
+	}
+	n.ensureProbed()
+	if n.Version() == "" {
+		return fmt.Errorf("%w: the target did not answer system.version", ErrTargetUnreachable)
+	}
+	return nil
 }
 
 // recordFailureLocked counts a failed connection and opens the circuit at the
@@ -180,36 +256,151 @@ func (n *NAS) call(method string, params any, out any) error {
 	if err != nil {
 		return err
 	}
-	raw, err := c.Call(method, callTimeoutSeconds, params)
+	n.ensureProbed()
+
+	raw, err := n.invoke(c, method, params)
 	if err != nil {
-		classified := classifyNASError(err)
-		switch classified {
-		case ErrTargetUnreachable:
-			// A dead socket must not be reused for the next call, or every
-			// subsequent one fails on a connection nothing will reopen.
-			n.drop()
-		case ErrRateLimited:
-			// Backpressure on a live session still counts: the next reconnect
-			// is what would trip the lockout, and the breaker has to be holding
-			// before that reconnect is attempted.
-			n.mu.Lock()
-			n.recordFailureLocked(err)
-			n.mu.Unlock()
-			n.drop()
-		}
-		return fmt.Errorf("%s: %w", method, classified)
+		return fmt.Errorf("%s: %w", method, n.classify(err))
 	}
 	n.mu.Lock()
 	n.lastRead = n.now()
 	n.mu.Unlock()
 
+	result, refusal, err := splitEnvelope(raw)
+	if err != nil {
+		return fmt.Errorf("%s: %w", method, err)
+	}
+	if refusal != nil {
+		// Checked before `out`, and independently of it. Every mutation on this
+		// add-on passes out == nil, so a refusal noticed only when a result was
+		// wanted would be a refusal never noticed at all — and `user.update`
+		// answering "no" would be reported to the backend as applied.
+		return fmt.Errorf("%s: %w (target error code %d)", method, n.classifyRefusal(refusal), refusal.Code)
+	}
 	if out == nil {
 		return nil
 	}
-	if err := json.Unmarshal(raw, out); err != nil {
-		return fmt.Errorf("%s: decode response: %w", method, err)
+	if len(result) == 0 {
+		return fmt.Errorf("%s: the target answered with neither a result nor an error", method)
+	}
+	if err := json.Unmarshal(result, out); err != nil {
+		return fmt.Errorf("%s: decode result: %w", method, err)
 	}
 	return nil
+}
+
+// invoke is the one place a request frame is written.
+//
+// Serialised, because the client writes outside its own lock and gorilla panics
+// on a concurrent write. The session lock is deliberately not reused for this:
+// that one is held while dialling, and a 30-second call must not block the
+// breaker check every other request makes.
+func (n *NAS) invoke(c rpc, method string, params any) (json.RawMessage, error) {
+	n.callMu.Lock()
+	defer n.callMu.Unlock()
+	return c.Call(method, callTimeoutSeconds, params)
+}
+
+// classify maps a failure onto the three outcomes that differ and does the
+// bookkeeping each one implies.
+func (n *NAS) classify(err error) error {
+	classified := classifyNASError(err)
+	switch classified {
+	case ErrTargetUnreachable:
+		// A dead socket must not be reused for the next call, or every
+		// subsequent one fails on a connection nothing will reopen.
+		n.drop()
+	case ErrRateLimited:
+		// Backpressure on a live session still counts: the next reconnect
+		// is what would trip the lockout, and the breaker has to be holding
+		// before that reconnect is attempted.
+		n.mu.Lock()
+		n.recordFailureLocked(err)
+		n.mu.Unlock()
+		n.drop()
+	}
+	return classified
+}
+
+// classifyRefusal narrows an answered refusal to the two outcomes it can be.
+//
+// Never unreachable, however the message reads: the target demonstrably
+// received the call, and the entire worth of that outcome is that it means
+// nothing happened. Rate limiting is the exception that still has to reach the
+// breaker — it is the target saying, in as many words, that the next reconnect
+// is the one that locks the account out.
+func (n *NAS) classifyRefusal(e *rpcError) error {
+	if errors.Is(classifyNASError(e), ErrRateLimited) {
+		n.mu.Lock()
+		n.recordFailureLocked(e)
+		n.mu.Unlock()
+		n.drop()
+		return ErrRateLimited
+	}
+	return ErrTargetRefused
+}
+
+// rpcError is a JSON-RPC error member.
+//
+// Its message is deliberately never propagated. `user.update({password})` puts
+// a member's credential in the call's own parameters, and the middleware's
+// error text is the likeliest place for one to be echoed back — so what leaves
+// this file is a classification and a numeric code, which is the guarantee
+// every caller's "the target's own text never reaches here" comment rests on.
+type rpcError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func (e *rpcError) Error() string { return e.Message }
+
+// jsonrpcEnvelope is what the client's `Call` actually returns.
+//
+// Not the result — the WHOLE message. `Call` forwards the raw frame the
+// listener read and reports err == nil for a frame carrying an `error` member,
+// so decoding its return straight into a caller's type reads the envelope's
+// keys as the result's, and a refusal reads as a success.
+type jsonrpcEnvelope struct {
+	Result json.RawMessage `json:"result"`
+	Error  *rpcError       `json:"error"`
+}
+
+// splitEnvelope separates the result from the refusal.
+func splitEnvelope(raw json.RawMessage) (json.RawMessage, *rpcError, error) {
+	var env jsonrpcEnvelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		return nil, nil, fmt.Errorf("decode response envelope: %w", err)
+	}
+	if env.Error != nil {
+		return nil, env.Error, nil
+	}
+	return env.Result, nil, nil
+}
+
+// callOnce issues one call on a session that is not the shared one.
+//
+// The purge runs on a credential injected for that single call, so it has no
+// NAS to route through — and it is the one operation that cannot be undone,
+// which makes reading its refusal the least optional of all of them.
+func callOnce(c rpc, method string, params any, out any) error {
+	raw, err := c.Call(method, callTimeoutSeconds, params)
+	if err != nil {
+		return fmt.Errorf("%s: %w", method, classifyNASError(err))
+	}
+	result, refusal, err := splitEnvelope(raw)
+	if err != nil {
+		return fmt.Errorf("%s: %w", method, err)
+	}
+	if refusal != nil {
+		return fmt.Errorf("%s: %w (target error code %d)", method, ErrTargetRefused, refusal.Code)
+	}
+	if out == nil {
+		return nil
+	}
+	if len(result) == 0 {
+		return fmt.Errorf("%s: the target answered with neither a result nor an error", method)
+	}
+	return json.Unmarshal(result, out)
 }
 
 // classifyNASError maps a client error onto the three outcomes that differ.

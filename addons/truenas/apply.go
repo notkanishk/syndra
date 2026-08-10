@@ -36,8 +36,19 @@ type ApplyRequest struct {
 	// its ACL entries and its SMB identity.
 	Email string `json:"email"`
 	// Fingerprint is the target state the plan was computed against, echoed
-	// back so this call can refuse if the subject moved in between.
+	// back so this call can refuse if the subject moved in between. Required:
+	// an absent one verifies vacuously, and "the diff you approved is the diff
+	// that lands" is not a property a caller gets to opt out of.
 	Fingerprint string `json:"fingerprint,omitempty"`
+	// PlanID is the approval this apply executes, recorded rather than checked:
+	// the add-on holds no plans, and what it can do is name in its own log what
+	// authorised the write. In signed mode it is inside the MAC, so a call
+	// re-aimed at another approval fails verification.
+	PlanID string `json:"plan_id,omitempty"`
+	// Actor is who the backend recorded as deciding this. The mutation log
+	// promises who did what to whom, and a record naming only the subject
+	// answers two thirds of that.
+	Actor string `json:"actor,omitempty"`
 	// Desired is the whole set, by field. Absent and empty are different: one
 	// says "do not manage this", the other says "make it empty".
 	Desired map[string]json.RawMessage `json:"desired"`
@@ -159,7 +170,7 @@ func fingerprintSubject(s *Subject) string {
 // handleApply converges one subject.
 func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req ApplyRequest
-	if err := json.Unmarshal(body, &req); err != nil {
+	if err := decodeStrict(body, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
 		return
 	}
@@ -167,13 +178,24 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
 		return
 	}
+	if strings.TrimSpace(req.Fingerprint) == "" {
+		// A missing fingerprint is refused, not skipped. §8's guarantee is that
+		// the diff an operator approved is the diff that lands, and a check that
+		// silently passes when the field is absent is a guarantee that holds
+		// only for callers who chose to be bound by it.
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":  "FINGERPRINT_REQUIRED",
+			"detail": "this call carries no fingerprint, so there is nothing to verify the plan against",
+		})
+		return
+	}
 
 	// Deduplicated before the lifecycle gate, so a replay during a maintenance
 	// window returns what it returned rather than being refused — the call
 	// already happened, and refusing it now would report a completed mutation
 	// as queued.
-	if cached, found, err := s.store.Recall(req.CallID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "STORE_UNREADABLE"})
+	if cached, found, err := s.store.Recall(req.CallID, kindApply); err != nil {
+		writeRecallFailure(w, err)
 		return
 	} else if found {
 		// Decoded and re-encoded rather than echoed. A replay must be
@@ -208,6 +230,18 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 
 	outcome, status, err := s.applyOne(req)
 	if err != nil {
+		if errors.Is(err, errStaleFingerprint) {
+			// Its own code, because it is its own operator action. Every other
+			// refusal here means "fix something and try again"; this one means
+			// the subject moved since the diff was approved, and what has to
+			// happen next is a re-plan somebody reads.
+			writeJSON(w, status, map[string]string{
+				"error":   "PLAN_STALE",
+				"subject": req.Subject,
+				"detail":  "the subject's state on the target has changed since the plan was computed",
+			})
+			return
+		}
 		writeJSON(w, status, map[string]string{"error": "APPLY_FAILED", "detail": err.Error()})
 		return
 	}
@@ -217,7 +251,7 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 	// second mutation. It is best-effort against the response, though: the
 	// mutation already happened, and refusing to report it because the cache
 	// write failed would lose the only account of it the caller gets.
-	if err := s.store.Remember(req.CallID, outcome); err != nil {
+	if err := s.store.Remember(req.CallID, kindApply, outcome); err != nil {
 		logStoreFailure("idempotency", req.CallID, err)
 	}
 	writeJSON(w, status, outcome)
@@ -249,7 +283,7 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 	// Verified against what was just read, immediately before the write. A
 	// fingerprint checked earlier would be a statement about a moment that has
 	// already passed.
-	if req.Fingerprint != "" && req.Fingerprint != fingerprintSubject(current) {
+	if req.Fingerprint != fingerprintSubject(current) {
 		return ApplyOutcome{}, http.StatusConflict, fmt.Errorf("%w: %s", errStaleFingerprint, req.Subject)
 	}
 
@@ -333,7 +367,16 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 	if desired.managed[FieldGroup] && !sameSet(current.Groups, desired.groups) {
 		// A full replace, which is what makes this level-triggered: the same
 		// call grants and revokes, and re-issuing it is a no-op.
-		update["groups"] = desired.groups
+		//
+		// Sent as record ids, which is what the read resolved names FROM. A
+		// write in names against a read in ids is the asymmetry where an
+		// account lands in the wrong groups and the next read calls it
+		// converged.
+		ids, err := s.groupIDsFor(desired.groups)
+		if err != nil {
+			return ApplyOutcome{}, http.StatusUnprocessableEntity, err
+		}
+		update["groups"] = ids
 	}
 	if desired.managed[FieldEnabled] && current.Enabled != desired.enabled {
 		update["locked"] = !desired.enabled
@@ -355,7 +398,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		}, http.StatusOK, nil
 	}
 
-	if err := s.nas.call("user.update", []any{current.UID, update}, nil); err != nil {
+	if err := s.nas.call("user.update", []any{current.ID, update}, nil); err != nil {
 		return ApplyOutcome{}, statusFor(err), err
 	}
 	applied := *current
@@ -369,10 +412,10 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		applied.SMBEnabled = desired.smbEnabled
 	}
 
-	s.record("apply", req.Subject, req.CallID, "succeeded")
+	s.record("apply", req.Subject, req.Actor, req.CallID, "succeeded")
 	return ApplyOutcome{
 		Subject: req.Subject, Effect: EffectApplied,
-		Detail:      describeChange(update),
+		Detail:      describeChange(update, desired.groups),
 		Consequence: describeHolding(applied),
 		Username:    applied.Username,
 		Fingerprint: fingerprintSubject(&applied),
@@ -384,6 +427,14 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	if !ValidUsername(binding.Username) {
 		return ApplyOutcome{}, http.StatusUnprocessableEntity,
 			fmt.Errorf("derived name %q is not valid on this target", binding.Username)
+	}
+	var groupIDs []apiID
+	if desired.managed[FieldGroup] {
+		ids, err := s.groupIDsFor(desired.groups)
+		if err != nil {
+			return ApplyOutcome{}, http.StatusUnprocessableEntity, err
+		}
+		groupIDs = ids
 	}
 	create := map[string]any{
 		"username": binding.Username,
@@ -397,15 +448,24 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		"locked":       desired.managed[FieldEnabled] && !desired.enabled,
 	}
 	if desired.managed[FieldGroup] {
-		create["groups"] = desired.groups
+		create["groups"] = groupIDs
 	}
 
-	var uid int64
-	if err := s.nas.call("user.create", []any{create}, &uid); err != nil {
+	var recordID apiID
+	if err := s.nas.call("user.create", []any{create}, &recordID); err != nil {
 		return ApplyOutcome{}, statusFor(err), err
 	}
+	// `user.create` answers with the RECORD key, not the unix uid, and the
+	// binding recognises an account by its uid across a rename. Read back
+	// rather than assumed: a fingerprint computed from a state this add-on
+	// invented is a fingerprint the next plan verifies against nothing.
+	created, err := s.readBack(binding.Username)
+	if err != nil {
+		return ApplyOutcome{}, statusFor(err),
+			fmt.Errorf("account %s was created and could not be read back: %w", binding.Username, err)
+	}
 
-	binding.SubjectID, binding.UID, binding.BoundBy = req.Subject, uid, "apply"
+	binding.SubjectID, binding.UID, binding.BoundBy = req.Subject, created.UID, "apply"
 	if err := s.store.PutBinding(binding); err != nil {
 		// The account exists and the record of whose it is did not land. Not a
 		// silent success: the next apply would derive the same name, find it
@@ -416,19 +476,28 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 			fmt.Errorf("account %s was created and its binding could not be recorded: %w", binding.Username, err)
 	}
 
-	created := Subject{
-		Username: binding.Username, UID: uid, Groups: desired.groups,
-		Enabled:    !desired.managed[FieldEnabled] || desired.enabled,
-		SMBEnabled: desired.managed[FieldSMBEnabled] && desired.smbEnabled,
-	}
-	s.record("apply.create", req.Subject, req.CallID, "succeeded")
+	s.record("apply.create", req.Subject, req.Actor, req.CallID, "succeeded")
 	return ApplyOutcome{
 		Subject: req.Subject, Effect: EffectApplied,
 		Detail:      fmt.Sprintf("Created %s.", binding.Username),
-		Consequence: describeHolding(created),
+		Consequence: describeHolding(*created),
 		Username:    binding.Username,
-		Fingerprint: fingerprintSubject(&created),
+		Fingerprint: fingerprintSubject(created),
 	}, http.StatusOK, nil
+}
+
+// readBack reads one account as the target now holds it.
+func (s *server) readBack(username string) (*Subject, error) {
+	snap, err := s.readSubjects()
+	if err != nil {
+		return nil, err
+	}
+	for i := range snap.Subjects {
+		if snap.Subjects[i].Username == username {
+			return &snap.Subjects[i], nil
+		}
+	}
+	return nil, fmt.Errorf("%w: %s is not on the target after being created", ErrTargetRefused, username)
 }
 
 // record appends to the mutation log, best-effort AFTER the fact.
@@ -437,8 +506,14 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 // failing the call because the record failed would tell the caller nothing
 // happened when something did. The failure is logged loudly and the head digest
 // the backend anchors is what makes a lost record visible.
-func (s *server) record(operation, subject, callID, outcome string) {
-	if _, err := s.log.Append(operation, subject, subject, callID, outcome); err != nil {
+func (s *server) record(operation, subject, actor, callID, outcome string) {
+	if strings.TrimSpace(actor) == "" {
+		// Unstated, not invented. The call arrived authenticated as the backend
+		// and named nobody, and recording the subject as their own actor —
+		// which this did — makes every record answer "who" with "whom".
+		actor = "syndra"
+	}
+	if _, err := s.log.Append(operation, subject, actor, callID, outcome); err != nil {
 		logStoreFailure("mutation log", callID, err)
 	}
 }
@@ -459,13 +534,18 @@ func sameSet(a, b []string) bool {
 	return true
 }
 
-func describeChange(update map[string]any) string {
+// describeChange says what changed, in the names an operator reads.
+//
+// The names come alongside rather than out of the update, because the update
+// carries the ids the target takes and "groups set to 45, 46" is not something
+// anybody can check.
+func describeChange(update map[string]any, groupNames []string) string {
 	var parts []string
-	if g, ok := update["groups"].([]string); ok {
-		if len(g) == 0 {
+	if _, ok := update["groups"]; ok {
+		if len(groupNames) == 0 {
 			parts = append(parts, "removed from every managed group")
 		} else {
-			parts = append(parts, "groups set to "+strings.Join(g, ", "))
+			parts = append(parts, "groups set to "+strings.Join(groupNames, ", "))
 		}
 	}
 	if locked, ok := update["locked"].(bool); ok {

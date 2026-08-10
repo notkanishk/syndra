@@ -85,18 +85,18 @@ func (l *lifecycle) State() (state, reason string) {
 	return l.state, l.reason
 }
 
-// AcceptsMutations reports whether a NEW mutation may start.
+// Begin marks a mutation in flight, or refuses it.
+//
+// The only gate. There was a bare `AcceptsMutations` beside it, used by nothing
+// but its own tests, and it exposed exactly the check-then-act shape Begin
+// exists to prevent: a caller could ask whether it may write, be told yes, and
+// count itself in after a drain had already concluded it was finished. A
+// predicate that must never be used is one somebody eventually uses.
 //
 // Reads are never gated. A draining or read-only add-on that stopped answering
 // `/subjects` would make the backend's drift sweep record an unreconciled
 // target — reporting a maintenance window as an outage, and manufacturing the
 // absence of evidence the sweep exists to avoid fabricating.
-func (l *lifecycle) AcceptsMutations() bool {
-	state, _ := l.State()
-	return state == LifecycleActive
-}
-
-// Begin marks a mutation in flight, or refuses it.
 //
 // The check and the increment are one call because they cannot be two: between
 // a caller asking whether it may write and recording that it is writing, a

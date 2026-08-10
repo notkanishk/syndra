@@ -24,8 +24,8 @@ func TestReadOnlyRefusesMutationsAndKeepsServingReads(t *testing.T) {
 	// Reads are never gated. An add-on that stopped answering /subjects during
 	// a maintenance window would make the backend record the target as
 	// unreconciled — reporting a deliberate state as an outage.
-	if l.AcceptsMutations() {
-		t.Fatal("read_only must not accept mutations")
+	if l.InFlight() != 0 {
+		t.Fatal("a refused mutation must not count itself in flight")
 	}
 	state, _ := l.State()
 	if state != LifecycleReadOnly {
@@ -68,8 +68,8 @@ func TestDrainingRefusesNewWorkAndReportsWhenSettled(t *testing.T) {
 func TestNeitherMaintenanceStateIsReportedAsUnhealthy(t *testing.T) {
 	for _, state := range []string{LifecycleDraining, LifecycleReadOnly} {
 		l := newLifecycle(state)
-		if l.AcceptsMutations() {
-			t.Errorf("%s must not accept mutations", state)
+		if _, err := l.Begin(); !errors.Is(err, errLifecycleRefusal) {
+			t.Errorf("%s must refuse a mutation, got %v", state, err)
 		}
 		got, _ := l.State()
 		if got != state {

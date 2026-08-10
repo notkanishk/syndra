@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -25,18 +28,57 @@ const subjectReadCap = 5000
 // nasUser is the shape of one `user.query` row, narrowed to the selected
 // fields. Deliberately not a map: a map would carry whatever the middleware
 // returned, including the two fields this file exists to keep out.
+// `id` and `uid` are different numbers and the difference is load-bearing:
+// `id` is the middleware's record key, which is what `user.update` and
+// `user.delete` take as their first argument, while `uid` is the unix identity
+// that survives a rename and is what a binding recognises an account by. Root
+// is id 1 and uid 0 — pass one where the other is meant and the call lands on
+// somebody else.
 type nasUser struct {
-	Username string  `json:"username"`
-	UID      int64   `json:"uid"`
-	Locked   bool    `json:"locked"`
-	SMB      bool    `json:"smb"`
-	Groups   []int64 `json:"groups"`
+	ID       apiID  `json:"id"`
+	Username string `json:"username"`
+	UID      int64  `json:"uid"`
+	Locked   bool   `json:"locked"`
+	SMB      bool   `json:"smb"`
+	// Groups is a list of group RECORD ids, not gids — the same key
+	// `user.update({groups})` writes back, which is why both directions resolve
+	// through one map.
+	Groups []apiID `json:"groups"`
 }
 
 type nasGroup struct {
+	ID   apiID  `json:"id"`
 	GID  int64  `json:"gid"`
 	Name string `json:"group"`
 }
+
+// apiID is a middleware record key as it appears on the wire.
+//
+// Kept as the token it arrived as rather than parsed into an int. The
+// middleware has sent these as bare numbers on every release this add-on has
+// been tested against and as quoted strings on some directory-service rows, and
+// this add-on never does arithmetic on one — it reads an id and hands the same
+// id back. Round-tripping the token means being wrong about which form a given
+// release uses costs nothing.
+type apiID struct{ raw json.RawMessage }
+
+func (i *apiID) UnmarshalJSON(b []byte) error {
+	i.raw = append(json.RawMessage(nil), b...)
+	return nil
+}
+
+func (i apiID) MarshalJSON() ([]byte, error) {
+	if len(i.raw) == 0 {
+		return []byte("null"), nil
+	}
+	return i.raw, nil
+}
+
+// String is the comparison and map key form, quotes stripped so `3` and `"3"`
+// are the same account whichever way each side sent it.
+func (i apiID) String() string { return strings.Trim(string(i.raw), `"`) }
+
+func (i apiID) known() bool { return i.String() != "" && i.String() != "null" }
 
 // readSubjects performs the full state read.
 //
@@ -51,7 +93,7 @@ func (s *server) readSubjects() (Snapshot, error) {
 	query := []any{
 		[]any{},
 		map[string]any{
-			"select": []string{"username", "uid", "locked", "smb", "groups"},
+			"select": []string{"id", "username", "uid", "locked", "smb", "groups"},
 			"limit":  subjectReadCap + 1,
 		},
 	}
@@ -64,7 +106,7 @@ func (s *server) readSubjects() (Snapshot, error) {
 		users = users[:subjectReadCap]
 	}
 
-	names, err := s.groupNames()
+	names, _, err := s.groupIndex()
 	if err != nil {
 		// A read that cannot name groups is a read whose group sets are
 		// meaningless to the resolver. Reported as a failure rather than
@@ -76,17 +118,17 @@ func (s *server) readSubjects() (Snapshot, error) {
 	subjects := make([]Subject, 0, len(users))
 	for _, u := range users {
 		groups := make([]string, 0, len(u.Groups))
-		for _, gid := range u.Groups {
-			if name, ok := names[gid]; ok {
+		for _, id := range u.Groups {
+			if name, ok := names[id.String()]; ok {
 				groups = append(groups, name)
 			}
-			// A gid with no name is skipped rather than rendered as a number.
+			// An id with no name is skipped rather than rendered as a number.
 			// It is a group the resolver could never have asked for, so
 			// including it would be reporting drift against a mapping that
 			// cannot exist.
 		}
 		subjects = append(subjects, Subject{
-			Username: u.Username, UID: u.UID, Groups: groups,
+			ID: u.ID, Username: u.Username, UID: u.UID, Groups: groups,
 			// `locked` is the NAS's word for it; `enabled` is Syndra's, and the
 			// translation belongs here rather than in the backend, which does
 			// not know what TrueNAS calls things.
@@ -97,21 +139,132 @@ func (s *server) readSubjects() (Snapshot, error) {
 	return Snapshot{TakenAt: time.Now().UTC(), Subjects: subjects, Truncated: truncated}, nil
 }
 
-// groupNames maps gid to group name.
-func (s *server) groupNames() (map[int64]string, error) {
+// groupIndex reads the group table once and returns both directions of it.
+//
+// Both, from one read, deliberately. A read that resolved ids to names and a
+// write that sent names would be two different vocabularies for one thing — and
+// the write is the half nobody sees fail until an account is in the wrong
+// groups, because the read it is later compared against would speak the other
+// one and report the account as converged.
+func (s *server) groupIndex() (byID map[string]string, byName map[string]apiID, err error) {
 	var groups []nasGroup
 	query := []any{
 		[]any{},
-		map[string]any{"select": []string{"gid", "group"}, "limit": subjectReadCap + 1},
+		map[string]any{"select": []string{"id", "gid", "group"}, "limit": subjectReadCap + 1},
 	}
 	if err := s.nas.call("group.query", query, &groups); err != nil {
-		return nil, fmt.Errorf("read groups: %w", err)
+		return nil, nil, fmt.Errorf("read groups: %w", err)
 	}
-	out := make(map[int64]string, len(groups))
+	byID = make(map[string]string, len(groups))
+	byName = make(map[string]apiID, len(groups))
 	for _, g := range groups {
-		out[g.GID] = g.Name
+		byID[g.ID.String()] = g.Name
+		byName[g.Name] = g.ID
 	}
-	return out, nil
+	return byID, byName, nil
+}
+
+// groupIDsFor resolves the names a mapping speaks into the ids a write takes.
+//
+// A name with no group is refused rather than dropped. Dropping it would apply
+// a smaller set than the one that was approved and report it as converged,
+// which is the silent under-grant version of the same failure the whole
+// entitlement plane exists to prevent.
+//
+// ponytail: one extra group.query per apply that changes groups. Cache it
+// alongside the method list if apply volume ever makes that measurable.
+func (s *server) groupIDsFor(names []string) ([]apiID, error) {
+	if len(names) == 0 {
+		return []apiID{}, nil
+	}
+	_, byName, err := s.groupIndex()
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]apiID, 0, len(names))
+	for _, name := range names {
+		id, ok := byName[name]
+		if !ok {
+			return nil, fmt.Errorf("this target has no group named %q", name)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+// recordID resolves a bound account's record key.
+//
+// By UID first, because that is the number a binding records precisely so it
+// can survive a rename. The apply path already follows a stable uid whose
+// username moved out of band and treats it as a rename rather than a missing
+// account (6.9); the one-shot operations went through the NAME instead, so an
+// out-of-band rename made `password.set`, `password.rotate` and `account.purge`
+// answer "the target has no account named X" until an apply happened to run and
+// re-sync the binding. One rule for both paths, and it is the uid.
+//
+// The name is the fallback, for a binding recorded before a uid was, and it is
+// also what a uid of zero would otherwise match: uid 0 is root.
+//
+// Read at the moment of use rather than stored, so there is no second copy of
+// the record key to go stale.
+func (s *server) recordID(b Binding) (apiID, error) {
+	if b.UID != 0 {
+		id, err := s.lookupOne("uid", b.UID)
+		if err == nil {
+			return id, nil
+		}
+		if !errors.Is(err, errNoSuchAccount) {
+			// Ambiguity included, and deliberately. Two accounts sharing a uid
+			// is a question about which one, and falling through to the name
+			// would answer it by changing the subject — quietly resolving the
+			// operation against whichever account happened to hold the recorded
+			// name, on a path whose next call sets a credential.
+			return apiID{}, err
+		}
+		// Gone by uid. Fall through: the account may have been recreated under
+		// the recorded name, which the binding still points at.
+	}
+	id, err := s.lookupOne("username", b.Username)
+	if err != nil {
+		return apiID{}, err
+	}
+	return id, nil
+}
+
+// The two ways a lookup can fail to name one account, kept apart because the
+// caller does different things with them. Absence is recoverable — try the
+// other field — and ambiguity is not: two accounts matching is a question
+// about which one, and the answer is never "whichever the next query returns".
+var (
+	errNoSuchAccount    = errors.New("the target has no such account")
+	errAmbiguousAccount = errors.New("more than one account on the target matches")
+)
+
+// lookupOne resolves exactly one account by one field, refusing an ambiguous
+// answer rather than picking from it.
+func (s *server) lookupOne(field string, value any) (apiID, error) {
+	var rows []nasUser
+	// limit 2 rather than 1: one row is not evidence that only one matched, and
+	// the second row is the whole reason this function can refuse.
+	query := []any{
+		[]any{[]any{field, "=", value}},
+		map[string]any{"select": []string{"id", "username", "uid"}, "limit": 2},
+	}
+	if err := s.nas.call("user.query", query, &rows); err != nil {
+		return apiID{}, err
+	}
+	switch {
+	case len(rows) > 1:
+		return apiID{}, fmt.Errorf("%w: %s=%v matched %d", errAmbiguousAccount, field, value, len(rows))
+	case len(rows) == 0:
+		return apiID{}, fmt.Errorf("%w: %s=%v", errNoSuchAccount, field, value)
+	case !rows[0].ID.known():
+		// Matched and unusable. Reported as absence, because the recoverable
+		// reading is the true one: this field cannot name the record key, and
+		// the other field is still worth asking.
+		return apiID{}, fmt.Errorf("%w: %s=%v answered without a record id", errNoSuchAccount, field, value)
+	}
+	return rows[0].ID, nil
 }
 
 // Ping is the reachability probe `/health` uses.
@@ -120,7 +273,11 @@ func (n *NAS) Ping() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Through the same lock as every other call: `Ping` writes a request frame
+	// like any other, and a concurrent write is a panic rather than a race.
+	n.callMu.Lock()
 	res, err := c.Ping()
+	n.callMu.Unlock()
 	if err != nil {
 		n.drop()
 		return "", fmt.Errorf("ping: %w", classifyNASError(err))

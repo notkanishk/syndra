@@ -54,7 +54,7 @@ type OperationResult struct {
 func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []byte) {
 	name := r.PathValue("name")
 	var req OperationRequest
-	if err := json.Unmarshal(body, &req); err != nil {
+	if err := decodeStrict(body, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
 		return
 	}
@@ -66,8 +66,12 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 	// The same dedup the apply uses, and universal for the same reason: §16
 	// declines a separate nonce store on the grounds that the call id already
 	// prevents replay, and that argument only holds if nothing is exempt.
-	if cached, found, err := s.store.Recall(req.CallID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "STORE_UNREADABLE"})
+	// Keyed by the operation NAME as well as the id. One namespace, so a call
+	// id reused anywhere is still caught — but a cached apply outcome decoded
+	// as an operation result is an all-zero success, and a password.set replayed
+	// at a different operation is a different call, not a duplicate.
+	if cached, found, err := s.store.Recall(req.CallID, kindOperation+name); err != nil {
+		writeRecallFailure(w, err)
 		return
 	} else if found {
 		var previous OperationResult
@@ -104,8 +108,13 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 		writeJSON(w, status, map[string]string{"error": "OPERATION_FAILED", "detail": err.Error()})
 		return
 	}
-	if err := s.store.Remember(req.CallID, result); err != nil {
-		logStoreFailure("idempotency", req.CallID, err)
+	// Mutations only. A cached read is a 30-day copy of a health report nobody
+	// will ask for twice — the dedup exists so a replayed MUTATION does not
+	// happen again, and a read that happens again is a read.
+	if mutatingOperation(name) {
+		if err := s.store.Remember(req.CallID, kindOperation+name, result); err != nil {
+			logStoreFailure("idempotency", req.CallID, err)
+		}
 	}
 	writeJSON(w, status, result)
 }
@@ -171,7 +180,11 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 	if err != nil {
 		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
-	if err := s.nas.call("user.update", []any{binding.UID, map[string]any{"password": password}}, nil); err != nil {
+	id, err := s.recordID(binding)
+	if err != nil {
+		return OperationResult{}, statusFor(err), fmt.Errorf("the bound account could not be located on the target")
+	}
+	if err := s.nas.call("user.update", []any{id, map[string]any{"password": password}}, nil); err != nil {
 		// A sentence an operator can read, not the security boundary. The
 		// client wrapper already classifies rather than wraps, so the target's
 		// own text — built from a call whose parameters include the password —
@@ -181,7 +194,7 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 		return OperationResult{}, statusFor(err), fmt.Errorf("the target refused the credential change")
 	}
 	// The event, never the value. There is no field on a Record for one.
-	s.record("password.set", req.Subject, req.CallID, "succeeded")
+	s.record("password.set", req.Subject, req.Actor, req.CallID, "succeeded")
 	return OperationResult{
 		Operation: "password.set", Subject: req.Subject, Outcome: "succeeded",
 		Detail: "The credential was set on " + binding.Username + ".",
@@ -202,10 +215,14 @@ func (s *server) rotatePassword(req OperationRequest) (OperationResult, int, err
 	if err != nil {
 		return OperationResult{}, http.StatusInternalServerError, fmt.Errorf("could not mint a credential")
 	}
-	if err := s.nas.call("user.update", []any{binding.UID, map[string]any{"password": minted}}, nil); err != nil {
+	id, err := s.recordID(binding)
+	if err != nil {
+		return OperationResult{}, statusFor(err), fmt.Errorf("the bound account could not be located on the target")
+	}
+	if err := s.nas.call("user.update", []any{id, map[string]any{"password": minted}}, nil); err != nil {
 		return OperationResult{}, statusFor(err), fmt.Errorf("the target refused the rotation")
 	}
-	s.record("password.rotate", req.Subject, req.CallID, "succeeded")
+	s.record("password.rotate", req.Subject, req.Actor, req.CallID, "succeeded")
 	return OperationResult{
 		Operation: "password.rotate", Subject: req.Subject, Outcome: "succeeded", Rotated: true,
 		Detail: "A new credential was set on " + binding.Username +
@@ -249,6 +266,13 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
 
+	// Resolved on the shared session, which can read but not delete. The
+	// elevated one does exactly one thing.
+	id, err := s.recordID(binding)
+	if err != nil {
+		return OperationResult{}, statusFor(err), fmt.Errorf("the bound account could not be located on the target")
+	}
+
 	// A session of its own, closed immediately. Not the long-lived one: an
 	// elevated credential must not outlive the single call it was injected for,
 	// and reusing the shared session would leave a delete-capable connection
@@ -259,10 +283,18 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	}
 	defer client.Close()
 
-	if _, err := client.Call("user.delete", callTimeoutSeconds, []any{binding.UID}); err != nil {
-		return OperationResult{}, statusFor(classifyNASError(err)), fmt.Errorf("the target refused the deletion")
+	if err := callOnce(client, "user.delete", []any{id}, nil); err != nil {
+		return OperationResult{}, statusFor(err), fmt.Errorf("the target refused the deletion")
 	}
-	s.record("account.purge", req.Subject, req.CallID, "succeeded")
+	// The binding goes with the account. Leaving it would leave this add-on
+	// claiming an account that no longer exists, and the next apply takes the
+	// bound-but-absent path — which re-creates under the recorded name, because
+	// that path exists for an account deleted BEHIND our back. A purge is not
+	// that: we deleted it, on purpose, and it must not resurrect itself.
+	if err := s.store.DeleteBinding(req.Subject); err != nil {
+		logStoreFailure("binding", req.Subject, err)
+	}
+	s.record("account.purge", req.Subject, req.Actor, req.CallID, "succeeded")
 	return OperationResult{
 		Operation: "account.purge", Subject: req.Subject, Outcome: "succeeded",
 		Detail: "Deleted " + binding.Username + ".",

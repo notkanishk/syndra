@@ -22,7 +22,7 @@ const theSecret = "correct-horse-battery-staple"
 
 func opServer(t *testing.T) (*server, *mutatingRPC) {
 	t.Helper()
-	s, m := applyServer(t, `[{"username":"ada","uid":3001,"locked":false,"smb":true,"groups":[900]}]`)
+	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestASubmittedCredentialReachesTheTargetAndIsKeptNowhere(t *testing.T) {
 	if strings.Contains(string(encoded), theSecret) {
 		t.Error("the snapshot carries the credential")
 	}
-	cached, found, _ := s.store.Recall("c1")
+	cached, found, _ := s.store.Recall("c1", kindOperation+"password.set")
 	if !found {
 		t.Fatal("the outcome must be recorded for replay")
 	}
@@ -146,7 +146,7 @@ func TestRotationMintsAValueNobodyEverSees(t *testing.T) {
 	if strings.Contains(rr.Body.String(), minted) {
 		t.Fatal("the response carries the minted credential — rotation as a revocation depends on it not being handed out")
 	}
-	cached, _, _ := s.store.Recall("c1")
+	cached, _, _ := s.store.Recall("c1", kindOperation+"password.set")
 	if strings.Contains(string(cached), minted) {
 		t.Fatal("the idempotency entry carries the minted credential")
 	}
@@ -221,7 +221,7 @@ func TestPurgeUsesTheInjectedCredentialAndKeepsItNowhere(t *testing.T) {
 	if strings.Contains(rr.Body.String(), elevated) {
 		t.Error("the response carries the elevated key")
 	}
-	cached, _, _ := s.store.Recall("c1")
+	cached, _, _ := s.store.Recall("c1", kindOperation+"password.set")
 	if strings.Contains(string(cached), elevated) {
 		t.Error("the idempotency entry carries the elevated key")
 	}
@@ -389,7 +389,7 @@ type recordingRPC struct {
 
 func (r *recordingRPC) Call(method string, _ int64, _ any) (json.RawMessage, error) {
 	r.onCall(method)
-	return json.RawMessage(`null`), nil
+	return envelope(`null`), nil
 }
 func (r *recordingRPC) Ping() (string, error) { return "pong", nil }
 func (r *recordingRPC) Close() error          { r.onClose(); return nil }
@@ -487,3 +487,188 @@ func TestEveryValueThatIsASecretIsDeclaredOne(t *testing.T) {
 type alwaysAvailable struct{}
 
 func (alwaysAvailable) availability(string) (bool, string) { return true, "" }
+
+// A purge takes the binding with it. Leaving it behind leaves this add-on
+// claiming an account that no longer exists, and the next apply reads
+// bound-but-absent as an out-of-band deletion — which re-creates under the
+// recorded name. That path is right for an account somebody else deleted and
+// exactly wrong for one we deleted on purpose.
+func TestAPurgeDoesNotLeaveTheSubjectBoundToADeletedAccount(t *testing.T) {
+	s, _ := opServer(t)
+	s.elevated = func(string) (rpc, error) {
+		return &recordingRPC{onCall: func(string) {}, onClose: func() {}}, nil
+	}
+
+	rr := postOperation(t, s, "account.purge",
+		`{"call_id":"c1","subject":"sub-1","actor":"op_1","params":{"elevated_key":"k"}}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if _, bound, err := s.store.GetBinding("sub-1"); err != nil || bound {
+		t.Fatalf("the binding must be gone: bound=%t err=%v", bound, err)
+	}
+}
+
+// A refusal from the target is a failure, not a success. The elevated call
+// wanted no result, and reading a refusal only when a result is wanted is how
+// a delete that never happened gets reported as done.
+func TestAPurgeTheTargetRefusesIsNotReportedAsDone(t *testing.T) {
+	s, _ := opServer(t)
+	s.elevated = func(string) (rpc, error) {
+		return &refusingRPC{}, nil
+	}
+
+	rr := postOperation(t, s, "account.purge",
+		`{"call_id":"c1","subject":"sub-1","actor":"op_1","params":{"elevated_key":"k"}}`)
+	if rr.Code == http.StatusOK {
+		t.Fatalf("a refused deletion must not answer 200: %s", rr.Body.String())
+	}
+	if _, bound, _ := s.store.GetBinding("sub-1"); !bound {
+		t.Fatal("the binding must survive a deletion that did not happen")
+	}
+}
+
+type refusingRPC struct{}
+
+func (refusingRPC) Call(string, int64, any) (json.RawMessage, error) {
+	return errorEnvelope("[EPERM] user.delete: not permitted"), nil
+}
+func (refusingRPC) Ping() (string, error) { return "pong", nil }
+func (refusingRPC) Close() error          { return nil }
+
+// One namespace so a reused call id is always caught, and a type tag so a
+// cached result is never decoded as the wrong shape — which is an all-zero
+// success, the worst answer available.
+func TestACallIdReplayedAtAnotherEndpointIsRefused(t *testing.T) {
+	s, _ := opServer(t)
+
+	if rr := postOperation(t, s, "password.set",
+		`{"call_id":"shared","subject":"sub-1","params":{"password":"`+theSecret+`"}}`); rr.Code != http.StatusOK {
+		t.Fatalf("setup: %s", rr.Body.String())
+	}
+	rr := postOperation(t, s, "password.rotate", `{"call_id":"shared","subject":"sub-1"}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("want a conflict, got %d (%s)", rr.Code, rr.Body.String())
+	}
+}
+
+// The log promises who did what to whom. Recording the subject as their own
+// actor answers "who" with "whom".
+func TestTheRecordedActorIsTheOneWhoAsked(t *testing.T) {
+	s, _ := opServer(t)
+	postOperation(t, s, "password.set",
+		`{"call_id":"c1","subject":"sub-1","actor":"op_7","params":{"password":"`+theSecret+`"}}`)
+
+	raw, err := os.ReadFile(mutationLogPath(t, s))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var r Record
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(raw))), &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Actor != "op_7" || r.Subject != "sub-1" {
+		t.Fatalf("want actor op_7 on subject sub-1, got %+v", r)
+	}
+}
+
+// 6.9 built the apply path to follow a stable uid whose username moved out of
+// band — a rename, not a missing account. The one-shot operations resolved by
+// NAME instead, so a rename made every one of them fail until an apply happened
+// to run and re-sync the binding. One rule for both paths, and it is the uid.
+func TestAnOutOfBandRenameDoesNotBreakTheOperationPath(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"ada_renamed","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
+	// The binding still names the account as it was.
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := postOperation(t, s, "password.set",
+		`{"call_id":"c1","subject":"sub-1","actor":"op_1","params":{"password":"`+theSecret+`"}}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("a rename must not break the credential path: %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(m.updates) != 1 || m.updates[0]["password"] != theSecret {
+		t.Fatalf("the credential must reach the target: %v", m.updates)
+	}
+	// And it landed on the renamed account's record id, not on a guess.
+	args, _ := lastCallParams(m, "user.update").([]any)
+	if len(args) != 2 {
+		t.Fatalf("want two arguments to user.update, got %v", args)
+	}
+	if id, ok := args[0].(apiID); !ok || id.String() != "11" {
+		t.Fatalf("want the record id of the renamed account, got %#v", args[0])
+	}
+}
+
+// A binding recorded before uids were is still resolvable, and uid 0 is root —
+// never a subject's account, so it must not be matched on.
+func TestABindingWithNoUidFallsBackToTheName(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada"}); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := postOperation(t, s, "password.set",
+		`{"call_id":"c1","subject":"sub-1","actor":"op_1","params":{"password":"`+theSecret+`"}}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	for _, params := range m.fakeRPC.params {
+		args, ok := params.([]any)
+		if !ok || len(args) == 0 {
+			continue
+		}
+		filters, ok := args[0].([]any)
+		if !ok || len(filters) == 0 {
+			continue
+		}
+		if one, ok := filters[0].([]any); ok && len(one) == 3 && one[0] == "uid" {
+			t.Fatalf("a binding with no uid must not query uid 0 — that is root: %v", one)
+		}
+	}
+}
+
+// Two accounts sharing a uid is a question about which one, and the answer is
+// never "whichever the next query returns". Falling through to the name would
+// answer it by changing the subject — on the path whose next call sets a
+// credential.
+func TestAnAmbiguousUidRefusesRatherThanResolvingByName(t *testing.T) {
+	s, m := applyServer(t, `[
+		{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]},
+		{"username":"ada_clone","id":12,"uid":3001,"locked":false,"smb":true,"groups":[42]}
+	]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := postOperation(t, s, "password.set",
+		`{"call_id":"c1","subject":"sub-1","actor":"op_1","params":{"password":"`+theSecret+`"}}`)
+	if rr.Code == http.StatusOK {
+		t.Fatalf("an ambiguous uid must not resolve: %s", rr.Body.String())
+	}
+	if len(m.updates) != 0 {
+		t.Fatalf("nothing may be written when the account could not be named: %v", m.updates)
+	}
+}
+
+// And the rename test above is only meaningful because the fake applies the
+// query's filters: with the binding naming `ada` and the target holding
+// `ada_renamed`, a name-first lookup matches nothing at all.
+func TestTheFakeAppliesTheFiltersTheLookupSends(t *testing.T) {
+	s, _ := applyServer(t, `[
+		{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]},
+		{"username":"leo","id":12,"uid":3002,"locked":false,"smb":true,"groups":[42]}
+	]`)
+
+	id, err := s.lookupOne("uid", int64(3002))
+	if err != nil {
+		t.Fatalf("a filtered lookup must find its row: %v", err)
+	}
+	if id.String() != "12" {
+		t.Fatalf("want leo's record id, got %s", id.String())
+	}
+	if _, err := s.lookupOne("uid", int64(9999)); !errors.Is(err, errNoSuchAccount) {
+		t.Fatalf("want errNoSuchAccount, got %v", err)
+	}
+}

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -40,7 +39,7 @@ const perRequestSubjectCap = 200
 
 func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req PlanRequest
-	if err := json.Unmarshal(body, &req); err != nil {
+	if err := decodeStrict(body, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
 		return
 	}

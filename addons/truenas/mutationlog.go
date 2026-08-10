@@ -140,26 +140,69 @@ func OpenMutationLog(dir string, maxBytes int64, keep int) (*MutationLog, error)
 	}
 	l.size = info.Size()
 
-	if err := l.recoverHead(path); err != nil {
+	if err := l.recoverHead(); err != nil {
 		f.Close()
 		return nil, err
 	}
 	return l, nil
 }
 
-// recoverHead walks the current file for the last sequence and digest.
+// recoverHead finds the last record written, wherever it lives.
+//
+// The live file first and then backwards through the rotated segments, because
+// the live file is empty for exactly as long as it takes the first record after
+// a rotation to arrive — and a restart in that window would otherwise reset the
+// sequence to 0 and the head to "". That is precisely the tail-truncation
+// signature the anchor exists to detect, manufactured by this add-on's own
+// restart.
 //
 // A malformed trailing line — the shape a crash mid-write leaves — is not
 // treated as corruption of the whole log. It is skipped, and the head is
 // whatever the last COMPLETE record said, which is the honest reading: that
 // record was fsynced and the partial one never was.
-func (l *MutationLog) recoverHead(path string) error {
+func (l *MutationLog) recoverHead() error {
+	segments, err := l.segmentsNewestFirst()
+	if err != nil {
+		return err
+	}
+	for _, path := range segments {
+		last, found, err := lastRecordIn(path)
+		if err != nil {
+			return err
+		}
+		if found {
+			l.seq, l.head = last.Seq, last.Digest
+			return nil
+		}
+	}
+	return nil
+}
+
+// segmentsNewestFirst is the live file followed by the rotated ones, newest
+// first. The rotated suffix is a zero-padded UTC timestamp, so lexicographic
+// order is chronological — chosen for exactly that.
+func (l *MutationLog) segmentsNewestFirst() ([]string, error) {
+	rotated, err := filepath.Glob(filepath.Join(l.dir, logFileName+".*"))
+	if err != nil {
+		return nil, fmt.Errorf("list rotated logs: %w", err)
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(rotated)))
+	return append([]string{filepath.Join(l.dir, logFileName)}, rotated...), nil
+}
+
+// lastRecordIn returns the final complete record in one segment.
+func lastRecordIn(path string) (Record, bool, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("read mutation log: %w", err)
+		if os.IsNotExist(err) {
+			return Record{}, false, nil
+		}
+		return Record{}, false, fmt.Errorf("read mutation log: %w", err)
 	}
 	defer f.Close()
 
+	var last Record
+	var found bool
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	for sc.Scan() {
@@ -171,12 +214,12 @@ func (l *MutationLog) recoverHead(path string) error {
 		if err := json.Unmarshal([]byte(line), &r); err != nil {
 			continue
 		}
-		l.seq, l.head = r.Seq, r.Digest
+		last, found = r, true
 	}
 	if err := sc.Err(); err != nil && !errors.Is(err, io.EOF) {
-		return fmt.Errorf("scan mutation log: %w", err)
+		return Record{}, false, fmt.Errorf("scan mutation log: %w", err)
 	}
-	return nil
+	return last, found, nil
 }
 
 // Append writes one record and returns only once it is durable.
@@ -261,6 +304,15 @@ func (l *MutationLog) rotateIfNeededLocked() error {
 		return fmt.Errorf("close before rotate: %w", err)
 	}
 	if err := os.Rename(path, rotated); err != nil {
+		// The old handle is already closed, so leaving it on the struct would
+		// leave every later Append writing to a descriptor nothing can reach.
+		// Reopened here so the failure costs a rotation rather than the log.
+		if reopened, reopenErr := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600); reopenErr == nil {
+			l.file, l.sync = reopened, reopened.Sync
+			if info, statErr := reopened.Stat(); statErr == nil {
+				l.size = info.Size()
+			}
+		}
 		return fmt.Errorf("rotate mutation log: %w", err)
 	}
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
@@ -305,18 +357,51 @@ func (l *MutationLog) Close() error {
 // before it, so altering a field, replacing a record, or removing one from the
 // middle all fail — and fail with the sequence number, because "the log is
 // broken" is not something an operator can act on.
+// One segment is not the whole log. `VerifyChain` reads a file, and a rotated
+// file opens at whatever sequence was live when it rolled over — so it adopts
+// the opening record's sequence and `Prev` rather than demanding record 1.
+// `VerifyLog` is the one that walks every segment in order and checks the joins
+// between them, which is where a lost rotation actually shows up.
 func VerifyChain(path string) error {
+	_, _, err := verifySegment(path, "", 0)
+	return err
+}
+
+// VerifyLog verifies the whole log, rotations included.
+func VerifyLog(dir string) error {
+	rotated, err := filepath.Glob(filepath.Join(dir, logFileName+".*"))
+	if err != nil {
+		return fmt.Errorf("list rotated logs: %w", err)
+	}
+	// Lexicographic is chronological: the suffix is a zero-padded UTC timestamp.
+	sort.Strings(rotated)
+	prev, expectSeq := "", uint64(0)
+	for _, path := range append(rotated, filepath.Join(dir, logFileName)) {
+		if prev, expectSeq, err = verifySegment(path, prev, expectSeq); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// verifySegment walks one file and reports the first record that breaks the
+// chain, returning where it left off so the next segment continues from it.
+//
+// expectSeq 0 means "adopt whatever the first record says", which is what makes
+// a single segment verifiable on its own.
+func verifySegment(path, prev string, expectSeq uint64) (string, uint64, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("open log: %w", err)
+		if os.IsNotExist(err) {
+			return prev, expectSeq, nil
+		}
+		return prev, expectSeq, fmt.Errorf("open log: %w", err)
 	}
 	defer f.Close()
 
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
 
-	var prev string
-	var expectSeq uint64 = 1
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
@@ -324,18 +409,23 @@ func VerifyChain(path string) error {
 		}
 		var r Record
 		if err := json.Unmarshal([]byte(line), &r); err != nil {
-			return fmt.Errorf("record %d is not readable: %w", expectSeq, err)
+			return prev, expectSeq, fmt.Errorf("record %d is not readable: %w", expectSeq, err)
+		}
+		if expectSeq == 0 {
+			// The opening record of a segment read on its own: its `Prev` links
+			// to a file this call was not given.
+			expectSeq, prev = r.Seq, r.Prev
 		}
 		switch {
 		case r.Seq != expectSeq:
-			return fmt.Errorf("record %d is missing: the next record calls itself %d", expectSeq, r.Seq)
+			return prev, expectSeq, fmt.Errorf("record %d is missing: the next record calls itself %d", expectSeq, r.Seq)
 		case r.Prev != prev:
-			return fmt.Errorf("record %d does not follow the one before it", r.Seq)
+			return prev, expectSeq, fmt.Errorf("record %d does not follow the one before it", r.Seq)
 		case r.Digest != r.digestOf():
-			return fmt.Errorf("record %d has been altered", r.Seq)
+			return prev, expectSeq, fmt.Errorf("record %d has been altered", r.Seq)
 		}
 		prev = r.Digest
 		expectSeq++
 	}
-	return sc.Err()
+	return prev, expectSeq, sc.Err()
 }
