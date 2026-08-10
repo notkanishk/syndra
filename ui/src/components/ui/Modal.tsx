@@ -41,6 +41,19 @@ export function useDialogFocusTrap(
   busy: boolean,
   onClose: () => void,
 ) {
+  // Held in refs so the trap installs ONCE per open. With `busy` and `onClose`
+  // in the dependency list the effect tore down and re-ran every time a
+  // mutation started or finished — and its first act is to focus the first
+  // focusable element in the panel, which during an apply is the first button
+  // still enabled. So starting an apply moved focus onto Cancel: the one
+  // control that abandons the operation, under the operator's next keystroke.
+  const busyRef = useRef(busy);
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    busyRef.current = busy;
+    closeRef.current = onClose;
+  });
+
   useEffect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -48,9 +61,9 @@ export function useDialogFocusTrap(
     panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)[0]?.focus();
 
     function handleKey(event: KeyboardEvent) {
-      if (event.key === "Escape" && !busy) {
+      if (event.key === "Escape" && !busyRef.current) {
         event.preventDefault();
-        onClose();
+        closeRef.current();
         return;
       }
       if (event.key !== "Tab") return;
@@ -73,7 +86,7 @@ export function useDialogFocusTrap(
       document.removeEventListener("keydown", handleKey);
       previouslyFocused?.focus();
     };
-  }, [panelRef, open, busy, onClose]);
+  }, [panelRef, open]);
 }
 
 export function Modal({

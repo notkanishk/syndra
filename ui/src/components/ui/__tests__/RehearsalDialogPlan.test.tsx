@@ -2,7 +2,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
+import { RehearsalDialog, queuedNote } from "@/components/ui/RehearsalDialog";
 import { ApiError } from "@/lib/api-client";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
 
@@ -108,6 +108,12 @@ describe("a stale approval", () => {
     "PLAN_NOT_FOUND",
     "PLAN_ALREADY_APPLIED",
     "PLAN_REQUEST_MISMATCH",
+    // The sixth. Missing from the set, it fell through to a bare toast — the
+    // one recovery path the rehearsal exists to close.
+    "PLAN_NOT_CITABLE_HERE",
+    // And the seventh: a re-plan is issued to the current operator, so it
+    // resolves this refusal rather than only reporting it.
+    "PLAN_NOT_YOURS",
   ];
 
   it.each(staleCodes)("re-plans rather than failing, on %s", async (code) => {
@@ -138,10 +144,41 @@ describe("a stale approval", () => {
     await screen.findByRole("button", { name: "Apply to 1 person" });
     fireEvent.click(screen.getByRole("button", { name: "Apply to 1 person" }));
 
-    const banner = await screen.findByRole("status");
+    const banner = await screen.findByRole("alert");
     expect(banner).toHaveTextContent("u_moved");
     expect(banner).toHaveTextContent("u_also");
     expect(banner).toHaveTextContent("Nothing was applied");
+  });
+
+  // Five of the six codes carry no details, so keying the banner on the moved
+  // list alone swapped the approved plan for a fresh one with nothing on screen
+  // but a transient toast. An operator could then press Apply believing they
+  // had already read this diff.
+  it.each(staleCodes)("says the plan is new even when %s names no rows", async (code) => {
+    onApply = vi.fn().mockRejectedValue(new ApiError(409, { error: code, message: "no good" }));
+    open();
+    await screen.findByRole("button", { name: "Apply to 1 person" });
+    fireEvent.click(screen.getByRole("button", { name: "Apply to 1 person" }));
+
+    const banner = await screen.findByRole("alert");
+    expect(banner).toHaveTextContent("Nothing was applied");
+    expect(banner).toHaveTextContent("review it again before applying");
+  });
+
+  // The one code where "nothing was applied" is false: the earlier apply
+  // landed, and only the second attempt did nothing. The bold line is read
+  // first, so it must not contradict the sentence under it.
+  it("does not claim nothing happened when the plan had already been applied", async () => {
+    onApply = vi
+      .fn()
+      .mockRejectedValue(new ApiError(409, { error: "PLAN_ALREADY_APPLIED", message: "spent" }));
+    open();
+    await screen.findByRole("button", { name: "Apply to 1 person" });
+    fireEvent.click(screen.getByRole("button", { name: "Apply to 1 person" }));
+
+    const banner = await screen.findByRole("alert");
+    expect(banner).toHaveTextContent("Nothing was applied twice");
+    expect(banner).toHaveTextContent("already applied once");
   });
 
   it("clears the notice once a fresh approval is applied", async () => {
@@ -155,11 +192,11 @@ describe("a stale approval", () => {
     await screen.findByRole("button", { name: "Apply to 1 person" });
 
     fireEvent.click(screen.getByRole("button", { name: "Apply to 1 person" }));
-    await screen.findByRole("status");
+    await screen.findByRole("alert");
 
     fireEvent.click(screen.getByRole("button", { name: "Apply to 1 person" }));
     await screen.findByRole("button", { name: "Close" });
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("leaves an ordinary failure alone rather than re-planning over it", async () => {
@@ -223,5 +260,42 @@ describe("a change bigger than the usual one", () => {
     await waitFor(() => expect(vi.mocked(onRehearse)).toHaveBeenCalledTimes(2));
     // The cohort has not grown. Re-asking buries the thing they need to read.
     expect(vi.mocked(onRehearse)).toHaveBeenNthCalledWith(2, true);
+  });
+});
+
+// §7: an operator who has just approved something must never have to know which
+// drain rule applied. Two rules drain this queue and they are not symmetric —
+// withdrawals leave on a background runner, everything conferring access waits
+// for a human — so the copy says what will happen rather than naming the rule.
+describe("queued rows say what happens next", () => {
+  it("tells a withdrawal it sends itself", () => {
+    const note = queuedNote({
+      op: "remove_role",
+      applied: true,
+      outcomes: [],
+      summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 1 },
+    });
+    expect(note).toMatch(/send themselves|leaves within/i);
+    expect(note).toMatch(/access holds until it does/i);
+  });
+
+  it("tells a grant it is waiting for someone", () => {
+    const note = queuedNote({
+      op: "assign_role",
+      applied: true,
+      outcomes: [],
+      summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 1 },
+    });
+    expect(note).toMatch(/resume the queue/i);
+  });
+
+  it("says nothing when nothing is queued", () => {
+    const note = queuedNote({
+      op: "assign_role",
+      applied: true,
+      outcomes: [],
+      summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 1, queued: 0 },
+    });
+    expect(note).toBeUndefined();
   });
 });

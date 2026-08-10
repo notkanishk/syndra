@@ -48,6 +48,24 @@ export function resultMessage(plan: BulkPlan, noun: [string, string]): string {
   return `${parts.join(", ")}.`;
 }
 
+/**
+ * What happens to the queued rows, without making the operator know the rule.
+ *
+ * Two rules drain this queue and they are not symmetric: a withdrawal leaves on
+ * a background runner because a delayed revocation IS retained access, and
+ * everything that confers access waits for a human to resume it. §7 states the
+ * operator consequence plainly — somebody who has just approved something must
+ * never have to know which rule applied — so the copy says what will happen
+ * rather than naming the rule that decided it.
+ */
+export function queuedNote(plan: BulkPlan): string | undefined {
+  if (plan.summary.queued === 0) return undefined;
+  const withdrawal = plan.op === "remove_role" || plan.op === "remove_bundle";
+  return withdrawal
+    ? "Recorded here and not yet in Zitadel. Withdrawals send themselves — this one leaves within a few minutes, and the access holds until it does."
+    : "Recorded here and not yet in Zitadel. Anything that gives access waits for someone to resume the queue on Pending changes.";
+}
+
 /** An error only when something actually failed; queued rows are a warning. */
 export function resultTone(plan: BulkPlan): "success" | "warning" | "error" {
   if (plan.summary.failed > 0) return "error";
@@ -89,16 +107,45 @@ interface RehearsalDialogProps {
  * Read from the code rather than the message, because a message is prose and
  * this is a branch.
  */
-const STALE_PLAN_CODES = new Set([
-  "PLAN_STALE",
-  "PLAN_EXPIRED",
-  "PLAN_NOT_FOUND",
-  "PLAN_ALREADY_APPLIED",
-  "PLAN_REQUEST_MISMATCH",
+const STALE_PLAN_CODES = new Map<string, string>([
+  ["PLAN_STALE", "The state this was rehearsed against has changed."],
+  ["PLAN_EXPIRED", "This approval sat long enough to expire, so it was not used."],
+  ["PLAN_NOT_FOUND", "This approval is no longer on file, so it was not used."],
+  [
+    "PLAN_ALREADY_APPLIED",
+    "This approval was already applied once. Nothing was applied a second time — the plan below is current state, so it may well show nothing left to do.",
+  ],
+  ["PLAN_REQUEST_MISMATCH", "The request no longer matches the one this was approved for."],
+  // The sixth. Its absence meant a plan cited on the wrong surface fell through
+  // to a bare toast, which is the one recovery path §8 exists to close.
+  ["PLAN_NOT_CITABLE_HERE", "This approval belongs to a different surface and cannot be applied here."],
+  // A re-plan is issued to the CURRENT operator, so it resolves this refusal
+  // rather than merely reporting it — the same recovery as every code above.
+  ["PLAN_NOT_YOURS", "That approval was somebody else's, so it was not used."],
 ]);
+
+/**
+ * The headline above the per-code sentence.
+ *
+ * `PLAN_ALREADY_APPLIED` is the one code where "nothing was applied" is false:
+ * the earlier apply landed, and only the second attempt did nothing. The bold
+ * line is read first, so a headline that contradicts the sentence under it is
+ * worse than no headline.
+ */
+function staleHeadline(code: string): string {
+  return code === "PLAN_ALREADY_APPLIED"
+    ? "Nothing was applied twice. This is a new plan."
+    : "Nothing was applied. This is a new plan.";
+}
 
 function stalePlanError(error: unknown): ApiError | null {
   return error instanceof ApiError && STALE_PLAN_CODES.has(error.code) ? error : null;
+}
+
+/** What moved, in the names an operator recognises. */
+function movedLabels(subjectIDs: string[], plan: BulkPlan | null): string[] {
+  const byID = new Map((plan?.outcomes ?? []).map((o) => [o.user_id, o.name || o.email]));
+  return subjectIDs.map((id) => byID.get(id) ?? id);
 }
 
 /**
@@ -131,8 +178,17 @@ export function RehearsalDialog({
   const [plan, setPlan] = useState<BulkPlan | null>(null);
   const [busy, setBusy] = useState(false);
   const [autoRan, setAutoRan] = useState(false);
-  /** Subjects the backend named as moved, so the re-plan says which rows to look at. */
-  const [moved, setMoved] = useState<string[]>([]);
+  /**
+   * The refusal that sent us back to a fresh plan: which one it was, and which
+   * subjects the backend named as moved.
+   *
+   * Only PLAN_STALE carries subjects. Keying the banner on that list alone left
+   * the other five refusals swapping the approved plan for a freshly computed
+   * one with nothing on screen but a transient toast — so the operator could
+   * press Apply believing they had already read this diff, which is exactly the
+   * gap the rehearsal exists to close, reintroduced in the recovery path.
+   */
+  const [stalePlan, setStalePlan] = useState<{ code: string; subjects: string[] } | null>(null);
   /** Set when the backend refuses to approve a change of this size unasked. */
   const [scope, setScope] = useState<{ affected: string; limit: string } | null>(null);
 
@@ -146,7 +202,7 @@ export function RehearsalDialog({
     try {
       const result = await onRehearse(acknowledgeScope);
       setPlan(result);
-      setMoved([]);
+      setStalePlan(null);
       setScope(null);
       setStep("review");
       return result;
@@ -178,9 +234,11 @@ export function RehearsalDialog({
     try {
       const result = await onApply(plan.plan_id);
       setPlan(result);
-      setMoved([]);
+      setStalePlan(null);
       setStep("result");
-      toast[resultTone(result)](resultMessage(result, noun));
+      toast[resultTone(result)](resultMessage(result, noun), {
+        description: queuedNote(result),
+      });
     } catch (error) {
       const stale = stalePlanError(error);
       if (!stale) {
@@ -194,7 +252,10 @@ export function RehearsalDialog({
         // moved buries the thing they actually need to read.
         const replanned = await onRehearse(true);
         setPlan(replanned);
-        setMoved(Object.keys(stale.details ?? {}));
+        // Recorded for EVERY refusal in the set, not only the one that happens
+        // to carry details. The banner is what tells the operator the plan
+        // under their cursor is not the one they approved.
+        setStalePlan({ code: stale.code, subjects: Object.keys(stale.details ?? {}) });
         setStep("review");
       } catch {
         toast.error("Couldn't re-plan against current state. Close and try again.");
@@ -251,17 +312,27 @@ export function RehearsalDialog({
         </div>
       ) : (
         <>
-          {moved.length > 0 && (
+          {stalePlan && (
             <div
-              role="status"
+              // alert, not status: this has to be read BEFORE the next click,
+              // and a polite live region is announced whenever the screen
+              // reader gets round to it.
+              role="alert"
               className="mx-6 mb-3 rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-[13.5px] text-warn-text"
             >
-              <p className="font-medium">This changed while you were reading it.</p>
+              <p className="font-medium">{staleHeadline(stalePlan.code)}</p>
               <p className="mt-1">
-                Nothing was applied. {moved.length === 1 ? "One row" : `${moved.length} rows`} moved
-                since you approved: {moved.join(", ")}. Below is the plan against current state —
+                {STALE_PLAN_CODES.get(stalePlan.code)} Below is the plan against current state —
                 review it again before applying.
               </p>
+              {stalePlan.subjects.length > 0 && (
+                <p className="mt-1">
+                  {stalePlan.subjects.length === 1
+                    ? "This row moved"
+                    : `${stalePlan.subjects.length} rows moved`}{" "}
+                  since you approved: {movedLabels(stalePlan.subjects, plan).join(", ")}.
+                </p>
+              )}
             </div>
           )}
           <PlanReview plan={plan} />
@@ -287,7 +358,9 @@ export function RehearsalDialog({
             >
               Rehearse
             </Button>
-            <Button onClick={onClose}>Cancel</Button>
+            <Button disabled={busy} onClick={onClose}>
+              Cancel
+            </Button>
           </>
         )}
 
@@ -300,7 +373,7 @@ export function RehearsalDialog({
             >
               Yes, plan for {scope?.affected} {noun[1]}
             </Button>
-            <Button onClick={compose ? () => setStep("compose") : onClose}>
+            <Button disabled={busy} onClick={compose ? () => setStep("compose") : onClose}>
               {compose ? "Back" : "Cancel"}
             </Button>
           </>
@@ -316,10 +389,19 @@ export function RehearsalDialog({
             >
               {plan ? applyLabel(plan, noun) : "Rehearsing…"}
             </Button>
+            {/*
+              Disabled while a write is out. Abandoning the dialog mid-apply
+              does not abandon the write — it only takes away the report of
+              what it did, which is the one thing the operator still needs.
+            */}
             {compose ? (
-              <Button onClick={() => setStep("compose")}>Back</Button>
+              <Button disabled={busy} onClick={() => setStep("compose")}>
+                Back
+              </Button>
             ) : (
-              <Button onClick={onClose}>Cancel</Button>
+              <Button disabled={busy} onClick={onClose}>
+                Cancel
+              </Button>
             )}
           </>
         )}

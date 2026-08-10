@@ -103,6 +103,9 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
   const grantsByRole = new Map(
     (grants.data ?? []).map((grant) => [`${grant.project_id}::${grant.role_key}`, grant]),
   );
+  // Only the ones applying now. A lifted or lapsed suspension belongs to the
+  // history the allowance surface keeps, not to what this person can reach.
+  const inForce = (access.data.allowances ?? []).filter((a) => a.in_force);
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -240,6 +243,39 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                 — {multiSource.explanation}. Removing one would not remove this role.
               </p>
             </div>
+          )}
+
+          {/*
+            The suppression band, above the roles rather than below them.
+            A role-holder list reads as full access, and a subtractive allowance
+            is precisely the case where it is not: the person holds the role and
+            the entitlement it maps to is being withheld, by somebody, for a
+            reason, until a date. §6's whole promise is that "why does this
+            person have access to X" has one answer — this is the half of the
+            answer that says they do not.
+          */}
+          {inForce.length > 0 && (
+            <Card>
+              <div className="flex flex-wrap items-center gap-3 px-5 py-4">
+                <span className="type-card-title">Withheld</span>
+                <span className="text-[13.5px] text-faint">
+                  {inForce.length} {inForce.length === 1 ? "suspension" : "suspensions"} in force
+                </span>
+              </div>
+              <ul className="flex flex-col gap-3 px-5 pb-4">
+                {inForce.map((a) => (
+                  <li key={a.id} className="text-[14.5px] leading-[1.55] text-ink/[.78]">
+                    <strong className="font-semibold text-ink">
+                      {a.field} · {a.value}
+                    </strong>{" "}
+                    on {a.target} — withheld by {a.actor_id}
+                    {a.reason ? `, because ${a.reason}` : ""}. They may still hold a role that maps
+                    to it; this is why they cannot use it.
+                    {a.review_due && " This is past its review date."}
+                  </li>
+                ))}
+              </ul>
+            </Card>
           )}
 
           {access.data.projects.map((project) => (

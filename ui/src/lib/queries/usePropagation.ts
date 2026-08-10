@@ -36,6 +36,13 @@ export interface DrainResult {
    * value means "state write failed; resume again to retry", even on HTTP 200.
    */
   errored: number;
+  /**
+   * Rows this pass made terminal because their retry budget ran out. A subset
+   * of `failed`, reported apart from it because what an operator does next
+   * differs: an ordinary failure names what the target said, and this one says
+   * nobody will try again.
+   */
+  exhausted?: number;
   halted: boolean;
   reason?: string;
 }

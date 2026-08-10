@@ -29,6 +29,7 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
   const failed = result?.failed ?? 0;
   const requeued = result?.requeued ?? 0;
   const errored = result?.errored ?? 0;
+  const exhausted = result?.exhausted ?? 0;
 
   const parts: string[] = [];
   if (applied) parts.push(`${applied} applied`);
@@ -67,6 +68,17 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
 
   if (!counts) {
     return { tone: "info", message: "Nothing was waiting." };
+  }
+
+  // Out of retries is terminal and nobody will try again, so it outranks the
+  // "resume again" advice below — resuming does nothing for these rows.
+  if (exhausted) {
+    return {
+      tone: "error",
+      message: `${counts}. ${exhausted === 1 ? "One write is" : `${exhausted} writes are`} out of retries.`,
+      detail:
+        "Those rows were given up on and the rest of the queue kept moving. They need a new request — resuming will not pick them up.",
+    };
   }
 
   // Neither of these is terminal, and both are invisible unless said out loud.
