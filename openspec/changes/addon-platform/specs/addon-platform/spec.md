@@ -554,3 +554,91 @@ An add-on MUST act on destructive transitions only from an explicit instruction.
 - **WHEN** a subject the add-on manages is absent from the backend's expected set with no explicit removal instruction
 - **THEN** the add-on MUST report the discrepancy as drift
 - **AND** MUST NOT delete, lock, or otherwise mutate that subject
+
+### Requirement: A request signature MUST cover the request line as well as the body
+
+Both ends MUST compute the request MAC over `<unix>.<method>.<path>.<body>`.
+
+The operation name lives in the URL and in nothing else. A signature computed
+over the timestamp and the body alone is, for an empty-bodied read, a function
+of the timestamp — valid for any zero-body request inside the tolerance window,
+whichever path it is replayed at. Both ends MUST compute the MAC over
+`<unix>.<method>.<path>.<body>`.
+
+#### Scenario: A signature does not travel between endpoints
+
+- **WHEN** a signature computed for `GET /capabilities` is replayed on a mutating path
+- **THEN** the add-on MUST refuse the request as unauthenticated
+
+### Requirement: Breaker state MUST NOT be cleared by add-on-controlled output
+
+A lifecycle refusal MUST NOT count as a breaker failure and MUST NOT clear an
+accumulated failure count. Only an answer proving the add-on read the request
+and decided — a 2xx or a 4xx — MUST clear it.
+
+A lifecycle refusal is a 503 with a `Retry-After` header — entirely within the
+add-on's gift. It MUST NOT count as a failure, because a maintenance window must
+not take a target offline for everybody, and it MUST NOT clear an accumulated
+failure count either: an add-on alternating 5xx with 503 would otherwise hold
+the breaker shut for ever. Only an answer that proves the add-on read the
+request and decided — a 2xx or a 4xx — clears the count.
+
+#### Scenario: A maintenance window pauses the count rather than forgiving it
+
+- **WHEN** an add-on alternates 5xx failures with lifecycle refusals
+- **THEN** the failure count MUST continue to accumulate across the refusals
+- **AND** the breaker MUST open at its threshold
+
+### Requirement: A row whose retry budget is spent MUST become terminal
+
+A row whose retry budget is spent MUST be made terminal with a reason, the pass
+MUST continue past it, and the count MUST be reported apart from ordinary
+failures.
+
+A drain that halts on a spent row without terminating it is a poison pill: the
+row returns to pending, the claim orders it first, and every later pass
+re-claims it and halts in the same place — so every row queued behind it never
+drains. In the background revocation runner that is retained access nobody is
+told about. The row MUST be made terminal with a reason, the pass MUST continue,
+and the count MUST be reported apart from ordinary failures, because resuming
+does not pick those rows up.
+
+#### Scenario: One spent row does not stop the queue
+
+- **WHEN** a drain claims a row whose attempts have reached the retry budget
+- **THEN** the row MUST be marked failed with a reason naming the exhaustion
+- **AND** the pass MUST attempt the rows behind it
+
+### Requirement: A manifest MUST NOT influence its own ceiling through repetition
+
+A manifest declaring one operation id more than once MUST resolve to the more
+restrictive of its own declarations, independently of their order.
+
+The effective operation set is the more restrictive of policy and the manifest
+on every dimension. A manifest declaring one operation id twice MUST resolve to
+the more restrictive of its own two declarations, so the least-trusted component
+in the system cannot choose which of its declarations the backend honours by
+relying on iteration or sort order.
+
+#### Scenario: A duplicated id resolves most-restrictively
+
+- **WHEN** a manifest declares one operation id as unavailable and again as available
+- **THEN** the effective operation MUST be unavailable
+- **AND** the result MUST NOT depend on the order the declarations appear in
+
+### Requirement: The deployment MUST enforce the add-on's isolation, not merely describe it
+
+The add-on MUST be reachable only by the backend, MUST NOT be able to reach the
+datastores, and MUST have no published host port.
+
+An add-on holds a target credential and runs in its own container so that one
+memory disclosure does not expose identity, storage and physical access
+together. That argument only holds if the network topology enforces it: the
+add-on MUST be reachable only by the backend, MUST NOT be able to reach the
+datastores, and MUST have no published host port.
+
+#### Scenario: The add-on cannot reach the database
+
+- **WHEN** the deployment is brought up
+- **THEN** the add-on container MUST NOT share a network with Postgres or Redis
+- **AND** MUST NOT be reachable from outside the deployment

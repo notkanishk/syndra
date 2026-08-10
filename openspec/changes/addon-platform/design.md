@@ -369,6 +369,98 @@ cd ui && bun run test && bun run lint && bun run build
 test ! -d sync   # the bridge plane is gone, not merely unwired
 ```
 
+## What the branch audit changed
+
+Recorded here because several of these contradict what earlier sections of this
+document describe, and a design that disagrees with its code is worse than one
+that is merely incomplete. Task detail is in `tasks.md` §13/§14; what follows is
+the reasoning that moved.
+
+**§10's session was right and its reading was not.** `truenas_api.Client.Call`
+returns the WHOLE JSON-RPC message and reports `err == nil` for a message
+carrying an `error` member. The add-on decoded that return straight into the
+caller's type, which meant `system.version` never parsed, the version gate that
+failure left empty refused every mutation permanently, and `core.get_methods`
+was never reached — so the manifest advertised operations the gate then refused.
+That half was visible. The half that was not: every mutation passes `out == nil`,
+so a refusal was noticed only where a result was wanted — fix the decode alone
+and every refused write becomes a reported success, on the outbox and in the
+mutation log both. They are one change for that reason.
+
+The general lesson is not "write more tests". Five hundred lines of add-on tests
+passed, because the fake and the code agreed with each other about a shape the
+target never sends. One contract test against a recorded real response is worth
+more than all of them, and it is now the first thing `nas_test.go` does.
+
+**The fixture is part of the contract.** This happened twice on one branch, and
+the second time is what makes it a rule rather than an anecdote. The envelope
+bug was a fake agreeing with the code about a frame the target never sends; the
+account-lookup bug was a fake agreeing with the code about a filter the target
+*does* apply — `user.query` was answered with the whole fixture whatever was
+asked, so a lookup by uid and a lookup by name were indistinguishable and the
+test for the difference passed either way. Neither was a missing test. Both were
+a fixture nobody had checked against reality, and in both cases the passing
+suite was the thing that made the bug invisible.
+
+It belongs beside §16's note about separately deployed binaries, because it is
+the same hazard from the other end: §16 says two binaries that ship together
+will drift unless something crosses the boundary and checks, and this says the
+thing standing in for the far side in a test is exactly as capable of drifting.
+Three practices follow, and all three are cheap:
+
+- a fake answers from RECORDED traffic where the shape is the thing under test;
+- a fake refuses loudly what it has not implemented, rather than defaulting to
+  the permissive answer — `filterRows` panics on a query operator it does not
+  understand, because ignoring one means matching everything;
+- a guard is not real until it has been watched to fail. Reverting `recordID` to
+  name-first and confirming the rename test dies is a thirty-second experiment,
+  and it is the only thing separating a test that constrains behaviour from one
+  that merely runs.
+
+**Version probing is per connection, not per process.** §10 said the version is
+read once per successful connect; `main` read it once at startup. An add-on that
+came up before its NAS — the ordinary case on a host reboot — refused every
+mutation until somebody restarted the container.
+
+**§16's signature covers the request line.** It covered the timestamp and the
+body, and the operation name is in the path. `GET /capabilities` has an empty
+body, so its MAC was a function of the timestamp alone and verified for any
+zero-body request inside the window. The call-id dedup happened to block the
+sequential version of that — a mitigation standing where a check should be.
+
+**§7's halt was a poison pill in the background runner.** §7 anticipated this in
+so many words and the code did the thing it warned about: a spent retry budget
+halted the pass without terminating the row, so the row returned to pending, the
+claim ordered it first, and every later tick re-claimed it and halted in the same
+place. Everything behind it never drained. The rule now is that a spent row is
+terminal with a reason and the pass continues; §2.51's escalation becomes a
+surface that reports a finding rather than one that rescues a stuck queue.
+
+**§2's isolation was a comment.** `docker-compose.yml` declared no networks at
+all, so every service shared the default bridge: the add-on could open a socket
+to Postgres, and "reachable only by the backend" was a sentence rather than a
+constraint. Three networks now — edge, an internal data segment, and an add-on
+segment that has egress but no route to the datastores.
+
+**A lifecycle refusal pauses the breaker rather than forgiving it.** §18's
+refusal is derived entirely from add-on-controlled output (503 plus
+`Retry-After`), and clearing the failure count on one let a broken add-on hold
+its own breaker shut indefinitely by alternating.
+
+**§13's ceiling did not survive a repeated id.** The most-restrictive rule was
+correct on every dimension it compared and never ran across two declarations of
+the same operation, so a manifest could choose which of its own declarations the
+backend honoured by relying on sort order. The rule now applies to duplicates
+too, which is the one place §13's argument actually needed it.
+
+**§6's allowance layer accepted terms it could not act on.** `resolveLifecycle`
+honours a lifecycle denial only when the value is exactly `"true"`, and nothing
+validated the field or the value — so `enabled=false`, which is how most people
+would write "disable this account", was recorded, rendered in the lineage band as
+in force with an actor and a reason, and suppressed nothing. §6 exists so that
+"why does this person have access to X" has one answer; this was the failure
+where it had a confident wrong one.
+
 ## Open Questions
 
 - **Default quota by role.** Phase 2. Natural shape is a per-role default with a per-user allowance override, matching the two-layer model, but not yet decided.

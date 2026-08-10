@@ -143,9 +143,22 @@ Everything else is healthy: index tracks HEAD, embeddings are local-semantic (`X
 
 ## 4a. Add-on platform — what is built and what is not
 
-The change `addon-platform` is 138 of 226 tasks done, with 10 more partial. The
-backend's IAM half, the TrueNAS add-on, and the dispatcher joining them are all
-built and green. What is missing is mostly surfaces.
+The change `addon-platform` is 140 of 226 tasks done, with 11 more partial —
+plus §13/§14's 64 post-review fixes, all applied, and §15's 6 gaps stated
+rather than implied. The backend's IAM half, the TrueNAS add-on, and the
+dispatcher joining them are all built and green. What is missing is mostly
+surfaces.
+
+**Read §13 first if you are picking this up.** A branch audit found that the
+TrueNAS add-on had never spoken to a real NAS and would have done nothing
+against one: `truenas_api.Client.Call` returns the whole JSON-RPC message and
+the add-on decoded it as the result, so every version read failed, the version
+gate that failure left empty refused every mutation, and — the half that would
+have bitten later — every refused mutation would have been reported as applied
+the moment the first bug was fixed alone. Both are fixed together, with a
+contract test against recorded middleware responses. The lesson worth keeping:
+574 lines of tests passed against a shape TrueNAS never sends, because the fake
+and the code agreed with each other.
 
 **Done and committed.** The target dimension and its schema (§1.1–1.17), drain
 ordering with revocation priority and stale-version rejection (§1.20–1.27), the
@@ -169,8 +182,12 @@ and a CRUD surface (§7.1–7.5, 7.7, 7.8), allowances end to end (§8.1–8.10,
    becomes optional for cascade-sourced rows.
 2. **Operator and member surfaces (§9, §10 — 37 tasks).** Including the
    unconfirmed-revocation surface, which is what §2.51's retry-budget escalation
-   has nowhere to escalate to, and the allowance authoring and carve-out
-   rendering §8.11–8.12's lineage band needs.
+   has nowhere to escalate to — note that 13.15 changed what that escalation is
+   for: a spent row is now terminal with a reason rather than a silent stop, so
+   the surface reports a finding rather than rescuing a stuck queue. Also the
+   allowance authoring §8.11–8.12's lineage band needs; the *carve-out
+   rendering* half landed early as 14.30, because without it a role-holder list
+   read as full access while an allowance withheld the entitlement.
 3. **Provisional plans (§2.23–2.31).** The schema is in (`plans.provisional`,
    `state_read_at`, and the CHECK binding them); the code that issues and
    resolves one is not.

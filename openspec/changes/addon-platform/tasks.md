@@ -80,7 +80,7 @@
 - [~] 2.48 Tests: a real panic through the real guard with a sentinel credential in the body, asserting it reaches neither the response nor the log while the path and the panic still do; a guard that `NewRouter` returns the wrapped mux, since one handler wrapped and the next not is what fails on the route added in a hurry; and a source guard that no handler logs a request body, with string literals stripped first so a message mentioning "payload" is not mistaken for an argument carrying one — a guard that fires on prose gets weakened until it fires on nothing
 - [x] 2.49 Rate-limit member-scoped operations per subject, refused after validation and before the record — a limit enforced after the call is not a limit on the target, it is a limit on the reporting, and a malformed request must not spend a member's budget for a call that never left. The counter is the `addon_operations` table itself rather than a new store: those rows already are the durable evidence that a secret-bearing call may have happened, so the thing bounded and the thing counted cannot drift apart, where a separate counter could be lost on a restart while the calls it bounded stayed on the record. Scoped to member operations because those are the ones a member can drive at will, and the path terminates in a single rate-limited session the add-on shares with everything else it does. It fails **closed**: letting a call through because the counter could not be read spends exactly the resource the limit protects. `ADDON_MEMBER_OP_LIMIT`, default 10 per hour — generous enough that an honest member never meets it
 - [x] 2.50 Tests: at the limit nothing is recorded and nothing is sent, and the count is scoped to this subject and this operation — a global counter would let one member's retries lock out everybody else's first attempt; below it the call goes; an unreadable counter refuses; an admin-scoped operation is not counted and is not even asked about
-- [ ] 2.51 Background revocation runner hardening: escalate retry-budget exhaustion onto the unconfirmed-revocation surface as a finding, back off on lock contention, pre-flight target reachability
+- [~] 2.51 Background revocation runner hardening. Back-off on lock contention and the reachability pre-flight shipped with 1.24 and are listed there; what remains is the ESCALATION, and 13.15 changed what it has to escalate — a spent row is now terminal with a reason rather than a silent stop, so the surface is reporting a finding rather than rescuing a stuck queue
 - [ ] 2.52 Tests: an exhausted revocation surfaces with its error rather than halting silently; lock contention backs off without spinning or starving; an unreachable target costs a probe, not a budget
 
 ## 3. Zitadel plan retrofit
@@ -260,20 +260,146 @@
 
 ## Sequencing
 
-226 tasks across 12 working groups. Two dependencies decide the order everything else falls into.
+226 tasks across 12 working groups, plus 75 post-review fixes (§13's 25, §14's
+39 and §16's 11) and 6 gaps §15 states rather than implies. Two dependencies decide the order
+everything else falls into.
 
 **1.5 (plan storage) gates the back half of §2 and all of §3.** Merging the plan and the snapshot onto one per-subject row means plan storage is schema, not handler state — so 2.17 through 2.26 (plan handler, apply gate, secret exclusion, provisional plans) and the entire Zitadel retrofit wait on it. §2's first sixteen tasks — manifest types, registry, client, redaction, enqueue, `addon_operations` — do not.
 
 **A first commit that stands alone is 1.1–1.7 plus their guards.** Schema only, no behaviour change, revertible: the registry, the outbox rename and reshape, snapshots, plan storage, the drift target dimension. Everything downstream assumes it, and nothing about it assumes anything downstream.
 
-**Group sizes**, for planning rather than for pride: §1 27, §2 52, §3 9, §4 17, §5 15, §6 24, §7 12, §8 14, §9 26, §10 11, §11 10, §12 7.
+**Group sizes**, for planning rather than for pride: §1 27, §2 52, §3 9, §4 17, §5 15, §6 24, §7 12, §8 14, §9 26, §10 11, §11 10, §12 7, §13 25, §14 39, §15 6, §16 11.
 
 **§11 goes last on purpose.** It deletes the LLDAP path, and the vault reduction inside it is the point of no return — once the hashes are dropped, every member re-enrols and returning to LLDAP means doing it again.
 
 ## 13. P1 fixes
 
-- [ ] 13.1 Reserved for post-review corrections
+Post-review corrections, from the branch audit. The order is the order they had
+to be done in: nothing about the add-on was verifiable until 13.1 landed.
+
+**The wire contract with TrueNAS.** The add-on had never spoken to a real NAS,
+and against one it did nothing.
+
+- [x] 13.1 `NAS.call` unwraps the JSON-RPC envelope. `truenas_api.Client.Call` returns the WHOLE message and reports `err == nil` for one carrying an `error` member, so the add-on decoded the envelope's keys as the result's: `system.version` failed to decode, the version gate that failure left empty refused every mutation permanently, and `core.get_methods` was never reached
+- [x] 13.2 An envelope `error` is a failure INDEPENDENTLY of whether a result was wanted. Every mutation passes `out == nil`, so a refusal noticed only when a result is wanted is a refusal never noticed — `user.update({password})` answering no was reported to the backend as applied, written to `mutations.log` as succeeded, and marked `applied` on the outbox
+- [x] 13.3 The target's own error text never leaves the client: a classification and a numeric code do. The parameters of the call it most often refuses are a member's password
+- [x] 13.4 Version and method list are re-probed on every fresh connection, not once from `main`. An add-on that started before its NAS refused every mutation until the container was restarted
+- [x] 13.5 Calls are serialised on the shared session. The client writes its request frame outside its own mutex and gorilla panics on a concurrent write, so two requests together took the process down
+- [x] 13.6 A contract test against recorded middleware responses (`nas_test.go`), and every fake in the package now answers in envelopes. 574 lines of tests had agreed with the bug rather than with the target
+- [x] 13.7 `user.update` / `user.delete` address the record id, not the unix uid — different numbers (root is id 1, uid 0), and the write landed on whichever account held the uid as its id
+- [x] 13.8 Group membership is read AND written as group record ids through one index, so the two directions cannot disagree; an unresolvable group name is refused rather than dropped
+- [x] 13.9 `user.create` answers with the record key, so the created account is read back for its real uid and fingerprint rather than having one invented for it
+
+**Silent wrong state.**
+
+- [x] 13.10 The dispatcher refuses a nil desired state before dispatch. `Desired()` returns nil for an unreadable snapshot precisely so this decision could be made, and nothing read it: nil is zero managed fields, which the add-on answers `no_change` and the drain recorded as converged
+- [x] 13.11 A transient `readIntent` failure no longer fails an approved row terminally — `failed` has no way back
+- [x] 13.12 A missing fingerprint is refused at both ends. An absent one verified vacuously, so §8's guarantee held only for callers who chose to be bound by it
+- [x] 13.13 Allowance field and value are validated against the target's schema. `{"field":"enabled","value":"false"}` returned 201, showed in the band as in force with actor and reason, and suppressed nothing — `resolveLifecycle` honours only `"true"`
+- [x] 13.14 An allowance on an unregistered target is refused before the foreign key
+
+**Retained access.**
+
+- [x] 13.15 A spent retry budget makes the row TERMINAL and the pass continues. Halting without terminating was a poison pill: the row returns to pending, the claim orders it first, and every later pass re-claimed it and halted in the same place — so every revocation queued behind it never drained, silently
+- [x] 13.16 `liveUserGrantRoles` failures are classified like every other Zitadel error rather than assumed transient. A user deleted upstream answers 404 for ever
+- [x] 13.17 `DrainResult.Exhausted` and the operator copy that says resuming will not pick those rows up
+- [x] 13.18 A TLS handshake failure is `unreached`, not `indeterminate`. Certificate expiry is a certainty this branch builds surfacing for, and the one outcome that is never retried and never counted turned the whole queue into rows nobody could resolve
+
+**The ceiling and the gate.**
+
+- [x] 13.19 Duplicate manifest operation ids fold most-restrictively. Declared twice — once withheld, once offered — the winner was whichever row a non-stable sort put first, which is the least-trusted component choosing which of its own declarations the backend honours
+- [x] 13.20 The apply gate queues only subjects the rehearsal said would change. `blocked` and `no_change` are recorded on purpose and were dispatched anyway
+- [x] 13.21 `planapply` carries the request fingerprint into the citation. `ClaimPlanTx` predicates on it, so the gate could only ever claim plans stored with an empty one
+
+**Deployment.**
+
+- [x] 13.22 `docker-compose.yml` defines three networks. Every service shared the default bridge, so §2's claim that the add-on is reachable only by the backend was a comment, and the add-on could open a socket to Postgres
+- [x] 13.23 `TLS_CLIENT_CA_FILE` has no default, so signed mode is reachable — a default made both modes non-empty and the add-on refused to start
+- [x] 13.24 Both ends hold the signing key as a PATH. One HMACed the file's contents and the other the literal path string; the only symptom was "no matching signature"
+- [x] 13.25 Every add-on container variable is documented in `.env.example`, and secrets are read from `*_FILE` where one is given
 
 ## 14. P2 fixes
 
-- [ ] 14.1 Reserved for post-review corrections
+**Transport and replay.**
+
+- [x] 14.1 The request signature covers `<unix>.<method>.<path>.<body>` on both ends. The operation name is in the URL and nothing else carried it, so an empty-bodied `GET /capabilities` had a MAC that was a function of the timestamp alone
+- [x] 14.2 A lifecycle refusal no longer CLEARS the breaker's failure count. It is derived from add-on-controlled output, so a broken add-on alternating 5xx with 503+`Retry-After` kept the breaker shut for ever
+- [x] 14.3 `CallRequest.PlanID` is populated and travels inside the signed body, as task 2.5 always claimed
+- [x] 14.4 `CallRequest` and `addonop.Request` redact in `MarshalJSON` as well as `String`/`GoString`
+- [x] 14.5 `redactValue` fails closed on a shape it cannot walk — it handled `map[string]any` and `[]any` and let a `map[string]string` or a struct through
+- [x] 14.6 `requireHTTPS` refuses credentials in the URL, a query string, and a fragment
+
+**Add-on state and forensics.**
+
+- [x] 14.7 Chain recovery walks the rotated segments, so a restart between a rotation and the first record after it no longer resets the sequence to 0 — the exact tail-truncation signature the anchor exists to detect
+- [x] 14.8 `VerifyChain` adopts a segment's opening sequence; `VerifyLog` walks the joins between segments
+- [x] 14.9 The idempotency namespace carries a type tag, so a call id replayed at another endpoint is a refusal rather than an all-zero success
+- [x] 14.10 `account.purge` deletes the binding. The next apply otherwise took the bound-but-absent path and re-created the account under the recorded name
+- [x] 14.11 The mutation log records the real actor, carried from the backend. It recorded the subject twice
+- [x] 14.12 Strict JSON decoding on all three inbound endpoints
+- [x] 14.13 Read, write and idle timeouts on the add-on's HTTP server; the body size was bounded and the time it took to arrive was not
+- [x] 14.14 Read-only operations are not cached in the idempotency store
+- [x] 14.15 mTLS requires client-authentication EKU, so the add-on's own server certificate — issued by the same private CA and mounted in the same container — is not a client credential
+
+**Backend logic.**
+
+- [x] 14.16 `DrainAddon` takes a reachability pre-flight, like its three siblings
+- [x] 14.17 A stale-fingerprint refusal is its own code end to end, so the surface can tell "re-plan" from "fix it and retry"
+- [x] 14.18 `recordReconciled` runs only when every finding this pass reached was written down; otherwise the target is `findings_unrecorded`
+- [x] 14.19 `MappingHolders` has the rule-derived arm its own comment promised, and an expiry filter on the direct arm
+- [x] 14.20 `PublishMappingVersion` and `RollbackMappingVersion` take a per-target advisory lock before reading `MAX(version)`
+- [x] 14.21 Migration 000031: published mapping versions and their entries are immutable against DELETE as well as UPDATE
+- [x] 14.22 The two bulk drift resolutions cap their cohorts at `BulkMaxUsers`, like every other bulk surface
+- [x] 14.23 The member operation rate limit is scoped per target, so one add-on's retries do not consume another's budget
+- [x] 14.24 `handlePublishMappingVersion` refuses an unregistered target before the foreign key
+
+**Surfaces.**
+
+- [x] 14.25 Every plan-refusal code shows a banner naming what happened; five of six carried no details and swapped the approved plan for a fresh one with nothing on screen but a toast
+- [x] 14.26 `PLAN_NOT_CITABLE_HERE` added to the stale-plan set
+- [x] 14.27 The banner is `role="alert"` and names subjects rather than printing raw uuids
+- [x] 14.28 Cancel and Back are disabled during an apply, and the focus trap installs once per open rather than re-running on `busy` and landing focus on Cancel
+- [x] 14.29 The queued copy says what happens next without naming the drain rule (§7)
+- [x] 14.30 `PersonAccess` renders allowances in force. A role-holder list read as full access while a subtractive allowance withheld the entitlement — the trap §6 exists to close
+
+**Lower.**
+
+- [x] 14.31 Dead `execPropagation` deleted — no callers, a raw query string, no `status='in_flight'` guard, under a comment claiming every finalizer is guarded
+- [x] 14.32 `lifecycle.AcceptsMutations` deleted: test-only, and the check-then-act shape `Begin` exists to prevent
+- [x] 14.33 `trimTrailingSpace` replaced by `bytes.TrimRight`
+- [x] 14.34 The mutation log reopens its file if `os.Rename` fails, rather than leaving every later append writing to a closed descriptor
+- [x] 14.35 The add-on's `main` is a `run() error`, so a startup failure runs the deferred closes that `log.Fatalf` skipped
+- [x] 14.36 `SweepIdempotency` is scheduled, so the stated retention is applied rather than described
+- [x] 14.37 `.dockerignore`, so `COPY . .` stops pulling a locally built 9.5 MB binary into the build context
+- [x] 14.38 One actor fallback across every surface; two of them recorded `operator` where the rest recorded `system`
+- [x] 14.39 The `policy ∩ manifest` doc comments corrected — the code implements the more protective reading, and the inverted phrasing is what a future edit would "fix" toward
+
+## 15. Still open after the audit
+
+Named here rather than left implied. Each is a real gap with a reason it is not
+closed in this group.
+
+- [ ] 15.1 `addonsResolvesValue` accepts every value (`handlers/deps.go`), while `access-governance/spec.md:200` states value validation as a MUST and 7.3/7.4 are ticked. It needs a per-target value probe on the add-on's `/capabilities`, which is a contract change
+- [ ] 15.2 `planapply` and `addonop` still have no production caller. NEXT.md item 1 holds the reason: the lifecycle trigger needs a decision about implicit plans for cascade-sourced rows. Both are heavily tested and neither has executed on a live request path
+- [ ] 15.3 `expiry.reconvergeSubject` resolves and enqueues nothing, for the same reason as 15.2 — a system-initiated re-convergence has no plan subject to cite. **Nothing else tells the target either:** the drift sweep is `const target = db.TargetZitadel` and add-on drift (1.18, and 1.22's reconcile half) is unbuilt, so for the only target class this change adds there is no second path. A lapsed suspension ends in Syndra and the account stays as it was until an operator drives a change. `SweepAllowances`' doc says exactly that now, after two weaker versions of the sentence that were both wrong
+- [ ] 15.4 Retry-budget escalation (2.51). A spent row is terminal with a reason an operator can see; there is no surface that raises it
+- [ ] 15.5 Nothing prunes `plans` / `plan_subjects`. The outbox has `PruneTerminalPropagations`; plans accumulate
+- [ ] 15.6 `lifecycle.go` says all three states need no redeploy, and the only setter is `LIFECYCLE_STATE` at startup — so an add-on cannot be put into `draining` before the API-key rotation §18 names it for
+
+## 16. Second-pass fixes
+
+From the verification read of §13/§14. Two were real defects the first pass
+introduced or left; the rest are places where a document said something the code
+did not do, which in this repo is its own class of bug.
+
+- [x] 16.1 `recordID` resolves a bound account by UID first, name second. 6.9 built the apply path to follow a stable uid whose username moved out of band; the one-shot operations resolved by NAME, so a rename made `password.set`, `password.rotate` and `account.purge` fail with "the target has no account named X" until an apply happened to re-sync the binding. One rule for both paths now, and it is the uid — with the name as the fallback for a binding recorded before uids were, and uid 0 never matched because uid 0 is root
+- [x] 16.2 `ensureProbed` takes a cooldown. A failed probe cleared its own flag with no timestamp beside it, so every later call re-ran `system.version` first — double the traffic, for as long as the condition lasted, on the ONE rate-limited session the whole session design exists to protect. The dial path already had `lastTry`; the probe path has the same now, and a fresh connection still probes immediately
+- [x] 16.3 `SweepAllowances` says plainly that NOTHING tells the target today. The drift sweep is `const target = db.TargetZitadel` and add-on drift is unbuilt, so naming it as the fallback was the second wrong version of that sentence — a doc that is confidently wrong about what restores somebody's access is worse than one that says nothing
+- [x] 16.4 §15.3 corrected the same way
+- [x] 16.5 The stale-plan banner headline is per code. "Nothing was applied" is read before the sentence under it, and for `PLAN_ALREADY_APPLIED` the earlier apply DID land
+- [x] 16.6 `PLAN_NOT_YOURS` joins the re-planning set. A re-plan is issued to the current operator, so it resolves that refusal rather than only reporting it
+- [x] 16.7 `writeAllowanceError`'s default arm stops returning raw driver text — a constraint name, a column list, or a fragment of the statement is a description of the schema handed to whoever asked. Logged, not returned
+- [x] 16.8 The never-echo-a-value rule is stated as scoped to secret-bearing parameters, at the one place that deliberately echoes: an allowance value is a lifecycle state or a group name chosen from a schema, and showing an operator what they typed is most of what makes the refusal actionable
+- [x] 16.9 `lookupOne` distinguishes absence from ambiguity, and `recordID` falls through to the name only on absence. One sentinel for both meant an ambiguous uid did not refuse — it quietly resolved by username instead, on the path whose next call sets a credential. The comment claimed the refusal; only the inner function performed it
+- [x] 16.10 The test fake applies a `user.query`'s filters instead of answering every query with the whole fixture, and PANICS on an operator it does not implement rather than ignoring it — an ignored filter is an answer of "everything", which is the hole itself, narrowed to the operators nobody uses yet. Without the filtering `lookupOne` was untested by construction and the rename test passed for the wrong reason; verified by reverting `recordID` to name-first and watching the test die, which it did not do before this. The rule this makes explicit — **the fixture is part of the contract** — is recorded in `design.md` beside §16's note on separately deployed binaries, because it happened twice on this branch in two different shapes
+- [x] 16.11 Container hardening on the add-on: `read_only` with a tmpfs, `cap_drop: ALL`, `no-new-privileges`, memory and pid limits, and a liveness check that says in its comment that it is a liveness check — every route is behind the authenticator, and the certificate this container holds is a server certificate the add-on now refuses as a client credential

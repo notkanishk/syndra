@@ -195,6 +195,48 @@ Revocations MUST be dispatched ahead of grants for the same target, and MUST be 
 - **THEN** the sweep MUST reconcile it against the outstanding revocation
 - **AND** MUST NOT raise it as new untraced drift
 
+### Requirement: An allowance MUST name a term its target can act on
+
+The backend MUST validate an allowance's field against the target's declared
+entitlement schema, and MUST validate the value of a lifecycle denial against
+the one spelling the resolver honours. An allowance naming an unregistered
+target MUST be refused before the foreign key.
+
+An allowance the resolver ignores is worse than one that was rejected, because
+the operator has evidence they suspended somebody: it is recorded, rendered in
+the lineage band as in force with an actor and a reason, and it suppresses
+nothing. The backend MUST validate an allowance's field against the target's
+declared entitlement schema, and MUST validate the value of a lifecycle denial
+against the one spelling the resolver honours. An allowance naming an
+unregistered target MUST be refused before the foreign key.
+
+#### Scenario: A lifecycle denial written the wrong way round is refused
+
+- **WHEN** an operator records a denial of `enabled` with the value `false`
+- **THEN** the backend MUST refuse it and name the spelling that would work
+- **AND** MUST NOT store a row that suppresses nothing
+
+#### Scenario: A field the target does not declare is refused
+
+- **WHEN** an operator records an allowance on a field absent from the target's schema
+- **THEN** the backend MUST refuse it and name the fields the target does declare
+
+### Requirement: An access view MUST show what is being withheld
+
+An access view MUST render the allowances in force on the subject alongside the
+roles they hold.
+
+A role-holder list reads as full access. A subtractive allowance is exactly the
+case where it is not — the subject holds the role and the entitlement it maps to
+is withheld — so a surface that renders holders without rendering allowances in
+force answers "why does this person have access to X" with a wrong answer.
+
+#### Scenario: A suspension in force is visible on the person
+
+- **WHEN** a subject holds a role whose entitlement an allowance is withholding
+- **THEN** their access view MUST say what is withheld, by whom, and why
+- **AND** MUST say that holding the role is not holding the access
+
 ### Requirement: Role-to-target mappings MUST be versioned, validated, and the sole source of role-derived entitlements
 
 A mapping binds a role on a project to a value for a field the target's entitlement schema declares. Mappings MUST be versioned with the same change history, rollback, and audit as bundle definitions, because editing one silently changes what every holder of that role can reach. The resolver MUST derive the role half of a subject's entitlement set from these mappings and from nothing else. A mapping write MUST be validated for structure by the backend and for reference by the add-on, and MUST be rejected if the add-on cannot confirm the value resolves on its target.
@@ -204,6 +246,12 @@ A mapping binds a role on a project to a value for a field the target's entitlem
 - **WHEN** an operator changes a role-to-target mapping
 - **THEN** the change MUST be recorded as a new version with its actor and time
 - **AND** the previous version MUST remain available to roll back to
+
+> **Status (§15.1):** the structural half is enforced — the field must be one
+> the manifest declares, and must not be a lifecycle field. The REFERENCE half
+> is not: `addonsResolvesValue` accepts every value, so a mapping to a group the
+> target does not have is accepted and fails at the first apply. Closing it
+> needs a per-target value probe on `/capabilities`, which is a contract change.
 
 #### Scenario: A mapping naming an unresolvable value is rejected
 
