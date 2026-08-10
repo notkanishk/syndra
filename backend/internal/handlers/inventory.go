@@ -129,3 +129,33 @@ func writeAdoptionError(w http.ResponseWriter, err error) {
 		jsonErrorResponse(w, http.StatusBadGateway, "ADOPTION_FAILED", err.Error())
 	}
 }
+
+type lifecycleRequest struct {
+	State  string `json:"state"`
+	Reason string `json:"reason"`
+}
+
+// handleSetTargetLifecycle stops or resumes an add-on's writing, without a
+// redeploy (design §18).
+//
+// Operator-gated and nothing more: it changes no access, and the states it sets
+// are all more restrictive than serving — the worst outcome of a mistake here is
+// that changes queue, which is the state the whole system is built to survive.
+func handleSetTargetLifecycle(w http.ResponseWriter, r *http.Request) {
+	var req lifecycleRequest
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
+	}
+	if strings.TrimSpace(req.Reason) == "" {
+		jsonValidationErrorResponse(w, "A state change needs a reason",
+			map[string]string{"reason": "an operator reading the health surface has only this to go on"})
+		return
+	}
+	out, err := addonsSetLifecycle(r.Context(), r.PathValue("target"), req.State, req.Reason)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusBadGateway, "LIFECYCLE_NOT_SET", err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, out)
+}

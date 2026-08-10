@@ -95,6 +95,7 @@ var (
 	}
 
 	pruneTerminal = db.PruneTerminalPropagations
+	prunePlans    = db.PruneSpentPlans
 
 	// The add-on dispatcher's two seams. Separate from the Zitadel ones because
 	// they are a different leg of the contract, and a test has to be able to

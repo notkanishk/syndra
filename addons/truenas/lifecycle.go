@@ -147,3 +147,62 @@ func writeLifecycleRefusal(w http.ResponseWriter, state string) {
 		"lifecycle": state,
 	})
 }
+
+// LifecycleRequest is an operator changing the state at runtime.
+//
+// A body rather than a query parameter, so the signed-mode MAC covers it: the
+// state is an authorisation decision — `read_only` is how an operator stops
+// this add-on writing during an incident — and a value an on-path peer could
+// edit is not one.
+type LifecycleRequest struct {
+	ContractVersion int    `json:"contract_version"`
+	State           string `json:"state"`
+	// Reason is what an operator will read on the health surface while
+	// wondering why nothing is applying. Required, because "read_only" with no
+	// explanation is indistinguishable from a bug.
+	Reason string `json:"reason"`
+}
+
+// handleLifecycle sets the state without a redeploy.
+//
+// §18 says all three states are configuration and none requires a restart — a
+// maintenance mode you have to restart into is a maintenance mode nobody uses —
+// and until this existed the only setter was an environment variable read at
+// startup, which is exactly the restart it says is not needed.
+func (s *server) handleLifecycle(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req LifecycleRequest
+	if err := decodeStrict(body, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
+		return
+	}
+	if !writeContractRefusal(w, req.ContractVersion) {
+		return
+	}
+	if strings.TrimSpace(req.Reason) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":  "REASON_REQUIRED",
+			"detail": "a state nobody explained is indistinguishable from a fault",
+		})
+		return
+	}
+	if err := s.life.Set(req.State, req.Reason); err != nil {
+		// The vocabulary, never the value. This is the one route whose input is
+		// echoed onto a surface an operator reads, and the closed set is the
+		// whole of what may appear there.
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+			"error":  "UNKNOWN_LIFECYCLE_STATE",
+			"detail": "state must be one of " + strings.Join([]string{LifecycleActive, LifecycleDraining, LifecycleReadOnly}, ", "),
+		})
+		return
+	}
+	state, reason := s.life.State()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"state":  state,
+		"reason": reason,
+		// What an operator waits on before pulling a credential out from under a
+		// call. Reported here so the state change and the answer to "is it safe
+		// yet" arrive together.
+		"in_flight": s.life.InFlight(),
+		"drained":   s.life.Drained(),
+	})
+}

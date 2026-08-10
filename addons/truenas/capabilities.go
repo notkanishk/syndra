@@ -1,5 +1,10 @@
 package main
 
+import (
+	"net/http"
+	"sort"
+)
+
 // The manifest: what this add-on can do, and against this target (design §5).
 //
 // It is a CEILING that the backend intersects with its own policy, never a
@@ -131,5 +136,60 @@ func manifest(product, productVersion string, probe capabilityProbe) Manifest {
 		ProductVersion:    productVersion,
 		EntitlementSchema: entitlementSchema(),
 		Operations:        operationSet(probe),
+	}
+}
+
+// ValuesResponse enumerates what a value on one entitlement field may be.
+//
+// It exists so the backend can check that `lab_makers` names something on this
+// target before a mapping binding a role to it is written. Syndra cannot answer
+// that — it does not know what the value means — and until this endpoint existed
+// the check accepted every value, so a typo bound a role to a group that has
+// never existed and the failure surfaced later as an apply nobody could explain.
+//
+// A read, not part of the manifest, and that placement matters: group membership
+// is runtime state on the target, and a manifest is cached. Enumerating it in
+// the manifest would mean a group created five minutes ago is refused until the
+// cache turns over.
+type ValuesResponse struct {
+	Field string `json:"field"`
+	// Values is what exists right now, sorted.
+	Values []string `json:"values"`
+	// Enumerable says this add-on can answer the question at all. A field whose
+	// values are unbounded — a path, a quota — reports false with an empty list,
+	// which the backend must read as "structure only", never as "no value is
+	// valid".
+	Enumerable bool `json:"enumerable"`
+}
+
+// handleValues answers what a field's values may be.
+func (s *server) handleValues(w http.ResponseWriter, r *http.Request, _ []byte) {
+	field := r.PathValue("field")
+	switch field {
+	case FieldGroup:
+		_, byName, err := s.groupIndex()
+		if err != nil {
+			// Unreadable, which is not the same as empty. 503 rather than an
+			// empty enumerable list: the backend fails open on a read it could
+			// not make, and an empty list would make it fail closed on every
+			// mapping while the target is down.
+			writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
+			return
+		}
+		names := make([]string, 0, len(byName))
+		for name := range byName {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: names, Enumerable: true})
+	case FieldEnabled, FieldSMBEnabled:
+		// Lifecycle fields are resolver-computed and not mapping-bindable, so
+		// there is no legitimate reason to ask. Answered rather than refused,
+		// because the honest answer is a closed set of two.
+		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: []string{"false", "true"}, Enumerable: true})
+	default:
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "UNKNOWN_FIELD", "detail": "this field is not in the entitlement schema",
+		})
 	}
 }

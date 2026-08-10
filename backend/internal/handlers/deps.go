@@ -327,13 +327,14 @@ var (
 
 	// addonsResolvesValue is the add-on's half of mapping validation: whether
 	// `lab_makers` names anything on its target. Syndra cannot answer it — it
-	// does not know what the value means.
+	// does not know what the value means — so the add-on is asked, through the
+	// `/values/{field}` read it now serves.
 	//
-	// ponytail: accepts every value until the add-on exposes the read (group 4
-	// ships `/capabilities` with an entitlement schema but no value oracle).
-	// Structure is enforced now; reference is enforced the day the add-on can
-	// answer, and this seam is where it lands.
-	addonsResolvesValue = func(context.Context, string, string, string) error { return nil }
+	// It fails open on everything except a definite "no". A target that could
+	// not be read is the absence of an answer, and refusing a mapping edit
+	// because a NAS was rebooting would make an outage look like a validation
+	// failure. Structure is Syndra's own and is enforced regardless.
+	addonsResolvesValue = addons.ResolvesValue
 
 	// Allowances (group 8).
 	dbCreateAllowance        = db.CreateAllowance
@@ -383,3 +384,6 @@ var (
 	dbListUnconfirmedRevocations  = db.ListUnconfirmedRevocations
 	dbCountUnconfirmedRevocations = db.CountUnconfirmedRevocations
 )
+
+// The add-on's runtime lifecycle setter (§18, 15.6).
+var addonsSetLifecycle = addons.SetLifecycle

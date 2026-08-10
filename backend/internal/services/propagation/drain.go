@@ -102,6 +102,17 @@ func Drain(ctx context.Context) (DrainResult, error) {
 	} else if n > 0 {
 		log.Printf("[PROPAGATION] pruned %d terminal outbox rows older than %dd", n, retentionDays)
 	}
+	// And the approvals behind them. Plans accumulate one per rehearsal — an
+	// operator may rehearse ten times and apply once — and until this existed
+	// nothing removed any of them. Same retention, same non-fatal handling, and
+	// deliberately after the outbox prune: a plan still cited by a queued row is
+	// refused by the foreign key, and pruning the rows first is what makes the
+	// spent ones prunable.
+	if n, err := prunePlans(ctx, retentionDays); err != nil {
+		log.Printf("[PROPAGATION] plan retention prune failed: %v (non-fatal)", err)
+	} else if n > 0 {
+		log.Printf("[PROPAGATION] pruned %d spent plans older than %dd", n, retentionDays)
+	}
 	return res, nil
 }
 

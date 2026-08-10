@@ -29,6 +29,7 @@ func stubDrainDeps(t *testing.T) {
 		swap(&grantIndexHasRole, func(context.Context, string, string, string) (bool, error) { return false, nil }),
 		swap(&liveUserGrantRoles, func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{}, nil }),
 		swap(&pruneTerminal, func(context.Context, int) (int64, error) { return 0, nil }),
+		swap(&prunePlans, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&awaitingDispatch, func(context.Context, string) ([]string, error) { return nil, nil }),
 		swap(&undispatchable, func(context.Context, string, string) (string, error) { return "", nil }),
 		swap(&markApplied, func(context.Context, string) error { return nil }),

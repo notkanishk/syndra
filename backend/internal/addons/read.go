@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -367,4 +368,111 @@ func Health(ctx context.Context, target string) TargetHealth {
 	}
 	out.Outcome, out.Status = OutcomeSucceeded, resp.Status
 	return out
+}
+
+// SetLifecycle moves an add-on between active, draining and read-only at
+// runtime (design §18).
+//
+// A mutation, and deliberately not an operation: operations act on a SUBJECT,
+// carry a durable record and a one-shot dispatch token, and are deduplicated on
+// a call id. This acts on the add-on itself, is idempotent by construction —
+// setting the same state twice is the same state — and has no subject to bind
+// to. Forcing it through the operation protocol would mean minting an
+// `addon_operations` row with no subject and a dedup token for a call that is
+// safe to repeat.
+func SetLifecycle(ctx context.Context, target, state, reason string) (map[string]any, error) {
+	a, err := Get(target)
+	if err != nil {
+		return nil, err
+	}
+	cred, err := credentialFor(a.Registration)
+	if err != nil {
+		return nil, fmt.Errorf("addon %s: %w", target, err)
+	}
+	body, err := json.Marshal(map[string]any{
+		"contract_version": ContractVersion, "state": state, "reason": reason,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("addon %s: encode lifecycle: %w", target, err)
+	}
+
+	resp := doAuthenticated(ctx, cred, http.MethodPost, a.Registration.BaseURL+"/lifecycle", body, callTimeout)
+	// Deliberately NOT recorded against the breaker. The breaker is a health
+	// signal about the add-on's ability to serve work, and this is the call an
+	// operator makes to stop it serving work — letting a refusal here count
+	// towards opening the circuit would conflate "we told it to stop" with "it
+	// stopped answering".
+	if resp.Outcome != OutcomeSucceeded {
+		return nil, fmt.Errorf("addon %s: lifecycle change refused (%d): %v", target, resp.Status, resp.Err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(resp.Body, &out); err != nil {
+		return nil, fmt.Errorf("addon %s: decode lifecycle: %w", target, err)
+	}
+	return out, nil
+}
+
+// ErrValueNotResolvable is a mapping value the target does not recognise.
+//
+// Its own error because its operator action is a correction, not a retry: the
+// value is a typo or a group somebody has not created yet, and nothing about
+// waiting changes it.
+var ErrValueNotResolvable = errors.New("addon: the target does not recognise that value")
+
+// ResolvesValue checks that a mapping value names something on the target.
+//
+// It FAILS OPEN on everything except a definite "no". A target that could not be
+// read, a field the add-on cannot enumerate, an add-on that is not registered —
+// all of those are the absence of an answer, and refusing a mapping edit because
+// a NAS was rebooting would make an outage look like a validation failure. The
+// only refusal is the one case where the add-on answered and the value was not
+// in the set it returned.
+//
+// That asymmetry is the whole design of this check: it is a reference check, not
+// an authorisation one. Structure — is this a field the schema declares, is it a
+// lifecycle field — is Syndra's own and is enforced whatever the target says.
+func ResolvesValue(ctx context.Context, target, field, value string) error {
+	a, err := Get(target)
+	if err != nil {
+		return nil
+	}
+	if !a.br.allow(timeNow()) {
+		return nil
+	}
+	cred, err := credentialFor(a.Registration)
+	if err != nil {
+		return nil
+	}
+
+	resp := doAuthenticated(ctx, cred, http.MethodGet,
+		a.Registration.BaseURL+"/values/"+url.PathEscape(field), nil, callTimeout)
+	a.br.record(timeNow(), resp)
+	if resp.Outcome != OutcomeSucceeded {
+		// Includes a 404 for a field this add-on does not enumerate. Not an
+		// answer about the value.
+		return nil
+	}
+
+	var decoded struct {
+		Values     []string `json:"values"`
+		Enumerable bool     `json:"enumerable"`
+	}
+	if err := json.Unmarshal(resp.Body, &decoded); err != nil {
+		return nil
+	}
+	if !decoded.Enumerable {
+		// The add-on can serve the field and cannot bound it — a path, a quota.
+		// Structure only, and never "no value is valid".
+		return nil
+	}
+	for _, candidate := range decoded.Values {
+		if candidate == value {
+			return nil
+		}
+	}
+	// The value is echoed, and this is the one place in the add-on layer that
+	// does it deliberately: a mapping value is a group name an operator typed,
+	// not a secret, and showing them what they typed is most of what makes the
+	// refusal actionable (16.8).
+	return fmt.Errorf("%w: %s has no %s named %q", ErrValueNotResolvable, target, field, value)
 }

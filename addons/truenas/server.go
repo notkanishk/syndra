@@ -14,8 +14,10 @@ import (
 //
 //	GET  /capabilities   entitlement schema, operation set, product + version
 //	GET  /subjects       full state read, feeding the backend's drift sweep
+//	GET  /values/{field} what a mapping may bind that field to
 //	GET  /health         reachability, version, key expiry, log head, lifecycle
 //	POST /apply          converge one subject's resolved entitlement state
+//	POST /lifecycle      set active / draining / read_only at runtime
 //	POST /operations/*   one-shot operation from the manifest
 //
 // Every route is behind the same authenticator, applied to the mux rather than
@@ -45,8 +47,17 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /capabilities", s.auth.authenticated(s.handleCapabilities))
 	mux.HandleFunc("GET /health", s.auth.authenticated(s.handleHealth))
 	mux.HandleFunc("GET /subjects", s.auth.authenticated(s.handleSubjects))
+	// What a field's values may be, so the backend can check that a mapping
+	// names something real. A read rather than manifest content: group
+	// membership is runtime state, and a cached manifest would refuse a group
+	// created five minutes ago.
+	mux.HandleFunc("GET /values/{field}", s.auth.authenticated(s.handleValues))
 	mux.HandleFunc("POST /apply", s.auth.authenticated(s.handleApply))
 	mux.HandleFunc("POST /plan", s.auth.authenticated(s.handlePlan))
+	// The runtime setter §18 says the three states need. Without it the only
+	// one was an environment variable read at startup — which is the redeploy
+	// the design says a maintenance mode must not require.
+	mux.HandleFunc("POST /lifecycle", s.auth.authenticated(s.handleLifecycle))
 	// The path segment is the operation NAME. The dedup token is the call id,
 	// inside the body. They were briefly the same word and that would have cost
 	// a debugging session, so nothing here lets one be passed where the other

@@ -771,3 +771,89 @@ func looksLikeUUID(s string) bool {
 	}
 	return true
 }
+
+// PruneSpentPlans deletes plans that can no longer be cited (change
+// `addon-platform` 15.5).
+//
+// Plans accumulate. Every rehearsal writes one, an operator may rehearse ten
+// times and apply once, and nothing ever removed them — the outbox has had
+// `PruneTerminalPropagations` since it existed and this table had nothing.
+//
+// Three things are deliberately NOT pruned:
+//
+//   - The desired-state snapshots. They are immutable audit records that outlive
+//     the plan citing them (1.6), and the FK is `ON DELETE` nothing, so a
+//     snapshot still referenced refuses the delete rather than cascading. That
+//     is why this deletes plan subjects first and only then their plan.
+//   - Provisional plans. Their expiry is NULL by construction — the gate is the
+//     re-fingerprint when the target returns, not a clock — so "expired" is a
+//     question that does not apply to them, and pruning one would discard an
+//     approved change because an outage outlasted a retention window.
+//   - Anything an outbox row still cites. The FK from `propagation_outbox` to
+//     `plan_subjects` refuses it, which is the point: the drain reads the
+//     approved intent through that citation, and a pruned plan under a queued
+//     row is a row that fails terminally for a reason nobody can reconstruct.
+//
+// The refusals are the schema's, not this function's, and that is on purpose: a
+// delete this permits and the database refuses is a bug reported at the moment
+// it matters, while one this excludes by a predicate somebody later edits is a
+// bug reported never.
+func PruneSpentPlans(ctx context.Context, retentionDays int) (int64, error) {
+	if retentionDays <= 0 {
+		return 0, nil
+	}
+	cutoff := fmt.Sprintf("%d days", retentionDays)
+
+	tx, err := PG.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("begin plan prune: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// A plan is prunable when it can no longer be cited AND nothing cites it: it
+	// was applied, or it expired unused, and no outbox row reaches it.
+	const selectPrunable = `
+		SELECT p.id
+		  FROM plans p
+		 WHERE p.provisional = false
+		   AND p.created_at < NOW() - $1::interval
+		   AND (p.applied_at IS NOT NULL OR (p.expires_at IS NOT NULL AND p.expires_at < NOW()))
+		   AND NOT EXISTS (
+		         SELECT 1 FROM propagation_outbox o
+		           JOIN plan_subjects ps ON ps.id = o.plan_subject_id
+		          WHERE ps.plan_id = p.id)`
+
+	rows, err := tx.Query(ctx, selectPrunable, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("select prunable plans: %w", err)
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("scan prunable plan: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("read prunable plans: %w", err)
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM plan_subjects WHERE plan_id = ANY($1::text[]::uuid[])`, ids); err != nil {
+		return 0, fmt.Errorf("prune plan subjects: %w", err)
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM plans WHERE id = ANY($1::text[]::uuid[])`, ids)
+	if err != nil {
+		return 0, fmt.Errorf("prune plans: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit plan prune: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}

@@ -253,6 +253,10 @@ func NewRouter() http.Handler {
 	// access somebody took away that is still there.
 	mux.HandleFunc("GET /api/v1/governance/unconfirmed-revocations", withCORS(withOperatorAuth(handleUnconfirmedRevocations)))
 
+	// Stopping an add-on writing, without a redeploy. A maintenance mode you
+	// have to restart into is a maintenance mode nobody uses.
+	mux.HandleFunc("POST /api/v1/targets/{target}/lifecycle", withCORS(withOperatorAuth(handleSetTargetLifecycle)))
+
 	// Revocation as a composition (design §10). This target cannot end a
 	// session, so "revoke" is a disabling allowance plus a credential rotation,
 	// and the response says what neither half does.
