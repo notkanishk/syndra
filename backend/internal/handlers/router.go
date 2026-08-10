@@ -241,6 +241,20 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/v1/targets/mappings/versions", withCORS(withOperatorAuth(handlePublishMappingVersion)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/mappings/versions/{version}/rollback", withCORS(withOperatorAuth(handleRollbackMappingVersion)))
 
+	// A member's own storage view and the one action on it. Self-scoped by
+	// construction: the subject is the authenticated actor and is never taken
+	// from the request, because a member-scoped operation must bind who it acts
+	// ON and not only who may call it.
+	mux.HandleFunc("GET /api/v1/me/targets", withCORS(withUserAuth(handleMyTargets)))
+	mux.HandleFunc("POST /api/v1/me/targets/{target}/credential", withCORS(withUserAuth(handleSetMyCredential)))
+
+	// The add-on roster. Deployment configuration, not data: an operator on a
+	// deployment running a TrueNAS add-on sees the TrueNAS entry whether or not
+	// it answers and whether or not anybody is bound to it, because structure
+	// must never move in response to data.
+	mux.HandleFunc("GET /api/v1/targets", withCORS(withOperatorAuth(handleListTargets)))
+	mux.HandleFunc("GET /api/v1/targets/{target}/health", withCORS(withOperatorAuth(handleTargetHealth)))
+
 	// The unmanaged inventory: what lives on a target that Syndra never put
 	// there. Reported, never triaged — and adoption is the one way an account
 	// moves out of it, because that decision hands somebody else's home

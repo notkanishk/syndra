@@ -387,3 +387,28 @@ var (
 
 // The add-on's runtime lifecycle setter (§18, 15.6).
 var addonsSetLifecycle = addons.SetLifecycle
+
+// The target roster (9.13). Seams because the roster is deployment
+// configuration and a test of the surface must be able to state a deployment.
+var (
+	addonsRegistered = addons.Registered
+	addonsGet        = addons.Get
+	addonsHealth     = addons.Health
+)
+
+// A member's own view of a target (group 10).
+var (
+	svcResolveEntitlementSet = services.ResolveEntitlements
+	dbGetTargetBinding       = db.GetTargetBinding
+
+	// addonsCallable is "has this add-on published a manifest we understand" —
+	// registration is a deployment fact and callability is a runtime one, and a
+	// member's credential form must be gated on the second.
+	addonsCallable = func(target string) bool {
+		a, err := addons.Get(target)
+		if err != nil {
+			return false
+		}
+		return !a.FetchedAt().IsZero() && !a.CircuitOpen()
+	}
+)
