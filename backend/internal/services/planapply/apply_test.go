@@ -390,3 +390,42 @@ func TestAnAcceptedApplyCountsQueuedAndNeverSucceeded(t *testing.T) {
 		t.Error("the counts must add up, or an operator is left wondering where the difference went")
 	}
 }
+
+// 9.18/9.19 — the response says whether these rows reach the target on their
+// own. An operator who assumes a queued change applies itself finds out when
+// somebody complains.
+func TestTheResponseSaysWhetherItDrainsOnItsOwn(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		queued      int
+		provisional bool
+		wants       string
+		forbids     string
+	}{
+		{
+			name: "a grant waits", queued: 2,
+			wants:   "resumes the drain",
+			forbids: "applied",
+		},
+		{
+			name: "a provisional plan says what it is waiting for", queued: 1, provisional: true,
+			wants:   "re-checked when the target comes back",
+			forbids: "resumes the drain",
+		},
+		{
+			name: "an empty apply says so rather than implying work", queued: 0,
+			wants:   "Nothing was queued",
+			forbids: "resumes the drain",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := disclose(tc.queued, tc.provisional)
+			if !strings.Contains(got, tc.wants) {
+				t.Errorf("disclosure = %q, want it to mention %q", got, tc.wants)
+			}
+			if strings.Contains(got, tc.forbids) {
+				t.Errorf("disclosure = %q, must not mention %q", got, tc.forbids)
+			}
+		})
+	}
+}

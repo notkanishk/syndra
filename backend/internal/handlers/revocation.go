@@ -152,6 +152,12 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 		"operation":    res.OperationID,
 		// Queued, not applied. The lock reaches the target when the drain runs.
 		"queued": true,
+		// The other half of 9.18: this one DOES drain on its own. A revocation
+		// is retained access until it lands, so it must not wait for somebody
+		// to open the right page — and an operator who assumes it waits, like
+		// a grant does, would go looking for a button that should not exist.
+		"disclosure": "The credential is already replaced. The account lock drains on its own — " +
+			"revocations do not wait for an operator, because a queued one is access somebody still has.",
 		"detail": revokeCopy,
 	})
 }

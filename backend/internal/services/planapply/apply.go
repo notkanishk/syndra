@@ -66,6 +66,11 @@ type Result struct {
 	// be re-fingerprinted.
 	Provisional bool            `json:"provisional"`
 	Queued      []QueuedSubject `json:"queued"`
+	// Disclosure says, in words, whether these rows reach the target on their
+	// own. An operator who assumes a queued change applies itself finds out
+	// when somebody complains, and the drain rule is not something a surface
+	// should have to know — so the backend says it (9.18).
+	Disclosure string `json:"disclosure"`
 	// Summary counts what this apply did, in the vocabulary every other bulk
 	// surface reports in — and its whole point is which column the rows land in.
 	// Nothing here has reached the target: the drain has not run, and an add-on
@@ -166,7 +171,7 @@ func Apply(ctx context.Context, req Request) (Result, error) {
 		}
 
 		res = Result{PlanID: plan.ID, Target: plan.Target, Provisional: plan.Provisional,
-			Queued: queued, Summary: summary}
+			Queued: queued, Summary: summary, Disclosure: disclose(len(queued), plan.Provisional)}
 		return nil
 	})
 	if err != nil {
@@ -175,4 +180,24 @@ func Apply(ctx context.Context, req Request) (Result, error) {
 		return Result{}, err
 	}
 	return res, nil
+}
+
+// disclose is the sentence a surface renders under the count.
+//
+// Here rather than in a frontend because it is a statement about what the
+// system will do, and a client that composed its own would be guessing at the
+// drain rule. An entitlement apply confers access, so it waits for an operator —
+// the rule narrowed to grants rather than disappearing, and this is where a
+// person finds that out.
+func disclose(queued int, provisional bool) string {
+	switch {
+	case queued == 0:
+		return "Nothing was queued: the plan you approved said none of these people would change."
+	case provisional:
+		return "Recorded against the target's last-known state while it was unreachable. " +
+			"It will be re-checked when the target comes back, and applied only if nothing moved."
+	default:
+		return "Queued. These changes reach the target when an operator resumes the drain — " +
+			"access is never granted without somebody deciding to."
+	}
 }

@@ -180,3 +180,21 @@ func TestTheSuspensionIsRecordedBeforeTheCredentialIsRotated(t *testing.T) {
 		t.Error("nothing may be rotated for a suspension that was never recorded")
 	}
 }
+
+// 9.19 — a revocation says it drains on its own, and a grant says it waits.
+// Neither should require an operator to infer it from the drain rule.
+func TestARevocationSaysItDrainsWithoutAnOperator(t *testing.T) {
+	stubRevocation(t)
+
+	rr := revoke(`{"reason":"offboarding","confirmed":true}`)
+	body := rr.Body.String()
+
+	if !strings.Contains(body, "drains on its own") {
+		t.Errorf("a revocation must say it does not wait: %s", body)
+	}
+	if strings.Contains(body, "resumes the drain") {
+		// That is the grant sentence. Shown here it would send an operator
+		// looking for a button that should not exist.
+		t.Errorf("a revocation must not tell an operator to resume anything: %s", body)
+	}
+}
