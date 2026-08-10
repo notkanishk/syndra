@@ -271,7 +271,10 @@ func DeleteDirectGrant(ctx context.Context, userID, grantID, actor string) (Dire
 			retained = append(retained, target.projectID+"/"+target.roleKey)
 		}
 
-		params := deltaParams(userID, nil, revokes, actor, "Direct access removal", "direct", grantID)
+		params, err := deltaParams(ctx, userID, nil, revokes, actor, "Direct access removal", "direct", grantID)
+		if err != nil {
+			return err
+		}
 
 		ids, err = svcDeleteDirectGrantAndEnqueue(ctx, actor, userID, grantID, params)
 		return err
@@ -367,7 +370,10 @@ func ExpireDirectGrant(ctx context.Context, userID, grantID, projectID, role, ac
 			retained = append(retained, lapsed.projectID+"/"+lapsed.roleKey)
 		}
 
-		params := deltaParams(userID, nil, revokes, actor, "Grant expired", "direct", grantID)
+		params, err := deltaParams(ctx, userID, nil, revokes, actor, "Grant expired", "direct", grantID)
+		if err != nil {
+			return err
+		}
 
 		deletedProject, deletedRole, ids, err := svcDeleteExpiredDirectGrantAndEnqueue(ctx, actor, userID, grantID, params)
 		if err != nil {

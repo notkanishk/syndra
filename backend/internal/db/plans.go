@@ -294,6 +294,36 @@ func CreatePlan(ctx context.Context, p NewPlan) (Plan, error) {
 		return Plan{}, err
 	}
 
+	// Joins the caller's access-mutation transaction when there is one, so a
+	// plan minted as part of a cascade commits with the role change that caused
+	// it. A separate transaction would let the grant land and the convergence
+	// approving it roll back — or the reverse, which is an approval for a change
+	// that never happened.
+	tx, owned, err := beginOrJoin(ctx)
+	if err != nil {
+		return Plan{}, err
+	}
+	if owned {
+		defer tx.Rollback(ctx) // no-op after a successful Commit
+	}
+	plan, err := createPlanTx(ctx, tx, p)
+	if err != nil {
+		return Plan{}, err
+	}
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return Plan{}, fmt.Errorf("commit plan tx: %w", err)
+		}
+	}
+	return plan, nil
+}
+
+// createPlanTx is the write itself, on a transaction somebody else owns.
+func createPlanTx(ctx context.Context, tx pgx.Tx, p NewPlan) (Plan, error) {
+	if err := p.validate(); err != nil {
+		return Plan{}, err
+	}
+
 	// Canonicalise before anything compares or stores an identifier. Postgres
 	// writes uuids in lowercase, so an uppercase citation matches the row in SQL
 	// — where the comparison happens after a parse — and then fails to match the
@@ -301,12 +331,6 @@ func CreatePlan(ctx context.Context, p NewPlan) (Plan, error) {
 	// Normalising the value rather than the check also keeps the stored row
 	// comparable: every later reader compares against what the database returns.
 	subjects := canonicalSubjects(p.Subjects)
-
-	tx, err := PG.Begin(ctx)
-	if err != nil {
-		return Plan{}, fmt.Errorf("begin plan tx: %w", err)
-	}
-	defer tx.Rollback(ctx) // no-op after a successful Commit
 
 	// Provenance before persistence. Shape was checked above and shape is not
 	// provenance: a uuid is a syntax, and a value in that syntax that names no
@@ -373,9 +397,6 @@ func CreatePlan(ctx context.Context, p NewPlan) (Plan, error) {
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return Plan{}, fmt.Errorf("commit plan tx: %w", err)
-	}
 	return plan, nil
 }
 

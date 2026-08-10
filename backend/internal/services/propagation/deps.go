@@ -18,6 +18,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/directory"
 	"syndra/internal/zitadel"
 )
 
@@ -172,3 +173,25 @@ func envInt(name string, def int) int {
 	}
 	return n
 }
+
+// The two reads the add-on dispatcher makes beside the apply itself.
+//
+// `planOne` is the re-fingerprint a system-initiated row needs, and `subjectEmail`
+// is the identity a first account creation is named from. Both are seams because
+// both are network calls a test must be able to answer without one — and because
+// a test has to be able to assert that an OPERATOR-approved row makes neither.
+var (
+	planOne = addons.Plan
+
+	subjectEmail = func(ctx context.Context, subjectID string) string {
+		profile, found, err := directory.Default.FindUser(ctx, subjectID)
+		if err != nil || !found {
+			// Not fatal. The email matters only for a first creation, and the
+			// add-on refuses to create under a name it had to invent — so a
+			// failed lookup becomes a visible blocked row rather than an account
+			// named after a hash.
+			return ""
+		}
+		return profile.Email
+	}
+)

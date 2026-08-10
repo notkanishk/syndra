@@ -248,7 +248,16 @@ func userBaseHoldingsWithBundleAt(
 // deltaParams converts a closure delta into enqueue params, all attributed to the ONE triggering
 // source (bundle or rule) — every row from a single cascade trigger carries the same
 // Source/SourceRef, whether it is an add or a revoke.
-func deltaParams(userID string, adds, revokes []roleKey, actor, reason, source, sourceRef string) []db.EnqueueParams {
+// It also fires the lifecycle trigger, and that placement is the point: this is
+// the ONE function every closure delta in this package passes through, so a
+// cascade added later reaches its mapped targets without anybody remembering to
+// wire it. Hooking the nine callers instead would be nine hooks and one that
+// gets forgotten — and the forgotten one is a person whose access changed in
+// Zitadel and nowhere else.
+func deltaParams(ctx context.Context, userID string, adds, revokes []roleKey, actor, reason, source, sourceRef string) ([]db.EnqueueParams, error) {
+	if err := triggerTargetConvergence(ctx, actor, userID, append(append([]roleKey(nil), adds...), revokes...)); err != nil {
+		return nil, err
+	}
 	params := make([]db.EnqueueParams, 0, len(adds)+len(revokes))
 	for _, k := range adds {
 		params = append(params, db.EnqueueParams{
@@ -264,7 +273,7 @@ func deltaParams(userID string, adds, revokes []roleKey, actor, reason, source, 
 			Source: source, SourceRef: sourceRef, OpType: "revoke", PayloadJSON: "{}",
 		})
 	}
-	return params
+	return params, nil
 }
 
 // CascadeBundleAssignedToUser assigns the bundle AND enqueues the user's closure delta (bundle
@@ -315,7 +324,10 @@ func CascadeBundleAssignedToUser(ctx context.Context, actor, userID, bundleID st
 			after[roleKey{projectID: ro.ProjectID, roleKey: ro.RoleKey}] = true
 		}
 		adds, revokes := closureDelta(effectiveClosure(before, rules), effectiveClosure(after, rules))
-		params := deltaParams(userID, adds, revokes, actor, "Bundle membership cascade", "bundle", bundleID)
+		params, err := deltaParams(ctx, userID, adds, revokes, actor, "Bundle membership cascade", "bundle", bundleID)
+		if err != nil {
+			return err
+		}
 
 		ids, assigned, err = svcAssignBundleAndEnqueue(ctx, actor, userID, bundleID, version.ID, params)
 		return err // enqueue+assign rolled back together → handler returns 500
@@ -388,7 +400,11 @@ func CascadeRuleCreated(ctx context.Context, actor, sourceProject, sourceRole, t
 			if len(adds) == 0 && len(revokes) == 0 {
 				continue
 			}
-			params = append(params, deltaParams(u, adds, revokes, actor, "Mapping rule cascade", "rule", "")...)
+			rows, err := deltaParams(ctx, u, adds, revokes, actor, "Mapping rule cascade", "rule", "")
+			if err != nil {
+				return err
+			}
+			params = append(params, rows...)
 		}
 
 		ruleID, ids, err = svcCreateRuleAndEnqueue(ctx, actor,
@@ -432,7 +448,10 @@ func CascadeBundleRemovedFromUser(ctx context.Context, actor, userID, bundleID s
 			return err
 		}
 		adds, revokes := closureDelta(effectiveClosure(before, rules), effectiveClosure(after, rules))
-		params := deltaParams(userID, adds, revokes, actor, "Bundle removal cascade", "bundle", bundleID)
+		params, err := deltaParams(ctx, userID, adds, revokes, actor, "Bundle removal cascade", "bundle", bundleID)
+		if err != nil {
+			return err
+		}
 
 		ids, err = svcRemoveBundleFromUserAndEnqueue(ctx, actor, userID, bundleID, params)
 		return err
@@ -487,7 +506,11 @@ func CascadeBundleDeleted(ctx context.Context, actor, bundleID string) (CascadeR
 			if len(adds) == 0 && len(revokes) == 0 {
 				continue
 			}
-			params = append(params, deltaParams(u, adds, revokes, actor, "Bundle deletion cascade", "bundle", bundleID)...)
+			rows, err := deltaParams(ctx, u, adds, revokes, actor, "Bundle deletion cascade", "bundle", bundleID)
+			if err != nil {
+				return err
+			}
+			params = append(params, rows...)
 		}
 
 		ids, err = svcDeleteBundleAndEnqueue(ctx, actor, bundleID, params)
@@ -545,7 +568,11 @@ func CascadeRuleUpdated(ctx context.Context, actor string, old models.MappingRul
 			if len(adds) == 0 && len(revokes) == 0 {
 				continue
 			}
-			params = append(params, deltaParams(u, adds, revokes, actor, "Mapping-rule update cascade", "rule", old.ID)...)
+			rows, err := deltaParams(ctx, u, adds, revokes, actor, "Mapping-rule update cascade", "rule", old.ID)
+			if err != nil {
+				return err
+			}
+			params = append(params, rows...)
 		}
 
 		ids, err = svcUpdateRuleAndEnqueue(ctx, actor, old.ID, sp, sr, tp, tr, params)
@@ -599,7 +626,11 @@ func CascadeRuleDeleted(ctx context.Context, actor string, old models.MappingRul
 			if len(adds) == 0 && len(revokes) == 0 {
 				continue
 			}
-			params = append(params, deltaParams(u, adds, revokes, actor, "Mapping-rule deletion cascade", "rule", old.ID)...)
+			rows, err := deltaParams(ctx, u, adds, revokes, actor, "Mapping-rule deletion cascade", "rule", old.ID)
+			if err != nil {
+				return err
+			}
+			params = append(params, rows...)
 		}
 
 		ids, err = svcDeleteRuleAndEnqueue(ctx, actor, old.ID, params)

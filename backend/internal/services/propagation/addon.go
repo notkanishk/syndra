@@ -146,10 +146,21 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		return false
 	}
 
+	fingerprint, halt := res.fingerprintFor(ctx, intent)
+	if halt {
+		return false
+	}
+
 	resp := applyEntitlement(ctx, addons.ApplyRequest{
-		Target:      intent.Target,
-		Subject:     intent.SubjectID,
-		Fingerprint: intent.Fingerprint,
+		Target:  intent.Target,
+		Subject: intent.SubjectID,
+		// The identity a username is derived from, and only for a subject with
+		// no account yet — an existing binding is authoritative and a later
+		// email change must never rename an account. Resolved here rather than
+		// recorded on the plan: the plan store deliberately holds no name or
+		// email, and the directory is where identity lives.
+		Email:       subjectEmail(ctx, intent.SubjectID),
+		Fingerprint: fingerprint,
 		PlanID:      intent.PlanID,
 		// Who decided this, carried through to the add-on's mutation log. That
 		// log promises who did what to whom, and the add-on knows only the whom.
@@ -260,4 +271,42 @@ func refusalReason(resp addons.ApplyResponse) string {
 		return "the target refused it: " + resp.Detail
 	}
 	return fmt.Sprintf("the target refused it (status %d)", resp.Status)
+}
+
+// fingerprintFor decides what this row verifies against.
+//
+// An operator-approved row carries the fingerprint of the state the operator
+// reviewed, and the add-on refuses if the subject moved since. That is the whole
+// guarantee: the diff you approved is the diff that lands.
+//
+// A system-initiated row has no such review behind it. Its "plan" was minted by
+// a cascade at the moment a role changed, and the target may legitimately have
+// moved between then and the drain — which is not an operator's mistake and not
+// a diff anybody agreed to. Carrying the trigger-time fingerprint would make an
+// ordinary access change fail terminally because somebody edited an account on
+// the NAS in the meantime, and a member's account creation would stall until a
+// human noticed. So it re-reads and converges against what is there now.
+//
+// The re-read is a `/plan` for one subject: the same call the rehearsal makes,
+// so the fingerprint is produced by the same code that verifies it. A value the
+// two sides computed differently verifies nothing.
+func (res *DrainResult) fingerprintFor(ctx context.Context, intent db.EntitlementIntent) (string, bool) {
+	if intent.Surface != db.SystemConvergenceSurface {
+		return intent.Fingerprint, false
+	}
+
+	answer := planOne(ctx, intent.Target, []addons.PlanSubject{{
+		Subject: intent.SubjectID,
+		Email:   subjectEmail(ctx, intent.SubjectID),
+		Desired: intent.Desired(),
+	}}, false)
+	if answer.Outcome != addons.OutcomeSucceeded || len(answer.Outcomes) != 1 {
+		// No fresh fingerprint and no licence to send the stale one: the apply
+		// would be verified against a moment nobody chose. Left claimable and
+		// counted as errored, which is what "we could not establish the state"
+		// means — the row is still queued and the next pass tries again.
+		res.persistErr(intent.OutboxID, "re-read state", fmt.Errorf("the target could not be re-read before dispatch"))
+		return "", true
+	}
+	return answer.Outcomes[0].Fingerprint, false
 }

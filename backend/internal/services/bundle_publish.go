@@ -273,8 +273,12 @@ func PublishBundleVersion(ctx context.Context, actor string, req PublishRequest)
 				if err != nil {
 					return err
 				}
-				params = append(params, deltaParams(h.UserID, adds, revokes, actor,
-					fmt.Sprintf("Bundle published at v%d", draft.NextVersion), "bundle", req.BundleID)...)
+				rows, err := deltaParams(ctx, h.UserID, adds, revokes, actor,
+					fmt.Sprintf("Bundle published at v%d", draft.NextVersion), "bundle", req.BundleID)
+				if err != nil {
+					return err
+				}
+				params = append(params, rows...)
 			}
 		}
 
@@ -434,8 +438,12 @@ func MoveHolders(ctx context.Context, actor string, req MoveHoldersRequest) (Bul
 			if err != nil {
 				return err
 			}
-			params = append(params, deltaParams(out.UserID, adds, revokes, actor,
-				"Bundle holder moved between versions", "bundle", req.BundleID)...)
+			rows, err := deltaParams(ctx, out.UserID, adds, revokes, actor,
+				"Bundle holder moved between versions", "bundle", req.BundleID)
+			if err != nil {
+				return err
+			}
+			params = append(params, rows...)
 		}
 		if len(actionable) == 0 {
 			return errNothingToMove

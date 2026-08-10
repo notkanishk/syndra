@@ -105,6 +105,12 @@ type BindingConflict struct {
 
 var errStaleFingerprint = errors.New("the subject's state on the target has changed since the plan")
 
+// errNoIdentityToDeriveFrom is an apply that would have to CREATE an account and
+// carries nothing to name it after. The derivation is deterministic from the
+// email localpart, so a call without one produces a name derived from the
+// subject id — valid, stable, and not the name the plan predicted.
+var errNoIdentityToDeriveFrom = errors.New("no identity to derive a username from")
+
 // desiredState is the request's fields, decoded once into the shapes this
 // add-on actually converges.
 type desiredState struct {
@@ -274,6 +280,15 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 	}
 
 	current, binding, conflict, err := s.locate(req)
+	if errors.Is(err, errNoIdentityToDeriveFrom) {
+		// Blocked rather than a transport-shaped failure: nothing is wrong with
+		// the target, and retrying the identical call will not fix it.
+		return ApplyOutcome{
+			Subject: req.Subject, Effect: EffectBlocked,
+			Detail:      "This subject has no account here and the call carried no identity to derive a name from.",
+			Consequence: "Nothing was changed.",
+		}, http.StatusUnprocessableEntity, nil
+	}
 	if err != nil {
 		return ApplyOutcome{}, http.StatusBadGateway, err
 	}
@@ -342,6 +357,16 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 		// name rather than re-deriving, because the recorded name is what every
 		// ACL and share still refers to.
 		return nil, binding, nil, nil
+	}
+
+	if strings.TrimSpace(req.Email) == "" {
+		// No binding and no identity to derive a name from. The fallback exists
+		// for a localpart that normalizes to nothing, not for a caller that sent
+		// no localpart at all: applied here it would create `u3f2a9c11` for
+		// somebody whose plan said `ada`, and the plan is what an operator
+		// approved. Refused so the disagreement is visible instead of being a
+		// name nobody chose.
+		return nil, Binding{}, nil, errNoIdentityToDeriveFrom
 	}
 
 	claimed, err := s.store.BoundUsernames()

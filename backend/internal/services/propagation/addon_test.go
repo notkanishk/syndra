@@ -366,3 +366,65 @@ func TestTheAddonDrainProbesBeforeItSpendsARetry(t *testing.T) {
 		t.Fatalf("nothing may be claimed or spent: %+v %v %v", h.dispatched, h.requeued, h.failed)
 	}
 }
+
+// 2.26/2.27 — a plan whose target moved underneath it is withheld, and the
+// refusal says which of the two things happened.
+//
+// This is the resolution path for a provisional plan and for an ordinary one
+// alike, and deliberately the same path: the add-on re-verifies the recorded
+// fingerprint against live state immediately before writing, so "the target
+// came back and nothing had changed" and "the target came back changed" are
+// answered by the write itself rather than by a second protocol.
+//
+// Terminal, because a stale approval must not be retried into a world it does
+// not describe. What makes it actionable rather than a phantom failure is that
+// the reason names the re-plan — every other refusal means "fix it and retry".
+func TestAStalePlanIsWithheldAndSaysSo(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.resp = addons.ApplyResponse{
+		Outcome: addons.OutcomeRejected, Status: 409,
+		Code:   addons.CodePlanStale,
+		Detail: "ada moved on the target since the plan was approved",
+	}
+
+	res, err := DrainAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Failed != 1 {
+		t.Fatalf("a stale plan must settle rather than sit in the queue: %+v", res)
+	}
+	if len(h.applied) != 0 {
+		t.Fatal("nothing may be recorded as applied for a call the target refused")
+	}
+	if len(h.requeued) != 0 {
+		t.Fatal("a stale approval must not be retried into a world it does not describe")
+	}
+	reason := h.failed["o1"]
+	if !strings.Contains(reason, addons.CodePlanStale) {
+		t.Errorf("the refusal must be distinguishable from an ordinary one: %q", reason)
+	}
+	if !strings.Contains(reason, "re-plan") {
+		// Every other refusal means "fix it and retry". This one means "look at
+		// what moved, then approve it again", and an operator reading the queue
+		// has only this sentence to tell them apart.
+		t.Errorf("the refusal must name the operator's next action: %q", reason)
+	}
+}
+
+// The dispatched fingerprint is the one the approval recorded — not one read at
+// dispatch time, which would verify a world against itself and pass always.
+func TestTheDispatchCarriesTheApprovedFingerprintAndNotAFreshOne(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.intent.Fingerprint = "fp-approved"
+
+	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.dispatched) != 1 {
+		t.Fatalf("want one dispatch, got %d", len(h.dispatched))
+	}
+	if h.dispatched[0].Fingerprint != "fp-approved" {
+		t.Errorf("fingerprint = %q, want the one the approval recorded", h.dispatched[0].Fingerprint)
+	}
+}

@@ -284,6 +284,13 @@ type EntitlementIntent struct {
 	// Version is the snapshot's monotonic version, for the ordering the drain
 	// already enforces at the claim.
 	Version int64
+	// Surface is the screen whose rehearsal issued the approval. The drain reads
+	// it to answer one question and no other: was there a human who reviewed a
+	// diff behind this row. A system-initiated convergence has no such review,
+	// so the fingerprint it carries protects nothing an operator saw — and
+	// verifying against a trigger-time read would fail an ordinary access change
+	// because somebody edited the target in between.
+	Surface string
 }
 
 // Desired decodes the approved snapshot into the per-field shape the transport
@@ -315,14 +322,15 @@ func (i EntitlementIntent) Desired() map[string]json.RawMessage {
 // loop reverts an intentional edit.)
 func ReadEntitlementIntent(ctx context.Context, outboxID string) (EntitlementIntent, error) {
 	const q = `
-		SELECT p.id, p.target, ps.plan_id, s.subject_id, ps.fingerprint, s.state_json, s.version
+		SELECT p.id, p.target, ps.plan_id, s.subject_id, ps.fingerprint, s.state_json, s.version, pl.surface
 		  FROM propagation_outbox p
 		  JOIN plan_subjects ps ON ps.id = p.plan_subject_id
+		  JOIN plans pl ON pl.id = ps.plan_id
 		  JOIN desired_state_snapshots s ON s.id = ps.snapshot_id
 		 WHERE p.id = $1`
 	var out EntitlementIntent
 	err := PG.QueryRow(ctx, q, outboxID).Scan(
-		&out.OutboxID, &out.Target, &out.PlanID, &out.SubjectID, &out.Fingerprint, &out.DesiredJSON, &out.Version)
+		&out.OutboxID, &out.Target, &out.PlanID, &out.SubjectID, &out.Fingerprint, &out.DesiredJSON, &out.Version, &out.Surface)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// A row with no approval chain is not a row this drain may dispatch.
 		// Reported rather than defaulted: dispatching an empty desired state

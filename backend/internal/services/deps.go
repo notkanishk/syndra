@@ -125,3 +125,14 @@ var (
 // a subject went unanswered — and none of them should need an add-on process to
 // produce one.
 var addonsPlan = addons.Plan
+
+// The lifecycle trigger's two reads and its one write (7.9).
+//
+// Seams because the trigger's whole content is a decision — does this role reach
+// a target, and what should the subject hold there — and a test of that decision
+// must not need a database or an add-on to make it.
+var (
+	dbTargetsMappedToRole     = db.TargetsMappedToRole
+	dbRecordSystemConvergence = db.RecordSystemConvergence
+	svcResolveEntitlements    = ResolveEntitlements
+)

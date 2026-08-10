@@ -90,6 +90,30 @@ func resetCascadeDeps(t *testing.T) {
 	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) {
 		return nil, nil
 	}
+
+	// And the lifecycle trigger's read, for the same reason. Its default answer
+	// is "this role reaches no target", which is what most roles in this
+	// deployment do — a cascade test that has not said otherwise is testing the
+	// Zitadel half and must not be made to invent a target.
+	stubNoMappedTargets(t)
+}
+
+// stubNoMappedTargets makes every role reach nothing, and fails the test if a
+// convergence is queued anyway.
+//
+// The second half is the useful one: it is how a test that says "this role is
+// mapped nowhere" can prove the trigger did not fire, rather than proving only
+// that it did not crash.
+func stubNoMappedTargets(t *testing.T) {
+	t.Helper()
+	origTargets, origRecord := dbTargetsMappedToRole, dbRecordSystemConvergence
+	t.Cleanup(func() { dbTargetsMappedToRole, dbRecordSystemConvergence = origTargets, origRecord })
+
+	dbTargetsMappedToRole = func(context.Context, string, string) ([]string, error) { return nil, nil }
+	dbRecordSystemConvergence = func(context.Context, db.SystemConvergence) (string, string, error) {
+		t.Error("a role mapped to no target must queue no convergence")
+		return "", "", nil
+	}
 }
 
 // noBundles/noDirects/noRules are the common "holds nothing else" stubs used by most closure-diff
