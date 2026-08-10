@@ -147,7 +147,22 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 	// One probe, and only to decide whether to offer the form. A member told
 	// their credential was set against an add-on that never answered is the one
 	// outcome this page must not produce.
-	view.Reachable = addonsCallable(target)
+	//
+	// Callable is not reachable, and the difference is the whole point here. An
+	// add-on answers `/capabilities` from its own process; the credential is set
+	// on the TARGET, over a session the add-on may not currently have. Reading
+	// only the manifest offered the form to a member whose NAS was switched off,
+	// and the failure arrived after they had typed a password — which is the
+	// exact outcome the paragraph above forbids.
+	//
+	// A health read that fails is read as unreachable rather than ignored: this
+	// field withdraws a form, and withdrawing one wrongly is a member told to
+	// come back later, while offering one wrongly is a member told their
+	// credential is set when it is not.
+	if !addonsCallable(target) {
+		return view, nil
+	}
+	view.Reachable = addonsHealth(r.Context(), target).Reachable
 	return view, nil
 }
 

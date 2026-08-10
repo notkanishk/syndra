@@ -23,6 +23,11 @@ type revokeHarness struct {
 	dispatched []addonop.Request
 	rotateErr  error
 	createErr  error
+	// rotateOutcome is the ADD-ON answering. Distinct from rotateErr, which is
+	// the backend refusing before anything was sent — the two produce different
+	// sentences and the difference was for a while invisible.
+	rotateOutcome addons.Outcome
+	rotateReason  error
 }
 
 func stubRevocation(t *testing.T) *revokeHarness {
@@ -50,7 +55,11 @@ func stubRevocation(t *testing.T) *revokeHarness {
 		if h.rotateErr != nil {
 			return addonop.Result{}, h.rotateErr
 		}
-		return addonop.Result{OperationID: "op_1", Outcome: addons.OutcomeSucceeded}, nil
+		outcome := h.rotateOutcome
+		if outcome == "" {
+			outcome = addons.OutcomeSucceeded
+		}
+		return addonop.Result{OperationID: "op_1", Outcome: outcome, Err: h.rotateReason}, nil
 	}
 	svcResolveEntitlementsFor = func(context.Context, string, string) (map[string]json.RawMessage, error) {
 		return map[string]json.RawMessage{"enabled": json.RawMessage(`false`)}, nil
@@ -196,5 +205,59 @@ func TestARevocationSaysItDrainsWithoutAnOperator(t *testing.T) {
 		// That is the grant sentence. Shown here it would send an operator
 		// looking for a button that should not exist.
 		t.Errorf("a revocation must not tell an operator to resume anything: %s", body)
+	}
+}
+
+// The sentence a human reads must agree with the fields a machine reads.
+//
+// Found on the dev deployment: a rotation the add-on REFUSED produced
+// `rotated: false` beside "the credential has been replaced". The fallback copy
+// was the success copy, and it applied to every case where the add-on answered
+// rather than the dispatch failing — which is most of them.
+func TestARefusedRotationNeverSaysTheCredentialWasReplaced(t *testing.T) {
+	cases := []struct {
+		name    string
+		outcome addons.Outcome
+		reason  error
+		want    string
+	}{
+		{"rejected", addons.OutcomeRejected, errors.New("the bound account no longer exists on the target"), "no longer exists"},
+		{"unreached", addons.OutcomeUnreached, nil, "could not be reached"},
+		{"indeterminate", addons.OutcomeIndeterminate, nil, "did not confirm"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h := stubRevocation(t)
+			h.rotateOutcome, h.rotateReason = c.outcome, c.reason
+
+			rr := revoke(`{"reason":"offboarding","confirmed":true}`)
+			body := rr.Body.String()
+			if rr.Code != http.StatusAccepted {
+				t.Fatalf("want 202, got %d (%s)", rr.Code, body)
+			}
+			if strings.Contains(body, "credential has been replaced") {
+				t.Errorf("a rotation that did not happen must not be described as one that did: %s", body)
+			}
+			if !strings.Contains(body, c.want) {
+				t.Errorf("want the copy to say %q: %s", c.want, body)
+			}
+			// And the half that DID happen is still stated first — the failure
+			// must not read as "the revocation failed".
+			if !strings.Contains(body, "New connections are refused now") {
+				t.Errorf("the suspension is real and must be stated: %s", body)
+			}
+		})
+	}
+}
+
+// An unconfirmed rotation must not tell an operator to try again. A second
+// rotation on an account that did rotate locks the member out of it.
+func TestAnUnconfirmedRotationDoesNotAskForARetry(t *testing.T) {
+	h := stubRevocation(t)
+	h.rotateOutcome = addons.OutcomeIndeterminate
+
+	body := revoke(`{"reason":"offboarding","confirmed":true}`).Body.String()
+	if strings.Contains(body, "Try the rotation again") {
+		t.Errorf("an unconfirmed rotation is the one case where retrying is wrong: %s", body)
 	}
 }

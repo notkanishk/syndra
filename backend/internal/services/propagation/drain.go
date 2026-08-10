@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 
 	"syndra/internal/db"
 	"syndra/internal/models"
@@ -36,6 +37,55 @@ type DrainResult struct {
 	Exhausted int    `json:"exhausted,omitempty"`
 	Halted    bool   `json:"halted"`
 	Reason    string `json:"reason,omitempty"`
+	// HaltedTarget names whose pass produced Reason. Its own field rather than a
+	// prefix on Reason: the reason strings are matched by callers and read by
+	// operators, and folding two facts into one string makes both harder to use.
+	HaltedTarget string `json:"halted_target,omitempty"`
+	// Passes reports what each target's own dispatcher did, because the summed
+	// counters above cannot say WHICH target halted — and that is the whole of
+	// what an operator does next. A drain that reported `halted: zitadel_offline`
+	// while the NAS pass applied nine rows was telling them their change had not
+	// gone through when it had.
+	Passes []PassResult `json:"passes,omitempty"`
+}
+
+// PassResult is one target's leg of a drain.
+//
+// A separate type rather than a nested DrainResult: a pass has no passes of its
+// own, and a shape that allows one invites a reader to look for a second level
+// that never exists.
+type PassResult struct {
+	Target    string `json:"target"`
+	Applied   int    `json:"applied"`
+	Failed    int    `json:"failed"`
+	Requeued  int    `json:"requeued"`
+	Abandoned int    `json:"abandoned"`
+	Errored   int    `json:"errored"`
+	Exhausted int    `json:"exhausted,omitempty"`
+	Halted    bool   `json:"halted"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+// merge folds one target's pass into the combined result.
+//
+// The combined `halted` is true when ANY pass halted, and the combined reason
+// names that pass. Both are deliberately pessimistic: an operator who is told
+// nothing halted must be able to believe it.
+func (r *DrainResult) merge(target string, p DrainResult) {
+	r.Applied += p.Applied
+	r.Failed += p.Failed
+	r.Requeued += p.Requeued
+	r.Abandoned += p.Abandoned
+	r.Errored += p.Errored
+	r.Exhausted += p.Exhausted
+	r.Passes = append(r.Passes, PassResult{
+		Target: target, Applied: p.Applied, Failed: p.Failed, Requeued: p.Requeued,
+		Abandoned: p.Abandoned, Errored: p.Errored, Exhausted: p.Exhausted,
+		Halted: p.Halted, Reason: p.Reason,
+	})
+	if p.Halted && !r.Halted {
+		r.Halted, r.Reason, r.HaltedTarget = true, p.Reason, target
+	}
 }
 
 // persistErr records a row whose Zitadel outcome was decided but whose state
@@ -50,17 +100,35 @@ func (r *DrainResult) persistErr(id, step string, err error) {
 
 const claimBatch = 100
 
-// Drain processes pending outbox rows in created_at order. Operator-triggered.
-// `applied` (synchronous 2xx, or idempotent 409) is terminal success — there is
-// no webhook round-trip. A 4xx (non-429/408) fails its row without halting the
-// batch; a transient error (5xx/timeout/429/408) requeues. The whole drain
-// halts only when Zitadel is unreachable up front, or a row exceeds the retry
-// budget.
+// Drain processes pending outbox rows in created_at order, for EVERY
+// registered target. Operator-triggered.
+//
+// One drain, several dispatchers. Zitadel's pass speaks the Management API and
+// an add-on's speaks that add-on's contract, so the passes are separate code —
+// but they are not separate operator actions. "Resume now" that resumed one
+// target and silently left another's approved work queued is the defect this
+// shape exists to prevent, and it was a real one: nothing called the add-on
+// dispatcher at all, so an approved entitlement change queued forever with no
+// error anywhere.
+//
+// The passes are independent in failure as well as in code. A Zitadel outage
+// halts Zitadel's pass and no other — they are separate deployments with
+// separate outages, and holding a reachable NAS's work behind an unreachable
+// identity provider is the coupling the target column was introduced to remove.
+//
+// Within a pass: `applied` (synchronous 2xx, or idempotent 409) is terminal
+// success — there is no webhook round-trip. A 4xx (non-429/408) fails its row
+// without halting the pass; a transient error (5xx/timeout/429/408) requeues. A
+// pass halts only when its target is unreachable up front, or a row exceeds the
+// retry budget.
 func Drain(ctx context.Context) (DrainResult, error) {
 	// Serialize drains: a session-level advisory lock ensures only one drain runs
 	// at a time, so the in_flight reclaim (ClaimPendingPropagations) can never
 	// steal a row a concurrent drain is mid-dispatch on — only crash-orphaned
 	// in_flight rows (whose drain session is gone) are ever reclaimed.
+	//
+	// Taken ONCE for all passes rather than per pass. Per pass, a second drain
+	// could interleave between two targets and reclaim rows this one is holding.
 	release, acquired, err := acquireDrainLock(ctx)
 	if err != nil {
 		return DrainResult{}, fmt.Errorf("acquire drain lock: %w", err)
@@ -70,31 +138,77 @@ func Drain(ctx context.Context) (DrainResult, error) {
 	}
 	defer release()
 
+	var res DrainResult
+	zitadel, err := drainZitadelPass(ctx)
+	if err != nil {
+		return DrainResult{}, err
+	}
+	res.merge(db.TargetZitadel, zitadel)
+
+	for _, target := range addonDrainTargets() {
+		pass, err := drainAddonPass(ctx, target)
+		if err != nil {
+			// One target's failure must not abandon the rest: the remaining
+			// passes are for other deployments, and returning here would leave
+			// their approved work queued because a different NAS is broken.
+			log.Printf("[ADDON-DRAIN] %s: %v", target, err)
+			res.merge(target, DrainResult{Halted: true, Reason: "pass_error"})
+			continue
+		}
+		res.merge(target, pass)
+	}
+
+	// Named after every pass has run, so it lists what is genuinely still
+	// waiting rather than what this drain was about to pick up.
+	if waiting, err := awaitingDispatch(ctx, ""); err != nil {
+		log.Printf("[PROPAGATION] could not list targets awaiting dispatch: %v (non-fatal)", err)
+	} else {
+		res.Awaiting = waiting
+	}
+
+	pruneAfterDrain(ctx)
+	return res, nil
+}
+
+// addonDrainTargets is the registered add-on targets, in a stable order.
+//
+// Sorted, because an operator reading two consecutive drains should not have to
+// work out whether a reordered list means something changed.
+func addonDrainTargets() []string {
+	regs := registeredAddons()
+	out := make([]string, 0, len(regs))
+	for _, reg := range regs {
+		if reg.Target == db.TargetZitadel {
+			continue
+		}
+		out = append(out, reg.Target)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// drainZitadelPass is the Management API leg. Caller holds the drain lock.
+func drainZitadelPass(ctx context.Context) (DrainResult, error) {
 	if !zitadelReachable(ctx) {
 		return DrainResult{Halted: true, Reason: "zitadel_offline"}, nil
 	}
-	// One target per pass, and this pass is Zitadel's: the dispatcher below
-	// speaks the Management API and nothing else. Add-on targets have their own
-	// dispatcher and their own pass (group 4); until that exists their rows are
-	// left alone rather than pushed through machinery shaped for a system they
-	// are not for.
 	rows, err := claimPending(ctx, db.TargetZitadel, claimBatch)
 	if err != nil {
 		return DrainResult{}, fmt.Errorf("claim pending: %w", err)
 	}
 	var res DrainResult
-	// Said out loud, because a pass that drained one target while another's
-	// work waits looks exactly like a pass with nothing left to do.
-	if waiting, err := awaitingDispatch(ctx, db.TargetZitadel); err != nil {
-		log.Printf("[PROPAGATION] could not list targets awaiting dispatch: %v (non-fatal)", err)
-	} else {
-		res.Awaiting = waiting
-	}
 	for _, row := range rows {
 		if halt := res.processRow(ctx, row); halt {
 			return res, nil
 		}
 	}
+	return res, nil
+}
+
+// pruneAfterDrain is the retention work, run once per drain rather than once
+// per pass: it is global, and repeating it per target would do the same scan
+// once for every registered add-on.
+func pruneAfterDrain(ctx context.Context) {
 	// Opportunistic retention prune (design §3.1). Non-fatal; canonical intent
 	// lives in direct_role_grants, so a failed prune never loses real data.
 	if n, err := pruneTerminal(ctx, retentionDays); err != nil {
@@ -113,7 +227,6 @@ func Drain(ctx context.Context) (DrainResult, error) {
 	} else if n > 0 {
 		log.Printf("[PROPAGATION] pruned %d spent plans older than %dd", n, retentionDays)
 	}
-	return res, nil
 }
 
 // DrainOne is the targeted counterpart to Drain: it processes ONLY the outbox row

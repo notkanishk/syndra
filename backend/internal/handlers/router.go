@@ -196,10 +196,14 @@ func NewRouter() http.Handler {
 	// the full grant inventory.
 	mux.HandleFunc("GET /api/v1/reconciliation/grants", withCORS(withOperatorAuth(handleGetReconciliationDiff)))
 
-	// Zitadel propagation outbox: operator drains the buffered Syndra-mediated
-	// grant mutations explicitly (B4/D3). Operator-gated — draining issues real
-	// Zitadel mutations and the pending list exposes the grant inventory.
+	// The propagation outbox: operator drains the buffered Syndra-mediated
+	// mutations explicitly (B4/D3), for every registered target. Operator-gated
+	// — draining issues real mutations and the pending list exposes the grant
+	// inventory.
 	mux.HandleFunc("POST /api/v1/propagations/drain", withCORS(withOperatorAuth(handleDrainPropagations)))
+	// And one target on its own, for the target that was unreachable while the
+	// rest drained and has come back.
+	mux.HandleFunc("POST /api/v1/targets/{target}/propagations/drain", withCORS(withOperatorAuth(handleDrainTarget)))
 	mux.HandleFunc("GET /api/v1/propagations", withCORS(withOperatorAuth(handleListPendingPropagations)))
 	// Change history: the same rows grouped by the event that produced them,
 	// including the ones still waiting. A half-applied cascade has to be

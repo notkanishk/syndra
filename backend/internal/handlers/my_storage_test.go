@@ -33,17 +33,21 @@ type storageHarness struct {
 	bound      bool
 	err        error
 	outcome    addons.Outcome
+	// unreachable is the target being switched off while the add-on in front of
+	// it answers perfectly — the state that decides whether this member is
+	// offered a form at all.
+	unreachable bool
 }
 
 func stubMyStorage(t *testing.T, h *storageHarness) {
 	t.Helper()
-	resolve, binding, cred, dispatch, record, callable :=
+	resolve, binding, cred, dispatch, record, callable, health :=
 		svcResolveEntitlementSet, dbGetTargetBinding, dbHasShadowCredential,
-		svcDispatchOperation, svcRecordCredentialSet, addonsCallable
+		svcDispatchOperation, svcRecordCredentialSet, addonsCallable, addonsHealth
 	t.Cleanup(func() {
 		svcResolveEntitlementSet, dbGetTargetBinding, dbHasShadowCredential,
-			svcDispatchOperation, svcRecordCredentialSet, addonsCallable =
-			resolve, binding, cred, dispatch, record, callable
+			svcDispatchOperation, svcRecordCredentialSet, addonsCallable, addonsHealth =
+			resolve, binding, cred, dispatch, record, callable, health
 	})
 
 	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
@@ -77,6 +81,9 @@ func stubMyStorage(t *testing.T, h *storageHarness) {
 		return nil
 	}
 	addonsCallable = func(string) bool { return true }
+	addonsHealth = func(context.Context, string) addons.TargetHealth {
+		return addons.TargetHealth{Reachable: !h.unreachable}
+	}
 }
 
 func setCredential(t *testing.T, body string) (*httptest.ResponseRecorder, string) {
@@ -172,6 +179,47 @@ func TestAnUnconfirmedCredentialSetIsNotReportedAsDone(t *testing.T) {
 	}
 	if len(h.recorded) != 0 {
 		t.Error("nothing may be recorded for a change nobody confirmed")
+	}
+}
+
+// An add-on that answers is not a target that answers, and this view must not
+// confuse the two.
+//
+// Found on the dev deployment: the add-on served its manifest happily while the
+// NAS behind it was switched off, so the member page offered the credential form
+// and the member learned otherwise after typing a password. The probe reads the
+// add-on's health — which is a live call to the target — rather than the
+// manifest it published about itself.
+func TestAnAnsweringAddOnWithAnUnreachableTargetOffersNoForm(t *testing.T) {
+	h := &storageHarness{entitled: true, bound: true, unreachable: true}
+	stubMyStorage(t, h)
+
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil)
+	r = r.WithContext(withPrincipal(r.Context(), &auth.Principal{Subject: "u1"}))
+	view, err := describeMyTarget(r, "truenas", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Reachable {
+		t.Error("a member must not be offered a form whose submission cannot land")
+	}
+}
+
+// And the refusal is the backend's, not the target's: a credential for an
+// unreachable target is refused here, before the value is sent anywhere.
+func TestACredentialForAnUnreachableTargetIsNotDispatched(t *testing.T) {
+	h := &storageHarness{entitled: true, bound: true, unreachable: true}
+	stubMyStorage(t, h)
+
+	rr, logs := setCredential(t, `{"password":"`+memberSecret+`"}`)
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(h.dispatched) != 0 {
+		t.Error("nothing may be sent at a target that cannot receive it")
+	}
+	if strings.Contains(rr.Body.String(), memberSecret) || strings.Contains(logs, memberSecret) {
+		t.Error("the refusal carries the credential")
 	}
 }
 

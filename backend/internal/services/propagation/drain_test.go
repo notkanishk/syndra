@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/zitadel"
@@ -31,6 +32,10 @@ func stubDrainDeps(t *testing.T) {
 		swap(&pruneTerminal, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&prunePlans, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&awaitingDispatch, func(context.Context, string) ([]string, error) { return nil, nil }),
+		// No add-ons unless a test registers some. Stubbed rather than left to
+		// the process registry so a drain test cannot depend on what some other
+		// package's Init happened to leave behind.
+		swap(&registeredAddons, func() []addons.Registration { return nil }),
 		swap(&undispatchable, func(context.Context, string, string) (string, error) { return "", nil }),
 		swap(&markApplied, func(context.Context, string) error { return nil }),
 		swap(&markFailed, func(context.Context, string, string) error { return nil }),
@@ -782,11 +787,16 @@ func TestDrain_ClaimsOnlyItsOwnTarget(t *testing.T) {
 // 1.11 — and it says what it left alone. A pass that dispatched one target's
 // work while another's waits is, from the outside, indistinguishable from a
 // pass with nothing left to do.
+//
+// The exclusion is empty now that a drain runs every target's pass: what is
+// still awaiting after all of them have run is genuinely undispatched — a
+// halted target, or one registered since. Excluding the target "just drained"
+// would hide exactly the case worth reporting.
 func TestDrain_ReportsTargetsItCouldNotDispatch(t *testing.T) {
 	stubDrainDeps(t)
 	awaitingDispatch = func(_ context.Context, drained string) ([]string, error) {
-		if drained != db.TargetZitadel {
-			t.Errorf("awaiting was asked to exclude %q, want the target just drained", drained)
+		if drained != "" {
+			t.Errorf("awaiting excluded %q; a whole-deployment drain excludes nothing", drained)
 		}
 		return []string{"truenas"}, nil
 	}

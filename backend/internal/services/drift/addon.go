@@ -302,7 +302,16 @@ const reconcileActor = "system:reconcile"
 // surface; this line carries it for whoever is reading logs at the time.
 func anchorLog(ctx context.Context, target string) string {
 	health := addonHealth(ctx, target)
-	if health.Outcome != addons.OutcomeSucceeded || health.LogHead == "" {
+	// A health read that did not succeed is no evidence either way, and the
+	// pass has nothing to compare. This is the only condition that skips.
+	//
+	// An empty LOG HEAD used to skip too, and that was the hole: the cheapest
+	// way to destroy the record is to delete the file, which reports no head
+	// and no records — so the one tampering that needs no skill at all was the
+	// one reading as "nothing to anchor". Against an anchor that remembers
+	// records, an empty head is a truncation and is classified as one; against
+	// no anchor at all it is refused below, where it is genuinely unanchorable.
+	if health.Outcome != addons.OutcomeSucceeded {
 		return ""
 	}
 	_, verdict, err := anchorLogHead(ctx, target, health.LogHead, health.LogRecords)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -426,5 +428,102 @@ func TestTheDispatchCarriesTheApprovedFingerprintAndNotAFreshOne(t *testing.T) {
 	}
 	if h.dispatched[0].Fingerprint != "fp-approved" {
 		t.Errorf("fingerprint = %q, want the one the approval recorded", h.dispatched[0].Fingerprint)
+	}
+}
+
+// The defect this pass was written for and did not have: nothing called it.
+//
+// `DrainAddon` was complete and tested, and no scheduler or route reached it —
+// so an approved entitlement change queued an outbox row that no code path
+// would ever dispatch, with no error anywhere to say so. Found by deploying and
+// pressing the operator's own Resume button, which drained Zitadel and reported
+// success while the NAS row sat pending.
+//
+// The property, stated so it stays: the operator's drain dispatches EVERY
+// registered target, not only the built-in one.
+func TestTheOperatorDrainDispatchesAddOnTargetsToo(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	claimed := map[string]bool{}
+	t.Cleanup(swap(&claimPending, func(_ context.Context, target string, _ int) ([]models.PendingPropagation, error) {
+		claimed[target] = true
+		if target == "truenas" {
+			return []models.PendingPropagation{addonRow("o1")}, nil
+		}
+		return nil, nil
+	}))
+	t.Cleanup(swap(&registeredAddons, func() []addons.Registration {
+		return []addons.Registration{{Target: "truenas"}}
+	}))
+
+	res, err := Drain(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !claimed[db.TargetZitadel] || !claimed["truenas"] {
+		t.Fatalf("both targets must have a pass, claimed=%v", claimed)
+	}
+	if len(h.dispatched) != 1 {
+		t.Fatalf("the add-on row was never dispatched: %+v", res)
+	}
+	if res.Applied != 1 {
+		t.Errorf("the combined summary must count the add-on row: %+v", res)
+	}
+	if len(res.Passes) != 2 {
+		t.Errorf("each target's pass must be reported separately: %+v", res.Passes)
+	}
+}
+
+// And a Zitadel outage does not hold a reachable NAS's approved work. They are
+// separate deployments with separate outages; coupling them is the thing the
+// target column was introduced to remove.
+func TestAZitadelOutageDoesNotHoldAnAddOnTarget(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	t.Cleanup(swap(&zitadelReachable, func(context.Context) bool { return false }))
+	t.Cleanup(swap(&claimPending, func(_ context.Context, target string, _ int) ([]models.PendingPropagation, error) {
+		if target == db.TargetZitadel {
+			t.Fatal("no row may be claimed for an unreachable Zitadel")
+		}
+		return []models.PendingPropagation{addonRow("o1")}, nil
+	}))
+	t.Cleanup(swap(&registeredAddons, func() []addons.Registration {
+		return []addons.Registration{{Target: "truenas"}}
+	}))
+
+	res, err := Drain(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(h.dispatched) != 1 || res.Applied != 1 {
+		t.Fatalf("the add-on pass must run regardless of Zitadel: %+v", res)
+	}
+	// And the operator is still told which half stopped, or "halted" is a
+	// sentence about nothing.
+	if !res.Halted || res.Reason != "zitadel_offline" || res.HaltedTarget != db.TargetZitadel {
+		t.Errorf("want the halt attributed to zitadel: %+v", res)
+	}
+}
+
+// The pre-flight probes the TARGET, not the add-on in front of it.
+//
+// The add-on is a separate container and stays up throughout a NAS outage, so a
+// manifest read — which is how this was probed — answered "reachable" while
+// nothing behind it was. A whole batch went through: twenty-one rows, twenty-one
+// round trips, twenty-one outcomes nobody could confirm, all to learn what one
+// call establishes.
+func TestThePreflightProbesTheTargetRatherThanTheAddon(t *testing.T) {
+	src, err := os.ReadFile("deps.go")
+	if err != nil {
+		t.Fatalf("read source: %v", err)
+	}
+	probe := regexp.MustCompile(`(?s)addonReachable = func\(ctx context\.Context, target string\) bool \{(.*?)\n\t\}`).
+		FindStringSubmatch(string(src))
+	if probe == nil {
+		t.Fatal("the pre-flight is gone; if it moved, move this guard with it")
+	}
+	if !strings.Contains(probe[1], "Reachable") {
+		t.Error("the pre-flight must read the target's reachability, not merely that the add-on answered")
+	}
+	if strings.Contains(probe[1], "addons.Refresh") {
+		t.Error("a manifest read proves only that the add-on's own process is up")
 	}
 }

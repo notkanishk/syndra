@@ -273,13 +273,15 @@ func writeMappingError(w http.ResponseWriter, err error) {
 		// 503, not 400: the request may be perfectly correct and the backend
 		// cannot tell yet. Retrying once the add-on answers is the right move.
 		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_CAPABILITIES_UNKNOWN", err.Error())
-	case errors.Is(err, errMappingValueUnresolvable):
+	case errors.Is(err, addons.ErrValueNotResolvable):
+		// The add-on's OWN sentinel, not a local restatement of it. This branch
+		// used to test a sentinel declared in this file that nothing ever
+		// wrapped, so a mapping naming a group the NAS does not have — an
+		// operator typo, the single likeliest mistake on this form — fell
+		// through to the default and came back 500 DB_ERROR. The target had
+		// answered clearly and the operator was shown an internal error.
 		jsonValidationErrorResponse(w, err.Error(), map[string]string{"value": "unresolvable"})
 	default:
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 	}
 }
-
-// errMappingValueUnresolvable is the add-on's half of the split: the field is
-// fine and the value names nothing on the target.
-var errMappingValueUnresolvable = errors.New("the target does not recognise that value")

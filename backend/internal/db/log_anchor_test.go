@@ -99,11 +99,37 @@ func TestTheAnchorDoesNotAdvancePastAViolation(t *testing.T) {
 
 // An add-on that reports no head cannot be anchored at all, and recording an
 // empty one would make every later empty head compare equal and read as healthy
-// for ever.
+// for ever. So it is refused — but only where that is the true statement.
 func TestAnEmptyHeadIsRefusedRatherThanAnchored(t *testing.T) {
 	src := readSource(t, "log_anchor.go")
 	if !strings.Contains(src, "the target reported no chain head") {
 		t.Error("an empty head must be refused, not stored")
+	}
+	// And refused inside the no-rows branch, not before the read. Before it,
+	// the refusal also swallowed the loudest signal the mechanism can get: a
+	// log deleted outright reports no head and no records, and an add-on whose
+	// anchor remembers three records reporting zero is a truncation.
+	noRows := regexp.MustCompile(`(?s)case errors\.Is\(err, pgx\.ErrNoRows\):(.*?)case err != nil:`).
+		FindStringSubmatch(src)
+	if noRows == nil {
+		t.Fatal("the first-sighting branch is gone; if it moved, move this guard with it")
+	}
+	if !strings.Contains(noRows[1], "no chain head") {
+		t.Error("the empty-head refusal belongs to the first sighting alone — a target with an anchor must be compared, not skipped")
+	}
+}
+
+// The deleted log, end to end through the rule that judges it.
+//
+// The cheapest possible tampering is `rm` on the file: no head, no records, no
+// skill required. It must be the easiest thing to detect and not the one case
+// that reads as an absence of evidence.
+func TestADeletedLogIsATruncationRatherThanASilence(t *testing.T) {
+	if got := ClassifyLogHead("dd7ff085259a", 3, "", 0); got != AnchorRecordsDecreased {
+		t.Fatalf("a log that reports nothing against an anchor of three records must be a violation, got %q", got)
+	}
+	if !AnchorViolation(ClassifyLogHead("dd7ff085259a", 3, "", 0)) {
+		t.Error("and it must be loud")
 	}
 }
 

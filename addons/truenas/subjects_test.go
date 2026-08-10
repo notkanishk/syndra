@@ -621,3 +621,97 @@ func TestTheFakeStillAnswersTheQueriesTheAddonSends(t *testing.T) {
 		t.Errorf("want only leo, got %s", got)
 	}
 }
+
+// The operating system's own accounts are not unmanaged accounts.
+//
+// Found by deploying: the inventory offered `root` for adoption. On a real
+// TrueNAS the read comes back with thirty-odd builtins beside the two accounts
+// an operator cares about, which buries the surface — and the worst of them is
+// adoptable, which hands somebody root's home directory and group memberships
+// and then converges the account to match a member's entitlements.
+func TestTheOperatingSystemsOwnAccountsAreNotReported(t *testing.T) {
+	rpc := &fakeRPC{
+		users: `[
+			{"username":"root","id":1,"uid":0,"locked":false,"smb":false,"groups":[41],"builtin":true},
+			{"username":"nobody","id":2,"uid":65534,"locked":true,"smb":false,"groups":[41],"builtin":true},
+			{"username":"svc-backup","id":3,"uid":999,"locked":false,"smb":false,"groups":[41]},
+			{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}
+		]`,
+		groups: fixtureGroups,
+	}
+	s := testServer(t, rpc)
+
+	snap, err := s.readSubjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.Subjects) != 1 || snap.Subjects[0].Username != "ada" {
+		var got []string
+		for _, s := range snap.Subjects {
+			got = append(got, s.Username)
+		}
+		t.Fatalf("want only the member account, got %v", got)
+	}
+}
+
+// Two guards, and the second one holds on its own. An account the target does
+// not flag as builtin but that carries a system uid is still the machine's.
+func TestASystemUIDIsExcludedEvenWithoutTheBuiltinFlag(t *testing.T) {
+	rpc := &fakeRPC{
+		users:  `[{"username":"root","id":1,"uid":0,"locked":false,"smb":false,"groups":[41]}]`,
+		groups: fixtureGroups,
+	}
+	s := testServer(t, rpc)
+
+	snap, err := s.readSubjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.Subjects) != 0 {
+		t.Fatalf("uid 0 must never be a manageable subject: %+v", snap.Subjects)
+	}
+}
+
+// And what cannot be read cannot be adopted. The refusal names the reason: an
+// operator who typed `root` on purpose is owed one.
+func TestRootCannotBeAdopted(t *testing.T) {
+	rpc := &fakeRPC{
+		users:  `[{"username":"root","id":1,"uid":0,"locked":false,"smb":false,"groups":[41],"builtin":true}]`,
+		groups: fixtureGroups,
+	}
+	s := testServer(t, rpc)
+
+	_, status, err := s.adoptAccount(OperationRequest{
+		Operation: "account.adopt", Subject: "u1", Actor: "op1", CallID: "c1",
+		Params: map[string]any{"username": "root"},
+	})
+	if status != http.StatusNotFound || err == nil {
+		t.Fatalf("want a refusal, got status=%d err=%v", status, err)
+	}
+	if !strings.Contains(err.Error(), "system accounts") {
+		t.Errorf("the refusal must say why: %v", err)
+	}
+}
+
+// A capped read stays capped. Truncation is decided on what the target sent,
+// before the system accounts are dropped — otherwise a read that hit the cap
+// could report itself complete, and "complete" is what the drift diff needs
+// before it may conclude that an account is absent.
+func TestTruncationIsDecidedBeforeSystemAccountsAreDropped(t *testing.T) {
+	var rows []string
+	for i := 0; i < subjectReadCap+1; i++ {
+		rows = append(rows, fmt.Sprintf(
+			`{"username":"sys%d","id":%d,"uid":%d,"locked":false,"smb":false,"groups":[],"builtin":true}`,
+			i, i+1, i))
+	}
+	rpc := &fakeRPC{users: "[" + strings.Join(rows, ",") + "]", groups: fixtureGroups}
+	s := testServer(t, rpc)
+
+	snap, err := s.readSubjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !snap.Truncated {
+		t.Error("a read that hit the cap must say so, whatever it dropped afterwards")
+	}
+}

@@ -62,6 +62,16 @@ type OperationResult struct {
 	// Activity and Health are the read-only operations' payloads.
 	Activity *ActivityReport `json:"activity,omitempty"`
 	Health   *TargetHealth   `json:"health,omitempty"`
+	// AccountUID is the unix identity of the account an adoption bound.
+	//
+	// Returned because the backend keeps its own copy of the binding and had no
+	// way to learn this: it knows the NAME the operator clicked, and a name is
+	// the half that changes. The add-on's own binding has carried the uid from
+	// the start, so without this the two copies of one binding disagreed about
+	// the field that survives a rename — and a renamed account came back as
+	// unmanaged, adoptable by somebody else, while the backend's binding still
+	// claimed it.
+	AccountUID int64 `json:"account_uid,omitempty"`
 }
 
 // handleOperation dispatches one named operation.
@@ -213,7 +223,7 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 	}
 	id, err := s.recordID(binding)
 	if err != nil {
-		return OperationResult{}, statusFor(err), fmt.Errorf("the bound account could not be located on the target")
+		return OperationResult{}, statusForLookup(err), lookupRefusal(err)
 	}
 	if err := s.nas.call("user.update", []any{id, map[string]any{"password": password}}, nil); err != nil {
 		// A sentence an operator can read, not the security boundary. The
@@ -248,7 +258,7 @@ func (s *server) rotatePassword(req OperationRequest) (OperationResult, int, err
 	}
 	id, err := s.recordID(binding)
 	if err != nil {
-		return OperationResult{}, statusFor(err), fmt.Errorf("the bound account could not be located on the target")
+		return OperationResult{}, statusForLookup(err), lookupRefusal(err)
 	}
 	if err := s.nas.call("user.update", []any{id, map[string]any{"password": minted}}, nil); err != nil {
 		return OperationResult{}, statusFor(err), fmt.Errorf("the target refused the rotation")
@@ -301,7 +311,7 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	// elevated one does exactly one thing.
 	id, err := s.recordID(binding)
 	if err != nil {
-		return OperationResult{}, statusFor(err), fmt.Errorf("the bound account could not be located on the target")
+		return OperationResult{}, statusForLookup(err), lookupRefusal(err)
 	}
 
 	// A session of its own, closed immediately. Not the long-lived one: an
@@ -516,7 +526,12 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 		if existing.Username == username {
 			return OperationResult{
 				Operation: "account.adopt", Subject: req.Subject, Outcome: "succeeded",
-				Detail: fmt.Sprintf("%s was already bound to this subject.", username),
+				// The uid travels on the repeat too. Without it the second
+				// adoption would hand the backend a zero and overwrite a
+				// binding that was correct with one that is not — the repeat
+				// path making the state worse than the first attempt left it.
+				AccountUID: existing.UID,
+				Detail:     fmt.Sprintf("%s was already bound to this subject.", username),
 			}, http.StatusOK, nil
 		}
 		// Rebinding is not adoption. The subject already has an account here,
@@ -554,8 +569,13 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 		}
 	}
 	if account == nil {
+		// "No such account" covers two cases and says both, because the second
+		// one is a refusal rather than a miss: the snapshot excludes the
+		// operating system's own accounts, so `root` reaches here exactly as a
+		// misspelling does — and an operator who typed `root` deliberately is
+		// owed the reason rather than a puzzle.
 		return OperationResult{}, http.StatusNotFound,
-			fmt.Errorf("the target has no account named %s", username)
+			fmt.Errorf("the target has no adoptable account named %s (system accounts are never adoptable)", username)
 	}
 
 	if err := s.store.PutBinding(Binding{
@@ -570,6 +590,7 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 	s.record("account.adopt", req.Subject, req.Actor, req.CallID, "succeeded")
 	return OperationResult{
 		Operation: "account.adopt", Subject: req.Subject, Outcome: "succeeded",
-		Detail: fmt.Sprintf("%s is now bound to this subject. Nothing on the account was changed.", account.Username),
+		AccountUID: account.UID,
+		Detail:     fmt.Sprintf("%s is now bound to this subject. Nothing on the account was changed.", account.Username),
 	}, http.StatusOK, nil
 }

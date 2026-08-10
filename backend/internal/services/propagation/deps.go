@@ -110,13 +110,27 @@ var (
 	// terminal, so an unreachable target would fail approved work rather than
 	// leaving it queued.
 	//
-	// The manifest read doubles as the probe: it is the call the backend
-	// already makes, and an add-on that cannot serve it cannot serve an apply.
-	// A refusal leaves the previous manifest in place, so probing costs nothing
-	// but a round trip.
+	// It probes the TARGET, not the add-on, and the distinction is what this
+	// pre-flight is for. A manifest read proves only that the add-on's own
+	// process is answering — which it is, throughout a NAS outage, because the
+	// add-on is a separate container that stays up. Probing that way let a
+	// whole batch through to a target that was switched off: twenty-one rows
+	// each spent a round trip, each came back as "we cannot say what happened",
+	// and twenty-one unresolved operations landed on the surface an operator
+	// watches, for an outage a single call establishes.
+	//
+	// `/health` is that single call, and it is a live read on the add-on's side
+	// rather than a cached opinion.
 	addonReachable = func(ctx context.Context, target string) bool {
-		return addons.Refresh(ctx, target) == nil
+		h := addons.Health(ctx, target)
+		return h.Outcome == addons.OutcomeSucceeded && h.Reachable
 	}
+
+	// Which targets the drain has a dispatcher for, beyond the built-in one.
+	// A seam because the alternative is a drain test that can only ever see
+	// Zitadel — which is exactly the gap that let the add-on dispatcher ship
+	// with no caller.
+	registeredAddons = addons.Registered
 
 	maxRetries    = outboxMaxRetries()    // OUTBOX_MAX_RETRIES (default 5)
 	retentionDays = outboxRetentionDays() // OUTBOX_RETENTION_DAYS (default 30)

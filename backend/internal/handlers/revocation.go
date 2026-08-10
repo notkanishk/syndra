@@ -129,15 +129,18 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 		ActorID: actor, SubjectID: subject, Confirmed: true,
 	})
 	if rotateErr != nil || res.Outcome != addons.OutcomeSucceeded {
-		detail := revokeCopy
-		if rotateErr != nil {
-			detail = "The suspension is recorded and queued. The credential was NOT replaced: " + rotateErr.Error()
-		}
+		// The copy is composed from what happened, never inherited from the
+		// success path. It used to fall back to `revokeCopy` whenever the
+		// dispatch returned no Go error — which is every case where the ADD-ON
+		// answered and said no — so an operator whose rotation was refused read
+		// "the credential has been replaced" beside `rotated: false`. The
+		// machine-readable fields were right and the sentence a human reads was
+		// the opposite, which is the worse half to get wrong.
 		jsonResponse(w, http.StatusAccepted, map[string]any{
 			"status":       "partially_revoked",
 			"allowance_id": allowance.ID,
 			"rotated":      false,
-			"detail":       detail,
+			"detail":       partialRevokeCopy(res.Outcome, rotateErr, res.Err),
 			// Named so a surface can offer the one remaining action rather than
 			// the whole composition again.
 			"outstanding": "password.rotate",
@@ -168,3 +171,33 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 // Long enough not to nag, short enough that "we suspended them during the
 // investigation" does not become a permanent state nobody remembers taking.
 const defaultRevocationReview = 90 * 24 * time.Hour
+
+// partialRevokeCopy says what actually happened to the credential half.
+//
+// Three sentences for three genuinely different states, because the action an
+// operator takes next differs in each: a refusal needs the reason dealt with, an
+// unreached target needs retrying, and an unconfirmed one must not be retried
+// blind — a second rotation on a target that did rotate leaves the member locked
+// out of an account nobody can explain.
+//
+// The suspension is stated first in all three. It is the half that DID happen,
+// and burying it under the failure would read as "the revocation failed".
+func partialRevokeCopy(outcome addons.Outcome, dispatchErr, targetErr error) string {
+	const suspended = "New connections are refused now — that half is recorded and queued. "
+
+	switch {
+	case dispatchErr != nil:
+		// Never sent. The backend refused it before it left, so the reason is
+		// this deployment's own and is safe to show.
+		return suspended + "The credential was NOT replaced: " + dispatchErr.Error()
+	case outcome == addons.OutcomeRejected:
+		return suspended + "The credential was NOT replaced — the target refused: " + errText(targetErr) +
+			" Replace it once that is resolved."
+	case outcome == addons.OutcomeUnreached:
+		return suspended + "The credential was NOT replaced — the target could not be reached. Try the rotation again."
+	default:
+		// Indeterminate. The one case where retrying is the wrong reflex.
+		return suspended + "The target did not confirm whether the credential was replaced. " +
+			"Check the account before rotating again — a second rotation on an account that did rotate locks the member out of it."
+	}
+}

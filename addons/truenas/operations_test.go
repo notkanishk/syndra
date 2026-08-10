@@ -699,3 +699,66 @@ func TestTheFakeAppliesTheFiltersTheLookupSends(t *testing.T) {
 		t.Fatalf("want errNoSuchAccount, got %v", err)
 	}
 }
+
+// An account that is gone is a refusal, not a mystery.
+//
+// Found on the dev deployment: a revocation aimed at an account somebody had
+// already deleted came back 502, which the backend reads as indeterminate — so
+// it parked on the unconfirmed-revocations surface as "we do not know whether
+// this happened" and stayed there. The truthful answer is that there was
+// nothing to revoke and no retry will change it, and only a 4xx says that.
+func TestAMissingBoundAccountIsRefusedRatherThanLeftUnknown(t *testing.T) {
+	rpc := &fakeRPC{users: `[]`, groups: fixtureGroups}
+	s := testServer(t, rpc)
+	if err := s.store.PutBinding(Binding{SubjectID: "u1", Username: "ada", UID: 3001}); err != nil {
+		t.Fatal(err)
+	}
+
+	// `account.purge` is deliberately absent: it refuses earlier still, for
+	// want of the elevated key, and never reaches the lookup.
+	for _, op := range []string{"password.rotate", "password.set"} {
+		t.Run(op, func(t *testing.T) {
+			req := OperationRequest{
+				Operation: op, Subject: "u1", Actor: "op1", CallID: "c-" + op,
+				Params: map[string]any{"password": "Correct-Horse-Battery-9!"},
+			}
+			_, status, err := s.runOperation(op, req)
+			if err == nil {
+				t.Fatal("want a refusal")
+			}
+			if status < 400 || status >= 500 {
+				t.Fatalf("want a deterministic 4xx, got %d (%v)", status, err)
+			}
+			if !strings.Contains(err.Error(), "no longer exists") {
+				t.Errorf("the operator needs to know the account is gone: %v", err)
+			}
+		})
+	}
+}
+
+// And two accounts matching one binding is a different refusal, because what an
+// operator does next differs: one of them has to be renamed before anything
+// touches either.
+func TestAnAmbiguousBindingIsItsOwnRefusal(t *testing.T) {
+	rpc := &fakeRPC{
+		users: `[
+			{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]},
+			{"username":"ada-old","id":12,"uid":3001,"locked":false,"smb":false,"groups":[42]}
+		]`,
+		groups: fixtureGroups,
+	}
+	s := testServer(t, rpc)
+	if err := s.store.PutBinding(Binding{SubjectID: "u1", Username: "ada", UID: 3001}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, status, err := s.rotatePassword(OperationRequest{
+		Operation: "password.rotate", Subject: "u1", Actor: "op1", CallID: "c1",
+	})
+	if err == nil {
+		t.Fatal("want a refusal")
+	}
+	if status != http.StatusConflict {
+		t.Fatalf("want 409, got %d (%v)", status, err)
+	}
+}

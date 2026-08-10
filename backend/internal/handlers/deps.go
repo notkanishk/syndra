@@ -36,6 +36,7 @@ var (
 	dbGetPropagationStatus          = db.GetPropagationStatus
 	svcDrainPropagations            = propagation.Drain
 	svcDrainPropagationRow          = propagation.DrainOne
+	svcDrainAddon                   = propagation.DrainAddon
 
 	dbCreateAccessRequest  = db.CreateAccessRequest
 	dbGetAccessRequestByID = db.GetAccessRequestByID
@@ -386,6 +387,9 @@ var (
 	addonsRegistered = addons.Registered
 	addonsGet        = addons.Get
 	addonsHealth     = addons.Health
+	// The backend's memory of an add-on's mutation log, read beside that add-on's
+	// own account of itself. Two authorities on purpose.
+	dbGetLogAnchor = db.GetLogAnchor
 )
 
 // A member's own view of a target (group 10).

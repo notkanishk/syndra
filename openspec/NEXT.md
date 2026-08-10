@@ -170,12 +170,24 @@ endpoint and no screen:
 5. **Connection instructions** (10.8) — the account name is already on the member page; the mount instructions are not.
 6. **A button for the revocation composition** (6.17) — `POST /targets/{t}/users/{id}/revoke-access` exists and nothing calls it. Its copy is fixed by the backend and must be shown verbatim: this target cannot end a session.
 
-**Operator-gated, and new.** The add-on platform has never run against a real
-deployment end to end. Specifically: register the TrueNAS add-on, watch the
-first manifest read turn registration into capability, rehearse a convergence
-for one subject, apply it, resume the drain, and confirm the account it creates
-is named from the email localpart rather than from a digest. Then the same
-against an unreachable NAS, to see a provisional plan issued and resolved.
+**It has now run end to end — against a stand-in, not a NAS.** The dev LXC ran
+the whole platform: migrations 25→34 against a clone of the live database, both
+binaries in their own containers over mutual TLS, and a stand-in middleware
+speaking TrueNAS's JSON-RPC on the far end. Rehearse → apply → drain creates the
+account under the name the plan promised; a replayed plan is refused; a
+provisional plan issued against the add-on's mirror is refused at dispatch as
+`PLAN_STALE` when the subject has moved; the mutation log deleted is detected.
+**§19 of `changes/addon-platform/tasks.md` records the fourteen defects that run
+found, seven of which every test in both suites passed straight through.**
+
+**Still operator-gated, and it is the same gap §13 named.** None of it has
+touched a real TrueNAS. What that leaves untested is TrueNAS's own behaviour
+rather than Syndra's: the filter syntax `user.query` actually accepts, what
+`user.update` does with a `groups` list, the auth rate limiter and its ten-minute
+lockout, whether `builtin` is on every supported major, and whether the API key's
+permission set covers `user.create`/`user.update` without FULL_ADMIN. Point
+`TRUENAS_URL` at the real one, run the same sequence, and read the mutation log
+afterwards.
 
 ## 4b. Test infrastructure debt
 
@@ -191,7 +203,7 @@ against an unreachable NAS, to see a provisional plan issued and resolved.
 
   This matters most in exactly the case it was built for: a nightly sweep that has been unable to reach a target for a week looks, on every surface an operator actually opens, like a week with no drift. The natural home is the governance summary beside the drift count — which needs `TargetReconciliation` moved to `internal/models` first, since `models` must not import `db`. Deliberately not done inline with 1.14: a backend field with no rendering is not "saying so" to anybody, and inventing the callout unprompted is a design decision the IA change owns (`basic-advanced-ia`).
 
-- **The log-integrity finding has no dashboard either.** `addon_log_anchors` (migration 000033) records where each add-on's mutation-log head was, and refuses to move past a truncation or a rewrite. `db.ListCompromisedLogs` exists and has no consumer. This is the strongest evidence this system produces and it currently lives in a log line and a table.
+- **The log-integrity finding reaches one surface, and should reach the summary.** `addon_log_anchors` (migration 000033) records where each add-on's mutation-log head was and refuses to move past a truncation or a rewrite. `GET /api/v1/targets/{target}/health` now carries the finding (§19.6), so an operator who opens that target sees it — but `db.ListCompromisedLogs` still has no consumer, so nothing tells them to open it. The governance summary is the home, beside the drift count and the unreconciled-target record above; all three are the same missing callout.
 
 ## 5. Declined / deliberately kept
 

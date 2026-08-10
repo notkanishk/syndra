@@ -98,6 +98,19 @@ operator somewhere different:
 - **serving from a stale mirror** — reads are answered from a copy, labelled
   with its age. Data with an age, not an error.
 
+And one more, which arrived after this document was first written and does not
+belong with the five above because it is not a state of the target's health:
+
+- **`log_anchor` with a `violation_reason`** — the target's mutation log is no
+  longer an extension of the one Syndra remembers: records that existed are gone,
+  or the same number of them now hash to something else. This is the strongest
+  evidence the system produces and it is a SECURITY finding, not a health
+  degradation — it appears whether or not the add-on is currently answering, and
+  it must not be rendered as another kind of amber. `violation_reason` is
+  `records_decreased` or `head_rewritten`, `violation_at` is when it was seen,
+  and `head`/`records` are where the anchor stopped. The anchor deliberately does
+  not advance past it, so the finding stays until somebody resolves it.
+
 ### Accounts Syndra did not create — the unmanaged inventory
 
 A real NAS holds `root`, service accounts and whatever an admin made by hand.
@@ -195,3 +208,28 @@ failure that endpoint's whole design is arranged to prevent.
 - **A confirmation is a backend refusal**, not a dialog. `account.adopt`,
   `account.purge` and the revocation composition are refused without one — a
   dialog that only the frontend enforces is a suggestion.
+
+Three more, added after the platform was deployed and run (§19 of `tasks.md`).
+Each one is a sentence the backend now composes from what actually happened, and
+each replaced one that was wrong:
+
+- **An adoption answers three ways, and only one of them is "adopted."** `200`
+  with `status: adopted` means the target confirmed it and the binding is
+  written. `409 ADOPTION_REFUSED` carries the target's own words — already bound
+  to somebody else, no such account — and nothing was recorded. `202` with
+  `status: unconfirmed` means the target did not answer, nothing was recorded,
+  and the operator should look at the inventory before trying again. Rendering
+  all three as success is what this endpoint used to do.
+- **A partial revocation says which half is outstanding and what to do about
+  it.** `status: partially_revoked` always means the suspension is recorded and
+  the credential is NOT replaced. The `detail` differs by outcome and must be
+  shown verbatim: a refusal names the reason, an unreachable target says to try
+  again, and an unconfirmed one deliberately does NOT — a second rotation on an
+  account that did rotate locks the member out of it.
+- **A drain reports one pass per target.** `passes[]` carries each target's own
+  counts and its own halt; `halted_target` names whose reason the top-level
+  `reason` is. A combined "halted" cannot say which target halted, and that is
+  the whole of what an operator does next — a Zitadel outage no longer holds a
+  reachable NAS's queue, so "halted" beside `applied: 9` is now an ordinary
+  result rather than a contradiction. `POST /targets/{t}/propagations/drain`
+  resumes one target alone.

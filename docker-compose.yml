@@ -81,11 +81,32 @@ services:
       # Self-mutation loop guard: drop events whose editorUserId matches the
       # backend's own M2M service-user ID. Unset disables the guard (dev only).
       - ZITADEL_M2M_USER_ID=${ZITADEL_M2M_USER_ID:-}
+      # Add-on registration. Absent from this list, every ADDON_* value in .env
+      # was read by a process that never saw it: the add-on container started,
+      # the operator's .env named it, and the backend registered nothing — with
+      # no error anywhere, because "not configured" is a legitimate state.
+      # Registration is a deployment fact, so it travels with the deployment.
+      - ADDON_TARGETS=${ADDON_TARGETS:-}
+      - ADDON_TRUENAS_BASE_URL=${ADDON_TRUENAS_BASE_URL:-}
+      - ADDON_TRUENAS_CLIENT_CERT=${ADDON_TRUENAS_CLIENT_CERT:-}
+      - ADDON_TRUENAS_CLIENT_KEY=${ADDON_TRUENAS_CLIENT_KEY:-}
+      - ADDON_TRUENAS_CA_CERT=${ADDON_TRUENAS_CA_CERT:-}
+      - ADDON_TRUENAS_SIGNING_KEY=${ADDON_TRUENAS_SIGNING_KEY:-}
+      - ADDON_MANIFEST_REFRESH_INTERVAL=${ADDON_MANIFEST_REFRESH_INTERVAL:-}
+      - ADDON_MEMBER_OP_LIMIT=${ADDON_MEMBER_OP_LIMIT:-}
+      - PLAN_COHORT_LIMIT=${PLAN_COHORT_LIMIT:-}
+      - PLAN_LIFETIME=${PLAN_LIFETIME:-}
     volumes:
       # Bind the host-side key file to the fixed internal path. When
       # ZITADEL_MACHINE_KEY_PATH is unset, this resolves to a /dev/null no-op
       # mount and the backend skips M2M init via the env-var check above.
       - ${ZITADEL_MACHINE_KEY_PATH:-/dev/null}:/etc/syndra/zitadel-sa-key.json:ro
+      # The backend's half of the add-on trust material: its client certificate
+      # and the private CA that authenticates the add-on to it. The add-on's
+      # half is mounted into the add-on. Two directories rather than one shared
+      # one, because the add-on must never be able to read the credential that
+      # authenticates the backend to it.
+      - ${BACKEND_SECRETS_DIR:-./secrets/backend}:/run/secrets:ro
     ports:
       - "8080:8080"
     # The only service on all three. It is the single mutation authority, so it

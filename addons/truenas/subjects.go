@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 )
@@ -40,6 +41,15 @@ type nasUser struct {
 	UID      int64  `json:"uid"`
 	Locked   bool   `json:"locked"`
 	SMB      bool   `json:"smb"`
+	// Builtin is the target's own word for an account that came with the
+	// operating system — root, daemon, nobody, and thirty more.
+	//
+	// Read so they can be left out. They are not unmanaged accounts awaiting an
+	// operator's decision, they are the machine: reporting them buries the two
+	// real findings under thirty that will never be actioned, and the inventory
+	// is a surface whose credibility is set the first time somebody opens it.
+	// Worse, every one of them was offered for adoption — including root.
+	Builtin bool `json:"builtin"`
 	// Groups is a list of group RECORD ids, not gids — the same key
 	// `user.update({groups})` writes back, which is why both directions resolve
 	// through one map.
@@ -93,7 +103,7 @@ func (s *server) readSubjects() (Snapshot, error) {
 	query := []any{
 		[]any{},
 		map[string]any{
-			"select": []string{"id", "username", "uid", "locked", "smb", "groups"},
+			"select": []string{"id", "username", "uid", "locked", "smb", "groups", "builtin"},
 			"limit":  subjectReadCap + 1,
 		},
 	}
@@ -101,10 +111,21 @@ func (s *server) readSubjects() (Snapshot, error) {
 		return Snapshot{}, err
 	}
 
+	// Truncation is decided on what the TARGET sent, before anything is
+	// dropped here. Deciding it after the filter would let a capped read of
+	// mostly system accounts report itself as complete, and "complete" is the
+	// word the drift diff needs to conclude that an account is absent.
 	truncated := len(users) > subjectReadCap
 	if truncated {
 		users = users[:subjectReadCap]
 	}
+
+	// Filtered here rather than in the query. A server-side `builtin = false`
+	// would be one filter expression away from a release that spells it
+	// differently, and the failure mode of a rejected query is a read that
+	// fails entirely — reporting a healthy target as unreachable. Filtering
+	// what came back costs one pass over a list that is already in memory.
+	users = withoutSystemAccounts(users)
 
 	names, _, err := s.groupIndex()
 	if err != nil {
@@ -137,6 +158,28 @@ func (s *server) readSubjects() (Snapshot, error) {
 		})
 	}
 	return Snapshot{TakenAt: time.Now().UTC(), Subjects: subjects, Truncated: truncated}, nil
+}
+
+// systemUIDCeiling is where the operating system's accounts stop.
+//
+// TrueNAS allocates 0-999 to the system and its services and assigns member
+// accounts from 1000 up, so this is a fact about the platform rather than a
+// tunable. It exists as a SECOND check beside the `builtin` flag because the
+// thing being prevented — Syndra taking ownership of root — is worth two
+// independent guards: one reads what the target says about an account, and one
+// reads what its identity is.
+const systemUIDCeiling = 1000
+
+// withoutSystemAccounts drops the accounts that belong to the machine.
+func withoutSystemAccounts(users []nasUser) []nasUser {
+	kept := make([]nasUser, 0, len(users))
+	for _, u := range users {
+		if u.Builtin || u.UID < systemUIDCeiling {
+			continue
+		}
+		kept = append(kept, u)
+	}
+	return kept
 }
 
 // groupIndex reads the group table once and returns both directions of it.
@@ -286,4 +329,46 @@ func (n *NAS) Ping() (string, error) {
 	n.lastRead = n.now()
 	n.mu.Unlock()
 	return res, nil
+}
+
+// statusForLookup answers what a failed account lookup actually was.
+//
+// `statusFor` is about the SESSION — unreachable, rate-limited, or "the target
+// said no" — and a lookup that resolved cleanly to "there is no such account"
+// went through its default and came back 502. The backend reads a 5xx as
+// indeterminate, so a revocation aimed at an account somebody had already
+// deleted was recorded as "we do not know whether it happened" and parked on the
+// unconfirmed-revocations surface for ever, when the truthful answer is that
+// there was nothing there to revoke and no retry will change it.
+//
+// Both lookup failures are deterministic and neither is a target fault, so both
+// are 4xx: the backend classifies those as rejected, which is what they are.
+func statusForLookup(err error) int {
+	switch {
+	case errors.Is(err, errNoSuchAccount):
+		return http.StatusUnprocessableEntity
+	case errors.Is(err, errAmbiguousAccount):
+		// A different refusal from absence. Two accounts matching is a question
+		// about which one, and an operator has to answer it before anything
+		// touches either.
+		return http.StatusConflict
+	default:
+		return statusFor(err)
+	}
+}
+
+// lookupRefusal is the sentence an operator reads.
+//
+// It distinguishes the two, because what to do next differs: an account that is
+// gone needs the binding cleared, and two accounts matching needs one of them
+// renamed before anything is safe to run.
+func lookupRefusal(err error) error {
+	switch {
+	case errors.Is(err, errNoSuchAccount):
+		return fmt.Errorf("the bound account no longer exists on the target")
+	case errors.Is(err, errAmbiguousAccount):
+		return fmt.Errorf("more than one account on the target matches the binding")
+	default:
+		return fmt.Errorf("the bound account could not be located on the target")
+	}
 }

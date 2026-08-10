@@ -83,26 +83,63 @@ func handleAdoptAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// An outcome that is not success is not an adoption, and it is answered as
+	// what it was.
+	//
+	// This handler used to answer 200 "The account is now bound to that person"
+	// for every outcome, including a refusal: the target said no, the binding
+	// was correctly not written, and the operator was told it had worked. The
+	// two states then disagreed with nothing on any surface saying so — the
+	// exact shape of failure the queued/succeeded distinction exists to prevent,
+	// arriving through the one action that hands somebody else's data over.
+	switch res.Outcome {
+	case addons.OutcomeSucceeded:
+		// Falls through to the binding write below.
+	case addons.OutcomeRejected:
+		jsonErrorResponse(w, http.StatusConflict, "ADOPTION_REFUSED", adoptionRefusal(res.Err))
+		return
+	default:
+		// Unreached and indeterminate differ in what may have happened on the
+		// target, and neither is something to record here: the add-on's own
+		// binding store is the authority, and the next inventory read reports
+		// what it actually holds.
+		jsonResponse(w, http.StatusAccepted, map[string]any{
+			"status":    "unconfirmed",
+			"operation": res.OperationID,
+			"outcome":   res.Outcome,
+			"detail":    "The target did not confirm the adoption. Nothing was recorded here; check the inventory before trying again.",
+		})
+		return
+	}
+
 	// The backend's own record, written only after the add-on confirmed it. The
 	// add-on's store is what the apply consults; this is the copy the inventory
 	// and the member's view read, and writing it first would have made an
 	// account look managed that the add-on had refused to bind.
-	if res.Outcome == addons.OutcomeSucceeded {
-		if err := dbRecordTargetBinding(r.Context(), db.TargetBinding{
-			Target: target, SubjectID: req.SubjectID,
-			Username: username, BoundBy: resolveActor(r, ""),
-		}); err != nil {
-			// The adoption happened. Reported as a partial rather than a failure,
-			// because retrying it would be a second adoption of an account that
-			// is already bound — which the add-on answers from its dedup store,
-			// but which an operator should not be told to do.
-			jsonResponse(w, http.StatusAccepted, map[string]any{
-				"status":    "adopted",
-				"operation": res.OperationID,
-				"warning":   "The target recorded the adoption and Syndra's own copy of it did not. It will be repaired by the next convergence.",
-			})
-			return
-		}
+	if err := dbRecordTargetBinding(r.Context(), db.TargetBinding{
+		Target: target, SubjectID: req.SubjectID,
+		Username: username, BoundBy: resolveActor(r, ""),
+		// The uid as the add-on read it off the target, not as this request
+		// described the account. A binding recorded by name alone stops
+		// recognising its account the moment somebody renames it on the
+		// NAS, and the account then reappears as unmanaged — offered for
+		// adoption to a second person while this binding still claims it.
+		//
+		// A pointer, and left nil when the add-on sent nothing: "the
+		// account has uid 0" is root, and writing a zero for "we were not
+		// told" would record the most dangerous account on the system.
+		AccountUID: optionalUID(res.AccountUID),
+	}); err != nil {
+		// The adoption happened. Reported as a partial rather than a failure,
+		// because retrying it would be a second adoption of an account that
+		// is already bound — which the add-on answers from its dedup store,
+		// but which an operator should not be told to do.
+		jsonResponse(w, http.StatusAccepted, map[string]any{
+			"status":    "adopted",
+			"operation": res.OperationID,
+			"warning":   "The target recorded the adoption and Syndra's own copy of it did not. It will be repaired by the next convergence.",
+		})
+		return
 	}
 
 	jsonResponse(w, http.StatusOK, map[string]any{
@@ -158,4 +195,29 @@ func handleSetTargetLifecycle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, out)
+}
+
+// optionalUID distinguishes "uid zero" from "no uid was reported".
+//
+// They are not the same account and they are not the same statement. uid 0 is
+// root; a missing value is an add-on that did not send one, and storing the
+// first when the second is true would record a binding to the most privileged
+// account on the target.
+func optionalUID(uid int64) *int64 {
+	if uid == 0 {
+		return nil
+	}
+	return &uid
+}
+
+// adoptionRefusal is what the target said, or a sentence when it said nothing.
+//
+// The add-on's own words are the useful half — "already bound to another
+// subject", "no adoptable account named root" — and losing them leaves an
+// operator with a status code and a guess.
+func adoptionRefusal(err error) string {
+	if err == nil {
+		return "The target refused the adoption."
+	}
+	return "The target refused the adoption: " + err.Error()
 }

@@ -26,6 +26,11 @@ import (
 // resolve current state — conflating the two is how a reconcile loop reverts an
 // intentional edit.
 
+// ErrBuiltInTarget is the add-on dispatcher being handed Zitadel. A sentinel
+// rather than a message, so the HTTP layer can answer "wrong route" instead of
+// reporting a downstream failure that did not happen.
+var ErrBuiltInTarget = errors.New("zitadel is the built-in target and has its own dispatcher")
+
 // DrainAddon dispatches one add-on target's queued entitlement work.
 //
 // Operator-triggered like the Zitadel pass, and for the same reason: these rows
@@ -42,7 +47,7 @@ func DrainAddon(ctx context.Context, target string) (DrainResult, error) {
 		// Refused rather than ignored. The Zitadel pass exists and is not this
 		// one; a caller that reached here with the built-in target has a wrong
 		// model of which dispatcher does what.
-		return DrainResult{}, fmt.Errorf("drain add-on: %s is the built-in target and has its own dispatcher", target)
+		return DrainResult{}, fmt.Errorf("drain add-on: %w", ErrBuiltInTarget)
 	}
 
 	release, acquired, err := acquireDrainLock(ctx)
@@ -54,6 +59,19 @@ func DrainAddon(ctx context.Context, target string) (DrainResult, error) {
 	}
 	defer release()
 
+	res, err := drainAddonPass(ctx, target)
+	if err != nil {
+		return DrainResult{}, err
+	}
+	// The single-target entry prunes too. Retention is global work that any
+	// drain may do, and an operator who only ever resumes one target would
+	// otherwise never prune anything.
+	pruneAfterDrain(ctx)
+	return res, nil
+}
+
+// drainAddonPass is one add-on target's leg. Caller holds the drain lock.
+func drainAddonPass(ctx context.Context, target string) (DrainResult, error) {
 	// One probe, before any row is claimed, exactly as the Zitadel passes do.
 	// A batch dispatched into an outage spends one retry per row to learn what
 	// a single call establishes — and an exhausted budget is terminal, so the

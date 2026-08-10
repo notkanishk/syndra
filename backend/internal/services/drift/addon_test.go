@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"regexp"
 	"testing"
 	"time"
 
@@ -277,5 +279,26 @@ func TestTheInventoryListingQueuesNothing(t *testing.T) {
 	}
 	if h.reconciled || len(h.marked) != 0 {
 		t.Error("a listing must not record a reconciliation it did not perform")
+	}
+}
+
+// The anchoring call must skip on a failed READ and on nothing else.
+//
+// It used to skip when the add-on reported an empty log head as well, which
+// meant a log deleted outright — the cheapest tampering there is — produced no
+// finding at all. A source guard because the condition is one line and the
+// failure it causes is silent for as long as nobody looks.
+func TestAnchoringSkipsOnlyWhenTheHealthReadFailed(t *testing.T) {
+	src, err := os.ReadFile("addon.go")
+	if err != nil {
+		t.Fatalf("read source: %v", err)
+	}
+	guard := regexp.MustCompile(`(?s)health := addonHealth\(ctx, target\)(.*?)\n\t_, verdict, err := anchorLogHead`).
+		FindStringSubmatch(string(src))
+	if guard == nil {
+		t.Fatal("anchorLog's shape changed; if it moved, move this guard with it")
+	}
+	if regexp.MustCompile(`health\.LogHead\s*==\s*""`).MatchString(guard[1]) {
+		t.Error("an empty log head must reach the classifier — against an existing anchor it is a truncation, not a silence")
 	}
 }

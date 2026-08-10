@@ -105,14 +105,18 @@ func RecordLogHead(ctx context.Context, target, head string, records int64) (Log
 	switch {
 	case strings.TrimSpace(target) == "":
 		return LogAnchor{}, "", fmt.Errorf("anchor log head: no target")
-	case strings.TrimSpace(head) == "":
-		// An add-on that reports no head is one whose log cannot be anchored at
-		// all. Refused rather than recorded as an empty head, which would then
-		// compare equal to the next empty one and read as healthy forever.
-		return LogAnchor{}, "", fmt.Errorf("anchor log head for %s: the target reported no chain head", target)
 	case records < 0:
 		return LogAnchor{}, "", fmt.Errorf("anchor log head for %s: negative record count", target)
 	}
+	// An empty head is NOT refused here, and where that check moved to is the
+	// point. It used to sit beside the two above, which meant the single
+	// loudest signal this mechanism can receive was discarded before it was
+	// read: a log that has been deleted outright reports no head and no
+	// records, and against an anchor that remembers three records that is a
+	// truncation, not an absence of evidence. The refusal now applies only
+	// where it is true — the FIRST sighting of a target, where there is nothing
+	// to compare against and an empty head recorded as the baseline would
+	// compare equal to the next empty one and read as healthy forever.
 
 	tx, err := PG.Begin(ctx)
 	if err != nil {
@@ -122,8 +126,15 @@ func RecordLogHead(ctx context.Context, target, head string, records int64) (Log
 
 	// Locked, so two readers of the same target cannot both decide they are the
 	// first sighting and both write one.
+	//
+	// COALESCE, because `violation_reason` is NULL on every healthy anchor and
+	// a NULL will not scan into a string. Without it this read failed for every
+	// target that had never been tampered with — which is every target — so the
+	// anchor was written once at first sighting and never compared against
+	// anything again. A tamper-evidence mechanism that stops after its first
+	// observation is worse than none: it reports a clean chain forever.
 	const read = `
-		SELECT head, records, violation_reason
+		SELECT head, records, COALESCE(violation_reason, '')
 		  FROM addon_log_anchors
 		 WHERE target = $1
 		 FOR UPDATE`
@@ -134,6 +145,9 @@ func RecordLogHead(ctx context.Context, target, head string, records int64) (Log
 	verdict := AnchorFirstSighting
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
+		if strings.TrimSpace(head) == "" {
+			return LogAnchor{}, "", fmt.Errorf("anchor log head for %s: the target reported no chain head and there is nothing to compare it against", target)
+		}
 		const insert = `
 			INSERT INTO addon_log_anchors (target, head, records)
 			VALUES ($1, $2, $3)`

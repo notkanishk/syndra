@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"time"
 
 	"syndra/internal/addons"
+	"syndra/internal/db"
 )
 
 // The target roster and one target's health (change `addon-platform` 9.13,
@@ -84,18 +86,52 @@ func handleListTargets(w http.ResponseWriter, r *http.Request) {
 func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 	target := r.PathValue("target")
 	health := addonsHealth(r.Context(), target)
+
+	// The anchor's finding, if it is carrying one, travels with the health of
+	// the target it is about — and it travels whether or not the add-on is
+	// answering right now. It was previously written to a table with no reader
+	// at all: the sweep detected a truncated mutation log, recorded it
+	// correctly, logged one line, and no surface in the system could report it.
+	// A tamper-evidence mechanism nobody is told about has done half its job.
+	anchor, anchored, err := dbGetLogAnchor(r.Context(), target)
+	if err != nil {
+		// Non-fatal. The health of the target is the question asked, and an
+		// unavailable finding must not take the answer down with it — but it is
+		// said out loud rather than rendered as "no finding".
+		log.Printf("[TARGETS] could not read %s's log anchor: %v (non-fatal)", target, err)
+	}
+
 	if health.Outcome != addons.OutcomeSucceeded {
 		// 200 with `reachable: false`, not an error status. The add-on being
 		// unreachable is the answer to the question, and an error would make a
 		// health surface unable to render the one state it exists to show.
-		jsonResponse(w, http.StatusOK, map[string]any{
+		body := map[string]any{
 			"target":    target,
 			"reachable": false,
 			"detail":    errText(health.Err),
-		})
+		}
+		if anchored && anchor.Compromised() {
+			body["log_anchor"] = anchor
+		}
+		jsonResponse(w, http.StatusOK, body)
 		return
 	}
-	jsonResponse(w, http.StatusOK, health)
+
+	if !anchored {
+		jsonResponse(w, http.StatusOK, health)
+		return
+	}
+	// Merged rather than nested under a second request, because the operator's
+	// question is one question: is this target all right.
+	jsonResponse(w, http.StatusOK, targetHealthWithAnchor{TargetHealth: health, LogAnchor: &anchor})
+}
+
+// targetHealthWithAnchor is the add-on's account of itself plus the backend's
+// memory of its log. Two authorities, one answer: the add-on cannot be the
+// source of truth about whether its own record has been edited.
+type targetHealthWithAnchor struct {
+	addons.TargetHealth
+	LogAnchor *db.LogAnchor `json:"log_anchor,omitempty"`
 }
 
 func describeTarget(reg addons.Registration) targetSummary {

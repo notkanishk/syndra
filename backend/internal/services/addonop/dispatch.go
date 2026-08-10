@@ -102,6 +102,26 @@ type Result struct {
 	// Err is the add-on's own answer, when it was not success. Held here rather
 	// than returned so that reading it is a choice and not an accident.
 	Err error
+	// AccountUID is the unix identity of the account an `account.adopt` bound,
+	// as the add-on read it from the target.
+	//
+	// The only field of an add-on's answer this layer parses, and it is parsed
+	// because the backend writes its own copy of the binding: a copy keyed only
+	// on the name it was given disagrees with the add-on's the moment somebody
+	// renames the account, and a binding that cannot recognise its own account
+	// hands it back to the unmanaged inventory for anybody to claim.
+	//
+	// Zero when the add-on did not send one. Deliberately not an error: an
+	// operation that succeeded must not be reported as failed because its
+	// answer lacked an optional field, and the caller decides what a zero means
+	// for the record it is about to write.
+	AccountUID int64
+}
+
+// operationAnswer is the add-on's response envelope, narrowed to what this
+// layer reads. Everything else in it belongs to the caller that asked for it.
+type operationAnswer struct {
+	AccountUID int64 `json:"account_uid"`
 }
 
 // ErrRateLimited refuses a member driving a secret-bearing path faster than any
@@ -286,6 +306,15 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 	}
 
 	result := Result{OperationID: id, Status: status, Outcome: resp.Outcome, Err: resp.Err}
+	// Only on success, and never fatally. A body that will not parse is not a
+	// reason to un-succeed a call the target confirmed; it is a reason for the
+	// caller to see a zero and decide.
+	if resp.Outcome == addons.OutcomeSucceeded && len(resp.Body) > 0 {
+		var answer operationAnswer
+		if err := json.Unmarshal(resp.Body, &answer); err == nil {
+			result.AccountUID = answer.AccountUID
+		}
+	}
 	if err := settleOperation(ctx, id, status); err != nil {
 		// The call already happened; failing to record its outcome does not
 		// un-happen it. The row stays `dispatching`, which is the honest state

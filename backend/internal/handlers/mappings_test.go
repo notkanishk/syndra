@@ -3,8 +3,11 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -188,9 +191,15 @@ func TestAnEditValidatesAgainstTheMappingsOwnTarget(t *testing.T) {
 }
 
 // The add-on's half: the field is fine and the value names nothing.
+//
+// The sentinel is the ADD-ON's, and it has to be. This test used to raise a
+// look-alike declared in the handler package, which nothing in the production
+// path ever wrapped — so the test asserted a 400 while a real typo'd group name
+// came back 500 DB_ERROR, and the two agreed with each other rather than with
+// the system.
 func TestAnUnresolvableValueIsRejectedAfterTheAddonSaysSo(t *testing.T) {
 	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
-	h.valueErr = errMappingValueUnresolvable
+	h.valueErr = fmt.Errorf("%w: truenas has no group named %q", addons.ErrValueNotResolvable, "no_such_group")
 
 	rr := postMapping(`{"target":"truenas","project_id":"pLab","role_key":"maker","field":"group","value":"no_such_group"}`)
 	if rr.Code != http.StatusBadRequest {
@@ -643,5 +652,22 @@ func TestARollbackThatDidNotRestoreQueuesNothing(t *testing.T) {
 	}
 	if len(h.converged) != 0 {
 		t.Error("nothing may be queued for a restore that did not happen")
+	}
+}
+
+// A refusal the target gave clearly must not reach an operator as an internal
+// error. Guarded at the source rather than only through the handler: the bug
+// was a look-alike sentinel, and a second one would pass every behavioural test
+// while breaking the classification again.
+func TestTheMappingErrorsAreClassifiedOnTheAddonsOwnSentinels(t *testing.T) {
+	src, err := os.ReadFile("mappings.go")
+	if err != nil {
+		t.Fatalf("read source: %v", err)
+	}
+	if regexp.MustCompile(`var errMappingValue\w* = errors\.New`).MatchString(string(src)) {
+		t.Error("a locally declared value-refusal sentinel is one nothing in the production path wraps")
+	}
+	if !strings.Contains(string(src), "addons.ErrValueNotResolvable") {
+		t.Error("the value refusal must be classified on the add-on package's own sentinel")
 	}
 }
