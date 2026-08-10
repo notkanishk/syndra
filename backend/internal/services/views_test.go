@@ -22,6 +22,13 @@ func resetGovernanceDeps(t *testing.T) {
 	defer func() {
 		svcAllowancesForSubject = func(context.Context, string) ([]db.Allowance, error) { return nil, nil }
 	}()
+	// And the revocation count, for the same reason: the indicators now carry
+	// it, and left unstubbed it reaches a nil pool.
+	origRevocations := svcCountUnconfirmedRevocations
+	t.Cleanup(func() { svcCountUnconfirmedRevocations = origRevocations })
+	svcCountUnconfirmedRevocations = func(context.Context) (db.UnconfirmedRevocationSummary, error) {
+		return db.UnconfirmedRevocationSummary{}, nil
+	}
 	origGetRequests := svcGetAccessRequests
 	origGetExpiring := svcGetExpiringDirectGrants
 	origGetAllBundles := svcGetAllBundles

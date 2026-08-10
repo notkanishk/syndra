@@ -163,7 +163,26 @@ type Indicators struct {
 	PendingPropagation int  `json:"pending_propagation"`
 	Drift              int  `json:"drift"`
 	ZitadelReachable   bool `json:"zitadel_reachable"`
+	// UnconfirmedRevocations is access somebody decided to withdraw that has
+	// not been withdrawn. Counted apart from PendingPropagation, which it is a
+	// subset of, because the two mean opposite things about urgency: a queued
+	// grant is somebody waiting, and a queued revocation is somebody still
+	// holding what was taken away.
+	UnconfirmedRevocations int `json:"unconfirmed_revocations"`
+	// RevocationsEscalated says at least one of them is a finding rather than a
+	// queue depth — spent, or old enough that it is not draining but stuck. The
+	// badge changes on this rather than on the count, because a count cannot
+	// carry the difference and an operator reading "3" cannot tell.
+	RevocationsEscalated bool `json:"revocations_escalated"`
 }
+
+// revocationEscalation is how long a queued revocation may age before it stops
+// being a queue and starts being a finding.
+//
+// A day: long enough that an operator who has not resumed the drain over a
+// weekend afternoon is not paged, short enough that access somebody withdrew is
+// never quietly retained for a week.
+const revocationEscalation = 24 * time.Hour
 
 // GovernanceIndicators counts the four badge signals directly, without
 // building the full GovernanceSummary payload.
@@ -193,6 +212,13 @@ func GovernanceIndicators(ctx context.Context) (Indicators, error) {
 		return Indicators{}, err
 	}
 	out.Drift = drift
+
+	revocations, err := svcCountUnconfirmedRevocations(ctx)
+	if err != nil {
+		return Indicators{}, err
+	}
+	out.UnconfirmedRevocations = revocations.Queued + revocations.Spent
+	out.RevocationsEscalated = revocations.Escalated(revocationEscalation)
 
 	// Only worth probing when there is something queued: the flag exists to
 	// explain why "Resume now" is disabled, and with an empty outbox there is
@@ -398,3 +424,11 @@ func ExpireDirectGrant(ctx context.Context, userID, grantID, projectID, role, ac
 	}
 	return out, nil
 }
+
+// RevocationEscalationThreshold exposes the one rule so a surface renders the
+// same escalation the indicator counted.
+//
+// Exported rather than duplicated: two components deciding independently when a
+// queued revocation becomes a finding is two components that will disagree, on
+// the badge whose whole job is to agree with the page it links to.
+func RevocationEscalationThreshold() time.Duration { return revocationEscalation }

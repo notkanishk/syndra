@@ -377,3 +377,9 @@ var (
 	svcDispatchOperation  = addonop.Dispatch
 	dbRecordTargetBinding = db.RecordTargetBinding
 )
+
+// The unconfirmed-revocation surface (2.51, 9.9).
+var (
+	dbListUnconfirmedRevocations  = db.ListUnconfirmedRevocations
+	dbCountUnconfirmedRevocations = db.CountUnconfirmedRevocations
+)

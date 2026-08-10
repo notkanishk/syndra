@@ -248,6 +248,16 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/targets/{target}/inventory", withCORS(withOperatorAuth(handleTargetInventory)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/inventory/{username}/adopt", withCORS(withOperatorAuth(handleAdoptAccount)))
 
+	// Access withdrawn that has not gone away. Beside drift triage, never inside
+	// it: drift is access that appeared without an explanation, and this is
+	// access somebody took away that is still there.
+	mux.HandleFunc("GET /api/v1/governance/unconfirmed-revocations", withCORS(withOperatorAuth(handleUnconfirmedRevocations)))
+
+	// Revocation as a composition (design §10). This target cannot end a
+	// session, so "revoke" is a disabling allowance plus a credential rotation,
+	// and the response says what neither half does.
+	mux.HandleFunc("POST /api/v1/targets/{target}/users/{id}/revoke-access", withCORS(withOperatorAuth(handleRevokeTargetAccess)))
+
 	// Entitlement convergence on an add-on target (group 9). Plan-then-apply,
 	// like every other target-affecting operator action: the rehearsal computes
 	// the diff through the add-on and records it, and the apply cites the id it

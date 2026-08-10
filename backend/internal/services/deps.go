@@ -136,3 +136,6 @@ var (
 	dbRecordSystemConvergence = db.RecordSystemConvergence
 	svcResolveEntitlements    = ResolveEntitlements
 )
+
+// The unconfirmed-revocation count behind the governance badge (2.51, 9.16).
+var svcCountUnconfirmedRevocations = db.CountUnconfirmedRevocations
