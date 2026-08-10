@@ -4,10 +4,13 @@ import {
   ADVANCED_NAV,
   BASIC_NAV,
   MEMBER_NAV,
+  MEMBER_ROUTES,
   crumbsFor,
   leafMatches,
   navFor,
   navLeaves,
+  targetNav,
+  targetLabel,
   memberMayVisit,
 } from "@/lib/nav";
 
@@ -28,10 +31,21 @@ describe("navigation contract", () => {
     expect(navLeaves(ADVANCED_NAV)[0].label).toBe("Home");
   });
 
-  it("gives members two destinations and no Home", () => {
+  it("gives members three destinations and no Home", () => {
     const labels = navLeaves(MEMBER_NAV).map((leaf) => leaf.label);
-    expect(labels).toEqual(["My access", "Requests"]);
+    expect(labels).toEqual(["My access", "Requests", "Network storage"]);
     expect(navFor("member")).toBe(MEMBER_NAV);
+  });
+
+  // 10.2 — the storage row is present for every member whatever they can reach.
+  // Gating it on entitlement would make the rail move as somebody's roles
+  // change, and it would answer the wrong question: a member without access is
+  // asking whether they can get it, and a missing row does not answer that.
+  it("keeps the storage row for a member with no infrastructure access", () => {
+    const storage = navLeaves(MEMBER_NAV).find((leaf) => leaf.href === "/storage");
+    expect(storage, "every member sees the storage row").toBeDefined();
+    expect(storage?.indicator, "a badge would make it move in response to data").toBeUndefined();
+    expect(MEMBER_ROUTES).toContain("/storage");
   });
 
   it("routes every badge to a destination, never to a tab", () => {
@@ -117,5 +131,45 @@ describe("member reachability", () => {
     for (const route of ["/users", "/bundles", "/governance/drift", "/applications", "/audit"]) {
       expect(memberMayVisit(route), `${route} must not be reachable`).toBe(false);
     }
+  });
+});
+
+// 9.13/9.14 — the per-target System rows come from the deployment, not from what
+// the operator can see.
+describe("the target rows", () => {
+  it("renders one row per registered add-on, whatever the data says", () => {
+    const entries = targetNav(["truenas", "unifi"]);
+    const system = entries.find((e) => e.kind === "group" && e.label === "System");
+    expect(system?.kind).toBe("group");
+    const labels = system?.kind === "group" ? system.children.map((c) => c.label) : [];
+
+    // Present, and in the System group beside the identity provider. The
+    // deployment registered them; nothing about a person's access is consulted.
+    expect(labels).toContain("TrueNAS");
+    expect(labels).toContain("UniFi Access");
+    // And the identity provider stays first: switching views appends, and so
+    // does registering a target. Nothing already there moves.
+    expect(labels[0]).toBe("Identity provider");
+  });
+
+  it("has no row for the bridge that no longer exists", () => {
+    for (const entries of [ADVANCED_NAV, targetNav(["truenas"])]) {
+      const labels = navLeaves(entries).map((leaf) => leaf.label);
+      expect(labels, "a nav row for a deleted subsystem is worse than a missing one")
+        .not.toContain("Hardware sync");
+      const hrefs = navLeaves(entries).map((leaf) => leaf.href);
+      expect(hrefs).not.toContain("/system/hardware-sync");
+    }
+  });
+
+  it("leaves the rail alone when the deployment registered nothing", () => {
+    expect(targetNav([])).toBe(ADVANCED_NAV);
+  });
+
+  it("names a target once, from one place", () => {
+    expect(targetLabel("truenas")).toBe("TrueNAS");
+    // An unknown target still gets a name rather than an id, so shipping an
+    // add-on does not require editing the navigation to make it readable.
+    expect(targetLabel("proxmox")).toBe("Proxmox");
   });
 });

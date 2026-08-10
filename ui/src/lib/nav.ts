@@ -20,12 +20,17 @@ export type IndicatorKey =
   | "pending_requests"
   | "expiring_grants"
   | "pending_propagation"
-  | "drift";
+  | "drift"
+  | "unconfirmed_revocations";
 
 /**
  * Badge tone follows the semantic palette and nothing else: Requests and
  * Pending changes are work (accent), Expiring access is a deadline (warn),
  * Unexplained access is something that already went wrong (danger).
+ *
+ * Withdrawn access is danger too, and for a sharper reason than drift: drift is
+ * access that appeared without an explanation, and this is access somebody
+ * decided to take away that is still there.
  */
 export type BadgeTone = "accent" | "warn" | "danger";
 
@@ -92,6 +97,10 @@ export const ADVANCED_NAV: NavEntry[] = [
   ]),
   group("Review", [
     leaf("Unexplained access", "/governance/drift", { indicator: "drift", tone: "danger" }),
+    leaf("Withdrawn access", "/governance/unconfirmed-revocations", {
+      indicator: "unconfirmed_revocations",
+      tone: "danger",
+    }),
     leaf("Expiring access", "/review/expiring-access", {
       indicator: "expiring_grants",
       tone: "warn",
@@ -100,10 +109,54 @@ export const ADVANCED_NAV: NavEntry[] = [
   ]),
   group("System", [
     leaf("Identity provider", "/zitadel"),
-    leaf("Hardware sync", "/system/hardware-sync"),
+    // The LLDAP bridge's row. Gone with the bridge: it named a service that no
+    // longer exists, and a nav entry for a deleted subsystem is worse than a
+    // missing one — an operator clicks it before they read anything.
     leaf("Event activity", "/operations"),
   ]),
 ];
+
+/**
+ * The per-target System rows, derived from DEPLOYMENT CONFIGURATION.
+ *
+ * Not from data, and the difference is the whole IA rule. An operator on a
+ * deployment running a TrueNAS add-on sees the TrueNAS row whether or not it
+ * currently answers, whether or not anybody is bound to it, and whether or not
+ * this operator can read a single account on it. A row that appeared when the
+ * first person was provisioned would be structure moving in response to data,
+ * which is exactly what this file exists to prevent.
+ *
+ * `GET /api/v1/targets` is the source, and it lists what was registered — never
+ * what is reachable. Reachability belongs on the page, where it can be
+ * explained.
+ */
+export function targetNav(targets: string[]): NavEntry[] {
+  if (targets.length === 0) return ADVANCED_NAV;
+  return ADVANCED_NAV.map((entry) => {
+    if (entry.kind !== "group" || entry.label !== "System") return entry;
+    return group("System", [
+      ...entry.children.slice(0, 1),
+      ...targets.map((target) =>
+        leaf(targetLabel(target), `/system/targets/${target}`, {
+          pattern: new RegExp(`^/system/targets/${target}(/|$)`),
+        }),
+      ),
+      ...entry.children.slice(1),
+    ]);
+  });
+}
+
+/**
+ * A target's display name. Title-cased from its id, because the id is
+ * deployment configuration an operator wrote and a mapping table here would be
+ * a second place to add a target — which is how the day a UniFi add-on ships,
+ * its row is called `unifi` on one screen and `UniFi Access` on another.
+ */
+export function targetLabel(target: string): string {
+  const known: Record<string, string> = { truenas: "TrueNAS", unifi: "UniFi Access" };
+  if (known[target]) return known[target];
+  return target.charAt(0).toUpperCase() + target.slice(1);
+}
 
 /**
  * Member — two destinations, and that is deliberate. No Home: a member's
@@ -113,6 +166,15 @@ export const ADVANCED_NAV: NavEntry[] = [
 export const MEMBER_NAV: NavEntry[] = [
   leaf("My access", "/"),
   leaf("Requests", "/requests"),
+  /**
+   * Present for every member, always, whatever they can reach.
+   *
+   * Gating this on entitlement would make the rail move as somebody's roles
+   * change — the one thing this file forbids — and it would also be the wrong
+   * answer to the question a member without access is asking, which is "can I
+   * get storage?". The page answers that; a missing row does not.
+   */
+  leaf("Network storage", "/storage"),
 ];
 
 export function navFor(audience: Audience): NavEntry[] {
@@ -137,7 +199,7 @@ export function navLeaves(entries: NavEntry[]): NavLeaf[] {
  * reachable for them — the backend 403s the underlying reads regardless, and
  * an affordance that will fail is worse than no affordance.
  */
-export const MEMBER_ROUTES = ["/", "/requests"];
+export const MEMBER_ROUTES = ["/", "/requests", "/storage"];
 
 export function memberMayVisit(pathname: string): boolean {
   return MEMBER_ROUTES.includes(pathname);

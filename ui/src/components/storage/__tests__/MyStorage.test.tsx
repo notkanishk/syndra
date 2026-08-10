@@ -1,0 +1,118 @@
+// @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+import { MyStorage } from "@/components/storage/MyStorage";
+import type { MyTargetView } from "@/lib/queries/useMyStorage";
+
+// 10.5/10.7 — the three states render distinctly, and the credential form
+// appears only in the third.
+//
+// The middle state is the one this test exists for. A two-state design shows
+// the form to a member whose account has not been created yet, dispatches at an
+// account that does not exist, and tells them their password was set.
+
+const state = { targets: [] as MyTargetView[] };
+
+vi.mock("@/lib/queries/useMyStorage", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/queries/useMyStorage")>(
+    "@/lib/queries/useMyStorage",
+  );
+  return {
+    ...actual,
+    useMyStorage: () => ({
+      data: state.targets,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    }),
+    useSetStorageCredential: () => ({ mutate: vi.fn(), isPending: false, data: undefined, error: null }),
+  };
+});
+
+function view(overrides: Partial<MyTargetView> = {}): MyTargetView {
+  return {
+    target: "truenas",
+    entitled: true,
+    account: { username: "ada" },
+    credential: { set: false },
+    reachable: true,
+    ...overrides,
+  };
+}
+
+function renderStorage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <MyStorage />
+    </QueryClientProvider>,
+  );
+}
+
+describe("a member's storage view", () => {
+  it("offers nothing to set when no role reaches the target", () => {
+    state.targets = [view({ entitled: false, account: undefined })];
+    renderStorage();
+
+    expect(screen.queryByLabelText(/password/i)).toBeNull();
+    expect(screen.getByText(/none of your roles reaches/i)).toBeInTheDocument();
+    // And no connection instructions: an account name that does not exist is
+    // worse than no instructions at all.
+    expect(screen.queryByText("ada")).toBeNull();
+  });
+
+  it("withholds the credential form while the account is still pending", () => {
+    state.targets = [view({ account: undefined })];
+    renderStorage();
+
+    expect(screen.queryByLabelText(/password/i)).toBeNull();
+    expect(screen.getByText(/has not been created yet/i)).toBeInTheDocument();
+  });
+
+  it("offers everything once the account exists", () => {
+    state.targets = [view()];
+    renderStorage();
+
+    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+    expect(screen.getByText("ada")).toBeInTheDocument();
+  });
+
+  it("says what the password is for, because members reasonably assume one password", () => {
+    state.targets = [view()];
+    renderStorage();
+
+    expect(screen.getByText(/not your Syndra sign-in/i)).toBeInTheDocument();
+  });
+
+  it("lists only the resources the current entitlements reach", () => {
+    state.targets = [view({ resources: { group: ["lab_makers"] } })];
+    renderStorage();
+
+    expect(screen.getByText("lab_makers")).toBeInTheDocument();
+  });
+
+  it("explains withheld access rather than showing a member an unexplained absence", () => {
+    state.targets = [
+      view({
+        entitled: false,
+        account: undefined,
+        suspended: [{ field: "group", value: "lab_makers", reason: "safety review", actor_id: "op_1" }],
+      }),
+    ];
+    renderStorage();
+
+    expect(screen.getByText(/safety review/)).toBeInTheDocument();
+  });
+
+  it("fails closed when the target is not answering", () => {
+    state.targets = [view({ reachable: false })];
+    renderStorage();
+
+    // No form: a credential set against an add-on that never answered would be
+    // reported to the member as done.
+    expect(screen.queryByLabelText(/password/i)).toBeNull();
+    expect(screen.getByText(/not answering right now/i)).toBeInTheDocument();
+  });
+});

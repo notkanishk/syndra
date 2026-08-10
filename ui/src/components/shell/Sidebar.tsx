@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { useTargets } from "@/lib/queries/useTargets";
 import { useIndicators, type Indicators } from "@/lib/queries/useIndicators";
-import { leafMatches, navFor, type BadgeTone, type NavLeaf } from "@/lib/nav";
+import { leafMatches, navFor, targetNav, type BadgeTone, type NavLeaf } from "@/lib/nav";
 import { useUiView } from "@/lib/ui-view";
 import { useFlashOnChange } from "@/lib/useFlashOnChange";
 import { SyndraMark } from "./SyndraMark";
@@ -25,7 +26,15 @@ export default function Sidebar() {
   const { audience, isOperator } = useUiView();
   const { data: indicators, isPlaceholderData } = useIndicators(isOperator);
 
-  const entries = navFor(audience);
+  // The roster is deployment configuration, so a target row appears because the
+  // deployment registered one — never because this operator can see something.
+  // The rail renders without it and gains the rows when it arrives: a structure
+  // that waited for a fetch would be a rail that moves in response to a poll.
+  const { data: targets } = useTargets();
+  const entries =
+    audience === "advanced"
+      ? targetNav((targets ?? []).map((t) => t.target))
+      : navFor(audience);
   const viewLabel =
     audience === "member" ? "Member" : audience === "advanced" ? "Advanced" : "Basic";
 

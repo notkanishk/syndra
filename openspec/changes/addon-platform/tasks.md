@@ -194,27 +194,27 @@
 
 ## 9. Operator surfaces
 
-- [ ] 9.1 Manifest-driven operation rendering: member and admin panels built from `scope`, with no add-on-specific frontend code
-- [ ] 9.2 Tests: an operation removed from a manifest disappears from the UI without a frontend change
+- [x] 9.1 Manifest-driven operation rendering: member and admin panels built from `scope`, with no add-on-specific frontend code
+- [x] 9.2 Tests: an operation removed from a manifest disappears from the UI without a frontend change
 - [ ] 9.3 Plan-then-apply flow reusing the `rehearse* → apply*` pattern, carrying the backend-issued plan id rather than round-tripping the plan body
 - [ ] 9.4 Tests: apply is unreachable until a rehearsal has issued a plan id; the apply request carries the id rather than the original submission; an apply with no id is refused
 - [ ] 9.5 Stale-plan recovery UX: a rejected apply re-plans and shows which subjects moved since the operator reviewed it
 - [ ] 9.6 Tests: a subject changed between plan and apply produces the stale-plan path with that subject named, not a generic failure
 - [ ] 9.7 Mapping management UI: role-to-target bindings with version history, rollback, and the plan shown before any edit or delete lands
 - [ ] 9.8 Tests: an edit affecting many subjects shows the full plan and refuses without the blast-radius acknowledgement; rollback restores the prior version
-- [ ] 9.9 Unconfirmed-revocation surface beside drift triage, with age-threshold escalation to a security-finding presentation
-- [ ] 9.10 Tests: queued revokes are counted and presented apart from queued grants; crossing the threshold changes the presentation
+- [x] 9.9 Unconfirmed-revocation surface beside drift triage, with age-threshold escalation to a security-finding presentation
+- [x] 9.10 Tests: queued revokes are counted and presented apart from queued grants; crossing the threshold changes the presentation
 - [ ] 9.11 Dormant-account housekeeping view: reason, age, individual and bulk action, plan before apply
 - [ ] 9.12 Tests: accounts held by an active role are excluded; bulk action plans before applying
-- [ ] 9.13 Remove `System > Hardware sync` from `ui/src/lib/nav.ts` and its route; add a per-target System entry per registered add-on, derived from deployment configuration rather than from what the current operator can see
-- [ ] 9.14 Tests: nav renders a target entry for each registered add-on regardless of that operator's data, and the LLDAP entry and route are gone
+- [x] 9.13 Remove `System > Hardware sync` from `ui/src/lib/nav.ts` and its route; add a per-target System entry per registered add-on, derived from deployment configuration rather than from what the current operator can see
+- [x] 9.14 Tests: nav renders a target entry for each registered add-on regardless of that operator's data, and the LLDAP entry and route are gone
 - [ ] 9.15 Align the new operator surfaces with `basic-advanced-ia`: Basic versus Advanced placement, structure that does not move in response to data
-- [ ] 9.16 Extend `GET /api/v1/governance/indicators` with the unconfirmed-revocation count and wire the `NavLeaf` indicator key so the badge can carry it
-- [ ] 9.17 Tests: the indicator appears when unconfirmed revocations exist and clears when they resolve
+- [x] 9.16 Extend `GET /api/v1/governance/indicators` with the unconfirmed-revocation count and wire the `NavLeaf` indicator key so the badge can carry it
+- [x] 9.17 Tests: the indicator appears when unconfirmed revocations exist and clears when they resolve
 - [ ] 9.18 Apply-surface disclosure: every submitted operation states whether it drains automatically or waits for an operator resume
 - [ ] 9.19 Tests: a revocation says it will drain on its own, a grant says it is queued until resumed, and neither requires the operator to infer it
-- [ ] 9.20 Add-on health surface distinguishing unreachable, read-only, draining, backlogged, and stale-snapshot states
-- [ ] 9.21 Tests: each state renders distinctly and stale data is labelled with its age
+- [x] 9.20 Add-on health surface distinguishing unreachable, read-only, draining, backlogged, and stale-snapshot states
+- [x] 9.21 Tests: each state renders distinctly and stale data is labelled with its age
 - [ ] 9.22 Allowance authoring UI supporting both bounded forms — an expiry, or no expiry with a mandatory review date — and rejecting a denial with neither
 - [ ] 9.23 Carve-out rendering wherever that role appears for that subject: user view, project role-holder lists, filtered cohorts, bulk selection
 - [ ] 9.24 Tests: a role with an active subtractive allowance never renders as full access; a role-holder list never counts a suspended subject as holding the listed access
@@ -223,17 +223,17 @@
 
 ## 10. Member surfaces
 
-- [ ] 10.1 Add a third `MEMBER_NAV` leaf `NAS/Network Storage` in `ui/src/lib/nav.ts`, present for every member regardless of entitlement, and extend the member route allow-list to cover it
-- [ ] 10.2 Tests: the leaf renders for a member with no infrastructure access and does not appear or vanish as mapped roles change
-- [ ] 10.3 Content gating on entitlement: a member with no role mapped to any target sees an explanation, and no credential form or connection instructions render
-- [ ] 10.4 Content gating on account existence: a member holding a mapped role whose account is not yet created sees the pending state, with the credential affordance still withheld
-- [ ] 10.5 Tests: all three states render distinctly — no entitlement, entitlement without account, account present — and the credential form appears only in the third
-- [ ] 10.6 Self-service credential set and reset, scoped-to-infrastructure copy, existence and last-change status only
-- [ ] 10.7 Tests: the credential value is never returned to the client or persisted; status renders from metadata alone
+- [x] 10.1 Add a third `MEMBER_NAV` leaf `NAS/Network Storage` in `ui/src/lib/nav.ts`, present for every member regardless of entitlement, and extend the member route allow-list to cover it
+- [x] 10.2 Tests: the leaf renders for a member with no infrastructure access and does not appear or vanish as mapped roles change
+- [x] 10.3 Content gating on entitlement: a member with no role mapped to any target sees an explanation, and no credential form or connection instructions render
+- [x] 10.4 Content gating on account existence: a member holding a mapped role whose account is not yet created sees the pending state, with the credential affordance still withheld
+- [x] 10.5 Tests: all three states render distinctly — no entitlement, entitlement without account, account present — and the credential form appears only in the third
+- [x] 10.6 Self-service credential set and reset, scoped-to-infrastructure copy, existence and last-change status only
+- [x] 10.7 Tests: the credential value is never returned to the client or persisted; status renders from metadata alone
 - [ ] 10.8 Connection instructions showing the add-on-reported account name and only the resources current entitlements reach
 - [ ] 10.9 Tests: instructions change with entitlements and never list an unreachable resource
-- [ ] 10.10 A credential set fails closed and says so when the target is unreachable, refusing for lifecycle state, or the account disappeared between render and submission — the backstop for that race, not the path for members without access
-- [ ] 10.11 Tests: each case returns an explicit failure, records nothing as queued, and tells the member to retry
+- [x] 10.10 A credential set fails closed and says so when the target is unreachable, refusing for lifecycle state, or the account disappeared between render and submission — the backstop for that race, not the path for members without access
+- [x] 10.11 Tests: each case returns an explicit failure, records nothing as queued, and tells the member to retry
 
 ## 11. Retire the LLDAP bridge
 
@@ -425,3 +425,18 @@ way: by reading one side's encoder against the other side's decoder.
 - [x] 17.7 **The entitlement spine, which nothing had.** Nothing wrote `desired_state_snapshots` — the table, its immutability trigger and its version allocator existed with no producer — and no route rehearsed or applied an entitlement change, which is why §15.2 records `planapply` and `addonop` as heavily tested and never executed. What lands: `db.WriteDesiredStateSnapshotTx`, `NewPlanSubject.DesiredState` so the snapshot and the plan citing it commit in ONE transaction (a snapshot written first and a plan that then fails is an audit row citing nothing that has already spent a version; the reverse is a citation the drain resolves to nothing and terminally fails an approved change on), `EntitlementSet.Desired()` as the one encoder of the instruction, `services.RehearseEntitlements`, and `POST /api/v1/targets/{target}/entitlements/{rehearse,apply}`. The apply is `planapply.Apply` — its first production caller
 - [x] 17.8 **Provisional plans fall out of it** (§2.23–2.27). The add-on's `/plan` now falls back to its mirror rather than refusing, and reports `current` and `taken_at` with the outcomes, so the currency travels WITH the plan instead of being inferred from the target's health a moment later. `!current` makes the plan provisional: no lifetime, gated by the re-fingerprint the add-on already performs at write time. What the fingerprint cannot cover is TRUNCATION — an absence read out of a capped list is not an absence, and "not in the read" and "not on the target" produce the same fingerprint — so a subject missing from a truncated read is blocked at the add-on, where the cap is known, rather than planned as a create that would make a second account for somebody who already has one
 - [x] 17.6 `addons.Plan` and `addons.Subjects` — the read legs the backend had no client for. Nothing called the add-on's `/plan` or `/subjects`, which is why the entitlement rehearsal, the add-on drift sweep and the unmanaged inventory each had no source of truth to build on. Both go through `doAuthenticated` like every other leg. `Subjects` deliberately tolerates a stale answer and labels it, and `SubjectsResult.Usable()` states the rule once — a read that is not current, or that hit the add-on's cap, cannot support the sentence every consumer of it writes, which is that an account is NOT there
+
+## 18. Surfaces: what shipped as wiring, and what was handed over
+
+The user's decision, recorded so nobody re-derives it: groups 9 and 10 ship as
+routes, data wiring and the behavioural assertions each task states, with the
+visual pass handed to the design agent that built the rest of the system.
+`HANDOVER-UI.md` in this directory is that handover — it names every screen, the
+states each one must keep distinct and why, the contracts a redesign must not
+quietly change, and the six screens that have a backend and no surface yet.
+
+- [x] 18.1 `nav.ts`: `Hardware sync` gone with the bridge it named, one row per registered add-on built by `targetNav()` from `GET /api/v1/targets`, `Withdrawn access` in Review, and `Network storage` as the member's third leaf. The target rows carry no badge and the member row is ungated, both for the same reason: a count or an entitlement check there would be data driving structure
+- [x] 18.2 `GET /api/v1/targets` and `/health`. The roster is DEPLOYMENT CONFIGURATION — an operator on a deployment running a TrueNAS add-on sees that entry whether or not it answers, whether or not anybody is bound to it, and whether or not they can read a single account on it
+- [x] 18.3 `GET /api/v1/me/targets` and `POST /me/targets/{target}/credential`. Three states, not two: the middle one — entitled, account not created yet — is the one a two-state design collapses, and it is the ordinary experience of every new member until an operator resumes the drain. The credential form is withheld in it, because a call dispatched at an account that does not exist would tell somebody their password was set
+- [x] 18.4 The screens: `/storage`, `/system/targets/{target}`, `/governance/unconfirmed-revocations`. Tests assert the assertions the tasks state — the three member states and which one offers a form, an operation vanishing with its manifest entry, an unavailable operation shown disabled rather than hidden, a maintenance window distinguished from an outage and from the breaker, a stale inventory refusing adoption, and an unmanaged account never rendered as drift
+- [ ] 18.5 **Handed over, not built:** the entitlement plan-then-apply UI (9.3–9.6), mapping management with version history (9.7–9.8), dormant-account housekeeping (9.11–9.12), allowance authoring and review-date surfacing (9.22, 9.25), connection instructions (10.8), and a button for the revocation composition. Each has its backend; `HANDOVER-UI.md` names what each one needs
