@@ -53,7 +53,6 @@ export const AUDIT_ACTIONS: Record<string, { verb: string; destructive?: boolean
   "claim_profile.updated": { verb: "Changed a project's token format" },
   "app_claim_override.updated": { verb: "Changed an app's token format" },
   "app_claim_override.deleted": { verb: "Removed an app's token override" },
-  "intent.emitted": { verb: "Queued a hardware provisioning intent" },
 };
 
 export function describeAction(action: string): { verb: string; destructive: boolean } {

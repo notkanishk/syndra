@@ -237,16 +237,16 @@
 
 ## 11. Retire the LLDAP bridge
 
-- [ ] 11.1 Delete `sync/` in full, the sync Compose profile and its `SYNC_*` / `LLDAP_*` environment, and the `go-ldap/v3` dependency
-- [ ] 11.2 Delete the intent pipeline: `db/intents.go`, `handlers/intents.go`, `services/provisioning.go`, `services/lldap.go` and their tests, the `/api/v1/intents*` routes in `router.go`, and the `ProvisioningIntent` types in `models.go`
-- [ ] 11.3 Remove intent emission from `handlers/webhook.go`, `handlers/profile.go`, and `services/expiry/sweep.go` (the removal-intent path), plus their `deps.go` seams in `handlers/`, `services/`, and `services/expiry/`
-- [ ] 11.4 Tests: no caller of the removed intent functions remains; webhook and expiry paths still complete their remaining work; `go vet ./...` is clean
-- [ ] 11.5 Migration: drop `provisioning_intents` and its `lldap_group` column
-- [ ] 11.6 Migration: drop `credential_hash`, `algorithm`, and `salt_params` from `shadow_credentials`, keeping existence and rotation metadata; paired coherence guard asserting no column can hold a credential hash
-- [ ] 11.7 Tests: the vault status endpoints answer from metadata alone; no hash is written or readable
-- [ ] 11.8 Member re-enrolment cutover: because stored hashes cannot be converted, every enrolled member must set a new credential — surface the un-enrolled state in the member view and prepare the operator communication before this step ships
-- [ ] 11.9 Tests: a member with pre-cutover metadata and no new credential renders as needing enrolment, not as enrolled
-- [ ] 11.10 Remove LLDAP-specific variables from `.env.example`, `DEPLOY.md`, and `docker-compose.yml`
+- [x] 11.1 Delete `sync/` in full, the sync Compose profile and its `SYNC_*` / `LLDAP_*` environment, and the `go-ldap/v3` dependency
+- [x] 11.2 Delete the intent pipeline: `db/intents.go`, `handlers/intents.go`, `services/provisioning.go`, `services/lldap.go` and their tests, the `/api/v1/intents*` routes in `router.go`, and the `ProvisioningIntent` types in `models.go`
+- [x] 11.3 Remove intent emission from `handlers/webhook.go`, `handlers/profile.go`, and `services/expiry/sweep.go` (the removal-intent path), plus their `deps.go` seams in `handlers/`, `services/`, and `services/expiry/`
+- [x] 11.4 Tests: no caller of the removed intent functions remains; webhook and expiry paths still complete their remaining work; `go vet ./...` is clean
+- [x] 11.5 Migration: drop `provisioning_intents` and its `lldap_group` column
+- [x] 11.6 Migration: drop `credential_hash`, `algorithm`, and `salt_params` from `shadow_credentials`, keeping existence and rotation metadata; paired coherence guard asserting no column can hold a credential hash
+- [x] 11.7 Tests: the vault status endpoints answer from metadata alone; no hash is written or readable
+- [x] 11.8 Member re-enrolment cutover: because stored hashes cannot be converted, every enrolled member must set a new credential — surface the un-enrolled state in the member view and prepare the operator communication before this step ships
+- [x] 11.9 Tests: a member with pre-cutover metadata and no new credential renders as needing enrolment, not as enrolled
+- [x] 11.10 Remove LLDAP-specific variables from `.env.example`, `DEPLOY.md`, and `docker-compose.yml`
 
 ## 12. Documentation and graph refresh
 
