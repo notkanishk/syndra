@@ -236,6 +236,13 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/v1/targets/mappings/versions", withCORS(withOperatorAuth(handlePublishMappingVersion)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/mappings/versions/{version}/rollback", withCORS(withOperatorAuth(handleRollbackMappingVersion)))
 
+	// Entitlement convergence on an add-on target (group 9). Plan-then-apply,
+	// like every other target-affecting operator action: the rehearsal computes
+	// the diff through the add-on and records it, and the apply cites the id it
+	// was given rather than resubmitting the request.
+	mux.HandleFunc("POST /api/v1/targets/{target}/entitlements/rehearse", withCORS(withOperatorAuth(handleRehearseEntitlements)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/entitlements/apply", withCORS(withOperatorAuth(handleApplyEntitlements)))
+
 	// Allowances (group 8): the per-user overlay beside role-derived access.
 	// Nothing here deletes — an allowance is lifted, and the row survives,
 	// because the reason and the actor stay attached to the person.

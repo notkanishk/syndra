@@ -186,10 +186,23 @@ type NewPlan struct {
 
 // NewPlanSubject is one row of the rehearsal.
 type NewPlanSubject struct {
-	SubjectID   string
-	SnapshotID  string
-	Fingerprint string
-	Outcome     PlanOutcome
+	SubjectID string
+	// SnapshotID cites a desired-state snapshot that already exists. Empty for a
+	// Zitadel plan, whose intent is the outbox row's own columns.
+	SnapshotID string
+	// DesiredState is the resolved set this rehearsal proposes, for a caller
+	// that has computed one and has no snapshot yet. CreatePlan writes it INSIDE
+	// its own transaction and cites what it wrote.
+	//
+	// Here rather than in the caller because the two have to commit together. A
+	// snapshot written first and a plan that then fails is an audit row citing
+	// nothing that has already spent a version; a plan written first and a
+	// snapshot that then fails is a citation the drain resolves to nothing and
+	// terminally fails an approved change on. Mutually exclusive with SnapshotID:
+	// two ways to say which intent was approved is one way for them to disagree.
+	DesiredState map[string]json.RawMessage
+	Fingerprint  string
+	Outcome      PlanOutcome
 }
 
 // PlanCitation is an apply naming the plan it is executing.
@@ -250,6 +263,15 @@ func (p NewPlan) validate() error {
 			return fmt.Errorf("%w: subject %s has no fingerprint, and a row that cannot be verified verifies vacuously", ErrInvalidPlan, s.SubjectID)
 		case s.SnapshotID != "" && !looksLikeUUID(s.SnapshotID):
 			return fmt.Errorf("%w: subject %s cites a malformed snapshot id", ErrInvalidPlan, s.SubjectID)
+		case s.SnapshotID != "" && s.DesiredState != nil:
+			// Both would leave the writer choosing, and whichever it chose the
+			// other would sit on the row looking authoritative.
+			return fmt.Errorf("%w: subject %s both cites a snapshot and carries one", ErrInvalidPlan, s.SubjectID)
+		case s.DesiredState != nil && p.Target == TargetZitadel:
+			// Zitadel's intent is the outbox row's project and role columns, and
+			// its plan subjects cite no snapshot. Writing one here would be a
+			// second account of one decision that nothing reads.
+			return fmt.Errorf("%w: subject %s carries a desired-state snapshot for %s, which holds its intent in the outbox row", ErrInvalidPlan, s.SubjectID, TargetZitadel)
 		}
 		if err := s.Outcome.validate(); err != nil {
 			return fmt.Errorf("%w (subject %s)", err, s.SubjectID)
@@ -332,6 +354,16 @@ func CreatePlan(ctx context.Context, p NewPlan) (Plan, error) {
 			return Plan{}, fmt.Errorf("marshal plan outcome for %s: %w", s.SubjectID, err)
 		}
 		var snapshot *string
+		if s.DesiredState != nil {
+			// Written on this transaction, so the intent and the approval citing
+			// it commit together or neither does. Provenance needs no check: the
+			// row was created here, for this subject, on this target.
+			written, err := WriteDesiredStateSnapshotTx(ctx, tx, s.SubjectID, p.Target, p.CreatedBy, s.DesiredState)
+			if err != nil {
+				return Plan{}, err
+			}
+			s.SnapshotID = written.ID
+		}
 		if s.SnapshotID != "" {
 			id := s.SnapshotID
 			snapshot = &id

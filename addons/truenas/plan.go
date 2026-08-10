@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // `POST /plan` — compute the effect of a proposed change, mutating nothing
@@ -45,6 +46,21 @@ type PlanRequest struct {
 
 type PlanResponse struct {
 	Outcomes []ApplyOutcome `json:"outcomes"`
+	// Current says the plan was computed against a live read rather than the
+	// mirror. A plan computed from the mirror is still worth issuing — §7's
+	// fail-open rule is that an unreachable target must not block the
+	// entitlement decision — but the backend has to mark it provisional, so the
+	// currency travels with the plan rather than being inferred from the
+	// target's health a moment later.
+	Current bool `json:"current"`
+	// TakenAt is when the read behind these outcomes happened. It is the AGE the
+	// operator surface labels a provisional plan with; without it, "computed
+	// against last-known state" is a claim with no number attached.
+	TakenAt string `json:"taken_at"`
+	// Truncated says the read hit the cap. Carried because it changes what an
+	// outcome means, not merely how confident it is: an absence in a capped read
+	// is not an absence.
+	Truncated bool `json:"truncated"`
 }
 
 // perRequestSubjectCap bounds one request.
@@ -76,10 +92,27 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 
 	// One read for the whole cohort. Planning forty subjects must not be forty
 	// state reads through a single rate-limited WebSocket.
+	//
+	// A failed read falls back to the mirror rather than refusing, and the
+	// answer says which it was. Refusing would make an unreachable target block
+	// the entitlement decision, which is the one thing §7 says it must not do:
+	// the change would be neither recorded nor rejected, and the operator would
+	// be told to come back later. The mirror is enough to compute a diff an
+	// operator can approve; what it cannot do is prove that diff still describes
+	// the target, and the fingerprint carried into the apply is what settles
+	// that at the moment of writing.
+	current := true
 	snap, err := s.readSubjects()
 	if err != nil {
-		writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE", "detail": err.Error()})
-		return
+		cached, found, cacheErr := s.store.GetSnapshot()
+		if cacheErr != nil || !found {
+			// Nothing current and nothing remembered. Refused rather than
+			// planned against an empty world, which would read as "everybody
+			// needs an account creating".
+			writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE", "detail": err.Error()})
+			return
+		}
+		snap, current = cached, false
 	}
 	byName := make(map[string]*Subject, len(snap.Subjects))
 	for i := range snap.Subjects {
@@ -91,15 +124,20 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 		return
 	}
 
-	out := PlanResponse{Outcomes: make([]ApplyOutcome, 0, len(req.Subjects))}
+	out := PlanResponse{
+		Outcomes:  make([]ApplyOutcome, 0, len(req.Subjects)),
+		Current:   current,
+		TakenAt:   snap.TakenAt.UTC().Format(time.RFC3339),
+		Truncated: snap.Truncated,
+	}
 	for _, subject := range req.Subjects {
-		out.Outcomes = append(out.Outcomes, s.planOne(subject, byName, claimed))
+		out.Outcomes = append(out.Outcomes, s.planOne(subject, byName, claimed, snap.Truncated))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
 // planOne says what would happen to one subject, and issues no mutating call.
-func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed map[string]string) ApplyOutcome {
+func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed map[string]string, truncated bool) ApplyOutcome {
 	desired, err := decodeDesired(req.Desired)
 	if err != nil {
 		return ApplyOutcome{
@@ -146,6 +184,21 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed ma
 	// the apply re-verifies against, so it has to describe the world the
 	// operator is approving a change to.
 	fingerprint := fingerprintSubject(current)
+
+	if current == nil && truncated {
+		// An absence read out of a capped list is not an absence. Planning a
+		// CREATE from one would make a second account for a subject who already
+		// has one past the cap — and the fingerprint would not catch it, because
+		// "not in the read" and "not on the target" produce the same one.
+		// Staleness is covered by the fingerprint; truncation has to be refused
+		// here, where the cap is known.
+		return ApplyOutcome{
+			Subject: req.Subject, Effect: EffectBlocked,
+			Detail:      "The account list was longer than one read returns, so this subject's absence from it proves nothing.",
+			Consequence: "Nothing would change.",
+			Fingerprint: fingerprint,
+		}
+	}
 
 	if current == nil {
 		return ApplyOutcome{

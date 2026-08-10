@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
@@ -116,3 +117,11 @@ var (
 	svcHasShadowCredential         = db.HasShadowCredential
 	svcInsertShadowCredentialAudit = db.InsertShadowCredentialAudit
 )
+
+// The add-on read leg the entitlement rehearsal asks its question through.
+//
+// A seam because every test of that rehearsal is a test about what the backend
+// does with an answer — provisional when the read was the mirror, blocked when
+// a subject went unanswered — and none of them should need an add-on process to
+// produce one.
+var addonsPlan = addons.Plan

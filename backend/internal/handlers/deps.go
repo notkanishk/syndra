@@ -11,6 +11,7 @@ import (
 	"syndra/internal/db"
 	"syndra/internal/services"
 	"syndra/internal/services/drift"
+	"syndra/internal/services/planapply"
 	"syndra/internal/services/propagation"
 	"syndra/internal/zitadel"
 )
@@ -349,4 +350,14 @@ var (
 	dbGetExpiringWithAcks             = db.GetExpiringDirectGrantsWithAcknowledgements
 	dbAcknowledgeGrantExpiry          = db.AcknowledgeGrantExpiry
 	dbClearGrantExpiryAcknowledgement = db.ClearGrantExpiryAcknowledgement
+)
+
+// The entitlement convergence surface (change `addon-platform` groups 7 and 9).
+//
+// Two seams, not one, because they answer different questions and a test has to
+// be able to fail either: what the rehearsal computed, and what the gate did
+// with the approval it was cited under.
+var (
+	svcRehearseEntitlements = services.RehearseEntitlements
+	svcApplyEntitlements    = planapply.Apply
 )

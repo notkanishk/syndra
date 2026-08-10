@@ -77,9 +77,22 @@ type BindingConflict struct {
 // PlanResult is the whole answer, plus what the backend learned about the call.
 type PlanResult struct {
 	Outcomes []SubjectOutcome `json:"outcomes"`
-	Outcome  Outcome          `json:"-"`
-	Status   int              `json:"-"`
-	Err      error            `json:"-"`
+	// Current says the add-on computed this against a live read. False means it
+	// answered from its mirror because the target was unreachable, and the plan
+	// the backend issues from it is provisional: recorded, labelled with the
+	// age below, and gated by a re-fingerprint on the target's return rather
+	// than by a clock (design §8).
+	Current bool `json:"current"`
+	// TakenAt is when the read behind these outcomes happened, which is the age
+	// a provisional plan is labelled with.
+	TakenAt time.Time `json:"taken_at"`
+	// Truncated says the read hit the add-on's cap. The add-on already blocks
+	// the outcomes that would have concluded an absence from it; this is carried
+	// so the surface can say why a cohort came back mostly blocked.
+	Truncated bool    `json:"truncated"`
+	Outcome   Outcome `json:"-"`
+	Status    int     `json:"-"`
+	Err       error   `json:"-"`
 	// LifecycleRefusal is the add-on declining while draining or read-only. A
 	// plan is a read and is not gated by lifecycle state on this add-on, so it
 	// is carried for completeness rather than expected.
@@ -148,7 +161,10 @@ func Plan(ctx context.Context, target string, subjects []PlanSubject, acknowledg
 	}
 	if resp.Outcome == OutcomeSucceeded {
 		var decoded struct {
-			Outcomes []SubjectOutcome `json:"outcomes"`
+			Outcomes  []SubjectOutcome `json:"outcomes"`
+			Current   bool             `json:"current"`
+			TakenAt   string           `json:"taken_at"`
+			Truncated bool             `json:"truncated"`
 		}
 		if err := json.Unmarshal(resp.Body, &decoded); err != nil {
 			// A 2xx whose body will not decode is not a plan. Reported as
@@ -157,7 +173,18 @@ func Plan(ctx context.Context, target string, subjects []PlanSubject, acknowledg
 			out.Outcome, out.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: decode plan: %w", target, err)
 			return out
 		}
-		out.Outcomes = decoded.Outcomes
+		out.Outcomes, out.Current, out.Truncated = decoded.Outcomes, decoded.Current, decoded.Truncated
+		if ts, err := time.Parse(time.RFC3339, decoded.TakenAt); err == nil {
+			out.TakenAt = ts.UTC()
+		}
+		if !out.Current && out.TakenAt.IsZero() {
+			// A provisional plan whose age cannot be read is refused rather than
+			// issued with no age: "computed against last-known state" with no
+			// number beside it is exactly the label an operator cannot act on,
+			// and the plan store requires the read time for the same reason.
+			out.Outcome = OutcomeIndeterminate
+			out.Err = fmt.Errorf("addon %s: the plan is not current and carries no read time to date it by", target)
+		}
 	}
 	if out.Outcome != OutcomeSucceeded {
 		// The bodies are not logged. The request carries a resolved entitlement

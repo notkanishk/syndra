@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -319,4 +320,57 @@ func effectiveRoleRefs(ctx context.Context, subjectID string) ([]db.RoleRef, err
 		return refs[i].RoleKey < refs[j].RoleKey
 	})
 	return refs, nil
+}
+
+// Desired encodes the resolved set as the wire's field map.
+//
+// Level-triggered, so this is the whole instruction and not a delta. Two rules
+// it must not get wrong, both of which the add-on reads as meaning:
+//
+//   - An absent field says "do not manage this"; a field present and empty says
+//     "make it empty". A fully suspended subject is the second, and collapsing
+//     it into the first would leave their groups exactly as they were while the
+//     surface reported the suspension as applied.
+//   - The lifecycle fields are always present. They are resolver-computed rather
+//     than mapping-derived, so there is no mapping whose absence could excuse
+//     omitting them — and omitting them is how a deprovisioned account stays
+//     usable while Syndra believes it is locked.
+//
+// It returns a map that is never nil, because nil is what a snapshot records as
+// `null` and the drain reads back as "no approved desired state".
+func (s EntitlementSet) Desired() map[string]json.RawMessage {
+	out := make(map[string]json.RawMessage, len(s.Fields)+2)
+	for field, values := range s.Fields {
+		if IsLifecycleField(field) {
+			// Cannot be reached through mappings — validation refuses those, and
+			// the resolver skips them — so a value here came from somewhere that
+			// should not exist. Dropped rather than encoded, because it would
+			// then race the authoritative lifecycle values written below.
+			continue
+		}
+		if values == nil {
+			// An explicitly empty set, encoded as one. `json.Marshal` writes nil
+			// as `null`, and `null` is neither "empty" nor "unmanaged" — it is a
+			// third thing the add-on has no reading for.
+			values = []string{}
+		}
+		encoded, err := json.Marshal(values)
+		if err != nil {
+			// Unreachable for []string, and not swallowed into an absent field:
+			// an absent field means "do not manage this", which would silently
+			// widen access rather than fail.
+			continue
+		}
+		out[field] = encoded
+	}
+	out[FieldEnabled] = boolJSON(s.Lifecycle.Enabled)
+	out[FieldSMBEnabled] = boolJSON(s.Lifecycle.SMBEnabled)
+	return out
+}
+
+func boolJSON(v bool) json.RawMessage {
+	if v {
+		return json.RawMessage(`true`)
+	}
+	return json.RawMessage(`false`)
 }

@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"reflect"
@@ -246,6 +247,20 @@ func TestAPlanRefusesToPersistWhatCannotBeApproved(t *testing.T) {
 		{"confirmed with a negative lifetime", func(p *NewPlan) { p.Lifetime = -time.Minute }},
 		{"provisional with no state read", func(p *NewPlan) { p.Provisional, p.Lifetime = true, 0 }},
 		{"provisional carrying a lifetime", func(p *NewPlan) { p.Provisional, p.StateReadAt = true, time.Now() }},
+		// Two ways to say which intent was approved is one way for them to
+		// disagree, and whichever the writer picked the other would sit on the
+		// row looking authoritative.
+		{"a subject that both cites a snapshot and carries one", func(p *NewPlan) {
+			p.Subjects[0].SnapshotID = sampleUUID
+			p.Subjects[0].DesiredState = map[string]json.RawMessage{"enabled": json.RawMessage(`true`)}
+		}},
+		// Zitadel holds its intent in the outbox row's own project and role
+		// columns, and its plan subjects cite no snapshot. One written here is a
+		// second account of one decision that nothing reads.
+		{"a desired-state snapshot for the built-in target", func(p *NewPlan) {
+			p.Target = TargetZitadel
+			p.Subjects[0].DesiredState = map[string]json.RawMessage{"enabled": json.RawMessage(`true`)}
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -263,6 +278,11 @@ func TestAPlanRefusesToPersistWhatCannotBeApproved(t *testing.T) {
 	provisional.Provisional, provisional.Lifetime, provisional.StateReadAt = true, 0, time.Now().Add(-48*time.Hour)
 	if err := provisional.validate(); err != nil {
 		t.Errorf("a provisional plan against a two-day-old read was refused: %v", err)
+	}
+	carrying := good()
+	carrying.Subjects[0].DesiredState = map[string]json.RawMessage{"enabled": json.RawMessage(`true`)}
+	if err := carrying.validate(); err != nil {
+		t.Errorf("a plan carrying the snapshot it wants written was refused: %v", err)
 	}
 	withSnapshot := good()
 	withSnapshot.Subjects[0].SnapshotID = sampleUUID
