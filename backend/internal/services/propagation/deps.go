@@ -183,6 +183,11 @@ func envInt(name string, def int) int {
 var (
 	planOne = addons.Plan
 
+	// saveBinding mirrors what the add-on reported. A seam so a test can assert
+	// the drain records it at all — the failure it prevents is invisible from
+	// the drain's own result, since the row settles either way.
+	saveBinding = db.RecordTargetBinding
+
 	subjectEmail = func(ctx context.Context, subjectID string) string {
 		profile, found, err := directory.Default.FindUser(ctx, subjectID)
 		if err != nil || !found {

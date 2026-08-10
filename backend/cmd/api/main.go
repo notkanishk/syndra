@@ -176,6 +176,37 @@ func main() {
 		log.Println("[REVOKE] Disabled via REVOCATION_DRAIN_ENABLED=false")
 	}
 
+	// Add-on reconciliation: one pass per registered add-on target, resolving
+	// current state and converging what has drifted (design §15). Deliberately
+	// not a drift SWEEP — an operator-initiated change applies the snapshot that
+	// was approved, and this resolves what policy says now, because a reconcile
+	// that replayed snapshots would fight every legitimate edit.
+	//
+	// It converges nothing by itself: it queues, and the rows wait for the drain
+	// like every other add-on row. What it does immediately is notice — an
+	// account somebody changed on the NAS by hand, and every account on the
+	// target that Syndra never provisioned.
+	var reconcileSched *periodic.Runner
+	if targets := addons.Registered(); len(targets) > 0 && driftSchedulerEnabled() {
+		reconcileSched = periodic.New("ADDON-RECONCILE", driftInterval(), 6*time.Hour, func(ctx context.Context) error {
+			for _, reg := range addons.Registered() {
+				res, err := drift.ReconcileAddon(ctx, reg.Target)
+				if err != nil {
+					// One target's failure must not stop the others: they are
+					// separate deployments with separate outages.
+					log.Printf("[ADDON-RECONCILE] %s: %v", reg.Target, err)
+					continue
+				}
+				if res.Queued > 0 || len(res.Unmanaged) > 0 || res.Halted {
+					log.Printf("[ADDON-RECONCILE] %s bound=%d queued=%d unmanaged=%d halted=%v %s",
+						reg.Target, res.Bound, res.Queued, len(res.Unmanaged), res.Halted, res.Reason)
+				}
+			}
+			return nil
+		})
+		go reconcileSched.Start(ctx)
+	}
+
 	// Add-on manifest refresh: reads each registered add-on's /capabilities,
 	// checks the contract version, and resolves the effective operation set
 	// against backend policy. Registration alone makes nothing callable — this
@@ -232,6 +263,14 @@ func main() {
 		case <-revokeSched.Done():
 		case <-shutdownCtx.Done():
 			log.Println("[REVOKE] Shutdown deadline exceeded waiting for drain; closing anyway")
+		}
+	}
+
+	if reconcileSched != nil {
+		select {
+		case <-reconcileSched.Done():
+		case <-shutdownCtx.Done():
+			log.Println("[ADDON-RECONCILE] Shutdown deadline exceeded waiting for the pass; closing anyway")
 		}
 	}
 

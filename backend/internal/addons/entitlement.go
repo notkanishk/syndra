@@ -66,7 +66,10 @@ type ApplyResponse struct {
 	// derived name is reported by the convergence that created it.
 	Effect   string `json:"effect"`
 	Username string `json:"username"`
-	Detail   string `json:"detail"`
+	// UID is the target's stable identity for the account. Recorded beside the
+	// name because the name can move out of band and this cannot.
+	UID    int64  `json:"uid"`
+	Detail string `json:"detail"`
 	// Fingerprint is the subject's state afterwards, so the next plan starts
 	// from something current rather than from a read the backend has to make.
 	Fingerprint string `json:"fingerprint"`

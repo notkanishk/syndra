@@ -6,6 +6,9 @@ package drift
 
 import (
 	"context"
+	"encoding/json"
+
+	"syndra/internal/addons"
 
 	"syndra/internal/db"
 	"syndra/internal/models"
@@ -56,4 +59,26 @@ var (
 	buildHolderSet  = services.BuildHolderSet
 	expectedViaRule = services.ExpectedViaRule
 	isExcluded      = services.IsExcluded
+)
+
+// The add-on reconciler's seams (1.18, 1.22).
+//
+// Separate from the Zitadel sweep's on purpose: they are a different reader with
+// different failure modes, and a test has to be able to fail either — a target
+// that answered from its mirror and was diffed anyway, an unmanaged account
+// entered into triage, a convergence queued for a blocked row.
+var (
+	addonSubjects = addons.Subjects
+	addonPlan     = addons.Plan
+	listBindings  = db.ListTargetBindings
+
+	recordConvergence = db.RecordSystemConvergence
+
+	resolveIntent = func(ctx context.Context, subjectID, target string) (map[string]json.RawMessage, error) {
+		set, err := services.ResolveEntitlements(ctx, subjectID, target)
+		if err != nil {
+			return nil, err
+		}
+		return set.Desired(), nil
+	}
 )

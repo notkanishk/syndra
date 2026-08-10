@@ -72,6 +72,11 @@ type ApplyOutcome struct {
 	// Username is the derived or bound account name, reported so no separate
 	// creation call has to be sequenced before this one to learn it.
 	Username string `json:"username,omitempty"`
+	// UID is the target's stable identity for that account. Reported beside the
+	// name because the name can move out of band and this cannot: a backend
+	// recording only the name would lose track of the account the first time
+	// somebody renamed it in the web UI.
+	UID int64 `json:"uid,omitempty"`
 	// Fingerprint is the subject's state AFTER this call, so the next plan
 	// starts from something current.
 	Fingerprint string `json:"fingerprint,omitempty"`
@@ -428,6 +433,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 			Subject: req.Subject, Effect: EffectNoChange,
 			Detail:      "Already in the requested state.",
 			Username:    current.Username,
+			UID:         current.UID,
 			Fingerprint: fingerprintSubject(current),
 		}, http.StatusOK, nil
 	}
@@ -452,6 +458,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		Detail:      describeChange(update, desired.groups),
 		Consequence: describeHolding(applied),
 		Username:    applied.Username,
+		UID:         applied.UID,
 		Fingerprint: fingerprintSubject(&applied),
 	}, http.StatusOK, nil
 }
@@ -516,6 +523,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		Detail:      fmt.Sprintf("Created %s.", binding.Username),
 		Consequence: describeHolding(*created),
 		Username:    binding.Username,
+		UID:         created.UID,
 		Fingerprint: fingerprintSubject(created),
 	}, http.StatusOK, nil
 }

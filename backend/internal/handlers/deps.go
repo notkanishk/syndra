@@ -10,6 +10,7 @@ import (
 	"syndra/internal/cache"
 	"syndra/internal/db"
 	"syndra/internal/services"
+	"syndra/internal/services/addonop"
 	"syndra/internal/services/drift"
 	"syndra/internal/services/planapply"
 	"syndra/internal/services/propagation"
@@ -368,4 +369,11 @@ var (
 var (
 	svcInTxLockingAccess      = db.InTxLockingAccess
 	dbRecordSystemConvergence = db.RecordSystemConvergence
+)
+
+// The unmanaged inventory and its one action (1.18/1.19, 6.8).
+var (
+	svcTargetInventory    = drift.Inventory
+	svcDispatchOperation  = addonop.Dispatch
+	dbRecordTargetBinding = db.RecordTargetBinding
 )

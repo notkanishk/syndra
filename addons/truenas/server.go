@@ -100,6 +100,10 @@ func methodsFor(operationID string) []string {
 		return []string{"user.update"}
 	case "account.purge":
 		return []string{"user.delete"}
+	case "account.adopt":
+		// The read it verifies the account with. It writes nothing on the
+		// target — the binding is local — so this is the whole dependency.
+		return []string{"user.query"}
 	case "activity.get":
 		// Both, because a report that could read the audit log but not the
 		// share list would be the silently-incomplete answer this operation

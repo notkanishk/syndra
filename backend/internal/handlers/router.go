@@ -241,6 +241,13 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/v1/targets/mappings/versions", withCORS(withOperatorAuth(handlePublishMappingVersion)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/mappings/versions/{version}/rollback", withCORS(withOperatorAuth(handleRollbackMappingVersion)))
 
+	// The unmanaged inventory: what lives on a target that Syndra never put
+	// there. Reported, never triaged — and adoption is the one way an account
+	// moves out of it, because that decision hands somebody else's home
+	// directory to a member if it is wrong.
+	mux.HandleFunc("GET /api/v1/targets/{target}/inventory", withCORS(withOperatorAuth(handleTargetInventory)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/inventory/{username}/adopt", withCORS(withOperatorAuth(handleAdoptAccount)))
+
 	// Entitlement convergence on an add-on target (group 9). Plan-then-apply,
 	// like every other target-affecting operator action: the rehearsal computes
 	// the diff through the add-on and records it, and the apply cites the id it

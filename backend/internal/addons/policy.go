@@ -66,6 +66,24 @@ var operationPolicy = map[string]OperationPolicy{
 		Scope:   ScopeAdmin,
 		Confirm: true,
 	},
+	// Adoption: attach an account the target already holds to a subject.
+	//
+	// Confirmed, and not because it is destructive — it writes one binding. It
+	// is because it is the one operation whose mistake is invisible: adopting
+	// the wrong account hands a member somebody else's home directory, their
+	// shares and their group memberships, and the next convergence then makes
+	// that look like the intended state. There is no undo that gives the data
+	// back to whoever it belonged to.
+	"account.adopt": {
+		Scope:   ScopeAdmin,
+		Confirm: true,
+		Params: []ParamSpec{
+			// The account being adopted, by the name the inventory showed. The
+			// subject is not a parameter: it is the request's subject, checked
+			// by the same binding rule every operation goes through.
+			{Name: "username", Type: "string", Required: true},
+		},
+	},
 	// The one irreversible operation in the set. Confirmation is not a UI
 	// nicety here — the backend refuses the call without it.
 	"account.purge": {

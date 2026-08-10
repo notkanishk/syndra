@@ -90,6 +90,13 @@ func operationSet(probe capabilityProbe) []Operation {
 		},
 		{ID: "password.rotate", Scope: "admin"},
 		{
+			// Adoption: bind an account the target already holds to a subject.
+			// Confirmed, because its mistake is the invisible one — the wrong
+			// account hands a member somebody else's home directory, and the
+			// next convergence makes that look intended.
+			ID: "account.adopt", Scope: "admin", Confirm: true,
+		},
+		{
 			ID: "account.purge", Scope: "admin", Confirm: true,
 			// The delete-capable key the backend injects for this one call.
 			// Declared secret so every redaction rule that covers a member's

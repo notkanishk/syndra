@@ -150,7 +150,7 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 
 func mutatingOperation(name string) bool {
 	switch name {
-	case "password.set", "password.rotate", "account.purge":
+	case "password.set", "password.rotate", "account.purge", "account.adopt":
 		return true
 	}
 	return false
@@ -164,6 +164,8 @@ func (s *server) runOperation(name string, req OperationRequest) (OperationResul
 		return s.rotatePassword(req)
 	case "account.purge":
 		return s.purgeAccount(req)
+	case "account.adopt":
+		return s.adoptAccount(req)
 	case "activity.get":
 		return s.smbActivity(req)
 	case "health.get":
@@ -480,4 +482,94 @@ func requireSecret(params map[string]any, name string) (string, error) {
 		return "", fmt.Errorf("%s is required", name)
 	}
 	return value, nil
+}
+
+// adoptAccount binds an account the target already holds to a subject.
+//
+// The one entry point for it, reached from two places: the unmanaged inventory
+// an operator browses, and the binding conflict an apply halts on. Design §11
+// requires them to leave identical state, and the way to guarantee that is for
+// there to be one action rather than two that agree today.
+//
+// It writes a binding and touches the account itself in no way at all. Whatever
+// groups, lock state and SMB flag it already has stay exactly as they are until
+// the next convergence, which is the operator's next decision and not this one's
+// side effect — an adoption that also converged would apply a diff nobody was
+// shown, on an account whose contents nobody has looked at yet.
+func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error) {
+	username, _ := req.Params["username"].(string)
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return OperationResult{}, http.StatusBadRequest, fmt.Errorf("no account named")
+	}
+	if strings.TrimSpace(req.Subject) == "" {
+		return OperationResult{}, http.StatusBadRequest, fmt.Errorf("no subject to bind it to")
+	}
+
+	// Already bound to this subject: reported as done rather than refused. The
+	// dedup store makes a replay return the original answer, and this covers the
+	// other repeat — an operator adopting the same account twice from two
+	// screens — without a second mutation.
+	if existing, bound, err := s.store.GetBinding(req.Subject); err != nil {
+		return OperationResult{}, http.StatusInternalServerError, err
+	} else if bound {
+		if existing.Username == username {
+			return OperationResult{
+				Operation: "account.adopt", Subject: req.Subject, Outcome: "succeeded",
+				Detail: fmt.Sprintf("%s was already bound to this subject.", username),
+			}, http.StatusOK, nil
+		}
+		// Rebinding is not adoption. The subject already has an account here,
+		// and moving them to another one abandons the first — its home
+		// directory, its ACL entries, its shares — with nothing recording that
+		// it was ever theirs.
+		return OperationResult{}, http.StatusConflict,
+			fmt.Errorf("this subject is already bound to %s", existing.Username)
+	}
+
+	claimed, err := s.store.BoundUsernames()
+	if err != nil {
+		return OperationResult{}, http.StatusInternalServerError, err
+	}
+	if owner, taken := claimed[username]; taken {
+		// Somebody else's. Refused rather than moved: this is the mistake the
+		// whole "adoption is an operator decision" rule exists to prevent, and
+		// making it recoverable by rebinding would make it silent.
+		return OperationResult{}, http.StatusConflict,
+			fmt.Errorf("%s is already bound to another subject (%s)", username, owner)
+	}
+
+	// Read from the target rather than trusted from the request. The inventory
+	// the operator was looking at is a snapshot, and an account deleted or
+	// renamed since would otherwise be bound by name to nothing.
+	snap, err := s.readSubjects()
+	if err != nil {
+		return OperationResult{}, statusFor(err), err
+	}
+	var account *Subject
+	for i := range snap.Subjects {
+		if snap.Subjects[i].Username == username {
+			account = &snap.Subjects[i]
+			break
+		}
+	}
+	if account == nil {
+		return OperationResult{}, http.StatusNotFound,
+			fmt.Errorf("the target has no account named %s", username)
+	}
+
+	if err := s.store.PutBinding(Binding{
+		SubjectID: req.Subject, Username: account.Username, UID: account.UID,
+		// Who decided it. An adoption that turns out to be wrong hands somebody
+		// else's data to a member, and the actor is the first thing asked for.
+		BoundBy: req.Actor,
+	}); err != nil {
+		return OperationResult{}, http.StatusInternalServerError, err
+	}
+
+	s.record("account.adopt", req.Subject, req.Actor, req.CallID, "succeeded")
+	return OperationResult{
+		Operation: "account.adopt", Subject: req.Subject, Outcome: "succeeded",
+		Detail: fmt.Sprintf("%s is now bound to this subject. Nothing on the account was changed.", account.Username),
+	}, http.StatusOK, nil
 }

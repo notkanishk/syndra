@@ -175,6 +175,13 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 
 	switch {
 	case resp.Outcome == addons.OutcomeSucceeded:
+		// Recorded before the row is settled, and non-fatally. The binding is
+		// the backend's copy of a decision the add-on already made and already
+		// persisted, so failing to write it does not un-apply anything — but a
+		// convergence marked applied while the backend still thinks the subject
+		// has no account would report them in the unmanaged inventory, which is
+		// the one place an operator is invited to adopt an account.
+		recordBinding(ctx, intent, resp, row.InitiatedBy)
 		if err := markApplied(ctx, row.ID); err != nil {
 			res.settleFailure(row.ID, "apply", err)
 			return false
@@ -309,4 +316,35 @@ func (res *DrainResult) fingerprintFor(ctx context.Context, intent db.Entitlemen
 		return "", true
 	}
 	return answer.Outcomes[0].Fingerprint, false
+}
+
+// recordBinding copies what the add-on reported into the backend's own record.
+//
+// Downstream of the add-on's answer, never a guess: the apply resolves a subject
+// to an account through the add-on's store, and this follows that decision. Two
+// stores deciding it would be two answers to the one question where being wrong
+// hands somebody else's home directory to a member.
+//
+// Non-fatal, and logged rather than returned. The convergence happened; refusing
+// to record it as applied because a mirror write failed would leave the row
+// claimable and re-drive a mutation that already landed.
+func recordBinding(ctx context.Context, intent db.EntitlementIntent, resp addons.ApplyResponse, actor string) {
+	if resp.Username == "" {
+		// An outcome that reported no account name. Nothing to record, and
+		// nothing wrong: a `no_change` on a subject the add-on could not name is
+		// already an outcome the surface shows.
+		return
+	}
+	binding := db.TargetBinding{
+		Target: intent.Target, SubjectID: intent.SubjectID,
+		Username: resp.Username, BoundBy: actor,
+	}
+	if resp.UID != 0 {
+		uid := resp.UID
+		binding.AccountUID = &uid
+	}
+	if err := saveBinding(ctx, binding); err != nil {
+		log.Printf("[ADDON-DRAIN] converged %s on %s but could not record the binding: %v",
+			intent.SubjectID, intent.Target, err)
+	}
 }
