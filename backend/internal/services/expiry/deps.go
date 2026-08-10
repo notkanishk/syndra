@@ -39,15 +39,22 @@ var (
 	//
 	// Resolution is already correct the moment the date passes — the resolver
 	// compares the expiry in its predicate — so what this closes is the gap
-	// between Syndra being right and the target being told.
+	// between Syndra being right and the target being told. Without it, a
+	// suspension that lapsed at midnight leaves the person locked out until
+	// somebody happens to drive a change through them.
 	//
-	// ponytail: a placeholder until the add-on entitlement dispatcher exists
-	// (group 4). It resolves the set so a mapping or allowance error surfaces
-	// here rather than at the first apply, and the enqueue lands with the
-	// dispatcher that can drain it. Until then the drift sweep is what notices
-	// the target is behind.
+	// It queues rather than applies, like every other add-on row: the
+	// convergence waits for the drain. And it is system-minted, for the same
+	// reason a cascade's is — nobody reviewed a diff here either, a clock did.
 	reconvergeSubject = func(ctx context.Context, subjectID, target string) error {
-		_, err := services.ResolveEntitlements(ctx, subjectID, target)
+		set, err := services.ResolveEntitlements(ctx, subjectID, target)
+		if err != nil {
+			return err
+		}
+		_, _, err = db.RecordSystemConvergence(ctx, db.SystemConvergence{
+			Target: target, SubjectID: subjectID, Actor: expiryActor,
+			Reason: "A subtractive allowance lapsed", Desired: set.Desired(),
+		})
 		return err
 	}
 )

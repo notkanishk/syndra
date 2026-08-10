@@ -19,15 +19,18 @@ import (
 // passes. What is NOT correct is the target: nothing has told it, and it will
 // keep the person out until something re-resolves them.
 //
-// And today NOTHING tells it. `reconvergeSubject` resolves the set and stops
-// there, because queueing an apply needs a plan subject to cite and a
-// system-initiated re-convergence has no plan — the open design question
-// NEXT.md item 1 names. The drift sweep is not the fallback either: it is
-// `const target = db.TargetZitadel`, and add-on drift is unbuilt, so for the
-// only target class this change adds there is no second path.
+// It tells it now. `reconvergeSubject` resolves the set and queues a
+// system-minted convergence — the same shape a role change produces, for the
+// same reason: nobody reviewed a diff here either, a clock did. The convergence
+// waits for the drain like every other add-on row, so the accurate claim is
+// that the suspension ends here, Syndra's answer is right from this moment, and
+// the target is told when the drain next runs.
 //
-// So the accurate claim is: the suspension ends here, Syndra's answer is right
-// from this moment, and the TARGET stays as it was until an operator drives a
+// The paragraph this replaces said nothing told the target, and that was true
+// when it was written: queueing needed a plan subject to cite, and a
+// system-initiated convergence had no plan. That question has an answer now
+// (`db.RecordSystemConvergence`), and the periodic reconcile is a second path
+// behind it. Historical text: the TARGET stays as it was until an operator drives a
 // change through the entitlement plane. Said plainly because the two weaker
 // versions of this sentence — "the access actually comes back", then "the drift
 // sweep tells it" — were both wrong, and a doc that is confidently wrong about

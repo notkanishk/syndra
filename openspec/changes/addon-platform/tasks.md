@@ -208,7 +208,7 @@
 - [ ] 9.12 Tests: accounts held by an active role are excluded; bulk action plans before applying
 - [x] 9.13 Remove `System > Hardware sync` from `ui/src/lib/nav.ts` and its route; add a per-target System entry per registered add-on, derived from deployment configuration rather than from what the current operator can see
 - [x] 9.14 Tests: nav renders a target entry for each registered add-on regardless of that operator's data, and the LLDAP entry and route are gone
-- [ ] 9.15 Align the new operator surfaces with `basic-advanced-ia`: Basic versus Advanced placement, structure that does not move in response to data
+- [x] 9.15 Align the new operator surfaces with `basic-advanced-ia`: Basic versus Advanced placement, structure that does not move in response to data
 - [x] 9.16 Extend `GET /api/v1/governance/indicators` with the unconfirmed-revocation count and wire the `NavLeaf` indicator key so the badge can carry it
 - [x] 9.17 Tests: the indicator appears when unconfirmed revocations exist and clears when they resolve
 - [ ] 9.18 Apply-surface disclosure: every submitted operation states whether it drains automatically or waits for an operator resume
@@ -216,8 +216,8 @@
 - [x] 9.20 Add-on health surface distinguishing unreachable, read-only, draining, backlogged, and stale-snapshot states
 - [x] 9.21 Tests: each state renders distinctly and stale data is labelled with its age
 - [ ] 9.22 Allowance authoring UI supporting both bounded forms — an expiry, or no expiry with a mandatory review date — and rejecting a denial with neither
-- [ ] 9.23 Carve-out rendering wherever that role appears for that subject: user view, project role-holder lists, filtered cohorts, bulk selection
-- [ ] 9.24 Tests: a role with an active subtractive allowance never renders as full access; a role-holder list never counts a suspended subject as holding the listed access
+- [x] 9.23 **Landed early as 14.30.** Carve-out rendering wherever that role appears for that subject: user view, project role-holder lists, filtered cohorts, bulk selection
+- [x] 9.24 **Landed early as 14.30.** Tests: a role with an active subtractive allowance never renders as full access; a role-holder list never counts a suspended subject as holding the listed access
 - [ ] 9.25 Review-date surfacing: an indefinite suspension appears in governance once its review date passes and stays in force until decided
 - [ ] 9.26 Tests: a passed review date surfaces the suspension without lifting it
 
@@ -250,13 +250,13 @@
 
 ## 12. Documentation and graph refresh
 
-- [ ] 12.1 Update `openspec/changes/syndra-core-architecture/design.md` §3 Bridge Plane and §9 interaction matrix for the add-on model
-- [ ] 12.2 Update `ROADMAP.md` Phase 4 to record the LLDAP path as abandoned and the add-on platform as its replacement
-- [ ] 12.3 Update `openspec/INDEX.md`: remove or supersede the LDAP Sync and Provisioning capability rows so INDEX stops advertising a bridge that no longer exists
-- [ ] 12.4 Mark `changes/syndra-core-architecture/specs/{ldap-sync,provisioning}/spec.md` superseded, pointing at this change
-- [ ] 12.5 Update `openspec/NEXT.md` and `specs/feature-coverage.md`
-- [ ] 12.6 Update root `CLAUDE.md` and `README.md` for the removal of `sync/` and the addition of `addons/`
-- [ ] 12.7 Run `detect_changes` and re-index the affected scope in codebase memory; record ADRs for adapter-not-controller and for narrowing the operator-only drain rule
+- [x] 12.1 Update `openspec/changes/syndra-core-architecture/design.md` §3 Bridge Plane and §9 interaction matrix for the add-on model
+- [x] 12.2 Update `ROADMAP.md` Phase 4 to record the LLDAP path as abandoned and the add-on platform as its replacement
+- [x] 12.3 Update `openspec/INDEX.md`: remove or supersede the LDAP Sync and Provisioning capability rows so INDEX stops advertising a bridge that no longer exists
+- [x] 12.4 Mark `changes/syndra-core-architecture/specs/{ldap-sync,provisioning}/spec.md` superseded, pointing at this change
+- [x] 12.5 Update `openspec/NEXT.md` and `specs/feature-coverage.md`
+- [x] 12.6 Update root `CLAUDE.md` and `README.md` for the removal of `sync/` and the addition of `addons/`
+- [x] 12.7 Run `detect_changes` and re-index the affected scope in codebase memory; record ADRs for adapter-not-controller and for narrowing the operator-only drain rule
 
 ## Sequencing
 
@@ -380,8 +380,8 @@ Named here rather than left implied. Each is a real gap with a reason it is not
 closed in this group.
 
 - [x] 15.1 **Closed.** `addonsResolvesValue` is now `addons.ResolvesValue`, reading the add-on's new `GET /values/{field}`. It fails open on everything except a definite "no" — an unreadable target, an unenumerable field and an unregistered add-on are all the ABSENCE of an answer, and refusing a mapping edit because a NAS was rebooting would make an outage look like a validation failure. A value is enumerated at read time rather than declared in the manifest, because group membership is runtime state and a cached manifest would refuse a group created five minutes ago. Original text: `addonsResolvesValue` accepts every value (`handlers/deps.go`), while `access-governance/spec.md:200` states value validation as a MUST and 7.3/7.4 are ticked. It needs a per-target value probe on the add-on's `/capabilities`, which is a contract change
-- [ ] 15.2 `planapply` and `addonop` still have no production caller. NEXT.md item 1 holds the reason: the lifecycle trigger needs a decision about implicit plans for cascade-sourced rows. Both are heavily tested and neither has executed on a live request path
-- [ ] 15.3 `expiry.reconvergeSubject` resolves and enqueues nothing, for the same reason as 15.2 — a system-initiated re-convergence has no plan subject to cite. **Nothing else tells the target either:** the drift sweep is `const target = db.TargetZitadel` and add-on drift (1.18, and 1.22's reconcile half) is unbuilt, so for the only target class this change adds there is no second path. A lapsed suspension ends in Syndra and the account stays as it was until an operator drives a change. `SweepAllowances`' doc says exactly that now, after two weaker versions of the sentence that were both wrong
+- [x] 15.2 **Closed.** Both have production callers now. `planapply.Apply` is behind `POST /api/v1/targets/{target}/entitlements/apply`, and `addonop.Dispatch` behind the adoption, the member credential set and the revocation composition. The decision that was blocking it was taken and recorded in §17.9: a cascade-sourced convergence mints an implicit plan, and a system-sourced row re-fingerprints at dispatch rather than carrying a trigger-time one. Original text: `planapply` and `addonop` still have no production caller. NEXT.md item 1 holds the reason: the lifecycle trigger needs a decision about implicit plans for cascade-sourced rows. Both are heavily tested and neither has executed on a live request path
+- [x] 15.3 **Closed, and by removing the function rather than filling it in.** Expiry computes a closure delta like every other access change, and that delta passes through `deltaParams`, which is where the lifecycle trigger hangs — so a lapsed grant reaches its mapped targets by the same path a bundle removal does, with no expiry-specific re-convergence at all. And the second half of the original finding is closed too: add-on reconciliation exists (`drift.ReconcileAddon`), so a target IS told. Original text: `expiry.reconvergeSubject` resolves and enqueues nothing, for the same reason as 15.2 — a system-initiated re-convergence has no plan subject to cite. **Nothing else tells the target either:** the drift sweep is `const target = db.TargetZitadel` and add-on drift (1.18, and 1.22's reconcile half) is unbuilt, so for the only target class this change adds there is no second path. A lapsed suspension ends in Syndra and the account stays as it was until an operator drives a change. `SweepAllowances`' doc says exactly that now, after two weaker versions of the sentence that were both wrong
 - [x] 15.4 Retry-budget escalation (2.51). A spent row is terminal with a reason an operator can see; there is no surface that raises it
 - [x] 15.5 **Closed.** `db.PruneSpentPlans`, called from the drain's existing retention step and deliberately after the outbox prune — a plan an outbox row still cites is refused by the foreign key, and pruning the rows first is what makes the spent ones prunable. Three things are excluded: the snapshots (immutable audit records that outlive the plan), provisional plans (their expiry is NULL by construction, so "expired" does not apply and pruning one would discard an approved change because an outage outlasted a retention window), and anything still cited
 - [x] 15.6 **Closed.** `POST /lifecycle` on the add-on and `POST /api/v1/targets/{target}/lifecycle` in front of it. A reason is required, because a `read_only` add-on with no explanation is indistinguishable from a fault. Deliberately not an operation: operations act on a subject, carry a durable record and a one-shot token, and deduplicate on a call id — this acts on the add-on itself, is idempotent by construction, and has no subject to bind to. The backend's breaker does not record it either: it is the call an operator makes to stop the add-on serving work, and counting a refusal towards opening the circuit would conflate "we told it to stop" with "it stopped answering"
