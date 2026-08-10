@@ -64,7 +64,6 @@ func loadConfig() (config, error) {
 		keyFile:    os.Getenv("TLS_KEY_FILE"),
 		caFile:     os.Getenv("TLS_CLIENT_CA_FILE"),
 		nasURL:     os.Getenv("TRUENAS_URL"),
-		nasAPIKey:  os.Getenv("TRUENAS_API_KEY"),
 		statePath:  envOr("STATE_PATH", "/var/lib/syndra-truenas/state.db"),
 		logDir:     envOr("MUTATION_LOG_DIR", "/var/lib/syndra-truenas"),
 		lifecycle:  envOr("LIFECYCLE_STATE", LifecycleActive),
@@ -77,10 +76,17 @@ func loadConfig() (config, error) {
 		// explicit `false` rather than something that quietly defaults off.
 		nasVerify: envBool("TRUENAS_VERIFY_TLS", true),
 	}
-	if key := strings.TrimSpace(os.Getenv("SIGNING_KEY")); key != "" {
-		// Trimmed: a mounted secret almost always carries a trailing newline,
-		// and a one-byte difference surfaces as "no matching signature" — a
-		// failure whose message points nowhere near its cause.
+	apiKey, err := secretValue("TRUENAS_API_KEY")
+	if err != nil {
+		return config{}, err
+	}
+	c.nasAPIKey = apiKey
+
+	key, err := secretValue("SIGNING_KEY")
+	if err != nil {
+		return config{}, err
+	}
+	if key != "" {
 		c.signingKey = []byte(key)
 	}
 	if raw := os.Getenv("TRUENAS_API_KEY_EXPIRES_AT"); raw != "" {
@@ -104,11 +110,11 @@ func loadConfig() (config, error) {
 	case c.caFile == "" && len(c.signingKey) == 0:
 		// Exactly one authentication mode must be configured. Neither means
 		// anything on the internal network can order a credential reset.
-		return config{}, errors.New("configure TLS_CLIENT_CA_FILE (mutual TLS) or SIGNING_KEY (signed requests): one is required")
+		return config{}, errors.New("configure TLS_CLIENT_CA_FILE (mutual TLS) or SIGNING_KEY_FILE (signed requests): one is required")
 	case c.caFile != "" && len(c.signingKey) > 0:
 		// Both is not "belt and braces", it is an ambiguity: a caller would
 		// choose, and the caller is the thing being authenticated.
-		return config{}, errors.New("configure exactly one of TLS_CLIENT_CA_FILE and SIGNING_KEY, not both")
+		return config{}, errors.New("configure exactly one of TLS_CLIENT_CA_FILE and SIGNING_KEY_FILE, not both")
 	}
 	for i := range c.supported {
 		c.supported[i] = strings.TrimSpace(c.supported[i])
@@ -116,17 +122,26 @@ func loadConfig() (config, error) {
 	return c, nil
 }
 
+// main does nothing but exit codes. Everything else is in `run`, because
+// `log.Fatalf` calls os.Exit and os.Exit does not run deferred functions — so
+// every startup failure after the store was opened closed neither the bbolt
+// file nor the mutation log.
 func main() {
 	log.SetFlags(log.LstdFlags | log.LUTC)
+	if err := run(); err != nil {
+		log.Fatalf("[STARTUP] %v", err)
+	}
+}
 
+func run() error {
 	cfg, err := loadConfig()
 	if err != nil {
-		log.Fatalf("[STARTUP] %v", err)
+		return err
 	}
 
 	store, err := OpenStore(cfg.statePath)
 	if err != nil {
-		log.Fatalf("[STARTUP] %v", err)
+		return err
 	}
 	defer store.Close()
 
@@ -135,27 +150,24 @@ func main() {
 		// Fatal on purpose. The mutation log is the record that survives losing
 		// Syndra's audit tables; starting without one would mean mutations with
 		// no independent trace, which is the guarantee the design states.
-		log.Fatalf("[STARTUP] mutation log: %v", err)
+		return fmt.Errorf("mutation log: %w", err)
 	}
 	defer mlog.Close()
 
 	nas := newNAS(dialTrueNAS(cfg.nasURL, cfg.nasAPIKey, cfg.nasVerify), cfg.supported)
-	// Probed once at startup so `/capabilities` can answer with a version, and
-	// non-fatally: an add-on that refused to start because the NAS was off
-	// would be unreachable in exactly the situation an operator is trying to
-	// diagnose.
-	if v, err := nas.SystemVersion(); err != nil {
+	// Probed at startup so `/capabilities` can answer with a version straight
+	// away, and non-fatally: an add-on that refused to start because the NAS
+	// was off would be unreachable in exactly the situation an operator is
+	// trying to diagnose. Nothing depends on this succeeding — every call
+	// re-probes a fresh connection — which is what stops an add-on that started
+	// first from refusing mutations for the rest of its life.
+	if err := nas.Probe(); err != nil {
 		log.Printf("[STARTUP] could not read the target version yet: %v", err)
 	} else {
-		log.Printf("[STARTUP] target version %s", v)
+		log.Printf("[STARTUP] target version %s", nas.Version())
 		if ok, why := nas.MajorSupported(); !ok {
 			log.Printf("[STARTUP] WARNING: %s — mutations will be refused, reads continue", why)
 		}
-		// Which methods this release actually has, so the manifest can mark an
-		// operation unavailable with a reason rather than letting it fail on
-		// use. Best-effort: a target that will not enumerate is not a target
-		// with no methods.
-		nas.loadMethods()
 	}
 
 	life := newLifecycle(cfg.lifecycle)
@@ -181,17 +193,31 @@ func main() {
 
 	tlsConf, err := serverTLS(cfg)
 	if err != nil {
-		log.Fatalf("[STARTUP] %v", err)
+		return err
 	}
 	httpSrv := &http.Server{
-		Addr:              cfg.listen,
-		Handler:           srv.routes(),
-		TLSConfig:         tlsConf,
+		Addr:      cfg.listen,
+		Handler:   srv.routes(),
+		TLSConfig: tlsConf,
+		// All four, not just the header one. The body size is bounded before it
+		// is read, but nothing bounded the TIME it took to arrive: a slow body
+		// pins a handler goroutine and, on a mutating route, one of the
+		// lifecycle's in-flight slots — which is how a service that drains
+		// before shutdown never drains.
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		// Longer than a call to the NAS, which is what a handler waits on.
+		WriteTimeout: 90 * time.Second,
+		IdleTimeout:  2 * time.Minute,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// The retention the store documents, actually applied. Nothing called the
+	// sweep outside a test, so the idempotency bucket grew for the life of the
+	// deployment — a 30-day window that never ended is a bucket, not a window.
+	go sweepIdempotency(ctx, store)
 
 	go func() {
 		mode := "mtls"
@@ -216,6 +242,26 @@ func main() {
 	}
 	nas.drop()
 	log.Println("[SHUTDOWN] stopped")
+	return nil
+}
+
+// sweepIdempotency applies the store's stated retention.
+//
+// Daily, and once at startup: the entries it removes are weeks old by
+// definition, so the cadence only has to be shorter than "never".
+func sweepIdempotency(ctx context.Context, store *Store) {
+	for {
+		if removed, err := store.SweepIdempotency(); err != nil {
+			log.Printf("[STORE] idempotency sweep failed: %v", err)
+		} else if removed > 0 {
+			log.Printf("[STORE] idempotency sweep removed %d expired result(s)", removed)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(24 * time.Hour):
+		}
+	}
 }
 
 // serverTLS builds the listener's configuration.
@@ -242,7 +288,67 @@ func serverTLS(cfg config) (*tls.Config, error) {
 	// RequireAndVerify, never VerifyIfGiven: the second lets an anonymous
 	// caller through, which is the whole authentication in this mode.
 	conf.ClientAuth = tls.RequireAndVerifyClientCert
+	// And the certificate has to have been issued FOR this. Verification
+	// against the pool alone admits anything the private CA ever signed —
+	// including the add-on's own server certificate, which the same CA issues
+	// and which is mounted in this container. A client certificate is one with
+	// client authentication in its extended key usage; a server certificate
+	// presented as a client credential is a misuse the chain cannot see.
+	conf.VerifyPeerCertificate = requireClientAuthEKU
 	return conf, nil
+}
+
+func requireClientAuthEKU(_ [][]byte, chains [][]*x509.Certificate) error {
+	for _, chain := range chains {
+		if len(chain) == 0 {
+			continue
+		}
+		leaf := chain[0]
+		if len(leaf.ExtKeyUsage) == 0 {
+			// Unconstrained. Old certificates in a lab deployment have no EKU
+			// at all, and refusing those would break a working install on an
+			// upgrade — so an absent EKU is accepted and a WRONG one is not.
+			return nil
+		}
+		for _, usage := range leaf.ExtKeyUsage {
+			if usage == x509.ExtKeyUsageClientAuth || usage == x509.ExtKeyUsageAny {
+				return nil
+			}
+		}
+	}
+	return errors.New("the client certificate is not marked for client authentication")
+}
+
+// secretValue reads a secret from the file `<NAME>_FILE` points at, or from
+// `<NAME>` itself.
+//
+// The file is preferred, and the backend's half of every one of these is
+// already a path. Two reasons, and the second is the one that bit: an
+// environment value is readable from `docker inspect` and /proc/1/environ in
+// the container the Dockerfile calls the least trusted in the deployment, while
+// the TLS material for that same container arrives as a mounted file — and the
+// two ends of the signing key disagreed about its FORM, so one HMACed the
+// file's contents and the other the literal path string. The only symptom was
+// "no matching signature".
+//
+// Trimmed, because a mounted secret almost always carries a trailing newline
+// and a one-byte difference surfaces as that same failure.
+func secretValue(name string) (string, error) {
+	if path := strings.TrimSpace(os.Getenv(name + "_FILE")); path != "" {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("read %s_FILE: %w", name, err)
+		}
+		value := strings.TrimSpace(string(raw))
+		if value == "" {
+			// An empty file is a mount that did not land. Silently falling back
+			// to the environment would start the add-on in whichever mode the
+			// other variable happened to configure.
+			return "", fmt.Errorf("%s_FILE (%s) is empty", name, path)
+		}
+		return value, nil
+	}
+	return strings.TrimSpace(os.Getenv(name)), nil
 }
 
 func envOr(name, fallback string) string {

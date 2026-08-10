@@ -12,6 +12,7 @@ services:
       POSTGRES_DB: syndradb
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks: [data]
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U syndra"]
@@ -24,6 +25,7 @@ services:
     container_name: syndra_redis
     volumes:
       - redisdata:/data
+    networks: [data]
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
 
@@ -86,6 +88,11 @@ services:
       - ${ZITADEL_MACHINE_KEY_PATH:-/dev/null}:/etc/syndra/zitadel-sa-key.json:ro
     ports:
       - "8080:8080"
+    # The only service on all three. It is the single mutation authority, so it
+    # is also the only thing that needs to reach both the datastores and the
+    # add-ons — and the segmentation below is what makes that a fact about the
+    # deployment rather than a sentence in a design document.
+    networks: [edge, data, addons]
     depends_on:
       postgres:
         condition: service_healthy
@@ -112,6 +119,10 @@ services:
       - ZITADEL_DOMAIN=${ZITADEL_DOMAIN:-}
       - ZITADEL_CLIENT_ID=${ZITADEL_CLIENT_ID:-}
       - ZITADEL_ADMIN_ROLE_KEY=${ZITADEL_ADMIN_ROLE_KEY:-admin}
+    # Edge only. The UI talks to the backend and to nothing else — it has no
+    # reason to reach an add-on or a datastore, and on one flat network it
+    # could reach both.
+    networks: [edge]
     restart: unless-stopped
 
   sync:
@@ -134,6 +145,9 @@ services:
       - SYNC_POLL_INTERVAL=${SYNC_POLL_INTERVAL:-10s}
       - SYNC_WORKER_COUNT=${SYNC_WORKER_COUNT:-5}
       - SYNC_INTENT_LIMIT=${SYNC_INTENT_LIMIT:-50}
+    # With the backend and the add-ons, never with the datastores: it polls the
+    # backend for intents and talks to an LDAP server outside the deployment.
+    networks: [addons]
     depends_on:
       - backend
     restart: unless-stopped
@@ -157,13 +171,28 @@ services:
       # CA never consulted, while both ends report themselves authenticated.
       - TLS_CERT_FILE=/run/secrets/truenas-addon/tls.crt
       - TLS_KEY_FILE=/run/secrets/truenas-addon/tls.key
-      # Exactly one of these. Mutual TLS against the deployment's own private CA
-      # is the stronger mode; SIGNING_KEY is the fallback where issuing a client
-      # certificate is impractical. Configuring both is refused at startup —
-      # a caller would choose, and the caller is the thing being authenticated.
-      - TLS_CLIENT_CA_FILE=${ADDON_CLIENT_CA_FILE:-/run/secrets/truenas-addon/ca.crt}
-      - SIGNING_KEY=${TRUENAS_ADDON_SIGNING_KEY:-}
-      - TRUENAS_URL=${TRUENAS_URL:-}
+      # Exactly one of these, and NEITHER has a default. Mutual TLS against the
+      # deployment's own private CA is the stronger mode; the signing key is the
+      # fallback where issuing a client certificate is impractical. Configuring
+      # both is refused at startup — a caller would choose, and the caller is
+      # the thing being authenticated — so a default here made the other mode
+      # unreachable: setting the signing key left both non-empty and the add-on
+      # refused to start, with nothing saying why.
+      #
+      # mTLS:   ADDON_CLIENT_CA_FILE=/run/secrets/truenas-addon/ca.crt
+      # signed: ADDON_SIGNING_KEY_FILE=/run/secrets/truenas-addon/signing.key
+      - TLS_CLIENT_CA_FILE=${ADDON_CLIENT_CA_FILE:-}
+      # A PATH, matching the backend's ADDON_TRUENAS_SIGNING_KEY, which is also
+      # a path. The two ends held the same secret in two forms for a while: one
+      # HMACed the file's contents and the other the literal path string, and
+      # the only symptom was "no matching signature".
+      - SIGNING_KEY_FILE=${ADDON_SIGNING_KEY_FILE:-}
+      - TRUENAS_URL=${TRUENAS_URL:?TRUENAS_URL is required when the truenas profile is enabled}
+      # Read from a mounted file where one is given. The Dockerfile calls this
+      # the least trusted container in the deployment, and an environment value
+      # is readable from `docker inspect` and /proc/1/environ — while the TLS
+      # material for the same container already arrives as files.
+      - TRUENAS_API_KEY_FILE=${ADDON_API_KEY_FILE:-}
       - TRUENAS_API_KEY=${TRUENAS_API_KEY:-}
       # Surfaced through /health so an operator sees it coming. The key carries
       # an expiry and a silently expired one looks exactly like an outage.
@@ -180,11 +209,67 @@ services:
     volumes:
       - truenas_addon_state:/var/lib/syndra-truenas
       - ${ADDON_SECRETS_DIR:-./secrets/truenas-addon}:/run/secrets/truenas-addon:ro
-    # No `ports:`. The backend reaches this on the internal network and nothing
-    # outside the deployment has any business doing so.
-    depends_on:
-      - backend
+    # No `ports:`, and on the add-on network only. Both halves are needed: the
+    # first stops anything outside the deployment reaching it, and the second
+    # stops it reaching Postgres and Redis — which is the whole reason it holds
+    # the NAS key in a container of its own.
+    networks: [addons]
+    # The rest of what "least trusted component" has to mean in practice. Every
+    # line below is a capability this container has no use for, and the argument
+    # for isolating it at all is that a compromise here must stay here.
+    #
+    # read_only with a tmpfs for /tmp: the binary is static and its only durable
+    # state is the named volume below, so nothing legitimate writes to the image.
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      # No new privileges through setuid binaries — there are none in the image,
+      # and this is what makes that true rather than merely currently accurate.
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Bounded, so an add-on that misbehaves cannot starve the backend that
+    # governs every other target on the same host.
+    mem_limit: 256m
+    pids_limit: 256
+    healthcheck:
+      # A LIVENESS check, and deliberately not a health check. Every route is
+      # behind the authenticator, so a real probe would need a client
+      # certificate this container has no business holding — and the one
+      # certificate it does hold is a SERVER certificate, which the add-on now
+      # refuses as a client credential on purpose. So this proves the listener
+      # is up and nothing more.
+      #
+      # The health that matters is `/health` read by the backend, which holds
+      # the credential for it and surfaces version, key expiry, breaker state
+      # and log head. Docker restarting a container that answers its own socket
+      # would not have told anybody any of that.
+      test: ["CMD", "nc", "-z", "127.0.0.1", "8443"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # No `depends_on: backend`. The dependency runs the other way — the backend
+    # calls this — and declaring it backwards only delays the add-on behind a
+    # service it never contacts.
     restart: unless-stopped
+
+# Segmentation, not decoration. Without these every service shared the default
+# bridge, so §2's claim that the add-on is reachable only by the backend was a
+# comment rather than a constraint, and the add-on could open a socket to
+# Postgres.
+networks:
+  # Published ports live here.
+  edge:
+  # internal: no route off the host. The datastores answer the backend and
+  # nothing else, including anything that later joins the deployment.
+  data:
+    internal: true
+  # NOT internal: an add-on's whole job is to reach a target on the LAN. What
+  # this segment provides is the other direction — nothing here can see the
+  # datastores, and nothing outside can see the add-ons.
+  addons:
 
 volumes:
   pgdata:
