@@ -231,8 +231,18 @@ func TestTheSchemaAndGoAgreeOnWhatWhitespaceIs(t *testing.T) {
 		t.Fatalf("only %d space runes found in unicode.IsSpace; this guard is not examining what it thinks", found)
 	}
 	if len(missing) > 0 {
+		// The remedy is spelled out here because this is where the next person
+		// will be standing, and the obvious fix is incomplete. Widening the
+		// literal with CREATE OR REPLACE changes the CHECK for NEW ROWS ONLY —
+		// Postgres does not re-validate a table when a function its constraint
+		// depends on is replaced — so the invariant silently becomes versioned
+		// by write time, and this guard would go green having said nothing
+		// about the rows already there.
 		t.Errorf("the schema's canonical form does not strip %s, which Go's TrimSpace does — "+
-			"so the CHECK would bless a term Go would have trimmed, and it would then match nothing",
+			"so the CHECK would bless a term Go would have trimmed, and it would then match nothing.\n"+
+			"Fixing this takes a NEW migration doing all three: replace the function, re-run both "+
+			"backfill UPDATEs, and DROP/re-ADD both constraints. The third step is what re-validates "+
+			"the existing rows, and nothing will ask you for it.",
 			strings.Join(missing, ", "))
 	}
 

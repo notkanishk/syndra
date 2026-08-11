@@ -29,6 +29,27 @@
 --   U+0009, U+000A, U+000B, U+000C, U+000D, U+0020, U+0085, U+00A0, U+1680, U+2000, U+2001, U+2002, U+2003, U+2004, U+2005, U+2006, U+2007, U+2008, U+2009, U+200A, U+2028, U+2029, U+202F, U+205F, U+3000
 -- IMMUTABLE because a CHECK constraint requires it, and it is: the set is a
 -- constant of the Unicode standard, not of this deployment.
+--
+-- STRICT is safe here only because `field` and `value` are NOT NULL on both
+-- tables. On a nullable column STRICT would return NULL for a NULL input, the
+-- CHECK would evaluate to NULL, and a NULL CHECK PASSES — the usual way this
+-- shape opens a hole. A future table adopting this function has to check that
+-- first.
+--
+-- CHANGING THIS FUNCTION IS NOT A ONE-LINE CHANGE. Postgres does not
+-- re-validate existing rows when a function a CHECK depends on is replaced, so
+-- `CREATE OR REPLACE` here silently makes the invariant versioned by write
+-- time: rows written before the change keep whatever the old body allowed, and
+-- nothing errors. The likeliest occasion is the one this migration's guard
+-- exists to force — Unicode gains a space rune, `TestTheSchemaAndGoAgreeOnWhat
+-- WhitespaceIs` fires, and somebody widens the literal. That guard compares the
+-- FUNCTION against Go and would still pass, having said nothing about the rows.
+--
+-- So a new migration, in this order, every time the body moves:
+--   1. CREATE OR REPLACE the function
+--   2. re-run both backfill UPDATEs below
+--   3. DROP and re-ADD both constraints, which is what re-validates the tables
+-- Step 3 is the one no error message will ever ask for.
 CREATE OR REPLACE FUNCTION syndra_canonical_term(t TEXT) RETURNS TEXT
     LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
     AS $$ SELECT btrim(t, E'\u0009\u000a\u000b\u000c\u000d\u0020\u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000') $$;
