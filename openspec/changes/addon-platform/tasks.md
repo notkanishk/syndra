@@ -41,6 +41,31 @@
 > Reconciled. That is the same defect the table above describes, in the ledger
 > rather than the code: two records of one thing, each correct on its own.
 >
+> ## Distrust the explanations first, not the statuses
+>
+> **A status is a claim someone will check. An explanation is a claim that stops
+> people checking.** A wrong reason is worse than no reason: `[~]` with no
+> explanation invites a look, and `[~]` with a plausible blocker ends the
+> reading. The same is true of a comment asserting a property of the code beside
+> it, and of a guard whose message describes what it would have caught.
+>
+> Row 9.5 is the worked example, wrong at three depths and none of them caught
+> by whoever wrote it:
+>
+> 1. **The status** said partial. The feature was built and tested at both ends.
+> 2. **The reason** said the spent plan is not retained. It is — and the diff
+>    never needed it, because the backend's refusal already names what moved.
+> 3. **The correction to the reason** misread the prune predicate's `NOT EXISTS`
+>    as being over `plan_subjects`, from a grep whose filter had removed the
+>    `FROM propagation_outbox` line that would have falsified it. Narrow read,
+>    lines matching the hypothesis, conclusion drawn from what survived the
+>    filter — and it reached the right answer by the wrong route, which is worse
+>    than being wrong, because nothing then re-checks it.
+>
+> Specificity reads as evidence. That is the whole mechanism, and it is the same
+> one as the table above: two accounts of one thing, and the wrong one carrying
+> more authority because it was more specific.
+>
 > ## Two rules the session earned
 >
 > **A guard is unproven until it has been watched to fail.** Two guards here
