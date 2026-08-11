@@ -1,3 +1,50 @@
+# The add-on platform — task ledger
+
+> **Read this first if you are new to the branch.**
+>
+> ## The recurring defect is two internally-consistent definitions of one thing
+>
+> Nearly every real bug found here was that, and none of them was visible from
+> either side alone — each side was correct, tested, and agreed with itself:
+>
+> | Two definitions | How they met |
+> |---|---|
+> | The backend's fake of the add-on, and the add-on's fake of the backend | one populated fixture per envelope, read by both suites (`fa82dfe`) |
+> | The proxy allowlist, and the backend's router | a test that reads `router.go` and drives the proxy for every `/me/` route |
+> | `op_type='apply'`, and three predicates naming `revoke` | one declared `withdraws_only`, read by the claim and the surface |
+> | Postgres `btrim`, and Go `strings.TrimSpace` | one `syndra_canonical_term` function, called by the CHECKs, the backfill and the rollback |
+> | A resolver reading the pool, inside a transaction that had written | one `querier(ctx)`, with a source guard over the package |
+> | A comment asserting a property, and the code beside it | the guard that fails — e.g. `entitlementSchema` read from the add-on's own source |
+>
+> **Where to look first is wherever two things have to agree and nothing makes
+> them.** That is a more useful map than the list below.
+>
+> ## Two rules the session earned
+>
+> **A guard is unproven until it has been watched to fail.** Two guards here
+> passed on nothing, and one of those was the guard written about guards passing
+> on nothing. Plant the failure it exists for; do not reason that it would fire.
+>
+> **An open item records what was examined, not only its status.**
+> `ErrBindingConflict` survived five rounds as "returned, checked by no caller" —
+> true of its declaration and its one return site, silent about the settle path,
+> which is where the defect was. "Confirmed, still open" is unfalsifiable and
+> accumulates confidence from repetition.
+>
+> A corollary both readers hit from opposite sides: the author of a fix has just
+> built a model of why it is correct, and that model decides where they stop
+> reading. Both stopping points were justified by the work just done, which is
+> what makes them invisible from the inside.
+>
+> ## And the strongest evidence for expressing rules as code
+>
+> `000038`'s comment names the three-valued-logic trap about `STRICT`. The same
+> hazard was then written into a new CHECK **two migrations later** — a NULL arm
+> making the whole expression NULL, which a CHECK treats as satisfied, so a
+> finding could close itself. Documenting it did nothing. What catches it is a
+> guard that reads the SQL, and even that guard's first version read the
+> migration's own comment quoting the broken constraint.
+
 ## 1. Schema and the target dimension
 
 - [x] 1.1 Migration: `targets` registry table with `state` (`active | disabled`), seeded with `zitadel`

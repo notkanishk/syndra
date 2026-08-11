@@ -179,6 +179,12 @@ provisional plan issued against the add-on's mirror is refused at dispatch as
 `PLAN_STALE` when the subject has moved; the mutation log deleted is detected.
 **§19 of `changes/addon-platform/tasks.md` records the fourteen defects that run
 found, seven of which every test in both suites passed straight through.**
+§23–§31 record a full audit of the branch afterwards, and the header of that
+file is the part to read first: **the recurring defect is two
+internally-consistent definitions of one thing** — two fakes agreeing with each
+other, `btrim` against `TrimSpace`, the proxy allowlist against the router, a
+comment against the code beside it. Each side correct, tested, agreeing with
+itself. Look wherever two things have to agree and nothing makes them.
 
 **Still operator-gated, and it is the same gap §13 named.** None of it has
 touched a real TrueNAS. What that leaves untested is TrueNAS's own behaviour
