@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
@@ -13,6 +13,7 @@ const state = {
   roster: [] as TargetSummary[],
   health: {} as TargetHealth,
   inventory: {} as TargetInventory,
+  resolved: [] as Array<{ head: string; note: string }>,
 };
 
 vi.mock("@/lib/queries/useTargets", async () => {
@@ -31,6 +32,11 @@ vi.mock("@/lib/queries/useTargets", async () => {
     }),
     useAdoptAccount: () => ({ mutate: vi.fn(), isPending: false }),
     useSetLifecycle: () => ({ mutate: vi.fn(), isPending: false }),
+    useResolveLogFinding: () => ({
+      mutate: (input: { head: string; note: string }) => state.resolved.push(input),
+      isPending: false,
+      error: null,
+    }),
   };
 });
 
@@ -167,5 +173,69 @@ describe("one target's page", () => {
     expect(screen.getByText("root")).toBeInTheDocument();
     expect(screen.getByText(/These are not drift/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /revoke/i })).toBeNull();
+  });
+});
+
+/**
+ * §23 — the finding said "this stays until somebody resolves it" beside no way
+ * to resolve it, so a legitimate volume replacement pinned the target as
+ * compromised forever.
+ *
+ * The ceremony is the fix, not the button: this is the only action in the
+ * product that discards evidence, and the copy has to lead with what is lost.
+ */
+describe("resolving a log finding", () => {
+  function renderWithFinding() {
+    state.resolved = [];
+    state.roster = [summary([])];
+    state.health = {
+      target: "truenas",
+      reachable: true,
+      log_anchor: {
+        target: "truenas",
+        head: "aaaaaaaaaaaaaaaa",
+        records: 12,
+        anchored_at: "2026-08-01T00:00:00Z",
+        violation_reason: "records_decreased",
+        violation_head: "bbbbbbbbbbbbbbbb",
+        violation_records: 3,
+        violation_at: "2026-08-09T00:00:00Z",
+      },
+    } as TargetHealth;
+    return renderTarget();
+  }
+
+  it("names what is given up rather than what the button does", () => {
+    renderWithFinding();
+    fireEvent.click(screen.getByRole("button", { name: /resolve this finding/i }));
+
+    expect(screen.getByText(/stops being able to tell you they did/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /adopt this log as the baseline/i }),
+    ).toBeDisabled();
+  });
+
+  it("takes rung 3 and an explanation, and cites the head that was read", () => {
+    renderWithFinding();
+    fireEvent.click(screen.getByRole("button", { name: /resolve this finding/i }));
+    const confirm = screen.getByRole("button", { name: /adopt this log as the baseline/i });
+
+    fireEvent.change(screen.getByLabelText(/Why the log changed/), {
+      target: { value: "we replaced the volume" },
+    });
+    expect(confirm).toBeDisabled();
+
+    fireEvent.change(screen.getByRole("textbox", { name: /type the target/i }), {
+      target: { value: "truenas" },
+    });
+    expect(confirm).toBeEnabled();
+
+    fireEvent.click(confirm);
+    // The VIOLATING head, not the anchored one. Adopting "whatever is there
+    // now" would swallow a second change made while the dialog was open, which
+    // is the event the anchor exists to notice.
+    expect(state.resolved).toEqual([
+      { head: "bbbbbbbbbbbbbbbb", note: "we replaced the volume" },
+    ]);
   });
 });

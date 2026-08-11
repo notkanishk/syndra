@@ -10,6 +10,7 @@ import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowled
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { blocksIrreversibleAction, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
@@ -18,6 +19,7 @@ import {
   useAdoptAccount,
   useSetLifecycle,
   useTargetHealth,
+  useResolveLogFinding,
   useTargetInventory,
   useTargets,
   type AdoptionResult,
@@ -227,6 +229,7 @@ function Health({
  * operator as one line in a log file.
  */
 function LogFinding({ anchor }: { anchor: LogAnchor }) {
+  const [resolving, setResolving] = useState(false);
   const what =
     anchor.violation_reason === "records_decreased"
       ? "Records that existed are gone."
@@ -247,7 +250,104 @@ function LogFinding({ anchor }: { anchor: LogAnchor }) {
         chain verifies its own contents and cannot notice its own truncation — this is the
         only thing that can.
       </p>
+      <div className="mt-3">
+        <Button variant="ghost" size="sm" onClick={() => setResolving(true)}>
+          Resolve this finding
+        </Button>
+      </div>
+      {resolving && (
+        <ResolveFindingDialog target={anchor.target} anchor={anchor} onClose={() => setResolving(false)} />
+      )}
     </div>
+  );
+}
+
+/**
+ * Clearing the finding, which means adopting the log that produced it.
+ *
+ * Rung 3 and the same gesture as every other irreversible action, because this
+ * is the only one in the product that discards EVIDENCE: after it, the records
+ * that went missing are still missing and Syndra can no longer tell anybody
+ * they did. The copy leads with that rather than with what the button does.
+ *
+ * The head is cited, so an operator adopts what they read. A log that changed
+ * again while this was open is refused by the backend and said out loud — that
+ * second change is exactly the event the anchor exists to notice, and it must
+ * not be swallowed by the action taken to clear the first.
+ */
+function ResolveFindingDialog({
+  target,
+  anchor,
+  onClose,
+}: {
+  target: string;
+  anchor: LogAnchor;
+  onClose: () => void;
+}) {
+  const resolve = useResolveLogFinding(target);
+  const [note, setNote] = useState("");
+  const confirmation = useTypedConfirmation(target);
+  const ready = confirmation.armed && note.trim() !== "" && !resolve.isPending;
+
+  return (
+    <Modal open onClose={resolve.isPending ? () => {} : onClose} busy={resolve.isPending} size="md" labelledBy="resolve-finding-title">
+      <ModalHeader
+        titleId="resolve-finding-title"
+        title="Resolve this finding"
+        lede={`Syndra will adopt the log ${targetLabel(target)} is reporting now as the new baseline.`}
+      />
+      <div className="grid gap-4 px-6">
+        <div className="rounded-inner border border-danger-line bg-danger-soft px-4 py-3">
+          <p className="text-[13.5px] text-danger-text">
+            The records that went missing stay missing, and Syndra stops being able to tell
+            you they did. Do this when you know why the log changed — a rebuilt add-on, a
+            replaced volume — and not to clear a warning.
+          </p>
+        </div>
+        <label className="grid gap-1.5 text-[14px]">
+          <span>Why the log changed</span>
+          <Input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="We replaced the add-on&rsquo;s volume on the 4th"
+          />
+          <span className="text-[13px] text-faint">
+            Kept with the resolution. &ldquo;We replaced the volume&rdquo; and &ldquo;we do
+            not know&rdquo; leave the anchor in the same state and are completely different
+            facts.
+          </span>
+        </label>
+        <ConfirmByTyping
+          expected={target}
+          value={confirmation.typed}
+          onChange={confirmation.setTyped}
+          noun="target"
+          disabled={resolve.isPending}
+        />
+        {resolve.error && (
+          <p className="text-[13.5px] text-danger-text">
+            {resolve.error instanceof Error ? resolve.error.message : "That could not be applied."}
+          </p>
+        )}
+      </div>
+      <ModalFooter note="The anchor moves to the reported head and starts comparing again from there.">
+        <Button
+          variant="dangerConfirm"
+          disabled={!ready}
+          onClick={() =>
+            resolve.mutate(
+              { head: anchor.violation_head ?? "", note },
+              { onSuccess: onClose },
+            )
+          }
+        >
+          {resolve.isPending ? "Resolving…" : "Adopt this log as the baseline"}
+        </Button>
+        <Button variant="ghost" onClick={onClose} disabled={resolve.isPending}>
+          Cancel
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 

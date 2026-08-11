@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -333,6 +334,21 @@ func handleDormantSweep(w http.ResponseWriter, r *http.Request) {
 			})
 		case res.Outcome == addons.OutcomeSucceeded:
 			removed++
+			// The binding goes with the account, and this is the call that was
+			// missing. `ForgetTargetBinding`'s own docblock says why: the apply
+			// path reads bound-but-absent as an out-of-band deletion and
+			// RECREATES the account under the recorded name — right for one
+			// somebody else deleted, and exactly wrong for one we just purged.
+			// The add-on drops its own binding as part of the purge; this is the
+			// backend's half, and without it the two stores disagreed.
+			//
+			// Logged rather than failed: the account is gone either way, and
+			// reporting a completed purge as refused would invite a retry of
+			// the one operation where retrying is not free. A stale binding is
+			// visible on the roster; an unexplained second purge is not.
+			if err := dbForgetTargetBinding(r.Context(), target, subject); err != nil {
+				log.Printf("[DORMANT] purged %s on %s and could not forget its binding: %v", name, target, err)
+			}
 			outcomes = append(outcomes, map[string]any{"account": name, "outcome": "removed"})
 		default:
 			// Unreached and indeterminate both mean nobody can say. Never

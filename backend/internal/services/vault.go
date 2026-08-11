@@ -72,8 +72,8 @@ func ValidatePasswordComplexity(password string) error {
 // It hashes nothing and stores nothing. The value went to the target through
 // the operation that received it and is kept nowhere — no API here accepts a
 // hash, so a stored one could only ever leak (change `addon-platform` group 11).
-func RecordCredentialSet(ctx context.Context, userID, actorID, ipAddress string) error {
-	status, err := svcHasShadowCredential(ctx, userID)
+func RecordCredentialSet(ctx context.Context, userID, target, actorID, ipAddress string) error {
+	status, err := svcHasShadowCredential(ctx, userID, target)
 	if err != nil {
 		return fmt.Errorf("check existing credential: %w", err)
 	}
@@ -82,11 +82,11 @@ func RecordCredentialSet(ctx context.Context, userID, actorID, ipAddress string)
 		action = "rotated"
 	}
 
-	credID, err := svcRecordCredentialSet(ctx, userID)
+	credID, err := svcRecordCredentialSet(ctx, userID, target)
 	if err != nil {
 		return fmt.Errorf("record credential: %w", err)
 	}
-	log.Printf("[VAULT] Credential %s: user=%s record=%s", action, userID, credID)
+	log.Printf("[VAULT] Credential %s: user=%s target=%s record=%s", action, userID, target, credID)
 	_ = svcInsertShadowCredentialAudit(ctx, userID, action, actorID, ipAddress)
 	return nil
 }

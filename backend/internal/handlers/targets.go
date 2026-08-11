@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"errors"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"syndra/internal/addons"
@@ -164,4 +166,69 @@ func errText(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+// resolveFindingRequest is an operator adopting a reported head as the new
+// baseline.
+type resolveFindingRequest struct {
+	// Head is the violating head they were shown. Cited rather than implied,
+	// because "re-baseline to whatever is there now" would adopt a chain that
+	// changed again while the dialog was open — which is the event this
+	// mechanism exists to notice.
+	Head string `json:"head"`
+	// Note is why. The one finding whose explanation is the whole of its value:
+	// "we replaced the volume" and "we do not know" are the same anchor state
+	// and completely different facts.
+	Note      string `json:"note"`
+	Confirmed bool   `json:"confirmed"`
+}
+
+// resolveFindingCopy is the confirmation an operator reads before clearing a
+// tamper finding.
+//
+// It names what is given up rather than what is done. Clearing this is the only
+// action in the product that discards evidence, and the sentence has to say so
+// in those words.
+const resolveFindingCopy = "Resolving adopts the log the target is reporting NOW as the new baseline. " +
+	"The records that went missing stay missing, and Syndra stops being able to tell you they did. " +
+	"Do this when you know why the log changed — a rebuilt add-on, a replaced volume — and not to clear a warning."
+
+// handleResolveLogFinding clears a log-anchor finding by re-baselining to it.
+//
+// The surface has always said "this stays until somebody resolves it". Until
+// this endpoint there was no way to, so a legitimate volume replacement pinned
+// a target as compromised permanently and the sentence named an action that did
+// not exist.
+func handleResolveLogFinding(w http.ResponseWriter, r *http.Request) {
+	target := r.PathValue("target")
+	var req resolveFindingRequest
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
+	}
+	if strings.TrimSpace(req.Note) == "" {
+		jsonValidationErrorResponse(w, "Resolving a finding takes an explanation",
+			map[string]string{"note": "required"})
+		return
+	}
+	if !req.Confirmed {
+		jsonErrorResponse(w, http.StatusUnprocessableEntity, "CONFIRMATION_REQUIRED", resolveFindingCopy)
+		return
+	}
+
+	anchor, err := dbResolveLogViolation(r.Context(), target, resolveActor(r, ""), req.Note, req.Head)
+	switch {
+	case errors.Is(err, db.ErrNoAnchorFinding):
+		jsonErrorResponse(w, http.StatusConflict, "NO_FINDING", err.Error())
+		return
+	case errors.Is(err, db.ErrAnchorMoved):
+		jsonErrorResponse(w, http.StatusConflict, "FINDING_MOVED",
+			"The target's log changed again since you read this finding. Re-read it before resolving — "+
+				"what you were about to adopt is not what the target is reporting now.")
+		return
+	case err != nil:
+		jsonErrorResponse(w, http.StatusInternalServerError, "RESOLVE_FAILED", err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, anchor)
 }

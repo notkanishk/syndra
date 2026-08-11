@@ -2,6 +2,7 @@ package db
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -25,12 +26,13 @@ func TestNoColumnOnTheVaultCanHoldACredential(t *testing.T) {
 		}
 	}
 	// And the closed list, so a column added later has to be argued for here.
-	// One column: the member. Everything else on the row is a timestamp the
-	// database sets or a flag the conflict clause clears.
+	// Two columns: the member, and the system they enrolled on. Everything else
+	// on the row is a timestamp the database sets or a flag the conflict clause
+	// clears — and nothing on it can be a secret.
 	// `between` keeps the marker it started at, so the comparison includes it.
 	columns := between(t, src, "INSERT INTO shadow_credentials (", ")")
-	if strings.TrimSpace(columns) != "INSERT INTO shadow_credentials (user_id" {
-		t.Errorf("the insert names more than the member: (%s)", columns)
+	if strings.TrimSpace(columns) != "INSERT INTO shadow_credentials (user_id, target" {
+		t.Errorf("the insert names more than the member and the target: (%s)", columns)
 	}
 }
 
@@ -94,5 +96,50 @@ func TestNothingReachesForTheRetiredBridge(t *testing.T) {
 				t.Errorf("%s names %q, which no longer exists", name, gone)
 			}
 		}
+	}
+}
+
+// §23 — the one table 000026's target dimension missed.
+//
+// `my_storage.go` renders enrolment status PER TARGET while the table keyed on
+// the person alone. Latent at one target and wrong at two: enrolling on the NAS
+// would report "set, last changed…" for the door system, and clear the
+// re-enrolment notice for both at once. The reader, the writer and the
+// migration have to agree, and none of that can be checked against a running
+// database from here.
+func TestEnrolmentIsRecordedPerTarget(t *testing.T) {
+	dir := findMigrationsDir(t)
+	raw, err := os.ReadFile(filepath.Join(dir, "000036_shadow_credentials_per_target.up.sql"))
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	up := string(raw)
+
+	// The uniqueness has to move with the column. Left on user_id alone, a
+	// second target's enrolment UPDATEs the first one's row instead of
+	// inserting beside it — the same bug as the missing column, expressed as
+	// data loss rather than as a wrong answer.
+	if !strings.Contains(up, "shadow_credentials_user_target_key") ||
+		!strings.Contains(up, "(user_id, target)") {
+		t.Error("the unique key must be on (user_id, target), or one target's enrolment overwrites another's")
+	}
+	// Surviving rows are named, never defaulted to a live target's name. They
+	// describe the retired bridge, which was not a target.
+	if !strings.Contains(up, "'retired_bridge'") {
+		t.Error("pre-cutover rows must be named as the retired bridge rather than assigned to a live target")
+	}
+	if strings.Contains(up, "ADD COLUMN IF NOT EXISTS target TEXT NOT NULL DEFAULT") {
+		t.Error("a DEFAULT here is the schema answering on behalf of a statement that did not say")
+	}
+
+	src := readSource(t, "vault.go")
+	// The conflict target and the read both have to name it, and the read has
+	// to prefer the real target over the pre-cutover row — otherwise a member
+	// who has already re-enrolled is told to re-enrol.
+	if !strings.Contains(src, "ON CONFLICT (user_id, target)") {
+		t.Error("the upsert must conflict on the pair, or a second target overwrites the first")
+	}
+	if !strings.Contains(src, "ORDER BY (target = $2) DESC") {
+		t.Error("the read must prefer this target's row over the pre-cutover one")
 	}
 }

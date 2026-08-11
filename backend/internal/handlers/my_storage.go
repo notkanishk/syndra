@@ -160,7 +160,7 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 		}
 	}
 
-	status, err := dbHasShadowCredential(r.Context(), subject)
+	status, err := dbHasShadowCredential(r.Context(), subject, view.Target)
 	if err == nil {
 		view.Credential = myCredentialStatus{
 			Set:              status.HasCredential,
@@ -290,7 +290,7 @@ func handleSetMyCredential(w http.ResponseWriter, r *http.Request) {
 	// Recorded only after the target confirmed it. Metadata, never a value —
 	// and a failure to write it does not un-set the password, so it is logged
 	// through the audit path rather than reported as a failed change.
-	if err := svcRecordCredentialSet(r.Context(), subject, subject, r.RemoteAddr); err != nil {
+	if err := svcRecordCredentialSet(r.Context(), subject, target, subject, r.RemoteAddr); err != nil {
 		log.Printf("[VAULT] %s set a credential on %s and it was not recorded: %v", subject, target, err)
 	}
 

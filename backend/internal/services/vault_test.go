@@ -29,13 +29,13 @@ func resetVaultDeps(t *testing.T) {
 }
 
 func noopVaultDeps() {
-	svcRecordCredentialSet = func(_ context.Context, _ string) (string, error) {
+	svcRecordCredentialSet = func(_ context.Context, _, _ string) (string, error) {
 		return "cred-1", nil
 	}
 	svcDeleteShadowCredential = func(_ context.Context, _ string) error {
 		return nil
 	}
-	svcHasShadowCredential = func(_ context.Context, _ string) (models.ShadowCredentialStatus, error) {
+	svcHasShadowCredential = func(_ context.Context, _, _ string) (models.ShadowCredentialStatus, error) {
 		return models.ShadowCredentialStatus{HasCredential: false}, nil
 	}
 	svcInsertShadowCredentialAudit = func(_ context.Context, _, _, _, _ string) error {

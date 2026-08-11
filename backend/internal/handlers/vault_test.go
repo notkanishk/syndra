@@ -33,9 +33,9 @@ func resetVaultHandlerDeps(t *testing.T) {
 func setupNoopVaultDeps(t *testing.T) {
 	t.Helper()
 	resetVaultHandlerDeps(t)
-	svcRecordCredentialSet = func(_ context.Context, _, _, _ string) error { return nil }
+	svcRecordCredentialSet = func(_ context.Context, _, _, _, _ string) error { return nil }
 	svcClearShadowPassword = func(_ context.Context, _, _, _ string) error { return nil }
-	dbHasShadowCredential = func(_ context.Context, _ string) (models.ShadowCredentialStatus, error) {
+	dbHasShadowCredential = func(_ context.Context, _, _ string) (models.ShadowCredentialStatus, error) {
 		return models.ShadowCredentialStatus{HasCredential: false}, nil
 	}
 	dbGetShadowCredentialAudit = func(_ context.Context, _ string) ([]models.ShadowCredentialAudit, error) {
@@ -68,7 +68,7 @@ func TestHandleGetShadowCredentialStatus_HasCredential(t *testing.T) {
 	setupNoopVaultDeps(t)
 
 	now := time.Now()
-	dbHasShadowCredential = func(_ context.Context, _ string) (models.ShadowCredentialStatus, error) {
+	dbHasShadowCredential = func(_ context.Context, _, _ string) (models.ShadowCredentialStatus, error) {
 		return models.ShadowCredentialStatus{
 			HasCredential: true,
 			CreatedAt:     &now,

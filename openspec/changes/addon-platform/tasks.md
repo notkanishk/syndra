@@ -620,13 +620,18 @@ Four instances of one shape, and none of them had the binding.
 - [x] 23.17 **Authoring a hold refreshed nothing.** It invalidated `["users", subject_id]`; the access view is keyed `["users", "access", id]` and prefix matching compares positionally, so the Withheld band never appeared on the page that had just authored the hold. Lifting one used a bare `["users"]` and did work — one direction refreshing and the other not is what made it read as a convention. Both go through the key factory now, asserted against a real cache rather than against a repeated literal
 - [x] 23.18 **The Hardware sync route was still live**, importing a query polling `/api/v1/intents` every five seconds — a route `f0da3e0` deleted. The nav half of 9.13 was done and the route half was not, while 9.13 was ticked. Unlinking is not deleting: a URL somebody saved is still a URL
 
-**Still open, and deliberately.** `shadow_credentials` keys on `user_id` alone
-while `my_storage.go` renders its status per target — latent at one target, and
-the one table predating migration 000026 that never got the column that
-migration existed to add. `RoleMember` carries no allowance field, so a role's
-holder list still reads as full access where §6 says the carve-out must be
-visible. `ForgetTargetBinding` and `ErrBindingConflict` have no callers.
-Nothing can clear `violation_reason`, so a legitimate volume replacement pins a
-target as compromised permanently. Each is a real gap; none is retained access
-or an inverted intent, which is why they are named here rather than fixed in the
-same pass.
+### The three sentences with no action behind them (HIGH)
+
+- [x] 23.19 **Nothing could ever clear `violation_reason`.** The finding freezes the anchor on purpose — one carrying a finding must not quietly catch up to the tampered chain the next time it extends — and the other end of that was missing, so a rebuilt add-on or a replaced volume pinned a target as compromised permanently. The surface said "this stays until somebody resolves it" beside no way to
+- [x] 23.20 Resolving is **re-baselining, not dismissing.** There is no state where the finding is acknowledged and the anchor is still frozen: that state detects nothing and reads as handled. The operator cites the head they were shown, so a log that changed AGAIN while the dialog was open is refused rather than adopted — that second change is precisely the event the anchor exists to notice, and it must not be swallowed by the action taken to clear the first. Rung 3, and the copy leads with what is lost: this is the only action in the product that discards evidence
+- [x] 23.21 **`ForgetTargetBinding` had no caller**, and its own docblock said what that costs — the apply path reads bound-but-absent as an out-of-band deletion and RECREATES the account under the recorded name, which is right for one somebody else deleted and exactly wrong for one the sweep just purged. The add-on drops its own binding as part of the purge, so the two stores disagreed. Only on a confirmed removal: forgetting the binding for an account that may still exist is the mirror failure, and the next convergence would derive a fresh name and make a second account beside it
+- [x] 23.22 **`shadow_credentials` never got migration 000026's target dimension** — the one table that predates the add-on platform and records something about a person on a system. Latent at one target and wrong at two: enrolling on the NAS would report "set, last changed…" for the door system and clear the re-enrolment notice for both at once. Migration 000036 adds the column and moves the uniqueness onto the pair, because a unique key left on `user_id` turns the same bug into data loss. Surviving rows are named `retired_bridge` rather than defaulted onto a live target's name — they describe the LLDAP bridge, which was not a target — and the read prefers a real target's row over the pre-cutover one, so a member who has already re-enrolled is not told to do it again
+
+**Still open, and deliberately.** `RoleMember` carries no allowance field, so a
+role's holder list still reads as full access where §6 says the carve-out must
+be visible everywhere the role appears — it needs a bulk in-force-allowance read
+this layer does not have, and a per-member query on a cohort screen is the wrong
+shape. `ErrBindingConflict` has no caller, so "this account belongs to somebody
+else" is reported by the add-on and reaches no operator surface. Both are
+visibility gaps rather than retained access or an inverted intent, which is why
+they are named here rather than fixed in the same pass.

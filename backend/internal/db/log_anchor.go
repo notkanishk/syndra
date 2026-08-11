@@ -192,6 +192,98 @@ func RecordLogHead(ctx context.Context, target, head string, records int64) (Log
 	return anchor, verdict, nil
 }
 
+// Resolving a finding (§23).
+//
+// The finding freezes the anchor deliberately: an anchor carrying one must not
+// quietly catch up to the tampered chain the next time it happens to extend.
+// What was missing is the other end of that — nothing could ever clear it, so a
+// legitimate volume replacement pinned a target as compromised permanently, and
+// the surface said "this stays until somebody resolves it" beside no way to.
+//
+// Resolving is re-baselining: the operator says what they are adopting as the
+// new truth, and the anchor moves there. It is not "dismiss" — there is no
+// state where the finding is acknowledged and the anchor is still frozen,
+// because that state detects nothing and reads as handled.
+var (
+	// ErrNoAnchorFinding: nothing to resolve. Refused rather than treated as a
+	// no-op, because a resolve against a healthy anchor would silently
+	// re-baseline a target the operator believed was compromised.
+	ErrNoAnchorFinding = errors.New("db: this target's log anchor is not carrying a finding")
+	// ErrAnchorMoved: the target's log moved between the operator reading the
+	// finding and resolving it. They would be adopting a head they never saw.
+	ErrAnchorMoved = errors.New("db: the target's log has moved since that finding was read")
+)
+
+// ResolveLogViolation clears a finding by adopting the head it reported.
+//
+// The citation is what makes this an operator decision rather than a button.
+// Re-baselining to "whatever the target says now" would adopt a chain that
+// changed again while the dialog was open — which is precisely the event this
+// mechanism exists to notice.
+func ResolveLogViolation(ctx context.Context, target, actor, note, citedHead string) (LogAnchor, error) {
+	switch {
+	case strings.TrimSpace(actor) == "":
+		return LogAnchor{}, fmt.Errorf("%w: no actor", ErrNoAnchorFinding)
+	case strings.TrimSpace(note) == "":
+		// The row somebody reads a year later, on the one finding whose
+		// explanation is the whole of its value.
+		return LogAnchor{}, fmt.Errorf("%w: resolving a finding takes an explanation", ErrNoAnchorFinding)
+	}
+
+	tx, err := PG.Begin(ctx)
+	if err != nil {
+		return LogAnchor{}, fmt.Errorf("begin resolve anchor tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	const read = `
+		SELECT COALESCE(violation_reason, ''), COALESCE(violation_head, ''), COALESCE(violation_records, 0)
+		  FROM addon_log_anchors
+		 WHERE target = $1
+		 FOR UPDATE`
+	var reason, head string
+	var records int64
+	if err := tx.QueryRow(ctx, read, target).Scan(&reason, &head, &records); errors.Is(err, pgx.ErrNoRows) {
+		return LogAnchor{}, fmt.Errorf("%w: %s has no anchor", ErrNoAnchorFinding, target)
+	} else if err != nil {
+		return LogAnchor{}, fmt.Errorf("read anchor for %s: %w", target, err)
+	}
+	if reason == "" {
+		return LogAnchor{}, fmt.Errorf("%w: %s", ErrNoAnchorFinding, target)
+	}
+	if head != citedHead {
+		return LogAnchor{}, fmt.Errorf("%w: %s", ErrAnchorMoved, target)
+	}
+
+	const rebaseline = `
+		UPDATE addon_log_anchors
+		   SET head = $2, records = $3, anchored_at = NOW(),
+		       violation_reason = NULL, violation_head = NULL,
+		       violation_records = NULL, violation_at = NULL
+		 WHERE target = $1`
+	if _, err := tx.Exec(ctx, rebaseline, target, head, records); err != nil {
+		return LogAnchor{}, fmt.Errorf("resolve log finding for %s: %w", target, err)
+	}
+
+	// In the same transaction as the clear. A resolution with no trace is the
+	// one edit to this table nobody could account for afterwards — and the
+	// table exists to make edits accountable.
+	const audit = `INSERT INTO audit_logs
+		(actor_zitadel_user_id, target_zitadel_user_id, action, resource_id) VALUES ($1,$2,$3,$4)`
+	if _, err := tx.Exec(ctx, audit, actor, "", "target."+target+".log_finding_resolved", note); err != nil {
+		return LogAnchor{}, fmt.Errorf("record anchor resolution for %s: %w", target, err)
+	}
+
+	anchor, err := readAnchorTx(ctx, tx, target)
+	if err != nil {
+		return LogAnchor{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return LogAnchor{}, fmt.Errorf("commit anchor resolution: %w", err)
+	}
+	return anchor, nil
+}
+
 // GetLogAnchor reads one target's anchor.
 func GetLogAnchor(ctx context.Context, target string) (LogAnchor, bool, error) {
 	a, err := readAnchor(ctx, querier(ctx).QueryRow(ctx, anchorSelect, target))

@@ -257,6 +257,7 @@ func NewRouter() http.Handler {
 	// must never move in response to data.
 	mux.HandleFunc("GET /api/v1/targets", withCORS(withOperatorAuth(handleListTargets)))
 	mux.HandleFunc("GET /api/v1/targets/{target}/health", withCORS(withOperatorAuth(handleTargetHealth)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/log-anchor/resolve", withCORS(withOperatorAuth(handleResolveLogFinding)))
 
 	// The unmanaged inventory: what lives on a target that Syndra never put
 	// there. Reported, never triaged — and adoption is the one way an account

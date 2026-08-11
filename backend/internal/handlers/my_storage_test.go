@@ -68,7 +68,7 @@ func stubMyStorage(t *testing.T, h *storageHarness) {
 		}
 		return db.TargetBinding{Target: "truenas", SubjectID: "u1", Username: "ada"}, true, nil
 	}
-	dbHasShadowCredential = func(context.Context, string) (models.ShadowCredentialStatus, error) {
+	dbHasShadowCredential = func(context.Context, string, string) (models.ShadowCredentialStatus, error) {
 		return models.ShadowCredentialStatus{}, nil
 	}
 	svcDispatchOperation = func(_ context.Context, req addonop.Request) (addonop.Result, error) {
@@ -82,7 +82,7 @@ func stubMyStorage(t *testing.T, h *storageHarness) {
 		}
 		return addonop.Result{OperationID: "op_1", Outcome: outcome}, nil
 	}
-	svcRecordCredentialSet = func(_ context.Context, uid, _, _ string) error {
+	svcRecordCredentialSet = func(_ context.Context, uid, _, _, _ string) error {
 		h.recorded = append(h.recorded, uid)
 		return nil
 	}

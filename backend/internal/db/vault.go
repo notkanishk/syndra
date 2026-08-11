@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -15,6 +16,15 @@ import (
 // Shadow Password Vault
 // ---------------------------------------------------------------------------
 
+// RetiredBridgeTarget is what a pre-cutover enrolment names.
+//
+// Those rows describe a credential set against the LLDAP bridge, which had no
+// target because it was not one — it was the single directory every member
+// shared. Naming it explicitly is what lets "they enrolled before the change"
+// stay a different sentence from "they have never enrolled" now that enrolment
+// is per target (§23).
+const RetiredBridgeTarget = "retired_bridge"
+
 // RecordCredentialSet notes that a member has set a credential on a target,
 // and when (change `addon-platform` group 11).
 //
@@ -23,25 +33,40 @@ import (
 // nowhere: no API in this system accepts a hash, so the only thing a stored one
 // could ever do is leak. What survives is the metadata the member's own view
 // renders and the answer to "have they enrolled".
-func RecordCredentialSet(ctx context.Context, userID string) (string, error) {
+//
+// Per target, because the view that renders it is. Keyed on the person alone,
+// enrolling on the NAS reported "set, last changed…" for every other target and
+// cleared the re-enrolment notice on all of them at once.
+func RecordCredentialSet(ctx context.Context, userID, target string) (string, error) {
+	if strings.TrimSpace(target) == "" {
+		// Refused rather than defaulted. A row with no target is the state this
+		// column exists to remove, and the only rows entitled to a stand-in are
+		// the pre-cutover ones the migration named.
+		return "", fmt.Errorf("record credential for %s: an enrolment must name the target it is on", userID)
+	}
 	var id string
 	err := querier(ctx).QueryRow(ctx, `
-		INSERT INTO shadow_credentials (user_id)
-		VALUES ($1)
-		ON CONFLICT (user_id) DO UPDATE SET
+		INSERT INTO shadow_credentials (user_id, target)
+		VALUES ($1, $2)
+		ON CONFLICT (user_id, target) DO UPDATE SET
 			updated_at              = NOW(),
 			rotated_at              = NOW(),
 			-- Setting one through the new path is what clears the mark: the
 			-- member has now enrolled against the system that exists.
 			enrolled_before_cutover = FALSE
-		RETURNING id`, userID).Scan(&id)
+		RETURNING id`, userID, target).Scan(&id)
 	if err != nil {
-		return "", fmt.Errorf("record credential for %s: %w", userID, err)
+		return "", fmt.Errorf("record credential for %s on %s: %w", userID, target, err)
 	}
 	return id, nil
 }
 
-// DeleteShadowCredential removes a user's shadow credential.
+// DeleteShadowCredential removes a user's enrolment records, on every target.
+//
+// Every one, deliberately. This is the operator action "clear this person's
+// credential record", reached from a surface that names a person and no target,
+// and clearing one target while leaving another would leave the operator
+// believing they had done the thing the button says.
 func DeleteShadowCredential(ctx context.Context, userID string) error {
 	tag, err := querier(ctx).Exec(ctx, `DELETE FROM shadow_credentials WHERE user_id = $1`, userID)
 	if err != nil {
@@ -53,18 +78,32 @@ func DeleteShadowCredential(ctx context.Context, userID string) error {
 	return nil
 }
 
-// HasShadowCredential answers whether a member has enrolled, and when.
+// HasShadowCredential answers whether a member has enrolled on a target, and
+// when.
 //
 // There is nothing else it could answer: the table holds no credential, and
 // this SELECT names every column that survives.
-func HasShadowCredential(ctx context.Context, userID string) (models.ShadowCredentialStatus, error) {
+//
+// The pre-cutover row is the second candidate and never the first. A member who
+// enrolled against the retired bridge and has since set a password on THIS
+// target has both rows, and the one that describes a working credential has to
+// win — otherwise the page tells somebody to re-enrol after they already have.
+//
+// An empty target asks the older question, "have they enrolled anywhere", which
+// is what the per-person vault route has always asked and is still the right
+// question there: it names a person and no system.
+func HasShadowCredential(ctx context.Context, userID, target string) (models.ShadowCredentialStatus, error) {
 	var s models.ShadowCredentialStatus
 	var createdAt, updatedAt time.Time
 	var rotatedAt, expiresAt *time.Time
 	var beforeCutover bool
 	err := querier(ctx).QueryRow(ctx, `
 		SELECT created_at, updated_at, rotated_at, expires_at, enrolled_before_cutover
-		FROM shadow_credentials WHERE user_id = $1`, userID).
+		FROM shadow_credentials
+		 WHERE user_id = $1
+		   AND ($2 = '' OR target IN ($2, '`+RetiredBridgeTarget+`'))
+		 ORDER BY (target = $2) DESC, updated_at DESC
+		 LIMIT 1`, userID, target).
 		Scan(&createdAt, &updatedAt, &rotatedAt, &expiresAt, &beforeCutover)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

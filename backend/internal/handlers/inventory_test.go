@@ -197,12 +197,23 @@ type sweepHarness struct {
 	reportErr error
 	purged    []addonop.Request
 	outcome   addons.Outcome
+	forgotten []string
 }
 
 func stubSweep(t *testing.T, h *sweepHarness) {
 	t.Helper()
-	dormant, dispatch := svcDormantAccounts, svcDispatchOperation
-	t.Cleanup(func() { svcDormantAccounts, svcDispatchOperation = dormant, dispatch })
+	dormant, dispatch, forget := svcDormantAccounts, svcDispatchOperation, dbForgetTargetBinding
+	t.Cleanup(func() {
+		svcDormantAccounts, svcDispatchOperation, dbForgetTargetBinding = dormant, dispatch, forget
+	})
+
+	// The backend's half of a purge. Stubbed rather than left to the pool,
+	// because it had no caller at all until §23 — and a nil-pool panic is how
+	// that absence finally became visible.
+	dbForgetTargetBinding = func(_ context.Context, _, subjectID string) error {
+		h.forgotten = append(h.forgotten, subjectID)
+		return nil
+	}
 
 	svcDormantAccounts = func(context.Context, string) (services.DormantReport, error) {
 		return h.report, h.reportErr
@@ -322,5 +333,49 @@ func TestAnUnconfirmedPurgeIsReportedRatherThanRetried(t *testing.T) {
 	}
 	if strings.Contains(body, `"removed":1`) {
 		t.Error("it must not be counted as removed")
+	}
+}
+
+// §23 — the binding goes with the account.
+//
+// `ForgetTargetBinding` had no caller, and its own docblock said what that
+// costs: the apply path reads bound-but-absent as an out-of-band deletion and
+// RECREATES the account under the recorded name. Right for one somebody else
+// deleted; exactly wrong for one this sweep just purged. The add-on drops its
+// own binding as part of the purge, so the two stores disagreed.
+func TestAPurgeForgetsTheBindingItLeavesBehind(t *testing.T) {
+	h := &sweepHarness{report: services.DormantReport{
+		Accounts: []services.DormantAccount{
+			{Account: "gone", SubjectID: "u1", SubjectStillMember: false},
+		},
+	}}
+	stubSweep(t, h)
+
+	rr := sweep(t, `{"accounts":["gone"],"elevated_key":"k","confirmed":true}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(h.forgotten) != 1 || h.forgotten[0] != "u1" {
+		t.Fatalf("a purged account must not leave its binding: %v", h.forgotten)
+	}
+}
+
+// And an outcome the target did not confirm leaves it alone. Forgetting the
+// binding for an account that may still exist is the mirror failure: the next
+// convergence would derive a fresh name and make a second account beside it.
+func TestAnUnconfirmedPurgeKeepsTheBinding(t *testing.T) {
+	h := &sweepHarness{
+		outcome: addons.OutcomeIndeterminate,
+		report: services.DormantReport{
+			Accounts: []services.DormantAccount{
+				{Account: "maybe-gone", SubjectID: "u1", SubjectStillMember: false},
+			},
+		},
+	}
+	stubSweep(t, h)
+
+	sweep(t, `{"accounts":["maybe-gone"],"elevated_key":"k","confirmed":true}`)
+	if len(h.forgotten) != 0 {
+		t.Fatalf("an unconfirmed purge must leave the binding in place: %v", h.forgotten)
 	}
 }

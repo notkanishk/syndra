@@ -95,6 +95,32 @@ export function useTargetHealth(target: string | undefined) {
   });
 }
 
+/**
+ * Clearing a tamper finding by adopting the head that produced it.
+ *
+ * Not "dismiss". There is no state where the finding is acknowledged and the
+ * anchor is still frozen — that state detects nothing and reads as handled — so
+ * resolving means re-baselining, and the copy says so.
+ *
+ * The cited head is what makes it an operator decision: re-baselining to
+ * whatever the target reports at the moment of the click would adopt a chain
+ * that changed again while the dialog was open, which is the event the anchor
+ * exists to notice.
+ */
+export function useResolveLogFinding(target: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { head: string; note: string }) =>
+      request<LogAnchor>(`/targets/${target}/log-anchor/resolve`, {
+        method: "POST",
+        body: { head: input.head, note: input.note, confirmed: true },
+      }),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["targets", target, "health"] });
+    },
+  });
+}
+
 export interface UnmanagedAccount {
   username: string;
   uid?: number;

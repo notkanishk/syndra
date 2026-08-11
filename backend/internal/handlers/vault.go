@@ -80,7 +80,7 @@ func handleGetShadowCredentialStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status, err := dbHasShadowCredential(r.Context(), uid)
+	status, err := dbHasShadowCredential(r.Context(), uid, "")
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
