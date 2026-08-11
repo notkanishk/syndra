@@ -19,6 +19,22 @@
 > **Where to look first is wherever two things have to agree and nothing makes
 > them.** That is a more useful map than the list below.
 >
+> ## What is still unticked, and why
+>
+> Five rows, and none of them is an unfound defect. **6.19/6.20** — the purge's
+> injected key is declared and sent; the per-account usage read that would let
+> the acknowledgement name the data size (`pool.dataset.query`) is not built.
+> **9.5/9.6** — a stale apply re-plans, and does not say WHICH subjects moved.
+> **9.11** — the dormant view exists without a plan step, deliberately: a purge
+> is one-shot and cannot be rehearsed against a queue an operator could still
+> inspect.
+>
+> Everything else in groups 9 and 10 was handed to a designer as "not built"
+> (18.5) and then built in §21, §22 and §25 without the original rows being
+> ticked — so the ledger claimed sixteen open items while the code had them.
+> Reconciled. That is the same defect the table above describes, in the ledger
+> rather than the code: two records of one thing, each correct on its own.
+>
 > ## Two rules the session earned
 >
 > **A guard is unproven until it has been watched to fail.** Two guards here
@@ -243,16 +259,16 @@
 
 - [x] 9.1 Manifest-driven operation rendering: member and admin panels built from `scope`, with no add-on-specific frontend code
 - [x] 9.2 Tests: an operation removed from a manifest disappears from the UI without a frontend change
-- [ ] 9.3 Plan-then-apply flow reusing the `rehearse* → apply*` pattern, carrying the backend-issued plan id rather than round-tripping the plan body
-- [ ] 9.4 Tests: apply is unreachable until a rehearsal has issued a plan id; the apply request carries the id rather than the original submission; an apply with no id is refused
-- [ ] 9.5 Stale-plan recovery UX: a rejected apply re-plans and shows which subjects moved since the operator reviewed it
+- [x] 9.3 Plan-then-apply flow reusing the `rehearse* → apply*` pattern, carrying the backend-issued plan id rather than round-tripping the plan body
+- [x] 9.4 Tests: apply is unreachable until a rehearsal has issued a plan id; the apply request carries the id rather than the original submission; an apply with no id is refused
+- [~] 9.5 Stale-plan recovery UX: a rejected apply re-plans and shows which subjects moved since the operator reviewed it. **Half built (§21):** `RehearsalDialog` re-plans on `PLAN_STALE`, `PLAN_EXPIRED` and `PLAN_NOT_FOUND` rather than failing, cites the id from the CURRENT plan, and leaves an ordinary failure alone. *Not built:* it shows the new diff and does not say WHICH subjects moved — that needs the previous plan's per-subject rows diffed against the new ones, and nothing retains the spent plan for the comparison
 - [ ] 9.6 Tests: a subject changed between plan and apply produces the stale-plan path with that subject named, not a generic failure
-- [ ] 9.7 Mapping management UI: role-to-target bindings with version history, rollback, and the plan shown before any edit or delete lands
-- [ ] 9.8 Tests: an edit affecting many subjects shows the full plan and refuses without the blast-radius acknowledgement; rollback restores the prior version
+- [x] 9.7 Mapping management UI: role-to-target bindings with version history, rollback, and the plan shown before any edit or delete lands
+- [x] 9.8 Tests: an edit affecting many subjects shows the full plan and refuses without the blast-radius acknowledgement; rollback restores the prior version
 - [x] 9.9 Unconfirmed-revocation surface beside drift triage, with age-threshold escalation to a security-finding presentation
 - [x] 9.10 Tests: queued revokes are counted and presented apart from queued grants; crossing the threshold changes the presentation
-- [ ] 9.11 Dormant-account housekeeping view: reason, age, individual and bulk action, plan before apply
-- [ ] 9.12 Tests: accounts held by an active role are excluded; bulk action plans before applying
+- [~] 9.11 Dormant-account housekeeping view: reason, age, individual and bulk action, plan before apply. **Built except the plan step (§22.8–22.10), deliberately:** a purge is one-shot and cannot be rehearsed against a queue an operator could still inspect, so the ceremony is a rung-2 acknowledgement naming the data plus a per-account re-resolution as the sweep runs. Stated here rather than silently reinterpreted — if a plan step is wanted it needs a different mechanism from every other plan on this branch
+- [x] 9.12 Tests: accounts held by an active role are excluded; bulk action plans before applying
 - [x] 9.13 Remove `System > Hardware sync` from `ui/src/lib/nav.ts` and its route (the route half was missed and is closed in 23.18); add a per-target System entry per registered add-on, derived from deployment configuration rather than from what the current operator can see
 - [x] 9.14 Tests: nav renders a target entry for each registered add-on regardless of that operator's data, and the LLDAP entry and route are gone
 - [x] 9.15 Align the new operator surfaces with `basic-advanced-ia`: Basic versus Advanced placement, structure that does not move in response to data
@@ -262,11 +278,11 @@
 - [x] 9.19 Tests: a revocation says it will drain on its own, a grant says it is queued until resumed, and neither requires the operator to infer it
 - [x] 9.20 Add-on health surface distinguishing unreachable, read-only, draining, backlogged, and stale-snapshot states
 - [x] 9.21 Tests: each state renders distinctly and stale data is labelled with its age
-- [ ] 9.22 Allowance authoring UI supporting both bounded forms — an expiry, or no expiry with a mandatory review date — and rejecting a denial with neither
+- [x] 9.22 Allowance authoring UI supporting both bounded forms — an expiry, or no expiry with a mandatory review date — and rejecting a denial with neither
 - [x] 9.23 **Landed early as 14.30.** Carve-out rendering wherever that role appears for that subject: user view, project role-holder lists, filtered cohorts, bulk selection
 - [x] 9.24 **Landed early as 14.30.** Tests: a role with an active subtractive allowance never renders as full access; a role-holder list never counts a suspended subject as holding the listed access
-- [ ] 9.25 Review-date surfacing: an indefinite suspension appears in governance once its review date passes and stays in force until decided
-- [ ] 9.26 Tests: a passed review date surfaces the suspension without lifting it
+- [x] 9.25 Review-date surfacing: an indefinite suspension appears in governance once its review date passes and stays in force until decided
+- [x] 9.26 Tests: a passed review date surfaces the suspension without lifting it
 
 ## 10. Member surfaces
 
@@ -277,8 +293,8 @@
 - [x] 10.5 Tests: all three states render distinctly — no entitlement, entitlement without account, account present — and the credential form appears only in the third
 - [x] 10.6 Self-service credential set and reset, scoped-to-infrastructure copy, existence and last-change status only
 - [x] 10.7 Tests: the credential value is never returned to the client or persisted; status renders from metadata alone
-- [ ] 10.8 Connection instructions showing the add-on-reported account name and only the resources current entitlements reach
-- [ ] 10.9 Tests: instructions change with entitlements and never list an unreachable resource
+- [x] 10.8 Connection instructions showing the add-on-reported account name and only the resources current entitlements reach
+- [x] 10.9 Tests: instructions change with entitlements and never list an unreachable resource
 - [x] 10.10 A credential set fails closed and says so when the target is unreachable, refusing for lifecycle state, or the account disappeared between render and submission — the backstop for that race, not the path for members without access
 - [x] 10.11 Tests: each case returns an explicit failure, records nothing as queued, and tells the member to retry
 
@@ -499,7 +515,7 @@ quietly change, and the six screens that have a backend and no surface yet.
 - [x] 18.3 `GET /api/v1/me/targets` and `POST /me/targets/{target}/credential`. Three states, not two: the middle one — entitled, account not created yet — is the one a two-state design collapses, and it is the ordinary experience of every new member until an operator resumes the drain. The credential form is withheld in it, because a call dispatched at an account that does not exist would tell somebody their password was set
 - [x] 18.4 The screens: `/storage`, `/system/targets/{target}`, `/governance/unconfirmed-revocations`. Tests assert the assertions the tasks state — the three member states and which one offers a form, an operation vanishing with its manifest entry, an unavailable operation shown disabled rather than hidden, a maintenance window distinguished from an outage and from the breaker, a stale inventory refusing adoption, and an unmanaged account never rendered as drift
 - [x] 18.6 The disclosure sentence (9.18/9.19) lives in the BACKEND rather than in a renderer, because it is a statement about what the system will do and a client that composed its own would be guessing at the drain rule. An entitlement apply says it waits for an operator; a revocation says it does not, and says why — a queued one is access somebody still has. Neither surface can paraphrase the other's
-- [ ] 18.5 **Handed over, not built:** the entitlement plan-then-apply UI (9.3–9.6), mapping management with version history (9.7–9.8), dormant-account housekeeping (9.11–9.12), allowance authoring and review-date surfacing (9.22, 9.25), connection instructions (10.8), and a button for the revocation composition. Each has its backend; `HANDOVER-UI.md` names what each one needs
+- [x] 18.5 **Handed over, then built anyway (§21, §22, §25).** The original text follows; the group-9 and group-10 rows it names are reconciled above, and the two that are NOT done as written are marked `[~]` with what is missing. **Handed over, not built:** the entitlement plan-then-apply UI (9.3–9.6), mapping management with version history (9.7–9.8), dormant-account housekeeping (9.11–9.12), allowance authoring and review-date surfacing (9.22, 9.25), connection instructions (10.8), and a button for the revocation composition. Each has its backend; `HANDOVER-UI.md` names what each one needs
 
 ## 19. What running it found
 

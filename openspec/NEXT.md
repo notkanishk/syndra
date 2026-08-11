@@ -144,14 +144,19 @@ Everything else is healthy: index tracks HEAD, embeddings are local-semantic (`X
 
 ## 4a. Add-on platform — complete, with one handover
 
-`changes/addon-platform` is done. The backend's IAM half, the TrueNAS add-on,
+`changes/addon-platform` is done, with five rows unticked and each one explained
+in that file's header: none is an unfound defect, and two are deliberate
+departures from what the row asks for. The backend's IAM half, the TrueNAS add-on,
 the dispatcher joining them, the lifecycle trigger that fires it, the unmanaged
 inventory, provisional plans, the mutation-log anchor, and the retirement of the
 LLDAP bridge are all in and green. What remains is a **visual pass on three
 screens**, handed to the design agent with
 [`HANDOVER-UI.md`](changes/addon-platform/HANDOVER-UI.md).
 
-**Read §13 and §17 first if you are picking this up.** Both record the same
+**Start at the header of [`tasks.md`](changes/addon-platform/tasks.md), then §13
+and §17.** The header names the pattern behind nearly every defect on the branch
+— two internally-consistent definitions of one thing — and says which rows are
+still open and why. §13 and §17 record the same
 class of defect, found twice: the add-on had never spoken to a real NAS (§13),
 and the backend and the add-on had never spoken to each other (§17) — the
 backend's envelopes carried fields the add-on's strict decoders never declared,
@@ -177,8 +182,9 @@ speaking TrueNAS's JSON-RPC on the far end. Rehearse → apply → drain creates
 account under the name the plan promised; a replayed plan is refused; a
 provisional plan issued against the add-on's mirror is refused at dispatch as
 `PLAN_STALE` when the subject has moved; the mutation log deleted is detected.
-**§19 of `changes/addon-platform/tasks.md` records the fourteen defects that run
-found, seven of which every test in both suites passed straight through.**
+**Start at the header of `changes/addon-platform/tasks.md`, then §13 and §17.**
+§19 records the fourteen defects the first deployment found, seven of which
+every test in both suites passed straight through.
 §23–§31 record a full audit of the branch afterwards, and the header of that
 file is the part to read first: **the recurring defect is two
 internally-consistent definitions of one thing** — two fakes agreeing with each
