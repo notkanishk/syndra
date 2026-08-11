@@ -59,6 +59,15 @@ type myTargetView struct {
 	// Reachable says the add-on answered. A member whose target is down is told
 	// so rather than shown a credential form that will fail.
 	Reachable bool `json:"reachable"`
+	// RecordedAt dates the middle state — entitled, no account yet — which is
+	// the ordinary experience of every new member because these changes wait
+	// for an operator rather than for a timer.
+	//
+	// Sent so the page can state an age instead of a promise. "This usually
+	// clears within a day" is a guess about a person; "recorded two days ago"
+	// is true, and it is what stops a member refreshing four times a day
+	// against a screen that always says the same thing.
+	RecordedAt *time.Time `json:"recorded_at,omitempty"`
 }
 
 type myTargetAccount struct {
@@ -129,6 +138,19 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 	if bound {
 		boundAt := binding.BoundAt
 		view.Account = &myTargetAccount{Username: binding.Username, BoundAt: &boundAt}
+	} else if view.Entitled {
+		// Only in the middle state, and only because that is the state with
+		// nothing else to say. Read once the binding is known absent so an
+		// ordinary page load for a member who already has an account does not
+		// pay for a query about when they got it.
+		//
+		// Non-fatal: an age is what makes the wait honest, and failing to read
+		// it is a reason to say less rather than to fail the page.
+		if at, found, err := dbEntitlementRecordedAt(r.Context(), target, subject); err != nil {
+			log.Printf("[MY-STORAGE] could not date %s's entitlement on %s: %v (non-fatal)", subject, target, err)
+		} else if found {
+			view.RecordedAt = &at
+		}
 	}
 
 	status, err := dbHasShadowCredential(r.Context(), subject)

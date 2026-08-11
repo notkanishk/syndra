@@ -1,5 +1,13 @@
 # Add-on platform — UI handover
 
+> **Superseded in part.** The design bundle has since landed at
+> `design_handoff_syndra 2/`, and its `BUILD-NOTES.md` overrides this file
+> wherever the two disagree. What remains useful here is the list of contracts a
+> redesign must not quietly change; §20 of `tasks.md` records what has been
+> built against the bundle since, including the three shared patterns (§31)
+> that everything else is now retrofitted to: `ReadFreshness`, `Acknowledge`
+> (the ladder), and `Withheld`.
+
 **For:** the design agent that already built Syndra's design system.
 **Status of this work:** routes, data wiring and behavioural tests are in and
 green. Visual design is deliberately not. Everything below is a real screen with

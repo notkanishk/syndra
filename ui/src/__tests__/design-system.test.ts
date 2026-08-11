@@ -335,6 +335,39 @@ describe("design system", () => {
     }
   });
 
+  // A token that does not exist is the same failure as a hardcoded hex, and it
+  // is quieter: `var(--fg-muted)` parses, the declaration is dropped, and the
+  // element inherits — so a panel meant to carry an amber border and tint
+  // renders as bare text and nobody sees an error. Three whole screens shipped
+  // that way, painted in six names the design system had never heard of.
+  //
+  // The rule this enforces is the one globals.css already states: the palette
+  // lives there and nowhere else. Reaching for a token is fine; inventing one
+  // is not.
+  it("uses no CSS variable globals.css does not declare", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const declared = new Set(
+      Array.from(css.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gm), (m) => m[1]),
+    );
+
+    const found: Array<{ file: string; matches: string[] }> = [];
+    for (const file of walk(SRC_ROOT)) {
+      const used = Array.from(
+        readFileSync(file, "utf8").matchAll(/var\(\s*(--[a-z0-9-]+)/g),
+        (m) => m[1],
+      );
+      const undeclared = [...new Set(used.filter((name) => !declared.has(name)))];
+      if (undeclared.length > 0) {
+        found.push({ file: file.replace(SRC_ROOT, "src"), matches: undeclared });
+      }
+    }
+
+    expect(
+      found,
+      `CSS variables no theme declares — these render as nothing:\n${describeOffenders(found)}`,
+    ).toEqual([]);
+  });
+
   it("focus is never removed", () => {
     // The accent focus ring is the keyboard user's only position indicator.
     const found = offenders(["outline-none", "focus:outline-0"]);

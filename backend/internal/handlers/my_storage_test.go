@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/auth"
@@ -37,17 +38,22 @@ type storageHarness struct {
 	// it answers perfectly — the state that decides whether this member is
 	// offered a form at all.
 	unreachable bool
+	// recordedAt dates the middle state. Zero means nothing has been recorded,
+	// which is a different sentence from "recorded a moment ago".
+	recordedAt time.Time
 }
 
 func stubMyStorage(t *testing.T, h *storageHarness) {
 	t.Helper()
-	resolve, binding, cred, dispatch, record, callable, health :=
+	resolve, binding, cred, dispatch, record, callable, health, recorded :=
 		svcResolveEntitlementSet, dbGetTargetBinding, dbHasShadowCredential,
-		svcDispatchOperation, svcRecordCredentialSet, addonsCallable, addonsHealth
+		svcDispatchOperation, svcRecordCredentialSet, addonsCallable, addonsHealth,
+		dbEntitlementRecordedAt
 	t.Cleanup(func() {
 		svcResolveEntitlementSet, dbGetTargetBinding, dbHasShadowCredential,
-			svcDispatchOperation, svcRecordCredentialSet, addonsCallable, addonsHealth =
-			resolve, binding, cred, dispatch, record, callable, health
+			svcDispatchOperation, svcRecordCredentialSet, addonsCallable, addonsHealth,
+			dbEntitlementRecordedAt =
+			resolve, binding, cred, dispatch, record, callable, health, recorded
 	})
 
 	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
@@ -83,6 +89,9 @@ func stubMyStorage(t *testing.T, h *storageHarness) {
 	addonsCallable = func(string) bool { return true }
 	addonsHealth = func(context.Context, string) addons.TargetHealth {
 		return addons.TargetHealth{Reachable: !h.unreachable}
+	}
+	dbEntitlementRecordedAt = func(context.Context, string, string) (time.Time, bool, error) {
+		return h.recordedAt, !h.recordedAt.IsZero(), nil
 	}
 }
 

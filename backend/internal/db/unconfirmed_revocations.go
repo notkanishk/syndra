@@ -92,6 +92,11 @@ func ListUnconfirmedRevocations(ctx context.Context, limit int) ([]UnconfirmedRe
 		       -- handle a case that means the same thing.
 		       COALESCE(p.project_id, ''), COALESCE(p.role_keys, ARRAY[]::text[]), p.status,
 		       p.attempts, p.last_error, p.created_at, p.target,
+		       -- The join key across the whole product. A withdrawal an operator
+		       -- can see and not act on is a finding; one they cannot trace back
+		       -- to the change that caused it is a mystery, and this column is
+		       -- the difference. NULL on a row nothing cascaded into.
+		       COALESCE(p.cascade_id::text, ''),
 		       EXTRACT(EPOCH FROM (NOW() - p.created_at))::bigint,
 		       p.status = 'failed'
 		  FROM propagation_outbox p
@@ -111,7 +116,8 @@ func ListUnconfirmedRevocations(ctx context.Context, limit int) ([]UnconfirmedRe
 		var ageSeconds int64
 		var lastError *string
 		if err := rows.Scan(&r.ID, &r.OpType, &r.UserID, &r.ProjectID, &r.RoleKeys, &r.Status,
-			&r.Attempts, &lastError, &r.CreatedAt, &r.Target, &ageSeconds, &r.Spent); err != nil {
+			&r.Attempts, &lastError, &r.CreatedAt, &r.Target, &r.CascadeID, &ageSeconds,
+			&r.Spent); err != nil {
 			return nil, fmt.Errorf("scan unconfirmed revocation: %w", err)
 		}
 		if lastError != nil {

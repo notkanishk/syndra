@@ -45,6 +45,33 @@ export interface DrainResult {
   exhausted?: number;
   halted: boolean;
   reason?: string;
+  /**
+   * Whose pass produced `reason`. Its own field rather than a prefix on the
+   * string, because the reasons are matched by callers as well as read.
+   */
+  halted_target?: string;
+  /**
+   * One entry per target the drain ran a pass for.
+   *
+   * A drain dispatches every registered target through its own dispatcher, and
+   * the passes fail independently: a Zitadel outage halts Zitadel's pass and
+   * leaves a reachable NAS's queue moving. So "halted" beside "applied: 9" is an
+   * ordinary result rather than a contradiction, and the only way to read it is
+   * per target.
+   */
+  passes?: DrainPass[];
+}
+
+export interface DrainPass {
+  target: string;
+  applied: number;
+  failed: number;
+  requeued: number;
+  abandoned: number;
+  errored: number;
+  exhausted?: number;
+  halted: boolean;
+  reason?: string;
 }
 
 const KEYS = {

@@ -64,6 +64,26 @@ export interface TargetHealth {
   last_read_at?: string;
   key_expires_at?: string;
   detail?: string;
+  /**
+   * The backend's memory of this target's mutation log, when it is carrying a
+   * finding. Two authorities in one payload on purpose: the add-on reports its
+   * own chain head, and the add-on cannot be the source of truth about whether
+   * its own record has been edited.
+   */
+  log_anchor?: LogAnchor;
+}
+
+export interface LogAnchor {
+  target: string;
+  /** Where the anchor stopped. It deliberately does not advance past a finding. */
+  head: string;
+  records: number;
+  anchored_at: string;
+  /** `records_decreased` or `head_rewritten`. Absent on a healthy anchor. */
+  violation_reason?: string;
+  violation_head?: string;
+  violation_records?: number;
+  violation_at?: string;
 }
 
 export function useTargetHealth(target: string | undefined) {
@@ -78,6 +98,21 @@ export function useTargetHealth(target: string | undefined) {
 export interface UnmanagedAccount {
   username: string;
   uid?: number;
+}
+
+/**
+ * What an adoption came back as.
+ *
+ * Three outcomes, and only one of them is "adopted". The endpoint used to
+ * answer 200 for all three — a target that refused and a target that never
+ * answered both produced "The account is now bound to that person" — on the one
+ * action in the product that hands one person's data to another and has no undo.
+ */
+export interface AdoptionResult {
+  status: "adopted" | "unconfirmed";
+  detail?: string;
+  outcome?: string;
+  warning?: string;
 }
 
 export interface TargetInventory {
@@ -111,12 +146,16 @@ export function useAdoptAccount(target: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (input: { username: string; subjectId: string }) =>
-      request<{ status: string; detail?: string }>(
+      request<AdoptionResult>(
         `/targets/${target}/inventory/${encodeURIComponent(input.username)}/adopt`,
         { method: "POST", body: { subject_id: input.subjectId, confirmed: true } },
       ),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ["targets", target, "inventory"] });
+      // The binding count on this page comes from the same read. Leaving it
+      // stale shows an account that has just left the unmanaged list without
+      // appearing anywhere else, which reads as a row that vanished.
+      client.invalidateQueries({ queryKey: ["targets", target, "health"] });
     },
   });
 }

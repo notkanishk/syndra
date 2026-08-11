@@ -113,7 +113,10 @@ describe("a member's storage view", () => {
     // No form: a credential set against an add-on that never answered would be
     // reported to the member as done.
     expect(screen.queryByLabelText(/password/i)).toBeNull();
-    expect(screen.getByText(/not answering right now/i)).toBeInTheDocument();
+    expect(screen.getByText(/is not answering/i)).toBeInTheDocument();
+    // And it says the access is untouched, so an outage does not read as a
+    // withdrawal to the person it is happening to.
+    expect(screen.getByText(/Nothing about\s+your access has changed/i)).toBeInTheDocument();
   });
 });
 

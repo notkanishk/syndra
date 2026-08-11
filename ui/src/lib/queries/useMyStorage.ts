@@ -35,6 +35,14 @@ export interface MyTargetView {
   };
   /** The add-on answered. A member whose target is down is told, not shown a form that fails. */
   reachable: boolean;
+  /**
+   * When their access was written down, for the middle state.
+   *
+   * The wait is on a person resuming the drain, not on a timer, so the page
+   * states an age rather than an estimate. "This usually clears within a day"
+   * is a guess about somebody's week; "recorded two days ago" is true.
+   */
+  recorded_at?: string;
 }
 
 export function useMyStorage() {

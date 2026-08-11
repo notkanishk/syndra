@@ -15,6 +15,7 @@ import { Chip, Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
+import { Withheld } from "@/components/ui/Withheld";
 import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
@@ -103,8 +104,8 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
   const grantsByRole = new Map(
     (grants.data ?? []).map((grant) => [`${grant.project_id}::${grant.role_key}`, grant]),
   );
-  // Only the ones applying now. A lifted or lapsed suspension belongs to the
-  // history the allowance surface keeps, not to what this person can reach.
+  // Only the ones applying now. A lifted or lapsed hold belongs to the history
+  // the Review queue keeps, not to what this person can reach.
   const inForce = (access.data.allowances ?? []).filter((a) => a.in_force);
 
   return (
@@ -246,35 +247,32 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
           )}
 
           {/*
-            The suppression band, above the roles rather than below them.
-            A role-holder list reads as full access, and a subtractive allowance
-            is precisely the case where it is not: the person holds the role and
-            the entitlement it maps to is being withheld, by somebody, for a
-            reason, until a date. §6's whole promise is that "why does this
-            person have access to X" has one answer — this is the half of the
-            answer that says they do not.
+            The holds band, above the roles rather than below them. A
+            role-holder list reads as full access, and a hold is precisely the
+            case where it is not: the person holds the role and the entitlement
+            it maps to is being withheld, by somebody, for a reason, until a
+            date. §6's whole promise is that "why does this person have access
+            to X" has one answer — this is the half that says they do not.
+
+            The same component the member reads on their own page, in its
+            operator voice. One object, and the two of them talking about it on
+            the phone need it to be one object on screen too.
           */}
           {inForce.length > 0 && (
             <Card>
-              <div className="flex flex-wrap items-center gap-3 px-5 py-4">
-                <span className="type-card-title">Withheld</span>
-                <span className="text-[13.5px] text-faint">
-                  {inForce.length} {inForce.length === 1 ? "suspension" : "suspensions"} in force
-                </span>
+              <div className="px-5 py-4">
+                <Withheld
+                  audience="operator"
+                  items={inForce.map((a) => ({
+                    field: a.field,
+                    value: a.value,
+                    reason: a.reason,
+                    target: a.target,
+                    actorId: a.actor_id,
+                    reviewDue: a.review_due,
+                  }))}
+                />
               </div>
-              <ul className="flex flex-col gap-3 px-5 pb-4">
-                {inForce.map((a) => (
-                  <li key={a.id} className="text-[14.5px] leading-[1.55] text-ink/[.78]">
-                    <strong className="font-semibold text-ink">
-                      {a.field} · {a.value}
-                    </strong>{" "}
-                    on {a.target} — withheld by {a.actor_id}
-                    {a.reason ? `, because ${a.reason}` : ""}. They may still hold a role that maps
-                    to it; this is why they cannot use it.
-                    {a.review_due && " This is past its review date."}
-                  </li>
-                ))}
-              </ul>
             </Card>
           )}
 

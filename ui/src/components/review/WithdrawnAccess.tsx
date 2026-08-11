@@ -1,8 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 
 import { EmptyState, ListStates } from "@/components/states";
+import { Mono } from "@/components/ui/Badge";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Relative } from "@/components/ui/Time";
@@ -40,6 +42,8 @@ interface UnconfirmedRevocation {
   target: string;
   age_seconds: number;
   spent: boolean;
+  /** The join key back to the change that caused this. */
+  cascade_id?: string;
 }
 
 interface Payload {
@@ -120,18 +124,30 @@ function Row({ row }: { row: UnconfirmedRevocation }) {
     <li className="grid gap-1">
       <div className="flex flex-wrap items-baseline gap-2">
         <UserName id={row.user_id} />
-        <span className="text-[var(--fg-muted)]">
+        <span className="text-muted">
           on {targetLabel(row.target)}
           {row.role_keys.length > 0 && <> · {row.role_keys.join(", ")}</>}
         </span>
-        <span className="text-[var(--fg-muted)]">
+        <span className="text-faint">
           decided <Relative iso={row.created_at} />
         </span>
+        <span className="flex-1" />
+        {row.cascade_id && (
+          // The join key, as a link, exactly as it appears in the audit log and
+          // on a person's activity. A finding an operator cannot trace back to
+          // the change that caused it is a mystery.
+          <Link
+            href={`/operations/cascades?cascade=${encodeURIComponent(row.cascade_id)}`}
+            className="text-[13px] font-semibold text-accent-text"
+          >
+            <Mono>{row.cascade_id.slice(0, 8)}</Mono>
+          </Link>
+        )}
       </div>
       {row.last_error && (
         // The reason, not a status. A terminal row an operator can see and not
         // act on is the whole difference between a finding and a mystery.
-        <p className="text-[var(--fg-muted)]">{row.last_error}</p>
+        <p className="text-muted">{row.last_error}</p>
       )}
     </li>
   );

@@ -38,6 +38,26 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
   if (errored) parts.push(`${errored} not recorded`);
   const counts = parts.join(" · ");
 
+  // A drain runs one pass per registered target, and the passes fail
+  // independently — so "halted" no longer means "nothing happened". A Zitadel
+  // outage stops Zitadel's pass and leaves a reachable NAS's queue moving, and
+  // telling an operator nothing was sent when nine writes landed is the worse
+  // half of that to get wrong.
+  const halted = (result?.passes ?? []).filter((pass) => pass.halted);
+  const whose = result?.halted_target ?? halted[0]?.target;
+  const stalled = halted.length > 0 ? halted.map((pass) => pass.target).join(", ") : whose;
+
+  // Only when the response actually says whose pass stopped. A single-target
+  // drain carries no `passes`, and "undefined did not run" is worse than the
+  // reason-shaped sentence below.
+  if (result?.halted && counts && stalled) {
+    return {
+      tone: "warning",
+      message: `${counts}. ${stalled} did not run.`,
+      detail: haltDetail(result.reason, stalled),
+    };
+  }
+
   if (result?.halted) {
     switch (result.reason) {
       case "drain_in_progress":
@@ -51,6 +71,13 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
           tone: "error",
           message: "The identity provider is unreachable. Nothing was sent.",
           detail: "Every write stays queued and in order.",
+        };
+      case "target_unreachable":
+        return {
+          tone: "error",
+          message: `${stalled ?? "That target"} is unreachable. Nothing was sent.`,
+          detail:
+            "Checked once before anything was claimed, so no write spent a retry on it. Everything stays queued.",
         };
       case "max_retries_exceeded":
         return {
@@ -93,4 +120,26 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
   }
 
   return { tone: failed ? "warning" : "success", message: `${counts}.` };
+}
+
+/**
+ * Why one target's pass did not run, said in the plural drain's voice.
+ *
+ * Separate from the single-reason switch above because the sentence is
+ * different when other passes DID work: the operator is not being told the
+ * drain failed, they are being told which part of it is still outstanding.
+ */
+function haltDetail(reason: string | undefined, target: string | undefined): string {
+  switch (reason) {
+    case "zitadel_offline":
+      return "The identity provider is unreachable. Its writes stay queued and in order; the rest went through.";
+    case "target_unreachable":
+      return `${target ?? "That target"} is not answering. Its writes stay queued — nothing spent a retry on it.`;
+    case "max_retries_exceeded":
+      return "A write there is out of retries, so that queue is paused at it. Nothing behind it was attempted.";
+    case "drain_in_progress":
+      return "Another resume was already running for it.";
+    default:
+      return "The rest of the queue went through.";
+  }
 }

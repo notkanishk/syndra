@@ -500,3 +500,30 @@ a real TrueNAS. The far end was a stand-in speaking the same JSON-RPC. What that
 leaves untested is TrueNAS's own behaviour — its filter syntax on `user.query`,
 what `user.update` does with a `groups` list, the rate limiter, and the API key's
 permission set. `NEXT.md` §4a carries it.
+
+## 20. Cohesion against the design system
+
+The design bundle landed (`design_handoff_syndra 2/`), and reading the three
+built screens against it found the same class of thing twice more: **a screen
+answering a question the rest of the product had already answered, differently.**
+
+- [x] 20.1 **The three add-on screens were painted in six colours that do not exist.** `var(--fg-muted)`, `--warn-bg`, `--warn-border`, `--warn-fg`, `--danger-fg`, `--border` — none declared in `globals.css`, in a codebase where every other component uses the Tailwind utilities the theme maps. An undeclared variable parses, the declaration is dropped, and the element inherits: the amber panels rendered as bare text and nobody saw an error. The canary guarded hardcoded hex and had nothing to say about a token that was never defined, which is the same failure and the quieter one. It does now — and the guard was checked by breaking it on purpose before being trusted
+- [x] 20.2 **§31 A — read freshness, said once.** Three screens two clicks apart each decided separately how to say how old their data was: one said "Served from a copy taken 4 minutes ago", one said nothing, one said "Reading…" and then nothing. `ReadFreshness` is the five readings with an age always attached, `truncated` orthogonal to the other four because completeness and age are different statements. `classifyRead` ranks `provisional` above age deliberately — a four-second-old copy of state we could not reach is still a copy
+- [x] 20.3 And it keeps the split §31 A is explicit about. `blocksIrreversibleAction` is named for what the ACTION does rather than for how old the read is: adoption is blocked at eleven minutes because it binds an identity off a list that may have moved, and a fourteen-minute-old plan still applies because applying joins a queue an operator can inspect. Two behaviours, one vocabulary, and only one caller of the blocking rule so they cannot drift together
+- [x] 20.4 **§31 B — the acknowledgement ladder as two controls.** Rung 2 puts the quantity inside the sentence being ticked, because a checkbox labelled "I understand" beside a figure in another paragraph is one people tick without moving their eyes. Rung 3 is the typed name that arms the one solid red fill in the product. Adoption was on neither: it is the single action that hands one person's data to another with no undo, and its dialog had a free-text field and a plain button
+- [x] 20.5 **Health reads as five readings, in the design's tones.** `draining` and `read_only` are ACCENT, never amber — somebody chose them, and amber sends an operator looking for a fault that does not exist. The same choice is accent on the withdrawn-access queue, which is the point. `circuit_open` says in words that it is not the target being down, because an operator who reads it that way looks at the wrong machine
+- [x] 20.6 **The log-integrity finding reaches a person.** `GET /targets/{t}/health` carries the anchor (§19.6) and the page now renders it — apart from the health readings, because a target can be perfectly healthy and still be reporting a record that has been edited. It says what was lost, where the anchor stopped, and that it will not move until somebody resolves it
+- [x] 20.7 **Adoption's three outcomes render as three**, matching the backend's §19.7 fix. `unconfirmed` is warn and says nothing was recorded here; a refusal carries the target's own words
+- [x] 20.8 **One object, one word.** The member's page and the operator's person page render the same `Withheld` component in two voices. The interface says *hold* and *withheld*; `allowance` stays in the API and out of the interface, and "suspension" is gone — three words for one object is how an operator and a member end up describing different things to each other on the phone
+- [x] 20.9 **The member's wait states an age rather than a promise.** "This usually clears within a day" is a guess about somebody's week; the wait is on a person resuming the drain. `desired_state_snapshots` already knew when the access was recorded — it is written in the same transaction as the plan that approved it — so `db.EntitlementRecordedAt` reads it and the page says "Recorded 2 days ago · waits on a person, not a timer". Nothing on that state spins, because a loop means "still happening" and this is not
+- [x] 20.10 **The account name gets connection-string treatment.** `CopyableValue` — mono, on its own ground, copyable — because a member pastes it into a file manager, and the failure mode is a transcription error they then spend twenty minutes hunting. Shared, so §30's connection instructions inherit it rather than inventing a second one
+- [x] 20.11 **The drain summary survives having more than one target.** §19.1 made the passes independent, which made `describeDrain` wrong: it read `zitadel_offline` as "Nothing was sent" while a reachable NAS's nine writes had just landed. It now names which pass did not run and leaves the rest as the ordinary result it is
+- [x] 20.12 **A withdrawn-access row carries its cascade id**, as a link, in the same form the audit log and a person's activity use. The design calls this the single most important piece of data plumbing in the product; a terminal finding an operator cannot trace back to the change that caused it is a mystery rather than a finding
+
+**Still not built, and now designed:** §23 entitlement plan-then-apply is a
+caller of `RehearsalDialog` per BUILD-NOTES §2, and `useRehearseEntitlements` /
+`useApplyEntitlements` exist with no caller — the same shape as §19.1. What it
+lacks is a cohort source: the endpoint takes explicit subject ids and no screen
+can honestly produce a list of them yet. §24's mapping holders
+(`/targets/mappings/{id}/holders`) is the natural one, which makes §24 the
+screen that unblocks §23 rather than a peer of it.

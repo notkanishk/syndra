@@ -3,10 +3,12 @@
 import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
+import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { blocksIrreversibleAction, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { targetLabel } from "@/lib/nav";
 import {
@@ -15,20 +17,17 @@ import {
   useTargetHealth,
   useTargetInventory,
   useTargets,
+  type AdoptionResult,
+  type LogAnchor,
+  type TargetHealth,
 } from "@/lib/queries/useTargets";
 
 /**
- * One add-on target's operator page (9.20, 1.18/1.19, 15.6).
+ * One add-on target's operator page (9.20, 1.18/1.19, 15.6; design §21).
  *
- * Three panels, and they answer three questions an operator asks in this order:
- * is it healthy, what lives on it that we did not put there, and can I stop it
- * writing.
- *
- * The health panel distinguishes states a single "status" would flatten:
- * unreachable, read-only, draining, backlogged, and serving-from-a-stale-mirror
- * are five different things to do next. Stale data is labelled with its age
- * rather than withheld — an operator during an outage is better served by a
- * dated answer than by a spinner.
+ * Four questions in this order, because each answer changes what the next one
+ * means: is it healthy, whose accounts are on it, what can it do, and what
+ * state did somebody put it in.
  */
 export function TargetOverview({ target }: { target: string }) {
   const roster = useTargets();
@@ -43,113 +42,233 @@ export function TargetOverview({ target }: { target: string }) {
       />
 
       <div className="grid gap-4">
-        <Card>
-          <CardHeader title="Health" />
-          {health.isLoading && <p className="text-sm text-[var(--fg-muted)]">Reading…</p>}
-          {health.data && <HealthLines target={target} health={health.data} />}
-        </Card>
-
+        <Health target={target} health={health.data} isLoading={health.isLoading} />
         <Inventory target={target} />
 
         {registered && (
           <Card>
-            <CardHeader title="Capabilities" />
+            <CardHeader
+              title="What it can do"
+              note="Read from the add-on's manifest, never from a list here"
+            />
             {!registered.callable ? (
-              <p className="text-sm text-[var(--fg-muted)]">
-                Registered, and it has not published a capability manifest yet.
-                Registration is a deployment fact; what it can do is a runtime
-                one, and nothing is offered until it answers.
-              </p>
+              <div className="px-5 pb-5">
+                <p className="text-[14px] text-muted">
+                  Registered, and it has not published a capability manifest yet.
+                  Registration is a deployment fact; what it can do is a runtime
+                  one, and nothing is offered until it answers.
+                </p>
+              </div>
             ) : (
-              <ul className="grid gap-1 text-sm">
-                {registered.operations.map((op) => (
-                  <li key={op.id} className="flex items-baseline gap-2">
-                    <span className="font-mono">{op.id}</span>
-                    <span className="text-[var(--fg-muted)]">{op.scope}</span>
-                    {!op.available && (
-                      <span className="text-[var(--warn-fg)]">
-                        unavailable — {op.unavailable_reason}
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              registered.operations.map((op, i) => (
+                <CardRow key={op.id} first={i === 0} className="flex-wrap">
+                  <span className="font-mono text-[13.5px]">{op.id}</span>
+                  <span className="text-[13px] text-faint">{op.scope}</span>
+                  {op.secret_params && op.secret_params.length > 0 && (
+                    // Named, never valued. There is nowhere in this payload for
+                    // a secret and nowhere on this page to render one.
+                    <span className="text-[12.5px] text-faint">
+                      never logged: {op.secret_params.join(", ")}
+                    </span>
+                  )}
+                  <span className="flex-1" />
+                  {!op.available && (
+                    // Shown disabled with its reason rather than omitted:
+                    // omitted, an operator wonders whether the feature exists.
+                    <span className="text-[13px] text-warn-text">
+                      unavailable — {op.unavailable_reason}
+                    </span>
+                  )}
+                </CardRow>
+              ))
             )}
           </Card>
         )}
 
-        <LifecycleControl target={target} />
+        <LifecycleControl target={target} health={health.data} />
       </div>
     </>
   );
 }
 
 /**
- * The five states, each rendered as itself.
+ * Health — five readings a single "status" chip would flatten, plus the one
+ * finding that is not about health at all.
  *
- * `draining` and `read_only` are deliberate operator decisions and must not read
- * as faults; `circuit_open` is the backend backing off and must not read as the
- * target being down; a stale snapshot is data with an age, not an error.
+ * Each reading sends an operator to a different machine, so each is rendered as
+ * itself. The tones are load-bearing and follow §21: a maintenance state
+ * somebody chose is ACCENT, because amber would read as a fault and send them
+ * looking for one; the backend backing off is danger and says so in words,
+ * because an operator who reads `circuit_open` as "the target is down" looks at
+ * the wrong machine entirely.
  */
-function HealthLines({
+function Health({
   target,
   health,
+  isLoading,
 }: {
   target: string;
-  health: NonNullable<ReturnType<typeof useTargetHealth>["data"]>;
+  health: TargetHealth | undefined;
+  isLoading: boolean;
 }) {
-  if (!health.reachable) {
-    return (
-      <p className="text-sm">
-        {targetLabel(target)} is not answering. {health.detail}
-      </p>
-    );
-  }
   return (
-    <dl className="grid gap-2 text-sm">
-      <Line label="Target" value={`${health.product ?? "—"} ${health.product_version ?? ""}`} />
-      <Line
-        label="Version"
-        value={health.version_tested ? "tested" : `untested — ${health.version_note ?? ""}`}
-      />
-      <Line
-        label="Accepting changes"
-        value={
-          health.lifecycle === "active"
-            ? "yes"
-            : `no — ${health.lifecycle} (${health.lifecycle_note ?? "no reason recorded"})`
-        }
-      />
-      {health.in_flight !== undefined && health.in_flight > 0 && (
-        <Line label="In flight" value={String(health.in_flight)} />
-      )}
-      {health.circuit_open && (
-        <Line
-          label="Backed off"
-          value="Syndra is refusing its own calls after repeated failures. Not the same as the target being down."
-        />
-      )}
-      {health.snapshot_taken_at && (
-        <Line
-          label="Mirror"
-          value={<>reads during an outage are served from a copy taken <Relative iso={health.snapshot_taken_at} /></>}
-        />
-      )}
-      {health.key_expires_at && (
-        <Line label="Credential expires" value={<Relative iso={health.key_expires_at} />} />
-      )}
-      {health.log_head && (
-        <Line label="Mutation log" value={`${health.log_records ?? 0} records`} />
-      )}
-    </dl>
+    <Card>
+      <CardHeader title="Health" />
+      <div className="grid gap-3 px-5 pb-5">
+        {isLoading && !health && <p className="text-[14px] text-faint">Reading…</p>}
+
+        {health?.log_anchor?.violation_reason && <LogFinding anchor={health.log_anchor} />}
+
+        {health && !health.reachable && (
+          <Reading tone="danger" label="Not answering">
+            {health.detail || `${targetLabel(target)} did not answer.`} The add-on is the
+            thing to look at.
+          </Reading>
+        )}
+
+        {health?.circuit_open && (
+          <Reading tone="danger" label="Backed off">
+            Syndra is refusing its own calls after repeated failures.{" "}
+            <strong className="font-semibold">This is not the target being down</strong> — it
+            clears on its own, and the machine to look at is this one.
+          </Reading>
+        )}
+
+        {health?.reachable && health.lifecycle && health.lifecycle !== "active" && (
+          // Accent, never amber. Somebody chose this, and the same choice is
+          // accent on the withdrawn-access queue for the same reason.
+          <Reading tone="accent" label={health.lifecycle === "draining" ? "Draining" : "Read-only"}>
+            Set deliberately{health.lifecycle_note ? `: ${health.lifecycle_note}` : ""}.{" "}
+            {health.lifecycle === "draining"
+              ? "New changes are refused and the ones already sent are being allowed to finish."
+              : "Every change is refused immediately. Reads keep working."}
+          </Reading>
+        )}
+
+        {health?.in_flight !== undefined && health.in_flight > 0 && (
+          <Reading tone="warn" label="Still settling">
+            {health.in_flight} call{health.in_flight === 1 ? "" : "s"} issued before the drain{" "}
+            {health.in_flight === 1 ? "has" : "have"} not come back. This is what to wait for
+            before pulling a credential out from under one.
+          </Reading>
+        )}
+
+        {health?.reachable && health.version_tested === false && (
+          <Reading tone="warn" label="Untested release">
+            {health.version_note || "This release has not been tested against."} Reads keep
+            working; changes are refused.
+          </Reading>
+        )}
+
+        {health?.reachable &&
+          (health.lifecycle ?? "active") === "active" &&
+          !health.circuit_open &&
+          health.version_tested !== false && (
+            <Reading tone="healthy" label="Serving">
+              {health.product} {health.product_version} · answering, tested, and accepting
+              changes.
+            </Reading>
+          )}
+
+        <dl className="grid gap-2 pt-1 text-[13.5px]">
+          {health?.last_read_at && (
+            <Line label="Last answered">
+              <Relative iso={health.last_read_at} />
+            </Line>
+          )}
+          {health?.key_expires_at && (
+            <Line label="Credential expires">
+              <Relative iso={health.key_expires_at} />
+            </Line>
+          )}
+          {health?.log_head && (
+            <Line label="Change record">
+              {health.log_records ?? 0} records ·{" "}
+              <span className="font-mono text-[12.5px] text-faint">
+                {health.log_head.slice(0, 12)}
+              </span>
+            </Line>
+          )}
+        </dl>
+
+        {health?.snapshot_taken_at && (
+          <ReadFreshness
+            subject="During an outage this target's state"
+            state={{ readAt: health.snapshot_taken_at, current: health.reachable }}
+          />
+        )}
+      </div>
+    </Card>
   );
 }
 
-function Line({ label, value }: { label: string; value: React.ReactNode }) {
+/**
+ * The mutation log no longer extending the one Syndra remembers.
+ *
+ * Not a health state, and rendered apart from them: the target can be perfectly
+ * healthy and still be reporting a record that has been edited. This is the
+ * strongest evidence the system produces, and until recently it reached an
+ * operator as one line in a log file.
+ */
+function LogFinding({ anchor }: { anchor: LogAnchor }) {
+  const what =
+    anchor.violation_reason === "records_decreased"
+      ? "Records that existed are gone."
+      : "The same number of records now hash to something else.";
+  return (
+    <div className="rounded-inner border border-danger-line bg-danger-soft px-4 py-3">
+      <p className="text-[13.5px] font-semibold text-danger-text">
+        This target&rsquo;s change record has been edited
+      </p>
+      <p className="mt-1 text-[13.5px] text-muted">
+        {what} Syndra last saw {anchor.records} record{anchor.records === 1 ? "" : "s"} ending{" "}
+        <span className="font-mono text-[12.5px]">{anchor.head.slice(0, 12)}</span>, anchored{" "}
+        <Relative iso={anchor.anchored_at} />; the target reported {anchor.violation_records ?? 0}{" "}
+        <Relative iso={anchor.violation_at} />.
+      </p>
+      <p className="mt-1 text-[13px] text-faint">
+        The anchor has not moved and will not, so this stays until somebody resolves it. A
+        chain verifies its own contents and cannot notice its own truncation — this is the
+        only thing that can.
+      </p>
+    </div>
+  );
+}
+
+const READING_TONE = {
+  healthy: { dot: "bg-healthy", label: "text-ink" },
+  accent: { dot: "bg-accent", label: "text-accent-text" },
+  warn: { dot: "bg-warn", label: "text-warn-text" },
+  danger: { dot: "bg-danger", label: "text-danger-text" },
+} as const;
+
+/** One health reading: a dot that carries the tone, a label, and the sentence. */
+function Reading({
+  tone,
+  label,
+  children,
+}: {
+  tone: keyof typeof READING_TONE;
+  label: string;
+  children: React.ReactNode;
+}) {
+  const style = READING_TONE[tone];
+  return (
+    <div className="flex items-baseline gap-2.5 text-[14px]">
+      <span aria-hidden className={`mt-1.5 size-1.5 shrink-0 rounded-pill ${style.dot}`} />
+      <span>
+        <span className={`font-semibold ${style.label}`}>{label}.</span>{" "}
+        <span className="text-muted">{children}</span>
+      </span>
+    </div>
+  );
+}
+
+function Line({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex gap-3">
-      <dt className="w-40 shrink-0 text-[var(--fg-muted)]">{label}</dt>
-      <dd>{value}</dd>
+      <dt className="w-40 shrink-0 text-faint">{label}</dt>
+      <dd className="text-muted">{children}</dd>
     </div>
   );
 }
@@ -157,24 +276,44 @@ function Line({ label, value }: { label: string; value: React.ReactNode }) {
 /**
  * The unmanaged inventory (1.18/1.19).
  *
- * These are never drift and are never presented as such: a real NAS holds
- * `root`, service accounts and whatever an admin made by hand, and classifying
- * those as untraced access would bury the triage queue on the first sweep after
- * deployment. Adoption is the one way an account leaves this list, and it is an
- * operator decision — the account may belong to somebody else entirely.
+ * Never drift, and never rendered as drift: a real NAS holds `root`, service
+ * accounts and whatever an admin made by hand, and classifying those as untraced
+ * access would bury the triage queue on the first sweep after deployment. Trust
+ * in a triage queue is set the day it first fills.
+ *
+ * Adoption is blocked while the read is stale, and this is the deliberate half of
+ * §31 A's split: adopting binds an identity irreversibly off a list that may have
+ * moved, while applying a plan only joins a queue somebody can still inspect. The
+ * two must not be unified.
  */
 function Inventory({ target }: { target: string }) {
   const inventory = useTargetInventory(target);
   const adopt = useAdoptAccount(target);
   const [adopting, setAdopting] = useState<string | null>(null);
-  const [subjectId, setSubjectId] = useState("");
+  const [result, setResult] = useState<AdoptionResult | null>(null);
+
+  const read = {
+    readAt: inventory.data?.read_at,
+    current: inventory.data?.current,
+    truncated: inventory.data?.truncated,
+  };
+  const tooOldToAdopt = !inventory.data || blocksIrreversibleAction(read);
 
   return (
     <Card>
       <CardHeader
         title="Accounts Syndra did not create"
+        count={inventory.data?.unmanaged?.length}
         note="Reported, never triaged. These are not drift."
       />
+      <div className="px-5 pb-2">
+        <ReadFreshness
+          subject="The account list"
+          state={read}
+          onRefresh={() => inventory.refetch()}
+          refreshing={inventory.isFetching}
+        />
+      </div>
       <ListStates
         isLoading={inventory.isLoading}
         error={inventory.error}
@@ -189,112 +328,225 @@ function Inventory({ target }: { target: string }) {
         }
       >
         <>
-          {inventory.data && !inventory.data.current && (
-            <p className="mb-3 text-sm text-[var(--warn-fg)]">
-              Served from a copy taken <Relative iso={inventory.data.read_at} />. Do not
-              adopt from a list this old — the account may have moved since.
-            </p>
-          )}
-          {inventory.data?.truncated && (
-            <p className="mb-3 text-sm text-[var(--warn-fg)]">
-              The account list was longer than one read returns. What is here is
-              real; what is missing is unknown.
-            </p>
-          )}
-          <ul className="grid gap-2 text-sm">
-            {(inventory.data?.unmanaged ?? []).map((account) => (
-              <li key={account.username} className="flex items-center gap-3">
-                <span className="font-mono">{account.username}</span>
-                {account.uid !== undefined && (
-                  <span className="text-[var(--fg-muted)]">uid {account.uid}</span>
-                )}
-                <Button
-                  variant="ghost"
-                  onClick={() => setAdopting(account.username)}
-                  disabled={!inventory.data?.current}
-                >
+          {(inventory.data?.unmanaged ?? []).map((account, i) => (
+            <CardRow key={account.username} first={i === 0}>
+              <span className="font-mono text-[13.5px]">{account.username}</span>
+              {account.uid !== undefined && (
+                <span className="text-[13px] text-faint">uid {account.uid}</span>
+              )}
+              <span className="flex-1" />
+              {tooOldToAdopt ? (
+                // The reason as text, never a tooltip. A disabled control whose
+                // reason lives in a `title` is a control nobody can find out
+                // about on a keyboard or a phone.
+                <span className="text-[13px] text-faint">
+                  Adoption needs a current read of this list
+                </span>
+              ) : (
+                <Button variant="ghost" size="sm" onClick={() => setAdopting(account.username)}>
                   Adopt
                 </Button>
-              </li>
-            ))}
-          </ul>
-          {adopting && (
-            <form
-              className="mt-4 grid gap-2 border-t border-[var(--border)] pt-4 text-sm"
-              onSubmit={(e) => {
-                e.preventDefault();
-                adopt.mutate(
-                  { username: adopting, subjectId },
-                  { onSuccess: () => { setAdopting(null); setSubjectId(""); } },
-                );
-              }}
-            >
-              <p>
-                Adopting <span className="font-mono">{adopting}</span> hands its home
-                directory, its shares and its group memberships to that person.
-                Nothing on the account changes now; the next convergence applies
-                their entitlements to it.
-              </p>
-              <Input
-                aria-label="Person to adopt it for"
-                placeholder="Subject id"
-                value={subjectId}
-                onChange={(e) => setSubjectId(e.target.value)}
-              />
-              <div className="flex gap-2">
-                <Button type="submit" disabled={!subjectId || adopt.isPending}>
-                  Adopt for this person
-                </Button>
-                <Button type="button" variant="ghost" onClick={() => setAdopting(null)}>
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          )}
+              )}
+            </CardRow>
+          ))}
         </>
       </ListStates>
+
+      {adopting && (
+        <AdoptPanel
+          username={adopting}
+          pending={adopt.isPending}
+          error={adopt.error}
+          onCancel={() => setAdopting(null)}
+          onAdopt={(subjectId) =>
+            adopt.mutate(
+              { username: adopting, subjectId },
+              {
+                onSuccess: (res) => {
+                  setResult(res);
+                  setAdopting(null);
+                },
+              },
+            )
+          }
+        />
+      )}
+
+      {result && <AdoptionOutcome result={result} onDismiss={() => setResult(null)} />}
     </Card>
+  );
+}
+
+/**
+ * Adopting one account. Rung 3, because there is no undo.
+ *
+ * The wrong choice hands a member somebody else's home directory, their shares
+ * and their group memberships, and the next convergence makes that look
+ * intended. Typing the account name is the same gesture as revoking access from a
+ * named person, deliberately — the two are equally unrecoverable.
+ */
+function AdoptPanel({
+  username,
+  pending,
+  error,
+  onAdopt,
+  onCancel,
+}: {
+  username: string;
+  pending: boolean;
+  error: unknown;
+  onAdopt: (subjectId: string) => void;
+  onCancel: () => void;
+}) {
+  const [subjectId, setSubjectId] = useState("");
+  const confirm = useTypedConfirmation(username);
+
+  return (
+    <form
+      className="row-divider grid gap-3 px-5 py-4 text-[14px]"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onAdopt(subjectId);
+      }}
+    >
+      <p className="text-muted">
+        Adopting <span className="font-mono text-ink">{username}</span> hands its home
+        directory, its shares and its group memberships to that person.{" "}
+        <strong className="font-semibold text-ink">There is no undo.</strong>
+      </p>
+      <p className="text-[13.5px] text-faint">
+        Nothing on the account changes now; the next convergence applies their entitlements
+        to it.
+      </p>
+      <Input
+        aria-label="Person to adopt it for"
+        placeholder="Subject id"
+        value={subjectId}
+        onChange={(e) => setSubjectId(e.target.value)}
+      />
+      <ConfirmByTyping
+        expected={username}
+        noun="account name"
+        value={confirm.typed}
+        onChange={confirm.setTyped}
+      />
+      <div className="flex gap-2">
+        <Button
+          type="submit"
+          variant="dangerConfirm"
+          disabled={!subjectId || !confirm.armed || pending}
+        >
+          {pending ? "Adopting…" : `Adopt ${username} for this person`}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+      {Boolean(error) && (
+        <p className="text-[13.5px] text-danger-text">
+          {error instanceof Error ? error.message : "That could not be applied."}
+        </p>
+      )}
+    </form>
+  );
+}
+
+/**
+ * What the adoption actually did — three outcomes, rendered as three.
+ *
+ * `unconfirmed` is the one that matters: the target did not answer, nothing was
+ * recorded here, and the operator must look before trying again. Rendering it as
+ * success is what this screen used to do.
+ */
+function AdoptionOutcome({ result, onDismiss }: { result: AdoptionResult; onDismiss: () => void }) {
+  const unconfirmed = result.status !== "adopted";
+  return (
+    <div
+      role="status"
+      className={`row-divider flex flex-wrap items-baseline gap-2 px-5 py-3.5 text-[13.5px] ${
+        unconfirmed ? "text-warn-text" : "text-muted"
+      }`}
+    >
+      <span>{result.detail ?? (unconfirmed ? "The target did not confirm it." : "Adopted.")}</span>
+      {result.warning && <span className="text-warn-text">{result.warning}</span>}
+      <span className="flex-1" />
+      <Button variant="ghost" size="sm" onClick={onDismiss}>
+        Dismiss
+      </Button>
+    </div>
   );
 }
 
 /**
  * Stopping the add-on writing, without a redeploy (15.6).
  *
- * `draining` and `read_only` differ in one way that matters during a credential
- * rotation: draining lets the calls already issued settle, and read-only does
- * not. An operator waiting to pull a key out from under a call needs the first.
+ * The explanation above the buttons is the whole of how an operator picks the
+ * right one, so it carries the weight rather than the labels: `draining` and
+ * `read_only` differ in exactly one way, and it is the one that matters during a
+ * credential rotation. The reason is mandatory because the person who reads it is
+ * not the person who set it.
  */
-function LifecycleControl({ target }: { target: string }) {
+function LifecycleControl({ target, health }: { target: string; health: TargetHealth | undefined }) {
   const set = useSetLifecycle(target);
   const [reason, setReason] = useState("");
+  const current = health?.lifecycle ?? "active";
+
+  const STATES: Array<{ id: string; label: string; blurb: string }> = [
+    { id: "active", label: "Active", blurb: "Accept changes normally." },
+    {
+      id: "draining",
+      label: "Draining",
+      blurb:
+        "Refuse new changes, let the ones already sent finish. This is what makes a credential rotation safe.",
+    },
+    { id: "read_only", label: "Read-only", blurb: "Refuse every change immediately." },
+  ];
 
   return (
     <Card>
-      <CardHeader title="Maintenance" />
-      <p className="text-sm text-[var(--fg-muted)]">
-        Draining refuses new changes and lets the ones already sent finish — this
-        is what makes a credential rotation safe. Read-only refuses every change
-        immediately. Reads keep working in both.
-      </p>
-      <div className="mt-3 grid gap-2">
+      <CardHeader title="Maintenance" note={`Currently ${current.replace("_", " ")}`} />
+      <div className="grid gap-3 px-5 pb-5">
+        <dl className="grid gap-1.5 text-[13.5px]">
+          {STATES.map((state) => (
+            <div key={state.id} className="flex gap-3">
+              <dt
+                className={`w-24 shrink-0 font-semibold ${
+                  state.id === current ? "text-accent-text" : "text-faint"
+                }`}
+              >
+                {state.label}
+              </dt>
+              <dd className="text-muted">{state.blurb}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="text-[13px] text-faint">Reads keep working in all three.</p>
         <Input
           aria-label="Reason"
-          placeholder="Why — this is what an operator reads later"
+          placeholder="Why — this is what the next operator reads"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
         />
-        <div className="flex gap-2">
-          {["active", "draining", "read_only"].map((state) => (
+        <div className="flex flex-wrap gap-2">
+          {STATES.map((state) => (
             <Button
-              key={state}
-              variant="ghost"
-              disabled={!reason || set.isPending}
-              onClick={() => set.mutate({ state, reason })}
+              key={state.id}
+              variant={state.id === current ? "ghost" : "outline"}
+              size="sm"
+              disabled={!reason || set.isPending || state.id === current}
+              onClick={() =>
+                set.mutate({ state: state.id, reason }, { onSuccess: () => setReason("") })
+              }
             >
-              {state.replace("_", " ")}
+              {state.id === current ? `Already ${state.label.toLowerCase()}` : state.label}
             </Button>
           ))}
         </div>
+        {set.error && (
+          <p className="text-[13.5px] text-danger-text">
+            {set.error instanceof Error ? set.error.message : "That could not be applied."}
+          </p>
+        )}
       </div>
     </Card>
   );

@@ -66,17 +66,21 @@ function renderPerson() {
   );
 }
 
-describe("a suspension in force", () => {
+describe("a hold in force", () => {
   it("says what is withheld, by whom and why", () => {
     state.allowances = [band()];
     renderPerson();
 
+    // The same pill the member reads on their own page — one object, one word
+    // for it, so an operator and a member on the phone are discussing the same
+    // thing.
     expect(screen.getByText("Withheld")).toBeInTheDocument();
-    const row = screen.getByText(/withheld by op_7/i);
+    const row = screen.getByText(/held by op_7/i).closest("li");
+    expect(row).not.toBeNull();
     expect(row).toHaveTextContent("safety review");
     expect(row).toHaveTextContent("truenas");
     // The trap, said out loud: holding the role is not holding the access.
-    expect(row).toHaveTextContent(/still hold a role that maps to it/i);
+    expect(screen.getByText(/still hold a role that maps to it/i)).toBeInTheDocument();
   });
 
   it("says nothing when every allowance has ended", () => {

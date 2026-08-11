@@ -116,10 +116,11 @@ describe("one target's page", () => {
     };
     renderTarget();
 
-    // The maintenance line, not the button that would set it: both say
-    // "draining", and only one is a statement about the current state.
-    expect(screen.getByText(/no — draining \(rotating the API key\)/)).toBeInTheDocument();
-    expect(screen.queryByText(/is not answering/i)).toBeNull();
+    // A state somebody chose reads as a decision, not a fault: the reason they
+    // gave is on screen, and nothing on the page calls it an outage.
+    expect(screen.getByText(/Set deliberately: rotating the API key/)).toBeInTheDocument();
+    expect(screen.queryByText(/did not answer/i)).toBeNull();
+    expect(screen.queryByText(/Not answering/)).toBeNull();
   });
 
   it("distinguishes Syndra backing off from the target being down", () => {
@@ -142,8 +143,12 @@ describe("one target's page", () => {
     };
     renderTarget();
 
-    expect(screen.getByText(/Do not\s+adopt from a list this old/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Adopt" })).toBeDisabled();
+    // The age is always given — "stale" without a number is not something an
+    // operator can act on — and the affordance is GONE rather than disabled
+    // with a tooltip, with its reason as text beside the row.
+    expect(screen.getByText(/last state seen/i)).toBeInTheDocument();
+    expect(screen.getByText(/Adoption needs a current read/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Adopt" })).toBeNull();
   });
 
   // 1.19 — the inventory is reported, never triaged. Nothing on this page calls

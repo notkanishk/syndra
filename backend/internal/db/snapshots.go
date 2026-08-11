@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -100,4 +101,36 @@ func WriteDesiredStateSnapshotTx(ctx context.Context, tx pgx.Tx, subjectID, targ
 		return DesiredStateSnapshot{}, fmt.Errorf("write desired state snapshot for %s on %s: %w", subjectID, target, err)
 	}
 	return out, nil
+}
+
+// EntitlementRecordedAt is when this subject's access to this target was last
+// written down, whether or not it has reached the target yet.
+//
+// It exists for one sentence on the member's own page. The middle state — "your
+// access is recorded and your account has not been created yet" — is the
+// ordinary experience of every new member, because add-on changes wait for an
+// operator rather than for a timer. A page that says "this usually clears
+// within a day" is guessing; one that says "recorded two days ago" is telling
+// them something true, and a member refreshing four times sees an honest number
+// instead of perpetual imminence.
+//
+// The snapshot is the right row to read because it IS the record: it is written
+// in the same transaction as the plan that approved the change, so its age is
+// the age of the decision rather than of a dispatch attempt.
+func EntitlementRecordedAt(ctx context.Context, target, subjectID string) (time.Time, bool, error) {
+	const q = `
+		SELECT created_at
+		  FROM desired_state_snapshots
+		 WHERE target = $1 AND subject_id = $2
+		 ORDER BY version DESC
+		 LIMIT 1`
+	var at time.Time
+	err := PG.QueryRow(ctx, q, target, subjectID).Scan(&at)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("read entitlement record time for %s on %s: %w", subjectID, target, err)
+	}
+	return at, true, nil
 }
