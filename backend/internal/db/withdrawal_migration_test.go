@@ -47,3 +47,51 @@ func TestTheWithdrawalDeclarationIsCoherentEndToEnd(t *testing.T) {
 		t.Error("the unconfirmed-revocation surface must read the declaration, or a stuck lock appears nowhere")
 	}
 }
+
+// §29's surface — the finding's schema and the code that reads it.
+//
+// `internal/db` has no live-DB harness, so what is asserted is that the
+// migration and the Go layer agree about the two properties that make a
+// standing finding usable: it is one per account, and a resolution is a
+// decision with an owner.
+func TestABindingConflictIsOnePerAccountAndAResolutionHasAnOwner(t *testing.T) {
+	dir := findMigrationsDir(t)
+	raw, err := os.ReadFile(filepath.Join(dir, "000039_binding_conflicts.up.sql"))
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	up := string(raw)
+
+	// One standing finding per account. A re-drive re-detects the same
+	// disagreement, and stacking rows turns one problem into a growing list of
+	// the same problem — which reads as it getting worse.
+	if !strings.Contains(up, "idx_binding_conflict_open") ||
+		!strings.Contains(up, "WHERE resolved_at IS NULL") {
+		t.Error("the open-finding index must be partial on unresolved rows, or a re-drive stacks duplicates")
+	}
+	// And a resolved row without an actor is a finding that closed itself.
+	if !strings.Contains(up, "binding_conflict_resolution_is_attributed") {
+		t.Error("a resolution must carry who decided and what they decided, together or not at all")
+	}
+	// A subject cannot conflict with themselves: that is a detector bug, and
+	// rendering it puts a person's name on a screen for no reason.
+	if !strings.Contains(up, "binding_conflict_is_between_two_subjects") {
+		t.Error("the two claimants must be constrained to differ")
+	}
+
+	// The upsert has to match the partial index, or the idempotency it claims
+	// is a unique violation at runtime instead.
+	src := readDBSource(t, "binding_conflicts.go")
+	if !strings.Contains(src, "ON CONFLICT (target, username) WHERE resolved_at IS NULL DO NOTHING") {
+		t.Error("the insert must name the partial index it relies on, or a re-drive raises instead of no-opping")
+	}
+	// The losing binding is deleted before the winning one is written: the
+	// unique index on (target, username) refuses the insert while the loser
+	// still holds it.
+	resolve := funcBody(t, src, "ResolveBindingConflict")
+	del := strings.Index(resolve, "DELETE FROM target_account_bindings")
+	ins := strings.Index(resolve, "INSERT INTO target_account_bindings")
+	if del < 0 || ins < 0 || del > ins {
+		t.Error("the losing binding must be forgotten before the winning one is written")
+	}
+}

@@ -140,8 +140,15 @@ func TestAnUnconfirmedAdoptionIsNotRecorded(t *testing.T) {
 // detection, correct row, one log line, and no surface in the system able to
 // report it. Tamper-evidence nobody is told about has done half its job.
 func TestACompromisedLogTravelsWithTheTargetsHealth(t *testing.T) {
-	health, anchor := addonsHealth, dbGetLogAnchor
-	t.Cleanup(func() { addonsHealth, dbGetLogAnchor = health, anchor })
+	health, anchor, conflicts := addonsHealth, dbGetLogAnchor, dbStandingBindingConflicts
+	t.Cleanup(func() {
+		addonsHealth, dbGetLogAnchor, dbStandingBindingConflicts = health, anchor, conflicts
+	})
+	// The health payload now carries binding conflicts beside the anchor, and
+	// the real read needs a database.
+	dbStandingBindingConflicts = func(context.Context, string) ([]db.BindingConflict, error) {
+		return nil, nil
+	}
 
 	addonsHealth = func(context.Context, string) addons.TargetHealth {
 		return addons.TargetHealth{Reachable: true, Outcome: addons.OutcomeSucceeded}
@@ -166,8 +173,15 @@ func TestACompromisedLogTravelsWithTheTargetsHealth(t *testing.T) {
 // And it survives the target being unreachable. An add-on that has gone away is
 // exactly when somebody would like to know its record was edited.
 func TestACompromisedLogIsReportedEvenWhenTheTargetIsDown(t *testing.T) {
-	health, anchor := addonsHealth, dbGetLogAnchor
-	t.Cleanup(func() { addonsHealth, dbGetLogAnchor = health, anchor })
+	health, anchor, conflicts := addonsHealth, dbGetLogAnchor, dbStandingBindingConflicts
+	t.Cleanup(func() {
+		addonsHealth, dbGetLogAnchor, dbStandingBindingConflicts = health, anchor, conflicts
+	})
+	// The health payload now carries binding conflicts beside the anchor, and
+	// the real read needs a database.
+	dbStandingBindingConflicts = func(context.Context, string) ([]db.BindingConflict, error) {
+		return nil, nil
+	}
 
 	addonsHealth = func(context.Context, string) addons.TargetHealth {
 		return addons.TargetHealth{Outcome: addons.OutcomeUnreached, Err: errors.New("dial: no route to host")}

@@ -203,6 +203,12 @@ var (
 	// the drain's own result, since the row settles either way.
 	saveBinding = db.RecordTargetBinding
 
+	// The conflict half. Separate seams from saveBinding, because a test that
+	// stubs the write must be able to assert what the finding recorded — the
+	// two used to be one log line.
+	bindingHolder = db.BindingHolder
+	saveConflict  = db.RecordBindingConflict
+
 	subjectEmail = func(ctx context.Context, subjectID string) string {
 		profile, found, err := directory.Default.FindUser(ctx, subjectID)
 		if err != nil || !found {

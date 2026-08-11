@@ -82,3 +82,73 @@ func TestResolvingAFindingThatMovedIsRefused(t *testing.T) {
 		t.Errorf("the refusal must say the log moved, which is the event this mechanism is for: %s", rr.Body.String())
 	}
 }
+
+// §29's surface — the operator action, and the two things that make it safe.
+func TestResolvingABindingConflict(t *testing.T) {
+	var got struct{ id, owner, actor, note string }
+	orig := dbResolveBindingConflict
+	t.Cleanup(func() { dbResolveBindingConflict = orig })
+	dbResolveBindingConflict = func(_ context.Context, id, owner, actor, note string) (db.BindingConflict, error) {
+		got.id, got.owner, got.actor, got.note = id, owner, actor, note
+		return db.BindingConflict{Target: "truenas", Username: "ada"}, nil
+	}
+
+	resolve := func(body string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost,
+			"/api/v1/targets/truenas/binding-conflicts/c1/resolve", strings.NewReader(body))
+		r.SetPathValue("target", "truenas")
+		r.SetPathValue("id", "c1")
+		handleResolveBindingConflict(rr, r)
+		return rr
+	}
+
+	// The confirmation names the person who LOSES the account — the half an
+	// operator can get wrong and the half nobody is notified about.
+	rr := resolve(`{"owner":"subject-a","note":"payroll confirmed it is hers"}`)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want a confirmation gate, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "stops holding it here") {
+		t.Errorf("the confirmation must name what the other subject loses: %s", rr.Body.String())
+	}
+
+	if rr := resolve(`{"owner":"subject-a","note":"  ","confirmed":true}`); rr.Code != http.StatusBadRequest {
+		t.Errorf("a resolution with no explanation must be refused, got %d", rr.Code)
+	}
+
+	rr = resolve(`{"owner":"subject-a","note":"payroll confirmed it is hers","confirmed":true}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if got.id != "c1" || got.owner != "subject-a" || got.note == "" {
+		t.Errorf("the citation, the owner and the reason must all reach the store: %+v", got)
+	}
+	// And it says the TARGET was not touched. Syndra's records agreeing is not
+	// the same as the account being right, and an operator who reads this as
+	// "done" would not converge.
+	if !strings.Contains(rr.Body.String(), "Nothing on the target changed") {
+		t.Errorf("the outcome must not imply the target was converged: %s", rr.Body.String())
+	}
+}
+
+// Naming somebody the finding does not is a validation failure, not a refusal
+// to act: it is a different decision with no rehearsal behind it.
+func TestResolvingToAThirdPartyIsRefused(t *testing.T) {
+	orig := dbResolveBindingConflict
+	t.Cleanup(func() { dbResolveBindingConflict = orig })
+	dbResolveBindingConflict = func(context.Context, string, string, string, string) (db.BindingConflict, error) {
+		return db.BindingConflict{}, db.ErrInvalidTargetBinding
+	}
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/truenas/binding-conflicts/c1/resolve",
+		strings.NewReader(`{"owner":"somebody-else","note":"hunch","confirmed":true}`))
+	r.SetPathValue("target", "truenas")
+	r.SetPathValue("id", "c1")
+	handleResolveBindingConflict(rr, r)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("want a validation failure, got %d: %s", rr.Code, rr.Body.String())
+	}
+}

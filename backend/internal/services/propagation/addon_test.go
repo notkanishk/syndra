@@ -57,6 +57,14 @@ func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarne
 		return rows, nil
 	}))
 	t.Cleanup(swap(&addonReachable, func(context.Context, string) bool { return h.reachable }))
+	// The conflict path's reads, defaulted so a test about anything else does
+	// not reach the real database. "Nobody else holds it" is the ordinary case
+	// and makes the finding unrecordable, which is the right default: a test
+	// that wants a conflict recorded says so.
+	t.Cleanup(swap(&bindingHolder, func(context.Context, string, string, int64) (string, bool, error) {
+		return "", false, nil
+	}))
+	t.Cleanup(swap(&saveConflict, func(context.Context, db.BindingConflict) error { return nil }))
 	t.Cleanup(swap(&readIntent, func(context.Context, string) (db.EntitlementIntent, error) {
 		return h.intent, h.intentErr
 	}))
@@ -596,5 +604,75 @@ func TestATransientBindingWriteFailureStillSettlesApplied(t *testing.T) {
 	}
 	if res.Failed != 0 {
 		t.Errorf("and it is not a finding: %+v", res)
+	}
+}
+
+// The finding is persisted, and it names BOTH claimants.
+//
+// The failed row carries the account name and the reason, and retention prunes
+// it — so an operator who was not watching that pass has nothing. The finding
+// has to outlive the drain that produced it, like the log anchor's does.
+func TestABindingConflictIsRecordedAsAStandingFinding(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "ada", UID: 3001}
+	t.Cleanup(swap(&saveBinding, func(context.Context, db.TargetBinding) error {
+		return fmt.Errorf("%w: ada on truenas", db.ErrBindingConflict)
+	}))
+	// The other claimant is READ BACK rather than inferred: the conflict may
+	// have been raised by the uid index on an account renamed out of band, and
+	// guessing from the reported name would put the wrong person on a screen.
+	t.Cleanup(swap(&bindingHolder, func(_ context.Context, target, username string, uid int64) (string, bool, error) {
+		if target != "truenas" || username != "ada" || uid != 3001 {
+			t.Errorf("the holder lookup must carry both keys: %s %s %d", target, username, uid)
+		}
+		return "subject-a", true, nil
+	}))
+	var recorded []db.BindingConflict
+	t.Cleanup(swap(&saveConflict, func(_ context.Context, c db.BindingConflict) error {
+		recorded = append(recorded, c)
+		return nil
+	}))
+
+	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != 1 {
+		t.Fatalf("the disagreement must be persisted, got %d", len(recorded))
+	}
+	got := recorded[0]
+	if got.ConvergedSubjectID != "sub-1" || got.BoundSubjectID != "subject-a" {
+		t.Errorf("both claimants must be named: %+v", got)
+	}
+	if got.Username != "ada" || got.AccountUID == nil || *got.AccountUID != 3001 {
+		t.Errorf("the account must be identified by name and uid: %+v", got)
+	}
+	if got.OutboxID == "" {
+		t.Error("the finding must trace back to the change that caused it")
+	}
+}
+
+// A finding that cannot name the other claimant is not recorded, and the row
+// still settles terminally. A warning with no subject is worse than the failed
+// row's reason, which already carries the account name.
+func TestAConflictWithNoTraceableHolderStillSettlesTerminally(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "ada", UID: 3001}
+	t.Cleanup(swap(&saveBinding, func(context.Context, db.TargetBinding) error {
+		return fmt.Errorf("%w: ada on truenas", db.ErrBindingConflict)
+	}))
+	t.Cleanup(swap(&bindingHolder, func(context.Context, string, string, int64) (string, bool, error) {
+		return "", false, nil
+	}))
+	t.Cleanup(swap(&saveConflict, func(context.Context, db.BindingConflict) error {
+		t.Error("a finding that cannot name the other claimant must not be recorded")
+		return nil
+	}))
+
+	res, err := DrainAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Failed != 1 || res.Applied != 0 {
+		t.Fatalf("the row still settles terminally whatever the finding did: %+v", res)
 	}
 }

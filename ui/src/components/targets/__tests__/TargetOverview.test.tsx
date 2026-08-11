@@ -14,6 +14,7 @@ const state = {
   health: {} as TargetHealth,
   inventory: {} as TargetInventory,
   resolved: [] as Array<{ head: string; note: string }>,
+  ownerDecided: [] as Array<{ id: string; owner: string; note: string }>,
 };
 
 vi.mock("@/lib/queries/useTargets", async () => {
@@ -32,6 +33,11 @@ vi.mock("@/lib/queries/useTargets", async () => {
     }),
     useAdoptAccount: () => ({ mutate: vi.fn(), isPending: false }),
     useSetLifecycle: () => ({ mutate: vi.fn(), isPending: false }),
+    useResolveBindingConflict: () => ({
+      mutate: (input: { id: string; owner: string; note: string }) => state.ownerDecided.push(input),
+      isPending: false,
+      error: null,
+    }),
     useResolveLogFinding: () => ({
       mutate: (input: { head: string; note: string }) => state.resolved.push(input),
       isPending: false,
@@ -237,5 +243,82 @@ describe("resolving a log finding", () => {
     expect(state.resolved).toEqual([
       { head: "bbbbbbbbbbbbbbbb", note: "we replaced the volume" },
     ]);
+  });
+});
+
+/**
+ * §29's surface — two of Syndra's own records disagreeing about who owns an
+ * account.
+ *
+ * It used to land among ordinary drain failures, where "the target refused this
+ * call" and this read the same to anybody scanning. Those want different places
+ * and different actions: one is retried after fixing the target, and this one
+ * is never retried at all.
+ */
+describe("a disputed account", () => {
+  function renderWithConflict() {
+    state.ownerDecided = [];
+    state.roster = [summary([])];
+    state.health = {
+      target: "truenas",
+      reachable: true,
+      binding_conflicts: [
+        {
+          id: "c1",
+          target: "truenas",
+          username: "ada",
+          account_uid: 3001,
+          converged_subject_id: "u-converged",
+          bound_subject_id: "u-bound",
+          outbox_id: "o1",
+          detected_at: "2026-08-10T00:00:00Z",
+        },
+      ],
+    } as TargetHealth;
+    return renderTarget();
+  }
+
+  it("names both claimants and calls neither correct", () => {
+    renderWithConflict();
+    expect(screen.getByText(/Two records disagree about who owns/)).toBeInTheDocument();
+    // The change LANDED. Every other terminal failure on that path means it did
+    // not, and an operator reading this as "it did not go through" retries it.
+    expect(screen.getByText(/The change landed on the target/)).toBeInTheDocument();
+  });
+
+  it("offers the two claimants and no third, and takes rung 3", () => {
+    renderWithConflict();
+    fireEvent.click(screen.getByRole("button", { name: /decide who owns it/i }));
+
+    const record = screen.getByRole("button", { name: /record the owner/i });
+    expect(record).toBeDisabled();
+    // Radios, not a free field: assigning it to somebody the finding does not
+    // name is a different decision, and the backend refuses it.
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+
+    fireEvent.click(screen.getAllByRole("radio")[0]);
+    fireEvent.change(screen.getByLabelText(/How you know/), {
+      target: { value: "checked the home directory with her" },
+    });
+    expect(record).toBeDisabled(); // the name is still untyped
+
+    fireEvent.change(screen.getByRole("textbox", { name: /type the account/i }), {
+      target: { value: "ada" },
+    });
+    expect(record).toBeEnabled();
+
+    fireEvent.click(record);
+    expect(state.ownerDecided).toEqual([
+      { id: "c1", owner: "u-bound", note: "checked the home directory with her" },
+    ]);
+  });
+
+  it("says the other person loses it without being told", () => {
+    renderWithConflict();
+    fireEvent.click(screen.getByRole("button", { name: /decide who owns it/i }));
+    expect(screen.getByText(/without\s+being told/)).toBeInTheDocument();
+    // And that the target was not touched, or an operator reads this as done
+    // and never converges.
+    expect(screen.getByText(/converged separately/)).toBeInTheDocument();
   });
 });

@@ -258,6 +258,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/targets", withCORS(withOperatorAuth(handleListTargets)))
 	mux.HandleFunc("GET /api/v1/targets/{target}/health", withCORS(withOperatorAuth(handleTargetHealth)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/log-anchor/resolve", withCORS(withOperatorAuth(handleResolveLogFinding)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/binding-conflicts/{id}/resolve", withCORS(withOperatorAuth(handleResolveBindingConflict)))
 
 	// The unmanaged inventory: what lives on a target that Syndra never put
 	// there. Reported, never triaged — and adoption is the one way an account

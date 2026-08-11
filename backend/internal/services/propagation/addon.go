@@ -212,6 +212,20 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 			// mutation landed. What failed is the attribution, and no retry
 			// resolves it — a re-drive converges the same wrong account again.
 			// An operator has to decide which subject the account belongs to.
+			// Persisted before the row is settled, because the row is not a
+			// surface: retention prunes it, and an operator who was not
+			// watching this pass never sees the drain report at all. The
+			// finding has to outlive the moment that produced it, the way the
+			// log anchor's does.
+			//
+			// Non-fatal if it cannot be written — the row still settles
+			// terminally with the reason, which is strictly better than the
+			// `applied` this replaced — but loud, because a finding that failed
+			// to persist is a disagreement nothing will surface again.
+			if cerr := recordConflict(ctx, intent, resp); cerr != nil {
+				log.Printf("[ADDON-DRAIN] binding conflict on %s for %s could not be recorded: %v",
+					intent.Target, intent.SubjectID, cerr)
+			}
 			if err := markFailed(ctx, row.ID, bindingConflictReason(intent, resp, err)); err != nil {
 				res.settleFailure(row.ID, "mark failed", err)
 				return false
@@ -417,6 +431,37 @@ func recordBinding(ctx context.Context, intent db.EntitlementIntent, resp addons
 		return err
 	}
 	return nil
+}
+
+// recordConflict persists the disagreement, naming both claimants.
+//
+// The subject Syndra's binding attributes the account to is read back rather
+// than inferred: the conflict was raised by a unique index, and which of the
+// two indexes fired decides whether the existing binding matches on the name or
+// on the uid. Guessing from the reported username would name the wrong person
+// on the half of the cases where the account was renamed out of band.
+func recordConflict(ctx context.Context, intent db.EntitlementIntent, resp addons.ApplyResponse) error {
+	holder, found, err := bindingHolder(ctx, intent.Target, resp.Username, resp.UID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		// The conflict was raised and the binding is gone by the time this
+		// reads — a concurrent purge, most likely. Not recorded: a finding that
+		// cannot name the other claimant is a warning without a subject, and
+		// the failed row already carries the account name and the reason.
+		return fmt.Errorf("the conflicting binding on %s is no longer there", intent.Target)
+	}
+	conflict := db.BindingConflict{
+		Target: intent.Target, Username: resp.Username,
+		ConvergedSubjectID: intent.SubjectID, BoundSubjectID: holder,
+		OutboxID: intent.OutboxID,
+	}
+	if resp.UID != 0 {
+		uid := resp.UID
+		conflict.AccountUID = &uid
+	}
+	return saveConflict(ctx, conflict)
 }
 
 // bindingConflictReason is what an operator reads on the failed row.

@@ -14,15 +14,18 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { blocksIrreversibleAction, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
+import { UserName } from "@/components/names";
 import { targetLabel } from "@/lib/nav";
 import {
   useAdoptAccount,
   useSetLifecycle,
   useTargetHealth,
+  useResolveBindingConflict,
   useResolveLogFinding,
   useTargetInventory,
   useTargets,
   type AdoptionResult,
+  type BindingConflict,
   type LogAnchor,
   type TargetHealth,
 } from "@/lib/queries/useTargets";
@@ -136,6 +139,13 @@ function Health({
         {isLoading && !health && <p className="text-[14px] text-faint">Reading…</p>}
 
         {health?.log_anchor?.violation_reason && <LogFinding anchor={health.log_anchor} />}
+
+        {/* Above the reachability reading, deliberately. A target being down is
+            temporary and this is not: it is two of Syndra's own records
+            disagreeing, and it stands whether or not the add-on is answering. */}
+        {(health?.binding_conflicts ?? []).map((conflict) => (
+          <BindingConflictFinding key={conflict.id} target={target} conflict={conflict} />
+        ))}
 
         {health && !health.reachable && (
           <Reading tone="danger" label="Not answering">
@@ -259,6 +269,173 @@ function LogFinding({ anchor }: { anchor: LogAnchor }) {
         <ResolveFindingDialog target={anchor.target} anchor={anchor} onClose={() => setResolving(false)} />
       )}
     </div>
+  );
+}
+
+/**
+ * Two of Syndra's own records disagreeing about who owns an account.
+ *
+ * Rendered apart from a drain failure, which is where it used to land. "The
+ * target refused this call" and "two of your records disagree about who owns an
+ * account" read the same in a failure list and want completely different
+ * actions — one is retried after fixing the target, and this one is never
+ * retried at all.
+ *
+ * Both claimants are named and neither is called correct, because Syndra does
+ * not know. That is the whole content of the finding.
+ */
+function BindingConflictFinding({
+  target,
+  conflict,
+}: {
+  target: string;
+  conflict: BindingConflict;
+}) {
+  const [deciding, setDeciding] = useState(false);
+  return (
+    <div className="rounded-inner border border-danger-line bg-danger-soft px-4 py-3">
+      <p className="text-[13.5px] font-semibold text-danger-text">
+        Two records disagree about who owns{" "}
+        <span className="font-mono text-[13px]">{conflict.username}</span>
+      </p>
+      <p className="mt-1 text-[13.5px] text-muted">
+        A change for{" "}
+        <UserName id={conflict.converged_subject_id} fallback={conflict.converged_subject_id} /> was
+        applied to this account, and Syndra records it as belonging to{" "}
+        <UserName id={conflict.bound_subject_id} fallback={conflict.bound_subject_id} />. The change
+        landed on the target — what could not be recorded is whose account it is.
+      </p>
+      <p className="mt-1 text-[13px] text-faint">
+        Noticed <Relative iso={conflict.detected_at} />. Nothing else will resolve this: a
+        convergence for either person acts on whichever record it reads.
+      </p>
+      <div className="mt-3">
+        <Button variant="ghost" size="sm" onClick={() => setDeciding(true)}>
+          Decide who owns it
+        </Button>
+      </div>
+      {deciding && (
+        <ResolveConflictDialog
+          target={target}
+          conflict={conflict}
+          onClose={() => setDeciding(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Choosing between the two claimants.
+ *
+ * Rung 3, because it takes an account away from somebody who is not in the
+ * room. The two names are radio options rather than a free field: an operator
+ * assigning it to a third person is not resolving this disagreement, and the
+ * backend refuses that — offering a text box would let them try.
+ */
+function ResolveConflictDialog({
+  target,
+  conflict,
+  onClose,
+}: {
+  target: string;
+  conflict: BindingConflict;
+  onClose: () => void;
+}) {
+  const resolve = useResolveBindingConflict(target);
+  const [owner, setOwner] = useState("");
+  const [note, setNote] = useState("");
+  const confirmation = useTypedConfirmation(conflict.username);
+  const ready = owner !== "" && note.trim() !== "" && confirmation.armed && !resolve.isPending;
+
+  return (
+    <Modal
+      open
+      onClose={resolve.isPending ? () => {} : onClose}
+      busy={resolve.isPending}
+      size="md"
+      labelledBy="resolve-conflict-title"
+    >
+      <ModalHeader
+        titleId="resolve-conflict-title"
+        title={`Who owns ${conflict.username}?`}
+        lede="Syndra cannot tell. Both of these people are recorded as holding this account, in different places."
+      />
+      <div className="grid gap-4 px-6">
+        <fieldset className="grid gap-2">
+          <legend className="mb-1 text-[14px]">The account belongs to</legend>
+          {[
+            { id: conflict.bound_subject_id, why: "Syndra's own binding says so." },
+            { id: conflict.converged_subject_id, why: "Their change was applied to it." },
+          ].map((claimant) => (
+            <label
+              key={claimant.id}
+              className="flex cursor-pointer items-start gap-3 rounded-inner border border-line px-3.5 py-3 text-[14px] has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft"
+            >
+              <input
+                type="radio"
+                name="conflict-owner"
+                className="mt-1 size-4 shrink-0 accent-[var(--accent)]"
+                checked={owner === claimant.id}
+                onChange={() => setOwner(claimant.id)}
+              />
+              <span>
+                <span className="font-semibold">
+                  <UserName id={claimant.id} fallback={claimant.id} />
+                </span>
+                <span className="block text-[13.5px] text-muted">{claimant.why}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+
+        <div className="rounded-inner border border-danger-line bg-danger-soft px-4 py-3">
+          <p className="text-[13.5px] text-danger-text">
+            The other person stops holding this account in Syndra, immediately and without
+            being told. Their data on the target is untouched — this changes who Syndra says
+            it belongs to, which is what every later revocation, sweep and convergence acts
+            on.
+          </p>
+        </div>
+
+        <label className="grid gap-1.5 text-[14px]">
+          <span>How you know</span>
+          <Input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Checked the home directory contents with them"
+          />
+          <span className="text-[13px] text-faint">
+            The row somebody reads when the other person asks where their account went.
+          </span>
+        </label>
+
+        <ConfirmByTyping
+          expected={conflict.username}
+          value={confirmation.typed}
+          onChange={confirmation.setTyped}
+          noun="account"
+          disabled={resolve.isPending}
+        />
+        {resolve.error && (
+          <p className="text-[13.5px] text-danger-text">
+            {resolve.error instanceof Error ? resolve.error.message : "That could not be applied."}
+          </p>
+        )}
+      </div>
+      <ModalFooter note="This changes Syndra's records only. The target is converged separately.">
+        <Button
+          variant="dangerConfirm"
+          disabled={!ready}
+          onClick={() => resolve.mutate({ id: conflict.id, owner, note }, { onSuccess: onClose })}
+        >
+          {resolve.isPending ? "Recording…" : "Record the owner"}
+        </Button>
+        <Button variant="ghost" onClick={onClose} disabled={resolve.isPending}>
+          Cancel
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 

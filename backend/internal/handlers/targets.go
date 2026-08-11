@@ -115,17 +115,47 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 		if anchored && anchor.Compromised() {
 			body["log_anchor"] = anchor
 		}
+		// Carried on the unreachable path too. A disagreement about who owns an
+		// account is a fact about Syndra's own records, so it stands whether or
+		// not the target is answering — and hiding it during an outage would
+		// hide it exactly when somebody is looking at this page.
+		if conflicts := bindingConflicts(r, target); len(conflicts) > 0 {
+			body["binding_conflicts"] = conflicts
+		}
 		jsonResponse(w, http.StatusOK, body)
 		return
 	}
 
-	if !anchored {
+	conflicts := bindingConflicts(r, target)
+	if !anchored && len(conflicts) == 0 {
 		jsonResponse(w, http.StatusOK, health)
 		return
 	}
 	// Merged rather than nested under a second request, because the operator's
 	// question is one question: is this target all right.
-	jsonResponse(w, http.StatusOK, targetHealthWithAnchor{TargetHealth: health, LogAnchor: &anchor})
+	merged := targetHealthWithAnchor{TargetHealth: health, BindingConflicts: conflicts}
+	if anchored {
+		merged.LogAnchor = &anchor
+	}
+	jsonResponse(w, http.StatusOK, merged)
+}
+
+// bindingConflicts reads the standing findings for a target's health payload.
+//
+// Beside the log anchor rather than under a separate request, for the reason
+// that one governs the other: both answer "does this target need a decision",
+// and an operator asking that should not have to know there are two places it
+// can be answered.
+func bindingConflicts(r *http.Request, target string) []db.BindingConflict {
+	conflicts, err := dbStandingBindingConflicts(r.Context(), target)
+	if err != nil {
+		// Non-fatal and said out loud, matching the anchor's rule: the health
+		// of the target is the question asked, and an unavailable finding must
+		// not take the answer down with it.
+		log.Printf("[TARGETS] could not read %s's binding conflicts: %v (non-fatal)", target, err)
+		return nil
+	}
+	return conflicts
 }
 
 // targetHealthWithAnchor is the add-on's account of itself plus the backend's
@@ -134,6 +164,11 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 type targetHealthWithAnchor struct {
 	addons.TargetHealth
 	LogAnchor *db.LogAnchor `json:"log_anchor,omitempty"`
+	// BindingConflicts is where two of Syndra's own records disagree about who
+	// owns an account. Not the add-on's opinion and not drift: both stores were
+	// written by this system, and neither is authoritative, which is why it
+	// needs a person rather than a reconcile.
+	BindingConflicts []db.BindingConflict `json:"binding_conflicts,omitempty"`
 }
 
 func describeTarget(reg addons.Registration) targetSummary {
@@ -231,4 +266,76 @@ func handleResolveLogFinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, anchor)
+}
+
+// resolveConflictRequest is an operator deciding who owns a disputed account.
+type resolveConflictRequest struct {
+	// Owner must be one of the two subjects the finding names. A third party is
+	// not a resolution of this disagreement; it is a different decision with no
+	// rehearsal behind it, and the store refuses it.
+	Owner string `json:"owner"`
+	// Note is what they decided and why. The row somebody reads when the other
+	// subject asks where their account went.
+	Note      string `json:"note"`
+	Confirmed bool   `json:"confirmed"`
+}
+
+// resolveConflictCopy is the confirmation.
+//
+// It names the person who LOSES the account, because that is the half an
+// operator can get wrong and the half nobody is notified about. Resolving is
+// not filing the finding away — it moves an account from one person to another
+// in Syndra's records, and the loser's page stops showing it.
+const resolveConflictCopy = "Deciding who owns this account moves it in Syndra's records. " +
+	"The other subject stops holding it here, immediately and without being told. " +
+	"Their data on the target is untouched — this changes who Syndra says it belongs to, " +
+	"which is what every later revocation, sweep and convergence will act on."
+
+// handleResolveBindingConflict records who a disputed account belongs to.
+func handleResolveBindingConflict(w http.ResponseWriter, r *http.Request) {
+	var req resolveConflictRequest
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
+	}
+	if strings.TrimSpace(req.Owner) == "" {
+		jsonValidationErrorResponse(w, "Nobody to give the account to",
+			map[string]string{"owner": "required"})
+		return
+	}
+	if strings.TrimSpace(req.Note) == "" {
+		jsonValidationErrorResponse(w, "Resolving a conflict takes an explanation",
+			map[string]string{"note": "required"})
+		return
+	}
+	if !req.Confirmed {
+		jsonErrorResponse(w, http.StatusUnprocessableEntity, "CONFIRMATION_REQUIRED", resolveConflictCopy)
+		return
+	}
+
+	conflict, err := dbResolveBindingConflict(r.Context(), r.PathValue("id"),
+		req.Owner, resolveActor(r, ""), req.Note)
+	switch {
+	case errors.Is(err, db.ErrNoSuchConflict):
+		jsonErrorResponse(w, http.StatusNotFound, "NO_SUCH_CONFLICT", err.Error())
+		return
+	case errors.Is(err, db.ErrInvalidTargetBinding):
+		// The third-party case, and it is a validation failure rather than a
+		// refusal to act: the operator named somebody the finding does not.
+		jsonValidationErrorResponse(w, err.Error(), map[string]string{"owner": "not_a_claimant"})
+		return
+	case err != nil:
+		jsonErrorResponse(w, http.StatusInternalServerError, "RESOLVE_FAILED", err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"resolved": true, "target": conflict.Target, "username": conflict.Username,
+		"owner": req.Owner,
+		// Queued, because the losing subject's entitlements are now unrecorded
+		// on this target and the winning subject's account may not match what
+		// policy says. Said rather than implied: the records agree now, and the
+		// TARGET has not been touched.
+		"detail": "Syndra's records now agree. Nothing on the target changed — " +
+			"converge the target when you are ready.",
+	})
 }

@@ -751,3 +751,26 @@ So an open item here records **what was examined**, not only its status:
 > refusal, and what an operator does about it once seen.
 
 The second half is the part that would have saved five rounds.
+
+## 30. The §29 surface
+
+The accounting fix stopped the lie; it did not give the finding anywhere to
+live. A terminal row with an honest reason still lands among ordinary drain
+failures, where *"the target refused this call"* and *"two of your records
+disagree about who owns an account"* read the same to anybody scanning — and
+want completely different actions. One is retried after fixing the target. This
+one is never retried at all.
+
+- [x] 30.1 **A drain report is not a surface.** An operator who was not watching that pass never sees it, and retention prunes the row. `target_binding_conflicts` persists the disagreement the way the log anchor persists its own, and for the same reason: the evidence has to outlive the moment that produced it
+- [x] 30.2 It records a **disagreement, not a verdict**. Syndra cannot tell which subject owns the account — that is the whole content of the finding — so both claimants are named, neither is called correct, and the resolution is a person's. A CHECK holds the two apart, because a subject conflicting with themselves is a detector bug and rendering it puts somebody's name on a screen for no reason
+- [x] 30.3 One standing finding per account, on a partial unique index, and the insert names that index. A re-drive re-detects the same disagreement, and stacking rows turns one problem into a growing list of the same problem — which reads as it getting worse
+- [x] 30.4 **The other claimant is read back, never inferred.** A conflict is raised by whichever of `(target, username)` and `(target, uid)` fired, so guessing from the reported name would put the wrong person on the screen exactly when the account was renamed out of band — the case the uid index exists for. A finding that cannot name the other claimant is not recorded at all: a warning with no subject is worse than the failed row's reason, which already carries the account name
+- [x] 30.5 **Resolution rebinds in one transaction**, losing binding first. Forgetting the loser without recording the winner leaves the account owned by nobody, which puts it in the unmanaged inventory — where the offered action is adoption, the hazard this entire path exists to keep an operator away from. The order also matters for the unique index: the winning insert is refused while the loser still holds the name
+- [x] 30.6 The owner must be one of the two the finding names, and the dialog offers **radios rather than a field**. A third party is a different decision with no rehearsal behind it; the backend refuses it, and a text box would invite the attempt
+- [x] 30.7 Rung 3, because it takes an account from somebody who is not in the room. The confirmation names what the OTHER person loses — *"stops holding it here, immediately and without being told"* — and the outcome says the target was not touched, because an operator who reads it as done will not converge
+- [x] 30.8 Rendered above the reachability reading on the target page. A target being down is temporary; this is two of Syndra's own records disagreeing, and it stands whether or not the add-on is answering — carried on the unreachable payload for that reason, since hiding it during an outage hides it exactly when somebody is looking
+
+**Nothing is open on this branch that has not been read end to end.** That is a
+different claim from the one that survived five rounds, and it is the one worth
+making: `ErrBindingConflict` was "returned, no caller" for five rounds because
+nobody followed it to the settle path.
