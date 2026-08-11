@@ -65,6 +65,10 @@ func rehearseMappingChange(w http.ResponseWriter, r *http.Request, surface strin
 		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
 		return
 	}
+	// Normalised once, here, so the value that is rehearsed, fingerprinted and
+	// written is one value. Trimming at the write alone would fingerprint the
+	// untrimmed form and refuse its own apply.
+	req.Value = services.NormaliseValue(req.Value)
 
 	mapping, err := dbGetRoleMapping(r.Context(), r.PathValue("id"))
 	if err != nil {
@@ -75,7 +79,7 @@ func rehearseMappingChange(w http.ResponseWriter, r *http.Request, surface strin
 		// Validated before the rehearsal, not after it. A plan for a value the
 		// target cannot resolve is a diff an operator would approve and the apply
 		// would then refuse — which teaches them the approval means nothing.
-		if err := validateMappingAgainstTarget(r.Context(), mapping.Target, mapping.Field, req.Value); err != nil {
+		if _, _, err := validateMappingAgainstTarget(r.Context(), mapping.Target, mapping.Field, req.Value); err != nil {
 			writeMappingError(w, err)
 			return
 		}

@@ -44,15 +44,18 @@ func handleCreateAllowance(w http.ResponseWriter, r *http.Request) {
 	// a sharper reason: a mapping the resolver ignores fails visibly the moment
 	// somebody looks for the entitlement, and an allowance the resolver ignores
 	// looks exactly like a suspension that worked.
-	if err := validateAllowanceAgainstTarget(r.Context(), req.Target, req.Field, req.Value); err != nil {
+	field, value, err := validateAllowanceAgainstTarget(r.Context(), req.Target, req.Field, req.Value)
+	if err != nil {
 		writeAllowanceError(w, err)
 		return
 	}
 	// The actor is the authenticated operator, never a field of the request. An
 	// allowance whose author is whoever the client said is an allowance nobody
 	// can be asked about, which is the whole thing this layer is for.
+	// The normalised pair, never `req`. Writing what arrived would store a term
+	// the validator approved a different version of.
 	created, err := dbCreateAllowance(r.Context(), db.Allowance{
-		SubjectID: req.SubjectID, Target: req.Target, Field: req.Field, Value: req.Value,
+		SubjectID: req.SubjectID, Target: req.Target, Field: field, Value: value,
 		Direction: req.Direction, Reason: req.Reason,
 		ActorID:    resolveActor(r, ""),
 		ExpiresAt:  req.ExpiresAt,
@@ -123,19 +126,22 @@ func handleAllowancesDueForReview(w http.ResponseWriter, r *http.Request) {
 // schema, in the order `validateMappingAgainstTarget` does: an unregistered
 // target first, because the foreign key would refuse the row anyway with a
 // message about a constraint rather than about the deployment.
-func validateAllowanceAgainstTarget(ctx context.Context, target, field, value string) error {
+// It returns the CANONICAL pair, not merely a verdict. A validator that checks
+// a trimmed copy and leaves the caller holding the original is how `group=x `
+// gets accepted and then matches nothing — see NormaliseTerm.
+func validateAllowanceAgainstTarget(ctx context.Context, target, field, value string) (string, string, error) {
 	if strings.TrimSpace(target) == "" {
-		return fmt.Errorf("%w: an allowance needs a target", db.ErrAllowanceInvalid)
+		return "", "", fmt.Errorf("%w: an allowance needs a target", db.ErrAllowanceInvalid)
 	}
 	schema, err := addonsEntitlementSchema(target)
 	switch {
 	case errors.Is(err, addons.ErrNotRegistered):
-		return fmt.Errorf("%w: %s is not a registered add-on target", db.ErrAllowanceInvalid, target)
+		return "", "", fmt.Errorf("%w: %s is not a registered add-on target", db.ErrAllowanceInvalid, target)
 	case err != nil:
 		// Registered and silent. Nothing about the term can be checked against a
 		// manifest we do not have, and recording a denial nobody has verified is
 		// the failure this whole check exists for.
-		return fmt.Errorf("%w: %s has not published a capability manifest yet, so its fields are unknown",
+		return "", "", fmt.Errorf("%w: %s has not published a capability manifest yet, so its fields are unknown",
 			db.ErrAllowanceInvalid, target)
 	}
 	// Lifecycle fields are included rather than skipped: they are not bindable

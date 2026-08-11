@@ -70,6 +70,15 @@ type RoleMembersView struct {
 	// filter pills below count people per SOURCE, and a carve-out is orthogonal
 	// to how somebody came to hold the role.
 	WithheldCount int `json:"withheld_count"`
+	// WithheldUnavailable says the carve-out read failed and this list does not
+	// know whether anybody is holding the role with something taken away.
+	//
+	// It exists because the degradation is otherwise INVISIBLE: a zero count
+	// and no rows is byte-identical to a cohort that genuinely has none, and a
+	// server log is not loud to the person reading the page. Rendering "no
+	// carve-outs" from a read that never happened reproduces, on this exact
+	// screen, the failure the field was added to close.
+	WithheldUnavailable bool `json:"withheld_unavailable,omitempty"`
 	// Counts per source, for the filter pills. A person held two ways is
 	// counted under both — the pills filter rows, they do not partition people.
 	DirectCount    int `json:"direct_count"`
@@ -138,11 +147,12 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 	// The shape of the available read decided what the screen said.
 	withheldBySubject, werr := withheldOnRole(ctx, projectID, key)
 	if werr != nil {
-		// Non-fatal, and it is the one degradation that must be loud rather
-		// than silent: a list that quietly omits carve-outs is the exact trap
-		// this exists to close. The count stays zero, and nothing claims the
-		// holders are unencumbered.
+		// Non-fatal — the holder list is still the answer to the question asked
+		// — but SAID, not merely logged. The count stays zero and the flag is
+		// what stops that zero from reading as "nobody has anything withheld",
+		// which is the one thing this page must not say when it does not know.
 		log.Printf("[ROLE-MEMBERS] could not read carve-outs for %s/%s: %v (rendered without them)", projectID, key, werr)
+		view.WithheldUnavailable = true
 	}
 
 	for _, user := range snap.Users() {
@@ -202,9 +212,21 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 // act on this row.
 //
 // Lifecycle denials are the exception and they belong on every role that
-// reaches the target: `enabled = true` denied means the account is off, so
-// nothing the role confers there is reachable. It is not bound to any mapping,
-// so the intersection cannot find it and it is matched on the target alone.
+// reaches the target: they are bound to no mapping, so the intersection cannot
+// find them, and they are matched on the target alone.
+//
+// The justification differs between the two, and the difference will matter.
+// `enabled = true` denied means the ACCOUNT is off — nothing the role confers
+// there is reachable, unconditionally, whatever fields exist now or later.
+// `smb_enabled` is narrower: it withholds only what SMB carries. Today `group`
+// is the sole entitlement field and it is SMB-mediated, so the two coincide and
+// showing an SMB denial against any role is exactly true. It stops being true
+// the moment a non-SMB field lands — quotas and path grants are in phase 2 —
+// at which point an SMB denial on a role that only binds a quota would claim to
+// withhold something it does not touch.
+//
+// `TestTheLifecycleExceptionRestsOnEverySchemaFieldBeingSMBMediated` fails when
+// a field is added, so the next person has to decide rather than inherit.
 func withheldOnRole(ctx context.Context, projectID, key string) (map[string][]WithheldOnRole, error) {
 	targets, err := dbTargetsMappedToRole(ctx, projectID, key)
 	if err != nil {

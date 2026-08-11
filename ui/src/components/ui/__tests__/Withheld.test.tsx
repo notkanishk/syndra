@@ -72,5 +72,9 @@ describe("the role holder list is a caller", () => {
     // And the count is stated before the list rather than left to be
     // discovered in it.
     expect(page).toContain("withheld_count");
+    // And the degradation, which is the half that reads as good news when it
+    // is dropped: a zero count from a read that failed says "nobody has one".
+    expect(page).toContain("withheld_unavailable");
+    expect(page).toMatch(/could not be read/);
   });
 });

@@ -235,10 +235,10 @@ func sortedKeys(m map[string]struct{}) []string {
 //
 // An allowance the resolver cannot act on is worse than a rejected one, because
 // the operator has evidence they suspended somebody.
-func ValidateAllowanceTerm(declared []string, field, value string) error {
-	field, value = strings.TrimSpace(field), strings.TrimSpace(value)
+func ValidateAllowanceTerm(declared []string, field, value string) (string, string, error) {
+	field, value = NormaliseTerm(field, value)
 	if field == "" || value == "" {
-		return fmt.Errorf("%w: an allowance needs a field and a value", db.ErrAllowanceInvalid)
+		return "", "", fmt.Errorf("%w: an allowance needs a field and a value", db.ErrAllowanceInvalid)
 	}
 	declares := false
 	for _, d := range declared {
@@ -250,7 +250,7 @@ func ValidateAllowanceTerm(declared []string, field, value string) error {
 	if !declares {
 		// The declared set is named, not the rejected field: an operator whose
 		// field is not in the schema needs to know what is.
-		return fmt.Errorf("%w: this target has no %s to deny — it declares %s",
+		return "", "", fmt.Errorf("%w: this target has no %s to deny — it declares %s",
 			db.ErrAllowanceInvalid, field, strings.Join(declared, ", "))
 	}
 	if IsLifecycleField(field) && value != "true" {
@@ -262,11 +262,42 @@ func ValidateAllowanceTerm(declared []string, field, value string) error {
 		// name, chosen by an operator from a schema, and showing them what they
 		// typed is most of what makes this refusal actionable. Stated so the next
 		// reader does not "correct" it in either direction.
-		return fmt.Errorf(
+		return "", "", fmt.Errorf(
 			"%w: a %s denial is written %s=true, because the value names the state being refused; %q denies nothing",
 			db.ErrAllowanceInvalid, field, field, value)
 	}
-	return nil
+	return field, value, nil
+}
+
+// NormaliseTerm is the canonical form of a (field, value) pair, and the ONLY
+// form that is ever written down.
+//
+// Returned rather than merely checked, because checking a trimmed copy and
+// storing the original is how a suspension becomes inert AND invisible at the
+// same time: `group=lab_makers ` passes validation, lands in the row with the
+// space, and then matches nothing. Both comparisons that consume it are exact
+// byte equality — the resolver's suppression and the holder list's intersection
+// — so the operator gets a 201, the member keeps the access, and no surface
+// disagrees. Exactly the shape of the `enabled=false` bug.
+//
+// `plans.go` already learned this: "Normalising the value rather than the check
+// is what matters, because the row is written from the same normalised copy."
+//
+// Whitespace only. Case is deliberately PRESERVED: the value names something in
+// the target's own namespace, and a target where `lab_makers` and `Lab_Makers`
+// are two different groups would have a folded value silently addressing the
+// wrong one. Trimming cannot pick the wrong group; folding can.
+func NormaliseTerm(field, value string) (string, string) {
+	return strings.TrimSpace(field), strings.TrimSpace(value)
+}
+
+// NormaliseValue is NormaliseTerm for a caller holding only the value — the
+// mapping edit path, where the field comes from the row being changed. Through
+// the same function rather than its own TrimSpace, so there is one definition
+// of canonical to change.
+func NormaliseValue(value string) string {
+	_, v := NormaliseTerm("", value)
+	return v
 }
 
 // ValidateMappingField refuses a mapping the backend can judge structurally,

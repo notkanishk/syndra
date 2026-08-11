@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -366,5 +368,104 @@ func TestAnUnreadableBandSaysSoRatherThanLookingEmpty(t *testing.T) {
 	}
 	if band == nil {
 		t.Error("and the band must still be a list rather than nil, so a surface renders empty rather than crashing")
+	}
+}
+
+// §26 — a term is normalised where it is WRITTEN, not merely where it is
+// checked.
+//
+// The validator trimmed a copy for its own checks and returned only a verdict,
+// so `group=lab_makers ` was accepted and stored with the space. Every
+// comparison that consumes it is exact byte equality — the resolver's
+// suppression here, and the holder list's intersection — so the carve-out was
+// inert and invisible at once: 201 to the operator, full access to the member,
+// nothing on any surface disagreeing. Same shape as the `enabled=false` bug.
+func TestAnAllowanceTermIsNormalisedBeforeItIsWrittenDown(t *testing.T) {
+	field, value, err := ValidateAllowanceTerm([]string{"group"}, " group ", " lab_makers ")
+	if err != nil {
+		t.Fatalf("a term with surrounding whitespace is valid, merely untidy: %v", err)
+	}
+	if field != "group" || value != "lab_makers" {
+		t.Fatalf("the validator must hand back the canonical pair, got %q=%q", field, value)
+	}
+
+	// And the canonical pair is what the resolver matches. A stored term with
+	// the space would suppress nothing.
+	set := resolve(t, &resolverFixture{
+		roles:      []db.RoleRef{{ProjectID: "pLab", RoleKey: "maker"}},
+		mappings:   []db.RoleMapping{mapping("maker", "group", "lab_makers")},
+		allowances: []db.Allowance{{ID: "a1", Target: "truenas", Field: field, Value: value, Direction: db.AllowanceDeny, ActorID: "op_1", Reason: "safety review"}},
+	})
+	if len(set.Fields["group"]) != 0 {
+		t.Errorf("the denial must take the group away, got %v", set.Fields["group"])
+	}
+	if len(set.Suppressed) != 1 {
+		t.Errorf("and it must say so, got %v", set.Suppressed)
+	}
+}
+
+// Case is deliberately NOT folded. The value names something in the target's
+// own namespace, and a NAS where `lab_makers` and `Lab_Makers` are two groups
+// would have a folded value silently addressing the wrong one — trimming
+// cannot pick the wrong group, folding can.
+func TestNormalisingDoesNotFoldCase(t *testing.T) {
+	_, value := NormaliseTerm("group", "  Lab_Makers  ")
+	if value != "Lab_Makers" {
+		t.Fatalf("case belongs to the target, not to Syndra: %q", value)
+	}
+}
+
+// A lifecycle denial still has to be written `enabled=true`, and the whitespace
+// form must not sneak past that check either — `" true "` denies nothing, and
+// accepting it would be the original bug with a space in it.
+func TestALifecycleTermIsCheckedAfterTrimming(t *testing.T) {
+	if _, _, err := ValidateAllowanceTerm([]string{"enabled"}, "enabled", " true "); err != nil {
+		t.Fatalf("a trimmed lifecycle value is the right one: %v", err)
+	}
+	if _, _, err := ValidateAllowanceTerm([]string{"enabled"}, "enabled", "false"); err == nil {
+		t.Fatal("enabled=false denies nothing and must still be refused")
+	}
+}
+
+// §26 — the lifecycle exception on the holder list rests on a fact about the
+// schema, and the fact has an expiry date.
+//
+// `withheldOnRole` shows a lifecycle denial against EVERY role reaching the
+// target, because such a denial binds to no mapping and the intersection cannot
+// find it. For `enabled` that is unconditionally right: the account is off.
+// For `smb_enabled` it is right only while every entitlement field is
+// SMB-mediated — true today, with `group` as the sole one, and false the moment
+// quotas or path grants land (phase 2), at which point an SMB denial on a role
+// binding only a quota would claim to withhold something it does not touch.
+//
+// Read from the add-on's own source rather than from a list retyped here, for
+// the same reason the wire contract is a shared artifact: a copy agrees with
+// itself. The failure is deliberately a prompt to decide, not a bug report.
+func TestTheLifecycleExceptionRestsOnEverySchemaFieldBeingSMBMediated(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "addons", "truenas", "capabilities.go"))
+	if err != nil {
+		t.Skipf("the add-on is not checked out beside the backend: %v", err)
+	}
+	body := string(raw)
+	start := strings.Index(body, "func entitlementSchema()")
+	if start < 0 {
+		t.Fatal("the add-on no longer declares entitlementSchema; this guard is watching nothing")
+	}
+	schema := body[start : start+strings.Index(body[start:], "\n}")]
+
+	// Every non-lifecycle field the target declares. `group` is SMB-mediated,
+	// so an SMB denial genuinely withholds it.
+	const smbMediated = "FieldGroup"
+	for _, line := range strings.Split(schema, "\n") {
+		name := strings.TrimSpace(line)
+		if !strings.HasPrefix(name, "{Name: Field") {
+			continue
+		}
+		if strings.Contains(name, "Lifecycle: true") || strings.Contains(name, smbMediated) {
+			continue
+		}
+		t.Errorf("the add-on declares a new entitlement field (%s), and `smb_enabled` may no longer withhold "+
+			"everything a role reaches. Decide whether withheldOnRole should still show an SMB denial against "+
+			"every role, or only against roles binding SMB-mediated fields.", name)
 	}
 }

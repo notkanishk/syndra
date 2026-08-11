@@ -95,12 +95,22 @@ export default function RoleMembersPage({
               and it is false for however many of them are holding it with
               something taken away. Not a filter pill: those partition by SOURCE,
               and a carve-out is orthogonal to how somebody came to hold it. */}
-          {(view?.withheld_count ?? 0) > 0 && (
+          {view?.withheld_unavailable ? (
+            // A zero the page cannot stand behind. Saying "none" from a read
+            // that did not happen is the failure this column exists to close,
+            // reproduced on the screen that closes it.
             <span className="text-[13.5px] text-warn-text">
-              {view?.withheld_count === 1
-                ? "1 of them has something withheld"
-                : `${view?.withheld_count} of them have something withheld`}
+              Holds could not be read — this list does not say who has something
+              withheld
             </span>
+          ) : (
+            (view?.withheld_count ?? 0) > 0 && (
+              <span className="text-[13.5px] text-warn-text">
+                {view?.withheld_count === 1
+                  ? "1 of them has something withheld"
+                  : `${view?.withheld_count} of them have something withheld`}
+              </span>
+            )
           )}
           <span className="flex-1" />
           <span className="text-[13.5px] text-faint">Filter by source:</span>

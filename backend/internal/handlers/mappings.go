@@ -54,14 +54,16 @@ func handleCreateRoleMapping(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
 		return
 	}
-	if err := validateMappingAgainstTarget(r.Context(), req.Target, req.Field, req.Value); err != nil {
+	field, value, err := validateMappingAgainstTarget(r.Context(), req.Target, req.Field, req.Value)
+	if err != nil {
 		writeMappingError(w, err)
 		return
 	}
 
+	// The normalised pair, never `req`.
 	created, err := dbCreateRoleMapping(r.Context(), db.RoleMapping{
 		Target: req.Target, ProjectID: req.ProjectID, RoleKey: req.RoleKey,
-		Field: req.Field, Value: req.Value, CreatedBy: resolveActor(r, ""),
+		Field: field, Value: value, CreatedBy: resolveActor(r, ""),
 	})
 	if err != nil {
 		writeMappingError(w, err)
@@ -93,11 +95,12 @@ func handleUpdateRoleMapping(w http.ResponseWriter, r *http.Request) {
 		writeMappingError(w, err)
 		return
 	}
-	if err := validateMappingAgainstTarget(r.Context(), existing.Target, existing.Field, req.Value); err != nil {
+	_, value, err := validateMappingAgainstTarget(r.Context(), existing.Target, existing.Field, req.Value)
+	if err != nil {
 		writeMappingError(w, err)
 		return
 	}
-	applyMappingRequest(w, r, existing, planSurfaceMappingEdit, req.PlanID, req.Value, "updated")
+	applyMappingRequest(w, r, existing, planSurfaceMappingEdit, req.PlanID, value, "updated")
 }
 
 type mappingDeleteRequest struct {
@@ -219,18 +222,23 @@ func handleRollbackMappingVersion(w http.ResponseWriter, r *http.Request) {
 }
 
 // validateMappingAgainstTarget runs both halves of the split, structure first.
-func validateMappingAgainstTarget(ctx context.Context, target, field, value string) error {
+// Like the allowance validator, it returns the CANONICAL pair rather than a
+// verdict. Both sides of the intersection have to be normalised or neither is:
+// a mapping stored as `lab_makers ` is one no allowance can ever match, and a
+// carve-out on it would be accepted and do nothing.
+func validateMappingAgainstTarget(ctx context.Context, target, field, value string) (string, string, error) {
+	field, value = services.NormaliseTerm(field, value)
 	schema, err := addonsEntitlementSchema(target)
 	switch {
 	case errors.Is(err, addons.ErrNotRegistered):
 		// Nothing about a mapping to a target the deployment does not run can
 		// be validated, and the foreign key would refuse the row anyway — with
 		// a message about a constraint rather than about the deployment.
-		return fmt.Errorf("%w: %s is not a registered add-on target", db.ErrMappingInvalid, target)
+		return "", "", fmt.Errorf("%w: %s is not a registered add-on target", db.ErrMappingInvalid, target)
 	case err != nil:
 		// Registered and never answered. Structure could still be checked
 		// against a manifest we do not have, which is to say it could not.
-		return fmt.Errorf("%w: %s has not published a capability manifest yet, so its entitlement schema is unknown", errMappingTargetSilent, target)
+		return "", "", fmt.Errorf("%w: %s has not published a capability manifest yet, so its entitlement schema is unknown", errMappingTargetSilent, target)
 	}
 
 	declared := make([]string, 0, len(schema))
@@ -245,16 +253,16 @@ func validateMappingAgainstTarget(ctx context.Context, target, field, value stri
 		declared = append(declared, f.Name)
 	}
 	if err := services.ValidateMappingField(declared, field); err != nil {
-		return err
+		return "", "", err
 	}
 
 	// Reference, last, and only once structure holds. This is the network call,
 	// and spending it to be told a field is misspelled would make an outage
 	// look like a validation failure.
 	if err := addonsResolvesValue(ctx, target, field, value); err != nil {
-		return err
+		return "", "", err
 	}
-	return nil
+	return field, value, nil
 }
 
 // errMappingTargetSilent separates "the add-on is wrong" from "the add-on has

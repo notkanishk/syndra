@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -381,5 +382,41 @@ func TestAnAdditiveAllowanceIsNotRenderedAsAWithholding(t *testing.T) {
 	}
 	if view.WithheldCount != 0 {
 		t.Fatalf("an allowance that GIVES something is not access taken away, got %d", view.WithheldCount)
+	}
+}
+
+// A carve-out read that failed must not render as "nobody has one".
+//
+// The zero count and the empty rows are byte-identical to a cohort that
+// genuinely has none, and a server log is not loud to the person reading the
+// page. Without the flag the degradation reproduces, on this exact screen, the
+// failure the field was added to close.
+func TestAFailedCarveOutReadSaysSoRatherThanReadingAsClean(t *testing.T) {
+	setupSnapshotTestFixtures(t, 1, 0, 1)
+	stubRoleFixtures(t)
+
+	origCollect := collectUserRolesHook
+	t.Cleanup(func() { collectUserRolesHook = origCollect })
+	collectUserRolesHook = func(context.Context, string) (map[roleKey]*models.EffectiveRole, []models.Bundle, error) {
+		return map[roleKey]*models.EffectiveRole{
+			{projectID: "p0", roleKey: "trained"}: {Reasons: []models.RoleReason{{Kind: "direct"}}},
+		}, nil, nil
+	}
+	dbTargetsMappedToRole = func(context.Context, string, string) ([]string, error) {
+		return nil, errors.New("the mapping table is unavailable")
+	}
+
+	view, err := RoleMembers(context.Background(), "p0", "trained")
+	if err != nil {
+		t.Fatalf("the holder list is still the answer to the question asked: %v", err)
+	}
+	if !view.WithheldUnavailable {
+		t.Fatal("a list that could not read carve-outs must say so, or its zero reads as an answer")
+	}
+	if view.WithheldCount != 0 {
+		t.Errorf("and it must not invent one: %d", view.WithheldCount)
+	}
+	if len(view.Members) != 1 {
+		t.Errorf("the holders themselves are unaffected: %d", len(view.Members))
 	}
 }

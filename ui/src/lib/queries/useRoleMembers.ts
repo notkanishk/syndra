@@ -42,6 +42,15 @@ export interface RoleMembersView {
   /** How many holders have something withheld. Counted apart from the source
    *  pills below: a carve-out is orthogonal to how somebody came to hold it. */
   withheld_count: number;
+  /**
+   * The carve-out read failed, so this list does not know whether anybody holds
+   * the role with something taken away.
+   *
+   * Rendered, never swallowed: a zero count with this set means "unknown", and
+   * a zero count without it means "none". Those are different sentences and the
+   * page has to say which one it is looking at.
+   */
+  withheld_unavailable?: boolean;
   direct_count: number;
   bundle_count: number;
   automatic_count: number;

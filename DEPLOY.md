@@ -480,6 +480,46 @@ Deploying by hand on the box, when the runner is down:
 su - runner -c 'cd /opt/syndra && git fetch --prune origin && git checkout --force origin/main && docker compose up -d --build'
 ```
 
+### Hosts without a git checkout
+
+`/opt/syndra` is a working copy, and `git checkout --force` is what makes the
+production path safe: it removes files the new commit deleted. A host synced any
+other way does not get that for free.
+
+The dev LXC is such a host, and the failure is real rather than theoretical. It
+was synced by extracting a `git archive` over the existing tree, which could add
+files and change files and **never remove one** — so
+`ui/src/app/system/hardware-sync` survived the commit that deleted it, the
+rebuilt image kept serving the route, and `/system/hardware-sync` answered 200
+against a tree that no longer contained it. The stale route was the small half;
+the large half was that a green rebuild was taken as evidence for a fix it had
+never carried.
+
+```bash
+scripts/deploy-source.sh root@<HOST> [/root/syndra]
+```
+
+It mirrors rather than copies — the tracked directories are removed and
+re-extracted — and, **before** it does, reports anything on the target that this
+commit does not contain. That report is the load-bearing part: it is what would
+have named `hardware-sync`. The check after the mirror only confirms the
+script's own work, which is why both exist.
+
+It never touches `.env` or `secrets/`. Host ports live in `.env` as
+`BACKEND_HOST_PORT` / `UI_HOST_PORT` because they used to be edited into
+`docker-compose.yml`, which is tracked, and the next sync overwrote them.
+
+### Verifying on a host with no directory
+
+A box with no `ZITADEL_DOMAIN` runs `Source=demo`, and the demo directory knows
+five identities. Anything that walks the user directory — the role-holder list
+is the one to watch — answers only for those five, so a cohort read against a
+real Zitadel subject id **comes back empty and reads as "nothing to report"**
+rather than as "nobody here". A smoke test written against the wrong ids gets a
+green result from a query that examined nobody. Use `sam_student`, `maya_staff`,
+`leo_mentor`, `ava_guest` or `dev_admin`, and assert a non-zero cohort before
+asserting anything about its contents.
+
 ### Rollback
 
 ```bash
