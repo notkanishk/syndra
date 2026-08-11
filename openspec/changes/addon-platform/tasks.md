@@ -635,3 +635,23 @@ shape. `ErrBindingConflict` has no caller, so "this account belongs to somebody
 else" is reported by the add-on and reaches no operator surface. Both are
 visibility gaps rather than retained access or an inverted intent, which is why
 they are named here rather than fixed in the same pass.
+
+## 24. What deploying it found
+
+Everything in §23 was found by reading. These were found by running it, which
+is the point of keeping the dev LXC: three of the four are invisible to a suite
+by construction — one is logged as non-fatal, one is stubbed by every test that
+reaches it, and one is a field no client had read yet.
+
+- [x] 24.1 **The outbox has never pruned, once.** `($1 || ' days')::interval` makes `$1` a TEXT parameter and pgx has no plan for encoding a Go int as text, so every retention prune failed with `unable to encode 30 into text format` and was logged as non-fatal. The call site's own comment says the prune is best-effort, which is exactly why nobody looked
+- [x] 24.2 **The same shape disabled the member rate limiter, and with it the member credential path.** `CountRecentAddonOperations` is the member-scoped limit, and `Dispatch` fails CLOSED when the count cannot be read — correctly, since the path terminates in a shared rate-limited session on the target. But the count could never be read, so every member-scoped operation was refused as rate-limited. `password.set` is member-scoped: group 10 was blocked here as well as at the proxy allowlist, and either block alone was enough. Two independent bugs on one path is why neither surfaced
+- [x] 24.3 Both go through `make_interval` now, which takes the number the caller actually has, and a source guard fails on the concatenated form anywhere in `internal/db`. Neither call site could have been caught from inside the package: one logs and continues, the other is stubbed by every test that reaches it
+- [x] 24.4 **An age in the wrong unit.** The unconfirmed-revocation surface reported `age_seconds: 18000000000` for a row eighteen seconds old: `Age` is a `time.Duration`, which marshals as NANOSECONDS. No client had read it, so nothing was broken and everything was ready to be — and the number reads as plausible, which is the kind of wrong nobody notices. The Duration stays for `Escalated`, which compares against one correctly; it no longer goes on the wire under a name promising seconds
+- [x] 24.5 **`docker-compose.yml` hard-coded its host ports**, so the box running the pre-rename stack alongside this one had moved them by editing a tracked file — which the next deploy overwrote, and the backend then failed to bind. `BACKEND_HOST_PORT` and `UI_HOST_PORT` default to the old literals, so nothing changes for a deployment that never set them
+
+**Verified on the deployment:** migrations 25→36 including both new ones, and
+the whole §23.5 path end to end — a target revocation queued an `apply` carrying
+`withdraws_only`, appeared on the unconfirmed-revocation surface and in the
+indicator (where it had appeared in neither), and was drained by the background
+runner at the next tick with `applied=1` while Zitadel was offline throughout.
+That last part is the property the response has been promising all along.
