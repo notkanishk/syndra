@@ -82,3 +82,37 @@ func permitted(allowed []string, use string) bool {
 	}
 	return false
 }
+
+// A parameter's Go type and the type the SQL gives it have to agree (§23).
+//
+// Found on the deployment: `($1 || ' days')::interval` makes $1 TEXT, pgx has
+// no plan for encoding a Go int as text, and every prune since this was written
+// failed with "unable to encode 30 into text format" — logged as non-fatal, so
+// the outbox simply never pruned. Nothing could have caught it here: this
+// package has no live database, and the call site logs and continues.
+//
+// So the guard is on the shape. Interval arithmetic either takes a string the
+// caller built or goes through make_interval; what it must not do is
+// concatenate a parameter the caller passes as a number.
+func TestIntervalParametersAreNotConcatenatedIntoText(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatalf("read package dir: %v", err)
+	}
+	concat := regexp.MustCompile(`\(\$\d+\s*\|\|\s*'[^']*'\)::interval`)
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Clean(name))
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		if match := concat.FindString(string(raw)); match != "" {
+			t.Errorf("%s builds an interval by concatenating a bind parameter (%s); "+
+				"that makes it TEXT and a numeric argument cannot be encoded for it — use make_interval",
+				name, match)
+		}
+	}
+}

@@ -108,7 +108,12 @@ services:
       # authenticates the backend to it.
       - ${BACKEND_SECRETS_DIR:-./secrets/backend}:/run/secrets:ro
     ports:
-      - "8080:8080"
+      # The HOST port is configurable; the container port never is. A box
+      # running a second stack — the pre-rename one still on this dev machine —
+      # has to move this, and it moved it by editing a tracked file, which the
+      # next deploy silently overwrote. Defaults to the old literal, so nothing
+      # changes for a deployment that never set it.
+      - "${BACKEND_HOST_PORT:-8080}:8080"
     # The only service on all three. It is the single mutation authority, so it
     # is also the only thing that needs to reach both the datastores and the
     # add-ons — and the segmentation below is what makes that a fact about the
@@ -127,7 +132,7 @@ services:
       dockerfile: Dockerfile
     container_name: syndra_ui
     ports:
-      - "3000:3000"
+      - "${UI_HOST_PORT:-3000}:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080}
       - BACKEND_URL=${BACKEND_URL:-http://backend:8080}

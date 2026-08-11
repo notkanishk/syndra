@@ -33,7 +33,13 @@ type UnconfirmedRevocation struct {
 	models.PendingPropagation
 	// Age is how long this row has been unconfirmed, computed by the database
 	// clock so it does not depend on the difference between two machines'.
-	Age time.Duration `json:"age_seconds"`
+	//
+	// Not serialised: a time.Duration marshals as NANOSECONDS, so a field named
+	// `age_seconds` carrying one is off by a factor of a billion — and it reads
+	// as a plausible number, which is the kind of wrong nobody notices.
+	Age time.Duration `json:"-"`
+	// AgeSeconds is what the name says, for clients.
+	AgeSeconds int64 `json:"age_seconds"`
 	// Spent says the row is terminal: its retry budget is gone and nothing will
 	// dispatch it again. The distinction the surface renders differently.
 	Spent bool `json:"spent"`
@@ -47,8 +53,11 @@ type UnconfirmedRevocationSummary struct {
 	// person who still has access somebody decided to take away.
 	Spent int `json:"spent"`
 	// OldestAge is the age of the oldest unconfirmed row of either kind. The
-	// number an escalation threshold is compared against.
-	OldestAge time.Duration `json:"oldest_age_seconds"`
+	// number an escalation threshold is compared against — in Go, where it is a
+	// Duration and the comparison is right.
+	OldestAge time.Duration `json:"-"`
+	// OldestAgeSeconds is the same age in the unit the field name promises.
+	OldestAgeSeconds int64 `json:"oldest_age_seconds"`
 }
 
 // Escalated reports whether this summary has crossed into a security finding.
@@ -130,6 +139,7 @@ func ListUnconfirmedRevocations(ctx context.Context, limit int) ([]UnconfirmedRe
 			r.LastError = *lastError
 		}
 		r.Age = time.Duration(ageSeconds) * time.Second
+		r.AgeSeconds = ageSeconds
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -155,5 +165,6 @@ func CountUnconfirmedRevocations(ctx context.Context) (UnconfirmedRevocationSumm
 		return UnconfirmedRevocationSummary{}, fmt.Errorf("count unconfirmed revocations: %w", err)
 	}
 	s.OldestAge = time.Duration(oldest) * time.Second
+	s.OldestAgeSeconds = oldest
 	return s, nil
 }

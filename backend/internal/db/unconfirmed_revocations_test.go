@@ -1,6 +1,7 @@
 package db
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -115,5 +116,49 @@ func TestTheCountKeepsTheTwoPopulationsApart(t *testing.T) {
 		// One query rather than three: three would be three moments, and a
 		// count of spent rows taken after the oldest age can disagree with it.
 		t.Error("the summary must come from one query, or its parts describe different moments")
+	}
+}
+
+// §23 — the field name and the unit have to agree.
+//
+// Found on the deployment, not by a test: the surface reported an age of
+// 18,000,000,000 for a row eighteen seconds old. `Age` is a `time.Duration`,
+// which marshals as NANOSECONDS, so a JSON field called `age_seconds` was off
+// by a factor of a billion — and it read as a plausible number, which is the
+// kind of wrong nobody notices. No client had read it yet, so nothing was
+// broken and everything was ready to be.
+//
+// The Duration stays, because `Escalated` compares against one and that
+// comparison is right. It just does not go on the wire under a name that
+// promises seconds.
+func TestTheAgeOnTheWireIsInTheUnitItsNameClaims(t *testing.T) {
+	row := UnconfirmedRevocation{Age: 90 * time.Second, AgeSeconds: 90}
+	encoded, err := json.Marshal(row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if got := decoded["age_seconds"]; got != float64(90) {
+		t.Errorf("age_seconds must be seconds, got %v", got)
+	}
+
+	summary := UnconfirmedRevocationSummary{Queued: 1, OldestAge: 2 * time.Hour, OldestAgeSeconds: 7200}
+	encoded, err = json.Marshal(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if got := decoded["oldest_age_seconds"]; got != float64(7200) {
+		t.Errorf("oldest_age_seconds must be seconds, got %v", got)
+	}
+	// And the Go-side comparison still works on the Duration, which is the one
+	// place the unit is not a matter of naming.
+	if !summary.Escalated(time.Hour) {
+		t.Error("a two-hour-old queued row must still escalate against a one-hour threshold")
 	}
 }

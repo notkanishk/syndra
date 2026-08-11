@@ -288,7 +288,12 @@ func CountRecentAddonOperations(ctx context.Context, target, subjectID, operatio
 	const q = `
 		SELECT COUNT(*) FROM addon_operations
 		 WHERE target = $1 AND subject_id = $2 AND operation = $3
-		   AND created_at > NOW() - ($4 || ' seconds')::interval`
+		   -- make_interval, not a parameter concatenated with a unit word and
+		   -- cast to interval. That concatenation
+		   -- makes $4 TEXT and pgx cannot encode a Go integer for it, so this
+		   -- count returned an ERROR rather than a number — and a rate limiter
+		   -- that cannot count is one that is not limiting.
+		   AND created_at > NOW() - make_interval(secs => $4::double precision)`
 	var n int
 	if err := querier(ctx).QueryRow(ctx, q, target, subjectID, operation, int64(window/time.Second)).Scan(&n); err != nil {
 		return 0, fmt.Errorf("count recent addon operations: %w", err)

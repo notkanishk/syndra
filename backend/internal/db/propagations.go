@@ -648,7 +648,15 @@ func PruneTerminalPropagations(ctx context.Context, retentionDays int) (int64, e
 	const q = `DELETE FROM propagation_outbox
 		WHERE status IN ('applied','failed','superseded','abandoned')
 		  AND completed_at IS NOT NULL
-		  AND completed_at < NOW() - ($1 || ' days')::interval`
+		  -- make_interval rather than a parameter concatenated with a unit
+		  -- word and cast to interval. The
+		  -- concatenation makes $1 a TEXT parameter, and pgx has no plan for
+		  -- encoding a Go int as text — so every call failed with "unable to
+		  -- encode 30 into text format", was logged as non-fatal, and the
+		  -- outbox has never been pruned once. The typed form takes the int the
+		  -- caller actually has. (PruneSpentPlans, six hundred lines down, does
+		  -- the string conversion by hand; either works and neither had a test.)
+		  AND completed_at < NOW() - make_interval(days => $1::int)`
 	tag, err := querier(ctx).Exec(ctx, q, retentionDays)
 	if err != nil {
 		return 0, fmt.Errorf("prune terminal propagations: %w", err)
