@@ -1,10 +1,12 @@
 package db
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode"
 )
 
 // 11.6/11.7 — the vault holds no credential, and the guard is paired with the
@@ -178,7 +180,70 @@ func TestTermsAreStoredCanonicalAndTheSchemaSaysSo(t *testing.T) {
 
 	// Which is only true if the restore actually does it.
 	restore := funcBody(t, readDBSource(t, "mappings.go"), "RollbackMappingVersion")
-	if !strings.Contains(restore, "btrim(value)") {
-		t.Error("the rollback restores raw values through SQL no Go touches; without btrim it reinstates padded ones")
+	if !strings.Contains(restore, "syndra_canonical_term(value)") {
+		t.Error("the rollback restores raw values through SQL no Go touches; without canonicalising it reinstates padded ones")
+	}
+}
+
+// §27 — the schema and Go have to mean the same thing by "canonical".
+//
+// 000037 wrote the invariant as `btrim(x)`, which is `btrim(x, ' ')`: ASCII
+// SPACES ONLY. Go's strings.TrimSpace strips every Unicode whitespace rune.
+// Two definitions agreeing on the common case and diverging on the ones that
+// occur — a group name pasted out of a web UI carries U+00A0 routinely, and it
+// is invisible in every surface an operator would check.
+//
+// The divergence bites in the admitting direction, which is the worse one: the
+// CHECK blesses `group=lab_makers\t` as canonical, and it then misses the
+// exact-byte comparison in the resolver's suppression and the holder-list
+// intersection. A carve-out accepted, matching nothing, with a constraint
+// asserting it is fine.
+//
+// The set is COMPUTED from unicode.IsSpace rather than retyped, so a Go
+// toolchain that learns a new space rune fails this rather than silently
+// reintroducing the gap.
+func TestTheSchemaAndGoAgreeOnWhatWhitespaceIs(t *testing.T) {
+	dir := findMigrationsDir(t)
+	raw, err := os.ReadFile(filepath.Join(dir, "000038_one_definition_of_canonical.up.sql"))
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	up := string(raw)
+
+	body := between(t, up, "SELECT btrim(t, E'", "')")
+	if !strings.HasPrefix(body, "SELECT btrim(t, E'") {
+		t.Fatalf("syndra_canonical_term no longer trims with an escape literal; this guard is reading nothing: %q", body)
+	}
+	literal := strings.TrimPrefix(body, "SELECT btrim(t, E'")
+
+	var missing []string
+	found := 0
+	for r := rune(0); r <= unicode.MaxRune; r++ {
+		if !unicode.IsSpace(r) {
+			continue
+		}
+		found++
+		if !strings.Contains(literal, fmt.Sprintf("\\u%04x", r)) {
+			missing = append(missing, fmt.Sprintf("U+%04X", r))
+		}
+	}
+	if found < 20 {
+		t.Fatalf("only %d space runes found in unicode.IsSpace; this guard is not examining what it thinks", found)
+	}
+	if len(missing) > 0 {
+		t.Errorf("the schema's canonical form does not strip %s, which Go's TrimSpace does — "+
+			"so the CHECK would bless a term Go would have trimmed, and it would then match nothing",
+			strings.Join(missing, ", "))
+	}
+
+	// And every consumer goes through the function rather than restating it.
+	for _, want := range []string{
+		"CHECK (field = syndra_canonical_term(field) AND value = syndra_canonical_term(value))",
+		"UPDATE allowances",
+		"UPDATE target_role_mappings",
+	} {
+		if !strings.Contains(up, want) {
+			t.Errorf("the migration is missing %q; one definition means every caller uses it", want)
+		}
 	}
 }

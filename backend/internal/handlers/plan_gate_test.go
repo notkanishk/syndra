@@ -731,6 +731,11 @@ func TestNoHandlerLogsARequestBody(t *testing.T) {
 	// Reading a body into a variable is ordinary; logging one is not. The
 	// identifiers below are the shapes that actually appear when somebody does.
 	forbidden := regexp.MustCompile(`log\.(Printf|Println|Print)\([^)]*\b(r\.Body|body|payload|reqBody|rawBody)\b`)
+	// Counted, because this asserts an ABSENCE over a glob. An empty glob makes
+	// it pass having read nothing, which is indistinguishable from a package
+	// that logs no bodies — and this is the guard standing between a debugging
+	// middleware and a credential in a log file.
+	examined, logging := 0, 0
 	for _, f := range files {
 		if strings.HasSuffix(f, "_test.go") {
 			continue
@@ -739,8 +744,18 @@ func TestNoHandlerLogsARequestBody(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		examined++
+		logging += strings.Count(string(src), "log.Printf(")
 		if m := forbidden.FindString(literal.ReplaceAllString(string(src), `""`)); m != "" {
 			t.Errorf("%s logs a request body (%q) — a submitted credential is a request body", f, m)
 		}
+	}
+	if examined < 20 {
+		t.Fatalf("only %d handler files examined; this guard is reading the wrong directory", examined)
+	}
+	if logging == 0 {
+		t.Fatal("no log.Printf call sites found in the handlers at all — either logging moved behind " +
+			"another helper, in which case the pattern above no longer matches anything, or this guard " +
+			"is not reading the package it thinks it is")
 	}
 }

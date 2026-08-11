@@ -172,6 +172,11 @@ func TestOutboxRenameIsComplete(t *testing.T) {
 func TestNoLiveQueryNamesTheOldOutbox(t *testing.T) {
 	roots := []string{"..", filepath.Join("..", "..", "cmd")}
 	var offenders []string
+	// Counted, because this asserts an ABSENCE across a walk: a root that stops
+	// resolving makes every assertion below vacuously true and the guard reports
+	// success having read nothing. Same failure mode as the deploy check that
+	// passed with a dead route on the target.
+	examined := 0
 	for _, root := range roots {
 		err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() || !strings.HasSuffix(path, ".go") {
@@ -185,6 +190,7 @@ func TestNoLiveQueryNamesTheOldOutbox(t *testing.T) {
 			if err != nil {
 				return err
 			}
+			examined++
 			if strings.Contains(string(src), "pending_zitadel_propagations") {
 				offenders = append(offenders, path)
 			}
@@ -193,6 +199,10 @@ func TestNoLiveQueryNamesTheOldOutbox(t *testing.T) {
 		if err != nil {
 			t.Fatalf("walk %s: %v", root, err)
 		}
+	}
+	if examined < 50 {
+		t.Fatalf("only %d source files walked; the roots %v no longer resolve and this guard is watching nothing",
+			examined, roots)
 	}
 	if len(offenders) > 0 {
 		t.Errorf("these files still name the pre-rename outbox table: %v", offenders)

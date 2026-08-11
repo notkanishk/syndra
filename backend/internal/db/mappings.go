@@ -368,7 +368,8 @@ func RollbackMappingVersion(ctx context.Context, target string, version int, act
 	if _, err := tx.Exec(ctx, `DELETE FROM target_role_mappings WHERE target = $1`, target); err != nil {
 		return fmt.Errorf("clear working mappings: %w", err)
 	}
-	// btrim, because this INSERT … SELECT copies rows and passes through no Go:
+	// syndra_canonical_term, because this INSERT … SELECT copies rows and passes
+	// through no Go:
 	// the three call sites that normalise a term are all above this layer, and a
 	// version published before they existed carries padded values that would be
 	// restored verbatim. A padded value is not merely untidy — it is compared by
@@ -377,10 +378,17 @@ func RollbackMappingVersion(ctx context.Context, target string, version int, act
 	//
 	// The historical record keeps what was published. Only the working table is
 	// canonicalised, and `target_role_mappings_term_is_canonical` is what fails
-	// loudly if this btrim is ever dropped.
+	// loudly if this is ever dropped.
+	//
+	// The FUNCTION rather than a bare btrim, and that is the point of it: plain
+	// `btrim(x)` is ASCII spaces only, while Go's TrimSpace strips every Unicode
+	// whitespace rune. Two definitions that agree on the common case and diverge
+	// on a value pasted out of a web UI with a non-breaking space in it — which
+	// would restore, satisfy the old constraint, and match nothing.
 	const restore = `
 		INSERT INTO target_role_mappings (target, project_id, role_key, field, value, created_by, updated_by)
-		SELECT $1, project_id, btrim(role_key), btrim(field), btrim(value), $2, $2
+		SELECT $1, project_id, syndra_canonical_term(role_key),
+		       syndra_canonical_term(field), syndra_canonical_term(value), $2, $2
 		  FROM target_mapping_version_entries WHERE version_id = $3`
 	if _, err := tx.Exec(ctx, restore, target, actor, versionID); err != nil {
 		return fmt.Errorf("restore mapping version: %w", err)
