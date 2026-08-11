@@ -53,6 +53,13 @@ func TestEveryStatementRunsOnTheAmbientTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read package dir: %v", err)
 	}
+	// Counted, because a source-reading guard's failure mode is passing on
+	// nothing. This one walks a directory and greps: if the walk found no files,
+	// or the package stopped using the accessor entirely, every assertion below
+	// is vacuously satisfied and the guard reports success having examined
+	// nothing. That is the same shape as the deploy check that passed with a
+	// dead route sitting on the target.
+	examined, uses := 0, 0
 	for _, entry := range entries {
 		name := entry.Name()
 		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
@@ -62,6 +69,8 @@ func TestEveryStatementRunsOnTheAmbientTransaction(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)
 		}
+		examined++
+		uses += strings.Count(string(raw), "querier(ctx)")
 		for _, line := range strings.Split(string(raw), "\n") {
 			for _, use := range direct.FindAllString(line, -1) {
 				if permitted(allowed[name], use) {
@@ -71,6 +80,14 @@ func TestEveryStatementRunsOnTheAmbientTransaction(t *testing.T) {
 					name, use, strings.TrimSpace(line))
 			}
 		}
+	}
+	if examined < 20 {
+		t.Fatalf("only %d source files examined; this guard is reading the wrong directory and would pass on anything", examined)
+	}
+	if uses < 100 {
+		t.Fatalf("only %d querier(ctx) call sites found, against 126 when this was written — "+
+			"either the accessor was renamed or the walk missed the package, and either way "+
+			"this guard is no longer watching what it claims to", uses)
 	}
 }
 
@@ -100,6 +117,10 @@ func TestIntervalParametersAreNotConcatenatedIntoText(t *testing.T) {
 		t.Fatalf("read package dir: %v", err)
 	}
 	concat := regexp.MustCompile(`\(\$\d+\s*\|\|\s*'[^']*'\)::interval`)
+	// Same reason as above: the positive form has to be present, or a rename of
+	// the package's interval arithmetic leaves this greping for a pattern
+	// nothing could match and reporting success.
+	intervals := 0
 	for _, entry := range entries {
 		name := entry.Name()
 		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
@@ -109,10 +130,15 @@ func TestIntervalParametersAreNotConcatenatedIntoText(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)
 		}
+		intervals += strings.Count(string(raw), "make_interval")
 		if match := concat.FindString(string(raw)); match != "" {
 			t.Errorf("%s builds an interval by concatenating a bind parameter (%s); "+
 				"that makes it TEXT and a numeric argument cannot be encoded for it — use make_interval",
 				name, match)
 		}
+	}
+	if intervals < 2 {
+		t.Fatalf("found %d make_interval call sites, expected the two this fixed; "+
+			"the package's interval arithmetic moved and this guard is watching nothing", intervals)
 	}
 }

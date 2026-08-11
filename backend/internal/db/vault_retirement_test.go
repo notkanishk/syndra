@@ -143,3 +143,42 @@ func TestEnrolmentIsRecordedPerTarget(t *testing.T) {
 		t.Error("the read must prefer this target's row over the pre-cutover one")
 	}
 }
+
+// §26 — the canonical-term invariant is enforced by the schema, not by three
+// call sites remembering.
+//
+// The Go fix is forward-only: rows written before it keep their padding, and a
+// rollback restores from the version entries through an INSERT … SELECT that
+// passes through no Go at all. A CHECK closes both — the rollback fails loudly
+// instead of silently reinstating a mapping no carve-out can match.
+func TestTermsAreStoredCanonicalAndTheSchemaSaysSo(t *testing.T) {
+	dir := findMigrationsDir(t)
+	raw, err := os.ReadFile(filepath.Join(dir, "000037_terms_are_stored_canonical.up.sql"))
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	up := string(raw)
+
+	// The backfill has to precede the constraints, or they refuse the table they
+	// are added to.
+	backfill := strings.Index(up, "UPDATE allowances")
+	constraint := strings.Index(up, "allowances_term_is_canonical")
+	if backfill < 0 || constraint < 0 || backfill > constraint {
+		t.Error("the backfill must run before the CHECK, or the migration fails on its own data")
+	}
+	for _, table := range []string{"allowances", "target_role_mappings"} {
+		if !strings.Contains(up, table+"_term_is_canonical") {
+			t.Errorf("%s has no canonical-term CHECK, so a writer that skips NormaliseTerm still succeeds", table)
+		}
+	}
+	// And NOT on the history, which is allowed to contain what was published.
+	if strings.Contains(up, "target_mapping_version_entries_term_is_canonical") {
+		t.Error("a published version is a historical record; canonicalising happens on restore, not in the archive")
+	}
+
+	// Which is only true if the restore actually does it.
+	restore := funcBody(t, readDBSource(t, "mappings.go"), "RollbackMappingVersion")
+	if !strings.Contains(restore, "btrim(value)") {
+		t.Error("the rollback restores raw values through SQL no Go touches; without btrim it reinstates padded ones")
+	}
+}

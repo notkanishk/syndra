@@ -368,9 +368,19 @@ func RollbackMappingVersion(ctx context.Context, target string, version int, act
 	if _, err := tx.Exec(ctx, `DELETE FROM target_role_mappings WHERE target = $1`, target); err != nil {
 		return fmt.Errorf("clear working mappings: %w", err)
 	}
+	// btrim, because this INSERT … SELECT copies rows and passes through no Go:
+	// the three call sites that normalise a term are all above this layer, and a
+	// version published before they existed carries padded values that would be
+	// restored verbatim. A padded value is not merely untidy — it is compared by
+	// exact bytes in the resolver's suppression and the holder list's
+	// intersection, so restoring one reinstates a mapping no carve-out can match.
+	//
+	// The historical record keeps what was published. Only the working table is
+	// canonicalised, and `target_role_mappings_term_is_canonical` is what fails
+	// loudly if this btrim is ever dropped.
 	const restore = `
 		INSERT INTO target_role_mappings (target, project_id, role_key, field, value, created_by, updated_by)
-		SELECT $1, project_id, role_key, field, value, $2, $2
+		SELECT $1, project_id, btrim(role_key), btrim(field), btrim(value), $2, $2
 		  FROM target_mapping_version_entries WHERE version_id = $3`
 	if _, err := tx.Exec(ctx, restore, target, actor, versionID); err != nil {
 		return fmt.Errorf("restore mapping version: %w", err)

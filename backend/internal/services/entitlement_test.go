@@ -442,9 +442,14 @@ func TestALifecycleTermIsCheckedAfterTrimming(t *testing.T) {
 // the same reason the wire contract is a shared artifact: a copy agrees with
 // itself. The failure is deliberately a prompt to decide, not a bug report.
 func TestTheLifecycleExceptionRestsOnEverySchemaFieldBeingSMBMediated(t *testing.T) {
+	// Fatal, not Skip. A skip is how a source-reading guard stops watching
+	// without anybody noticing: the add-on moves, the path stops resolving, and
+	// the suite stays green while the invariant is unguarded. The add-on lives
+	// in this repository, so a path that does not resolve is a broken guard
+	// rather than a partial checkout.
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "addons", "truenas", "capabilities.go"))
 	if err != nil {
-		t.Skipf("the add-on is not checked out beside the backend: %v", err)
+		t.Fatalf("cannot read the add-on's capability schema, so this guard is watching nothing: %v", err)
 	}
 	body := string(raw)
 	start := strings.Index(body, "func entitlementSchema()")
