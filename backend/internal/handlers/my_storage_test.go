@@ -245,3 +245,61 @@ func TestAWeakCredentialIsRefusedBeforeItReachesTheTarget(t *testing.T) {
 		t.Error("a rejected password must not have already reached the target")
 	}
 }
+
+// Connection instructions appear only where there is an account to connect
+// with (10.8; design §30).
+//
+// The other two states would be describing how to reach something that is not
+// there — the same rule the credential form follows, for the same reason. And
+// the host comes from the add-on's registration rather than a constant here, so
+// moving the NAS is a deployment change rather than a code change.
+func TestConnectionInstructionsFollowTheAccount(t *testing.T) {
+	connection := addonsConnection
+	t.Cleanup(func() { addonsConnection = connection })
+	addonsConnection = func(string) (*addons.Connection, error) {
+		return &addons.Connection{Protocol: "smb", Host: "nas.makerspace.internal"}, nil
+	}
+
+	h := &storageHarness{entitled: true, bound: true}
+	stubMyStorage(t, h)
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil)
+	r = r.WithContext(withPrincipal(r.Context(), &auth.Principal{Subject: "u1"}))
+
+	view, err := describeMyTarget(r, "truenas", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Connection == nil || view.Connection.Host != "nas.makerspace.internal" {
+		t.Fatalf("an account with a registered host must carry it: %+v", view.Connection)
+	}
+
+	// No account yet: nothing to connect to, so nothing to describe.
+	h.bound = false
+	pending, err := describeMyTarget(r, "truenas", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pending.Connection != nil {
+		t.Error("a member with no account must not be given instructions for one")
+	}
+}
+
+// A deployment that has not named a share host has not named one. The page
+// omits the instructions rather than printing a host that does not answer: a
+// path that fails teaches a member to distrust the whole page, starting with
+// the parts that were right.
+func TestNoHostMeansNoInstructionsRatherThanAGuess(t *testing.T) {
+	connection := addonsConnection
+	t.Cleanup(func() { addonsConnection = connection })
+	addonsConnection = func(string) (*addons.Connection, error) { return nil, nil }
+
+	h := &storageHarness{entitled: true, bound: true}
+	stubMyStorage(t, h)
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil)
+	r = r.WithContext(withPrincipal(r.Context(), &auth.Principal{Subject: "u1"}))
+
+	view, _ := describeMyTarget(r, "truenas", "u1")
+	if view.Connection != nil {
+		t.Errorf("nothing was configured, so nothing may be rendered: %+v", view.Connection)
+	}
+}

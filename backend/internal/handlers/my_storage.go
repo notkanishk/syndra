@@ -68,6 +68,13 @@ type myTargetView struct {
 	// is true, and it is what stops a member refreshing four times a day
 	// against a screen that always says the same thing.
 	RecordedAt *time.Time `json:"recorded_at,omitempty"`
+	// Connection is how they reach it, when the add-on's deployment has said.
+	//
+	// From the add-on's registration rather than from a constant here, because
+	// moving the NAS must not mean editing a component — and absent rather than
+	// guessed, because a share path that does not work teaches a member to
+	// distrust the whole page, starting with the parts that were right.
+	Connection *addons.Connection `json:"connection,omitempty"`
 }
 
 type myTargetAccount struct {
@@ -185,6 +192,15 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 		return view, nil
 	}
 	view.Reachable = addonsHealth(r.Context(), target).Reachable
+
+	// Only where there is an account to connect WITH. In the other two states
+	// the instructions would describe reaching something that is not there —
+	// the same rule the credential form follows, for the same reason.
+	if view.Account != nil {
+		if connection, err := addonsConnection(target); err == nil {
+			view.Connection = connection
+		}
+	}
 	return view, nil
 }
 

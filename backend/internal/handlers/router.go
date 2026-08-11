@@ -263,6 +263,10 @@ func NewRouter() http.Handler {
 	// moves out of it, because that decision hands somebody else's home
 	// directory to a member if it is wrong.
 	mux.HandleFunc("GET /api/v1/targets/{target}/inventory", withCORS(withOperatorAuth(handleTargetInventory)))
+	// Accounts Syndra created whose reason for existing has gone. A read; the
+	// removal runs through the ordinary plan-then-apply path.
+	mux.HandleFunc("GET /api/v1/targets/{target}/accounts/dormant", withCORS(withOperatorAuth(handleDormantAccounts)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/accounts/dormant/sweep", withCORS(withOperatorAuth(handleDormantSweep)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/inventory/{username}/adopt", withCORS(withOperatorAuth(handleAdoptAccount)))
 
 	// Access withdrawn that has not gone away. Beside drift triage, never inside

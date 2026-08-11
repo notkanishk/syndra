@@ -45,7 +45,13 @@ type config struct {
 	// accepting either would mean the weaker one is always available.
 	signingKey []byte
 
-	nasURL     string
+	nasURL string
+	// shareHost is the name a MEMBER types into a file manager, which is
+	// frequently not the middleware endpoint above: the API may be reached on an
+	// internal address while SMB is published on another. Optional — unset, the
+	// manifest carries no connection block and the member's page omits the
+	// instructions rather than printing a host that does not answer.
+	shareHost  string
 	nasAPIKey  string
 	nasVerify  bool
 	keyExpiry  time.Time
@@ -64,6 +70,7 @@ func loadConfig() (config, error) {
 		keyFile:    os.Getenv("TLS_KEY_FILE"),
 		caFile:     os.Getenv("TLS_CLIENT_CA_FILE"),
 		nasURL:     os.Getenv("TRUENAS_URL"),
+		shareHost:  strings.TrimSpace(os.Getenv("TRUENAS_SHARE_HOST")),
 		statePath:  envOr("STATE_PATH", "/var/lib/syndra-truenas/state.db"),
 		logDir:     envOr("MUTATION_LOG_DIR", "/var/lib/syndra-truenas"),
 		lifecycle:  envOr("LIFECYCLE_STATE", LifecycleActive),
@@ -183,6 +190,9 @@ func run() error {
 		life:      life,
 		keyExpiry: cfg.keyExpiry,
 		product:   "truenas_scale",
+		// Nil unless the deployment named a share host. The manifest omits the
+		// block, and the member's page omits the instructions with it.
+		connection: shareConnection(cfg.shareHost),
 		// A fresh session per purge, under the injected key, closed immediately
 		// after. Never the shared one: an elevated credential must not outlive
 		// the single call it was injected for.
@@ -382,4 +392,18 @@ func envBool(name string, fallback bool) bool {
 		return fallback
 	}
 	return b
+}
+
+// shareConnection is the member-facing address, or nothing.
+//
+// Never derived from TRUENAS_URL. The middleware endpoint and the SMB host are
+// frequently different names for the same machine and occasionally different
+// machines, and a guess here reaches a member as a path that does not work —
+// which teaches them to distrust the whole page, starting with the parts that
+// were right.
+func shareConnection(host string) *Connection {
+	if host == "" {
+		return nil
+	}
+	return &Connection{Protocol: "smb", Host: host}
 }

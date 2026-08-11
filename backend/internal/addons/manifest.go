@@ -48,6 +48,20 @@ type Manifest struct {
 	ProductVersion    string             `json:"product_version"`
 	EntitlementSchema []EntitlementField `json:"entitlement_schema"`
 	Operations        []Operation        `json:"operations"`
+	// Connection is how a MEMBER reaches this target, when the add-on's
+	// deployment has said. Absent otherwise, and the member's page then omits
+	// the instructions rather than inventing a host — a path that does not work
+	// teaches somebody to distrust the whole page, and the next thing they
+	// distrust is the part that was right.
+	Connection *Connection `json:"connection,omitempty"`
+}
+
+// Connection is the member-facing address of a target, and nothing else. Never
+// the add-on's own base URL: that is an internal endpoint the backend calls,
+// and it is not the name a member types into a file manager.
+type Connection struct {
+	Protocol string `json:"protocol"`
+	Host     string `json:"host"`
 }
 
 // EntitlementField names one field of the target's desired state. Syndra fills

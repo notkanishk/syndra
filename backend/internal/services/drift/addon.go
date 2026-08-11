@@ -44,6 +44,12 @@ type AddonReconcileResult struct {
 	Bound int `json:"bound"`
 	// Unmanaged is the inventory — reported, not triaged.
 	Unmanaged []UnmanagedAccount `json:"unmanaged"`
+	// Accounts is the other half of "whose accounts are on this target", and it
+	// was missing: the inventory answered only which accounts Syndra does NOT
+	// manage, so the ones it does had no surface at all — and they are the ones
+	// an operator acts on. Read on the INVENTORY path only, because a reconcile
+	// pass is a background sweep whose result nobody reads as a list.
+	Accounts []db.TargetBinding `json:"accounts,omitempty"`
 	// Queued counts the convergences this pass enqueued. Never "fixed": they
 	// wait for the drain like every other add-on row.
 	Queued int `json:"queued"`
@@ -87,6 +93,7 @@ func Inventory(ctx context.Context, target string) (AddonReconcileResult, error)
 		return res, fmt.Errorf("read bindings for %s: %w", target, err)
 	}
 	res.Bound = len(bindings)
+	res.Accounts = bindings
 	res.Unmanaged = unmanaged(read.Accounts, bindings)
 	res.ReadAt, res.Current, res.Truncated = read.TakenAt, read.Current, read.Truncated
 	if !read.Current {

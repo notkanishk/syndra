@@ -115,9 +115,26 @@ export interface AdoptionResult {
   warning?: string;
 }
 
+/** One account Syndra DOES manage, and who it belongs to. */
+export interface BoundAccount {
+  target: string;
+  subject_id: string;
+  username: string;
+  account_uid?: number;
+  bound_by: string;
+  bound_at: string;
+  last_seen_at: string;
+}
+
 export interface TargetInventory {
   target: string;
   bound: number;
+  /**
+   * The accounts Syndra manages. The other half of "whose accounts are on this
+   * target" — the inventory answered only which ones it does NOT manage, and
+   * those are not the ones an operator acts on.
+   */
+  accounts?: BoundAccount[];
   unmanaged: UnmanagedAccount[];
   read_at?: string;
   current: boolean;

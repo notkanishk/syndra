@@ -136,3 +136,43 @@ var (
 
 // The unconfirmed-revocation count behind the governance badge (2.51, 9.16).
 var svcCountUnconfirmedRevocations = db.CountUnconfirmedRevocations
+
+// Holds past their review date. Counted for the badge beside expiring access,
+// and deliberately not merged with it — see Indicators.HoldsDue.
+var svcAllowancesDueForReview = db.AllowancesDueForReview
+
+// The dormant listing's four reads (change `addon-platform` 9.11; design §29).
+//
+// Separate seams rather than one, because each answers a different question and
+// a test of this surface has to be able to make one of them lie: an account on
+// the target, a binding for it, what the subject resolves to, and whether the
+// subject is still a member at all. The last one is what separates housekeeping
+// from a lockout, and it is the only field the surface refuses to act on.
+var (
+	dormantSubjects = addons.Subjects
+	dormantBindings = db.ListTargetBindings
+	dormantResolve  = ResolveEntitlements
+
+	// dormantSubjectStatus is the display name and whether they are still a
+	// member. A miss is NOT an error: somebody who has left the makerspace
+	// resolves to nothing, and that is the answer rather than a failure.
+	dormantSubjectStatus = func(ctx context.Context, subjectID string) (name string, stillMember bool) {
+		profile, found, err := directory.Default.FindUser(ctx, subjectID)
+		if err != nil || !found {
+			return "", false
+		}
+		return profile.Name, true
+	}
+
+	// dormantSubjectRoles is what they hold anywhere, to tell "no roles at all"
+	// from "roles that no longer reach here".
+	dormantSubjectRoles = func(ctx context.Context, subjectID string) ([]models.DirectGrant, error) {
+		return db.GetDirectGrantsForUser(ctx, subjectID, false)
+	}
+
+	// dormantTargetMapped reports whether anything maps to this target at all.
+	dormantTargetMapped = func(ctx context.Context, target string) (bool, error) {
+		mappings, err := db.ListRoleMappings(ctx, target)
+		return len(mappings) > 0, err
+	}
+)

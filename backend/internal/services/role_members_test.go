@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"syndra/internal/db"
+
 	"syndra/internal/models"
 )
 
@@ -192,5 +194,35 @@ func TestGovernanceIndicators_SkipsReachabilityProbeWhenOutboxEmpty(t *testing.T
 	}
 	if !got.ZitadelReachable {
 		t.Error("with nothing queued the flag should stay true, not report a probe that never ran")
+	}
+}
+
+// Holds due are counted apart from expiring grants, and the reason is that
+// inaction means the opposite thing in each: an expiring grant lapses if nobody
+// acts, and a hold stays in force. A badge that summed them would be counting
+// "access about to end" together with "access still being withheld", and an
+// operator reading one number could not tell which they were looking at.
+func TestHoldsDueAreCountedApartFromExpiringGrants(t *testing.T) {
+	resetGovernanceDeps(t)
+
+	svcGetAccessRequests = func(context.Context, string) ([]models.AccessRequest, error) { return nil, nil }
+	svcGetExpiringDirectGrants = func(context.Context, time.Duration) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{ID: "g1"}, {ID: "g2"}}, nil
+	}
+	svcCountPendingPropagations = func(context.Context) (int, error) { return 0, nil }
+	svcCountPendingDrift = func(context.Context) (int, error) { return 0, nil }
+	svcAllowancesDueForReview = func(context.Context) ([]db.Allowance, error) {
+		return []db.Allowance{{ID: "a1"}, {ID: "a2"}, {ID: "a3"}}, nil
+	}
+
+	got, err := GovernanceIndicators(context.Background())
+	if err != nil {
+		t.Fatalf("GovernanceIndicators: %v", err)
+	}
+	if got.HoldsDue != 3 {
+		t.Errorf("holds due = %d, want 3", got.HoldsDue)
+	}
+	if got.ExpiringGrants != 2 {
+		t.Errorf("expiring grants = %d, want 2 — the two counts must not merge", got.ExpiringGrants)
 	}
 }

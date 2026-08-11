@@ -7,6 +7,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/services"
 	"syndra/internal/services/addonop"
 )
 
@@ -220,4 +221,131 @@ func adoptionRefusal(err error) string {
 		return "The target refused the adoption."
 	}
 	return "The target refused the adoption: " + err.Error()
+}
+
+// handleDormantAccounts lists the accounts on a target whose reason for
+// existing has gone (9.11/9.12).
+//
+// A read, and only a read. The removal that follows runs through the ordinary
+// plan-then-apply path, so nothing here writes and nothing here queues.
+func handleDormantAccounts(w http.ResponseWriter, r *http.Request) {
+	report, err := svcDormantAccounts(r.Context(), r.PathValue("target"))
+	if err != nil {
+		if errors.Is(err, services.ErrTargetUnplannable) {
+			// 503, not an empty list. Every row here is a candidate for
+			// removal, and an empty list is a statement that there are none —
+			// which a read that did not happen cannot support.
+			jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREADABLE",
+				"That target could not be read, so nothing can be said about which of its accounts are dormant.")
+			return
+		}
+		jsonErrorResponse(w, http.StatusInternalServerError, "DORMANT_ERROR", err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, report)
+}
+
+type dormantSweepRequest struct {
+	// Accounts is an explicit list, never "everything dormant". The list an
+	// operator saw is the list that is acted on, and a sweep that re-derived it
+	// server-side would remove whatever had become dormant between the read and
+	// the click.
+	Accounts []string `json:"accounts"`
+	// ElevatedKey is a delete-capable credential the operator supplies now. The
+	// add-on holds none — its long-lived session can read and write accounts and
+	// cannot remove one — so this is the only moment such a credential exists
+	// anywhere in the deployment, and it exists for the length of one request.
+	ElevatedKey string `json:"elevated_key"`
+	Confirmed   bool   `json:"confirmed"`
+}
+
+// handleDormantSweep removes dormant accounts, one dispatch each.
+//
+// The only bulk action in the product, and the exception is principled: no
+// active role grants any of these accounts, so removing them takes access from
+// nobody. That is why it may be a sweep at all, and it is not a licence to add
+// one elsewhere — every other revoke removes real access from a real person.
+//
+// The guard that makes it safe is not the ceremony, it is the RE-CHECK: every
+// account named is resolved again here, and one that has become entitled since
+// the operator read the list is refused rather than removed. A list is a moment,
+// and this operation cannot be undone.
+func handleDormantSweep(w http.ResponseWriter, r *http.Request) {
+	target := r.PathValue("target")
+	var req dormantSweepRequest
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
+	}
+	switch {
+	case len(req.Accounts) == 0:
+		jsonValidationErrorResponse(w, "Nothing named to remove", map[string]string{"accounts": "required"})
+		return
+	case strings.TrimSpace(req.ElevatedKey) == "":
+		jsonValidationErrorResponse(w, "A delete-capable credential is required",
+			map[string]string{"elevated_key": "the add-on holds none of its own"})
+		return
+	case !req.Confirmed:
+		jsonErrorResponse(w, http.StatusUnprocessableEntity, "CONFIRMATION_REQUIRED",
+			"Their home directories and everything in them go with the accounts. There is no undo.")
+		return
+	}
+
+	// Re-read, and re-resolve. The list the operator ticked was true when they
+	// read it; this is the only thing that makes it true when it runs.
+	report, err := svcDormantAccounts(r.Context(), target)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREADABLE",
+			"That target could not be read, so nothing was removed.")
+		return
+	}
+	removable := map[string]string{} // account -> subject
+	for _, account := range report.Accounts {
+		// Still-a-member rows are excluded HERE as well as in the surface.
+		// Removing one locks somebody out rather than tidying up, and a
+		// client-side filter is a suggestion.
+		if !account.SubjectStillMember {
+			removable[account.Account] = account.SubjectID
+		}
+	}
+
+	actor := resolveActor(r, "")
+	outcomes := make([]map[string]any, 0, len(req.Accounts))
+	removed := 0
+	for _, name := range req.Accounts {
+		subject, ok := removable[name]
+		if !ok {
+			outcomes = append(outcomes, map[string]any{
+				"account": name, "outcome": "refused",
+				"detail": "No longer dormant, or no longer removable here. Nothing was done to it.",
+			})
+			continue
+		}
+		res, err := svcDispatchOperation(r.Context(), addonop.Request{
+			Target: target, Operation: "account.purge",
+			ActorID: actor, SubjectID: subject, Confirmed: true,
+			Params: map[string]any{"elevated_key": req.ElevatedKey},
+		})
+		switch {
+		case err != nil:
+			outcomes = append(outcomes, map[string]any{
+				"account": name, "outcome": "refused", "detail": err.Error(),
+			})
+		case res.Outcome == addons.OutcomeSucceeded:
+			removed++
+			outcomes = append(outcomes, map[string]any{"account": name, "outcome": "removed"})
+		default:
+			// Unreached and indeterminate both mean nobody can say. Never
+			// retried automatically: a purge that may have happened is the one
+			// operation where trying again is not free.
+			outcomes = append(outcomes, map[string]any{
+				"account": name, "outcome": string(res.Outcome),
+				"detail": "The target did not confirm this one. Check it before trying again.",
+			})
+		}
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"target": target, "removed": removed, "outcomes": outcomes,
+	})
 }

@@ -21,7 +21,8 @@ export type IndicatorKey =
   | "expiring_grants"
   | "pending_propagation"
   | "drift"
-  | "unconfirmed_revocations";
+  | "unconfirmed_revocations"
+  | "holds_due";
 
 /**
  * Badge tone follows the semantic palette and nothing else: Requests and
@@ -105,6 +106,11 @@ export const ADVANCED_NAV: NavEntry[] = [
       indicator: "expiring_grants",
       tone: "warn",
     }),
+    // Beside Expiring access, never inside it. Inaction means the opposite
+    // thing in each — an expiring grant lapses if ignored, a hold stays in
+    // force — and one list would sit "do nothing and access ends" next to "do
+    // nothing and access stays blocked".
+    leaf("Holds due", "/review/holds", { indicator: "holds_due", tone: "warn" }),
     leaf("Audit", "/audit"),
   ]),
   group("System", [

@@ -176,6 +176,7 @@ function TargetPanel({ view }: { view: MyTargetView }) {
 
         {held.length > 0 && <Withheld items={held} />}
         <CredentialForm view={view} />
+        <ConnectionInstructions view={view} />
       </div>
     </Card>
   );
@@ -271,5 +272,72 @@ function CredentialForm({ view }: { view: MyTargetView }) {
         </p>
       )}
     </form>
+  );
+}
+
+/**
+ * How to actually connect (10.8; design §30).
+ *
+ * The only screen in the product where somebody retypes a string into another
+ * application, so every one of them is copyable rather than selectable prose.
+ *
+ * Three rules it must not break, all of them the same rule: only describe what
+ * is real. The host comes from the add-on's registration, so moving the NAS is
+ * a deployment change; the resources come from what their entitlements actually
+ * resolve to, never from a template; and a withheld resource is named as
+ * excluded rather than silently dropped, because a member who knows their
+ * folder is missing on purpose does not spend twenty minutes hunting a typo.
+ */
+function ConnectionInstructions({ view }: { view: MyTargetView }) {
+  if (!view.connection || !view.account) return null;
+
+  const shares = Object.values(view.resources ?? {}).flat();
+  if (shares.length === 0) return null;
+
+  const host = view.connection.host;
+  const held = view.suspended ?? [];
+
+  return (
+    <div className="grid gap-3 border-t border-line pt-4">
+      <p className="text-[13px] text-label">Connecting</p>
+
+      {shares.map((share) => (
+        <div key={share} className="grid gap-2">
+          <p className="text-[13.5px] text-muted">{share}</p>
+          {/* Two rows, not three. macOS and Linux take the same string, and
+              rendering it twice under two headings asks a member to compare
+              two identical lines to find out they are identical. */}
+          <div className="grid gap-1.5">
+            <Platform
+              label="macOS (Finder › Go › Connect to Server) and Linux (Files › Other Locations)"
+              value={`smb://${host}/${share}`}
+            />
+            <Platform label="Windows — File Explorer address bar" value={`\\\\${host}\\${share}`} />
+          </div>
+        </div>
+      ))}
+
+      <p className="text-[13px] text-faint">
+        Sign in as <span className="font-mono text-muted">{view.account.username}</span> with
+        the password you set above.
+      </p>
+
+      {held.length > 0 && (
+        // Named as excluded, never silently dropped.
+        <p className="text-[13px] text-warn-text">
+          {held.map((item) => item.value).join(", ")}{" "}
+          {held.length === 1 ? "is" : "are"} not in this list on purpose — see the hold above.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Platform({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1">
+      <p className="text-[12.5px] text-faint">{label}</p>
+      <CopyableValue value={value} label={label} />
+    </div>
   );
 }

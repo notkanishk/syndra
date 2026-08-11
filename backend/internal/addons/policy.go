@@ -89,6 +89,19 @@ var operationPolicy = map[string]OperationPolicy{
 	"account.purge": {
 		Scope:   ScopeAdmin,
 		Confirm: true,
+		Params: []ParamSpec{
+			// A delete-capable credential the OPERATOR supplies at the moment
+			// of the call. The add-on deliberately holds none: its long-lived
+			// session can read and write accounts and cannot remove one, so a
+			// compromise of the add-on cannot destroy anybody's files.
+			//
+			// Declared here because it was not, and the omission made this
+			// operation uncallable end to end: the add-on refuses a purge with
+			// no `elevated_key`, and this policy refused to send one as an
+			// unknown parameter. The same class of disagreement as §17, on the
+			// one operation nobody had exercised.
+			{Name: "elevated_key", Type: "string", Required: true, Secret: true},
+		},
 	},
 	"activity.get": {
 		Scope:   ScopeAdmin,

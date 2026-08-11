@@ -43,6 +43,13 @@ export interface MyTargetView {
    * is a guess about somebody's week; "recorded two days ago" is true.
    */
   recorded_at?: string;
+  /**
+   * How to reach it, from the add-on's own registration.
+   *
+   * Absent when the deployment has not named a share host, and the page then
+   * omits the instructions rather than printing one that does not answer.
+   */
+  connection?: { protocol: string; host: string };
 }
 
 export function useMyStorage() {

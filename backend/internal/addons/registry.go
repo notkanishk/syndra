@@ -465,6 +465,27 @@ func EntitlementSchema(target string) ([]EntitlementField, error) {
 	return m.EntitlementSchema, nil
 }
 
+// ConnectionFor is how a member reaches a target, or nil.
+//
+// Narrower than handing out the manifest for the same reason EntitlementSchema
+// is: the member's page asks one question, and a caller holding the whole
+// registration could answer a different one by accident. Nil is a legitimate
+// answer — a deployment that has not named a share host has not named one — so
+// this reports no error for it, only for a target that is not registered.
+func ConnectionFor(target string) (*Connection, error) {
+	a, err := Get(target)
+	if err != nil {
+		return nil, err
+	}
+	m, err := a.Manifest()
+	if err != nil {
+		// No manifest yet is no connection yet, and it is not an error on a
+		// page that renders fine without one.
+		return nil, nil
+	}
+	return m.Connection, nil
+}
+
 // Operations returns the effective operation set for rendering, including the
 // unavailable ones. A surface shows those disabled with their reason; omitting
 // them would leave an operator wondering whether the feature exists.

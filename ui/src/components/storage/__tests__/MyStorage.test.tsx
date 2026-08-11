@@ -142,3 +142,62 @@ describe("the re-enrolment cutover", () => {
     expect(screen.queryByText(/no longer works/i)).toBeNull();
   });
 });
+
+/**
+ * §30 — the only screen where a member retypes a string into another
+ * application. Every rule here is the same rule: only describe what is real.
+ */
+describe("connection instructions", () => {
+  it("are absent until there is an account to connect with", () => {
+    state.targets = [
+      view({
+        account: undefined,
+        connection: { protocol: "smb", host: "nas.makerspace.internal" },
+      }),
+    ];
+    renderStorage();
+
+    expect(screen.queryByText(/smb:\/\//)).toBeNull();
+  });
+
+  // A deployment that has not named a share host has not named one. A guessed
+  // path that fails teaches a member to distrust the whole page — starting with
+  // the parts that were right.
+  it("are absent when no host is registered, rather than guessed", () => {
+    state.targets = [view({ connection: undefined })];
+    renderStorage();
+
+    expect(screen.queryByText(/smb:\/\//)).toBeNull();
+  });
+
+  it("name every platform for what the member's entitlements actually reach", () => {
+    state.targets = [
+      view({
+        resources: { share: ["members", "lab"] },
+        connection: { protocol: "smb", host: "nas.makerspace.internal" },
+      }),
+    ];
+    renderStorage();
+
+    expect(screen.getByText("smb://nas.makerspace.internal/members")).toBeInTheDocument();
+    expect(screen.getByText("smb://nas.makerspace.internal/lab")).toBeInTheDocument();
+    expect(screen.getByText("\\\\nas.makerspace.internal\\members")).toBeInTheDocument();
+  });
+
+  // A member who knows their folder is missing on purpose does not spend twenty
+  // minutes hunting a typo.
+  it("name a withheld resource as excluded rather than dropping it silently", () => {
+    state.targets = [
+      view({
+        resources: { share: ["members"] },
+        suspended: [
+          { field: "share", value: "lab", reason: "safety review", actor_id: "op_7" },
+        ],
+        connection: { protocol: "smb", host: "nas.makerspace.internal" },
+      }),
+    ];
+    renderStorage();
+
+    expect(screen.getByText(/not in this list on purpose/i)).toBeInTheDocument();
+  });
+});

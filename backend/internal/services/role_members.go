@@ -174,6 +174,12 @@ type Indicators struct {
 	// badge changes on this rather than on the count, because a count cannot
 	// carry the difference and an operator reading "3" cannot tell.
 	RevocationsEscalated bool `json:"revocations_escalated"`
+	// HoldsDue is holds whose review date has passed and which are still in
+	// force. Its own count beside ExpiringGrants, never folded into it, because
+	// inaction means the opposite thing in each: an expiring grant lapses if
+	// nobody acts, and a hold stays. A badge that summed them would be counting
+	// "access about to end" together with "access still being withheld".
+	HoldsDue int `json:"holds_due"`
 }
 
 // revocationEscalation is how long a queued revocation may age before it stops
@@ -219,6 +225,12 @@ func GovernanceIndicators(ctx context.Context) (Indicators, error) {
 	}
 	out.UnconfirmedRevocations = revocations.Queued + revocations.Spent
 	out.RevocationsEscalated = revocations.Escalated(revocationEscalation)
+
+	holds, err := svcAllowancesDueForReview(ctx)
+	if err != nil {
+		return Indicators{}, err
+	}
+	out.HoldsDue = len(holds)
 
 	// Only worth probing when there is something queued: the flag exists to
 	// explain why "Resume now" is disabled, and with an empty outbox there is

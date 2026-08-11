@@ -33,6 +33,11 @@ type server struct {
 	life      *lifecycle
 	keyExpiry time.Time
 	product   string
+	// connection is how a member reaches the target, for the instructions on
+	// their own page. Nil when the deployment has not said, and the manifest
+	// then omits it rather than guessing from the API URL — a share path that
+	// does not work teaches a member to distrust the whole page.
+	connection *Connection
 
 	// elevated opens a one-off session under a credential the backend injects
 	// for a single call. A seam because a test must be able to observe that the
@@ -73,7 +78,7 @@ func (s *server) routes() http.Handler {
 // that are merely unobservable — the same mistake as concluding an absence from
 // a read that could not happen.
 func (s *server) handleCapabilities(w http.ResponseWriter, r *http.Request, _ []byte) {
-	writeJSON(w, http.StatusOK, manifest(s.product, s.nas.Version(), s))
+	writeJSON(w, http.StatusOK, manifest(s.product, s.nas.Version(), s, s.connection))
 }
 
 // availability answers the capability probe for one operation (4.7).

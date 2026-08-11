@@ -11,6 +11,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/services"
 	"syndra/internal/services/addonop"
 )
 
@@ -182,5 +183,144 @@ func TestACompromisedLogIsReportedEvenWhenTheTargetIsDown(t *testing.T) {
 
 	if !strings.Contains(rr.Body.String(), db.AnchorHeadRewritten) {
 		t.Errorf("an unreachable target must still report its finding: %s", rr.Body.String())
+	}
+}
+
+// §29's sweep — the only bulk action in the product.
+//
+// What makes it safe is not the ceremony, it is the re-check: the list an
+// operator ticked was true when they read it, and this is the only thing that
+// makes it true when it runs.
+
+type sweepHarness struct {
+	report    services.DormantReport
+	reportErr error
+	purged    []addonop.Request
+	outcome   addons.Outcome
+}
+
+func stubSweep(t *testing.T, h *sweepHarness) {
+	t.Helper()
+	dormant, dispatch := svcDormantAccounts, svcDispatchOperation
+	t.Cleanup(func() { svcDormantAccounts, svcDispatchOperation = dormant, dispatch })
+
+	svcDormantAccounts = func(context.Context, string) (services.DormantReport, error) {
+		return h.report, h.reportErr
+	}
+	svcDispatchOperation = func(_ context.Context, req addonop.Request) (addonop.Result, error) {
+		h.purged = append(h.purged, req)
+		outcome := h.outcome
+		if outcome == "" {
+			outcome = addons.OutcomeSucceeded
+		}
+		return addonop.Result{OperationID: "op_1", Outcome: outcome}, nil
+	}
+}
+
+func sweep(t *testing.T, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/truenas/accounts/dormant/sweep",
+		strings.NewReader(body))
+	r.SetPathValue("target", "truenas")
+	rr := httptest.NewRecorder()
+	handleDormantSweep(rr, r)
+	return rr
+}
+
+func TestASweepRemovesOnlyWhatIsStillDormant(t *testing.T) {
+	h := &sweepHarness{report: services.DormantReport{
+		Accounts: []services.DormantAccount{
+			{Account: "gone", SubjectID: "u1", SubjectStillMember: false},
+		},
+	}}
+	stubSweep(t, h)
+
+	// "revived" was on the operator's list and is not on this one: somebody
+	// gave them a role between the read and the click.
+	rr := sweep(t, `{"accounts":["gone","revived"],"elevated_key":"k","confirmed":true}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(h.purged) != 1 || h.purged[0].SubjectID != "u1" {
+		t.Fatalf("only the still-dormant account may be purged: %+v", h.purged)
+	}
+	if !strings.Contains(rr.Body.String(), "No longer dormant") {
+		t.Errorf("the refusal must be reported per account: %s", rr.Body.String())
+	}
+}
+
+// Still-a-member rows are refused by the BACKEND, not merely unselectable in
+// the surface: removing one locks somebody out rather than tidying up, and a
+// client-side filter is a suggestion.
+func TestASweepRefusesAnAccountWhoseSubjectIsStillAMember(t *testing.T) {
+	h := &sweepHarness{report: services.DormantReport{
+		Accounts: []services.DormantAccount{
+			{Account: "locked-out", SubjectID: "u2", SubjectStillMember: true},
+		},
+	}}
+	stubSweep(t, h)
+
+	sweep(t, `{"accounts":["locked-out"],"elevated_key":"k","confirmed":true}`)
+	if len(h.purged) != 0 {
+		t.Error("an account whose subject is still a member must never be purged here")
+	}
+}
+
+func TestASweepRefusesWithoutAConfirmationOrACredential(t *testing.T) {
+	h := &sweepHarness{report: services.DormantReport{
+		Accounts: []services.DormantAccount{{Account: "gone", SubjectID: "u1"}},
+	}}
+	stubSweep(t, h)
+
+	if code := sweep(t, `{"accounts":["gone"],"elevated_key":"k"}`).Code; code != http.StatusUnprocessableEntity {
+		t.Errorf("want 422 without a confirmation, got %d", code)
+	}
+	if code := sweep(t, `{"accounts":["gone"],"confirmed":true}`).Code; code != http.StatusBadRequest {
+		t.Errorf("want 400 without a credential, got %d", code)
+	}
+	if len(h.purged) != 0 {
+		t.Error("nothing may be dispatched before both are present")
+	}
+}
+
+// The credential exists for the length of one request and appears in nothing
+// this handler emits — the same property the member's password path is held to.
+func TestTheElevatedCredentialIsNotEchoed(t *testing.T) {
+	const key = "delete-capable-9!"
+	h := &sweepHarness{report: services.DormantReport{
+		Accounts: []services.DormantAccount{{Account: "gone", SubjectID: "u1"}},
+	}}
+	stubSweep(t, h)
+
+	rr := sweep(t, `{"accounts":["gone"],"elevated_key":"`+key+`","confirmed":true}`)
+	if strings.Contains(rr.Body.String(), key) {
+		t.Errorf("the response carries the credential: %s", rr.Body.String())
+	}
+	if got, _ := h.purged[0].Params["elevated_key"].(string); got != key {
+		t.Error("it must reach the add-on unchanged, or this test proves nothing")
+	}
+}
+
+// An outcome the target did not confirm is never retried on this path: a purge
+// that may have happened is the one operation where trying again is not free.
+func TestAnUnconfirmedPurgeIsReportedRatherThanRetried(t *testing.T) {
+	h := &sweepHarness{
+		report: services.DormantReport{
+			Accounts: []services.DormantAccount{{Account: "gone", SubjectID: "u1"}},
+		},
+		outcome: addons.OutcomeIndeterminate,
+	}
+	stubSweep(t, h)
+
+	rr := sweep(t, `{"accounts":["gone"],"elevated_key":"k","confirmed":true}`)
+	if len(h.purged) != 1 {
+		t.Fatalf("want exactly one attempt, got %d", len(h.purged))
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "did not confirm") {
+		t.Errorf("an unconfirmed purge must say so: %s", body)
+	}
+	if strings.Contains(body, `"removed":1`) {
+		t.Error("it must not be counted as removed")
 	}
 }

@@ -22,6 +22,29 @@ type Manifest struct {
 	ProductVersion    string             `json:"product_version"`
 	EntitlementSchema []EntitlementField `json:"entitlement_schema"`
 	Operations        []Operation        `json:"operations"`
+	// Connection is how a MEMBER reaches this target, for the instructions on
+	// their own page.
+	//
+	// It comes from the add-on's own configuration because that is where the
+	// truth about the deployment lives: moving the NAS must not mean editing a
+	// component in the frontend. Absent when the deployment has not said, and
+	// the member's page then omits the instructions rather than inventing a
+	// host — a path that does not work teaches somebody to distrust the whole
+	// page, and the next thing they distrust is the part that was right.
+	Connection *Connection `json:"connection,omitempty"`
+}
+
+// Connection is the member-facing address of the target, and nothing else.
+//
+// Deliberately not the API URL: the middleware endpoint this add-on talks to is
+// frequently not the name a member types into a file manager, and sending one
+// where the other is meant produces instructions that fail for everybody.
+type Connection struct {
+	// Protocol is what a member connects with — "smb" here. Named rather than
+	// assumed, so a second storage add-on speaking something else cannot be
+	// rendered with these instructions by accident.
+	Protocol string `json:"protocol"`
+	Host     string `json:"host"`
 }
 
 // EntitlementField names one field of desired state Syndra may fill. Syndra
@@ -129,13 +152,14 @@ type capabilityProbe interface {
 }
 
 // manifest composes the whole answer.
-func manifest(product, productVersion string, probe capabilityProbe) Manifest {
+func manifest(product, productVersion string, probe capabilityProbe, connection *Connection) Manifest {
 	return Manifest{
 		ContractVersion:   ContractVersion,
 		Product:           product,
 		ProductVersion:    productVersion,
 		EntitlementSchema: entitlementSchema(),
 		Operations:        operationSet(probe),
+		Connection:        connection,
 	}
 }
 

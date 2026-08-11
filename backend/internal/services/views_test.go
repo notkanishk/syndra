@@ -29,6 +29,12 @@ func resetGovernanceDeps(t *testing.T) {
 	svcCountUnconfirmedRevocations = func(context.Context) (db.UnconfirmedRevocationSummary, error) {
 		return db.UnconfirmedRevocationSummary{}, nil
 	}
+	// And the holds-due count, for the same reason again: the indicators grew a
+	// sixth read and an unstubbed one reaches a nil pool, failing every test in
+	// this file for a reason none of them is about.
+	origHoldsDue := svcAllowancesDueForReview
+	t.Cleanup(func() { svcAllowancesDueForReview = origHoldsDue })
+	svcAllowancesDueForReview = func(context.Context) ([]db.Allowance, error) { return nil, nil }
 	origGetRequests := svcGetAccessRequests
 	origGetExpiring := svcGetExpiringDirectGrants
 	origGetAllBundles := svcGetAllBundles

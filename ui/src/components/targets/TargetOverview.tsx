@@ -4,6 +4,8 @@ import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { MappingManagement } from "@/components/targets/MappingManagement";
+import { DormantAccounts } from "@/components/targets/DormantAccounts";
+import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
@@ -48,6 +50,15 @@ export function TargetOverview({ target }: { target: string }) {
             are the reason any of those accounts exist, and reading the
             inventory first invites the question this panel answers. */}
         <MappingManagement target={target} />
+        {/* Whose accounts are on it — the managed half first, because it is the
+            half an operator acts on, and the unmanaged inventory below reads as
+            "and what else is here". */}
+        <PeopleOnTarget target={target} />
+        {/* Accounts Syndra created and no longer has a reason for, between the
+            people it manages and the accounts it never made: it is the third
+            answer to "whose accounts are on it", and the only one with an
+            action that removes data. */}
+        <DormantAccounts target={target} />
         <Inventory target={target} />
 
         {registered && (

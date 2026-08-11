@@ -32,6 +32,13 @@ export interface Indicators {
    * difference and an operator reading "3" cannot tell.
    */
   revocations_escalated: boolean;
+  /**
+   * Holds past their review date and still in force. Counted apart from
+   * expiring_grants, never summed with it: an expiring grant lapses if nobody
+   * acts and a hold stays, so one number covering both would be counting
+   * "access about to end" together with "access still being withheld".
+   */
+  holds_due: number;
   zitadel_reachable: boolean;
 }
 
@@ -41,6 +48,7 @@ const EMPTY: Indicators = {
   pending_propagation: 0,
   drift: 0,
   unconfirmed_revocations: 0,
+  holds_due: 0,
   revocations_escalated: false,
   zitadel_reachable: true,
 };
