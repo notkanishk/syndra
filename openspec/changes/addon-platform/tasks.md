@@ -732,3 +732,22 @@ the strength of reading a sentinel's declaration and its one return site — the
 "checked rather than proven" distinction, applied to the item that had only ever
 been checked. The last thing on a list nobody has looked at twice is the thing
 most likely to have been looked at once.
+
+### How an open item is written from here
+
+`ErrBindingConflict` survived five rounds as "returned at `target_bindings.go:83`,
+checked by no caller." Every word of that was true, and it was true about the
+sentinel's declaration and its one return site. It never said *the settle path
+has not been read* — and the settle path was where the defect was. Each
+restatement made the item look more examined than it was, because repetition
+reads as evidence.
+
+So an open item here records **what was examined**, not only its status:
+
+> **Open — the §29 surface.** A binding conflict settles terminally with a
+> reason naming the account and the divergence, and lands among ordinary drain
+> failures. *Examined:* the settle path, the reason string, the inventory
+> exclusion. *Not examined:* whether any surface groups it apart from a target
+> refusal, and what an operator does about it once seen.
+
+The second half is the part that would have saved five rounds.
