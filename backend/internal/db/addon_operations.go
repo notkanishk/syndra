@@ -159,7 +159,7 @@ func ClaimAddonOperation(ctx context.Context, id, target, operation, subject str
 		   AND subject_id = $4
 		RETURNING id, target, operation, actor_id, subject_id, status, created_at, claimed_at, settled_at`
 	var o AddonOperation
-	err := PG.QueryRow(ctx, q, id, target, operation, subject).Scan(&o.ID, &o.Target, &o.Operation,
+	err := querier(ctx).QueryRow(ctx, q, id, target, operation, subject).Scan(&o.ID, &o.Target, &o.Operation,
 		&o.ActorID, &o.SubjectID, &o.Status, &o.CreatedAt, &o.ClaimedAt, &o.SettledAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return AddonOperation{}, fmt.Errorf("%w: %s", ErrAddonOperationNotOpen, id)
@@ -196,7 +196,7 @@ func SettleAddonOperation(ctx context.Context, id, status string) error {
 		   SET status = $2, settled_at = NOW()
 		 WHERE id = $1 AND status = 'dispatching'
 		   AND (claimed_at IS NOT NULL OR $2 = 'unreached')`
-	tag, err := PG.Exec(ctx, q, id, status)
+	tag, err := querier(ctx).Exec(ctx, q, id, status)
 	if err != nil {
 		return fmt.Errorf("settle addon operation: %w", err)
 	}
@@ -222,7 +222,7 @@ func ListUnresolvedAddonOperations(ctx context.Context, grace time.Duration, lim
 		    OR (status = 'dispatching' AND COALESCE(claimed_at, created_at) < NOW() - $1::interval)
 		 ORDER BY created_at ASC
 		 LIMIT $2`
-	rows, err := PG.Query(ctx, q, grace.String(), limit)
+	rows, err := querier(ctx).Query(ctx, q, grace.String(), limit)
 	if err != nil {
 		return nil, fmt.Errorf("list unresolved addon operations: %w", err)
 	}
@@ -261,7 +261,7 @@ func CountAddonOperations(ctx context.Context, target string) (AddonOperationCou
 		FROM addon_operations
 		WHERE $1 = '' OR target = $1`
 	var c AddonOperationCounts
-	if err := PG.QueryRow(ctx, q, target).Scan(&c.Succeeded, &c.Failed, &c.Unresolved); err != nil {
+	if err := querier(ctx).QueryRow(ctx, q, target).Scan(&c.Succeeded, &c.Failed, &c.Unresolved); err != nil {
 		return AddonOperationCounts{}, fmt.Errorf("count addon operations: %w", err)
 	}
 	return c, nil
@@ -290,7 +290,7 @@ func CountRecentAddonOperations(ctx context.Context, target, subjectID, operatio
 		 WHERE target = $1 AND subject_id = $2 AND operation = $3
 		   AND created_at > NOW() - ($4 || ' seconds')::interval`
 	var n int
-	if err := PG.QueryRow(ctx, q, target, subjectID, operation, int64(window/time.Second)).Scan(&n); err != nil {
+	if err := querier(ctx).QueryRow(ctx, q, target, subjectID, operation, int64(window/time.Second)).Scan(&n); err != nil {
 		return 0, fmt.Errorf("count recent addon operations: %w", err)
 	}
 	return n, nil

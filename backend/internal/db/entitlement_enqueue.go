@@ -51,6 +51,17 @@ type EntitlementApply struct {
 	PlanSubjectID string
 	// Source is how the change came about. Defaults to `direct`.
 	Source string
+	// WithdrawsOnly declares that this convergence can only take access away.
+	//
+	// Set by the caller, because the caller is the only thing that knows. An
+	// apply carries a whole resolved set and the row cannot be read to find out
+	// which way it moves; a revocation, on the other hand, resolved that set
+	// with the lifecycle field denied and cannot confer anything.
+	//
+	// It is what lets the background runner drain a revocation without an
+	// operator. False is the safe default: an undeclared row waits, which is
+	// where every convergence waited before this existed.
+	WithdrawsOnly bool
 }
 
 // validOutboxSource reports whether s is one of the sources the outbox CHECK
@@ -145,8 +156,8 @@ func EnqueueEntitlementApplyTx(ctx context.Context, tx pgx.Tx, p EntitlementAppl
 			   FOR UPDATE
 		)
 		INSERT INTO propagation_outbox
-			(op_type, user_id, payload_json, idempotency_key, initiated_by, source, target, plan_subject_id)
-		SELECT 'apply', ps.subject_id, '{}'::jsonb, $1, p.created_by, $2, p.target, ps.id
+			(op_type, user_id, payload_json, idempotency_key, initiated_by, source, target, plan_subject_id, withdraws_only)
+		SELECT 'apply', ps.subject_id, '{}'::jsonb, $1, p.created_by, $2, p.target, ps.id, $5
 		  FROM plan_subjects ps
 		  JOIN plans        p ON p.id = ps.plan_id
 		  JOIN locked_target lt ON lt.target = p.target
@@ -157,7 +168,7 @@ func EnqueueEntitlementApplyTx(ctx context.Context, tx pgx.Tx, p EntitlementAppl
 		RETURNING id, user_id, initiated_by, target`
 
 	var outboxID, subjectID, initiatedBy, target string
-	err = tx.QueryRow(ctx, insertOutbox, key, source, TargetZitadel, p.PlanSubjectID).
+	err = tx.QueryRow(ctx, insertOutbox, key, source, TargetZitadel, p.PlanSubjectID, p.WithdrawsOnly).
 		Scan(&outboxID, &subjectID, &initiatedBy, &target)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", explainEnqueueRefusal(ctx, tx, p.PlanSubjectID)
@@ -329,7 +340,7 @@ func ReadEntitlementIntent(ctx context.Context, outboxID string) (EntitlementInt
 		  JOIN desired_state_snapshots s ON s.id = ps.snapshot_id
 		 WHERE p.id = $1`
 	var out EntitlementIntent
-	err := PG.QueryRow(ctx, q, outboxID).Scan(
+	err := querier(ctx).QueryRow(ctx, q, outboxID).Scan(
 		&out.OutboxID, &out.Target, &out.PlanID, &out.SubjectID, &out.Fingerprint, &out.DesiredJSON, &out.Version, &out.Surface)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// A row with no approval chain is not a row this drain may dispatch.

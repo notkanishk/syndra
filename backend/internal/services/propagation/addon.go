@@ -333,6 +333,34 @@ func (res *DrainResult) fingerprintFor(ctx context.Context, intent db.Entitlemen
 		res.persistErr(intent.OutboxID, "re-read state", fmt.Errorf("the target could not be re-read before dispatch"))
 		return "", true
 	}
+	// A 200 is not the same as a usable answer, and reading only the outcome is
+	// how the two got conflated. The add-on answers from its mirror when the
+	// target is unreachable and says so in `current`; it caps a large read and
+	// says so in `truncated`. A fingerprint from either describes something
+	// other than the target's live state, and dispatching against it converges
+	// a subject onto a set computed from a read that could not see them.
+	switch {
+	case !answer.Current:
+		res.persistErr(intent.OutboxID, "re-read state",
+			fmt.Errorf("the add-on answered from its mirror; a provisional fingerprint cannot gate an apply"))
+		return "", true
+	case answer.Truncated:
+		res.persistErr(intent.OutboxID, "re-read state",
+			fmt.Errorf("the re-read hit the target's cap; an absence it reports may be the cap rather than the target"))
+		return "", true
+	case answer.Outcomes[0].Effect == db.PlanEffectBlocked:
+		// The plan itself says this subject cannot be applied — a name held by
+		// an account nobody has bound, most often. Dispatching it anyway is the
+		// one case where the apply might succeed and be wrong: it would write
+		// into somebody else's account. Terminal, because no retry resolves a
+		// conflict; an operator does.
+		if err := markFailed(ctx, intent.OutboxID, "the target refused: "+answer.Outcomes[0].Detail); err != nil {
+			res.settleFailure(intent.OutboxID, "mark failed", err)
+		} else {
+			res.Failed++
+		}
+		return "", true
+	}
 	return answer.Outcomes[0].Fingerprint, false
 }
 

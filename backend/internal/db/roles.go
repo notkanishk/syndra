@@ -35,7 +35,7 @@ func CreateRole(ctx context.Context, projectID, roleKey, displayName, descriptio
 		RETURNING id`
 
 	var id string
-	err := PG.QueryRow(ctx, query, projectID, roleKey, displayName, description, group,
+	err := querier(ctx).QueryRow(ctx, query, projectID, roleKey, displayName, description, group,
 		createdBy, clonedFromProject, clonedFromRole).Scan(&id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -49,7 +49,7 @@ func CreateRole(ctx context.Context, projectID, roleKey, displayName, descriptio
 // DeleteRole removes a role by ID. Used for compensating rollback when
 // Zitadel propagation fails after local insert.
 func DeleteRole(ctx context.Context, id string) error {
-	_, err := PG.Exec(ctx, `DELETE FROM roles WHERE id = $1`, id)
+	_, err := querier(ctx).Exec(ctx, `DELETE FROM roles WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("delete role: %w", err)
 	}
@@ -66,7 +66,7 @@ func GetRole(ctx context.Context, projectID, roleKey string) (models.Role, error
 		WHERE zitadel_project_id = $1 AND role_key = $2`
 
 	var r models.Role
-	err := PG.QueryRow(ctx, query, projectID, roleKey).Scan(
+	err := querier(ctx).QueryRow(ctx, query, projectID, roleKey).Scan(
 		&r.ID, &r.ProjectID, &r.RoleKey, &r.DisplayName, &r.Description, &r.Group,
 		&r.ClonedFromProject, &r.ClonedFromRole, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt)
 	if err != nil {
@@ -84,7 +84,7 @@ func GetAllLocalRoles(ctx context.Context) ([]models.Role, error) {
 		FROM roles
 		ORDER BY created_at DESC`
 
-	rows, err := PG.Query(ctx, query)
+	rows, err := querier(ctx).Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("query roles: %w", err)
 	}
@@ -111,7 +111,7 @@ func GetRoleUsageCounts(ctx context.Context) (map[string]RoleUsage, error) {
 		FROM bundle_roles
 		GROUP BY zitadel_project_id, zitadel_role_key`
 
-	rows, err := PG.Query(ctx, bundleQuery)
+	rows, err := querier(ctx).Query(ctx, bundleQuery)
 	if err != nil {
 		return nil, fmt.Errorf("query bundle role counts: %w", err)
 	}
@@ -147,7 +147,7 @@ func GetRoleUsageCounts(ctx context.Context) (map[string]RoleUsage, error) {
 		) sub
 		GROUP BY project_id, role_key`
 
-	rows2, err := PG.Query(ctx, ruleQuery)
+	rows2, err := querier(ctx).Query(ctx, ruleQuery)
 	if err != nil {
 		return nil, fmt.Errorf("query rule counts: %w", err)
 	}
@@ -177,7 +177,7 @@ func GetAssignedUserCounts(ctx context.Context) (map[string]int, error) {
 		WHERE (expires_at IS NULL OR expires_at > NOW())
 		GROUP BY zitadel_project_id, zitadel_role_key`
 
-	rows, err := PG.Query(ctx, query)
+	rows, err := querier(ctx).Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("query assigned user counts: %w", err)
 	}
@@ -210,7 +210,7 @@ func GetAllReferencedRoleKeys(ctx context.Context) ([][2]string, error) {
 		) all_refs
 		ORDER BY project_id, role_key`
 
-	rows, err := PG.Query(ctx, query)
+	rows, err := querier(ctx).Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("query referenced role keys: %w", err)
 	}

@@ -25,7 +25,7 @@ import (
 // renders and the answer to "have they enrolled".
 func RecordCredentialSet(ctx context.Context, userID string) (string, error) {
 	var id string
-	err := PG.QueryRow(ctx, `
+	err := querier(ctx).QueryRow(ctx, `
 		INSERT INTO shadow_credentials (user_id)
 		VALUES ($1)
 		ON CONFLICT (user_id) DO UPDATE SET
@@ -43,7 +43,7 @@ func RecordCredentialSet(ctx context.Context, userID string) (string, error) {
 
 // DeleteShadowCredential removes a user's shadow credential.
 func DeleteShadowCredential(ctx context.Context, userID string) error {
-	tag, err := PG.Exec(ctx, `DELETE FROM shadow_credentials WHERE user_id = $1`, userID)
+	tag, err := querier(ctx).Exec(ctx, `DELETE FROM shadow_credentials WHERE user_id = $1`, userID)
 	if err != nil {
 		return fmt.Errorf("delete shadow credential (user=%s): %w", userID, err)
 	}
@@ -62,7 +62,7 @@ func HasShadowCredential(ctx context.Context, userID string) (models.ShadowCrede
 	var createdAt, updatedAt time.Time
 	var rotatedAt, expiresAt *time.Time
 	var beforeCutover bool
-	err := PG.QueryRow(ctx, `
+	err := querier(ctx).QueryRow(ctx, `
 		SELECT created_at, updated_at, rotated_at, expires_at, enrolled_before_cutover
 		FROM shadow_credentials WHERE user_id = $1`, userID).
 		Scan(&createdAt, &updatedAt, &rotatedAt, &expiresAt, &beforeCutover)
@@ -88,7 +88,7 @@ func HasShadowCredential(ctx context.Context, userID string) (models.ShadowCrede
 
 // InsertShadowCredentialAudit records a credential lifecycle event.
 func InsertShadowCredentialAudit(ctx context.Context, userID, action, actorID, ipAddress string) error {
-	_, err := PG.Exec(ctx, `
+	_, err := querier(ctx).Exec(ctx, `
 		INSERT INTO shadow_credential_audit (user_id, action, actor_id, ip_address)
 		VALUES ($1, $2, $3, $4)`,
 		userID, action, actorID, ipAddress)
@@ -100,7 +100,7 @@ func InsertShadowCredentialAudit(ctx context.Context, userID, action, actorID, i
 
 // GetShadowCredentialAudit returns the audit trail for a user's shadow credential.
 func GetShadowCredentialAudit(ctx context.Context, userID string) ([]models.ShadowCredentialAudit, error) {
-	rows, err := PG.Query(ctx, `
+	rows, err := querier(ctx).Query(ctx, `
 		SELECT id, user_id, action, actor_id, ip_address, created_at
 		FROM shadow_credential_audit
 		WHERE user_id = $1

@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Relative } from "@/components/ui/Time";
 import { Withheld } from "@/components/ui/Withheld";
 import { targetLabel } from "@/lib/nav";
+import { oneShot } from "@/lib/secret";
 import { useMyStorage, useSetStorageCredential, type MyTargetView } from "@/lib/queries/useMyStorage";
 
 /**
@@ -220,7 +221,7 @@ function CredentialForm({ view }: { view: MyTargetView }) {
       className="grid gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        set.mutate(password, { onSuccess: () => setPassword("") });
+        set.mutate(oneShot(password), { onSuccess: () => setPassword("") });
       }}
     >
       {view.credential.needs_re_enrolment && (

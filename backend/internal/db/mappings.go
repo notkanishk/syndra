@@ -73,7 +73,7 @@ func CreateRoleMapping(ctx context.Context, m RoleMapping) (RoleMapping, error) 
 		VALUES ($1, $2, $3, $4, $5, $6, $6)
 		ON CONFLICT (target, project_id, role_key, field) DO NOTHING
 		RETURNING id`
-	err := PG.QueryRow(ctx, q, m.Target, m.ProjectID, m.RoleKey, m.Field, m.Value, m.CreatedBy).Scan(&m.ID)
+	err := querier(ctx).QueryRow(ctx, q, m.Target, m.ProjectID, m.RoleKey, m.Field, m.Value, m.CreatedBy).Scan(&m.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Absorbed rather than raised: a unique violation aborts the caller's
 		// transaction, and this refusal is one a caller is expected to handle.
@@ -100,7 +100,7 @@ func UpdateRoleMappingValue(ctx context.Context, id, value, actor string) error 
 		return fmt.Errorf("%w: %s", ErrMappingNotFound, id)
 	}
 	const q = `UPDATE target_role_mappings SET value = $2, updated_by = $3, updated_at = NOW() WHERE id = $1`
-	tag, err := PG.Exec(ctx, q, id, value, actor)
+	tag, err := querier(ctx).Exec(ctx, q, id, value, actor)
 	if err != nil {
 		return fmt.Errorf("update role mapping: %w", err)
 	}
@@ -118,7 +118,7 @@ func DeleteRoleMapping(ctx context.Context, id string) error {
 	if !looksLikeUUID(id) {
 		return fmt.Errorf("%w: %s", ErrMappingNotFound, id)
 	}
-	tag, err := PG.Exec(ctx, `DELETE FROM target_role_mappings WHERE id = $1`, id)
+	tag, err := querier(ctx).Exec(ctx, `DELETE FROM target_role_mappings WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("delete role mapping: %w", err)
 	}
@@ -137,7 +137,7 @@ func GetRoleMapping(ctx context.Context, id string) (RoleMapping, error) {
 		SELECT id, target, project_id, role_key, field, value, created_by, updated_by
 		  FROM target_role_mappings WHERE id = $1`
 	var m RoleMapping
-	err := PG.QueryRow(ctx, q, id).Scan(&m.ID, &m.Target, &m.ProjectID, &m.RoleKey, &m.Field, &m.Value, &m.CreatedBy, &m.UpdatedBy)
+	err := querier(ctx).QueryRow(ctx, q, id).Scan(&m.ID, &m.Target, &m.ProjectID, &m.RoleKey, &m.Field, &m.Value, &m.CreatedBy, &m.UpdatedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return RoleMapping{}, fmt.Errorf("%w: %s", ErrMappingNotFound, id)
 	}
@@ -155,7 +155,7 @@ func ListRoleMappings(ctx context.Context, target string) ([]RoleMapping, error)
 		  FROM target_role_mappings
 		 WHERE ($1 = '' OR target = $1)
 		 ORDER BY target, project_id, role_key, field`
-	rows, err := PG.Query(ctx, q, target)
+	rows, err := querier(ctx).Query(ctx, q, target)
 	if err != nil {
 		return nil, fmt.Errorf("list role mappings: %w", err)
 	}
@@ -187,7 +187,7 @@ func MappingsForRoles(ctx context.Context, target string, roles []RoleRef) ([]Ro
 		    ON held.project_id = m.project_id AND held.role_key = m.role_key
 		 WHERE m.target = $1
 		 ORDER BY m.project_id, m.role_key, m.field`
-	rows, err := PG.Query(ctx, q, target, projects, keys)
+	rows, err := querier(ctx).Query(ctx, q, target, projects, keys)
 	if err != nil {
 		return nil, fmt.Errorf("read mappings for roles: %w", err)
 	}
@@ -204,7 +204,7 @@ func TargetsMappedToRole(ctx context.Context, projectID, roleKey string) ([]stri
 		  JOIN targets t ON t.target = m.target AND t.state = 'active'
 		 WHERE m.project_id = $1 AND m.role_key = $2
 		 ORDER BY m.target`
-	rows, err := PG.Query(ctx, q, projectID, roleKey)
+	rows, err := querier(ctx).Query(ctx, q, projectID, roleKey)
 	if err != nil {
 		return nil, fmt.Errorf("read targets mapped to %s/%s: %w", projectID, roleKey, err)
 	}
@@ -256,7 +256,7 @@ func MappingHolders(ctx context.Context, projectID, roleKey string) ([]string, e
 			 WHERE r.target_zitadel_project_id = $1 AND r.target_zitadel_role_key = $2
 		) holders
 		ORDER BY user_id`
-	rows, err := PG.Query(ctx, q, projectID, roleKey)
+	rows, err := querier(ctx).Query(ctx, q, projectID, roleKey)
 	if err != nil {
 		return nil, fmt.Errorf("read mapping holders: %w", err)
 	}
@@ -335,37 +335,52 @@ func PublishMappingVersion(ctx context.Context, target, note, actor string) (int
 // behind every binding added since — which is the half of the change an
 // operator is usually rolling back.
 func RollbackMappingVersion(ctx context.Context, target string, version int, actor string) error {
-	return InTx(ctx, func(tx pgx.Tx) error {
-		// The same lock a publish takes, and on the same key. A rollback
-		// DELETEs the whole working set and re-inserts it; a publish reads that
-		// set to snapshot it. Overlapping, one target could be published
-		// mid-rollback and the resulting version would be a set that never
-		// existed.
-		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "mapping_version:"+target); err != nil {
-			return fmt.Errorf("lock mapping versions for %s: %w", target, err)
+	// Joins the caller's transaction rather than opening one. The restore is
+	// half of a rollback; the other half is the convergence queued for every
+	// holder afterwards, and a restore that commits on its own leaves the
+	// bindings changed with nothing queued when that half fails. A drift sweep
+	// would then see the target holding exactly what Syndra last told it to.
+	tx, owned, err := beginOrJoin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin mapping rollback tx: %w", err)
+	}
+	if owned {
+		defer tx.Rollback(ctx) // no-op after a successful Commit
+	}
+
+	// The same lock a publish takes, and on the same key. A rollback DELETEs the
+	// whole working set and re-inserts it; a publish reads that set to snapshot
+	// it. Overlapping, one target could be published mid-rollback and the
+	// resulting version would be a set that never existed.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "mapping_version:"+target); err != nil {
+		return fmt.Errorf("lock mapping versions for %s: %w", target, err)
+	}
+	var versionID string
+	err = tx.QueryRow(ctx,
+		`SELECT id FROM target_mapping_versions WHERE target = $1 AND version = $2`,
+		target, version).Scan(&versionID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("%w: %s v%d", ErrMappingNotFound, target, version)
+	}
+	if err != nil {
+		return fmt.Errorf("read mapping version: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM target_role_mappings WHERE target = $1`, target); err != nil {
+		return fmt.Errorf("clear working mappings: %w", err)
+	}
+	const restore = `
+		INSERT INTO target_role_mappings (target, project_id, role_key, field, value, created_by, updated_by)
+		SELECT $1, project_id, role_key, field, value, $2, $2
+		  FROM target_mapping_version_entries WHERE version_id = $3`
+	if _, err := tx.Exec(ctx, restore, target, actor, versionID); err != nil {
+		return fmt.Errorf("restore mapping version: %w", err)
+	}
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit mapping rollback: %w", err)
 		}
-		var versionID string
-		err := tx.QueryRow(ctx,
-			`SELECT id FROM target_mapping_versions WHERE target = $1 AND version = $2`,
-			target, version).Scan(&versionID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("%w: %s v%d", ErrMappingNotFound, target, version)
-		}
-		if err != nil {
-			return fmt.Errorf("read mapping version: %w", err)
-		}
-		if _, err := tx.Exec(ctx, `DELETE FROM target_role_mappings WHERE target = $1`, target); err != nil {
-			return fmt.Errorf("clear working mappings: %w", err)
-		}
-		const restore = `
-			INSERT INTO target_role_mappings (target, project_id, role_key, field, value, created_by, updated_by)
-			SELECT $1, project_id, role_key, field, value, $2, $2
-			  FROM target_mapping_version_entries WHERE version_id = $3`
-		if _, err := tx.Exec(ctx, restore, target, actor, versionID); err != nil {
-			return fmt.Errorf("restore mapping version: %w", err)
-		}
-		return nil
-	})
+	}
+	return nil
 }
 
 // A published version, as the history surface reads it (change `addon-platform`
@@ -432,7 +447,7 @@ func ListMappingHistory(ctx context.Context, target string) (MappingHistory, err
 		  LEFT JOIN target_mapping_version_entries e ON e.version_id = v.id
 		 WHERE v.target = $1
 		 ORDER BY v.version DESC, e.project_id, e.role_key, e.field`
-	rows, err := PG.Query(ctx, q, target)
+	rows, err := querier(ctx).Query(ctx, q, target)
 	if err != nil {
 		return MappingHistory{}, fmt.Errorf("list mapping versions for %s: %w", target, err)
 	}

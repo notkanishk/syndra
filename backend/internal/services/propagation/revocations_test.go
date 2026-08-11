@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/models"
 )
@@ -173,5 +174,62 @@ func TestRevocationSeamIsBoundToTheRestrictedClaim(t *testing.T) {
 		if strings.Contains(string(src), forbidden) {
 			t.Errorf("the background runner must not call %s", forbidden)
 		}
+	}
+}
+
+// §17 — the add-on leg. A target revocation queues an `apply` row, and before
+// this the background runner claimed only `revoke`: the lock sat in the queue
+// while the response told the operator it drains on its own.
+//
+// The dispatcher is the entitlement one, not the Zitadel one — a TrueNAS row has
+// no project and no roles for that path to send.
+func TestDrainRevocations_DrainsAddonWithdrawals(t *testing.T) {
+	h := stubAddonDrain(t)
+	t.Cleanup(swap(&registeredAddons, func() []addons.Registration {
+		return []addons.Registration{{Target: "truenas"}}
+	}))
+	t.Cleanup(swap(&claimRevocations, func(_ context.Context, target string, _ int) ([]models.PendingPropagation, error) {
+		if target == db.TargetZitadel {
+			return nil, nil
+		}
+		return []models.PendingPropagation{addonRow("lock-1")}, nil
+	}))
+
+	res, err := DrainRevocations(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(h.dispatched) != 1 || h.dispatched[0].Subject != "sub-1" {
+		t.Fatalf("the queued lock must be dispatched to its target, got %+v", h.dispatched)
+	}
+	if res.Applied != 1 {
+		t.Fatalf("want the lock applied, got %+v", res)
+	}
+}
+
+// An unreachable NAS must not stop a door system's revocation, and neither must
+// stop Zitadel's. Each leg is a separate deployment with a separate outage.
+func TestDrainRevocations_OneTargetsOutageDoesNotStopAnother(t *testing.T) {
+	h := stubAddonDrain(t)
+	h.reachable = false
+	t.Cleanup(swap(&registeredAddons, func() []addons.Registration {
+		return []addons.Registration{{Target: "truenas"}}
+	}))
+	t.Cleanup(swap(&claimRevocations, revokeRows("r1")))
+	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
+		return map[string]bool{"r": true}, nil
+	}
+	var applied []string
+	markApplied = func(_ context.Context, id string) error { applied = append(applied, id); return nil }
+
+	res, err := DrainRevocations(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(applied) != 1 || applied[0] != "r1" {
+		t.Fatalf("Zitadel's revoke must still land while the add-on is down, got %v", applied)
+	}
+	if !res.Halted || res.HaltedTarget != "truenas" || res.Reason != "target_unreachable" {
+		t.Errorf("the unreachable target must be named rather than folded into a total: %+v", res)
 	}
 }

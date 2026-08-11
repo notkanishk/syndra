@@ -123,7 +123,7 @@ func CreateAllowance(ctx context.Context, a Allowance) (Allowance, error) {
 		INSERT INTO allowances (subject_id, target, field, value, direction, actor_id, reason, expires_at, review_date)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at`
-	err := PG.QueryRow(ctx, q, a.SubjectID, a.Target, a.Field, a.Value, a.Direction,
+	err := querier(ctx).QueryRow(ctx, q, a.SubjectID, a.Target, a.Field, a.Value, a.Direction,
 		a.ActorID, a.Reason, a.ExpiresAt, a.ReviewDate).Scan(&a.ID, &a.CreatedAt)
 	if err != nil {
 		return Allowance{}, fmt.Errorf("create allowance: %w", err)
@@ -141,7 +141,7 @@ func LiftAllowance(ctx context.Context, id, actor string) error {
 		return fmt.Errorf("%w: %s", ErrAllowanceNotFound, id)
 	}
 	const q = `UPDATE allowances SET lifted_at = NOW(), lifted_by = $2 WHERE id = $1 AND lifted_at IS NULL`
-	tag, err := PG.Exec(ctx, q, id, actor)
+	tag, err := querier(ctx).Exec(ctx, q, id, actor)
 	if err != nil {
 		return fmt.Errorf("lift allowance: %w", err)
 	}
@@ -166,7 +166,7 @@ func AllowancesInForce(ctx context.Context, subjectID, target string) ([]Allowan
 		   AND lifted_at IS NULL
 		   AND (expires_at IS NULL OR expires_at > NOW())
 		 ORDER BY created_at`
-	rows, err := PG.Query(ctx, q, subjectID, target)
+	rows, err := querier(ctx).Query(ctx, q, subjectID, target)
 	if err != nil {
 		return nil, fmt.Errorf("read allowances in force: %w", err)
 	}
@@ -181,7 +181,7 @@ func AllowancesForSubject(ctx context.Context, subjectID string) ([]Allowance, e
 		SELECT id, subject_id, target, field, value, direction, actor_id, reason,
 		       created_at, expires_at, review_date, lifted_at, COALESCE(lifted_by, '')
 		  FROM allowances WHERE subject_id = $1 ORDER BY created_at DESC`
-	rows, err := PG.Query(ctx, q, subjectID)
+	rows, err := querier(ctx).Query(ctx, q, subjectID)
 	if err != nil {
 		return nil, fmt.Errorf("read allowances for %s: %w", subjectID, err)
 	}
@@ -202,7 +202,7 @@ func AllowancesDueForReview(ctx context.Context) ([]Allowance, error) {
 		   AND review_date IS NOT NULL AND review_date <= NOW()
 		   AND (expires_at IS NULL OR expires_at > NOW())
 		 ORDER BY review_date`
-	rows, err := PG.Query(ctx, q)
+	rows, err := querier(ctx).Query(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("read allowances due for review: %w", err)
 	}
@@ -227,7 +227,7 @@ func LapsedAllowances(ctx context.Context, limit int) ([]Allowance, error) {
 		 WHERE lifted_at IS NULL AND expires_at IS NOT NULL AND expires_at <= NOW()
 		 ORDER BY expires_at
 		 LIMIT $1`
-	rows, err := PG.Query(ctx, q, limit)
+	rows, err := querier(ctx).Query(ctx, q, limit)
 	if err != nil {
 		return nil, fmt.Errorf("read lapsed allowances: %w", err)
 	}
@@ -253,7 +253,7 @@ func ResolveLapsedAllowance(ctx context.Context, id string) error {
 		)
 		INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
 		SELECT 'system', l.subject_id, 'allowance.' || l.target || '.lapsed', l.id FROM lapsed l`
-	tag, err := PG.Exec(ctx, q, id)
+	tag, err := querier(ctx).Exec(ctx, q, id)
 	if err != nil {
 		return fmt.Errorf("resolve lapsed allowance: %w", err)
 	}

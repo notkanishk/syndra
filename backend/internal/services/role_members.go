@@ -283,7 +283,7 @@ func DeleteDirectGrant(ctx context.Context, userID, grantID, actor string) (Dire
 	// Read and write under one lock, for the same reason expiry does: a delta
 	// computed while another cascade is mid-flight is a statement about a world
 	// neither of them ends up in.
-	if err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
+	if err := withLockedAccess(ctx, func(ctx context.Context) error {
 		rules, err := svcGetActiveMappingRules(ctx)
 		if err != nil {
 			return err
@@ -384,7 +384,7 @@ func ExpireDirectGrant(ctx context.Context, userID, grantID, projectID, role, ac
 	// What they need is not to see this transaction's own writes — there are
 	// none yet — but for nothing that could invalidate them to be able to
 	// commit while they run, and every enqueue must take this same lock.
-	err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
+	err := withLockedAccess(ctx, func(ctx context.Context) error {
 		rules, err := svcGetActiveMappingRules(ctx)
 		if err != nil {
 			return err

@@ -30,7 +30,7 @@ func UpsertDirectGrant(ctx context.Context, userID, projectID, roleKey, grantedB
 		RETURNING id;`
 
 	var id string
-	if err := PG.QueryRow(ctx, query, userID, projectID, roleKey, grantedBy, reason, expiresAt).Scan(&id); err != nil {
+	if err := querier(ctx).QueryRow(ctx, query, userID, projectID, roleKey, grantedBy, reason, expiresAt).Scan(&id); err != nil {
 		return "", fmt.Errorf("failed to upsert direct grant: %w", err)
 	}
 	return id, nil
@@ -46,7 +46,7 @@ func GetDirectGrantsForUser(ctx context.Context, userID string, includeExpired b
 	}
 	query += ` ORDER BY created_at DESC`
 
-	rows, err := PG.Query(ctx, query, userID)
+	rows, err := querier(ctx).Query(ctx, query, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func GetAllDirectGrants(ctx context.Context, includeExpired bool) ([]models.Dire
 	}
 	query += ` ORDER BY user_id, zitadel_project_id, zitadel_role_key`
 
-	rows, err := PG.Query(ctx, query)
+	rows, err := querier(ctx).Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func GetExpiringDirectGrants(ctx context.Context, within time.Duration) ([]model
 		  AND expires_at <= NOW() + $1::interval
 		ORDER BY expires_at ASC`
 
-	rows, err := PG.Query(ctx, query, fmt.Sprintf("%f seconds", within.Seconds()))
+	rows, err := querier(ctx).Query(ctx, query, fmt.Sprintf("%f seconds", within.Seconds()))
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func GetExpiringDirectGrantsWithAcknowledgements(ctx context.Context, within tim
 		  AND g.expires_at <= NOW() + $1::interval
 		ORDER BY g.expires_at ASC`
 
-	rows, err := PG.Query(ctx, query, fmt.Sprintf("%f seconds", within.Seconds()))
+	rows, err := querier(ctx).Query(ctx, query, fmt.Sprintf("%f seconds", within.Seconds()))
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +249,7 @@ func AcknowledgeGrantExpiry(ctx context.Context, grantID string, expiresAt time.
 // leave a decision unrevisable the moment they leave for the summer.
 func ClearGrantExpiryAcknowledgement(ctx context.Context, grantID string) (string, error) {
 	var userID string
-	err := PG.QueryRow(ctx, `
+	err := querier(ctx).QueryRow(ctx, `
 		DELETE FROM grant_expiry_acknowledgements a
 		USING direct_role_grants g
 		WHERE a.grant_id = $1 AND g.id = a.grant_id
@@ -275,7 +275,7 @@ func GetExpiredDirectGrants(ctx context.Context, limit int) ([]models.DirectGran
 		ORDER BY expires_at ASC
 		LIMIT $1`
 
-	rows, err := PG.Query(ctx, query, limit)
+	rows, err := querier(ctx).Query(ctx, query, limit)
 	if err != nil {
 		return nil, err
 	}

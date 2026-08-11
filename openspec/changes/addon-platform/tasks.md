@@ -206,7 +206,7 @@
 - [x] 9.10 Tests: queued revokes are counted and presented apart from queued grants; crossing the threshold changes the presentation
 - [ ] 9.11 Dormant-account housekeeping view: reason, age, individual and bulk action, plan before apply
 - [ ] 9.12 Tests: accounts held by an active role are excluded; bulk action plans before applying
-- [x] 9.13 Remove `System > Hardware sync` from `ui/src/lib/nav.ts` and its route; add a per-target System entry per registered add-on, derived from deployment configuration rather than from what the current operator can see
+- [x] 9.13 Remove `System > Hardware sync` from `ui/src/lib/nav.ts` and its route (the route half was missed and is closed in 23.18); add a per-target System entry per registered add-on, derived from deployment configuration rather than from what the current operator can see
 - [x] 9.14 Tests: nav renders a target entry for each registered add-on regardless of that operator's data, and the LLDAP entry and route are gone
 - [x] 9.15 Align the new operator surfaces with `basic-advanced-ia`: Basic versus Advanced placement, structure that does not move in response to data
 - [x] 9.16 Extend `GET /api/v1/governance/indicators` with the unconfirmed-revocation count and wire the `NavLeaf` indicator key so the badge can carry it
@@ -570,3 +570,63 @@ component nobody had exercised end to end.
 **Not built, and now the whole of what is left:** Unifi Access (§26 doors, §28
 cards), which the bundle sequences after the storage path; `pool.dataset.query`
 for 22.11; and the real NAS.
+
+## 23. The audit of the whole branch, and the five it found
+
+An audit of `55cd9a6..HEAD` — 23 commits, 202 files. All three suites were
+green throughout, and every finding below was invisible to them. The pattern is
+one thing, and it is the pattern `fa82dfe` built the right mechanism for and
+then applied to exactly one boundary: **two correct-looking sides of a boundary,
+changed independently, each side's tests agreeing with itself.**
+
+The proxy allowlist against the backend's router. `op_type='apply'` against
+three predicates naming `revoke`. A resolver reading the pool inside a
+transaction that had written. `locate` against the guard `plan` already had.
+Four instances of one shape, and none of them had the binding.
+
+### The transaction boundary (CRITICAL)
+
+- [x] 23.1 **The lifecycle trigger queued the inverse of its intent.** `triggerTargetConvergence` was `deltaParams`' first statement, and `deltaParams` runs before the source write by construction. So the resolver ran in the world the change had not happened in: gaining a first mapped role resolved to *no mapped role, disable the account*, and losing the last one resolved to *still holds it, keep the access*. Both halves of §12's reversible deprovisioning, inverted. The comment at the resolve site said "AFTER the source write" — the third time on this branch a comment asserted the property the code broke
+- [x] 23.2 Fixed by **deferring, not by reordering.** The chokepoint registers; `withLockedAccess` flushes after fn and inside the same transaction. Reordering at nine call sites would have been nine chances to forget, which is the argument that put the hook at the chokepoint in the first place — so the hook stays and only the moment moves. A delta built outside the wrapper is REFUSED rather than skipped: a role change with no path to its mapped targets must fail, not commit half of itself
+- [x] 23.3 And the other half, which reordering alone would not have fixed: **`internal/db` read through `PG` — the pool — from inside the ambient transaction.** 127 statements across 28 files. A read there cannot see its caller's uncommitted write; a write there commits on its own and survives the caller's rollback, which is exactly how a mapping edit landed with its convergences rolled back. Every statement now goes through `querier(ctx)`, with a source guard listing the three exceptions and why each one is a transaction BOUNDARY rather than a statement
+- [x] 23.4 The test that would have caught it drives `CascadeBundleAssignedToUser` and asserts the queued snapshot. The old ones called the trigger directly with an after-state fixture **no caller produces** — and the mapping stub answered for any role set, so even a fixture that flipped on the write would have passed. Verified by reintroducing the bug and watching it fail
+
+### The revocation that never drained (CRITICAL)
+
+- [x] 23.5 **Three correct-looking parts, composing into retained access.** `DrainRevocations` claims `op_type = 'revoke'`; a target revocation's account lock is an `apply` row; `unconfirmed_revocations` matched neither. So the lock was unclaimable by the only background drain, invisible on every surface and in every indicator, and the response told the operator in as many words that *revocations do not wait for an operator*
+- [x] 23.6 The claim's own comment had named the reason for the exclusion — an apply is level-triggered, so nothing on the row said which direction it moved. **The answer is to stop inferring it.** Migration 000035 adds `withdraws_only`, declared by the writer, which is the only thing that knows: a revocation resolves its set with the lifecycle field denied and cannot confer. FALSE by default, so an undeclared row still waits for an operator — adding the column cannot widen what the runner dispatches
+- [x] 23.7 The intent-order guard widens with it. An older **apply that did not declare itself** is conferring intent, and draining a withdrawal ahead of it would let the operator's later drain restore precisely what was withdrawn — silently, with neither row having failed
+- [x] 23.8 `DrainRevocations` grows an add-on leg per registered target, each with its own reachability probe, so a NAS being off does not leave a door system's revocation queued. And the surface reads the same declaration, which is what makes the property whole: **a revocation is either draining or on a screen**
+
+### The member surface members could not reach (CRITICAL)
+
+- [x] 23.9 **`isMemberAllowed` had no case for `me/…`.** GET fell through to `isSelfScoped`, which requires `path[0] === "users"`; POST allowed only `requests`. Both new member routes 403'd at the proxy for every non-admin session. The backend was correct throughout — `withUserAuth`, self-scoped, operation name hard-coded — so group 10 shipped built on both sides and unreachable in the middle
+- [x] 23.10 The allowlist is now **bound to the backend's router**, the way `fa82dfe` bound the wire envelopes to a shared artifact. `/api/v1/me/` is the member prefix by definition, so a route there a member cannot reach is always a bug; the test reads `router.go` and drives the proxy for each. It immediately found a third: `GET /me/profile`, blocked since the day it was added
+- [x] 23.11 Still an explicit list rather than a prefix rule. A blanket `path[0] === "me"` would admit whatever is added under it next, and §26's doors should widen this surface by somebody typing it, not by inheritance
+
+### Dead code hiding a broken read, and a rollback outside its own transaction (CRITICAL)
+
+- [x] 23.12 **`ListCompromisedLogs` could not run.** It extended `anchorSelect`, whose predicate needs an argument, and passed none — pgx errors on every call. Having no caller is what hid it. Deleted rather than repaired: a finding already reaches the operator on the target's health card, and a second listing with no screen is a second thing to keep correct for no reader
+- [x] 23.13 **`RollbackMappingVersion` opened its own transaction** inside the handler's. Restoring the bindings is half a rollback; the convergences queued afterwards are the other half, and a failure there left the mapping changed with nothing queued — a state `e48613d`'s own commit message said was unreachable. It joins through `beginOrJoin` now
+
+### The two truncation guards (HIGH)
+
+- [x] 23.14 **`fingerprintFor` read the outcome and nothing else.** A 200 is not a usable answer: the add-on answers from its mirror when the target is unreachable and says so in `current`, and caps a large read and says so in `truncated`. A fingerprint from either describes something other than live state. Both now refuse the dispatch and leave the row claimable; a `blocked` outcome fails terminally, because no retry resolves a binding conflict
+- [x] 23.15 **The add-on's `locate` never checked `snap.Truncated`.** `plan` blocks a create from a capped read — an absence read out of a truncated list is not an absence, and the fingerprint cannot tell them apart because "not in the read" and "not on the target" hash identically. `apply` made the account anyway. Verified by removing the guard and watching a second account get created for a subject whose first one sits past the cap
+
+### The rest (HIGH)
+
+- [x] 23.16 **Two secrets lived in the mutation cache.** TanStack retains a mutation's variables after the request settles, so a member's storage password and the delete-capable elevated credential both outlived their requests — under docblocks saying they were kept nowhere. `reset()` is not the fix: it discards the outcome the screen is still rendering. The secret is no longer the variable — a one-shot box is, and what the cache retains is empty
+- [x] 23.17 **Authoring a hold refreshed nothing.** It invalidated `["users", subject_id]`; the access view is keyed `["users", "access", id]` and prefix matching compares positionally, so the Withheld band never appeared on the page that had just authored the hold. Lifting one used a bare `["users"]` and did work — one direction refreshing and the other not is what made it read as a convention. Both go through the key factory now, asserted against a real cache rather than against a repeated literal
+- [x] 23.18 **The Hardware sync route was still live**, importing a query polling `/api/v1/intents` every five seconds — a route `f0da3e0` deleted. The nav half of 9.13 was done and the route half was not, while 9.13 was ticked. Unlinking is not deleting: a URL somebody saved is still a URL
+
+**Still open, and deliberately.** `shadow_credentials` keys on `user_id` alone
+while `my_storage.go` renders its status per target — latent at one target, and
+the one table predating migration 000026 that never got the column that
+migration existed to add. `RoleMember` carries no allowance field, so a role's
+holder list still reads as full access where §6 says the carve-out must be
+visible. `ForgetTargetBinding` and `ErrBindingConflict` have no callers.
+Nothing can clear `violation_reason`, so a legitimate volume replacement pins a
+target as compromised permanently. Each is a real gap; none is retained access
+or an inverted intent, which is why they are named here rather than fixed in the
+same pass.

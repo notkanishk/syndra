@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import type { OneShotSecret } from "@/lib/secret";
 
 /**
  * A member's own storage view.
@@ -65,14 +66,18 @@ export function useMyStorage() {
  *
  * The value goes to the target and is kept nowhere: not in the query cache, not
  * in the response, not in Syndra's database. What comes back is metadata.
+ *
+ * The one-shot box is what makes the first of those true. A mutation's
+ * variables outlive the request in the MutationCache, so taking the password as
+ * a plain argument retained it — under this exact sentence.
  */
 export function useSetStorageCredential(target: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (password: string) =>
+    mutationFn: (password: OneShotSecret) =>
       request<{ status: string; detail: string }>(`/me/targets/${target}/credential`, {
         method: "POST",
-        body: { password },
+        body: { password: password.take() },
       }),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ["me", "targets"] });

@@ -55,7 +55,7 @@ func CreateBundle(ctx context.Context, name string, description string, confirma
 // no holder falls behind, and publishing a version to fix a typo would put a
 // meaningless entry in a history that exists to answer "what changed for whom".
 func UpdateBundle(ctx context.Context, id, name, description string) error {
-	tag, err := PG.Exec(ctx,
+	tag, err := querier(ctx).Exec(ctx,
 		`UPDATE bundles SET name = $2, description = $3 WHERE id = $1`, id, name, description)
 	if err != nil {
 		return fmt.Errorf("update bundle (id=%s): %w", id, err)
@@ -112,7 +112,7 @@ func GetAllBundles(ctx context.Context) ([]models.Bundle, error) {
 		SELECT b.id, b.name, b.description, b.is_welcome, b.confirmation_mode, b.created_at,
 		       COALESCE((SELECT MAX(version) FROM bundle_versions v WHERE v.bundle_id = b.id), 0)
 		FROM bundles b ORDER BY b.created_at DESC;`
-	rows, err := PG.Query(ctx, query)
+	rows, err := querier(ctx).Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func GetAllBundles(ctx context.Context) ([]models.Bundle, error) {
 // confirmation_mode before fanning out.
 func GetBundleByID(ctx context.Context, id string) (models.Bundle, error) {
 	var b models.Bundle
-	err := PG.QueryRow(ctx,
+	err := querier(ctx).QueryRow(ctx,
 		`SELECT id, name, description, is_welcome, confirmation_mode, created_at
 		 FROM bundles WHERE id = $1`, id).
 		Scan(&b.ID, &b.Name, &b.Description, &b.IsWelcome, &b.ConfirmationMode, &b.CreatedAt)
@@ -143,7 +143,7 @@ func GetBundleByID(ctx context.Context, id string) (models.Bundle, error) {
 
 func GetRolesForBundle(ctx context.Context, bundleID string) ([]models.BundleRole, error) {
 	query := `SELECT bundle_id, zitadel_project_id, zitadel_role_key FROM bundle_roles WHERE bundle_id = $1;`
-	rows, err := PG.Query(ctx, query, bundleID)
+	rows, err := querier(ctx).Query(ctx, query, bundleID)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func GetBundlesForUser(ctx context.Context, userID string) ([]models.Bundle, err
 		JOIN bundle_versions bv ON bv.id = uba.version_id
 		WHERE uba.user_id = $1;`
 
-	rows, err := PG.Query(ctx, query, userID)
+	rows, err := querier(ctx).Query(ctx, query, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +194,7 @@ func GetBundlesForUser(ctx context.Context, userID string) ([]models.Bundle, err
 // fanned out a query per row would be a list nobody keeps open.
 func GetBundleHolderCounts(ctx context.Context) (map[string]int, error) {
 	const q = `SELECT bundle_id, COUNT(DISTINCT user_id) FROM user_bundle_assignments GROUP BY bundle_id`
-	rows, err := PG.Query(ctx, q)
+	rows, err := querier(ctx).Query(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("query bundle holder counts: %w", err)
 	}

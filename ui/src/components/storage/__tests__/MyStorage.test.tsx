@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { MyStorage } from "@/components/storage/MyStorage";
 import type { MyTargetView } from "@/lib/queries/useMyStorage";
+import type { OneShotSecret } from "@/lib/secret";
 
 // 10.5/10.7 — the three states render distinctly, and the credential form
 // appears only in the third.
@@ -13,7 +14,7 @@ import type { MyTargetView } from "@/lib/queries/useMyStorage";
 // the form to a member whose account has not been created yet, dispatches at an
 // account that does not exist, and tells them their password was set.
 
-const state = { targets: [] as MyTargetView[] };
+const state = { targets: [] as MyTargetView[], sent: [] as OneShotSecret[] };
 
 vi.mock("@/lib/queries/useMyStorage", async () => {
   const actual = await vi.importActual<typeof import("@/lib/queries/useMyStorage")>(
@@ -27,7 +28,12 @@ vi.mock("@/lib/queries/useMyStorage", async () => {
       error: null,
       refetch: vi.fn(),
     }),
-    useSetStorageCredential: () => ({ mutate: vi.fn(), isPending: false, data: undefined, error: null }),
+    useSetStorageCredential: () => ({
+      mutate: (secret: OneShotSecret) => state.sent.push(secret),
+      isPending: false,
+      data: undefined,
+      error: null,
+    }),
   };
 });
 
@@ -199,5 +205,25 @@ describe("connection instructions", () => {
     renderStorage();
 
     expect(screen.getByText(/not in this list on purpose/i)).toBeInTheDocument();
+  });
+});
+
+// The password must not outlive the request. TanStack keeps a mutation's
+// variables in the MutationCache, so passing the string directly left a
+// member's password in memory under a docblock promising it was kept nowhere.
+describe("what the page hands to the mutation", () => {
+  it("sends the password in a box that empties on read", () => {
+    state.sent = [];
+    state.targets = [view()];
+    renderStorage();
+
+    fireEvent.change(screen.getByLabelText(/Set a storage password/), {
+      target: { value: "correct horse" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Set password/ }));
+
+    expect(state.sent).toHaveLength(1);
+    expect(state.sent[0].take()).toBe("correct horse");
+    expect(state.sent[0].spent).toBe(true);
   });
 });

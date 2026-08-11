@@ -3,6 +3,7 @@ package propagation
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"syndra/internal/db"
 )
@@ -39,28 +40,62 @@ func DrainRevocations(ctx context.Context) (DrainResult, error) {
 	}
 	defer release()
 
-	// One probe, before any row is claimed. The retry budget exists for real
-	// failures; spending it on a target that is switched off would exhaust a
-	// revocation's attempts on an outage and halt the runner permanently on the
-	// row class where a permanent silent stop is worst.
-	if !zitadelReachable(ctx) {
-		return DrainResult{Halted: true, Reason: "zitadel_offline"}, nil
-	}
-
-	// Only withdrawal rows, and only where dispatching one cannot invert its
-	// subject's own intent order. Both conditions are in the claim, so this
-	// runner cannot reach an access-conferring row even by mistake — a guard here
-	// would be one a future caller of the claim could skip.
-	rows, err := claimRevocations(ctx, db.TargetZitadel, claimBatch)
-	if err != nil {
-		return DrainResult{}, fmt.Errorf("claim revocations: %w", err)
-	}
-
 	var res DrainResult
-	for _, row := range rows {
-		if halt := res.processRow(ctx, row); halt {
-			return res, nil
+
+	// Zitadel's leg. One probe, before any row is claimed: the retry budget
+	// exists for real failures, and spending it on a target that is switched off
+	// would exhaust a revocation's attempts on an outage and halt the runner
+	// permanently on the row class where a permanent silent stop is worst.
+	if !zitadelReachable(ctx) {
+		res.merge(db.TargetZitadel, DrainResult{Halted: true, Reason: "zitadel_offline"})
+	} else {
+		// Only withdrawal rows, and only where dispatching one cannot invert its
+		// subject's own intent order. Both conditions are in the claim, so this
+		// runner cannot reach an access-conferring row even by mistake — a guard
+		// here would be one a future caller of the claim could skip.
+		rows, err := claimRevocations(ctx, db.TargetZitadel, claimBatch)
+		if err != nil {
+			return DrainResult{}, fmt.Errorf("claim revocations: %w", err)
 		}
+		var pass DrainResult
+		for _, row := range rows {
+			if halt := pass.processRow(ctx, row); halt {
+				break
+			}
+		}
+		res.merge(db.TargetZitadel, pass)
+	}
+
+	// And every add-on's. A target revocation queues a lock, and a lock that
+	// waits for somebody to open the right page is retained access — the same
+	// reason this runner exists at all. The claim is the same one, so the same
+	// two restrictions apply: withdrawal rows only, never ahead of older
+	// conferring intent for the same subject.
+	//
+	// One target's outage does not stop the others. They are separate
+	// deployments, and a NAS being off is not a reason to leave a door system's
+	// revocation queued.
+	for _, target := range addonDrainTargets() {
+		if !addonReachable(ctx, target) {
+			res.merge(target, DrainResult{Halted: true, Reason: "target_unreachable"})
+			continue
+		}
+		rows, err := claimRevocations(ctx, target, claimBatch)
+		if err != nil {
+			// Logged and skipped rather than returned: the Zitadel leg above has
+			// already dispatched, and failing the pass would discard that report
+			// for a claim error on an unrelated target.
+			log.Printf("[REVOKE] %s: claim revocations: %v", target, err)
+			res.merge(target, DrainResult{Halted: true, Reason: "claim_error"})
+			continue
+		}
+		var pass DrainResult
+		for _, row := range rows {
+			if halt := pass.dispatchEntitlement(ctx, row); halt {
+				break
+			}
+		}
+		res.merge(target, pass)
 	}
 	return res, nil
 }

@@ -27,7 +27,7 @@ func CreateAccessRequest(ctx context.Context, requesterID, projectID, roleKey, j
 		RETURNING id`
 
 	var id string
-	if err := PG.QueryRow(ctx, query, requesterID, projectID, roleKey, justification, durationDays).Scan(&id); err != nil {
+	if err := querier(ctx).QueryRow(ctx, query, requesterID, projectID, roleKey, justification, durationDays).Scan(&id); err != nil {
 		return "", fmt.Errorf("failed to create access request: %w", err)
 	}
 	return id, nil
@@ -44,7 +44,7 @@ func GetAccessRequests(ctx context.Context, status string) ([]models.AccessReque
 	}
 	query += ` ORDER BY created_at DESC`
 
-	rows, err := PG.Query(ctx, query, args...)
+	rows, err := querier(ctx).Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func GetAccessRequestByID(ctx context.Context, id string) (models.AccessRequest,
 		WHERE id = $1`
 
 	var req models.AccessRequest
-	if err := PG.QueryRow(ctx, query, id).Scan(&req.ID, &req.RequesterID, &req.ProjectID, &req.RoleKey, &req.Justification, &req.DurationDays, &req.Status, &req.ReviewerID, &req.ReviewNote, &req.CreatedAt, &req.ResolvedAt); err != nil {
+	if err := querier(ctx).QueryRow(ctx, query, id).Scan(&req.ID, &req.RequesterID, &req.ProjectID, &req.RoleKey, &req.Justification, &req.DurationDays, &req.Status, &req.ReviewerID, &req.ReviewNote, &req.CreatedAt, &req.ResolvedAt); err != nil {
 		return req, fmt.Errorf("failed to fetch access request: %w", err)
 	}
 	return req, nil
@@ -89,7 +89,7 @@ func ResolveAccessRequest(ctx context.Context, id, status, reviewerID, reviewNot
 			resolved_at = CURRENT_TIMESTAMP
 		WHERE id = $1 AND status = 'pending'`
 
-	tag, err := PG.Exec(ctx, query, id, status, reviewerID, reviewNote)
+	tag, err := querier(ctx).Exec(ctx, query, id, status, reviewerID, reviewNote)
 	if err != nil {
 		return fmt.Errorf("failed to resolve access request: %w", err)
 	}
@@ -116,7 +116,7 @@ func WithdrawAccessRequest(ctx context.Context, id, requesterID string) error {
 			resolved_at = CURRENT_TIMESTAMP
 		WHERE id = $1 AND requester_user_id = $2 AND status = 'pending'`
 
-	tag, err := PG.Exec(ctx, query, id, requesterID)
+	tag, err := querier(ctx).Exec(ctx, query, id, requesterID)
 	if err != nil {
 		return fmt.Errorf("failed to withdraw access request: %w", err)
 	}

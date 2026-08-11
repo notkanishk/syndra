@@ -19,7 +19,7 @@ import (
 // LatestVersion returns a bundle's highest published version.
 func LatestVersion(ctx context.Context, bundleID string) (models.BundleVersion, error) {
 	var v models.BundleVersion
-	err := PG.QueryRow(ctx, `
+	err := querier(ctx).QueryRow(ctx, `
 		SELECT id, bundle_id, version, note, published_by, published_at
 		FROM bundle_versions WHERE bundle_id = $1
 		ORDER BY version DESC LIMIT 1`, bundleID).
@@ -34,7 +34,7 @@ func LatestVersion(ctx context.Context, bundleID string) (models.BundleVersion, 
 // people" is the sentence an operator needs before deciding whether the older
 // version is a deliberate exception or something nobody got round to.
 func ListBundleVersions(ctx context.Context, bundleID string) ([]models.BundleVersion, error) {
-	rows, err := PG.Query(ctx, `
+	rows, err := querier(ctx).Query(ctx, `
 		SELECT bv.id, bv.bundle_id, bv.version, bv.note, bv.published_by, bv.published_at,
 		       COUNT(uba.user_id)
 		FROM bundle_versions bv
@@ -72,7 +72,7 @@ func ListBundleVersions(ctx context.Context, bundleID string) ([]models.BundleVe
 // edits to somebody who is not pinned to them.
 func LatestVersionRoles(ctx context.Context, bundleID string) (models.BundleVersion, []models.BundleRole, error) {
 	var version models.BundleVersion
-	if err := PG.QueryRow(ctx, `
+	if err := querier(ctx).QueryRow(ctx, `
 		SELECT id, bundle_id, version, note, published_by, published_at
 		FROM bundle_versions WHERE bundle_id = $1
 		ORDER BY version DESC LIMIT 1`, bundleID).
@@ -81,7 +81,7 @@ func LatestVersionRoles(ctx context.Context, bundleID string) (models.BundleVers
 		return version, nil, fmt.Errorf("latest version: %w", err)
 	}
 
-	rows, err := PG.Query(ctx, `
+	rows, err := querier(ctx).Query(ctx, `
 		SELECT bv.bundle_id, r.zitadel_project_id, r.zitadel_role_key
 		FROM bundle_version_roles r
 		JOIN bundle_versions bv ON bv.id = r.version_id
@@ -106,7 +106,7 @@ func LatestVersionRoles(ctx context.Context, bundleID string) (models.BundleVers
 // VersionBelongsTo reports whether a version is one of a bundle's own.
 func VersionBelongsTo(ctx context.Context, bundleID, versionID string) (bool, error) {
 	var ok bool
-	err := PG.QueryRow(ctx,
+	err := querier(ctx).QueryRow(ctx,
 		`SELECT EXISTS (SELECT 1 FROM bundle_versions WHERE id = $1 AND bundle_id = $2)`,
 		versionID, bundleID).Scan(&ok)
 	return ok, err
@@ -114,7 +114,7 @@ func VersionBelongsTo(ctx context.Context, bundleID, versionID string) (bool, er
 
 // GetRolesForVersion returns what one published snapshot contained.
 func GetRolesForVersion(ctx context.Context, versionID string) ([]models.BundleRole, error) {
-	rows, err := PG.Query(ctx, `
+	rows, err := querier(ctx).Query(ctx, `
 		SELECT bv.bundle_id, r.zitadel_project_id, r.zitadel_role_key
 		FROM bundle_version_roles r
 		JOIN bundle_versions bv ON bv.id = r.version_id
@@ -146,7 +146,7 @@ func GetRolesForVersion(ctx context.Context, versionID string) ([]models.BundleR
 // it asked what the bundle holds, when the question is what this person's
 // version holds.
 func GetUserBundleRolesGrouped(ctx context.Context, userID string) (map[string][]models.BundleRole, error) {
-	rows, err := PG.Query(ctx, `
+	rows, err := querier(ctx).Query(ctx, `
 		SELECT uba.bundle_id, r.zitadel_project_id, r.zitadel_role_key
 		FROM user_bundle_assignments uba
 		JOIN bundle_version_roles r ON r.version_id = uba.version_id
@@ -170,7 +170,7 @@ func GetUserBundleRolesGrouped(ctx context.Context, userID string) (map[string][
 // GetBundleHoldersByVersion lists holders of one bundle with the version each
 // sits on, newest version first then user id, so the list has a stable order.
 func GetBundleHoldersByVersion(ctx context.Context, bundleID string) ([]models.BundleHolder, error) {
-	rows, err := PG.Query(ctx, `
+	rows, err := querier(ctx).Query(ctx, `
 		SELECT uba.user_id, bv.id, bv.version, uba.assigned_at
 		FROM user_bundle_assignments uba
 		JOIN bundle_versions bv ON bv.id = uba.version_id
@@ -196,7 +196,7 @@ func GetBundleHoldersByVersion(ctx context.Context, bundleID string) ([]models.B
 // GetUserBundleVersions returns, for one user, which version of each bundle
 // they hold. Drives the version chip on a person's page.
 func GetUserBundleVersions(ctx context.Context, userID string) (map[string]models.BundleVersion, error) {
-	rows, err := PG.Query(ctx, `
+	rows, err := querier(ctx).Query(ctx, `
 		SELECT bv.bundle_id, bv.id, bv.version, bv.note, bv.published_by, bv.published_at,
 		       (SELECT MAX(version) FROM bundle_versions x WHERE x.bundle_id = bv.bundle_id)
 		FROM user_bundle_assignments uba
@@ -226,7 +226,7 @@ func GetUserBundleVersions(ctx context.Context, userID string) (map[string]model
 // holders are spread across three versions is a different object from one where
 // everybody is current, and the list is where that has to be visible.
 func GetStaleHolderCounts(ctx context.Context) (map[string]int, error) {
-	rows, err := PG.Query(ctx, `
+	rows, err := querier(ctx).Query(ctx, `
 		SELECT uba.bundle_id, COUNT(*)
 		FROM user_bundle_assignments uba
 		JOIN bundle_versions bv ON bv.id = uba.version_id

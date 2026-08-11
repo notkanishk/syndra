@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -29,6 +30,95 @@ import (
 // behind it. So the convergence is queued with a recorded intent and no
 // fingerprint, and the drain re-reads live state before dispatching it.
 
+// The trigger resolves AFTER the source write, and that is a structural
+// property rather than a discipline.
+//
+// `deltaParams` is the one chokepoint every closure delta passes through, and
+// it necessarily runs BEFORE the write it is building params for. Resolving
+// there resolves the world the change has not happened in yet, and the answer
+// is inverted in both directions: gaining a first mapped role resolves to "no
+// mapped role, disable the account", and losing the last one resolves to "still
+// holds it, keep the access". A level-triggered apply then converges the target
+// to the opposite of the intent.
+//
+// So the chokepoint DEFERS and `withLockedAccess` FLUSHES: the resolve runs
+// after fn has finished writing, still inside fn's transaction and still under
+// the access-mutation lock. Registering rather than calling keeps the single
+// hook — a cascade added later reaches its mapped targets without anybody
+// remembering to wire it — and moves only the moment.
+
+type pendingKeyType struct{}
+
+var pendingKey pendingKeyType
+
+// errConvergenceOutsideLock is returned rather than silently skipped. A closure
+// delta computed outside the access-mutation lock is not a convergence that
+// merely runs late; it is a role change with no path to its mapped targets, and
+// it must fail the change rather than commit half of it.
+var errConvergenceOutsideLock = errors.New(
+	"closure delta built outside withLockedAccess: the lifecycle trigger has nowhere to register")
+
+type pendingConvergence struct {
+	actor   string
+	userID  string
+	changed []roleKey
+}
+
+type pendingConvergences struct{ items []pendingConvergence }
+
+// add merges into an existing entry for the same subject and actor. One
+// cascade can produce several deltas for one person — a bundle move is a
+// removal and an addition — and each would otherwise queue its own convergence
+// carrying the identical resolved set.
+func (p *pendingConvergences) add(actor, userID string, changed []roleKey) {
+	for i := range p.items {
+		if p.items[i].actor == actor && p.items[i].userID == userID {
+			p.items[i].changed = append(p.items[i].changed, changed...)
+			return
+		}
+	}
+	p.items = append(p.items, pendingConvergence{actor: actor, userID: userID, changed: changed})
+}
+
+// withLockedAccess is svcInTxLockingAccess plus the deferred lifecycle trigger.
+//
+// Every cascade in this package uses it instead of the raw lock, so the flush
+// cannot be forgotten at a call site: a cascade that took the lock directly
+// would register convergences into a context with no pending list and fail
+// loudly at the first delta rather than quietly converging nothing.
+func withLockedAccess(ctx context.Context, fn func(context.Context) error) error {
+	return svcInTxLockingAccess(ctx, func(ctx context.Context) error {
+		pending := &pendingConvergences{}
+		ctx = context.WithValue(ctx, pendingKey, pending)
+		if err := fn(ctx); err != nil {
+			return err
+		}
+		// Indexed rather than ranged: nothing registers during the flush today,
+		// and if something ever does it must be flushed too rather than dropped.
+		for i := 0; i < len(pending.items); i++ {
+			it := pending.items[i]
+			if err := triggerTargetConvergence(ctx, it.actor, it.userID, it.changed); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// deferTargetConvergence records that a subject's roles changed, to be resolved
+// once the caller's writes are in the transaction.
+func deferTargetConvergence(ctx context.Context, actor, userID string, changed []roleKey) error {
+	if len(changed) == 0 {
+		return nil
+	}
+	pending, ok := ctx.Value(pendingKey).(*pendingConvergences)
+	if !ok || pending == nil {
+		return errConvergenceOutsideLock
+	}
+	pending.add(actor, userID, changed)
+	return nil
+}
+
 // triggerTargetConvergence queues a convergence on every target the changed
 // roles reach.
 //
@@ -46,7 +136,9 @@ func triggerTargetConvergence(ctx context.Context, actor, userID string, changed
 		return err
 	}
 	for _, target := range targets {
-		// Resolved fresh, inside the lock, AFTER the source write. The delta
+		// Resolved fresh, inside the lock, after the source write — which is
+		// what the deferral above buys, and the whole reason the flush is not
+		// at the chokepoint. The delta
 		// being enqueued beside this is the role change itself; what the target
 		// needs is the state that follows from it, which is the whole resolved
 		// set and not the delta. A set computed from the delta alone would carry

@@ -33,7 +33,7 @@ const (
 func UpsertTarget(ctx context.Context, target string) error {
 	const q = `INSERT INTO targets (target, state) VALUES ($1, 'active')
 		ON CONFLICT (target) DO UPDATE SET state = 'active'`
-	if _, err := PG.Exec(ctx, q, target); err != nil {
+	if _, err := querier(ctx).Exec(ctx, q, target); err != nil {
 		return fmt.Errorf("upsert target %s: %w", target, err)
 	}
 	return nil
@@ -185,7 +185,7 @@ func abandonQueuedWorkTx(ctx context.Context, tx pgx.Tx, target string) ([]Aband
 
 // ActiveTargets returns the targets the drain and sweep may dispatch work for.
 func ActiveTargets(ctx context.Context) ([]string, error) {
-	rows, err := PG.Query(ctx, `SELECT target FROM targets WHERE state = 'active' ORDER BY target`)
+	rows, err := querier(ctx).Query(ctx, `SELECT target FROM targets WHERE state = 'active' ORDER BY target`)
 	if err != nil {
 		return nil, fmt.Errorf("list active targets: %w", err)
 	}

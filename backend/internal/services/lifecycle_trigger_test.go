@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
 // 7.9/7.10 — a role change reaches a target when somebody mapped it there.
@@ -196,11 +197,17 @@ func TestTheIntentIsTheWholeResolvedSetAndNotTheDelta(t *testing.T) {
 func TestTheTriggerHangsOffTheOneChokepoint(t *testing.T) {
 	src := readServiceSource(t, "cascade.go")
 	body := sliceBetween(t, src, "func deltaParams(", "\nfunc ")
-	if !strings.Contains(body, "triggerTargetConvergence(") {
-		t.Fatal("deltaParams no longer fires the lifecycle trigger, so a cascade reaches Zitadel and no mapped target")
+	if !strings.Contains(body, "deferTargetConvergence(") {
+		t.Fatal("deltaParams no longer registers the lifecycle trigger, so a cascade reaches Zitadel and no mapped target")
 	}
-	if strings.Index(body, "triggerTargetConvergence(") > strings.Index(body, "params := make(") {
-		t.Error("the trigger must run before the params are built, so a failure to queue it stops the change")
+	// It must REGISTER, never resolve. deltaParams runs before the source write
+	// by construction, so resolving here reads the world the change has not
+	// happened in and queues the inverse of the intent.
+	if strings.Contains(body, "triggerTargetConvergence(") {
+		t.Error("deltaParams resolves the entitlement set before the source write, which inverts it")
+	}
+	if strings.Index(body, "deferTargetConvergence(") > strings.Index(body, "params := make(") {
+		t.Error("the trigger must register before the params are built, so a failure to register stops the change")
 	}
 
 	// And every caller goes through it: a closure delta turned into enqueue
@@ -210,6 +217,115 @@ func TestTheTriggerHangsOffTheOneChokepoint(t *testing.T) {
 		if strings.Contains(other, "db.EnqueueParams{") {
 			t.Errorf("%s builds enqueue params directly instead of going through deltaParams", file)
 		}
+	}
+}
+
+// Every cascade takes the lock through the wrapper that flushes the trigger.
+// One that took `svcInTxLockingAccess` directly would build deltas into a
+// context with no pending list — a role change with no path to its mapped
+// targets — and a source guard is the only thing that catches the omission,
+// because the cascade's own tests stub the resolver and never notice.
+func TestEveryCascadeTakesTheLockThroughTheFlushingWrapper(t *testing.T) {
+	for _, file := range []string{"cascade.go", "bundle_publish.go", "role_members.go"} {
+		src := readServiceSource(t, file)
+		if strings.Contains(src, "svcInTxLockingAccess(ctx,") {
+			t.Errorf("%s takes the access lock directly, so its deltas never reach the lifecycle trigger", file)
+		}
+	}
+	wrapper := sliceBetween(t, readServiceSource(t, "lifecycle_trigger.go"), "func withLockedAccess(", "\nfunc ")
+	if strings.Index(wrapper, "fn(ctx)") > strings.Index(wrapper, "triggerTargetConvergence(") {
+		t.Error("the flush must run after fn, or it resolves the state before the write again")
+	}
+}
+
+// A delta built outside the wrapper fails loudly. Silently skipping the trigger
+// would be the same divergence in a quieter form: the roles commit, the target
+// never hears, and no surface disagrees.
+func TestADeltaBuiltOutsideTheLockIsRefused(t *testing.T) {
+	err := deferTargetConvergence(context.Background(), "op_1", "u1",
+		[]roleKey{{projectID: "pLab", roleKey: "trained"}})
+	if !errors.Is(err, errConvergenceOutsideLock) {
+		t.Fatalf("want a refusal outside the lock, got %v", err)
+	}
+}
+
+// The one test that would have caught the inversion: it drives a real cascade
+// rather than calling the trigger with an after-state fixture no caller
+// produces.
+//
+// The fixture's answer changes when the assignment is written, exactly as the
+// database's would. Resolving at `deltaParams` — before that write — reads a
+// subject who holds no mapped role and queues "disable the account", which is
+// the inverse of what assigning the bundle means.
+func TestAssigningABundleQueuesTheStateAFTERTheAssignment(t *testing.T) {
+	resetCascadeDeps(t)
+
+	// Nothing is held until svcAssignBundleAndEnqueue runs, and the mapping read
+	// answers for the roles it is actually given — a stub that returns the
+	// mapping regardless of the role set would resolve the group either way and
+	// hide the very thing this test is for.
+	var assigned bool
+	origRefs, origMappings, origAllowances := svcEffectiveRoleRefs, dbMappingsForRoles, dbAllowancesInForce
+	t.Cleanup(func() {
+		svcEffectiveRoleRefs, dbMappingsForRoles, dbAllowancesInForce = origRefs, origMappings, origAllowances
+	})
+	svcEffectiveRoleRefs = func(context.Context, string) ([]db.RoleRef, error) {
+		if !assigned {
+			return nil, nil
+		}
+		return []db.RoleRef{{ProjectID: "pLab", RoleKey: "trained"}}, nil
+	}
+	dbMappingsForRoles = func(_ context.Context, _ string, roles []db.RoleRef) ([]db.RoleMapping, error) {
+		var out []db.RoleMapping
+		for _, r := range roles {
+			if r.RoleKey == "trained" {
+				out = append(out, mapping("trained", "group", "lab_makers"))
+			}
+		}
+		return out, nil
+	}
+	dbAllowancesInForce = func(context.Context, string, string) ([]db.Allowance, error) { return nil, nil }
+
+	var queued []db.SystemConvergence
+	origTargets, origRecord := dbTargetsMappedToRole, dbRecordSystemConvergence
+	t.Cleanup(func() { dbTargetsMappedToRole, dbRecordSystemConvergence = origTargets, origRecord })
+	dbTargetsMappedToRole = func(_ context.Context, project, role string) ([]string, error) {
+		if project == "pLab" && role == "trained" {
+			return []string{"truenas"}, nil
+		}
+		return nil, nil
+	}
+	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
+		queued = append(queued, c)
+		return "plan_1", "outbox_1", nil
+	}
+
+	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
+		return models.Bundle{ID: id, ConfirmationMode: "manual"}, nil
+	}
+	svcLatestVersionRoles = func(context.Context, string) (models.BundleVersion, []models.BundleRole, error) {
+		return models.BundleVersion{ID: "v1", Version: 1},
+			[]models.BundleRole{{ProjectID: "pLab", RoleKey: "trained"}}, nil
+	}
+	svcGetDirectGrantsForUser = noDirects
+	svcGetUserBundleRolesGrouped = noBundleRoles
+	svcGetActiveMappingRules = noRules
+	svcAssignBundleAndEnqueue = func(context.Context, string, string, string, string, []db.EnqueueParams) ([]string, bool, error) {
+		assigned = true
+		return []string{"o1"}, true, nil
+	}
+
+	if _, err := CascadeBundleAssignedToUser(context.Background(), "op_1", "u1", "b1"); err != nil {
+		t.Fatalf("CascadeBundleAssignedToUser: %v", err)
+	}
+	if len(queued) != 1 {
+		t.Fatalf("want one convergence, got %d", len(queued))
+	}
+	if string(queued[0].Desired["enabled"]) != "true" {
+		t.Errorf("gaining a mapped role must queue an enabled account, got %s", queued[0].Desired["enabled"])
+	}
+	if string(queued[0].Desired["group"]) != `["lab_makers"]` {
+		t.Errorf("the group the bundle confers must reach the intent, got %s", queued[0].Desired["group"])
 	}
 }
 

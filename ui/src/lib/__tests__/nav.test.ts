@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -171,5 +174,22 @@ describe("the target rows", () => {
     // An unknown target still gets a name rather than an id, so shipping an
     // add-on does not require editing the navigation to make it readable.
     expect(targetLabel("proxmox")).toBe("Proxmox");
+  });
+});
+
+/**
+ * §17 — and the route is gone too, not merely unlinked.
+ *
+ * Removing the nav row was half of retiring the sync service. The page stayed,
+ * importing a query that polls `/api/v1/intents` every five seconds — a route
+ * the same change deleted — so a bookmarked tab polled a 404 forever and the
+ * ledger recorded the item as done. Unlinking is not deleting; a URL somebody
+ * saved is still a URL.
+ */
+describe("the retired sync surface", () => {
+  it("has no page and no query left behind the removed nav row", () => {
+    for (const orphan of ["../../app/system/hardware-sync/page.tsx", "../../lib/queries/useIntents.ts"]) {
+      expect(existsSync(resolve(__dirname, orphan)), `${orphan} still exists`).toBe(false);
+    }
   });
 });

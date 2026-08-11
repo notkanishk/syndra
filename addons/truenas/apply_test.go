@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -168,7 +169,7 @@ func withFingerprint(t *testing.T, s *server, body string) string {
 	if err := json.Unmarshal([]byte(body), &req); err != nil {
 		return body
 	}
-	current, _, _, err := s.locate(req)
+	current, _, _, _, err := s.locate(req)
 	if err != nil {
 		// The target is unreadable in this test; the request never gets as far
 		// as the comparison, so any value will do.
@@ -770,4 +771,64 @@ func lastCallParams(m *mutatingRPC, method string) any {
 		}
 	}
 	return nil
+}
+
+// cappedUsers is a user list one longer than a single read returns, so every
+// read of it comes back truncated.
+func cappedUsers() string {
+	var b strings.Builder
+	b.WriteString("[")
+	for i := range subjectReadCap + 1 {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		fmt.Fprintf(&b, `{"username":"u%d","uid":%d,"locked":false,"smb":true,"groups":[42]}`, i, 4000+i)
+	}
+	b.WriteString("]")
+	return b.String()
+}
+
+// §17 — the write path refuses what the plan already refuses.
+//
+// `plan` blocks a create from a capped read: an absence read out of a truncated
+// list is not an absence, and the fingerprint cannot tell the two apart because
+// "not in the read" and "not on the target" hash identically. `apply` did not,
+// so a subject whose account sits past the cap got a SECOND one — while the
+// first kept the home directory every share points at.
+func TestAnApplyWillNotCreateFromATruncatedRead(t *testing.T) {
+	s, rpc := applyServer(t, cappedUsers())
+
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-past-the-cap","email":"ada@example.edu",
+		"desired":{"group":["lab_makers"],"enabled":true}}`)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("want the create refused, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(rpc.creates) != 0 {
+		t.Fatalf("nothing may be created from a read that could not see the whole target: %v", rpc.creates)
+	}
+	if !strings.Contains(rr.Body.String(), "proves nothing") {
+		t.Errorf("the refusal must say why, not merely refuse: %s", rr.Body.String())
+	}
+}
+
+// And it stays a refusal about ABSENCE only. A subject the read did find is
+// found whether or not the list was capped, and refusing that one would stall
+// every ordinary convergence on a large target.
+func TestATruncatedReadStillConvergesASubjectItFound(t *testing.T) {
+	// Inside the cap, so the read does see them — the flag is set by the list's
+	// length, not by where this row happens to sit.
+	users := `[{"username":"ada","uid":5500,"locked":false,"smb":true,"groups":[42]},` +
+		strings.TrimPrefix(cappedUsers(), "[")
+	s, _ := applyServer(t, users)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-ada", Username: "ada", UID: 5500}); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := postApply(t, s, `{"call_id":"c2","subject":"sub-ada","email":"ada@example.edu",
+		"desired":{"group":["lab_makers"],"enabled":true}}`)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("a subject the read found must still converge, got %d: %s", rr.Code, rr.Body.String())
+	}
 }

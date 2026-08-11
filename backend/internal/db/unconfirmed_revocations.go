@@ -66,11 +66,17 @@ func (s UnconfirmedRevocationSummary) Escalated(threshold time.Duration) bool {
 
 // unconfirmedRevocationPredicate is the shared WHERE clause.
 //
-// `op_type` is the restriction that makes this a revocation surface and not an
-// outbox listing. `replace` counts: it confers and withdraws in one call, and
+// The direction is the restriction that makes this a revocation surface and not
+// an outbox listing. `replace` counts: it confers and withdraws in one call, and
 // its withdrawal half is exactly as unconfirmed as a revoke's.
+//
+// So does a declared add-on withdrawal, and it is the shape this surface used to
+// miss entirely. A target revocation queues an `apply`, which read as an
+// ordinary convergence here — so an operator's own revocation appeared on no
+// surface and in no indicator, which is retained access that nobody can see. The
+// same declaration the background claim reads is what makes it visible.
 const unconfirmedRevocationPredicate = `
-	    p.op_type IN ('revoke', 'replace')
+	    (p.op_type IN ('revoke', 'replace') OR p.withdraws_only)
 	AND p.status IN ('pending', 'in_flight', 'failed')`
 
 // ListUnconfirmedRevocations returns every withdrawal that has not reached its
@@ -104,7 +110,7 @@ func ListUnconfirmedRevocations(ctx context.Context, limit int) ([]UnconfirmedRe
 		 ORDER BY p.created_at
 		 LIMIT $1`
 
-	rows, err := PG.Query(ctx, q, limit)
+	rows, err := querier(ctx).Query(ctx, q, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list unconfirmed revocations: %w", err)
 	}
@@ -145,7 +151,7 @@ func CountUnconfirmedRevocations(ctx context.Context) (UnconfirmedRevocationSumm
 
 	var s UnconfirmedRevocationSummary
 	var oldest int64
-	if err := PG.QueryRow(ctx, q).Scan(&s.Queued, &s.Spent, &oldest); err != nil {
+	if err := querier(ctx).QueryRow(ctx, q).Scan(&s.Queued, &s.Spent, &oldest); err != nil {
 		return UnconfirmedRevocationSummary{}, fmt.Errorf("count unconfirmed revocations: %w", err)
 	}
 	s.OldestAge = time.Duration(oldest) * time.Second

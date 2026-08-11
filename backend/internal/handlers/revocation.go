@@ -115,6 +115,11 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 	if _, _, err := dbRecordSystemConvergence(r.Context(), db.SystemConvergence{
 		Target: target, SubjectID: subject, Actor: actor,
 		Reason: "Access revoked", Desired: set,
+		// Declared here because here is where it is knowably true: the set was
+		// resolved with `enabled` denied, so this row can disable and cannot
+		// confer. It is what lets the background runner drain the lock — and
+		// without it the disclosure below is a promise nothing keeps.
+		WithdrawsOnly: true,
 	}); err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "CONVERGENCE_NOT_QUEUED",
 			"The suspension was recorded and the change to the target was not queued: "+err.Error())

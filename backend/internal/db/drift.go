@@ -83,7 +83,7 @@ func UpsertDriftItemWithEvidence(ctx context.Context, target, userID, projectID 
 		RETURNING id, (xmax = 0) AS inserted`
 	var id string
 	var inserted bool
-	err := PG.QueryRow(ctx, q, target, userID, projectID, roleKeys, zitadelGrantID, detectionSource, driftType,
+	err := querier(ctx).QueryRow(ctx, q, target, userID, projectID, roleKeys, zitadelGrantID, detectionSource, driftType,
 		ev.UpstreamActor, ev.UpstreamCreatedAt).Scan(&id, &inserted)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, nil
@@ -113,7 +113,7 @@ func GetDriftItems(ctx context.Context, f DriftFilter) ([]models.DriftItem, erro
 		  AND ($4 = '' OR project_id = $4)
 		  AND ($5 = '' OR detection_source = $5)
 		ORDER BY detected_at DESC`
-	rows, err := PG.Query(ctx, q, status, f.Target, f.UserID, f.ProjectID, f.DetectionSource)
+	rows, err := querier(ctx).Query(ctx, q, status, f.Target, f.UserID, f.ProjectID, f.DetectionSource)
 	if err != nil {
 		return nil, fmt.Errorf("get drift items: %w", err)
 	}
@@ -129,7 +129,7 @@ func GetDriftItem(ctx context.Context, id string) (models.DriftItem, error) {
 		       resolved_at, COALESCE(resolved_by,''), COALESCE(resolution_payload_json::text,''),
 		       COALESCE(upstream_actor,''), upstream_created_at, last_seen_at
 		FROM drift_items WHERE id = $1`
-	rows, err := PG.Query(ctx, q, id)
+	rows, err := querier(ctx).Query(ctx, q, id)
 	if err != nil {
 		return models.DriftItem{}, fmt.Errorf("get drift item: %w", err)
 	}
@@ -147,7 +147,7 @@ func GetDriftItem(ctx context.Context, id string) (models.DriftItem, error) {
 // CountPendingDrift is the number badge for the sidebar dot + dashboard callout.
 func CountPendingDrift(ctx context.Context) (int, error) {
 	var n int
-	if err := PG.QueryRow(ctx, `SELECT COUNT(*) FROM drift_items WHERE status='pending_triage'`).Scan(&n); err != nil {
+	if err := querier(ctx).QueryRow(ctx, `SELECT COUNT(*) FROM drift_items WHERE status='pending_triage'`).Scan(&n); err != nil {
 		return 0, fmt.Errorf("count pending drift: %w", err)
 	}
 	return n, nil

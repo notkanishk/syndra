@@ -194,7 +194,7 @@ func RecordLogHead(ctx context.Context, target, head string, records int64) (Log
 
 // GetLogAnchor reads one target's anchor.
 func GetLogAnchor(ctx context.Context, target string) (LogAnchor, bool, error) {
-	a, err := readAnchor(ctx, PG.QueryRow(ctx, anchorSelect, target))
+	a, err := readAnchor(ctx, querier(ctx).QueryRow(ctx, anchorSelect, target))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return LogAnchor{}, false, nil
 	}
@@ -204,25 +204,17 @@ func GetLogAnchor(ctx context.Context, target string) (LogAnchor, bool, error) {
 	return a, true, nil
 }
 
-// ListCompromisedLogs returns every target whose anchor is carrying a finding,
-// for the surface that reports them.
-func ListCompromisedLogs(ctx context.Context) ([]LogAnchor, error) {
-	rows, err := PG.Query(ctx, anchorSelect+` AND violation_reason IS NOT NULL ORDER BY violation_at`)
-	if err != nil {
-		return nil, fmt.Errorf("list compromised logs: %w", err)
-	}
-	defer rows.Close()
-
-	var out []LogAnchor
-	for rows.Next() {
-		a, err := readAnchor(ctx, rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, a)
-	}
-	return out, rows.Err()
-}
+// There was a ListCompromisedLogs here, for a cross-target findings surface
+// that was never built. It extended anchorSelect — whose `WHERE ($1 = '' OR
+// target = $1)` needs an argument — and passed none, so pgx refused every call
+// it was ever given. Having no caller is what hid that: dead code cannot fail a
+// test, and a broken read behind a surface nobody opens is indistinguishable
+// from a working one.
+//
+// Deleted rather than repaired. A finding already reaches the operator on the
+// target's own health card, which is where they act on it; a second listing
+// with no screen is a second thing to keep correct for no reader. It comes back
+// when there is a surface that wants it, and then it comes back with a test.
 
 // anchorSelect ends in a predicate the callers extend, so the column list and
 // the scan order are written once.

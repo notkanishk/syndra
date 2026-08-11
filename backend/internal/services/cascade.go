@@ -248,14 +248,18 @@ func userBaseHoldingsWithBundleAt(
 // deltaParams converts a closure delta into enqueue params, all attributed to the ONE triggering
 // source (bundle or rule) — every row from a single cascade trigger carries the same
 // Source/SourceRef, whether it is an add or a revoke.
-// It also fires the lifecycle trigger, and that placement is the point: this is
-// the ONE function every closure delta in this package passes through, so a
-// cascade added later reaches its mapped targets without anybody remembering to
-// wire it. Hooking the nine callers instead would be nine hooks and one that
-// gets forgotten — and the forgotten one is a person whose access changed in
-// Zitadel and nowhere else.
+// It also REGISTERS the lifecycle trigger, and that placement is the point:
+// this is the ONE function every closure delta in this package passes through,
+// so a cascade added later reaches its mapped targets without anybody
+// remembering to wire it. Hooking the nine callers instead would be nine hooks
+// and one that gets forgotten — and the forgotten one is a person whose access
+// changed in Zitadel and nowhere else.
+//
+// Registers rather than resolves, because this necessarily runs before the
+// write it is building params for. `withLockedAccess` flushes it afterwards,
+// inside the same transaction; see lifecycle_trigger.go.
 func deltaParams(ctx context.Context, userID string, adds, revokes []roleKey, actor, reason, source, sourceRef string) ([]db.EnqueueParams, error) {
-	if err := triggerTargetConvergence(ctx, actor, userID, append(append([]roleKey(nil), adds...), revokes...)); err != nil {
+	if err := deferTargetConvergence(ctx, actor, userID, append(append([]roleKey(nil), adds...), revokes...)); err != nil {
 		return nil, err
 	}
 	params := make([]db.EnqueueParams, 0, len(adds)+len(revokes))
@@ -294,7 +298,7 @@ func CascadeBundleAssignedToUser(ctx context.Context, actor, userID, bundleID st
 	// The drain below is deliberately outside: it talks to Zitadel, and holding
 	// a global lock across a network call would make one unreachable target
 	// serialise every access change behind it.
-	err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
+	err := withLockedAccess(ctx, func(ctx context.Context) error {
 		var err error
 		bundle, err = svcGetBundleByID(ctx, bundleID)
 		if err != nil {
@@ -376,7 +380,7 @@ func CascadeRuleCreated(ctx context.Context, actor, sourceProject, sourceRole, t
 	// are is what these reads are for — which is why the lock is one lock and
 	// not one per subject. There is no subject set to lock before the question
 	// that produces it.
-	err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
+	err := withLockedAccess(ctx, func(ctx context.Context) error {
 		users, err := svcGetAllKnownUserIDs(ctx)
 		if err != nil {
 			return err
@@ -429,7 +433,7 @@ func CascadeRuleCreated(ctx context.Context, actor, sourceProject, sourceRole, t
 func CascadeBundleRemovedFromUser(ctx context.Context, actor, userID, bundleID string) (CascadeResult, error) {
 	var bundle models.Bundle
 	var ids []string
-	err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
+	err := withLockedAccess(ctx, func(ctx context.Context) error {
 		var err error
 		bundle, err = svcGetBundleByID(ctx, bundleID)
 		if err != nil {
@@ -477,7 +481,7 @@ func CascadeBundleRemovedFromUser(ctx context.Context, actor, userID, bundleID s
 func CascadeBundleDeleted(ctx context.Context, actor, bundleID string) (CascadeResult, error) {
 	var bundle models.Bundle
 	var ids []string
-	err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
+	err := withLockedAccess(ctx, func(ctx context.Context) error {
 		var err error
 		bundle, err = svcGetBundleByID(ctx, bundleID)
 		if err != nil {
@@ -533,7 +537,7 @@ func CascadeBundleDeleted(ctx context.Context, actor, bundleID string) (CascadeR
 // (e.g. re-added identically, or still covered by another source) simply gets an empty delta.
 func CascadeRuleUpdated(ctx context.Context, actor string, old models.MappingRule, sp, sr, tp, tr string) (CascadeResult, error) {
 	var ids []string
-	err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
+	err := withLockedAccess(ctx, func(ctx context.Context) error {
 		var err error
 		users, err := svcGetAllKnownUserIDs(ctx)
 		if err != nil {
@@ -599,7 +603,7 @@ func CascadeRuleUpdated(ctx context.Context, actor string, old models.MappingRul
 // would be a claim about the rule graph rather than a reading of it.
 func CascadeRuleDeleted(ctx context.Context, actor string, old models.MappingRule) (CascadeResult, error) {
 	var ids []string
-	err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
+	err := withLockedAccess(ctx, func(ctx context.Context) error {
 		var err error
 		users, err := svcGetAllKnownUserIDs(ctx)
 		if err != nil {

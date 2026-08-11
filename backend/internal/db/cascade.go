@@ -200,7 +200,7 @@ func GetAllKnownUserIDs(ctx context.Context) ([]string, error) {
 }
 
 func scanUserIDs(ctx context.Context, q string, args ...any) ([]string, error) {
-	rows, err := PG.Query(ctx, q, args...)
+	rows, err := querier(ctx).Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -409,7 +409,7 @@ func RemoveRoleFromBundleAndEnqueue(ctx context.Context, actor, bundleID, projec
 // SetRuleConfirmationMode bulk-updates the confirmation_mode of the given mapping rules in one
 // statement (one implicit tx). mode is normalized so an invalid literal can never persist.
 func SetRuleConfirmationMode(ctx context.Context, ids []string, mode string) error {
-	_, err := PG.Exec(ctx,
+	_, err := querier(ctx).Exec(ctx,
 		`UPDATE mapping_rules SET confirmation_mode = $1 WHERE id = ANY($2)`,
 		NormalizeConfirmationMode(mode), ids)
 	return err
@@ -418,7 +418,7 @@ func SetRuleConfirmationMode(ctx context.Context, ids []string, mode string) err
 // SetBundleConfirmationMode bulk-updates the confirmation_mode of the given bundles in one
 // statement (one implicit tx). Same shape as SetRuleConfirmationMode.
 func SetBundleConfirmationMode(ctx context.Context, ids []string, mode string) error {
-	_, err := PG.Exec(ctx,
+	_, err := querier(ctx).Exec(ctx,
 		`UPDATE bundles SET confirmation_mode = $1 WHERE id = ANY($2)`,
 		NormalizeConfirmationMode(mode), ids)
 	return err
@@ -473,7 +473,7 @@ func GetCascadeGroups(ctx context.Context, limit int, cascadeID string) ([]model
 		args = []any{cascadeGroupSources, cascadeID}
 	}
 
-	rows, err := PG.Query(ctx, q, args...)
+	rows, err := querier(ctx).Query(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("get cascade groups: %w", err)
 	}

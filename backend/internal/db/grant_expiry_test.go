@@ -252,7 +252,7 @@ func TestEveryClosureDiffRunsUnderTheAccessLock(t *testing.T) {
 				continue
 			}
 			found[fn] = true
-			if !strings.Contains(funcBody(t, src, fn), "svcInTxLockingAccess(ctx,") {
+			if !strings.Contains(funcBody(t, src, fn), "withLockedAccess(ctx,") {
 				t.Errorf("services/%s: %s must run its reads and its write under the access lock", file, fn)
 			}
 		}
@@ -347,7 +347,7 @@ func TestNoDirectoryLookupInsideTheAccessLock(t *testing.T) {
 	}
 	for _, fn := range []string{"PublishBundleVersion", "MoveHolders"} {
 		body := funcBody(t, src, fn)
-		lock := strings.Index(body, "svcInTxLockingAccess(ctx,")
+		lock := strings.Index(body, "withLockedAccess(ctx,")
 		// Both exits decorate: the one that failed still renders a plan, and
 		// counting them is what distinguishes "decorated after the lock" from
 		// "decorated only on the path nobody looks at". A single call passes an

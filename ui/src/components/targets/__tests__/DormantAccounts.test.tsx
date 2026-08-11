@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DormantAccounts } from "@/components/targets/DormantAccounts";
 import type { DormantReport } from "@/lib/queries/useDormant";
+import type { OneShotSecret } from "@/lib/secret";
 
 /**
  * §29 — the only bulk action in the product, and the two things that keep it
@@ -14,7 +15,7 @@ import type { DormantReport } from "@/lib/queries/useDormant";
 
 const state: {
   report: DormantReport;
-  swept: Array<{ accounts: string[]; elevatedKey: string }>;
+  swept: Array<{ accounts: string[]; elevatedKey: OneShotSecret }>;
 } = {
   report: { target: "truenas", state_read_at: new Date().toISOString(), truncated: false, accounts: [] },
   swept: [],
@@ -34,7 +35,7 @@ vi.mock("@/lib/queries/useDormant", async () => {
       refetch: vi.fn(),
     }),
     useSweepDormant: () => ({
-      mutate: (input: { accounts: string[]; elevatedKey: string }) => state.swept.push(input),
+      mutate: (input: { accounts: string[]; elevatedKey: OneShotSecret }) => state.swept.push(input),
       isPending: false,
       error: null,
     }),
@@ -112,7 +113,30 @@ describe("dormant accounts", () => {
     expect(remove).toBeEnabled();
 
     fireEvent.click(remove);
-    expect(state.swept).toEqual([{ accounts: ["former-member"], elevatedKey: "k" }]);
+    expect(state.swept).toHaveLength(1);
+    expect(state.swept[0].accounts).toEqual(["former-member"]);
+    expect(state.swept[0].elevatedKey.take()).toBe("k");
+  });
+
+  // The delete-capable credential must not outlive its request. TanStack keeps
+  // a mutation's variables in the MutationCache, so a plain string here would
+  // be the one such key in the deployment, sitting in memory behind a docblock
+  // saying it is kept nowhere.
+  it("hands the elevated credential over in a box that empties on read", () => {
+    renderDormant();
+    fireEvent.click(screen.getByLabelText("Select former-member"));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand/i }));
+    fireEvent.change(screen.getByLabelText(/credential that may delete/i), {
+      target: { value: "super-secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /remove 1 account/i }));
+
+    const sent = state.swept[0].elevatedKey;
+    expect(sent.take()).toBe("super-secret");
+    expect(sent.spent).toBe(true);
+    // What the cache retains from here on holds nothing, and says so rather
+    // than quietly handing back an empty string a retry would send.
+    expect(() => sent.take()).toThrow(/already been sent/);
   });
 
   // The irreversible part is the data, not the row — and where the size is

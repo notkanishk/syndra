@@ -51,7 +51,7 @@ func TryAcquireDrainLock(ctx context.Context) (func(), bool, error) {
 func GetPropagationStatus(ctx context.Context, id string) (string, error) {
 	const q = `SELECT status FROM propagation_outbox WHERE id=$1`
 	var st string
-	if err := PG.QueryRow(ctx, q, id).Scan(&st); err != nil {
+	if err := querier(ctx).QueryRow(ctx, q, id).Scan(&st); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
 		}
@@ -175,7 +175,7 @@ func PendingOutboxAddExists(ctx context.Context, target, userID, projectID, role
 		WHERE op_type='add' AND target=$1 AND user_id=$2 AND project_id=$3
 		  AND $4 = ANY(role_keys) AND status IN ('pending','in_flight'))`
 	var exists bool
-	if err := PG.QueryRow(ctx, q, target, userID, projectID, roleKey).Scan(&exists); err != nil {
+	if err := querier(ctx).QueryRow(ctx, q, target, userID, projectID, roleKey).Scan(&exists); err != nil {
 		return false, fmt.Errorf("pending outbox add exists (%s %s/%s/%s): %w", target, userID, projectID, roleKey, err)
 	}
 	return exists, nil
@@ -257,7 +257,7 @@ func terminateSuperseded(ctx context.Context, target, onlyID string) error {
 		)
 		INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
 		SELECT 'system', d.user_id, $4, d.id FROM discarded d`
-	if _, err := PG.Exec(ctx, q, target, supersededReason, onlyID, "entitlement."+target+".superseded"); err != nil {
+	if _, err := querier(ctx).Exec(ctx, q, target, supersededReason, onlyID, "entitlement."+target+".superseded"); err != nil {
 		return fmt.Errorf("terminate superseded propagations for %s: %w", target, err)
 	}
 	return nil
@@ -335,7 +335,7 @@ func ClaimPendingPropagations(ctx context.Context, target string, limit int) ([]
 		          p.source, COALESCE(p.source_ref,''), COALESCE(p.cascade_id::text,''),
 		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
 		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at`
-	rows, err := PG.Query(ctx, q, limit, target)
+	rows, err := querier(ctx).Query(ctx, q, limit, target)
 	if err != nil {
 		return nil, fmt.Errorf("claim propagations: %w", err)
 	}
@@ -378,7 +378,7 @@ func ClaimPropagationByID(ctx context.Context, target, id string) (*models.Pendi
 		          p.source, COALESCE(p.source_ref,''),
 		          COALESCE(p.cascade_id::text,''), COALESCE(p.zitadel_grant_id,''),
 		          p.status, p.attempts, COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at`
-	rows, err := PG.Query(ctx, q, id, target)
+	rows, err := querier(ctx).Query(ctx, q, id, target)
 	if err != nil {
 		return nil, false, fmt.Errorf("claim propagation %s: %w", id, err)
 	}
@@ -399,12 +399,20 @@ func ClaimPropagationByID(ctx context.Context, target, id string) (*models.Pendi
 //
 // Two restrictions, and both are the point of the function.
 //
-// `op_type = 'revoke'` and nothing else. `add` confers, and `replace` confers
-// and withdraws in one call — a background runner that dispatched either would
-// hand somebody access with no operator in the loop, which is the consent
-// property the operator-only drain rule exists to protect (design §7). `apply`
-// is excluded for the same reason until an add-on dispatcher can say which
-// direction a resolved snapshot moves in.
+// Withdrawal rows only. `add` confers, and `replace` confers and withdraws in
+// one call — a background runner that dispatched either would hand somebody
+// access with no operator in the loop, which is the consent property the
+// operator-only drain rule exists to protect (design §7).
+//
+// Two shapes qualify. `op_type = 'revoke'` is Zitadel's, where the row itself
+// names the direction. An add-on revocation is an `apply` carrying a resolved
+// set, and the row cannot be read to find out which way it moves — so the
+// writer declares it, and `withdraws_only` is that declaration. This used to be
+// excluded outright, and the exclusion was worse than it looked: a target
+// revocation queued a lock nothing would claim, on a response that told the
+// operator it drains on its own, appearing on no surface. `apply` rows that
+// have NOT declared themselves are still excluded, which is the same rule, now
+// answered rather than assumed.
 //
 // And never ahead of older conferring intent for the same subject. A grant
 // queued BEFORE this revocation is the earlier decision and must land first; if
@@ -426,13 +434,19 @@ func ClaimPendingRevocations(ctx context.Context, target string, limit int) ([]m
 			SELECT p.id FROM propagation_outbox p
 			JOIN targets t ON t.target = p.target AND t.state = 'active'
 			WHERE p.status IN ('pending','in_flight') AND p.target = $2
-			  AND p.op_type = 'revoke'
+			  AND (p.op_type = 'revoke' OR p.withdraws_only)
 			  AND NOT EXISTS (
 			      SELECT 1 FROM propagation_outbox e
 			       WHERE e.target     = p.target
 			         AND e.user_id    = p.user_id
 			         AND e.project_id IS NOT DISTINCT FROM p.project_id
-			         AND e.op_type    IN ('add', 'replace')
+			         -- Anything queued earlier that could confer. On the add-on
+			         -- side that is an apply which did not declare itself a
+			         -- withdrawal: it carries a whole resolved set, so draining
+			         -- it after this one would restore exactly what is being
+			         -- withdrawn, silently, with neither row having failed.
+			         AND (e.op_type IN ('add', 'replace')
+			              OR (e.op_type = 'apply' AND NOT e.withdraws_only))
 			         AND e.status     IN ('pending', 'in_flight')
 			         AND e.intent_seq < p.intent_seq)
 			ORDER BY p.intent_seq
@@ -447,7 +461,7 @@ func ClaimPendingRevocations(ctx context.Context, target string, limit int) ([]m
 		          p.source, COALESCE(p.source_ref,''), COALESCE(p.cascade_id::text,''),
 		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
 		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at`
-	rows, err := PG.Query(ctx, q, limit, target)
+	rows, err := querier(ctx).Query(ctx, q, limit, target)
 	if err != nil {
 		return nil, fmt.Errorf("claim pending revocations: %w", err)
 	}
@@ -468,7 +482,7 @@ func TargetsAwaitingDispatch(ctx context.Context, drained string) ([]string, err
 		  JOIN targets t ON t.target = p.target AND t.state = 'active'
 		 WHERE p.status IN ('pending','in_flight') AND p.target <> $1
 		 ORDER BY p.target`
-	rows, err := PG.Query(ctx, q, drained)
+	rows, err := querier(ctx).Query(ctx, q, drained)
 	if err != nil {
 		return nil, fmt.Errorf("list targets awaiting dispatch: %w", err)
 	}
@@ -498,7 +512,7 @@ func UndispatchableTarget(ctx context.Context, dispatcher, id string) (string, e
 		  JOIN targets t ON t.target = p.target AND t.state = 'active'
 		 WHERE p.id = $1 AND p.target <> $2 AND p.status IN ('pending','in_flight')`
 	var target string
-	if err := PG.QueryRow(ctx, q, id, dispatcher).Scan(&target); err != nil {
+	if err := querier(ctx).QueryRow(ctx, q, id, dispatcher).Scan(&target); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
 		}
@@ -532,7 +546,7 @@ var ErrPropagationNotInFlight = errors.New("db: the propagation row is no longer
 // no rows did not settle: the caller is about to count an outcome it never
 // recorded.
 func settleOne(ctx context.Context, what, id, q string, args ...any) error {
-	tag, err := PG.Exec(ctx, q, append([]any{id}, args...)...)
+	tag, err := querier(ctx).Exec(ctx, q, append([]any{id}, args...)...)
 	if err != nil {
 		return fmt.Errorf("%s: %w", what, err)
 	}
@@ -566,7 +580,7 @@ func RequeuePropagation(ctx context.Context, id, errMsg string) (int, error) {
 		SET status='pending', attempts=attempts+1, last_error=$2, started_at=NULL
 		WHERE id=$1 AND status='in_flight' RETURNING attempts`
 	var attempts int
-	err := PG.QueryRow(ctx, q, id, errMsg).Scan(&attempts)
+	err := querier(ctx).QueryRow(ctx, q, id, errMsg).Scan(&attempts)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, fmt.Errorf("%w: %s", ErrPropagationNotInFlight, id)
 	}
@@ -604,7 +618,7 @@ func GetPendingPropagations(ctx context.Context) ([]models.PendingPropagation, e
 		FROM propagation_outbox
 		WHERE status IN ('pending','in_flight')
 		ORDER BY cascade_id NULLS LAST, created_at`
-	rows, err := PG.Query(ctx, q)
+	rows, err := querier(ctx).Query(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("get pending propagations: %w", err)
 	}
@@ -617,7 +631,7 @@ func GetPendingPropagations(ctx context.Context) ([]models.PendingPropagation, e
 func CountPendingPropagations(ctx context.Context) (int, error) {
 	const q = `SELECT COUNT(*) FROM propagation_outbox WHERE status IN ('pending','in_flight')`
 	var n int
-	if err := PG.QueryRow(ctx, q).Scan(&n); err != nil {
+	if err := querier(ctx).QueryRow(ctx, q).Scan(&n); err != nil {
 		return 0, fmt.Errorf("count pending propagations: %w", err)
 	}
 	return n, nil
@@ -635,7 +649,7 @@ func PruneTerminalPropagations(ctx context.Context, retentionDays int) (int64, e
 		WHERE status IN ('applied','failed','superseded','abandoned')
 		  AND completed_at IS NOT NULL
 		  AND completed_at < NOW() - ($1 || ' days')::interval`
-	tag, err := PG.Exec(ctx, q, retentionDays)
+	tag, err := querier(ctx).Exec(ctx, q, retentionDays)
 	if err != nil {
 		return 0, fmt.Errorf("prune terminal propagations: %w", err)
 	}
@@ -816,7 +830,7 @@ func QueuedRevocations(ctx context.Context, userID string) ([]RoleRef, error) {
 		  AND o.status IN ('pending', 'in_flight')
 		  AND o.project_id IS NOT NULL AND o.role_keys IS NOT NULL
 		  AND NOT (g.zitadel_role_key = ANY(o.role_keys))`
-	rows, err := PG.Query(ctx, q, userID)
+	rows, err := querier(ctx).Query(ctx, q, userID)
 	if err != nil {
 		return nil, fmt.Errorf("queued revocations for %s: %w", userID, err)
 	}

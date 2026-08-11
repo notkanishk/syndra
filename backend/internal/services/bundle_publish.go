@@ -240,7 +240,7 @@ func PublishBundleVersion(ctx context.Context, actor string, req PublishRequest)
 	// Rehearsal and apply under one lock: the plan an operator approved is a
 	// statement about a world, and another cascade committing between the two
 	// makes it a statement about neither.
-	if err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
+	if err := withLockedAccess(ctx, func(ctx context.Context) error {
 		var draft DraftDiff
 		var err error
 		plan, draft, err = RehearseBundlePublish(ctx, req)
@@ -411,7 +411,7 @@ func MoveHolders(ctx context.Context, actor string, req MoveHoldersRequest) (Bul
 	// Same reason as PublishBundleVersion: the rehearsal and the apply are one
 	// decision, and a cascade landing between them makes the plan describe a
 	// world nobody approved.
-	if err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
+	if err := withLockedAccess(ctx, func(ctx context.Context) error {
 		var err error
 		plan, err := RehearseMoveHolders(ctx, req)
 		if err != nil {

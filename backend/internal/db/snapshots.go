@@ -125,7 +125,7 @@ func EntitlementRecordedAt(ctx context.Context, target, subjectID string) (time.
 		 ORDER BY version DESC
 		 LIMIT 1`
 	var at time.Time
-	err := PG.QueryRow(ctx, q, target, subjectID).Scan(&at)
+	err := querier(ctx).QueryRow(ctx, q, target, subjectID).Scan(&at)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return time.Time{}, false, nil
 	}

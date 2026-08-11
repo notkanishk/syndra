@@ -17,6 +17,7 @@ import {
   type SweepResult,
 } from "@/lib/queries/useDormant";
 import { targetLabel } from "@/lib/nav";
+import { oneShot } from "@/lib/secret";
 
 /**
  * Accounts Syndra created whose reason for existing has gone (9.11/9.12;
@@ -185,7 +186,7 @@ export function DormantAccounts({ target }: { target: string }) {
               disabled={!acknowledged || !elevatedKey || remove.isPending}
               onClick={() =>
                 remove.mutate(
-                  { accounts: chosen.map((a) => a.account), elevatedKey },
+                  { accounts: chosen.map((a) => a.account), elevatedKey: oneShot(elevatedKey) },
                   {
                     onSuccess: (outcome) => {
                       setResult(outcome);

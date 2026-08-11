@@ -19,7 +19,7 @@ import (
 func GetExclusions(ctx context.Context, target string) ([]models.ExternalGrantExclusion, error) {
 	const q = `SELECT target, user_id, project_id, role_key, marked_by, marked_at, COALESCE(reason,'')
 		FROM external_grant_exclusions WHERE target = $1`
-	rows, err := PG.Query(ctx, q, target)
+	rows, err := querier(ctx).Query(ctx, q, target)
 	if err != nil {
 		return nil, fmt.Errorf("get exclusions: %w", err)
 	}

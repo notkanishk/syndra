@@ -261,3 +261,28 @@ func TestAnUnconfirmedRotationDoesNotAskForARetry(t *testing.T) {
 		t.Errorf("an unconfirmed rotation is the one case where retrying is wrong: %s", body)
 	}
 }
+
+// §17 — the queued lock declares that it only withdraws, and the disclosure
+// depends on it.
+//
+// Without the declaration the background runner cannot claim the row: it drains
+// `revoke` rows and add-on withdrawals that say so, and an undeclared `apply`
+// waits for an operator. The response tells the operator the opposite, so the
+// flag and the sentence have to be checked together — separately, each looks
+// right.
+func TestTheQueuedLockDeclaresItselfAWithdrawal(t *testing.T) {
+	h := stubRevocation(t)
+	rr := revoke(`{"reason":"offboarding","confirmed":true}`)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("want 202, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(h.converged) != 1 {
+		t.Fatalf("want one convergence, got %d", len(h.converged))
+	}
+	if !h.converged[0].WithdrawsOnly {
+		t.Error("the lock must declare itself a withdrawal, or nothing claims it and the disclosure below is false")
+	}
+	if !strings.Contains(rr.Body.String(), "drains on its own") {
+		t.Error("the disclosure is the promise the declaration keeps; one without the other is the bug")
+	}
+}

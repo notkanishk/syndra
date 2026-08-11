@@ -100,7 +100,7 @@ func MarkTargetUnreconciled(ctx context.Context, target, reason string) (TargetR
 			-- from the first of those, not the latest.
 			unreconciled_reason = EXCLUDED.unreconciled_reason
 		RETURNING target, last_current_read_at, unreconciled_since, COALESCE(unreconciled_reason,'')`
-	return scanReconciliation(PG.QueryRow(ctx, q, target, reason), "mark target unreconciled")
+	return scanReconciliation(querier(ctx).QueryRow(ctx, q, target, reason), "mark target unreconciled")
 }
 
 // MarkTargetReconciled records a completed reconciliation over a current read,
@@ -123,7 +123,7 @@ func MarkTargetReconciled(ctx context.Context, target string) (TargetReconciliat
 			unreconciled_since   = NULL,
 			unreconciled_reason  = NULL
 		RETURNING target, last_current_read_at, unreconciled_since, COALESCE(unreconciled_reason,'')`
-	return scanReconciliation(PG.QueryRow(ctx, q, target), "mark target reconciled")
+	return scanReconciliation(querier(ctx).QueryRow(ctx, q, target), "mark target reconciled")
 }
 
 // GetUnreconciledTargets lists the targets Syndra currently cannot vouch for,
@@ -135,7 +135,7 @@ func GetUnreconciledTargets(ctx context.Context) ([]TargetReconciliation, error)
 		FROM target_reconciliation
 		WHERE unreconciled_since IS NOT NULL
 		ORDER BY unreconciled_since`
-	rows, err := PG.Query(ctx, q)
+	rows, err := querier(ctx).Query(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("get unreconciled targets: %w", err)
 	}

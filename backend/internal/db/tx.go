@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // beginTx is a seam. InTx's contract is "commit on success, roll back on
@@ -42,6 +43,41 @@ func InTx(ctx context.Context, fn func(pgx.Tx) error) error {
 type txKeyType struct{}
 
 var txKey txKeyType
+
+// Querier is the subset of pgxpool.Pool that pgx.Tx also satisfies: the three
+// verbs every statement in this package uses. It exists so a statement can be
+// written once and run either on the pool or on an ambient transaction.
+type Querier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+// querier is what a statement in this package runs against: the ambient
+// access-mutation transaction when there is one, and the pool otherwise.
+//
+// Every statement goes through it, not merely the ones somebody remembered were
+// inside a lock. Two failures follow from a statement that reaches past the
+// transaction it is running inside, and both are silent:
+//
+//   - A READ cannot see the caller's own uncommitted write. The lifecycle
+//     trigger resolves a subject's entitlements immediately after the grant
+//     change that provoked it; on the pool it resolves the world as it was
+//     BEFORE, so gaining a first mapped role queues "disable this account" and
+//     losing the last one queues "keep the access". Both halves of reversible
+//     deprovisioning invert.
+//   - A WRITE commits on its own. A mapping edit that succeeds on the pool
+//     inside a transaction that then rolls back leaves the mapping changed with
+//     nothing queued to converge it.
+//
+// Neither is visible to a test that fakes the layer below, which is why this is
+// one accessor rather than a rule about which functions must remember.
+func querier(ctx context.Context) Querier {
+	if tx, ok := ctx.Value(txKey).(pgx.Tx); ok && tx != nil {
+		return tx
+	}
+	return PG
+}
 
 // beginOrJoin returns the ambient access-mutation transaction if the caller is
 // running inside one, and otherwise opens a fresh transaction of its own.

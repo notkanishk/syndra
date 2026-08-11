@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import type { OneShotSecret } from "@/lib/secret";
 
 /**
  * Accounts Syndra created whose reason for existing has gone (9.11/9.12).
@@ -68,17 +69,21 @@ export interface SweepResult {
  *
  * The elevated credential is supplied by the operator and travels no further
  * than this request: the add-on holds no delete-capable credential of its own,
- * which is why a compromise of it cannot destroy anybody's files. It is never
- * put in the query cache — the mutation takes it as an argument and the result
- * does not carry it back.
+ * which is why a compromise of it cannot destroy anybody's files.
+ *
+ * It arrives in a one-shot box rather than as a plain string, and that is the
+ * difference between the sentence above being true and being a claim. A
+ * mutation's variables live in the MutationCache after the request settles, so
+ * passing the key directly left the one delete-capable credential in this
+ * deployment sitting in memory behind a comment saying it was kept nowhere.
  */
 export function useSweepDormant(target: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { accounts: string[]; elevatedKey: string }) =>
+    mutationFn: (input: { accounts: string[]; elevatedKey: OneShotSecret }) =>
       request<SweepResult>(`/targets/${target}/accounts/dormant/sweep`, {
         method: "POST",
-        body: { accounts: input.accounts, elevated_key: input.elevatedKey, confirmed: true },
+        body: { accounts: input.accounts, elevated_key: input.elevatedKey.take(), confirmed: true },
       }),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ["targets", target, "dormant"] });

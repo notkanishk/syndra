@@ -284,7 +284,7 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 		return ApplyOutcome{}, http.StatusBadRequest, err
 	}
 
-	current, binding, conflict, err := s.locate(req)
+	current, binding, conflict, truncated, err := s.locate(req)
 	if errors.Is(err, errNoIdentityToDeriveFrom) {
 		// Blocked rather than a transport-shaped failure: nothing is wrong with
 		// the target, and retrying the identical call will not fix it.
@@ -317,6 +317,20 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 	}
 
 	if current == nil {
+		if truncated {
+			// The same refusal `plan` makes, on the path that actually writes.
+			// An absence read out of a capped list is not an absence, and the
+			// fingerprint cannot tell the two apart — "not in the read" and
+			// "not on the target" produce the identical digest. Without this
+			// the plan blocked the create and the apply made it anyway, which
+			// is a second account for somebody who already has one, past the
+			// cap, still holding the home directory every share points at.
+			return ApplyOutcome{
+				Subject: req.Subject, Effect: EffectBlocked,
+				Detail:      "The account list was longer than one read returns, so this subject's absence from it proves nothing.",
+				Consequence: "Nothing was changed.",
+			}, http.StatusConflict, nil
+		}
 		return s.createAndConverge(req, desired, binding)
 	}
 	return s.converge(req, desired, current)
@@ -327,10 +341,13 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 // The binding is authoritative and the derivation is a recovery path. Asking
 // the other way round would rename an account every time somebody's email
 // changed, which is the one thing §11 forbids.
-func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, error) {
+// The fourth return value says the read hit the cap. Carried out rather than
+// acted on here, because it only matters where an ABSENCE is concluded: a
+// subject found by binding is found whether or not the list was capped.
+func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, bool, error) {
 	snap, err := s.readSubjects()
 	if err != nil {
-		return nil, Binding{}, nil, err
+		return nil, Binding{}, nil, false, err
 	}
 	byName := make(map[string]*Subject, len(snap.Subjects))
 	byUID := make(map[int64]*Subject, len(snap.Subjects))
@@ -341,11 +358,11 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 
 	binding, bound, err := s.store.GetBinding(req.Subject)
 	if err != nil {
-		return nil, Binding{}, nil, err
+		return nil, Binding{}, nil, false, err
 	}
 	if bound {
 		if found, ok := byName[binding.Username]; ok {
-			return found, binding, nil, nil
+			return found, binding, nil, snap.Truncated, nil
 		}
 		// The name moved. A stable uid whose username changed out of band is a
 		// RENAME, not a missing account — reporting it as missing would create
@@ -355,13 +372,13 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 			if err := s.store.PutBinding(binding); err != nil {
 				logStoreFailure("binding", req.Subject, err)
 			}
-			return found, binding, nil, nil
+			return found, binding, nil, snap.Truncated, nil
 		}
 		// Bound, and neither the name nor the uid is there. The account was
 		// deleted out of band; convergence re-creates it under the recorded
 		// name rather than re-deriving, because the recorded name is what every
 		// ACL and share still refers to.
-		return nil, binding, nil, nil
+		return nil, binding, nil, snap.Truncated, nil
 	}
 
 	if strings.TrimSpace(req.Email) == "" {
@@ -371,12 +388,12 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 		// somebody whose plan said `ada`, and the plan is what an operator
 		// approved. Refused so the disagreement is visible instead of being a
 		// name nobody chose.
-		return nil, Binding{}, nil, errNoIdentityToDeriveFrom
+		return nil, Binding{}, nil, false, errNoIdentityToDeriveFrom
 	}
 
 	claimed, err := s.store.BoundUsernames()
 	if err != nil {
-		return nil, Binding{}, nil, err
+		return nil, Binding{}, nil, false, err
 	}
 	// The suffix resolves collisions with accounts THIS ADD-ON manages, and
 	// nothing else. An unbound account holding the derived name is not a
@@ -394,9 +411,9 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 		return nil, Binding{}, &BindingConflict{
 			Username: derived, UID: existing.UID,
 			Adoptable: owner == "", BoundTo: owner,
-		}, nil
+		}, snap.Truncated, nil
 	}
-	return nil, Binding{SubjectID: req.Subject, Username: derived}, nil, nil
+	return nil, Binding{SubjectID: req.Subject, Username: derived}, nil, snap.Truncated, nil
 }
 
 // converge brings an existing account onto the desired state.

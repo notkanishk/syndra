@@ -161,7 +161,7 @@ func TestQueuedWorkLookupIsScopedToItsTarget(t *testing.T) {
 	if !regexp.MustCompile(`(?is)WHERE op_type='add' AND target=\$1`).MatchString(body) {
 		t.Error("PendingOutboxAddExists must narrow by target in the predicate, not in the caller's head")
 	}
-	if !regexp.MustCompile(`PG\.QueryRow\(ctx, q, target, userID, projectID, roleKey\)`).MatchString(body) {
+	if !regexp.MustCompile(`querier\(ctx\)\.QueryRow\(ctx, q, target, userID, projectID, roleKey\)`).MatchString(body) {
 		t.Error("the target must be bound first, matching $1 in the predicate")
 	}
 }

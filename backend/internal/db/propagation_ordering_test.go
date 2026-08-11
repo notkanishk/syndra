@@ -118,7 +118,7 @@ func TestEveryClaimRejectsStaleVersionsBeforeItClaims(t *testing.T) {
 			t.Errorf("%s must reject stale versions; every claim is a way to reach a dispatcher", fn)
 			continue
 		}
-		query := strings.Index(body, "PG.Query")
+		query := strings.Index(body, "querier(ctx).Query")
 		if query < 0 {
 			t.Fatalf("%s: no query found to order against", fn)
 		}
@@ -133,19 +133,33 @@ func TestEveryClaimRejectsStaleVersionsBeforeItClaims(t *testing.T) {
 func TestRevocationClaimReturnsOnlyWithdrawalsAndNeverOvertakesOlderIntent(t *testing.T) {
 	body := funcBody(t, readDBSource(t, "propagations.go"), "ClaimPendingRevocations")
 
-	if !strings.Contains(body, "p.op_type = 'revoke'") {
-		t.Fatal("the background claim must return only revocations: 'add' confers and 'replace' both confers and withdraws")
+	// Two withdrawal shapes and no third. Zitadel names the direction in
+	// op_type; an add-on apply carries a resolved set and cannot be read for it,
+	// so the writer declares it and the claim reads the declaration.
+	if !strings.Contains(body, "(p.op_type = 'revoke' OR p.withdraws_only)") {
+		t.Fatal("the background claim must return only withdrawals: 'add' confers, 'replace' both confers and withdraws, and an undeclared 'apply' may do either")
 	}
+	// And never on op_type alone for the conferring shapes. An `apply` selected
+	// without its declaration is the exclusion this claim used to make outright,
+	// re-entered by the back door.
 	for _, conferring := range []string{"'add'", "'apply'"} {
 		if regexp.MustCompile(`p\.op_type\s*(=|IN\s*\([^)]*)` + regexp.QuoteMeta(conferring)).MatchString(body) {
-			t.Errorf("the background claim must never select %s: nobody gains access without an operator", conferring)
+			t.Errorf("the background claim must never select %s on op_type alone: nobody gains access without an operator", conferring)
 		}
 	}
 	guard := regexp.MustCompile(`(?s)NOT EXISTS \(.*?e\.intent_seq < p\.intent_seq\)`).FindString(body)
 	if guard == "" {
 		t.Fatal("a revocation must not be dispatched ahead of OLDER conferring intent for its subject; draining the grant later restores the access")
 	}
-	for _, frag := range []string{"e.user_id    = p.user_id", "e.op_type    IN ('add', 'replace')", "e.status     IN ('pending', 'in_flight')"} {
+	for _, frag := range []string{
+		"e.user_id    = p.user_id",
+		"e.op_type IN ('add', 'replace')",
+		// The add-on half of the same rule. An older apply that did not declare
+		// itself a withdrawal is conferring intent, and draining it after this
+		// row restores exactly what is being withdrawn.
+		"e.op_type = 'apply' AND NOT e.withdraws_only",
+		"e.status     IN ('pending', 'in_flight')",
+	} {
 		if !strings.Contains(guard, frag) {
 			t.Errorf("the intent-order guard is missing %q", frag)
 		}

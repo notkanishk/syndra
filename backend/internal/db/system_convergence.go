@@ -64,6 +64,15 @@ type SystemConvergence struct {
 	// executing. Never nil: nil records as JSON null and the drain reads that
 	// back as no approved intent.
 	Desired map[string]json.RawMessage
+	// WithdrawsOnly says this convergence can only take access away, which is
+	// what lets the background runner drain it without an operator.
+	//
+	// Declared by whoever queues it, and only where it is true by construction:
+	// a revocation resolves its set with the lifecycle field denied. A cascade
+	// leaves it false even when the delta happens to be a removal, because the
+	// resolved set it carries is whatever policy now says — and on the next
+	// person that same code path confers.
+	WithdrawsOnly bool
 }
 
 // systemRequestFingerprint binds an approval to the convergence that caused it.
@@ -153,7 +162,10 @@ func RecordSystemConvergence(ctx context.Context, c SystemConvergence) (planID, 
 		return "", "", fmt.Errorf("%w: the approval names %d subjects", ErrNotASystemConvergence, len(subjects))
 	}
 
-	outboxID, err = EnqueueEntitlementApplyTx(ctx, tx, EntitlementApply{PlanSubjectID: subjects[0].ID})
+	outboxID, err = EnqueueEntitlementApplyTx(ctx, tx, EntitlementApply{
+		PlanSubjectID: subjects[0].ID,
+		WithdrawsOnly: c.WithdrawsOnly,
+	})
 	if err != nil {
 		return "", "", fmt.Errorf("queue system convergence: %w", err)
 	}

@@ -102,7 +102,7 @@ func GetTargetBinding(ctx context.Context, target, subjectID string) (TargetBind
 		  FROM target_account_bindings
 		 WHERE target = $1 AND subject_id = $2`
 	var b TargetBinding
-	err := PG.QueryRow(ctx, q, target, subjectID).Scan(
+	err := querier(ctx).QueryRow(ctx, q, target, subjectID).Scan(
 		&b.Target, &b.SubjectID, &b.Username, &b.AccountUID, &b.BoundBy, &b.BoundAt, &b.LastSeenAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TargetBinding{}, false, nil
@@ -124,7 +124,7 @@ func ListTargetBindings(ctx context.Context, target string) ([]TargetBinding, er
 		  FROM target_account_bindings
 		 WHERE target = $1
 		 ORDER BY username`
-	rows, err := PG.Query(ctx, q, target)
+	rows, err := querier(ctx).Query(ctx, q, target)
 	if err != nil {
 		return nil, fmt.Errorf("list bindings on %s: %w", target, err)
 	}
