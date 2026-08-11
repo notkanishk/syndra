@@ -774,3 +774,18 @@ one is never retried at all.
 different claim from the one that survived five rounds, and it is the one worth
 making: `ErrBindingConflict` was "returned, no caller" for five rounds because
 nobody followed it to the settle path.
+
+## 31. What resolution left behind, and a NULL CHECK
+
+Both found after §30 shipped — one by probing the live database, one by tracing
+what the endpoint leaves in the world rather than what it writes.
+
+- [x] 31.1 **`binding_conflict_resolution_is_attributed` admitted the thing it forbade.** `btrim(resolved_by) <> ''` with a NULL `resolved_by` is NULL, the satisfied arm is `true AND NULL AND NULL` = NULL, and `false OR NULL` = NULL — **which a CHECK treats as satisfied**. So a finding could close itself with no actor and no reason, and the partial unique index followed: a self-closed row leaves `resolved_at IS NOT NULL`, drops out of the open index, and a second standing finding lands on the same account. The second failure was a consequence of the first, not a separate bug
+- [x] 31.2 000038's own comment names this trap about `STRICT`. Writing it down did not stop it being written two migrations later, which is the whole argument for the guard reading the SQL — and the guard's first version read the migration's own COMMENT quoting the broken constraint, which is the same failure inside the fix for it. Comments stripped, whitespace collapsed, and the statement read to its semicolon rather than to the first `)`, which lands inside `btrim(`
+- [x] 31.3 **Resolution agreed the records and left the target wrong.** Apply is level-triggered, so the convergence that caused the conflict replaced the account's set outright. Assign it to the bound subject and the account permanently carries the OTHER person's groups — access they were never granted, under a finding somebody has just marked resolved. Assign it the other way and the loser holds a mapped role with no account. Neither is drift a sweep would repair: both stores agree, and they agree on something wrong
+- [x] 31.4 Both claimants are converged **in the same transaction as the rebind**, not disclosed for an operator to do by hand. Every other decision on this branch that changes who holds what enqueues where it commits; this was the one place a resolved decision left the work on a human. A convergence for somebody already correct is a no-op the add-on answers without writing, so both go rather than reasoning about which needs it
+- [x] 31.5 And a failure to queue **rolls the rebind back**. Records agreeing over a target nobody will fix is the state this endpoint exists to leave behind, not to create. The copy says queued rather than resolved, and names what the account still holds until it drains
+
+**Every finding in §29–§31 came from following the code past the point the
+previous round stopped.** Not from a new tool or a wider sweep — from reading
+the next function.

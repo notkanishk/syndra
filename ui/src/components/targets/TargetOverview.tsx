@@ -394,7 +394,8 @@ function ResolveConflictDialog({
             The other person stops holding this account in Syndra, immediately and without
             being told. Their data on the target is untouched — this changes who Syndra says
             it belongs to, which is what every later revocation, sweep and convergence acts
-            on.
+            on. A convergence is queued for both of them, because the change that caused
+            this overwrote one person&rsquo;s entitlements with the other&rsquo;s.
           </p>
         </div>
 
@@ -423,7 +424,7 @@ function ResolveConflictDialog({
           </p>
         )}
       </div>
-      <ModalFooter note="This changes Syndra's records only. The target is converged separately.">
+      <ModalFooter note="A convergence is queued for both people. The account keeps what the change that caused this wrote to it until that drains.">
         <Button
           variant="dangerConfirm"
           disabled={!ready}

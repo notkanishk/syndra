@@ -95,3 +95,53 @@ func TestABindingConflictIsOnePerAccountAndAResolutionHasAnOwner(t *testing.T) {
 		t.Error("the losing binding must be forgotten before the winning one is written")
 	}
 }
+
+// §30 — a CHECK over nullable columns has to say what it means about NULL
+// before it says anything else.
+//
+// 000039 wrote `btrim(resolved_by) <> ”` in the satisfied arm. With
+// `resolved_by` NULL that term is NULL, the arm is NULL, the whole expression
+// is `false OR NULL` = NULL — and a NULL CHECK PASSES. The constraint written
+// to stop a finding closing itself permitted exactly that, and the partial
+// unique index followed it: a self-closed row drops out of the open index and a
+// second standing finding lands on the same account.
+//
+// 000038's own comment names this trap about STRICT. Writing it down did not
+// stop it being written two migrations later, so this reads the SQL.
+func TestAResolutionArmSaysWhatItMeansAboutNull(t *testing.T) {
+	dir := findMigrationsDir(t)
+	raw, err := os.ReadFile(filepath.Join(dir, "000040_a_resolution_cannot_close_itself.up.sql"))
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	up := string(raw)
+
+	// Comments stripped first, and whitespace collapsed. This migration's own
+	// comment QUOTES the broken constraint to explain it, and the first version
+	// of this guard read that quotation instead of the statement — the same
+	// failure as a guard greping prose, in the guard written about it.
+	var statements []string
+	for _, line := range strings.Split(up, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "--") {
+			continue
+		}
+		statements = append(statements, line)
+	}
+	sql := strings.Join(strings.Fields(strings.Join(statements, " ")), " ")
+	if !strings.Contains(sql, "ADD CONSTRAINT binding_conflict_resolution_is_attributed") {
+		t.Fatalf("the migration does not re-add the constraint; this guard is reading nothing: %q", sql)
+	}
+
+	// The whole statement, not "up to the first `)`" — which lands inside
+	// `btrim(resolved_by)` and truncates the arm being examined.
+	arm := between(t, sql, "ADD CONSTRAINT binding_conflict_resolution_is_attributed", ";")
+	for _, col := range []string{"resolved_by", "resolution"} {
+		if !strings.Contains(arm, col+" IS NOT NULL") {
+			t.Errorf("the satisfied arm does not require %s IS NOT NULL — btrim(NULL) is NULL, "+
+				"the arm evaluates to NULL, and a NULL CHECK passes", col)
+		}
+		if !strings.Contains(arm, "btrim("+col+")") {
+			t.Errorf("and it must still refuse an empty %s, or a resolution can be attributed to a blank", col)
+		}
+	}
+}

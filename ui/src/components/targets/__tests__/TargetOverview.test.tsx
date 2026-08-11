@@ -317,8 +317,10 @@ describe("a disputed account", () => {
     renderWithConflict();
     fireEvent.click(screen.getByRole("button", { name: /decide who owns it/i }));
     expect(screen.getByText(/without\s+being told/)).toBeInTheDocument();
-    // And that the target was not touched, or an operator reads this as done
-    // and never converges.
-    expect(screen.getByText(/converged separately/)).toBeInTheDocument();
+    // And that the account is not right yet. The change that caused the
+    // conflict overwrote one person's entitlements with the other's, so a
+    // convergence is queued for both — and until it drains the account still
+    // holds what that change wrote.
+    expect(screen.getByText(/queued for both people/)).toBeInTheDocument();
   });
 });

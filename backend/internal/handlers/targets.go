@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -313,8 +315,48 @@ func handleResolveBindingConflict(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conflict, err := dbResolveBindingConflict(r.Context(), r.PathValue("id"),
-		req.Owner, resolveActor(r, ""), req.Note)
+	// The rebind and the convergences in ONE transaction, and this is the half
+	// the first version left out. Agreeing Syndra's two records does not touch
+	// the target, and the target is wrong in both directions: the losing
+	// subject's groups were overwritten by the convergence that caused the
+	// conflict, so they hold a mapped role with no account — and the winning
+	// subject's account is carrying the OTHER person's resolved set, which is
+	// access they were never granted, sitting under a finding somebody has just
+	// marked resolved.
+	//
+	// Every other decision on this branch that changes who holds what enqueues
+	// in the same transaction it commits. A disclosure telling the operator to
+	// go and converge two people by hand would make this the one place a
+	// resolved decision leaves the work on a human.
+	actor := resolveActor(r, "")
+	var conflict db.BindingConflict
+	var queued []string
+	err := svcInTxLockingAccess(r.Context(), func(ctx context.Context) error {
+		var err error
+		conflict, err = dbResolveBindingConflict(ctx, r.PathValue("id"), req.Owner, actor, req.Note)
+		if err != nil {
+			return err
+		}
+		// Both claimants, always. Which one needs what depends on which way the
+		// operator decided, and resolving each is cheaper than reasoning about
+		// it — a convergence for somebody already correct is a no-op the add-on
+		// answers without writing.
+		for _, subject := range []string{conflict.ConvergedSubjectID, conflict.BoundSubjectID} {
+			set, resolveErr := svcResolveEntitlementsFor(ctx, subject, conflict.Target)
+			if resolveErr != nil {
+				return fmt.Errorf("resolve %s on %s: %w", subject, conflict.Target, resolveErr)
+			}
+			if _, _, qerr := dbRecordSystemConvergence(ctx, db.SystemConvergence{
+				Target: conflict.Target, SubjectID: subject, Actor: actor,
+				Reason: "A disputed account was assigned an owner",
+				Desired: set,
+			}); qerr != nil {
+				return fmt.Errorf("queue convergence for %s: %w", subject, qerr)
+			}
+			queued = append(queued, subject)
+		}
+		return nil
+	})
 	switch {
 	case errors.Is(err, db.ErrNoSuchConflict):
 		jsonErrorResponse(w, http.StatusNotFound, "NO_SUCH_CONFLICT", err.Error())
@@ -330,12 +372,12 @@ func handleResolveBindingConflict(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{
 		"resolved": true, "target": conflict.Target, "username": conflict.Username,
-		"owner": req.Owner,
-		// Queued, because the losing subject's entitlements are now unrecorded
-		// on this target and the winning subject's account may not match what
-		// policy says. Said rather than implied: the records agree now, and the
-		// TARGET has not been touched.
-		"detail": "Syndra's records now agree. Nothing on the target changed — " +
-			"converge the target when you are ready.",
+		"owner": req.Owner, "queued": queued,
+		// Queued, not applied, and it says which. The convergence that caused
+		// the conflict left the account holding the other person's resolved set
+		// — access the owner was never granted — and it stays there until this
+		// drains. That is the sentence an operator needs, not "resolved".
+		"detail": "Syndra's records now agree, and a convergence is queued for both people. " +
+			"Until it drains the account still holds whatever the change that caused this wrote to it.",
 	})
 }

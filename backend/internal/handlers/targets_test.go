@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -86,11 +88,27 @@ func TestResolvingAFindingThatMovedIsRefused(t *testing.T) {
 // §29's surface — the operator action, and the two things that make it safe.
 func TestResolvingABindingConflict(t *testing.T) {
 	var got struct{ id, owner, actor, note string }
-	orig := dbResolveBindingConflict
-	t.Cleanup(func() { dbResolveBindingConflict = orig })
+	var converged []string
+	orig, origTx, origResolve, origRecord :=
+		dbResolveBindingConflict, svcInTxLockingAccess, svcResolveEntitlementsFor, dbRecordSystemConvergence
+	t.Cleanup(func() {
+		dbResolveBindingConflict, svcInTxLockingAccess, svcResolveEntitlementsFor, dbRecordSystemConvergence =
+			orig, origTx, origResolve, origRecord
+	})
+	svcInTxLockingAccess = func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
 	dbResolveBindingConflict = func(_ context.Context, id, owner, actor, note string) (db.BindingConflict, error) {
 		got.id, got.owner, got.actor, got.note = id, owner, actor, note
-		return db.BindingConflict{Target: "truenas", Username: "ada"}, nil
+		return db.BindingConflict{
+			Target: "truenas", Username: "ada",
+			ConvergedSubjectID: "subject-b", BoundSubjectID: "subject-a",
+		}, nil
+	}
+	svcResolveEntitlementsFor = func(context.Context, string, string) (map[string]json.RawMessage, error) {
+		return map[string]json.RawMessage{"enabled": json.RawMessage(`true`)}, nil
+	}
+	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
+		converged = append(converged, c.SubjectID)
+		return "plan_1", "outbox_1", nil
 	}
 
 	resolve := func(body string) *httptest.ResponseRecorder {
@@ -124,19 +142,76 @@ func TestResolvingABindingConflict(t *testing.T) {
 	if got.id != "c1" || got.owner != "subject-a" || got.note == "" {
 		t.Errorf("the citation, the owner and the reason must all reach the store: %+v", got)
 	}
-	// And it says the TARGET was not touched. Syndra's records agreeing is not
-	// the same as the account being right, and an operator who reads this as
-	// "done" would not converge.
-	if !strings.Contains(rr.Body.String(), "Nothing on the target changed") {
-		t.Errorf("the outcome must not imply the target was converged: %s", rr.Body.String())
+	// Both claimants are converged, in the same transaction as the rebind.
+	//
+	// Agreeing the records does not touch the target, and the target is wrong
+	// both ways: the loser's groups were overwritten by the change that caused
+	// the conflict, and the winner's account carries the OTHER person's
+	// resolved set — access they were never granted, under a finding somebody
+	// has just marked resolved.
+	if len(converged) != 2 {
+		t.Fatalf("both people need re-converging, got %v", converged)
+	}
+	// And the outcome says queued rather than done, naming what is still true
+	// of the account until it drains.
+	if !strings.Contains(rr.Body.String(), "convergence is queued") {
+		t.Errorf("the outcome must say the work is queued: %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "still holds whatever") {
+		t.Errorf("and what the account holds until then: %s", rr.Body.String())
+	}
+}
+
+// A convergence that cannot be queued fails the whole resolution.
+//
+// The rebind and the convergences are one decision: records agreeing while the
+// target keeps one person's entitlements on another person's account is the
+// state this endpoint exists to leave behind, not to create.
+func TestAResolutionThatCannotQueueIsRolledBack(t *testing.T) {
+	origTx, origResolve, origRecord, origConflict :=
+		svcInTxLockingAccess, svcResolveEntitlementsFor, dbRecordSystemConvergence, dbResolveBindingConflict
+	t.Cleanup(func() {
+		svcInTxLockingAccess, svcResolveEntitlementsFor, dbRecordSystemConvergence, dbResolveBindingConflict =
+			origTx, origResolve, origRecord, origConflict
+	})
+	var rolledBack bool
+	svcInTxLockingAccess = func(ctx context.Context, fn func(context.Context) error) error {
+		err := fn(ctx)
+		rolledBack = err != nil
+		return err
+	}
+	dbResolveBindingConflict = func(context.Context, string, string, string, string) (db.BindingConflict, error) {
+		return db.BindingConflict{Target: "truenas", Username: "ada",
+			ConvergedSubjectID: "subject-b", BoundSubjectID: "subject-a"}, nil
+	}
+	svcResolveEntitlementsFor = func(context.Context, string, string) (map[string]json.RawMessage, error) {
+		return map[string]json.RawMessage{}, nil
+	}
+	dbRecordSystemConvergence = func(context.Context, db.SystemConvergence) (string, string, error) {
+		return "", "", errors.New("the outbox is unavailable")
+	}
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/truenas/binding-conflicts/c1/resolve",
+		strings.NewReader(`{"owner":"subject-a","note":"checked with her","confirmed":true}`))
+	r.SetPathValue("target", "truenas")
+	r.SetPathValue("id", "c1")
+	handleResolveBindingConflict(rr, r)
+
+	if rr.Code == http.StatusOK {
+		t.Fatalf("a resolution whose convergence could not be queued must not report success: %s", rr.Body.String())
+	}
+	if !rolledBack {
+		t.Error("and the rebind must go back with it — records agreeing over a target nobody will fix is the state this prevents")
 	}
 }
 
 // Naming somebody the finding does not is a validation failure, not a refusal
 // to act: it is a different decision with no rehearsal behind it.
 func TestResolvingToAThirdPartyIsRefused(t *testing.T) {
-	orig := dbResolveBindingConflict
-	t.Cleanup(func() { dbResolveBindingConflict = orig })
+	orig, origTx := dbResolveBindingConflict, svcInTxLockingAccess
+	t.Cleanup(func() { dbResolveBindingConflict, svcInTxLockingAccess = orig, origTx })
+	svcInTxLockingAccess = func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
 	dbResolveBindingConflict = func(context.Context, string, string, string, string) (db.BindingConflict, error) {
 		return db.BindingConflict{}, db.ErrInvalidTargetBinding
 	}
