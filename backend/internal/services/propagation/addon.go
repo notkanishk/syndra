@@ -193,13 +193,32 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 
 	switch {
 	case resp.Outcome == addons.OutcomeSucceeded:
-		// Recorded before the row is settled, and non-fatally. The binding is
-		// the backend's copy of a decision the add-on already made and already
-		// persisted, so failing to write it does not un-apply anything — but a
-		// convergence marked applied while the backend still thinks the subject
-		// has no account would report them in the unmanaged inventory, which is
-		// the one place an operator is invited to adopt an account.
-		recordBinding(ctx, intent, resp, row.InitiatedBy)
+		// Recorded before the row is settled. A transient write failure is
+		// non-fatal — the binding is the backend's copy of a decision the add-on
+		// already made and already persisted, so failing to write it does not
+		// un-apply anything.
+		//
+		// A CONFLICT is not that, and treating the two alike is what made this
+		// path lie. `ErrBindingConflict` means the account the add-on just wrote
+		// to is one the backend attributes to a DIFFERENT subject: the two
+		// stores have diverged, and the add-on has converged this subject's
+		// entitlements onto somebody else's account. Settled `applied`, that
+		// disagreement surfaces nowhere — the other subject still shows as
+		// holding the account, this one shows as having none, `convergeBound`
+		// iterates bindings so it is never revisited, and the detection that
+		// exists to catch exactly this sits in a log line.
+		if err := recordBinding(ctx, intent, resp, row.InitiatedBy); errors.Is(err, db.ErrBindingConflict) {
+			// Terminal, and deliberately NOT phrased as "nothing happened": the
+			// mutation landed. What failed is the attribution, and no retry
+			// resolves it — a re-drive converges the same wrong account again.
+			// An operator has to decide which subject the account belongs to.
+			if err := markFailed(ctx, row.ID, bindingConflictReason(intent, resp, err)); err != nil {
+				res.settleFailure(row.ID, "mark failed", err)
+				return false
+			}
+			res.Failed++
+			return false
+		}
 		if err := markApplied(ctx, row.ID); err != nil {
 			res.settleFailure(row.ID, "apply", err)
 			return false
@@ -374,12 +393,12 @@ func (res *DrainResult) fingerprintFor(ctx context.Context, intent db.Entitlemen
 // Non-fatal, and logged rather than returned. The convergence happened; refusing
 // to record it as applied because a mirror write failed would leave the row
 // claimable and re-drive a mutation that already landed.
-func recordBinding(ctx context.Context, intent db.EntitlementIntent, resp addons.ApplyResponse, actor string) {
+func recordBinding(ctx context.Context, intent db.EntitlementIntent, resp addons.ApplyResponse, actor string) error {
 	if resp.Username == "" {
 		// An outcome that reported no account name. Nothing to record, and
 		// nothing wrong: a `no_change` on a subject the add-on could not name is
 		// already an outcome the surface shows.
-		return
+		return nil
 	}
 	binding := db.TargetBinding{
 		Target: intent.Target, SubjectID: intent.SubjectID,
@@ -392,5 +411,24 @@ func recordBinding(ctx context.Context, intent db.EntitlementIntent, resp addons
 	if err := saveBinding(ctx, binding); err != nil {
 		log.Printf("[ADDON-DRAIN] converged %s on %s but could not record the binding: %v",
 			intent.SubjectID, intent.Target, err)
+		// Returned as well as logged, because the caller has to tell a
+		// transient write failure from a finding. They used to travel through
+		// one `err != nil` branch and one log line.
+		return err
 	}
+	return nil
+}
+
+// bindingConflictReason is what an operator reads on the failed row.
+//
+// It has to say the mutation LANDED, because every other terminal failure on
+// this path means it did not, and an operator who reads this as "the change did
+// not go through" will re-drive it — onto the same account belonging to the
+// same other person.
+func bindingConflictReason(intent db.EntitlementIntent, resp addons.ApplyResponse, err error) string {
+	return fmt.Sprintf(
+		"the change was applied on %s and could not be attributed: %s already belongs to another subject here. "+
+			"%s now has entitlements written to an account Syndra records against somebody else. "+
+			"Do not retry — decide who the account belongs to first (%v)",
+		intent.Target, resp.Username, intent.SubjectID, err)
 }

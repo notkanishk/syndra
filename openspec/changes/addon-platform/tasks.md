@@ -713,3 +713,22 @@ The vacuous deploy check was not a one-off. **Most guards on this branch have ne
 - [x] 28.9 `STRICT` on that function is safe only because `field` and `value` are NOT NULL on both tables: on a nullable column it would return NULL, the CHECK would evaluate to NULL, and **a NULL CHECK passes**. Stated on the function, because a future table adopting it has to check that first
 
 **The last three rounds were one defect at three depths**, and the shape is worth keeping: a carve-out that read as accepted and matched nothing → normalise at the write rather than the check → put the rule in the schema → make the schema's rule mean what the code's rule means → and now, the boundary the function itself introduced. Each fix was correct and each exposed the next layer. Moving an invariant DOWNWARD passes it through layers with their own vocabularies — Go's trim set, `btrim`'s default argument, constraint re-validation semantics — and agreement at one boundary says nothing about the next.
+
+## 29. The false `applied`
+
+`ErrBindingConflict` was carried forward five rounds as "returned and checked by
+nobody" — read at its declaration and its single return site, and never followed
+to the call site. Two greps past that: the caller settles the row `applied`
+regardless.
+
+- [x] 29.1 **A finding travelled through the same branch as a transient write failure.** `recordBinding` swallowed every error into one log line, and the comment above it reasons carefully about the transient case and is right about it — the add-on already persisted the decision, so failing to copy it does not un-apply anything. That reasoning does not hold for a conflict, because a conflict is not a failure to write
+- [x] 29.2 What it actually means: the account the add-on just wrote to is one the backend attributes to a **different subject**, so the two stores have diverged and this subject's entitlements have landed on somebody else's account. Settled `applied`, that surfaces nowhere — the other subject still shows as holding the account, this one shows as having none, `convergeBound` iterates bindings so it is never revisited, and the detection built to catch exactly this sits in a log line
+- [x] 29.3 The conflict now settles **terminally and not as applied**, with a reason that says the change LANDED. Every other terminal failure on this path means it did not, so an operator reading it as "the change did not go through" would re-drive it onto the same account belonging to the same other person. It names the account, says the attribution failed rather than the mutation, and says not to retry — no retry resolves it, an operator deciding who owns the account does
+- [x] 29.4 A transient write failure keeps its old behaviour, and a test holds the two apart in both directions. Verified by removing the branch and watching the conflict case go back to `Applied:1`
+- [x] 29.5 **The adoption hazard is not reachable this way, and that is now pinned rather than assumed.** `RecordTargetBinding` upserts on `(target, subject_id)`, so the only indexes it can violate are `(target, username)` and `(target, uid)` — a conflict therefore always implies a binding to another subject already exists, and that binding is exactly what `unmanaged` filters on. No exclusion was added; a test asserts the reasoning instead, because it depends on the shape of the upsert and would stop following silently if that changed
+
+**The review that found this is the finding.** It had been carried five rounds on
+the strength of reading a sentinel's declaration and its one return site — the
+"checked rather than proven" distinction, applied to the item that had only ever
+been checked. The last thing on a list nobody has looked at twice is the thing
+most likely to have been looked at once.

@@ -302,3 +302,38 @@ func TestAnchoringSkipsOnlyWhenTheHealthReadFailed(t *testing.T) {
 		t.Error("an empty log head must reach the classifier — against an existing anchor it is a truncation, not a silence")
 	}
 }
+
+// §29 — the account behind a refused binding is never offered for adoption,
+// and it is worth pinning why rather than adding a guard for it.
+//
+// `RecordTargetBinding` upserts on (target, subject_id), so the only unique
+// indexes it can violate are (target, username) and (target, uid) — which means
+// a conflict ALWAYS implies a binding to another subject already exists. That
+// binding is what `unmanaged` filters on, so the account is excluded by the
+// ordinary path and the adoption hazard §11 names is not reachable this way.
+//
+// Asserted rather than assumed, because the reasoning depends on the shape of
+// the upsert: change it to conflict on something else and the exclusion stops
+// following, silently.
+func TestAnAccountBoundToAnotherSubjectIsNeverOfferedForAdoption(t *testing.T) {
+	uid := int64(3001)
+	bindings := []db.TargetBinding{
+		{Target: "truenas", SubjectID: "subject-a", Username: "ada", AccountUID: &uid},
+	}
+	accounts := []addons.TargetAccount{
+		{Username: "ada", UID: 3001},
+		{Username: "nobody-owns-this", UID: 4002},
+	}
+
+	got := unmanaged(accounts, bindings)
+	if len(got) != 1 || got[0].Username != "nobody-owns-this" {
+		t.Fatalf("an account bound to another subject must not appear as adoptable: %+v", got)
+	}
+
+	// The uid arm too: a conflict can be raised by either index, and a binding
+	// whose username has drifted still owns the account.
+	renamed := []addons.TargetAccount{{Username: "ada-renamed", UID: 3001}}
+	if got := unmanaged(renamed, bindings); len(got) != 0 {
+		t.Errorf("a bound uid owns the account whatever it is currently called: %+v", got)
+	}
+}

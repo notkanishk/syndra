@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"regexp"
 	"strings"
@@ -525,5 +526,75 @@ func TestThePreflightProbesTheTargetRatherThanTheAddon(t *testing.T) {
 	}
 	if strings.Contains(probe[1], "addons.Refresh") {
 		t.Error("a manifest read proves only that the add-on's own process is up")
+	}
+}
+
+// §29 — a refused binding is a FINDING, not a failed write.
+//
+// `recordBinding` swallowed every error into one log line and the row settled
+// `applied` regardless. The reasoning above it is right about the transient
+// case — the add-on already persisted the decision, so failing to copy it does
+// not un-apply anything — and wrong about this one, because a conflict is not a
+// failure to write.
+//
+// What it means: the account the add-on just wrote to is one the backend
+// attributes to a DIFFERENT subject. The two stores have diverged and this
+// subject's entitlements have landed on somebody else's account. Marked
+// applied, that surfaces nowhere — the other subject still shows as holding the
+// account, this one shows as having none, and `convergeBound` iterates bindings
+// so it is never revisited.
+func TestARefusedBindingDoesNotSettleApplied(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "ada", UID: 3001}
+	t.Cleanup(swap(&saveBinding, func(context.Context, db.TargetBinding) error {
+		return fmt.Errorf("%w: ada on truenas", db.ErrBindingConflict)
+	}))
+
+	res, err := DrainAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(h.applied) != 0 || res.Applied != 0 {
+		t.Fatalf("a convergence the backend cannot attribute must not be recorded as applied: %+v", res)
+	}
+	if res.Failed != 1 {
+		t.Fatalf("it must settle terminally — a retry converges the same wrong account again: %+v", res)
+	}
+
+	reason := h.failed["o1"]
+	// The mutation LANDED. Every other terminal failure on this path means it
+	// did not, so an operator who reads this as "the change did not go through"
+	// re-drives it onto the same account belonging to the same other person.
+	if !strings.Contains(reason, "was applied") {
+		t.Errorf("the reason must say the change landed: %q", reason)
+	}
+	if !strings.Contains(reason, "ada") || !strings.Contains(reason, "another subject") {
+		t.Errorf("it must name the account and what is wrong with it: %q", reason)
+	}
+	if !strings.Contains(reason, "Do not retry") {
+		t.Errorf("and that retrying is the wrong move: %q", reason)
+	}
+}
+
+// A transient write failure keeps its old behaviour, which was correct. The
+// binding is the backend's copy of a decision the add-on already persisted, so
+// a connection blip must not convert a successful convergence into a terminal
+// failure an operator has to triage.
+func TestATransientBindingWriteFailureStillSettlesApplied(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "ada", UID: 3001}
+	t.Cleanup(swap(&saveBinding, func(context.Context, db.TargetBinding) error {
+		return errors.New("connection reset by peer")
+	}))
+
+	res, err := DrainAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Applied != 1 || len(h.applied) != 1 {
+		t.Fatalf("a blip writing the mirror must not un-apply a convergence that happened: %+v", res)
+	}
+	if res.Failed != 0 {
+		t.Errorf("and it is not a finding: %+v", res)
 	}
 }
