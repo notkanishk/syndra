@@ -13,6 +13,21 @@ export interface RoleMember {
   expires?: string;
   /** Present only for a direct source — the id the removal endpoint takes. */
   grant_id?: string;
+  /**
+   * What this role confers and this person does not have.
+   *
+   * §6: the carve-out has to be visible everywhere the role appears, and this
+   * list is where an operator picks who to act on. Without it the screen says
+   * "these people hold this role" and means "most of them do".
+   */
+  withheld?: Array<{
+    target: string;
+    field: string;
+    value: string;
+    reason: string;
+    actor_id: string;
+    allowance_id: string;
+  }>;
 }
 
 export interface RoleMembersView {
@@ -24,6 +39,9 @@ export interface RoleMembersView {
   group?: string;
   cloned_from?: string;
   members: RoleMember[];
+  /** How many holders have something withheld. Counted apart from the source
+   *  pills below: a carve-out is orthogonal to how somebody came to hold it. */
+  withheld_count: number;
   direct_count: number;
   bundle_count: number;
   automatic_count: number;

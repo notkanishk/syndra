@@ -119,3 +119,35 @@ export function Withheld({
     </div>
   );
 }
+
+/**
+ * The one-line form, for a row inside a dense list.
+ *
+ * The banner above is right on a page about one person and wrong repeated forty
+ * times down a table — a warning that appears on most rows is a background
+ * colour, not a warning. This says the same thing in a line, and it says the
+ * REASON: an operator scanning a holder list is deciding who to act on, and
+ * "withheld" without the why moves the question rather than answering it.
+ *
+ * Same component file as the banner deliberately. They are two densities of one
+ * object, and the day the vocabulary changes it must change in both.
+ */
+export function WithheldInline({ items }: { items: WithheldItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <ul className="mt-1 grid gap-0.5">
+      {items.map((item) => (
+        <li
+          key={`${item.target ?? ""}:${item.field}:${item.value}`}
+          className="flex flex-wrap items-baseline gap-x-1.5 text-[13px]"
+        >
+          <WithheldPill />
+          <span className="font-mono text-[12.5px] text-ink">{item.value}</span>
+          {item.target && <span className="text-faint">on {item.target}</span>}
+          {item.reason && <span className="text-muted">— {item.reason}</span>}
+          {item.reviewDue && <span className="text-warn-text">· past its review date</span>}
+        </li>
+      ))}
+    </ul>
+  );
+}

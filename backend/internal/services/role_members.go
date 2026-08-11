@@ -2,10 +2,13 @@ package services
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
 
+	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
 )
@@ -30,6 +33,26 @@ type RoleMember struct {
 	// GrantID is the direct_role_grants row id, present only for a direct
 	// source — it is what the removal endpoint takes.
 	GrantID string `json:"grant_id,omitempty"`
+	// Withheld is what this role confers on a target and this person does not
+	// have, with the decision that took it away attached.
+	//
+	// On the holder list because §6 says the carve-out has to be visible
+	// EVERYWHERE the role appears, and this is the screen where an operator
+	// decides who to act on. Without it the list says "these forty people have
+	// this role" and means "thirty-nine of them do" — which is the trap the
+	// resolver's Suppressed exists to close, closed on the member's own page
+	// and left open on the operator's.
+	Withheld []WithheldOnRole `json:"withheld,omitempty"`
+}
+
+// WithheldOnRole is one thing this role would give somebody and does not.
+type WithheldOnRole struct {
+	Target      string `json:"target"`
+	Field       string `json:"field"`
+	Value       string `json:"value"`
+	Reason      string `json:"reason"`
+	ActorID     string `json:"actor_id"`
+	AllowanceID string `json:"allowance_id"`
 }
 
 // RoleMembersView is the response for GET /projects/{id}/roles/{key}/members.
@@ -42,6 +65,11 @@ type RoleMembersView struct {
 	Group       string       `json:"group,omitempty"`
 	ClonedFrom  string       `json:"cloned_from,omitempty"`
 	Members     []RoleMember `json:"members"`
+	// WithheldCount is how many of them are holding the role with something
+	// taken away. Its own number rather than a length the client computes: the
+	// filter pills below count people per SOURCE, and a carve-out is orthogonal
+	// to how somebody came to hold the role.
+	WithheldCount int `json:"withheld_count"`
 	// Counts per source, for the filter pills. A person held two ways is
 	// counted under both — the pills filter rows, they do not partition people.
 	DirectCount    int `json:"direct_count"`
@@ -103,6 +131,20 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 		}
 	}
 
+	// What this role confers, and what is currently taken away from it. Read
+	// once for the whole cohort rather than per member: the per-subject read is
+	// the only one that existed, and a screen listing forty holders would have
+	// needed forty calls — which is why this list carried no carve-out at all.
+	// The shape of the available read decided what the screen said.
+	withheldBySubject, werr := withheldOnRole(ctx, projectID, key)
+	if werr != nil {
+		// Non-fatal, and it is the one degradation that must be loud rather
+		// than silent: a list that quietly omits carve-outs is the exact trap
+		// this exists to close. The count stays zero, and nothing claims the
+		// holders are unencumbered.
+		log.Printf("[ROLE-MEMBERS] could not read carve-outs for %s/%s: %v (rendered without them)", projectID, key, werr)
+	}
+
 	for _, user := range snap.Users() {
 		roleMap, _, ferr := snap.For(user.ID)
 		if ferr != nil {
@@ -129,6 +171,10 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 				view.AutomaticCount++
 			}
 		}
+		if held := withheldBySubject[user.ID]; len(held) > 0 {
+			member.Withheld = held
+			view.WithheldCount++
+		}
 		if grant, ok := grantsByUser[user.ID]; ok {
 			member.GrantID = grant.ID
 			member.Since = grant.CreatedAt.UTC().Format("2006-01-02")
@@ -143,6 +189,74 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 		return strings.ToLower(view.Members[i].User.Name) < strings.ToLower(view.Members[j].User.Name)
 	})
 	return view, nil
+}
+
+// withheldOnRole is, per subject, what this role confers that they do not have.
+//
+// Two reads and an intersection, and the intersection is the whole point: an
+// allowance is a denial on a (target, field, value), and it belongs on THIS
+// role's row only when this role is what would otherwise confer that value. A
+// person suspended from a share their OTHER role grants is not holding this one
+// with something taken away, and saying so here would move the carve-out onto
+// the wrong role — which is worse than omitting it, because an operator would
+// act on this row.
+//
+// Lifecycle denials are the exception and they belong on every role that
+// reaches the target: `enabled = true` denied means the account is off, so
+// nothing the role confers there is reachable. It is not bound to any mapping,
+// so the intersection cannot find it and it is matched on the target alone.
+func withheldOnRole(ctx context.Context, projectID, key string) (map[string][]WithheldOnRole, error) {
+	targets, err := dbTargetsMappedToRole(ctx, projectID, key)
+	if err != nil {
+		return nil, fmt.Errorf("read targets mapped to %s/%s: %w", projectID, key, err)
+	}
+	if len(targets) == 0 {
+		// A role mapped to nothing confers nothing on any target, so nothing can
+		// be withheld from it. The common case, and it costs one indexed read.
+		return nil, nil
+	}
+
+	// What this role binds, per target: the set an allowance has to match.
+	conferred := map[string]map[string]bool{} // target -> "field\x00value"
+	for _, target := range targets {
+		mappings, err := dbMappingsForRoles(ctx, target, []db.RoleRef{{ProjectID: projectID, RoleKey: key}})
+		if err != nil {
+			return nil, fmt.Errorf("read mappings for %s/%s on %s: %w", projectID, key, target, err)
+		}
+		bound := map[string]bool{}
+		for _, m := range mappings {
+			bound[m.Field+"\x00"+m.Value] = true
+		}
+		conferred[target] = bound
+	}
+
+	allowances, err := dbAllowancesOnTargets(ctx, targets)
+	if err != nil {
+		return nil, fmt.Errorf("read allowances on the targets %s/%s reaches: %w", projectID, key, err)
+	}
+
+	out := map[string][]WithheldOnRole{}
+	for _, a := range allowances {
+		if a.Direction != db.AllowanceDeny {
+			// The additive arm is refused at the write, so reaching here means
+			// the write path grew one. Skipped rather than rendered as a
+			// carve-out: an allowance that GIVES something is not access taken
+			// away, and drawing it as one would say the opposite of the truth.
+			continue
+		}
+		bound, ok := conferred[a.Target]
+		if !ok {
+			continue
+		}
+		if !IsLifecycleField(a.Field) && !bound[a.Field+"\x00"+a.Value] {
+			continue
+		}
+		out[a.SubjectID] = append(out[a.SubjectID], WithheldOnRole{
+			Target: a.Target, Field: a.Field, Value: a.Value,
+			Reason: a.Reason, ActorID: a.ActorID, AllowanceID: a.ID,
+		})
+	}
+	return out, nil
 }
 
 // expiryHorizon is how far ahead "expiring soon" looks. Shared by the Today

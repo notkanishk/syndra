@@ -174,6 +174,38 @@ func AllowancesInForce(ctx context.Context, subjectID, target string) ([]Allowan
 	return scanAllowances(rows)
 }
 
+// AllowancesInForceOnTargets returns every in-force allowance on any of the
+// given targets, for every subject.
+//
+// The cohort read. `AllowancesInForce` answers for one person, and a screen
+// listing everyone who holds a role would have to call it once per member —
+// which is why the role-holder list carried no carve-out at all: the shape of
+// the only available read made the honest version too expensive to write, so
+// the list said nothing and read as full access.
+//
+// One query over a small table beats N queries over the same one, and it beats
+// a per-row lookup that a future caller would be tempted to skip on a large
+// cohort.
+func AllowancesInForceOnTargets(ctx context.Context, targets []string) ([]Allowance, error) {
+	if len(targets) == 0 {
+		return nil, nil
+	}
+	const q = `
+		SELECT id, subject_id, target, field, value, direction, actor_id, reason,
+		       created_at, expires_at, review_date, lifted_at, COALESCE(lifted_by, '')
+		  FROM allowances
+		 WHERE target = ANY($1)
+		   AND lifted_at IS NULL
+		   AND (expires_at IS NULL OR expires_at > NOW())
+		 ORDER BY subject_id, created_at`
+	rows, err := querier(ctx).Query(ctx, q, targets)
+	if err != nil {
+		return nil, fmt.Errorf("read allowances in force on targets: %w", err)
+	}
+	defer rows.Close()
+	return scanAllowances(rows)
+}
+
 // AllowancesForSubject returns every allowance ever recorded for a subject,
 // including lifted and lapsed ones — the lineage view's read.
 func AllowancesForSubject(ctx context.Context, subjectID string) ([]Allowance, error) {

@@ -16,6 +16,7 @@ import { Mono } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FilterPills } from "@/components/ui/Select";
+import { WithheldInline } from "@/components/ui/Withheld";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useCrumb } from "@/lib/page-crumb";
 import { peopleHref } from "@/lib/people-filters";
@@ -89,6 +90,18 @@ export default function RoleMembersPage({
               ? "1 person holds this role"
               : `${view?.members.length ?? 0} people hold this role`}
           </span>
+          {/* Stated before the list rather than left to be discovered in it.
+              "Forty people hold this role" is the sentence an operator acts on,
+              and it is false for however many of them are holding it with
+              something taken away. Not a filter pill: those partition by SOURCE,
+              and a carve-out is orthogonal to how somebody came to hold it. */}
+          {(view?.withheld_count ?? 0) > 0 && (
+            <span className="text-[13.5px] text-warn-text">
+              {view?.withheld_count === 1
+                ? "1 of them has something withheld"
+                : `${view?.withheld_count} of them have something withheld`}
+            </span>
+          )}
           <span className="flex-1" />
           <span className="text-[13.5px] text-faint">Filter by source:</span>
           <FilterPills<Filter>
@@ -191,6 +204,21 @@ function MemberRow({
       </div>
       <div className="min-w-0 flex-1">
         <AccessSourceList reasons={member.reasons} />
+        {/* On the row, under the source, because it modifies what the source
+            means: "holds it via the maker bundle" and "holds it via the maker
+            bundle, with the share withheld" are different facts about the same
+            person, and only one of them is what the operator is looking at. */}
+        {member.withheld && member.withheld.length > 0 && (
+          <WithheldInline
+            items={member.withheld.map((held) => ({
+              field: held.field,
+              value: held.value,
+              reason: held.reason,
+              target: held.target,
+              actorId: held.actor_id,
+            }))}
+          />
+        )}
       </div>
       <div className="w-[120px] shrink-0 text-[13.5px] text-faint">
         {member.expires

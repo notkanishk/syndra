@@ -655,3 +655,17 @@ the whole §23.5 path end to end — a target revocation queued an `apply` carry
 indicator (where it had appeared in neither), and was drained by the background
 runner at the next tick with `applied=1` while Zitadel was offline throughout.
 That last part is the property the response has been promising all along.
+
+## 25. The holder list, and a deploy that could add but never delete
+
+- [x] 25.1 **`RoleMember` carries what this role confers and the person does not have.** §6 says the carve-out has to be visible everywhere the role appears, and the holder list is where an operator decides who to act on — so "these forty people hold this role" was false for however many held it with something taken away, on the one screen where somebody acts on the number. The member's own page had it; the operator's did not, which is the wrong way round
+- [x] 25.2 The read that was missing is why. `AllowancesInForce` answers for one person, so an honest holder list needed one call per member — the shape of the available read decided what the screen said. `AllowancesInForceOnTargets` is the cohort form: one query over a small table, and no per-row lookup for a future caller to skip on a large cohort
+- [x] 25.3 **The intersection is the whole of it.** An allowance belongs on THIS role's row only where this role is what would otherwise confer that value; a person suspended from a share their other role grants is not holding this one with something taken away, and putting the carve-out on the wrong role is worse than omitting it, because an operator acts on the row. Lifecycle denials are the deliberate exception and match on the target alone — `enabled = true` denied means the account is off, so nothing the role reaches there is reachable
+- [x] 25.4 The count is stated **before** the list, and it is not a filter pill: the pills partition by source, and a carve-out is orthogonal to how somebody came to hold the role. `WithheldInline` is a second density of the same component rather than bespoke markup — the banner is right on a page about one person and wrong forty times down a table, where a warning on most rows is a background colour by the second visit. Both say the reason, because "withheld" alone moves the question rather than answering it
+- [x] 25.5 A failed carve-out read is **logged and rendered without**, never silently omitted, and the count stays zero rather than claiming the holders are unencumbered
+- [x] 25.6 **The deploy could add and change files but never delete one.** `cp -a` over the tree left `ui/src/app/system/hardware-sync` and `useIntents.ts` on the box after the repo deleted them, so the rebuilt image kept serving the retired route — `/system/hardware-sync` answered 200 against a commit that had removed it. The fix in 23.18 was real and had not reached the deployment. Mirroring (remove the tracked directories, then extract) now, and the route 404s
+- [x] 25.7 The full tree diff the overwrite prompted found nothing else the repo does not know about: a stale compiled `addons/truenas/truenas` binary in the build context, and `openspec/` and `.env.example` lagging because earlier syncs never copied them. No local edits beyond the host ports 24.5 moved into the environment
+
+**Still open:** `ErrBindingConflict` is returned by `RecordTargetBinding` and
+checked by no caller, so "this account belongs to somebody else" is reported by
+the add-on and reaches no operator surface.
