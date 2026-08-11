@@ -527,3 +527,22 @@ lacks is a cohort source: the endpoint takes explicit subject ids and no screen
 can honestly produce a list of them yet. §24's mapping holders
 (`/targets/mappings/{id}/holders`) is the natural one, which makes §24 the
 screen that unblocks §23 rather than a peer of it.
+
+## 21. The two screens that were designed and not built
+
+§24 first, and §23 second, because §24 is what unblocks §23 rather than a peer
+of it: the entitlement endpoints take an explicit list of subjects, and until
+this pass no surface in the product could honestly produce one.
+
+- [x] 21.1 **`GET /api/v1/targets/{target}/mappings/versions`** — the one backend gap. The version tables and the publish and rollback writers existed from group 7; nothing could read them back, so "every version carries who changed it and why" had nowhere to come from. The reader returns each version with its note, its publisher and its entries, newest first
+- [x] 21.2 And it answers the question a version list alone cannot: **`unpublished`**. Publishing snapshots the working set and every edit afterwards moves the set and not the snapshot, so "current version 4" is true and misleading when what is live is version 4 plus three edits — and an operator rolling back to 4 from there is undoing work listed nowhere. Compared by CONTENT rather than by count, because a set with one edited value is exactly the drift worth flagging and a length check calls it equal. The entries join is a LEFT JOIN so a version published against an empty set still appears; an inner join would drop it and the gap in the numbering would be its only trace
+- [x] 21.3 **§24 as a caller of `RehearsalDialog`, per BUILD-NOTES §2** — not the screen the board draws. Edit, delete and rollback all rehearse first, through the same dialog bulk grants, request decisions, drift resolution and bundle publishing already use. An operator who has read one plan knows where the button is on all five
+- [x] 21.4 The blast radius is **the backend's refusal, not a checkbox drawn upfront**. The rehearsal asks with `acknowledge_scope: false`, `COHORT_ACKNOWLEDGEMENT_REQUIRED` becomes the dialog's scope step carrying the number the backend computed, and the threshold lives in one place. Rung 2 throughout: a mapping edit is routine work whose reach is larger than it looks, and copying digits would train an operator not to look
+- [x] 21.5 A rollback acknowledges **the binding count, not a head count** — and that is the honest number. A rollback restores a SET; how many people it moves depends on who holds those roles when the drain runs, and a person count here would claim a rehearsal this endpoint does not perform
+- [x] 21.6 **§23 as a second caller of the same dialog.** `useRehearseEntitlements` and `useApplyEntitlements` had existed with no caller since the spine landed — the same shape as §19.1's undispatched drain. The adapter is where the contract survives: `succeeded` is hardcoded to zero on both legs, because the endpoint's own summary is always zero precisely so a client cannot default it, and the word "done" and the tick never appear
+- [x] 21.7 **Rows needing nothing are counted, not hidden.** "This changes less than you think" is the most useful thing a plan can say, and a screen that filtered them leaves an operator wondering where their cohort went
+- [x] 21.8 **A provisional plan is labelled with the age of what it saw**, in the same `ReadFreshness` strip the inventory uses — and stays applicable, which is the deliberate other half of §31 A's split. Adoption is blocked on a stale read because it binds an identity; applying only joins a queue an operator can still inspect. Rendered outside the dialog body so the age survives every step of it
+- [x] 21.9 **The cohort comes from a mapping's holders**, on the row that already knows them. A control that assembled its own list would be assembling one nobody reviewed, and a role nobody holds offers no convergence at all — with the reason as text rather than a disabled button with a tooltip
+
+**Verified on the deployment:** publishing a version, reading the history back,
+editing a mapping, and watching `unpublished` flip from false to true.

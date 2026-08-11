@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
+import { MappingManagement } from "@/components/targets/MappingManagement";
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
@@ -43,6 +44,10 @@ export function TargetOverview({ target }: { target: string }) {
 
       <div className="grid gap-4">
         <Health target={target} health={health.data} isLoading={health.isLoading} />
+        {/* What roles reach here, before whose accounts are on it: the mappings
+            are the reason any of those accounts exist, and reading the
+            inventory first invites the question this panel answers. */}
+        <MappingManagement target={target} />
         <Inventory target={target} />
 
         {registered && (

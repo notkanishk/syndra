@@ -389,7 +389,8 @@ var (
 	addonsHealth     = addons.Health
 	// The backend's memory of an add-on's mutation log, read beside that add-on's
 	// own account of itself. Two authorities on purpose.
-	dbGetLogAnchor = db.GetLogAnchor
+	dbListMappingHistory = db.ListMappingHistory
+	dbGetLogAnchor       = db.GetLogAnchor
 	// When a member's access to a target was written down, for the one sentence
 	// on their own page that would otherwise be a promise about a person.
 	dbEntitlementRecordedAt = db.EntitlementRecordedAt

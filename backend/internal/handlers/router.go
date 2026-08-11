@@ -239,6 +239,9 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/v1/targets/mappings/{id}/rehearse-edit", withCORS(withOperatorAuth(handleRehearseMappingEdit)))
 	mux.HandleFunc("POST /api/v1/targets/mappings/{id}/rehearse-delete", withCORS(withOperatorAuth(handleRehearseMappingDelete)))
 	mux.HandleFunc("POST /api/v1/targets/mappings/versions", withCORS(withOperatorAuth(handlePublishMappingVersion)))
+	// The history behind those versions. Read-only, and operator-gated like the
+	// rest: a version's note names who decided what a role means.
+	mux.HandleFunc("GET /api/v1/targets/{target}/mappings/versions", withCORS(withOperatorAuth(handleMappingHistory)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/mappings/versions/{version}/rollback", withCORS(withOperatorAuth(handleRollbackMappingVersion)))
 
 	// A member's own storage view and the one action on it. Self-scoped by

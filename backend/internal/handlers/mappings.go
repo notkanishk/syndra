@@ -285,3 +285,17 @@ func writeMappingError(w http.ResponseWriter, err error) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 	}
 }
+
+// handleMappingHistory is a target's published versions, newest first (9.7/9.8).
+//
+// The whole history rather than a page of it: a makerspace publishes a mapping
+// version a handful of times a term, and paging a list that short would cost an
+// operator a click to see the thing they came for.
+func handleMappingHistory(w http.ResponseWriter, r *http.Request) {
+	history, err := dbListMappingHistory(r.Context(), r.PathValue("target"))
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, history)
+}

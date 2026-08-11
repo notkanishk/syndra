@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -365,4 +366,136 @@ func RollbackMappingVersion(ctx context.Context, target string, version int, act
 		}
 		return nil
 	})
+}
+
+// A published version, as the history surface reads it (change `addon-platform`
+// 9.7/9.8; design §24).
+//
+// Who published it and why travel with it, and they are not decoration: a
+// rollback target with no reason attached is a guess, and the operator choosing
+// one is deciding whose judgement to restore. The note is the only record of
+// that judgement, which is why publishing takes one.
+type MappingVersion struct {
+	Version     int                   `json:"version"`
+	Note        string                `json:"note"`
+	PublishedBy string                `json:"published_by"`
+	PublishedAt time.Time             `json:"published_at"`
+	Entries     []MappingVersionEntry `json:"entries"`
+}
+
+// MappingVersionEntry is one binding inside a version. Deliberately not a
+// RoleMapping: a snapshot row has no id and no target of its own, and giving it
+// those fields would invite a caller to treat history as something editable.
+type MappingVersionEntry struct {
+	ProjectID string `json:"project_id"`
+	RoleKey   string `json:"role_key"`
+	Field     string `json:"field"`
+	Value     string `json:"value"`
+}
+
+// MappingHistory is a target's published versions, newest first, with whether
+// the working copy still matches the newest one.
+//
+// The second half is the part a version list alone cannot say. Publishing
+// snapshots the working set; every edit afterwards moves the working set and
+// not the snapshot. So "current version 4" is true and misleading on its own —
+// what is live may be version 4 plus three edits nobody has published — and an
+// operator rolling back to 4 from that state would be undoing work they cannot
+// see listed anywhere.
+type MappingHistory struct {
+	Target string `json:"target"`
+	// CurrentVersion is the newest PUBLISHED version, or 0 if none. What the
+	// surface tints.
+	CurrentVersion int `json:"current_version"`
+	// Unpublished says the working copy differs from that newest version — or
+	// that there is no version at all and every binding is unpublished.
+	Unpublished bool             `json:"unpublished"`
+	Versions    []MappingVersion `json:"versions"`
+}
+
+// ListMappingHistory reads a target's version history and compares the newest
+// version against what is live.
+func ListMappingHistory(ctx context.Context, target string) (MappingHistory, error) {
+	if strings.TrimSpace(target) == "" {
+		return MappingHistory{}, fmt.Errorf("list mapping history: no target")
+	}
+	history := MappingHistory{Target: target, Versions: []MappingVersion{}}
+
+	const q = `
+		SELECT v.version, v.note, v.published_by, v.published_at,
+		       COALESCE(e.project_id, ''), COALESCE(e.role_key, ''),
+		       COALESCE(e.field, ''), COALESCE(e.value, '')
+		  FROM target_mapping_versions v
+		  -- LEFT, because a version published against an empty working set is a
+		  -- real event and must appear in the history. An inner join would drop
+		  -- it, and the gap in the version numbers would be the only trace.
+		  LEFT JOIN target_mapping_version_entries e ON e.version_id = v.id
+		 WHERE v.target = $1
+		 ORDER BY v.version DESC, e.project_id, e.role_key, e.field`
+	rows, err := PG.Query(ctx, q, target)
+	if err != nil {
+		return MappingHistory{}, fmt.Errorf("list mapping versions for %s: %w", target, err)
+	}
+	defer rows.Close()
+
+	byVersion := map[int]int{} // version number -> index in history.Versions
+	for rows.Next() {
+		var v MappingVersion
+		var e MappingVersionEntry
+		if err := rows.Scan(&v.Version, &v.Note, &v.PublishedBy, &v.PublishedAt,
+			&e.ProjectID, &e.RoleKey, &e.Field, &e.Value); err != nil {
+			return MappingHistory{}, fmt.Errorf("scan mapping version: %w", err)
+		}
+		idx, seen := byVersion[v.Version]
+		if !seen {
+			v.Entries = []MappingVersionEntry{}
+			history.Versions = append(history.Versions, v)
+			idx = len(history.Versions) - 1
+			byVersion[v.Version] = idx
+		}
+		if e.ProjectID != "" {
+			history.Versions[idx].Entries = append(history.Versions[idx].Entries, e)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return MappingHistory{}, fmt.Errorf("read mapping versions for %s: %w", target, err)
+	}
+
+	live, err := ListRoleMappings(ctx, target)
+	if err != nil {
+		return MappingHistory{}, err
+	}
+	if len(history.Versions) == 0 {
+		history.Unpublished = len(live) > 0
+		return history, nil
+	}
+	history.CurrentVersion = history.Versions[0].Version
+	history.Unpublished = !sameBindings(live, history.Versions[0].Entries)
+	return history, nil
+}
+
+// sameBindings compares a working set against a snapshot, order-independently.
+//
+// By CONTENT rather than by count: two sets of the same size differing in one
+// value is exactly the edit an operator would want flagged as unpublished, and a
+// length check would call them equal.
+func sameBindings(live []RoleMapping, snapshot []MappingVersionEntry) bool {
+	if len(live) != len(snapshot) {
+		return false
+	}
+	key := func(project, role, field, value string) string {
+		return project + "\x00" + role + "\x00" + field + "\x00" + value
+	}
+	have := make(map[string]int, len(live))
+	for _, m := range live {
+		have[key(m.ProjectID, m.RoleKey, m.Field, m.Value)]++
+	}
+	for _, e := range snapshot {
+		k := key(e.ProjectID, e.RoleKey, e.Field, e.Value)
+		if have[k] == 0 {
+			return false
+		}
+		have[k]--
+	}
+	return true
 }
