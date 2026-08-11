@@ -144,9 +144,9 @@ Everything else is healthy: index tracks HEAD, embeddings are local-semantic (`X
 
 ## 4a. Add-on platform — complete, with one handover
 
-`changes/addon-platform` is done, with five rows unticked and each one explained
-in that file's header: none is an unfound defect, and two are deliberate
-departures from what the row asks for. The backend's IAM half, the TrueNAS add-on,
+`changes/addon-platform` is done, with three rows unticked and each one explained
+in that file's header: none is an unfound defect, and one is a deliberate
+departure from what the row asks for. The backend's IAM half, the TrueNAS add-on,
 the dispatcher joining them, the lifecycle trigger that fires it, the unmanaged
 inventory, provisional plans, the mutation-log anchor, and the retirement of the
 LLDAP bridge are all in and green. What remains is a **visual pass on three

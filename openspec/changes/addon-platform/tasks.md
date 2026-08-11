@@ -21,13 +21,19 @@
 >
 > ## What is still unticked, and why
 >
-> Five rows, and none of them is an unfound defect. **6.19/6.20** — the purge's
+> Three rows, and none of them is an unfound defect. **6.19/6.20** — the purge's
 > injected key is declared and sent; the per-account usage read that would let
 > the acknowledgement name the data size (`pool.dataset.query`) is not built.
-> **9.5/9.6** — a stale apply re-plans, and does not say WHICH subjects moved.
 > **9.11** — the dormant view exists without a plan step, deliberately: a purge
 > is one-shot and cannot be rehearsed against a queue an operator could still
 > inspect.
+>
+> 9.5/9.6 were `[~]` and `[ ]` here for one round on a justification that was
+> wrong twice: it claimed the spent plan is not retained (it is), for a diff
+> that never needed it (the backend's refusal already names what moved). Both
+> are built and tested at both ends. **A wrong reason is worse than no reason** —
+> `[~]` with no explanation invites a look, and `[~]` with a plausible blocker
+> ends the reading.
 >
 > Everything else in groups 9 and 10 was handed to a designer as "not built"
 > (18.5) and then built in §21, §22 and §25 without the original rows being
@@ -261,8 +267,8 @@
 - [x] 9.2 Tests: an operation removed from a manifest disappears from the UI without a frontend change
 - [x] 9.3 Plan-then-apply flow reusing the `rehearse* → apply*` pattern, carrying the backend-issued plan id rather than round-tripping the plan body
 - [x] 9.4 Tests: apply is unreachable until a rehearsal has issued a plan id; the apply request carries the id rather than the original submission; an apply with no id is refused
-- [~] 9.5 Stale-plan recovery UX: a rejected apply re-plans and shows which subjects moved since the operator reviewed it. **Half built (§21):** `RehearsalDialog` re-plans on `PLAN_STALE`, `PLAN_EXPIRED` and `PLAN_NOT_FOUND` rather than failing, cites the id from the CURRENT plan, and leaves an ordinary failure alone. *Not built:* it shows the new diff and does not say WHICH subjects moved — that needs the previous plan's per-subject rows diffed against the new ones, and nothing retains the spent plan for the comparison
-- [ ] 9.6 Tests: a subject changed between plan and apply produces the stale-plan path with that subject named, not a generic failure
+- [x] 9.5 Stale-plan recovery UX: a rejected apply re-plans and shows which subjects moved. `RehearsalDialog` re-plans on every stale code rather than failing, cites the id from the CURRENT plan, leaves an ordinary failure alone — and names the movers: the backend's refusal carries `Details: moved`, the dialog keeps those ids across the re-plan, and `movedLabels` renders them as names an operator recognises. **This row was marked `[~]` first, with a justification that was wrong twice over** — it said nothing retains the spent plan, when the plan is retained AND the diff never needed it, because the backend already names what moved. Recorded because a wrong reason is worse than none: `[~]` with a plausible blocker is what stops the next person reading
+- [x] 9.6 Tests: a subject changed between plan and apply produces the stale-plan path with that subject named, not a generic failure. Both ends — `plan_gate_test.go` asserts the refusal names the mover and ONLY the mover, and mutates nothing; `RehearsalDialogPlan.test.tsx` asserts the banner carries the id and that a code with no details still re-plans
 - [x] 9.7 Mapping management UI: role-to-target bindings with version history, rollback, and the plan shown before any edit or delete lands
 - [x] 9.8 Tests: an edit affecting many subjects shows the full plan and refuses without the blast-radius acknowledgement; rollback restores the prior version
 - [x] 9.9 Unconfirmed-revocation surface beside drift triage, with age-threshold escalation to a security-finding presentation
