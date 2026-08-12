@@ -310,6 +310,44 @@ Then `caddy reload`. No application change is needed for the reverse proxy:
 `ui/src/lib/oidc.ts:73-74` already derives the OIDC redirect URI from
 `x-forwarded-host` / `x-forwarded-proto`, which Caddy sets by default.
 
+#### 5a. Reaching a TrueNAS target
+
+The NAS is not deployed by this runbook and Caddy is not on its path by
+default. What Syndra needs from it is one property: **`TRUENAS_URL` must be a
+`wss://` endpoint whose certificate the add-on can verify**, because TrueNAS
+revokes a user-linked API key presented over plaintext, and because the
+alternative is `TRUENAS_VERIFY_TLS=false`. Two ways to get there.
+
+**Preferred — a real certificate on the NAS, no proxy.** TrueNAS issues its own
+ACME certificate over a DNS-01 challenge (`Credentials > Certificates`, then
+`System > General Settings > GUI SSL Certificate`), which works for a name whose
+A record is LAN-only as long as the zone is publicly delegated for the
+`_acme-challenge` TXT. Point `nas.example.org` straight at the NAS in
+local DNS and everything reaches one name: the UI, the add-on, SMB, NFS.
+
+That last part is the argument. **SMB and NFS cannot traverse Caddy** — it
+proxies HTTP, and tcp/445 and tcp/2049 are not HTTP. Putting the name on the
+proxy therefore splits the NAS across two names for no gain.
+
+**Alternative — front the HTTP side with Caddy.** Reasonable if ACME on the NAS
+is not an option. The site block is a plain WebSocket-transparent proxy; the
+middleware API is JSON-RPC over one long-lived WebSocket at `/api/current` and
+`reverse_proxy` upgrades it natively, with `Host` passed through unchanged.
+`tls_insecure_skip_verify` belongs on the upstream leg only, where the NAS
+presents its self-signed certificate. **SMB and NFS then need a second name
+pointed directly at the NAS**, which is what `TRUENAS_SHARE_HOST` is for.
+
+Either way, two resolvers must agree on the name: the administrator's browser
+and the add-on container. The second is the one that gets missed — the container
+resolves through the Docker daemon's resolver, not the LXC's `/etc/hosts`:
+
+```bash
+docker compose exec truenas-addon getent hosts nas.example.org
+```
+
+Nothing back means the add-on cannot reach the NAS by name whatever else is
+configured, and the symptom is a target that registers and never answers.
+
 ### 6. Build the images
 
 ```bash
@@ -581,6 +619,97 @@ Registration and callability are separate states. The backend registers a
 configured add-on whether or not it answers, so navigation reflects the
 deployment rather than the weather; what turns registration into capability is
 the first successful manifest read.
+
+#### Bringing up the TrueNAS add-on
+
+Four things have to exist, in this order. Each one's failure looks like the next
+one's, so doing them out of order costs an afternoon.
+
+**1 — The NAS-side identity.** Roles in TrueNAS attach to *groups*, never
+directly to users, and an API key inherits whatever its linked user's groups
+carry. So: a group, a privilege naming the roles, a user in that group, a key on
+that user.
+
+- `Credentials > Groups > Add` — a group, e.g. `syndra-addon`. No sudo.
+- `Credentials > Groups > Privileges > Add` — name it, put `syndra-addon` in
+  **Local Groups**, and in **Roles** select `ACCOUNT_WRITE` and
+  `SYSTEM_AUDIT_READ`. Not `FULL_ADMIN`.
+- `Credentials > Users > Add` — e.g. `syndra`, primary group `syndra-addon`.
+  No home directory, no shell, SSH off. It never logs in interactively.
+- `Credentials > Users >` select the row `> Access > View API Keys > Add` —
+  set an expiry, and record it. Copy the key **now**; TrueNAS shows it once.
+
+> **`ACCOUNT_WRITE` includes deletion.** `user.delete` requires exactly the role
+> `user.create` and `user.update` require, and TrueNAS has no narrower one — see
+> [the RBAC reference][truenas-rbac]. The purge path's separate injected key is
+> therefore an *audit and blast-radius* separation, not a capability one: it
+> keeps deletion out of the long-lived session and makes every delete traceable
+> to a credential issued for that one call. It does **not** mean the standing key
+> cannot delete an account. Do not write it down as if it did.
+
+> **HTTPS is not optional on this path.** TrueNAS automatically **revokes** a
+> user-linked API key presented over plaintext transport. A misconfigured
+> `TRUENAS_URL` of `ws://` does not fail with an auth error you can retry — it
+> destroys the credential, and the fix is minting a new one.
+
+**2 — Reachability.** Set `TRUENAS_URL=wss://nas.example.org/api/current`
+(step 5a) and leave `TRUENAS_VERIFY_TLS=true`. Routing through the proxy is what
+earns that: the NAS's own certificate is self-signed and cannot be issued for a
+name it does not know it has, so pointing the add-on straight at the LAN address
+means turning verification off. Set `TRUENAS_SHARE_HOST` to the name a member
+types into a file manager — it feeds the manifest's connection block, and unset,
+the member's page silently omits the mount instructions.
+
+`TRUENAS_SHARE_HOST` is **not** the proxy name. Caddy terminates HTTP; SMB is
+tcp/445 and does not pass through it, so a member told to mount
+`nas.example.org` would be pointed at a host answering on 443 and nothing
+else. Name the NAS directly. The two variables describe two different paths to
+the same machine, which is exactly why the add-on never derives one from the
+other.
+
+**3 — The backend↔add-on channel.** No plaintext mode exists, so this needs
+certificates whichever authentication mode you pick:
+
+```bash
+sudo ./scripts/gen-addon-certs.sh
+```
+
+One private CA, the add-on's server certificate, the backend's client
+certificate, and a signing key — written into two directories, because the
+add-on holds the NAS credential and must not be able to read the key that
+authenticates the backend to it. The script prints the two `.env` blocks; set
+**one**. The add-on refuses to start with both configured, since a caller would
+otherwise choose, and the caller is the thing being authenticated.
+
+Run it under `sudo`: the add-on runs as uid 65532 and the mount is read-only, so
+without the `chown` the container exits on a private key it can see but not
+open. Without root the script falls back to world-readable and says so.
+
+**4 — Start it, in this order.** `ADDON_TARGETS=truenas` on the backend, then:
+
+```bash
+docker compose --profile truenas up -d truenas-addon
+docker compose up -d backend            # re-reads ADDON_TARGETS
+docker compose exec truenas-addon getent hosts nas.example.org
+docker compose logs backend | grep '\[ADDON\]'
+```
+
+Expect `[ADDON] Registered target=truenas base=https://truenas-addon:8443
+auth=mtls`. `auth=none` means the transport block did not land and the target
+will not be callable. Registration alone proves nothing about the NAS; what does
+is the first manifest read, visible on the target's health response.
+
+| Symptom | Cause |
+|---|---|
+| Add-on exits at `TRUENAS_URL is required` | The profile started without the `.env` block. |
+| Add-on exits at `configure exactly one of...` | Both `ADDON_CLIENT_CA_FILE` and `ADDON_SIGNING_KEY_FILE` are set. |
+| Registers, never answers | Name does not resolve *inside the container*, or the base URL names a host/port that is not `truenas-addon:8443`. |
+| `x509: certificate signed by unknown authority` | `ADDON_TRUENAS_CA_CERT` unset, so the backend verified an internal service against the public web PKI. |
+| `no matching signature` | The two ends disagree about the signing key. Both HMAC the file's *contents*; both variables are paths, and they must name the same bytes. |
+| NAS auth fails right after it worked once | The key was presented over plaintext and TrueNAS revoked it. Mint a new one and fix the scheme. |
+| NAS auth fails repeatedly, then stops responding | TrueNAS locks out for ten minutes after 20 failed authentications in 60 seconds. Wait it out; the add-on's own breaker is what keeps a retry loop from renewing it. |
+
+[truenas-rbac]: https://api.truenas.com/v25.10/rbac.html
 
 ---
 
