@@ -715,8 +715,20 @@ docker compose exec truenas-addon getent hosts nas.example.org
 docker compose logs backend | grep '\[ADDON\]'
 ```
 
+Then check the two legs that are Syndra's own, before looking at the NAS:
+
+```bash
+./scripts/smoke-test-addon.sh truenas
+```
+
+It checks the secret's mode and ownership, that the backend registered the
+target, and — the one worth having — that **the key the backend pins is the key
+the add-on serves**, by diffing the two startup log lines. It deliberately does
+not check the NAS: diagnosing that leg together with this one is what the
+bring-up order exists to avoid, and the script says which leg it stopped on.
+
 Expect `[ADDON] Registered target=truenas base=https://truenas-addon:8443
-auth=derived`. `auth=none` means no secret reached the backend and the target
+auth=derived pinned_key=…`. `auth=none` means no secret reached the backend and the target
 will not be callable — that is fail-closed, not a warning. Registration alone
 proves nothing about the NAS; what does is the first manifest read, visible on
 the target's health response.

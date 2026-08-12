@@ -85,7 +85,8 @@
 - [x] 7.1 Both suites assert the same vector file. A change to it fails both, in two modules, which is what makes it a contract rather than a fixture
 - [x] 7.2 An end-to-end test: derived server, pinned client, signed request, real handshake — plus the negative cases from 3.7 and 3.8. A proof of the scheme exists at `hkdfdemo/main.go` from the design session and should become this test rather than being rewritten from memory
 - [x] 7.3 `go test ./... && go vet ./...` in `backend/` and `addons/truenas`
-- [ ] 7.4 A live re-run of the bring-up in `DEPLOY.md`, since this change alters the leg that registration exercises first
+- [ ] 7.4 A live re-run of the bring-up in `DEPLOY.md`, since this change alters the leg that registration exercises first. **Operator-gated: it needs the real NAS.** What can be prepared for it has been — `scripts/smoke-test-addon.sh <target>` checks the two legs that are Syndra's own (the secret's mode and ownership; the key the backend pins against the key the add-on serves, diffed from the two startup logs) and deliberately stops before the NAS, because diagnosing that leg together with this one is exactly what the sequencing exists to prevent
+- [x] 7.5 **The backend logs the key it pins.** The add-on already logged the key it serves; the backend logged only that it had registered, so the comparison a pin failure demands could not be made from the logs at all — the only way to see the expected value was to read the source and recompute it. `pinned_key=` at registration makes the diagnosis a diff of two lines
 
 ## 8. Configuration semantics, which the vector cannot reach
 

@@ -200,7 +200,20 @@ func Init(ctx context.Context) error {
 			continue
 		}
 		fresh[target] = &Addon{Registration: r}
-		log.Printf("[ADDON] Registered target=%s base=%s auth=%s", target, r.BaseURL, r.AuthMode())
+		// The key this backend will PIN, logged beside the registration.
+		//
+		// The add-on logs the key it serves at its own startup, and a pin
+		// failure names three causes it cannot tell apart. With both lines the
+		// operator diffs two hex strings instead of investigating; without this
+		// one, the only way to see what was expected was to read the source and
+		// recompute it by hand. Public key, so there is nothing here to leak.
+		if pub, err := deriveTLSPublicKey(r.Secret, target); err == nil {
+			log.Printf("[ADDON] Registered target=%s base=%s auth=%s pinned_key=%x",
+				target, r.BaseURL, r.AuthMode(), pub)
+		} else {
+			log.Printf("[ADDON] Registered target=%s base=%s auth=%s (could not derive the pinned key: %v)",
+				target, r.BaseURL, r.AuthMode(), err)
+		}
 	}
 
 	registryMu.Lock()
