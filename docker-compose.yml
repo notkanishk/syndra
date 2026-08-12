@@ -202,6 +202,12 @@ services:
       - truenas_addon_secret:/secret
     environment:
       - ADDON_TARGETS=${ADDON_TARGETS:-}
+    # NOTE the `$$` in the script below. A single `$` is interpolated by Compose
+    # when it parses this file, which would BAKE the value in beside the
+    # environment entry above — two definitions of one thing, the defect this
+    # branch keeps paying for. `$$` reaches the shell, so the check reads the
+    # variable the service was actually given.
+    #
     # 0640 root:65532 — owner read for the backend, group read for the add-on's
     # uid. 0600 is unreadable by the add-on; 0644 makes the deployment's most
     # sensitive value readable by anything else in either container.
@@ -216,7 +222,7 @@ services:
       - |
         set -eu
         f=/secret/secret.key
-        case ",${ADDON_TARGETS:-}," in
+        case ",$${ADDON_TARGETS:-}," in
           *,truenas,*) ;;
           *) echo "[SECRET] truenas is not in ADDON_TARGETS; nothing to mint"; exit 0 ;;
         esac
