@@ -525,9 +525,15 @@ func majorOf(version string) string {
 //
 // `auth.login_with_api_key` under the hood — a user-linked key whose privileges
 // come from the linked user's group. The add-on's identity is a dedicated local
-// user granted `ACCOUNT_WRITE` and `SYSTEM_AUDIT_READ` and nothing more; in
-// particular it cannot delete an account, which is why purge runs on a separate
-// credential the backend injects into that one call.
+// user granted `ACCOUNT_WRITE` and `SYSTEM_AUDIT_READ` and nothing more.
+//
+// That is not a capability separation for deletion, and this comment claimed it
+// was. TrueNAS requires `ACCOUNT_WRITE` for `user.delete` and has no narrower
+// role, so the standing key CAN delete an account; what the separate injected
+// credential buys is that no delete travels on the long-lived session and each
+// one is attributable to a key issued for that single call. The mechanism is
+// unchanged — the reason given for it was wrong, which is the more expensive
+// kind of wrong, because a reason is what stops the next person checking.
 func dialTrueNAS(url, apiKey string, verifyTLS bool) dialer {
 	return func() (rpc, error) {
 		c, err := truenas.NewClient(url, verifyTLS)
