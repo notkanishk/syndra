@@ -244,6 +244,18 @@ func run() error {
 		// Longer than a call to the NAS, which is what a handler waits on.
 		WriteTimeout: 90 * time.Second,
 		IdleTimeout:  2 * time.Minute,
+		// The container's liveness probe is `nc -z 127.0.0.1 8443` — a TCP
+		// connect that closes without ever sending a ClientHello, deliberately,
+		// because every route here is authenticated and a real probe would need
+		// a credential this container has no business holding.
+		//
+		// net/http logs each one as `http: TLS handshake error from
+		// 127.0.0.1:NNNNN: EOF`. Every 30 seconds, forever, in the log an
+		// operator reads during a bring-up — where "TLS handshake error" is
+		// precisely the phrase that sends them to look at the transport they
+		// just configured. It is not information; it is the health check
+		// working.
+		ErrorLog: log.New(probeNoiseFilter{}, "", 0),
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -325,6 +337,32 @@ func serverTLS(cfg config) (*tls.Config, error) {
 		MinVersion:   tls.VersionTLS13,
 		Certificates: []tls.Certificate{cert},
 	}, nil
+}
+
+// probeNoiseFilter drops the liveness probe's handshake errors and passes
+// everything else through untouched.
+//
+// Narrow on purpose, and narrow in the two ways that matter: only EOF (a peer
+// that sent nothing), and only from loopback. A real backend connection arrives
+// over the Compose network and never from 127.0.0.1, so no failure that an
+// operator needs is silenced here — including a genuine handshake failure from
+// the backend, which is the one this add-on most needs to report.
+type probeNoiseFilter struct{}
+
+func (probeNoiseFilter) Write(p []byte) (int, error) {
+	if isProbeNoise(string(p)) {
+		return len(p), nil
+	}
+	return os.Stderr.Write(p)
+}
+
+// isProbeNoise is the whole of the decision, in one place because the test has
+// to assert THIS and not a copy of it. A predicate restated in a test agrees
+// with itself while the code drifts, which is the defect this branch keeps
+// paying for.
+func isProbeNoise(line string) bool {
+	return strings.Contains(line, "TLS handshake error from 127.0.0.1:") &&
+		strings.HasSuffix(strings.TrimSpace(line), "EOF")
 }
 
 // servedPublicKey is for the startup log only: the key an operator compares
