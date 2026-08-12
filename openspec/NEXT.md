@@ -206,7 +206,8 @@ lockout, and whether `builtin` is on every supported major. Point `TRUENAS_URL`
 at the real one, run the same sequence, and read the mutation log afterwards.
 The bring-up is now written down — DEPLOY.md step 5a for the proxy and
 "Bringing up the TrueNAS add-on" for the NAS identity, the transport secret
-(`scripts/gen-addon-secret.sh`) and the start order.
+(minted by the deployment itself — `truenas-addon-secret` in the compose file)
+and the start order, which is now two `.env` lines and `docker compose up -d`.
 
 **The transport under that bring-up changed after it was written.** The
 certificate ceremony is gone: one secret per target, both keys derived from it

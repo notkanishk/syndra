@@ -239,8 +239,7 @@ func TestInitSkipsTargetWithNoBaseURL(t *testing.T) {
 // The hyphen is the real case. `${ADDON_MY-NAS_BASE_URL}` is Compose's
 // default-value operator, not a variable reference, so the value silently
 // becomes something else and the only symptom is "BASE_URL is empty" — pointing
-// an operator at a line they set correctly. The same charset is validated by
-// scripts/gen-addon-secret.sh, which is where the name is first typed.
+// an operator at a line they set correctly.
 func TestInitRefusesATargetNameThatCannotFormAVariable(t *testing.T) {
 	resetRegistry(t)
 	withEnv(t, map[string]string{

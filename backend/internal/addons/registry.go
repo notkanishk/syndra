@@ -340,7 +340,7 @@ func splitTargets(v string) []string {
 	return out
 }
 
-// The same shape scripts/gen-addon-secret.sh validates its argument against.
+// The shape a target name has to have to survive Compose interpolation.
 var targetName = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
 // Registered returns every registered add-on, sorted. This is the deployment

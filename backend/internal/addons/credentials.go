@@ -204,7 +204,6 @@ func newAddonClient(tlsCfg *tls.Config) *http.Client {
 	}
 }
 
-
 // TransportCredential is the operator-facing state of one add-on's transport
 // material.
 //

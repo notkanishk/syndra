@@ -20,37 +20,40 @@ cd "$(dirname "$0")/.."
 TARGET="${1:?usage: scripts/smoke-test-addon.sh <target>   (e.g. truenas)}"
 COMPOSE="${COMPOSE:-docker compose}"
 SERVICE="${TARGET}-addon"
-SECRET_DIR="${ADDON_TRANSPORT_SECRETS_DIR:-./secrets/addon}"
-SECRET="$SECRET_DIR/$TARGET.key"
+MINTER="${TARGET}-addon-secret"
 
 pass() { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n' "$1" >&2; shift; printf '        %s\n' "$@" >&2; exit 1; }
 
 echo "==> 1. the secret"
 
-if [ -d "$SECRET" ]; then
-  fail "$SECRET is a directory" \
-    "Docker created it by bind-mounting a secret that did not exist yet." \
-    "Stop the add-on, run: rmdir '$SECRET', then: sudo scripts/gen-addon-secret.sh $TARGET"
-fi
-[ -f "$SECRET" ] || fail "no secret at $SECRET" \
-  "Mint it: sudo scripts/gen-addon-secret.sh $TARGET"
+# Nothing to create by hand: the minting service provisions it on first start.
+# What this checks is that it RAN and that the file it left is readable by both
+# containers — 0640 root:65532, owner read for the backend, group read for the
+# add-on's uid.
+MINT_LOG=$($COMPOSE logs "$MINTER" 2>/dev/null || true)
+[ -n "$MINT_LOG" ] || fail "$MINTER has never run" \
+  "The backend and the add-on both depend on it, so this usually means the" \
+  "stack has not been started: $COMPOSE up -d"
+printf '%s\n' "$MINT_LOG" | grep -qE '\[SECRET\] (minted|already provisioned)' \
+  && pass "provisioned by $MINTER" \
+  || fail "$MINTER did not provision anything" \
+       "$(printf '%s\n' "$MINT_LOG" | tail -3)" \
+       "Is $TARGET in ADDON_TARGETS?"
 
-# 0640 root:65532 — owner read for the backend, group read for the add-on's uid.
-# A 0600 root-owned file is the failure that looks like a wrong secret: the
-# add-on cannot open it, exits, and every backend call then fails to connect.
-MODE=$(stat -c '%a' "$SECRET" 2>/dev/null || stat -f '%Lp' "$SECRET")
-OWNER=$(stat -c '%u:%g' "$SECRET" 2>/dev/null || stat -f '%u:%g' "$SECRET")
-case "$MODE" in
-  640) pass "mode 0640" ;;
-  600) fail "mode 0$MODE — the add-on runs as uid 65532 and cannot read this" \
-        "sudo chmod 0640 '$SECRET' && sudo chown 0:65532 '$SECRET'" ;;
-  *)   fail "mode 0$MODE" \
-        "0644 or wider makes the deployment's most sensitive value world-readable." \
-        "sudo chmod 0640 '$SECRET' && sudo chown 0:65532 '$SECRET'" ;;
-esac
-[ "$OWNER" = "0:65532" ] && pass "owned root:65532" || \
-  fail "owned $OWNER, expected 0:65532" "sudo chown 0:65532 '$SECRET'"
+# From INSIDE the add-on, which is the only view that matters: the host has no
+# copy, and a mode that looks right from elsewhere is not what the reader sees.
+PERMS=$($COMPOSE exec -T "$SERVICE" stat -c '%a %u:%g' /run/secrets/addon/secret.key 2>/dev/null || true)
+if [ -z "$PERMS" ]; then
+  echo "  ----  could not stat the secret inside $SERVICE (is it running?)"
+else
+  case "$PERMS" in
+    "640 0:65532") pass "0640 root:65532, as both readers need" ;;
+    *) fail "the secret is $PERMS, expected 640 0:65532" \
+         "The add-on runs as uid 65532 and reads it by group; the backend reads" \
+         "it as owner. Recreate the volume: $COMPOSE down && docker volume rm ${TARGET}_addon_secret" ;;
+  esac
+fi
 
 echo "==> 2. backend <-> add-on"
 
@@ -62,7 +65,7 @@ BACKEND_LOG=$($COMPOSE logs backend 2>/dev/null || true)
 ADDON_LOG=$($COMPOSE logs "$SERVICE" 2>/dev/null || true)
 
 [ -n "$ADDON_LOG" ] || fail "$SERVICE has no logs — is it running?" \
-  "$COMPOSE --profile $TARGET up -d $SERVICE"
+  "$COMPOSE up -d   (with COMPOSE_PROFILES=$TARGET in .env)"
 
 REGISTERED=$(printf '%s\n' "$BACKEND_LOG" | grep -F "[ADDON] Registered target=$TARGET" | tail -1 || true)
 if [ -z "$REGISTERED" ]; then

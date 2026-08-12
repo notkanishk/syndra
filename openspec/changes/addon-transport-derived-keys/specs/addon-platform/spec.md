@@ -127,13 +127,21 @@ No transport certificate expiry MUST be surfaced on target health once no expiry
 - **THEN** it MUST use the runtime lifecycle operation and wait on the add-on's drained signal
 - **AND** MUST NOT rely on editing a start-up environment variable, which a running container does not re-read
 
-### Requirement: The per-target secret MUST be minted by a defined generator
+### Requirement: The per-target secret MUST be minted by the deployment, not by an operator
 
-Each target's secret MUST be produced by a generator rather than chosen, because neither weakness nor reuse is observable anywhere in the running system once configured. The generator MUST take the target name as an explicit argument and MUST be usable for a target added to an existing deployment: a generator that can only run at first setup does not cover the case it is most needed for, since targets arrive one at a time.
+Each target's secret MUST be produced by a generator rather than chosen, because neither weakness nor reuse is observable anywhere in the running system once configured.
 
-**Minting a target's secret MUST be a separate, explicitly privileged step, and MUST NOT be invoked from the unprivileged environment bootstrap.** The two have different privilege requirements and different inputs, and composing them is not possible rather than merely untidy: the environment bootstrap runs as the unprivileged deployment user — which the deployment requires, since that user also drives automated deploys — while setting the secret's ownership requires privilege that user does not have and must not be granted. The set of targets is also not available at bootstrap: it is a value the operator records in the generated environment file afterwards, so a bootstrap that iterated over it would be reading something it had just created empty.
+**That generator MUST run as part of bringing the deployment up, and MUST NOT be a step performed by a human beforehand.** A step that precedes the first start is a step that gets skipped, and this one does not fail loudly when it is: the container runtime creates a directory where the missing secret was to be mounted, the add-on exits on a secret it cannot read, and the backend registers a target whose every call then fails at the handshake — three symptoms, none of which names the omission. It MUST also be runnable by whatever performs automated deploys, which is why it cannot require privilege on the host that the deploy identity is deliberately denied.
 
-The privileged step MUST NOT be satisfied by granting the deployment user membership of the add-on's group. That would make every add-on secret readable by the account that runs automated deploys, which is the opposite of what per-target isolation is for, and it would do so permanently to avoid a one-time action.
+Both readers — the backend and that target's add-on — MUST wait for it to complete before starting. Registration reads the secret once, at start-up, so a backend that starts first does not register the target and the deployment needs a second, manual restart to notice. That dependency MUST NOT be conditional on the add-on being enabled: a start-up order that changes with configuration is one that is untested in the configuration nobody is running today.
+
+Minting MUST be idempotent and MUST cover a target added to an existing deployment: targets arrive one at a time, and a generator that only covers first setup does not cover the case it is most needed for.
+
+**Minting MUST NOT be invoked from the unprivileged environment bootstrap.** The two have different inputs and different privilege: the bootstrap runs as the deployment user and the set of targets is not available to it — that is a value the operator records in the environment file it is in the middle of generating, so a bootstrap that iterated over it would read something it had just created empty.
+
+The ownership the secret needs MUST be obtained where the deployment already has it, rather than by requiring privilege on the host. Running the mint as a privileged step *inside* the container runtime the deploy identity already drives grants nothing that identity did not already hold, and removes the one action that could not be automated.
+
+It MUST NOT be satisfied by granting the deployment user membership of the add-on's group. That would make every add-on secret readable by the account that runs automated deploys, which is the opposite of what per-target isolation is for, and it would do so permanently to avoid a one-time action.
 
 A target's secret MUST exist as **one** file, mounted read-only into both the backend and that add-on. It MUST NOT be written as two copies to be kept identical.
 
@@ -202,6 +210,19 @@ Temporary paths MUST therefore be unique per run. A deterministic temporary path
 - **WHEN** the environment bootstrap is run as the deployment user
 - **THEN** it MUST NOT attempt to mint any add-on secret
 - **AND** it MUST NOT fail on account of an add-on target having no secret yet
+
+#### Scenario: A deployment is brought up for the first time
+
+- **WHEN** the deployment is started with a target configured and no secret yet existing
+- **THEN** the secret MUST be minted as part of that start
+- **AND** the backend and the add-on MUST NOT start before it exists
+- **AND** the target MUST register on that first start, without a second one
+
+#### Scenario: A deployment is brought up again
+
+- **WHEN** the deployment is started and the target's secret already exists
+- **THEN** it MUST be left exactly as it is
+- **AND** neither reader MUST see a different value than it saw before the restart
 
 #### Scenario: A secret is minted without the required privilege
 

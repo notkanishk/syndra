@@ -93,7 +93,7 @@ services:
       # and it must be the SAME BYTES the add-on has, under the same name it
       # knows itself by (ADDON_TARGET there, the ADDON_TARGETS entry here). The
       # file is the same file, mounted into both.
-      - ADDON_TRUENAS_SECRET_FILE=${ADDON_TRUENAS_SECRET_FILE:-/run/secrets/addon/truenas.key}
+      - ADDON_TRUENAS_SECRET_FILE=${ADDON_TRUENAS_SECRET_FILE:-/run/secrets/addon/truenas/secret.key}
       - ADDON_TRUENAS_SECRET=${ADDON_TRUENAS_SECRET:-}
       - ADDON_MANIFEST_REFRESH_INTERVAL=${ADDON_MANIFEST_REFRESH_INTERVAL:-}
       - ADDON_MEMBER_OP_LIMIT=${ADDON_MEMBER_OP_LIMIT:-}
@@ -112,11 +112,19 @@ services:
       # lives in one shared directory below and this keeps what is genuinely
       # the backend's alone.
       - ${BACKEND_SECRETS_DIR:-./secrets/backend}:/run/secrets:ro
-      # The transport secrets, shared with the add-ons. One file per target,
-      # mounted into the backend and into that target's add-on: the scheme is
-      # symmetric, so there is no half of it either side must be kept from, and
-      # a second copy would only create a state where the two disagree.
-      - ${ADDON_TRANSPORT_SECRETS_DIR:-./secrets/addon}:/run/secrets/addon:ro
+      # One volume PER TARGET, minted by that target's *-addon-secret service
+      # below and mounted read-only here. The backend holds every target's
+      # secret because it is the one component that talks to every add-on; each
+      # add-on gets only its own volume, so it cannot read a neighbour's secret
+      # and derive the neighbour's keys.
+      #
+      # A volume rather than a host directory because provisioning is the
+      # deployment's job, not the operator's: a host file needs `sudo chown
+      # root:65532` before the first start, and a step a human performs before
+      # a container starts is a step a human forgets — after which Docker
+      # creates a DIRECTORY at the mount path and the add-on exits on a secret
+      # it cannot read.
+      - truenas_addon_secret:/run/secrets/addon/truenas:ro
     ports:
       # The HOST port is configurable; the container port never is. A box
       # running a second stack — the pre-rename one still on this dev machine —
@@ -130,6 +138,12 @@ services:
     # deployment rather than a sentence in a design document.
     networks: [edge, data, addons_truenas]
     depends_on:
+      # Registration reads every target's secret ONCE, at start-up. Starting
+      # before the secret exists means the target does not register and the
+      # deployment needs a second, manual restart to notice — which is the
+      # hands-on step this dependency removes.
+      truenas-addon-secret:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -161,6 +175,68 @@ services:
     networks: [edge]
     restart: unless-stopped
 
+  # Mints this target's transport secret, once, before anything reads it.
+  #
+  # This used to be `sudo ./scripts/gen-addon-secret.sh truenas`, run by a human
+  # BEFORE the first `up`. Two things were wrong with that. It needed root on
+  # the host to set the ownership the two containers read by — while the deploy
+  # user deliberately has none — and a step performed before a container starts
+  # is a step that gets skipped, after which Docker creates a directory at the
+  # mount path and the add-on exits on a secret it cannot read. Automated
+  # deploys could not run it at all.
+  #
+  # Root INSIDE a throwaway container, not on the host: the deploy user already
+  # drives this daemon, so nothing here is privilege it did not have, and the
+  # ownership lands where it is needed without a host-side sudo.
+  #
+  # Not gated on the truenas profile, deliberately. The backend must be able to
+  # depend on it unconditionally — a dependency that disappears with a profile
+  # is a start-up order that changes with configuration — so it runs always and
+  # decides for itself whether there is anything to do.
+  truenas-addon-secret:
+    image: alpine:3.22
+    container_name: syndra_truenas_addon_secret
+    user: "0:0"
+    restart: "no"
+    volumes:
+      - truenas_addon_secret:/secret
+    environment:
+      - ADDON_TARGETS=${ADDON_TARGETS:-}
+    # 0640 root:65532 — owner read for the backend, group read for the add-on's
+    # uid. 0600 is unreadable by the add-on; 0644 makes the deployment's most
+    # sensitive value readable by anything else in either container.
+    #
+    # `ln` and never `mv`: rename REPLACES its destination, so two concurrent
+    # runs would both publish and the later would destroy a secret the earlier
+    # may already have put into service — leaving the two ends on different
+    # values, which is the split state the derivation exists to make impossible.
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        f=/secret/secret.key
+        case ",${ADDON_TARGETS:-}," in
+          *,truenas,*) ;;
+          *) echo "[SECRET] truenas is not in ADDON_TARGETS; nothing to mint"; exit 0 ;;
+        esac
+        if [ -s "$$f" ]; then
+          echo "[SECRET] truenas already provisioned; leaving it alone"
+          exit 0
+        fi
+        umask 077
+        tmp=$$(mktemp /secret/.secret.XXXXXXXX)
+        head -c 32 /dev/urandom | od -An -v -tx1 | tr -d " \n" > "$$tmp"
+        chown 0:65532 "$$tmp"
+        chmod 0640 "$$tmp"
+        if ln "$$tmp" "$$f" 2>/dev/null; then
+          rm -f "$$tmp"
+          echo "[SECRET] minted the transport secret for truenas"
+        else
+          rm -f "$$tmp"
+          echo "[SECRET] another run published first; keeping that one"
+        fi
+
   truenas-addon:
     build:
       context: ./addons/truenas
@@ -187,14 +263,14 @@ services:
       # derived. There is no certificate to mint, distribute, or renew, and no
       # second mode to choose between.
       #
-      # The file is preferred and is what scripts/gen-addon-secret.sh writes:
-      # an environment value is readable from `docker inspect` and
-      # /proc/1/environ, in the container the Dockerfile calls the least
-      # trusted in the deployment. ONE file, mounted into both this service and
-      # the backend — the scheme is symmetric, so there is no half of it the
-      # add-on must not see, and a second copy would only create a state where
-      # the two can disagree.
-      - ADDON_SECRET_FILE=${ADDON_SECRET_FILE:-/run/secrets/addon/truenas.key}
+      # The file is preferred and is what truenas-addon-secret mints: an
+      # environment value is readable from `docker inspect` and /proc/1/environ,
+      # in the container the Dockerfile calls the least trusted in the
+      # deployment. ONE file, in a volume mounted into both this service and the
+      # backend — the scheme is symmetric, so there is no half of it the add-on
+      # must not see, and a second copy would only create a state where the two
+      # can disagree.
+      - ADDON_SECRET_FILE=${ADDON_SECRET_FILE:-/run/secrets/addon/secret.key}
       # The inline form, matching TRUENAS_API_KEY below, for a deployment that
       # cannot mount a file. Both secrets prefer the file; one supporting the
       # inline form and the other not is the asymmetry that cost a debugging
@@ -247,10 +323,12 @@ services:
       # keys, and one compromised add-on would then open all of them — the
       # exact isolation the per-target derivation exists to give.
       #
-      # If this host file does not exist yet, Docker creates a DIRECTORY here
-      # and the add-on exits on a secret it cannot read. Mint it first:
-      # `sudo scripts/gen-addon-secret.sh truenas`.
-      - ${ADDON_TRANSPORT_SECRETS_DIR:-./secrets/addon}/truenas.key:/run/secrets/addon/truenas.key:ro
+      # THIS TARGET'S VOLUME ALONE. Nothing to create by hand and nothing to
+      # chown: truenas-addon-secret mints it on first start and never again.
+      - truenas_addon_secret:/run/secrets/addon:ro
+    depends_on:
+      truenas-addon-secret:
+        condition: service_completed_successfully
     # No `ports:`, and on this add-on's own network only. Both halves are
     # needed: the first stops anything outside the deployment reaching it, and
     # the second stops it reaching Postgres and Redis — which is the whole
@@ -339,3 +417,7 @@ volumes:
   pgdata:
   redisdata:
   truenas_addon_state:
+  # One per target, and never shared. Losing it is survivable: both ends
+  # re-derive from whatever the next mint produces, and nothing persistent
+  # depends on the value.
+  truenas_addon_secret:

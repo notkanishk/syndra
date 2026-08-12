@@ -50,6 +50,29 @@
 
 ## 5. Deployment surface
 
+> **Superseded within this change: the generator is a compose service, not a
+> script an operator runs.** Rows 5.5–5.11 below specify
+> `scripts/gen-addon-secret.sh <target>`, run under `sudo` before the first
+> `up`. That script was built, verified, and then deleted, because the shape was
+> wrong in a way no amount of care inside it could fix: **a step performed before
+> a container starts is a step that gets skipped**, and the skip does not fail
+> loudly — Docker creates a DIRECTORY at the missing bind-mount path, the add-on
+> exits on a secret it cannot read, and the backend registers a target whose
+> every call then fails at the handshake. Three symptoms, none naming the
+> omission. It also required root on the host, which the deploy user is
+> deliberately denied, so automated deploys could not run it at all: the one
+> action in the bring-up that a human had to perform was the one no machine
+> could.
+>
+> `truenas-addon-secret` in `docker-compose.yml` mints it instead, running as
+> root **inside a throwaway container** — privilege the deploy identity already
+> holds by driving the daemon, so nothing is granted that was not already there.
+> Both readers `depend_on` it completing. Every property the rows below argue
+> for is kept and none is weakened: `0640 root:65532`, exclusive publication with
+> `link(2)` and never `rename`, a unique temporary at a restrictive mode from the
+> outset, refusal-as-success when the secret already exists, and the destination
+> deciding the outcome. What changed is *who runs it*, and the answer is nobody.
+
 - [x] 5.1 One network per add-on (`addons_truenas`, …); the backend joins each. No add-on shares an L3 segment with another, which is the structural half of the isolation
 - [x] 5.2 **The backend gains the add-on's `secretValue` semantics**, so `ADDON_<TARGET>_SECRET` and `ADDON_<TARGET>_SECRET_FILE` mean the same thing at both ends. Today the asymmetry is real and has already cost a debugging session: the add-on accepts an inline value or a `_FILE` path, while the backend accepts only a path (`readSigningKey` over `SigningKeyPath`) — which is why `.env.example` has to warn that the signing key "is A PATH, matching the backend's … which is also a path". One helper, one naming convention. **The contract vector does NOT cover this** — an earlier draft of this row said it did, which was the same false-coverage claim §32.4 records: the vector pins derivation and MAC *bytes* given a secret, and is blind to how that secret was resolved. Configuration semantics need their own tests, in group 8
 - [x] 5.3 **The certificate mounts go; a secret mount stays — ONE file, mounted into both.** Removing file delivery outright would force the shared secret into the environment, where `docker inspect` and `/proc/1/environ` read it. But it is **one file per target**, not a copy per side: the scheme is symmetric, both ends hold the same bytes by definition, and neither holds a half the other must not see — so a second copy buys no confidentiality and creates a state where the two can disagree. The two-directory rule was written for the backend's **client key**, which this change deletes; it does not carry over to a shared secret. Compose top-level `secrets:` is the native mechanism — one host file, referenced by both services, mounted read-only. **5.2 and 5.3 are one decision: do not tick one without the other**
@@ -62,7 +85,7 @@
 - [x] 5.10 **Refusal must say which refusal it is.** Because publication is indivisible, an interruption leaves either no secret or a finished one — and in the second case the run did exactly what it existed to do, so the next run's refusal is the **successful** end of that story, not an error. An earlier draft's scenarios contradicted each other here: one required a subsequent run to "proceed without manual repair", the other required it to refuse, and after a post-publication interrupt both applied. "Proceed" meant "the operator is never stranded"; it read as "succeed". The generator distinguishes *this target already has a secret, nothing to do* from *insufficient privilege* and *destination unwritable*, because an operator who meets a bare "refused" after an interruption cannot tell completion from breakage, and the tempting next move is deleting a live secret
 - [x] 5.11 The file holds the secret with **no trailing newline ambiguity**: whatever is written, both ends trim, and 8.2 asserts the equivalence rather than the script guaranteeing a form
 - [x] 5.12 `docker-compose.yml` updated; `config_env_test.go` must still pass — every variable the add-on reads is passed by the service, and this change moves several
-- [x] 5.13 `scripts/gen-addon-certs.sh` deleted
+- [x] 5.13 `scripts/gen-addon-certs.sh` deleted — and `gen-addon-secret.sh` with it, per the note above
 - [x] 5.14a **`TransportCredentials()` reaches an operator surface.** Stripping the expiry fields left it exported and called by nothing but its own tests — a reporting function for a failure mode nobody could see. What it still answers is the one thing registration cannot: whether the secret loads *now*. Carried into `GET /api/v1/targets` as `transport_status`/`transport_error` and rendered above the reachability reading, because an unreadable secret also makes the add-on look unreachable and "not answering" sends an operator to the NAS — the wrong machine, and the slowest one to rule out
 - [x] 5.14b **The roster's `auth_mode` is rendered in words, not as the token.** `Authenticated by derived` names the mechanism where the operator's question is whether the channel is authenticated at all. `none` is spelled out as NOT AUTHENTICATED rather than left to a fallback: the one thing that line must never do is read as reassurance
 - [x] 5.15 **Add-on target names are validated where they are first typed and where they are first read.** `my-nas` in `ADDON_TARGETS` produces `${ADDON_MY-NAS_BASE_URL}`, which is Compose's default-value operator rather than a variable reference, so the value silently becomes something else and the only symptom is "BASE_URL is empty" — pointing an operator at a line they set correctly. Refused by both `splitTargets` and `gen-addon-secret.sh`, against one charset

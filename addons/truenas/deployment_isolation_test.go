@@ -35,23 +35,23 @@ func TestEachAddOnMountsOnlyItsOwnTransportSecret(t *testing.T) {
 			t.Fatalf("%s: %v", service, err)
 		}
 
-		// The backend mounts this directory — it holds every target's secret,
-		// because it is the one component that talks to all of them. An add-on
-		// mounting the same directory reads every other target's secret and can
-		// derive every other target's keys.
-		if regexp.MustCompile(`:/run/secrets/addon:`).MatchString(body) {
-			t.Errorf("%s mounts the whole transport secrets DIRECTORY.\n"+
-				"That hands it every other target's secret, and the per-target "+
-				"derivation is then decoration: one compromised add-on derives "+
-				"the keys of all of them. Mount only %s.key.", service, target)
-		}
-
-		want := regexp.MustCompile(`/` + regexp.QuoteMeta(target) + `\.key:/run/secrets/addon/` + regexp.QuoteMeta(target) + `\.key:ro`)
+		// Its OWN volume, and only its own. Every target's secret lives in a
+		// volume of its own; an add-on holding more than one could derive the
+		// other target's keys, and the per-target derivation would be
+		// decoration.
+		mine := target + "_addon_secret"
+		want := regexp.MustCompile(`- ` + regexp.QuoteMeta(mine) + `:/run/secrets/addon:ro`)
 		if !want.MatchString(body) {
-			t.Errorf("%s does not mount its own transport secret read-only at the "+
-				"expected path.\nExpected a volume ending "+
-				"`/%s.key:/run/secrets/addon/%s.key:ro`, matching ADDON_SECRET_FILE "+
-				"and what scripts/gen-addon-secret.sh writes.", service, target, target)
+			t.Errorf("%s does not mount its own transport secret volume read-only.\n"+
+				"Expected `- %s:/run/secrets/addon:ro`, matching ADDON_SECRET_FILE.",
+				service, mine)
+		}
+		for _, mount := range regexp.MustCompile(`([a-z0-9_]+_addon_secret):`).FindAllStringSubmatch(body, -1) {
+			if mount[1] != mine {
+				t.Errorf("%s mounts %s, which is another target's secret.\n"+
+					"One compromised add-on would then hold the keys of both.",
+					service, mount[1])
+			}
 		}
 	}
 }
@@ -122,4 +122,60 @@ func composeNetworks(body string) []string {
 		}
 	}
 	return out
+}
+
+// Provisioning is the deployment's job, and both readers wait for it.
+//
+// This was a documented human step — a `sudo` script run before the first `up`.
+// A step performed before a container starts
+// is a step that gets skipped, and the skip does not fail loudly: Docker
+// creates a DIRECTORY at the missing mount path, the add-on exits on a secret
+// it cannot read, and the backend registers a target whose every call fails at
+// the handshake.
+//
+// So the minting is a service, and the two readers depend on it completing.
+// Guarded because all three lines are ordinary-looking YAML whose absence
+// produces exactly the failure above.
+func TestEachAddOnsSecretIsMintedByTheDeployment(t *testing.T) {
+	for _, service := range composeAddOnServices(t) {
+		target := strings.TrimSuffix(service, "-addon")
+		minter := target + "-addon-secret"
+
+		body, err := composeServiceBody(minter)
+		if err != nil {
+			t.Fatalf("no %s service: %v\nNothing mints %s's transport secret, so "+
+				"the first start depends on a human having run a script.", minter, err, target)
+		}
+		// Root inside the container, because the file is owned root:65532 —
+		// owner read for the backend, group read for the add-on's uid.
+		if !regexp.MustCompile(`user:\s*"0:0"`).MatchString(body) {
+			t.Errorf("%s does not run as root, so it cannot set the ownership both "+
+				"readers need", minter)
+		}
+		if !regexp.MustCompile(`\bln\b`).MatchString(body) {
+			t.Errorf("%s does not publish with `ln`.\nrename/mv REPLACES its "+
+				"destination, so two runs would both publish and the later would "+
+				"destroy a secret the earlier may already have put into service.", minter)
+		}
+		if regexp.MustCompile(`\bprofiles:`).MatchString(body) {
+			// A dependency that disappears with a profile is a start-up order
+			// that changes with configuration.
+			t.Errorf("%s is profile-gated, so the backend cannot depend on it "+
+				"unconditionally", minter)
+		}
+
+		for _, reader := range []string{"backend", service} {
+			rb, err := composeServiceBody(reader)
+			if err != nil {
+				t.Fatalf("%s: %v", reader, err)
+			}
+			dep := regexp.MustCompile(regexp.QuoteMeta(minter) + `:\s*\n\s*condition:\s*service_completed_successfully`)
+			if !dep.MatchString(rb) {
+				t.Errorf("%s does not wait for %s to finish.\nRegistration reads "+
+					"the secret ONCE at start-up, so starting first means the target "+
+					"does not register and the deployment needs a second, manual "+
+					"restart to notice.", reader, minter)
+			}
+		}
+	}
 }

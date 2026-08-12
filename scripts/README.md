@@ -10,7 +10,6 @@ Operational helpers. Most are also reachable through `make` targets — see the
 | `smoke-test-action-v2.sh` | Signed POST to `/api/action/inject`, asserts claim injection |
 | `smoke-test-event-listener.sh` | Signed POST to `/api/webhooks/zitadel`, asserts event handling |
 | `smoke-test-lxc.sh` | Checks UI, API health, and container status on a deployed host |
-| `gen-addon-secret.sh` | Mints one add-on's transport secret. Run under `sudo`, once per target |
 | `smoke-test-addon.sh` | Checks an add-on's bring-up leg by leg, stopping before the target itself |
 | `lib/` | Shared shell helpers |
 
@@ -56,29 +55,6 @@ environment. They exist because the Actions path is the one place where a
 misconfiguration produces no error on the Syndra side at all: Zitadel calls, the
 call fails, and nothing local ever notices.
 
-## gen-addon-secret.sh
-
-One secret per add-on target. Both ends derive both keys from it — the Ed25519
-key the add-on serves and the backend pins, and the HMAC key that signs every
-request — so there is no certificate to mint, distribute, or renew.
-
-```bash
-sudo ./scripts/gen-addon-secret.sh truenas
-```
-
-Writes `./secrets/addon/truenas.key` at `0640 root:65532` (owner read for the
-backend, group read for the add-on's uid) and prints the `.env` lines naming it.
-
-Run it **before** starting the add-on: Docker creates a *directory* when a bind
-mount names a host path that does not exist, and the add-on then exits on a
-secret it cannot read.
-
-Re-running for a target that already has one does nothing and exits 0.
-Publication is a `link(2)`, which never clobbers, so a file at the destination
-is always a complete secret — including after a run killed midway. Rotation is a
-deliberate procedure (DEPLOY.md, "Rotating an add-on transport secret"), because
-replacing the value under a running pair strands whatever is in flight.
-
 ## smoke-test-addon.sh
 
 ```bash
@@ -88,8 +64,9 @@ replacing the value under a running pair strands whatever is in flight.
 Three connections carry an add-on and each fails looking like the others, so
 this checks them in order and stops at the first break:
 
-1. the secret exists, `0640 root:65532`, and is a file rather than the directory
-   Docker leaves behind
+1. the deployment's own minting service ran, and the secret it left is
+   `0640 root:65532` as seen from inside the add-on — the only view that
+   matters, since no copy exists on the host
 2. the backend registered the target, and **the key it pins equals the key the
    add-on serves** — diffed from the two startup log lines, which is what
    separates the three causes a pin failure cannot tell apart
