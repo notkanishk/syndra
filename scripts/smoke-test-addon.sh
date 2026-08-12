@@ -102,12 +102,17 @@ fi
 
 # Registration says the deployment is configured; the manifest read is the first
 # thing that proves the channel works end to end.
+#
+# Labelled as the LAST such line and not as the current state, because it is
+# whatever the log happens to end with — including a connection refused from the
+# seconds during a restart, which reads as a live fault when it is already over.
 MANIFEST=$(printf '%s\n' "$BACKEND_LOG" | grep -F "$TARGET" | grep -iE "manifest|capabilit" | tail -1 || true)
 # An `if`, not `[ ... ] && echo`: under `set -e` that idiom exits the script
 # when the test fails if it is ever the last command in its block, and "no
 # manifest line yet" is the NORMAL state at a first bring-up.
 if [ -n "$MANIFEST" ]; then
-  echo "  note  $MANIFEST"
+  echo "  last  the most recent manifest line (may predate a restart):"
+  echo "        $MANIFEST"
 fi
 
 echo "==> 3. $TARGET itself"
