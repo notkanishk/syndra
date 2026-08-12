@@ -135,7 +135,9 @@ Each target's secret MUST be produced by a generator rather than chosen, because
 
 The privileged step MUST NOT be satisfied by granting the deployment user membership of the add-on's group. That would make every add-on secret readable by the account that runs automated deploys, which is the opposite of what per-target isolation is for, and it would do so permanently to avoid a one-time action.
 
-A target's secret MUST exist as **one** file, mounted read-only into both the backend and that add-on. It MUST NOT be written as two copies to be kept identical. The two ends hold the same bytes by definition — the scheme is symmetric, and neither end holds a half the other must not see — so a second copy carries no confidentiality and introduces a state in which the two disagree. Requiring two files to be created "as one operation" would specify an atomicity the filesystem cannot provide: an interrupt, a failed ownership change, or a host crash between the writes leaves one copy, and a generator that then refuses to run has stranded the deployment in exactly the split state it exists to prevent.
+A target's secret MUST exist as **one** file, mounted read-only into both the backend and that add-on. It MUST NOT be written as two copies to be kept identical.
+
+**An add-on MUST be given only its own target's secret, never the set of them.** The backend holds every target's secret because it is the one component that talks to every add-on; an add-on that could read another target's secret could derive that target's keys, and one compromised add-on would then hold all of them — which is precisely what per-target derivation exists to prevent. Mounting the directory of secrets into an add-on therefore MUST NOT be treated as equivalent to mounting its own file, even though both ends of *that* target's channel legitimately hold the same bytes. The two ends hold the same bytes by definition — the scheme is symmetric, and neither end holds a half the other must not see — so a second copy carries no confidentiality and introduces a state in which the two disagree. Requiring two files to be created "as one operation" would specify an atomicity the filesystem cannot provide: an interrupt, a failed ownership change, or a host crash between the writes leaves one copy, and a generator that then refuses to run has stranded the deployment in exactly the split state it exists to prevent.
 
 The generator MUST create that file atomically: written to a temporary path on the destination filesystem, given its final ownership and mode there, and only then published under its final name — so that no observer, and no subsequent run, can encounter a partially written or wrongly owned secret. It MUST remove its temporary artefacts on every exit path where it still runs — success, refusal, or error it can observe. It MUST NOT be specified as removing them on *any* failure, since this requirement elsewhere models a run killed without the chance to clean up; that case is covered by the temporary's restrictive mode and by the irrelevance rule below, not by a cleanup the process never reaches.
 
@@ -144,6 +146,8 @@ The generator MUST create that file atomically: written to a temporary path on t
 It MUST verify before writing anything that the destination is writable and that it holds whatever privilege the required ownership needs, and MUST fail before creating any file when it does not. That preflight is an ergonomic guard against a run that cannot possibly succeed; it is not the safety property, which is carried by the exclusive publication above.
 
 The file's ownership and mode MUST be readable by both consumers as they actually run — the backend and an add-on that runs as an unprivileged uid against a read-only mount — and MUST NOT be world-readable on the host. The generator MUST refuse when the file already exists, and MUST emit the configuration lines naming it, so that no step of the mapping is left to be recalled.
+
+**"Already provisioned" MUST be reported as a non-error and every other refusal as an error**, in the exit status and not only in the prose. The distinction required below is worthless if a caller cannot act on it: an operator minting secrets for several targets, or re-running after an interruption, needs "this one was already done" to be indistinguishable from success and "this one could not be done" to stop them. Reporting both as failure makes the safe case indistinguishable from the unsafe one at exactly the moment the tempting next action is deleting a live secret.
 
 **An interrupted run MUST leave exactly one of two states, and refusal is the correct outcome of one of them.** Because publication is exclusive and indivisible, an interruption falls either before it — leaving no secret, so a subsequent run publishes one — or after it, leaving a complete and correctly owned secret. In the second case the run produced the very thing it existed to produce, so the target is provisioned and a subsequent run MUST refuse. That refusal MUST be specified as the successful terminal state of the interrupted case rather than as a failure to be worked around: an operator who reads a bare refusal after an interruption cannot distinguish completion from breakage, and the tempting next action is to delete a live secret. The refusal MUST therefore distinguish *this target already has a secret and nothing needs doing* from every other reason the generator declines. Neither state MUST require manual repair, and there is no third state to repair.
 
@@ -211,6 +215,7 @@ Temporary paths MUST therefore be unique per run. A deterministic temporary path
 - **THEN** it MUST refuse
 - **AND** MUST NOT overwrite it
 - **AND** the refusal MUST be distinguishable from a refusal caused by insufficient privilege or an unwritable destination
+- **AND** MUST report success rather than failure, since the target is provisioned and nothing needs doing
 
 #### Scenario: Two generator runs race for the same target
 
@@ -230,3 +235,33 @@ This is a structural control and MUST NOT be treated as replacing the transport 
 - **WHEN** a further add-on is added to the deployment
 - **THEN** it MUST receive its own segment
 - **AND** MUST NOT be able to reach or observe another add-on's traffic
+- **AND** MUST be given only its own target's transport secret
+
+#### Scenario: An add-on is given the deployment's secrets directory
+
+- **WHEN** an add-on's deployment would mount the directory holding every target's secret
+- **THEN** that MUST be refused
+- **AND** the refusal MUST state that the per-target derivation is void once one add-on can read another's secret
+
+### Requirement: A transport secret that stops loading MUST be surfaced before the next call fails
+
+The backend MUST report, per registered target and at read time, whether that target's transport secret can still be loaded — and MUST NOT infer it from registration, which read the secret once at start-up. A mount that was removed, a file emptied by a half-finished rotation, or a `_FILE` path that stopped resolving each leave a target that is registered, was callable, and whose next call fails at the handshake.
+
+That failure MUST NOT be the operator's first notice of it. The handshake error names three causes it cannot distinguish — a differing secret, a mismatched target name, or another peer answering — so an operator meeting it first has no way to know the fault is on their own host, and the misdiagnosis it invites (rotating a secret that was never wrong) makes the state worse.
+
+A target whose secret cannot be loaded MUST remain registered and MUST NOT be withdrawn from the roster. "Not deployed" and "deployed and broken" are different sentences with different fixes, and collapsing the second into the first hides an incident behind an absence.
+
+The surface MUST state that the fault is on the Syndra host rather than on the target, and MUST carry the underlying error including the path it was given.
+
+#### Scenario: A target's secret file disappears while the deployment runs
+
+- **WHEN** a registered target's transport secret becomes unreadable after start-up
+- **THEN** the target MUST still be listed as registered
+- **AND** its transport state MUST report the failure with the path it was given
+- **AND** the operator surface MUST attribute the fault to the Syndra host, not to the target
+
+#### Scenario: One target's secret fails while another's is fine
+
+- **WHEN** one registered target's secret cannot be loaded and another's can
+- **THEN** only the affected target MUST report the failure
+

@@ -608,8 +608,7 @@ All commands run from `/opt/syndra` as the `runner` user.
 Each add-on sits behind a Compose profile and does **not** start by default: it
 holds a credential for the system it provisions, and a container nobody asked
 for holding one is a container nobody is watching. Fill its block in `.env` —
-base URL, and either a client certificate with the private CA or a signing key —
-and start it:
+the base URL and one transport secret — and start it:
 
 ```bash
 docker compose --profile truenas up -d
@@ -667,23 +666,45 @@ else. Name the NAS directly. The two variables describe two different paths to
 the same machine, which is exactly why the add-on never derives one from the
 other.
 
-**3 — The backend↔add-on channel.** No plaintext mode exists, so this needs
-certificates whichever authentication mode you pick:
+**3 — The backend↔add-on channel.** One value, minted per target:
 
 ```bash
-sudo ./scripts/gen-addon-certs.sh
+sudo ./scripts/gen-addon-secret.sh truenas
 ```
 
-One private CA, the add-on's server certificate, the backend's client
-certificate, and a signing key — written into two directories, because the
-add-on holds the NAS credential and must not be able to read the key that
-authenticates the backend to it. The script prints the two `.env` blocks; set
-**one**. The add-on refuses to start with both configured, since a caller would
-otherwise choose, and the caller is the thing being authenticated.
+That writes `./secrets/addon/truenas.key` and prints the `.env` lines naming it.
+From that one secret **both ends derive both keys** — the Ed25519 key the add-on
+serves and the backend pins, and the HMAC key that signs every request. There is
+no CA, no certificate to distribute, nothing that expires, and no second mode to
+choose between. (Until recently this step minted four files across two
+directories and asked you to pick a mode.)
 
-Run it under `sudo`: the add-on runs as uid 65532 and the mount is read-only, so
-without the `chown` the container exits on a private key it can see but not
-open. Without root the script falls back to world-readable and says so.
+Three things about it are load-bearing:
+
+- **Run it under `sudo`.** The file is `0640 root:65532`: the backend reads it as
+  owner, the add-on reads it by group. The add-on runs as uid 65532 against a
+  read-only mount and cannot open a root-owned `0600` file, and `0644` would make
+  the deployment's most sensitive value world-readable on the host. This is
+  *deliberately not* part of step 3's `gen-prod-env.sh`, which runs as the
+  unprivileged deploy user — see the note below.
+- **Do not hand-pick the value.** An operator-chosen secret is the one input HKDF
+  cannot strengthen.
+- **Mint it before starting the add-on.** Docker creates a *directory* when a
+  bind mount names a host path that does not exist, and the add-on then exits on
+  a secret it cannot read. If that happened, `rmdir ./secrets/addon/truenas.key`
+  and re-run; the script says so too.
+
+Re-running for a target that already has a secret does nothing and exits 0 —
+publication is a `link(2)`, which never clobbers, so a file here is always a
+complete secret. Rotation is a separate procedure (below), because replacing the
+value under a running pair is what strands an in-flight mutation.
+
+> **Where this sits in the step order.** First-time bring-up step 3 (`su - runner
+> … gen-prod-env.sh`) stays unprivileged and mints no add-on secret: the deploy
+> user "must not run as root", and setting `root:65532` ownership requires exactly
+> that. `ADDON_TARGETS` is also a line in the `.env` that script is generating, so
+> there would be nothing to iterate. Minting is this per-target step, run under
+> `sudo` when the target is actually being added.
 
 **4 — Start it, in this order.** `ADDON_TARGETS=truenas` on the backend, then:
 
@@ -695,19 +716,60 @@ docker compose logs backend | grep '\[ADDON\]'
 ```
 
 Expect `[ADDON] Registered target=truenas base=https://truenas-addon:8443
-auth=mtls`. `auth=none` means the transport block did not land and the target
-will not be callable. Registration alone proves nothing about the NAS; what does
-is the first manifest read, visible on the target's health response.
+auth=derived`. `auth=none` means no secret reached the backend and the target
+will not be callable — that is fail-closed, not a warning. Registration alone
+proves nothing about the NAS; what does is the first manifest read, visible on
+the target's health response.
 
 | Symptom | Cause |
 |---|---|
 | Add-on exits at `TRUENAS_URL is required` | The profile started without the `.env` block. |
-| Add-on exits at `configure exactly one of...` | Both `ADDON_CLIENT_CA_FILE` and `ADDON_SIGNING_KEY_FILE` are set. |
+| Add-on exits at `ADDON_SECRET is required` | No secret reached it. A component holding the NAS credential must not answer an unauthenticated caller, so it refuses to start rather than serving one. |
+| Add-on exits reading its secret as a directory | It was started before `gen-addon-secret.sh` ran, so Docker created a directory at the mount path. `rmdir ./secrets/addon/truenas.key`, mint, restart. |
 | Registers, never answers | Name does not resolve *inside the container*, or the base URL names a host/port that is not `truenas-addon:8443`. |
-| `x509: certificate signed by unknown authority` | `ADDON_TRUENAS_CA_CERT` unset, so the backend verified an internal service against the public web PKI. |
-| `no matching signature` | The two ends disagree about the signing key. Both HMAC the file's *contents*; both variables are paths, and they must name the same bytes. |
+| `addon truenas is not the one derived from this deployment's secret` | The pin failed, and it names all three causes it cannot tell apart: the two ends hold different bytes, the add-on's `ADDON_TARGET` does not match the `ADDON_TARGETS` entry (the name is the derivation's salt), or something else is answering on that address. Check the *name* before rotating a secret that was never the problem. |
+| `no matching signature` | Same three causes, one leg further in: the handshake pinned but the request MAC did not verify. In practice this is a clock more than two minutes out, since the derivation would have failed at the handshake. |
 | NAS auth fails right after it worked once | The key was presented over plaintext and TrueNAS revoked it. Mint a new one and fix the scheme. |
 | NAS auth fails repeatedly, then stops responding | TrueNAS locks out for ten minutes after 20 failed authentications in 60 seconds. Wait it out; the add-on's own breaker is what keeps a retry loop from renewing it. |
+
+#### Rotating an add-on transport secret
+
+The two ends cannot move atomically. Calls fail to authenticate for a bounded
+window rather than proceeding unauthenticated — which is the correct trade, but
+it means an in-flight mutation must be allowed to settle first.
+
+```bash
+# 1. Drain — in the UI: Targets > TrueNAS > set lifecycle to `draining`, with a
+#    reason. Or through the backend, which is the thing that can sign the call:
+curl -sS -X POST "$SYNDRA/api/v1/targets/truenas/lifecycle" \
+  -H "Authorization: Bearer $OPERATOR_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"state":"draining","reason":"transport secret rotation"}'
+#    NOT curl to the add-on directly: /lifecycle is authenticated with a signed
+#    request over the pinned transport, so only the backend can make it — and
+#    over the very transport you are about to replace, which is why this is
+#    step 1. Wait for `drained` on the target's health.
+#
+#    Editing TRUENAS_LIFECYCLE_STATE does nothing here: it is read once at
+#    start-up, and applying the edit needs the very recreation the drain exists
+#    to precede.
+
+# 2. Replace the value. One file, both ends.
+sudo mv ./secrets/addon/truenas.key ./secrets/addon/truenas.key.prev
+sudo ./scripts/gen-addon-secret.sh truenas
+
+# 3. Recreate. NOT `restart`: that reuses the environment the container was
+#    created with, so both ends would report success while still holding the
+#    previous value.
+docker compose up -d --force-recreate backend truenas-addon
+
+# 4. Confirm registration and the first manifest read.
+docker compose logs backend | grep '\[ADDON\]'
+```
+
+Once the secret is replaced you can no longer reach the old container's
+lifecycle handler, and the only remaining lever is SIGTERM — which is why the
+drain is step 1 and not step 3. Rollback is restoring `.prev` and recreating
+again; nothing persistent depends on the secret, so it is clean.
 
 [truenas-rbac]: https://api.truenas.com/v25.10/rbac.html
 

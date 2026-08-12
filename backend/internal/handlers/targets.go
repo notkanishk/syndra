@@ -36,11 +36,24 @@ type targetSummary struct {
 	// so a client reading one target's payload does not have to infer it from
 	// the row's presence.
 	Registered bool `json:"registered"`
-	// AuthMode is how the backend authenticates to it: mutual TLS or signed
-	// requests. Rendered because an operator who believes mutual TLS is on while
-	// running signed requests has a wrong model of their own trust boundary and
-	// nothing else would tell them.
+	// AuthMode is how the backend authenticates to it. One mode now — `derived`,
+	// both keys from the per-target secret — and `none` for a target that
+	// configured none, which does not register and therefore never appears here.
+	// Rendered because an operator's model of their own trust boundary should
+	// come from the deployment rather than from memory.
 	AuthMode string `json:"auth_mode"`
+	// TransportStatus is whether that secret still LOADS — `ok` or `error`.
+	//
+	// Separate from every other state on this row, and not derivable from them.
+	// Registration reads the secret once at start-up; this reads it now. A mount
+	// that was unmounted, a file emptied by a half-finished rotation, a `_FILE`
+	// path that stopped resolving — each leaves a target that is registered, was
+	// callable, and whose next call will fail at the handshake with an error
+	// naming three causes it cannot tell apart. The whole value of this field is
+	// arriving before that call does.
+	TransportStatus string `json:"transport_status,omitempty"`
+	// TransportError is why, when it is not ok.
+	TransportError string `json:"transport_error,omitempty"`
 	// Callable says a manifest has been read and understood. Registration alone
 	// makes nothing callable, and the gap between the two is the state a fresh
 	// deployment sits in before its first refresh.
@@ -76,9 +89,16 @@ type operationSummary struct {
 // handleListTargets returns the deployment's add-on roster.
 func handleListTargets(w http.ResponseWriter, r *http.Request) {
 	registrations := addonsRegistered()
+	// One pass for the whole roster rather than a load per row: each entry
+	// re-reads a secret from disk, and this list is rendered on every visit to
+	// the targets page.
+	transport := map[string]addons.TransportCredential{}
+	for _, tc := range addonsTransportCredentials() {
+		transport[tc.Target] = tc
+	}
 	out := make([]targetSummary, 0, len(registrations))
 	for _, reg := range registrations {
-		out = append(out, describeTarget(reg))
+		out = append(out, describeTarget(reg, transport[reg.Target]))
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{"targets": out})
 }
@@ -173,8 +193,9 @@ type targetHealthWithAnchor struct {
 	BindingConflicts []db.BindingConflict `json:"binding_conflicts,omitempty"`
 }
 
-func describeTarget(reg addons.Registration) targetSummary {
+func describeTarget(reg addons.Registration, transport addons.TransportCredential) targetSummary {
 	s := targetSummary{Target: reg.Target, Registered: true, AuthMode: reg.AuthMode()}
+	s.TransportStatus, s.TransportError = transport.Status, transport.Error
 
 	a, err := addonsGet(reg.Target)
 	if err != nil {
@@ -348,7 +369,7 @@ func handleResolveBindingConflict(w http.ResponseWriter, r *http.Request) {
 			}
 			if _, _, qerr := dbRecordSystemConvergence(ctx, db.SystemConvergence{
 				Target: conflict.Target, SubjectID: subject, Actor: actor,
-				Reason: "A disputed account was assigned an owner",
+				Reason:  "A disputed account was assigned an owner",
 				Desired: set,
 			}); qerr != nil {
 				return fmt.Errorf("queue convergence for %s: %w", subject, qerr)

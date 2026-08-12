@@ -46,11 +46,21 @@ export function TargetOverview({ target }: { target: string }) {
     <>
       <PageHeader
         title={targetLabel(target)}
-        meta={registered ? `Authenticated by ${registered.auth_mode}` : undefined}
+        meta={registered ? authLabel(registered.auth_mode) : undefined}
       />
 
       <div className="grid gap-4">
-        <Health target={target} health={health.data} isLoading={health.isLoading} />
+        <Health
+          target={target}
+          health={health.data}
+          isLoading={health.isLoading}
+          // A deployment-side fault, carried into the health card because that
+          // is where an operator looks when a target stops working — and this
+          // one explains the reading below it rather than sitting beside it.
+          transportError={
+            registered?.transport_status === "error" ? registered.transport_error : undefined
+          }
+        />
         {/* What roles reach here, before whose accounts are on it: the mappings
             are the reason any of those accounts exist, and reading the
             inventory first invites the question this panel answers. */}
@@ -123,14 +133,31 @@ export function TargetOverview({ target }: { target: string }) {
  * because an operator who reads `circuit_open` as "the target is down" looks at
  * the wrong machine entirely.
  */
+/**
+ * What the roster's `auth_mode` means in words.
+ *
+ * `derived` is the accurate token and an unhelpful thing to render: it names the
+ * mechanism, and the operator's question is whether the channel is authenticated
+ * at all. `none` never reaches this page — a target with no secret does not
+ * register — but it is spelled out rather than left to a fallback, because the
+ * one thing this line must never do is read as reassurance when it is not.
+ */
+function authLabel(mode: string): string {
+  if (mode === "derived") return "Authenticated by a key derived from this deployment's secret";
+  if (mode === "none") return "NOT AUTHENTICATED — no transport secret configured";
+  return `Authenticated by ${mode}`;
+}
+
 function Health({
   target,
   health,
   isLoading,
+  transportError,
 }: {
   target: string;
   health: TargetHealth | undefined;
   isLoading: boolean;
+  transportError?: string;
 }) {
   return (
     <Card>
@@ -146,6 +173,18 @@ function Health({
         {(health?.binding_conflicts ?? []).map((conflict) => (
           <BindingConflictFinding key={conflict.id} target={target} conflict={conflict} />
         ))}
+
+        {/* Above reachability, because it EXPLAINS it. A target whose transport
+            secret cannot be read will also not answer, and an operator who
+            reads "not answering" first goes to the NAS — which is the wrong
+            machine, and the one that takes longest to rule out. */}
+        {transportError && (
+          <Reading tone="danger" label="Transport secret unreadable">
+            Syndra cannot read this target&apos;s transport secret, so no call to it can be
+            authenticated. This is a fault on <strong className="font-semibold">this</strong>{" "}
+            host, not on the target: {transportError}
+          </Reading>
+        )}
 
         {health && !health.reachable && (
           <Reading tone="danger" label="Not answering">

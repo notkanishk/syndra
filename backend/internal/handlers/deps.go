@@ -385,8 +385,11 @@ var addonsSetLifecycle = addons.SetLifecycle
 // configuration and a test of the surface must be able to state a deployment.
 var (
 	addonsRegistered = addons.Registered
-	addonsGet        = addons.Get
-	addonsHealth     = addons.Health
+	// Whether each registered target's transport secret still loads, read at
+	// request time rather than trusted from start-up.
+	addonsTransportCredentials = addons.TransportCredentials
+	addonsGet                  = addons.Get
+	addonsHealth               = addons.Health
 	// How a member reaches a target, for the instructions on their own page.
 	addonsConnection = addons.ConnectionFor
 	// The backend's memory of an add-on's mutation log, read beside that add-on's

@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -128,11 +129,14 @@ var (
 // Env shape, matching the flat style the rest of the backend uses:
 //
 //	ADDON_TARGETS=truenas
-//	ADDON_TRUENAS_BASE_URL=https://syndra-addon-truenas:8090
-//	ADDON_TRUENAS_CLIENT_CERT=/run/secrets/truenas-client.crt
-//	ADDON_TRUENAS_CLIENT_KEY=/run/secrets/truenas-client.key
-//	ADDON_TRUENAS_CA_CERT=/run/secrets/addon-ca.crt
-//	ADDON_TRUENAS_SIGNING_KEY=/run/secrets/truenas-signing.key   # instead of the pair
+//	ADDON_TRUENAS_BASE_URL=https://truenas-addon:8443
+//	ADDON_TRUENAS_SECRET_FILE=/run/secrets/addon/truenas.key
+//	ADDON_TRUENAS_SECRET=<the value inline, where a mount is impractical>
+//
+// One value per target, from which both keys are derived (derive.go). The host
+// and port are the Compose SERVICE name and the add-on's real listener — an
+// earlier version of this comment named neither, and the only symptom was an
+// add-on that registered and never answered.
 func Init(ctx context.Context) error {
 	fresh := map[string]*Addon{}
 	// Resolved secret -> the target that claimed it first, for the duplicate
@@ -300,12 +304,31 @@ func requireHTTPS(base string) error {
 func splitTargets(v string) []string {
 	var out []string
 	for _, part := range strings.Split(v, ",") {
-		if t := strings.ToLower(strings.TrimSpace(part)); t != "" {
-			out = append(out, t)
+		t := strings.ToLower(strings.TrimSpace(part))
+		if t == "" {
+			continue
 		}
+		// A target name becomes part of an environment variable name
+		// (ADDON_<TARGET>_BASE_URL), so the charset is not cosmetic. A hyphen
+		// is the case that bites: `${ADDON_MY-NAS_BASE_URL}` is Compose's
+		// default-value operator, so the variable expands to something else
+		// entirely and the target registers with no base URL — reported as
+		// "named in ADDON_TARGETS but BASE_URL is empty", which sends an
+		// operator to look at a line they already set correctly.
+		if !targetName.MatchString(t) {
+			log.Printf("[ADDON] %q in ADDON_TARGETS is not a usable target name "+
+				"(want %s); it forms part of ADDON_<TARGET>_* variable names, "+
+				"where a hyphen is Compose's default-value operator and would "+
+				"expand to something else. Not registered.", t, targetName)
+			continue
+		}
+		out = append(out, t)
 	}
 	return out
 }
+
+// The same shape scripts/gen-addon-secret.sh validates its argument against.
+var targetName = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
 // Registered returns every registered add-on, sorted. This is the deployment
 // fact operator navigation derives from — never "what this operator can see".

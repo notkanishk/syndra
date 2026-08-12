@@ -54,20 +54,12 @@ func TestTheDeploymentAllowsTheShutdownDrainToFinish(t *testing.T) {
 // add-on's own drain budget is a constant in its own module, which this package
 // cannot read. Its module carries the comparison; this carries the floor.
 func TestEveryAddOnServiceSetsAStopGracePeriod(t *testing.T) {
-	raw, err := os.ReadFile("../../docker-compose.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	services := regexp.MustCompile(`(?m)^  ([a-z0-9][a-z0-9_-]*-addon):$`).FindAllStringSubmatch(string(raw), -1)
-	if len(services) == 0 {
-		t.Fatal("no *-addon services found; the naming this guard keys on has changed")
-	}
-	for _, s := range services {
-		if _, err := composeStopGracePeriod(s[1]); err != nil {
+	for _, s := range composeAddOnServices(t) {
+		if _, err := composeStopGracePeriod(s); err != nil {
 			t.Errorf("%s: %v\n"+
 				"Every add-on runs the same drain-then-shutdown path, so an add-on "+
 				"service without this setting is killed mid-settle by Docker's 10s "+
-				"default — and the symptom is an absence nobody sees.", s[1], err)
+				"default — and the symptom is an absence nobody sees.", s, err)
 		}
 	}
 }
@@ -76,20 +68,9 @@ func TestEveryAddOnServiceSetsAStopGracePeriod(t *testing.T) {
 // block scoping from config_env_test.go: another service's setting must not
 // satisfy a guard about this one.
 func composeStopGracePeriod(service string) (time.Duration, error) {
-	raw, err := os.ReadFile("../../docker-compose.yml")
+	body, err := composeServiceBody(service)
 	if err != nil {
 		return 0, err
-	}
-	body := string(raw)
-
-	header := "\n  " + service + ":\n"
-	start := strings.Index(body, header)
-	if start < 0 {
-		return 0, errNoAddOnService
-	}
-	body = body[start+len(header):]
-	if end := regexp.MustCompile(`(?m)^(  [a-z][a-z0-9_-]*:|[a-z][a-z0-9_-]*:)$`).FindStringIndex(body); end != nil {
-		body = body[:end[0]]
 	}
 
 	m := regexp.MustCompile(`(?m)^\s*stop_grace_period:\s*(\S+)\s*$`).FindStringSubmatch(body)
@@ -97,6 +78,47 @@ func composeStopGracePeriod(service string) (time.Duration, error) {
 		return 0, errNoGracePeriod
 	}
 	return time.ParseDuration(m[1])
+}
+
+// composeServiceBody returns one service's block. Scoping matters more than it
+// looks: a guard about this service that another service's line can satisfy is
+// a guard that passes for the wrong reason, which is the failure mode every
+// source guard in this package exists to avoid.
+func composeServiceBody(service string) (string, error) {
+	raw, err := os.ReadFile("../../docker-compose.yml")
+	if err != nil {
+		return "", err
+	}
+	body := string(raw)
+
+	header := "\n  " + service + ":\n"
+	start := strings.Index(body, header)
+	if start < 0 {
+		return "", errNoAddOnService
+	}
+	body = body[start+len(header):]
+	if end := regexp.MustCompile(`(?m)^(  [a-z][a-z0-9_-]*:|[a-z][a-z0-9_-]*:)$`).FindStringIndex(body); end != nil {
+		body = body[:end[0]]
+	}
+	return body, nil
+}
+
+// composeAddOnServices lists every `*-addon` service in the deployment.
+func composeAddOnServices(t *testing.T) []string {
+	t.Helper()
+	raw, err := os.ReadFile("../../docker-compose.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := regexp.MustCompile(`(?m)^  ([a-z0-9][a-z0-9_-]*-addon):$`).FindAllStringSubmatch(string(raw), -1)
+	if len(found) == 0 {
+		t.Fatal("no *-addon services found; the naming these guards key on has changed")
+	}
+	out := make([]string, 0, len(found))
+	for _, m := range found {
+		out = append(out, m[1])
+	}
+	return out
 }
 
 var (

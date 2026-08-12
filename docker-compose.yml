@@ -128,7 +128,7 @@ services:
     # is also the only thing that needs to reach both the datastores and the
     # add-ons — and the segmentation below is what makes that a fact about the
     # deployment rather than a sentence in a design document.
-    networks: [edge, data, addons]
+    networks: [edge, data, addons_truenas]
     depends_on:
       postgres:
         condition: service_healthy
@@ -234,19 +234,28 @@ services:
       - truenas_addon_state:/var/lib/syndra-truenas
       # The NAS API key and anything else specific to this add-on.
       - ${ADDON_SECRETS_DIR:-./secrets/truenas-addon}:/run/secrets/truenas-addon:ro
-      # The transport secret, shared with the backend. ONE directory mounted
-      # into both, read-only at both, because both ends derive from the same
-      # bytes — this is not material one of them must be kept from. It used to
-      # be two directories holding two copies, which is what the certificate
-      # era needed: there, the backend's client key was material the add-on
-      # must never read. With a symmetric secret that reasoning does not carry,
-      # and a second copy buys only a state where the two can disagree.
-      - ${ADDON_TRANSPORT_SECRETS_DIR:-./secrets/addon}:/run/secrets/addon:ro
-    # No `ports:`, and on the add-on network only. Both halves are needed: the
-    # first stops anything outside the deployment reaching it, and the second
-    # stops it reaching Postgres and Redis — which is the whole reason it holds
-    # the NAS key in a container of its own.
-    networks: [addons]
+      # The transport secret, shared with the backend. ONE file — the same
+      # file, not a copy: both ends derive from the same bytes, so there is no
+      # half either must be kept from, and a second copy buys only a state
+      # where the two can disagree. (The certificate era needed two
+      # directories; there, the backend's client key WAS material this add-on
+      # must never read. That reasoning does not carry to a symmetric secret.)
+      #
+      # THIS TARGET'S FILE ALONE, not the directory the backend mounts. The
+      # backend holds every target's secret because it talks to every add-on;
+      # an add-on that could read its neighbours' secrets could derive their
+      # keys, and one compromised add-on would then open all of them — the
+      # exact isolation the per-target derivation exists to give.
+      #
+      # If this host file does not exist yet, Docker creates a DIRECTORY here
+      # and the add-on exits on a secret it cannot read. Mint it first:
+      # `sudo scripts/gen-addon-secret.sh truenas`.
+      - ${ADDON_TRANSPORT_SECRETS_DIR:-./secrets/addon}/truenas.key:/run/secrets/addon/truenas.key:ro
+    # No `ports:`, and on this add-on's own network only. Both halves are
+    # needed: the first stops anything outside the deployment reaching it, and
+    # the second stops it reaching Postgres and Redis — which is the whole
+    # reason it holds the NAS key in a container of its own.
+    networks: [addons_truenas]
     # Longer than the add-on's own `shutdownTimeout` (20s), so the process
     # always reaches its own deadline first.
     #
@@ -313,10 +322,18 @@ networks:
   # nothing else, including anything that later joins the deployment.
   data:
     internal: true
+  # ONE SEGMENT PER ADD-ON, not one shared `addons` network. The backend joins
+  # each because it is the single mutation authority and must reach all of
+  # them; no add-on shares an L3 segment with another, so a compromised add-on
+  # cannot even open a socket to its neighbours. That is the structural half of
+  # the isolation the per-target key derivation gives cryptographically — each
+  # holds only its own secret, and now cannot reach the peer it could not
+  # authenticate to anyway.
+  #
   # NOT internal: an add-on's whole job is to reach a target on the LAN. What
-  # this segment provides is the other direction — nothing here can see the
+  # the segment provides is the other direction — nothing here can see the
   # datastores, and nothing outside can see the add-ons.
-  addons:
+  addons_truenas:
 
 volumes:
   pgdata:

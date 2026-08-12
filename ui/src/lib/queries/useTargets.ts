@@ -28,6 +28,9 @@ export interface TargetSummary {
   target: string;
   registered: boolean;
   auth_mode: string;
+  /** Whether that secret still loads — read now, not at start-up. */
+  transport_status?: string;
+  transport_error?: string;
   /** A manifest has been read and understood. Registration alone offers nothing. */
   callable: boolean;
   operations: TargetOperation[];

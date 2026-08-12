@@ -200,8 +200,16 @@ rather than Syndra's: the filter syntax `user.query` actually accepts, what
 lockout, and whether `builtin` is on every supported major. Point `TRUENAS_URL`
 at the real one, run the same sequence, and read the mutation log afterwards.
 The bring-up is now written down — DEPLOY.md step 5a for the proxy and
-"Bringing up the TrueNAS add-on" for the NAS identity, the transport material
-(`scripts/gen-addon-certs.sh`) and the start order.
+"Bringing up the TrueNAS add-on" for the NAS identity, the transport secret
+(`scripts/gen-addon-secret.sh`) and the start order.
+
+**The transport under that bring-up changed after it was written.** The
+certificate ceremony is gone: one secret per target, both keys derived from it
+at both ends (`addon-transport-derived-keys`). Sequencing was meant to be the
+other way round — the live bring-up first, so a NAS-side failure and a
+transport-side failure could never be diagnosed together — and it was not, so
+the first real bring-up carries a transport that has never handshaked outside a
+test. Worth knowing while reading the failure, not a reason to redo it.
 
 **One of those questions is answered, and the answer contradicts what the branch
 said.** The API key's permission set does cover `user.create`/`user.update`

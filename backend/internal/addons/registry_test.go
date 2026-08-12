@@ -233,6 +233,33 @@ func TestInitSkipsTargetWithNoBaseURL(t *testing.T) {
 	}
 }
 
+// A target name that cannot form an environment variable never registers, and
+// says why.
+//
+// The hyphen is the real case. `${ADDON_MY-NAS_BASE_URL}` is Compose's
+// default-value operator, not a variable reference, so the value silently
+// becomes something else and the only symptom is "BASE_URL is empty" — pointing
+// an operator at a line they set correctly. The same charset is validated by
+// scripts/gen-addon-secret.sh, which is where the name is first typed.
+func TestInitRefusesATargetNameThatCannotFormAVariable(t *testing.T) {
+	resetRegistry(t)
+	withEnv(t, map[string]string{
+		"ADDON_TARGETS":          "my-nas,truenas",
+		"ADDON_TRUENAS_BASE_URL": "https://addon-truenas:8090",
+		"ADDON_TRUENAS_SECRET":   "a-test-transport-secret-for-truenas",
+	})
+	withTargetRegistry(t, &fakeTargetRegistry{})
+	if err := Init(context.Background()); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	got := Registered()
+	// The usable name beside it still registers: one bad entry must not take
+	// the deployment's working add-ons down with it.
+	if len(got) != 1 || got[0].Target != "truenas" {
+		t.Fatalf("expected only truenas registered, got %+v", got)
+	}
+}
+
 // 2.4 — an unregistered add-on is not callable, and the error says so rather
 // than reporting the operation as unknown. The two are different operator
 // actions: deploy it, versus fix its manifest.

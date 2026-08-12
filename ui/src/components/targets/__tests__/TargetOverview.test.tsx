@@ -50,7 +50,7 @@ function summary(operations: TargetSummary["operations"]): TargetSummary {
   return {
     target: "truenas",
     registered: true,
-    auth_mode: "mtls",
+    auth_mode: "derived",
     callable: true,
     operations,
     circuit_open: false,
@@ -67,6 +67,37 @@ function renderTarget() {
 }
 
 describe("one target's page", () => {
+  it("says a transport secret that stopped loading is a fault on THIS host", () => {
+    // Above the reachability reading and worded away from the target on
+    // purpose. An unreadable secret also makes the add-on look unreachable, and
+    // an operator who reads "not answering" first drives to the NAS — the wrong
+    // machine, and the one that takes longest to rule out.
+    state.roster = [
+      {
+        ...summary([]),
+        transport_status: "error",
+        transport_error: "read ADDON_TRUENAS_SECRET_FILE (/run/secrets/addon/truenas.key): no such file or directory",
+      },
+    ];
+    state.health = { reachable: false, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    expect(screen.getByText(/Transport secret unreadable/i)).toBeTruthy();
+    // The path, because "no secret configured" and "the mount is missing" are
+    // the same symptom and different fixes.
+    expect(screen.getByText(/run\/secrets\/addon\/truenas\.key/)).toBeTruthy();
+  });
+
+  it("does not claim a transport fault when the secret loads", () => {
+    state.roster = [{ ...summary([]), transport_status: "ok" }];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    expect(screen.queryByText(/Transport secret unreadable/i)).toBeNull();
+  });
+
   it("renders the operations the manifest offers, and nothing else", () => {
     state.roster = [
       summary([

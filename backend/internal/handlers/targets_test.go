@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 )
 
@@ -225,5 +226,84 @@ func TestResolvingToAThirdPartyIsRefused(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("want a validation failure, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// A registered target whose transport secret stopped loading says so on the
+// roster, before the next call fails at the handshake.
+//
+// The states are deliberately not merged. "Registered" is a deployment fact
+// read once at start-up; this is a live read of the same material, and the gap
+// between them is exactly the window an operator needs told about — a mount
+// that was unmounted, a rotation that half-finished, a `_FILE` path that
+// stopped resolving. The failure it precedes names three causes it cannot tell
+// apart, so arriving first is the whole of this field's value.
+func TestTheRosterReportsATransportSecretThatStoppedLoading(t *testing.T) {
+	origReg, origTC := addonsRegistered, addonsTransportCredentials
+	t.Cleanup(func() { addonsRegistered, addonsTransportCredentials = origReg, origTC })
+
+	addonsRegistered = func() []addons.Registration {
+		return []addons.Registration{
+			{Target: "truenas", BaseURL: "https://truenas-addon:8443", Secret: []byte("configured")},
+			{Target: "unifi", BaseURL: "https://unifi-addon:8443", Secret: []byte("configured")},
+		}
+	}
+	addonsTransportCredentials = func() []addons.TransportCredential {
+		return []addons.TransportCredential{
+			{Target: "truenas", AuthMode: "derived", Status: "error",
+				Error: "read ADDON_TRUENAS_SECRET_FILE (/run/secrets/addon/truenas.key): no such file or directory"},
+			{Target: "unifi", AuthMode: "derived", Status: "ok"},
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	handleListTargets(rec, httptest.NewRequest(http.MethodGet, "/api/v1/targets", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+
+	var body struct {
+		Targets []struct {
+			Target          string `json:"target"`
+			Registered      bool   `json:"registered"`
+			TransportStatus string `json:"transport_status"`
+			TransportError  string `json:"transport_error"`
+		} `json:"targets"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	byTarget := map[string]struct {
+		Target          string `json:"target"`
+		Registered      bool   `json:"registered"`
+		TransportStatus string `json:"transport_status"`
+		TransportError  string `json:"transport_error"`
+	}{}
+	for _, row := range body.Targets {
+		byTarget[row.Target] = row
+	}
+
+	broken, ok := byTarget["truenas"]
+	if !ok {
+		t.Fatal("the broken target vanished from the roster; it is still deployed")
+	}
+	// Still registered. Withdrawing the row would make a mount that fell off
+	// look like a target that was never deployed, and those are different
+	// sentences with different fixes.
+	if !broken.Registered {
+		t.Error("a target with an unloadable secret is still registered")
+	}
+	if broken.TransportStatus != "error" || broken.TransportError == "" {
+		t.Errorf("the unloadable secret is not reported: %+v", broken)
+	}
+	// The path, because "no secret configured" and "the mount is missing" are
+	// the same symptom and different fixes.
+	if !strings.Contains(broken.TransportError, "/run/secrets/addon/truenas.key") {
+		t.Errorf("the error must carry the path it was given, got %q", broken.TransportError)
+	}
+	// And a healthy target beside it is unaffected — the per-row read must not
+	// smear one target's failure across the roster.
+	if byTarget["unifi"].TransportStatus != "ok" {
+		t.Errorf("the healthy target reports %q", byTarget["unifi"].TransportStatus)
 	}
 }

@@ -358,7 +358,10 @@ func secretValue(name string) (string, error) {
 	if path := strings.TrimSpace(os.Getenv(name + "_FILE")); path != "" {
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			return "", fmt.Errorf("read %s_FILE: %w", name, err)
+			// Naming the path, matching the backend's resolveSecret: "no secret
+			// configured" and "the mount did not land" are the same symptom and
+			// different fixes.
+			return "", fmt.Errorf("read %s_FILE (%s): %w", name, path, err)
 		}
 		value := strings.TrimSpace(string(raw))
 		if value == "" {

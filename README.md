@@ -139,7 +139,7 @@ reference; this table is only the orientation.
 | Zitadel M2M | Management API access for live orchestration |
 | Actions v2 | Signing keys for claim injection and the event listener |
 | Schedulers | Grant expiry, drift reconciliation, outbox drain |
-| Add-on targets | One block per target: base URL and its client certificate or signing key |
+| Add-on targets | One block per target: base URL and one transport secret, from which both ends derive their keys |
 
 Do not hand-adapt `.env.example` for production. Run
 [`scripts/gen-prod-env.sh`](scripts/gen-prod-env.sh) on the production host — it
