@@ -20,6 +20,7 @@
 
 - [x] 3.1 `go test ./... && go vet ./...` in `addons/truenas`
 - [x] 3.2 `docker compose config` parses and shows `stop_grace_period: 30s` on the service
+- [x] 3.2a **The shipped binary's shutdown path, run for real.** Everything above asserts the numbers, and numbers are satisfied by a drain that never runs. `shutdown_binary_test.go` builds the add-on, starts it, sends SIGTERM, and asserts it enters the drain, completes it, and exits cleanly **inside the budget Compose grants** — read from `stop_grace_period` rather than hardcoded, so the assertion tracks the deployment. Mutation-verified by making the process exit before the drain. This does NOT close 3.3: what still needs hardware is a mutation actually in flight against a target settling rather than being abandoned, and no local harness can produce one
 - [ ] 3.3 Observed once against the live deployment: stop the add-on with a mutation in flight and confirm the settle completes and the terminal status is written. This is the only step that proves the original defect is gone rather than merely reconfigured — everything above asserts the numbers, not the behaviour
 
 ## Deliberately not done
