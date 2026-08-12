@@ -93,7 +93,7 @@ services:
       # and it must be the SAME BYTES the add-on has, under the same name it
       # knows itself by (ADDON_TARGET there, the ADDON_TARGETS entry here). The
       # file is the same file, mounted into both.
-      - ADDON_TRUENAS_SECRET_FILE=${ADDON_TRUENAS_SECRET_FILE:-/run/secrets/addon/truenas/secret.key}
+      - ADDON_TRUENAS_SECRET_FILE=${ADDON_TRUENAS_SECRET_FILE:-/run/addon-secrets/truenas/secret.key}
       - ADDON_TRUENAS_SECRET=${ADDON_TRUENAS_SECRET:-}
       - ADDON_MANIFEST_REFRESH_INTERVAL=${ADDON_MANIFEST_REFRESH_INTERVAL:-}
       - ADDON_MEMBER_OP_LIMIT=${ADDON_MEMBER_OP_LIMIT:-}
@@ -124,7 +124,13 @@ services:
       # a container starts is a step a human forgets — after which Docker
       # creates a DIRECTORY at the mount path and the add-on exits on a secret
       # it cannot read.
-      - truenas_addon_secret:/run/secrets/addon/truenas:ro
+      # NOT under /run/secrets. That path is itself a read-only bind mount here,
+      # and Docker has to CREATE the mountpoint directory for a nested mount —
+      # which fails on a read-only parent, at container start, with an OCI
+      # runtime error that names `mkdirat ... read-only file system` and nothing
+      # about add-ons. Found by starting it; no source guard can see a mount
+      # ordering constraint.
+      - truenas_addon_secret:/run/addon-secrets/truenas:ro
     ports:
       # The HOST port is configurable; the container port never is. A box
       # running a second stack — the pre-rename one still on this dev machine —

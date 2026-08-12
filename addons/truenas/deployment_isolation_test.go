@@ -179,3 +179,50 @@ func TestEachAddOnsSecretIsMintedByTheDeployment(t *testing.T) {
 		}
 	}
 }
+
+// No service may mount a volume UNDER one of its own read-only mounts.
+//
+// Docker has to create the mountpoint directory for a nested mount, and on a
+// read-only parent that fails at container start with an OCI runtime error
+// naming `mkdirat ... read-only file system` — and nothing about add-ons,
+// secrets, or which of the two mounts is at fault.
+//
+// This is here because it happened: the backend's transport secret was mounted
+// at /run/secrets/addon/<target> while /run/secrets is itself a read-only bind
+// mount, and the backend would not start. Every unit test passed, `docker
+// compose config` validated, and the first thing that noticed was a real
+// deployment — which is what the live bring-up is for, and why this check is a
+// test rather than a comment.
+func TestNoServiceMountsUnderItsOwnReadOnlyMount(t *testing.T) {
+	// `- <source>:<target>[:opts]`. The source is matched non-greedily because
+	// it frequently contains a colon of its own — `${VAR:-default}` — and an
+	// earlier version of this pattern that forbade colons in the source
+	// silently matched nothing on exactly the lines it existed to check.
+	mount := regexp.MustCompile(`(?m)^\s+- (.+?):(/[^\s:]+)(:[a-z,]+)?\s*$`)
+
+	for _, service := range append(composeAddOnServices(t), "backend") {
+		body, err := composeServiceBody(service)
+		if err != nil {
+			t.Fatalf("%s: %v", service, err)
+		}
+		type m struct{ target, opts string }
+		var mounts []m
+		for _, hit := range mount.FindAllStringSubmatch(body, -1) {
+			mounts = append(mounts, m{target: hit[2], opts: hit[3]})
+		}
+		for _, inner := range mounts {
+			for _, outer := range mounts {
+				if inner.target == outer.target || !strings.HasPrefix(inner.target, outer.target+"/") {
+					continue
+				}
+				if strings.Contains(outer.opts, "ro") {
+					t.Errorf("%s mounts %s inside the read-only mount %s.\n"+
+						"Docker must create the mountpoint under a read-only parent, "+
+						"which fails at container start with an OCI error that names "+
+						"neither mount's purpose. Move it outside %s.",
+						service, inner.target, outer.target, outer.target)
+				}
+			}
+		}
+	}
+}
