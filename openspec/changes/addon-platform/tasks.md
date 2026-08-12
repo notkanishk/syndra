@@ -883,3 +883,19 @@ what the endpoint leaves in the world rather than what it writes.
 **Every finding in §29–§31 came from following the code past the point the
 previous round stopped.** Not from a new tool or a wider sweep — from reading
 the next function.
+
+## 32. The deployment's configuration surface, and a reason that was wrong
+
+Found while wiring the add-on to a real NAS through the deployment's reverse
+proxy. Neither is in the add-on's logic; both are the recurring defect in the
+two places the branch had not looked — the Compose file, and a comment.
+
+- [x] 32.1 **Four variables the add-on reads and Compose passed to nothing.** `TRUENAS_SHARE_HOST`, `MUTATION_LOG_MAX_BYTES`, `MUTATION_LOG_KEEP` and the inline `SIGNING_KEY` were read by `loadConfig` and absent from the `truenas-addon` service, so no Compose deployment could set them at any value. The add-on's configuration surface and the deployment's are two definitions of one thing and nothing made them agree — the same defect as the two fakes and the allowlist-against-router, in the file nobody counted as code
+- [x] 32.2 The worst of the four is the one that fails **silently and correctly**. Unset, `TRUENAS_SHARE_HOST` makes the manifest omit its connection block, which is exactly the designed behaviour when the SMB host is genuinely unknown (22.12) — so the member page dropped the mount instructions and nothing anywhere reported a misconfiguration. A required-value check would have been wrong; the variable is genuinely optional. What was missing was the wire
+- [x] 32.3 `config_env_test.go` reads the add-on's own source for every literal handed to `os.Getenv`/`envOr`/`envInt`/`envBool`/`secretValue`, expands `secretValue` to both its forms, and asserts each name appears in the `truenas-addon` service block — scoped to that service, because the backend is passed `ADDON_*` names of its own and a whole-file read would accept a variable wired into the wrong container. Verified by mutation: renaming the Compose entry fails it naming the variable
+- [x] 32.4 **`ACCOUNT_WRITE` includes deletion, and three places said it did not.** `nas.go`'s dialer comment, `.env.example` and the design's account of the purge key all asserted the standing credential *cannot* delete an account. TrueNAS requires exactly `ACCOUNT_WRITE` for `user.delete` and publishes no narrower role, so it can. The mechanism is untouched and still worth having — no delete travels on the long-lived session, and each is attributable to a credential issued for that one call — but that is an audit and blast-radius separation, not the capability separation claimed
+- [x] 32.5 This is the §-header's own rule turned on the branch's security story: **a status invites a check and a plausible reason ends one.** The claim was load-bearing for how the purge path reads, it was written in three places, and every review passed over it because it explained itself. Corrected in place rather than footnoted, since the next reader meets the comment before any ledger
+- [x] 32.6 `scripts/gen-addon-certs.sh` mints the transport material that had no generator: one private CA, the add-on's server certificate with the Compose service name in its SAN, the backend's client certificate, and a signing key — into two directories, because the add-on must not be able to read the credential that authenticates the backend to it. The CA private key is deliberately not retained. Verified with a real TLS 1.3 mutual handshake and hostname verification, not by inspecting the files
+
+**What §32 adds to the header's map:** *wherever two things have to agree and
+nothing makes them* includes the deployment manifest, and includes a sentence.

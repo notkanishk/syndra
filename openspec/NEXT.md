@@ -196,10 +196,29 @@ itself. Look wherever two things have to agree and nothing makes them.
 touched a real TrueNAS. What that leaves untested is TrueNAS's own behaviour
 rather than Syndra's: the filter syntax `user.query` actually accepts, what
 `user.update` does with a `groups` list, the auth rate limiter and its ten-minute
-lockout, whether `builtin` is on every supported major, and whether the API key's
-permission set covers `user.create`/`user.update` without FULL_ADMIN. Point
-`TRUENAS_URL` at the real one, run the same sequence, and read the mutation log
-afterwards.
+lockout, and whether `builtin` is on every supported major. Point `TRUENAS_URL`
+at the real one, run the same sequence, and read the mutation log afterwards.
+The bring-up is now written down — DEPLOY.md step 5a for the proxy and
+"Bringing up the TrueNAS add-on" for the NAS identity, the transport material
+(`scripts/gen-addon-certs.sh`) and the start order.
+
+**One of those questions is answered, and the answer contradicts what the branch
+said.** The API key's permission set does cover `user.create`/`user.update`
+without FULL_ADMIN — `ACCOUNT_WRITE` is enough — but the same role is what
+`user.delete` requires, and TrueNAS publishes no narrower one. So the standing
+key **can** delete an account, which `nas.go`, `.env.example` and the design all
+denied. The injected purge key is an audit and blast-radius separation, not the
+capability separation claimed. Corrected in place; recorded as
+[`addon-platform` §32](changes/addon-platform/tasks.md). The design's own
+account of the purge key is the one copy not yet reworded.
+
+**And the deployment manifest was carrying the branch's recurring defect.**
+Four variables the add-on reads were passed by no Compose service, so no
+deployment could set them — `TRUENAS_SHARE_HOST` worst of the four, because
+unset it makes the manifest omit its connection block exactly as designed, so
+the member page dropped its mount instructions and nothing reported a fault.
+Wired, and guarded by a test that reads the add-on's own source against the
+Compose service block (§32.3).
 
 ## 4b. Test infrastructure debt
 
