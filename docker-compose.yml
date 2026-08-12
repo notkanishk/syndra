@@ -187,7 +187,17 @@ services:
       # HMACed the file's contents and the other the literal path string, and
       # the only symptom was "no matching signature".
       - SIGNING_KEY_FILE=${ADDON_SIGNING_KEY_FILE:-}
+      # The inline form, matching TRUENAS_API_KEY below. Both secrets prefer the
+      # file; a deployment that can only pass one of them inline should not find
+      # that only one of the two supports it.
+      - SIGNING_KEY=${ADDON_SIGNING_KEY:-}
       - TRUENAS_URL=${TRUENAS_URL:?TRUENAS_URL is required when the truenas profile is enabled}
+      # The name a MEMBER types into a file manager, which is frequently not the
+      # middleware endpoint above — the API may be reached on one name while SMB
+      # is published on another. Never derived from TRUENAS_URL. Unset, the
+      # manifest omits the connection block and the member page omits the mount
+      # instructions rather than printing a host that does not answer.
+      - TRUENAS_SHARE_HOST=${TRUENAS_SHARE_HOST:-}
       # Read from a mounted file where one is given. The Dockerfile calls this
       # the least trusted container in the deployment, and an environment value
       # is readable from `docker inspect` and /proc/1/environ — while the TLS
@@ -206,6 +216,10 @@ services:
       - LIFECYCLE_STATE=${TRUENAS_LIFECYCLE_STATE:-active}
       - STATE_PATH=/var/lib/syndra-truenas/state.db
       - MUTATION_LOG_DIR=/var/lib/syndra-truenas
+      # Rotation bounds for that log. Defaulted in the add-on, passed here so
+      # the named volume can be sized against them rather than the reverse.
+      - MUTATION_LOG_MAX_BYTES=${TRUENAS_MUTATION_LOG_MAX_BYTES:-}
+      - MUTATION_LOG_KEEP=${TRUENAS_MUTATION_LOG_KEEP:-}
     volumes:
       - truenas_addon_state:/var/lib/syndra-truenas
       - ${ADDON_SECRETS_DIR:-./secrets/truenas-addon}:/run/secrets/truenas-addon:ro
