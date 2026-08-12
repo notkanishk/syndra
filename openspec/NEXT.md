@@ -84,6 +84,7 @@ thing to do before this deploys.
 
 None of these are code. All need a live instance and a human.
 
+- **Add-on shutdown drain** (`addon-shutdown-grace-period` 3.3) — stop the add-on with a mutation in flight and confirm the settle completes and the terminal status is written. The fix and its guard are in: `stop_grace_period: 30s` now exceeds the add-on's `shutdownTimeout`, and a test fails if that inverts. But everything asserted so far is *numbers*. Only this proves the drain actually survives a real stop, which it had not done for the whole life of the add-on — Docker's 10s default was cutting a 20s drain in half, invisibly, because a truncated drain and a clean stop look identical from outside.
 - **Actions v2 key lifecycle** — `make zitadel-actions-register`, then `make zitadel-actions-rotate-key`, verify the new key lands in both the response and `.action-signing-key` with the old one in `.action-signing-key.previous`; swap env var, restart, confirm `make zitadel-actions-verify` passes.
 - **Actions v2 smoke** — `go run ./backend/cmd/api` + `scripts/smoke-test-action-v2.sh`, expect 200 with an `append_claims` array.
 - **Live directory smoke** — confirm `[DIRECTORY] Source=zitadel` at startup; `/users`, `/projects`, `/bundles`, `/applications` show real Zitadel entities, not Alice/Sam/Laser-Lab. Then the demo-mode regression: unset `ZITADEL_MACHINE_KEY_PATH`, restart, expect `[DIRECTORY] Source=demo`.

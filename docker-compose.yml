@@ -228,6 +228,20 @@ services:
     # stops it reaching Postgres and Redis — which is the whole reason it holds
     # the NAS key in a container of its own.
     networks: [addons]
+    # Longer than the add-on's own `shutdownTimeout` (20s), so the process
+    # always reaches its own deadline first.
+    #
+    # Docker's default is 10s and then SIGKILL, which for the whole life of this
+    # add-on has been terminating the shutdown drain halfway through — the drain
+    # that exists so an in-flight mutation settles rather than being abandoned
+    # half-applied with no record of how far it got. Nothing reported it: a
+    # truncated drain and a clean stop look identical from outside.
+    #
+    # This value and the constant are checked against each other by
+    # `TestTheDeploymentAllowsTheShutdownDrainToFinish`; raising the constant
+    # without raising this fails that test rather than silently restoring the
+    # truncation.
+    stop_grace_period: 30s
     # The rest of what "least trusted component" has to mean in practice. Every
     # line below is a capability this container has no use for, and the argument
     # for isolating it at all is that a compromise here must stay here.

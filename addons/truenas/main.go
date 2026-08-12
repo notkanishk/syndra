@@ -29,6 +29,22 @@ import (
 	"time"
 )
 
+// shutdownTimeout is how long an in-flight mutation has to settle after a
+// termination signal, before the listener is torn down regardless.
+//
+// A named constant rather than a literal because the deployment has to agree
+// with it and nothing else makes the two agree. Compose's `stop_grace_period`
+// on this service must EXCEED it, so that the process always reaches its own
+// deadline first — Docker's default is 10s and then SIGKILL, which for the
+// whole life of this add-on has been cutting this drain in half. A truncated
+// drain is invisible from outside: the process is gone either way, and the
+// mutation that was settling leaves the same silence as one that never began.
+//
+// `TestTheDeploymentAllowsTheShutdownDrainToFinish` reads this value and the
+// Compose one and fails if the relationship inverts. Changing this number
+// without changing the deployment is the mistake it exists to catch.
+const shutdownTimeout = 20 * time.Second
+
 type config struct {
 	listen string
 
@@ -245,7 +261,7 @@ func run() error {
 	// Draining before the deadline, so an in-flight mutation settles rather
 	// than being abandoned half-applied with no record of how far it got.
 	_ = life.Set(LifecycleDraining, "shutting down")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
 		log.Printf("[SHUTDOWN] %v", err)
