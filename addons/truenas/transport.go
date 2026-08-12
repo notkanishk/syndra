@@ -57,21 +57,23 @@ var (
 	errNoSignature      = errors.New("request carries no signature")
 	errBadSignature     = errors.New("signature does not match the body and timestamp")
 	errStaleSignature   = errors.New("signature timestamp is outside the accepted window")
-	errNoClientIdentity = errors.New("request presented no verified client certificate")
+	errNoSigningKey     = errors.New("the add-on has no signing key and cannot authenticate anything")
 )
 
 // authenticator decides whether a request came from the backend.
 //
-// In mTLS mode the TLS layer has already done it — `tls.RequireAndVerifyClientCert`
-// against the private CA pool means an unverified peer never reaches a handler
-// — and this only confirms that a verified chain is present, because a server
-// misconfigured to `VerifyClientCertIfGiven` would otherwise hand anonymous
-// callers straight through.
+// The signature is the whole authentication, so it is verified over the body
+// that will actually be parsed rather than over a re-read of it.
 //
-// In signed mode the signature is the whole authentication, so it is verified
-// over the body that will actually be parsed rather than over a re-read of it.
+// There was a second mode — mutual TLS against a private CA — and it is gone
+// with the CA. The signing key is now derived from the deployment secret rather
+// than configured beside a certificate, so there is nothing left to choose
+// between and no "configure exactly one of" to refuse. What the TLS layer still
+// carries is confidentiality of a body holding declared secret_params, and the
+// backend's assurance that it is talking to this add-on is its pin on the key
+// derived from that same secret.
 type authenticator struct {
-	signingKey []byte // empty in mTLS mode
+	signingKey []byte
 	now        func() time.Time
 }
 
@@ -92,12 +94,12 @@ func (a *authenticator) verify(r *http.Request) ([]byte, error) {
 	}
 
 	if len(a.signingKey) == 0 {
-		// mTLS mode. The handshake decided this; all that remains is to refuse
-		// a request that somehow arrived without a verified chain.
-		if r.TLS == nil || len(r.TLS.VerifiedChains) == 0 {
-			return nil, errNoClientIdentity
-		}
-		return body, nil
+		// Unreachable through loadConfig, which refuses to start without a
+		// secret. Kept as a refusal rather than an assumption: a future caller
+		// constructing an authenticator directly must not get an open door,
+		// and "the config validates it" is the kind of reasoning that stops
+		// holding one refactor later.
+		return nil, errNoSigningKey
 	}
 	if err := a.verifySignature(r.Header.Get(SignatureHeader), r.Method, r.URL.Path, body); err != nil {
 		return nil, err

@@ -88,10 +88,13 @@ services:
       # Registration is a deployment fact, so it travels with the deployment.
       - ADDON_TARGETS=${ADDON_TARGETS:-}
       - ADDON_TRUENAS_BASE_URL=${ADDON_TRUENAS_BASE_URL:-}
-      - ADDON_TRUENAS_CLIENT_CERT=${ADDON_TRUENAS_CLIENT_CERT:-}
-      - ADDON_TRUENAS_CLIENT_KEY=${ADDON_TRUENAS_CLIENT_KEY:-}
-      - ADDON_TRUENAS_CA_CERT=${ADDON_TRUENAS_CA_CERT:-}
-      - ADDON_TRUENAS_SIGNING_KEY=${ADDON_TRUENAS_SIGNING_KEY:-}
+      # The other end of the add-on's ADDON_SECRET. One value per target, from
+      # which both the key this pins and the key it signs with are derived —
+      # and it must be the SAME BYTES the add-on has, under the same name it
+      # knows itself by (ADDON_TARGET there, the ADDON_TARGETS entry here). The
+      # file is the same file, mounted into both.
+      - ADDON_TRUENAS_SECRET_FILE=${ADDON_TRUENAS_SECRET_FILE:-/run/secrets/addon/truenas.key}
+      - ADDON_TRUENAS_SECRET=${ADDON_TRUENAS_SECRET:-}
       - ADDON_MANIFEST_REFRESH_INTERVAL=${ADDON_MANIFEST_REFRESH_INTERVAL:-}
       - ADDON_MEMBER_OP_LIMIT=${ADDON_MEMBER_OP_LIMIT:-}
       - PLAN_COHORT_LIMIT=${PLAN_COHORT_LIMIT:-}
@@ -101,12 +104,19 @@ services:
       # ZITADEL_MACHINE_KEY_PATH is unset, this resolves to a /dev/null no-op
       # mount and the backend skips M2M init via the env-var check above.
       - ${ZITADEL_MACHINE_KEY_PATH:-/dev/null}:/etc/syndra/zitadel-sa-key.json:ro
-      # The backend's half of the add-on trust material: its client certificate
-      # and the private CA that authenticates the add-on to it. The add-on's
-      # half is mounted into the add-on. Two directories rather than one shared
-      # one, because the add-on must never be able to read the credential that
-      # authenticates the backend to it.
+      # The backend's own secrets. This used to hold its add-on client
+      # certificate and the private CA, kept apart from the add-on's directory
+      # because the add-on must never read the credential authenticating the
+      # backend to it. That reasoning does not carry to a derived transport:
+      # both ends hold the same bytes by definition, so the transport secret
+      # lives in one shared directory below and this keeps what is genuinely
+      # the backend's alone.
       - ${BACKEND_SECRETS_DIR:-./secrets/backend}:/run/secrets:ro
+      # The transport secrets, shared with the add-ons. One file per target,
+      # mounted into the backend and into that target's add-on: the scheme is
+      # symmetric, so there is no half of it either side must be kept from, and
+      # a second copy would only create a state where the two disagree.
+      - ${ADDON_TRANSPORT_SECRETS_DIR:-./secrets/addon}:/run/secrets/addon:ro
     ports:
       # The HOST port is configurable; the container port never is. A box
       # running a second stack — the pre-rename one still on this dev machine —
@@ -165,32 +175,32 @@ services:
     profiles: ["truenas"]
     environment:
       - LISTEN_ADDR=:8443
-      # Always HTTPS. There is no plaintext mode: a client's transport settings
-      # are consulted only where a handshake happens, so a plaintext listener
-      # would mean the backend's certificate is never presented and its private
-      # CA never consulted, while both ends report themselves authenticated.
-      - TLS_CERT_FILE=/run/secrets/truenas-addon/tls.crt
-      - TLS_KEY_FILE=/run/secrets/truenas-addon/tls.key
-      # Exactly one of these, and NEITHER has a default. Mutual TLS against the
-      # deployment's own private CA is the stronger mode; the signing key is the
-      # fallback where issuing a client certificate is impractical. Configuring
-      # both is refused at startup — a caller would choose, and the caller is
-      # the thing being authenticated — so a default here made the other mode
-      # unreachable: setting the signing key left both non-empty and the add-on
-      # refused to start, with nothing saying why.
+      # This add-on's name in the deployment, and the HKDF salt. It MUST equal
+      # the entry the backend carries in ADDON_TARGETS: the salt feeds both
+      # derived keys, so a disagreement here produces different keys from the
+      # same secret, and the symptom is a pin failure indistinguishable from a
+      # wrong secret. No default, because a default would make that failure
+      # possible without anyone having typed anything.
+      - ADDON_TARGET=truenas
+      # The whole transport configuration: one value, from which both the TLS
+      # key the backend pins and the HMAC key that signs its requests are
+      # derived. There is no certificate to mint, distribute, or renew, and no
+      # second mode to choose between.
       #
-      # mTLS:   ADDON_CLIENT_CA_FILE=/run/secrets/truenas-addon/ca.crt
-      # signed: ADDON_SIGNING_KEY_FILE=/run/secrets/truenas-addon/signing.key
-      - TLS_CLIENT_CA_FILE=${ADDON_CLIENT_CA_FILE:-}
-      # A PATH, matching the backend's ADDON_TRUENAS_SIGNING_KEY, which is also
-      # a path. The two ends held the same secret in two forms for a while: one
-      # HMACed the file's contents and the other the literal path string, and
-      # the only symptom was "no matching signature".
-      - SIGNING_KEY_FILE=${ADDON_SIGNING_KEY_FILE:-}
-      # The inline form, matching TRUENAS_API_KEY below. Both secrets prefer the
-      # file; a deployment that can only pass one of them inline should not find
-      # that only one of the two supports it.
-      - SIGNING_KEY=${ADDON_SIGNING_KEY:-}
+      # The file is preferred and is what scripts/gen-addon-secret.sh writes:
+      # an environment value is readable from `docker inspect` and
+      # /proc/1/environ, in the container the Dockerfile calls the least
+      # trusted in the deployment. ONE file, mounted into both this service and
+      # the backend — the scheme is symmetric, so there is no half of it the
+      # add-on must not see, and a second copy would only create a state where
+      # the two can disagree.
+      - ADDON_SECRET_FILE=${ADDON_SECRET_FILE:-/run/secrets/addon/truenas.key}
+      # The inline form, matching TRUENAS_API_KEY below, for a deployment that
+      # cannot mount a file. Both secrets prefer the file; one supporting the
+      # inline form and the other not is the asymmetry that cost a debugging
+      # session when the signing key was a path at one end and a value at the
+      # other.
+      - ADDON_SECRET=${ADDON_SECRET:-}
       - TRUENAS_URL=${TRUENAS_URL:?TRUENAS_URL is required when the truenas profile is enabled}
       # The name a MEMBER types into a file manager, which is frequently not the
       # middleware endpoint above — the API may be reached on one name while SMB
@@ -222,7 +232,16 @@ services:
       - MUTATION_LOG_KEEP=${TRUENAS_MUTATION_LOG_KEEP:-}
     volumes:
       - truenas_addon_state:/var/lib/syndra-truenas
+      # The NAS API key and anything else specific to this add-on.
       - ${ADDON_SECRETS_DIR:-./secrets/truenas-addon}:/run/secrets/truenas-addon:ro
+      # The transport secret, shared with the backend. ONE directory mounted
+      # into both, read-only at both, because both ends derive from the same
+      # bytes — this is not material one of them must be kept from. It used to
+      # be two directories holding two copies, which is what the certificate
+      # era needed: there, the backend's client key was material the add-on
+      # must never read. With a symmetric secret that reasoning does not carry,
+      # and a second copy buys only a state where the two can disagree.
+      - ${ADDON_TRANSPORT_SECRETS_DIR:-./secrets/addon}:/run/secrets/addon:ro
     # No `ports:`, and on the add-on network only. Both halves are needed: the
     # first stops anything outside the deployment reaching it, and the second
     # stops it reaching Postgres and Redis — which is the whole reason it holds

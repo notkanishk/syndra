@@ -73,12 +73,28 @@ func verifySignature(header, method, path string, body, key []byte, tolerance ti
 	return nil
 }
 
-// signedAddon wires a target at srv authenticated by a signing key on disk.
-func signedAddon(t *testing.T, srvURL string, key []byte) {
+// signedAddon wires a target at srv whose signing key is DERIVED from the
+// deployment secret. Tests that check what the add-on receives take the same
+// secret and derive the key the same way, so a change to the derivation breaks
+// them together rather than leaving the fake agreeing with itself.
+func signedAddon(t *testing.T, srvURL, secret string) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "sign.key")
-	writeFile(t, path, key)
-	installAddon(t, Registration{Target: "truenas", BaseURL: srvURL, SigningKeyPath: path}, goodManifest())
+	path := filepath.Join(t.TempDir(), "truenas.key")
+	writeFile(t, path, []byte(secret))
+	installAddon(t, Registration{
+		Target: "truenas", BaseURL: srvURL,
+		Secret: []byte(secret), SecretPath: path,
+	}, goodManifest())
+}
+
+// signingKeyFor is what the add-on side of a test must use to verify.
+func signingKeyFor(t *testing.T, secret, target string) []byte {
+	t.Helper()
+	k, err := deriveHMACKey([]byte(secret), target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return k
 }
 
 // passwordSet builds a dispatch that already satisfies backend policy's
@@ -126,7 +142,11 @@ func withBreaker(t *testing.T, threshold int, cooldown time.Duration) {
 // id, and the fingerprint, and carries them INSIDE the signed body rather than
 // beside it.
 func TestCallCarriesPlanFingerprintAndOperationIdUnderSignature(t *testing.T) {
-	key := []byte("a-real-signing-key")
+	const secret = "a-test-deployment-secret"
+	// Derived, not handed over: the add-on side of this test must compute the
+	// key the same way the backend does, or the two fakes agree with each other
+	// and neither notices a change to the derivation.
+	key := signingKeyFor(t, secret, "truenas")
 	var (
 		mu   sync.Mutex
 		env  callEnvelope
@@ -144,7 +164,7 @@ func TestCallCarriesPlanFingerprintAndOperationIdUnderSignature(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	signedAddon(t, srv.URL, key)
+	signedAddon(t, srv.URL, secret)
 	req := passwordSet(map[string]any{"password": "hunter2"})
 	resp := Call(context.Background(), req)
 
@@ -175,7 +195,11 @@ func TestCallCarriesPlanFingerprintAndOperationIdUnderSignature(t *testing.T) {
 // covered neither would be a shared secret with extra steps: it would prove who
 // called and nothing about what they asked or when.
 func TestSignatureBindsBodyAndTimestamp(t *testing.T) {
-	key := []byte("a-real-signing-key")
+	const secret = "a-test-deployment-secret"
+	// Derived, not handed over: the add-on side of this test must compute the
+	// key the same way the backend does, or the two fakes agree with each other
+	// and neither notices a change to the derivation.
+	key := signingKeyFor(t, secret, "truenas")
 	var (
 		mu     sync.Mutex
 		header string
@@ -190,7 +214,7 @@ func TestSignatureBindsBodyAndTimestamp(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	signedAddon(t, srv.URL, key)
+	signedAddon(t, srv.URL, secret)
 	if resp := Call(context.Background(), passwordSet(map[string]any{"password": "hunter2"})); resp.Outcome != OutcomeSucceeded {
 		t.Fatalf("setup call failed: %s %v", resp.Outcome, resp.Err)
 	}
@@ -233,57 +257,70 @@ func TestSignatureBindsBodyAndTimestamp(t *testing.T) {
 	})
 }
 
-// 2.35, 2.36 — mutual TLS against a private CA: our client is admitted, and a
-// caller without a certificate this deployment's CA issued is refused by the
-// handshake, before any handler runs.
-func TestMutualTLSAdmitsTheBackendAndRefusesEveryoneElse(t *testing.T) {
-	pki := newTestPKI(t, time.Now().Add(365*24*time.Hour))
+// 2.35, 2.36 — the backend pins the key derived from the deployment secret.
+// Its own client is admitted; anything else is refused by the handshake, before
+// any handler runs and before any body is written.
+//
+// The last part is the property the whole design turns on. The request body
+// carries declared secret_params — a member's plaintext credential, and on the
+// purge path an elevated target credential — so an on-path attacker that could
+// complete the handshake would read them even though the request is signed.
+func TestThePinAdmitsTheRealAddOnAndRefusesEveryoneElse(t *testing.T) {
+	const secret = "the-deployment-secret-for-truenas"
 	var handled atomic.Int32
-	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	count := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		handled.Add(1)
 		w.WriteHeader(http.StatusOK)
-	}))
-	srv.TLS = &tls.Config{
-		Certificates: []tls.Certificate{pki.serverCert},
-		ClientCAs:    pki.caPool(t),
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		MinVersion:   tls.VersionTLS13,
-	}
-	srv.StartTLS()
-	defer srv.Close()
+	})
 
-	t.Run("the registered client is admitted", func(t *testing.T) {
-		installAddon(t, pki.registration("truenas", srv.URL), goodManifest())
+	t.Run("the add-on derived from the same secret is admitted", func(t *testing.T) {
+		d := serveDerived(t, secret, "truenas", count)
+		installAddon(t, d.registration(t, "truenas"), goodManifest())
 		resp := Call(context.Background(), passwordSet(map[string]any{"password": "hunter2"}))
 		if resp.Outcome != OutcomeSucceeded {
 			t.Fatalf("outcome = %s (err %v), want succeeded", resp.Outcome, resp.Err)
 		}
 	})
 
-	t.Run("a certificate from another CA is refused", func(t *testing.T) {
+	t.Run("a peer derived from a different secret is refused", func(t *testing.T) {
+		d := serveDerived(t, "an-entirely-different-secret", "truenas", count)
 		before := handled.Load()
-		r := pki.registration("truenas", srv.URL)
-		r.ClientCertPath, r.ClientKeyPath = pki.otherCertPath, pki.otherKeyPath
+		r := d.registration(t, "truenas")
+		// The deployment is configured with the real secret; the peer is not.
+		r.Secret = []byte(secret)
+		r.SecretPath = ""
 		installAddon(t, r, goodManifest())
+
 		resp := Call(context.Background(), passwordSet(map[string]any{"password": "hunter2"}))
 		if resp.Outcome == OutcomeSucceeded {
-			t.Fatal("an untrusted client certificate was accepted")
+			t.Fatal("a peer that does not hold the deployment secret was accepted")
 		}
 		if handled.Load() != before {
-			t.Fatal("the handler ran for a caller the CA never issued")
+			t.Fatal("the body reached a peer the pin should have refused")
+		}
+		// Unreached, not indeterminate: the handshake fails before the request
+		// is written, so nothing can have happened at the target.
+		if resp.Outcome != OutcomeUnreached {
+			t.Errorf("outcome = %s, want unreached: the pin fails before any body is sent", resp.Outcome)
 		}
 	})
 
-	t.Run("no client certificate at all is refused", func(t *testing.T) {
+	t.Run("the same secret under a different target name is refused", func(t *testing.T) {
+		// The salt is the target name, so an add-on whose ADDON_TARGET does not
+		// match derives a different key from the same secret. This is a real
+		// misconfiguration, and it must fail closed rather than quietly.
+		d := serveDerived(t, secret, "unifi", count)
 		before := handled.Load()
-		c := &http.Client{Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{RootCAs: pki.caPool(t), MinVersion: tls.VersionTLS13},
-		}}
-		if _, err := c.Get(srv.URL + "/capabilities"); err == nil {
-			t.Fatal("a client presenting no certificate completed the handshake")
+		r := d.registration(t, "truenas")
+		r.Secret = []byte(secret)
+		r.SecretPath = ""
+		installAddon(t, r, goodManifest())
+
+		if resp := Call(context.Background(), passwordSet(map[string]any{"password": "hunter2"})); resp.Outcome == OutcomeSucceeded {
+			t.Fatal("a peer salted with another target name was accepted")
 		}
 		if handled.Load() != before {
-			t.Fatal("the handler ran for an unauthenticated caller")
+			t.Fatal("the body reached a peer whose target name did not match")
 		}
 	})
 }
@@ -317,7 +354,7 @@ func TestFailureModesMapToTheirOutcome(t *testing.T) {
 				w.WriteHeader(tc.status)
 			}))
 			defer srv.Close()
-			signedAddon(t, srv.URL, []byte("k"))
+			signedAddon(t, srv.URL, "a-test-secret")
 			withBreaker(t, 1000, time.Minute) // not the subject here
 
 			resp := Call(context.Background(), passwordSet(nil))
@@ -346,7 +383,7 @@ func TestUnreachableAddonIsUnreachedAndRetryable(t *testing.T) {
 	url := srv.URL
 	srv.Close()
 
-	signedAddon(t, url, []byte("k"))
+	signedAddon(t, url, "a-test-secret")
 	resp := Call(context.Background(), passwordSet(nil))
 	if resp.Outcome != OutcomeUnreached {
 		t.Fatalf("outcome = %s (err %v), want unreached", resp.Outcome, resp.Err)
@@ -367,7 +404,7 @@ func TestTimeoutIsIndeterminateNotFailed(t *testing.T) {
 	}))
 	defer func() { close(release); srv.Close() }()
 
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 	withCallTimeout(t, 50*time.Millisecond)
 
 	resp := Call(context.Background(), passwordSet(nil))
@@ -392,7 +429,7 @@ func TestCircuitOpensAndRefusesWithoutDispatching(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 	withBreaker(t, 3, 30*time.Second)
 	clock := withTestClock(t, time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC))
 
@@ -447,7 +484,7 @@ func TestRejectionsDoNotOpenTheCircuit(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 	withBreaker(t, 3, 30*time.Second)
 
 	for i := 0; i < 10; i++ {
@@ -478,7 +515,7 @@ func TestSuccessClosesTheCircuit(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 	withBreaker(t, 3, 30*time.Second)
 	clock := withTestClock(t, time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC))
 
@@ -521,7 +558,7 @@ func TestDispatchWithoutAnOperationRecordIsRefused(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 	req := passwordSet(nil)
 	req.Record = DispatchRecord{}
 
@@ -547,7 +584,7 @@ func TestUncallableOperationNeverReachesTheNetwork(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 
 	req := passwordSet(nil)
 	req.Operation = "account.purge" // in policy, absent from this manifest
@@ -588,7 +625,7 @@ func TestNoFailureModeIsSilentSuccess(t *testing.T) {
 			}
 		}))
 		defer srv.Close()
-		signedAddon(t, srv.URL, []byte("k"))
+		signedAddon(t, srv.URL, "a-test-secret")
 		resp := Call(context.Background(), passwordSet(nil))
 		if resp.Outcome == OutcomeSucceeded {
 			t.Fatal("a 2xx whose body was cut off was reported as success")
@@ -602,7 +639,7 @@ func TestNoFailureModeIsSilentSuccess(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer srv.Close()
-		signedAddon(t, srv.URL, []byte("k"))
+		signedAddon(t, srv.URL, "a-test-secret")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -620,7 +657,8 @@ func TestNoFailureModeIsSilentSuccess(t *testing.T) {
 // over an unauthenticated channel is one an on-path attacker can edit, and
 // capability is what the backend then decides against.
 func TestManifestReadIsAuthenticated(t *testing.T) {
-	key := []byte("manifest-signing-key")
+	const secret = "a-manifest-test-secret"
+	key := signingKeyFor(t, secret, "truenas")
 	var (
 		mu     sync.Mutex
 		sigErr error
@@ -636,12 +674,12 @@ func TestManifestReadIsAuthenticated(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	path := filepath.Join(t.TempDir(), "sign.key")
-	writeFile(t, path, key)
+	path := filepath.Join(t.TempDir(), "truenas.key")
+	writeFile(t, path, []byte(secret))
 	resetRegistry(t)
 	registryMu.Lock()
 	registry = map[string]*Addon{"truenas": {Registration: Registration{
-		Target: "truenas", BaseURL: srv.URL, SigningKeyPath: path,
+		Target: "truenas", BaseURL: srv.URL, Secret: []byte(secret), SecretPath: path,
 	}}}
 	registryMu.Unlock()
 
@@ -713,7 +751,7 @@ func TestOversizedResponseIsNotASuccess(t *testing.T) {
 			_, _ = w.Write(oversized)
 		}))
 		defer srv.Close()
-		signedAddon(t, srv.URL, []byte("k"))
+		signedAddon(t, srv.URL, "a-test-secret")
 		withBreaker(t, 1000, time.Minute)
 
 		resp := Call(context.Background(), passwordSet(nil))
@@ -731,7 +769,7 @@ func TestOversizedResponseIsNotASuccess(t *testing.T) {
 			_, _ = w.Write(oversized)
 		}))
 		defer srv.Close()
-		signedAddon(t, srv.URL, []byte("k"))
+		signedAddon(t, srv.URL, "a-test-secret")
 		withBreaker(t, 1000, time.Minute)
 
 		// A 4xx is decided by its status. Reclassifying it because the
@@ -751,12 +789,10 @@ func TestOversizedResponseIsNotASuccess(t *testing.T) {
 			_, _ = w.Write(oversized)
 		}))
 		defer srv.Close()
-		path := filepath.Join(t.TempDir(), "sign.key")
-		writeFile(t, path, []byte("k"))
 		resetRegistry(t)
 		registryMu.Lock()
 		registry = map[string]*Addon{"truenas": {Registration: Registration{
-			Target: "truenas", BaseURL: srv.URL, SigningKeyPath: path,
+			Target: "truenas", BaseURL: srv.URL, Secret: []byte("a-secret"),
 		}}}
 		registryMu.Unlock()
 
@@ -766,70 +802,35 @@ func TestOversizedResponseIsNotASuccess(t *testing.T) {
 	})
 }
 
-// 2.35 — signing a request says nothing about the response. Signed mode still
-// verifies the add-on's server certificate, against the private CA when one is
-// configured, or a forged 2xx is recorded as a completed mutation.
-func TestSignedModeVerifiesTheAddonsServerCertificate(t *testing.T) {
-	pki := newTestPKI(t, time.Now().Add(365*24*time.Hour))
-	keyPath := filepath.Join(t.TempDir(), "sign.key")
-	writeFile(t, keyPath, []byte("a-real-signing-key"))
+// 2.35 — signing a request says nothing about the response, so the add-on is
+// verified as well as authenticated. The anchor used to be a private CA; it is
+// now the derived key, which is a stronger question asked of the same peer:
+// not "did some authority vouch for this name" but "do you hold the deployment
+// secret".
+//
+// Without it a forged 2xx is recorded as a completed mutation, and a member's
+// credential is written to whatever answered.
+func TestASignedCallStillVerifiesTheAddOn(t *testing.T) {
+	const secret = "the-deployment-secret-for-truenas"
 
-	serve := func(cert tls.Certificate) *httptest.Server {
-		s := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		}))
-		s.TLS = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS13}
-		s.StartTLS()
-		return s
-	}
-
-	t.Run("a server the private CA issued is accepted", func(t *testing.T) {
-		srv := serve(pki.serverCert)
-		defer srv.Close()
-		installAddon(t, Registration{
-			Target: "truenas", BaseURL: srv.URL, CAPath: pki.caPath, SigningKeyPath: keyPath,
-		}, goodManifest())
-
+	t.Run("the add-on holding the secret is accepted", func(t *testing.T) {
+		d := serveDerived(t, secret, "truenas", nil)
+		installAddon(t, d.registration(t, "truenas"), goodManifest())
 		if resp := Call(context.Background(), passwordSet(nil)); resp.Outcome != OutcomeSucceeded {
 			t.Fatalf("outcome = %s (err %v), want succeeded", resp.Outcome, resp.Err)
 		}
 	})
 
-	t.Run("a server from another CA is refused", func(t *testing.T) {
-		impostor := newTestPKI(t, time.Now().Add(365*24*time.Hour))
-		srv := serve(impostor.serverCert)
-		defer srv.Close()
-		installAddon(t, Registration{
-			Target: "truenas", BaseURL: srv.URL, CAPath: pki.caPath, SigningKeyPath: keyPath,
-		}, goodManifest())
+	t.Run("an impostor is refused however well-formed its certificate", func(t *testing.T) {
+		impostor := serveDerived(t, "a-secret-the-deployment-never-had", "truenas", nil)
+		r := impostor.registration(t, "truenas")
+		r.Secret, r.SecretPath = []byte(secret), ""
+		installAddon(t, r, goodManifest())
 
-		resp := Call(context.Background(), passwordSet(nil))
-		if resp.Outcome == OutcomeSucceeded {
-			t.Fatal("a signed-mode call trusted a server the configured CA never issued")
+		if resp := Call(context.Background(), passwordSet(nil)); resp.Outcome == OutcomeSucceeded {
+			t.Fatal("a signed call trusted a peer that does not hold the deployment secret")
 		}
 	})
-}
-
-// 2.2 — a private CA alone is a deliberate signed-mode anchor, not half-built
-// mutual TLS. Warning about it would train an operator to ignore the warning
-// that does matter.
-func TestPrivateCAAloneIsASignedModeAnchorNotAWarning(t *testing.T) {
-	r := Registration{
-		Target: "truenas", BaseURL: "https://addon:8090",
-		CAPath: "/run/secrets/ca.crt", SigningKeyPath: "/run/secrets/s.key",
-	}
-	if r.AuthMode() != "signed" {
-		t.Fatalf("auth mode = %q, want signed", r.AuthMode())
-	}
-	if r.partialMTLS() {
-		t.Fatal("a CA with no client certificate was reported as incomplete mTLS")
-	}
-
-	// A certificate without its key still is.
-	half := Registration{Target: "truenas", ClientCertPath: "/c.crt", SigningKeyPath: "/s.key"}
-	if !half.partialMTLS() {
-		t.Fatal("a client certificate with no key must still be flagged")
-	}
 }
 
 // 2.35 — an add-on's response never redirects the backend. Go follows redirects
@@ -859,7 +860,7 @@ func TestARedirectIsRefusedAndNeverReplaysTheBody(t *testing.T) {
 			}))
 			defer first.Close()
 
-			signedAddon(t, first.URL, []byte("k"))
+			signedAddon(t, first.URL, "a-test-secret")
 			withBreaker(t, 1000, time.Minute)
 
 			resp := Call(context.Background(), passwordSet(map[string]any{"password": theSecret}))
@@ -891,12 +892,10 @@ func TestARedirectIsRefusedAndNeverReplaysTheBody(t *testing.T) {
 		}))
 		defer first.Close()
 
-		path := filepath.Join(t.TempDir(), "sign.key")
-		writeFile(t, path, []byte("k"))
 		resetRegistry(t)
 		registryMu.Lock()
 		registry = map[string]*Addon{"truenas": {Registration: Registration{
-			Target: "truenas", BaseURL: first.URL, SigningKeyPath: path,
+			Target: "truenas", BaseURL: first.URL, Secret: []byte("a-test-secret"),
 		}}}
 		registryMu.Unlock()
 
@@ -964,7 +963,7 @@ func TestOnlyA503ThatSaysRetryAfterIsALifecycleRefusal(t *testing.T) {
 				w.WriteHeader(http.StatusServiceUnavailable)
 			}))
 			defer srv.Close()
-			signedAddon(t, srv.URL, []byte("k"))
+			signedAddon(t, srv.URL, "a-test-secret")
 			withBreaker(t, 1000, time.Minute)
 
 			resp := Call(context.Background(), passwordSet(nil))
@@ -1010,7 +1009,7 @@ func TestApplyRefusesWithoutADeduplicationToken(t *testing.T) {
 	var reached bool
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached = true }))
 	defer srv.Close()
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 	withBreaker(t, 1000, time.Minute)
 
 	resp := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "sub-1"})
@@ -1032,7 +1031,7 @@ func TestApplyConsultsTheBreakerBeforeSending(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 	withBreaker(t, 1, time.Hour)
 
 	req := ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c1", Fingerprint: "fp-1"}
@@ -1059,7 +1058,7 @@ func TestAnUndecodableApplySuccessIsIndeterminate(t *testing.T) {
 		_, _ = w.Write([]byte(`not json at all`))
 	}))
 	defer srv.Close()
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 	withBreaker(t, 1000, time.Minute)
 
 	resp := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c1", Fingerprint: "fp-1"})
@@ -1080,7 +1079,7 @@ func TestASuccessfulApplyCarriesBackWhatTheAddonDid(t *testing.T) {
 		_, _ = w.Write([]byte(`{"effect":"applied","username":"ada","fingerprint":"fp-2","detail":"Created ada."}`))
 	}))
 	defer srv.Close()
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 	withBreaker(t, 1000, time.Minute)
 
 	resp := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c1", Fingerprint: "fp-1"})
@@ -1095,7 +1094,8 @@ func TestASuccessfulApplyCarriesBackWhatTheAddonDid(t *testing.T) {
 // The apply leg goes over the same authenticated transport, or there are two
 // authentication stories and one of them is weaker.
 func TestApplyIsSignedLikeEveryOtherLeg(t *testing.T) {
-	key := []byte("k")
+	const secret = "a-test-deployment-secret"
+	key := signingKeyFor(t, secret, "truenas")
 	var verified error
 	var seenBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1104,7 +1104,7 @@ func TestApplyIsSignedLikeEveryOtherLeg(t *testing.T) {
 		_, _ = w.Write([]byte(`{"effect":"applied"}`))
 	}))
 	defer srv.Close()
-	signedAddon(t, srv.URL, key)
+	signedAddon(t, srv.URL, secret)
 	withBreaker(t, 1000, time.Minute)
 
 	Apply(context.Background(), ApplyRequest{
@@ -1183,7 +1183,7 @@ func TestTheSignatureCoversTheRequestLineNotOnlyTheBody(t *testing.T) {
 // full — and a structured log line is the most likely of the three to be
 // written by somebody who never read this type.
 func TestMarshallingACallRequestRedactsTheSecret(t *testing.T) {
-	installAddon(t, Registration{Target: "truenas", BaseURL: "https://addon", SigningKeyPath: keyFile(t)}, goodManifest())
+	installAddon(t, Registration{Target: "truenas", BaseURL: "https://addon", Secret: []byte("a-test-secret")}, goodManifest())
 
 	req := CallRequest{
 		Target: "truenas", Operation: "password.set", Subject: "u1",

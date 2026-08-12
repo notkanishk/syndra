@@ -118,7 +118,7 @@ func TestOneTokenDispatchesOnce(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 	withBreaker(t, 1000, time.Minute)
 	claims := withClaimableRecord(t, openRow(), nil)
 
@@ -155,7 +155,7 @@ func TestConcurrentCallsUnderOneTokenDispatchOnce(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 	withBreaker(t, 1000, time.Minute)
 	withClaimableRecord(t, openRow(), nil)
 
@@ -198,7 +198,7 @@ func TestATokenCannotBeUsedForADifferentCall(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 	withBreaker(t, 1000, time.Minute)
 
 	for _, tc := range []struct{ name, target, operation, subject string }{
@@ -241,7 +241,7 @@ func TestARefusedCallDoesNotConsumeTheRecord(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 	withBreaker(t, 1, time.Hour)
 	claims := withClaimableRecord(t, openRow(), nil)
 
@@ -273,7 +273,7 @@ func TestAZeroRecordCannotDispatch(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 	withBreaker(t, 1000, time.Minute)
 
 	req := passwordSet(nil)
@@ -298,7 +298,7 @@ func TestTheTransportRefusesParametersPolicyDoesNotDeclare(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 	withBreaker(t, 1000, time.Minute)
 
 	resp := Call(context.Background(), passwordSet(map[string]any{
@@ -328,7 +328,7 @@ func TestATokenWithNoClaimCannotDispatch(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	signedAddon(t, srv.URL, []byte("k"))
+	signedAddon(t, srv.URL, "a-test-secret")
 	withBreaker(t, 1000, time.Minute)
 
 	req := passwordSet(nil)

@@ -14,15 +14,14 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -48,17 +47,27 @@ const shutdownTimeout = 20 * time.Second
 type config struct {
 	listen string
 
-	// TLS: this add-on always serves HTTPS. There is no plaintext mode and no
-	// localhost exemption — a client's transport settings are consulted only
-	// where a handshake happens, so a plaintext listener means the backend's
-	// certificate is never presented and its private CA never consulted, while
-	// both ends report themselves mutually authenticated.
-	certFile string
-	keyFile  string
-	caFile   string
+	// target is this add-on's name in the deployment, and it MUST match the
+	// entry the backend carries in ADDON_TARGETS. It is the HKDF salt, so a
+	// disagreement about it produces two different keys from one secret — and
+	// the symptom is a pin failure that looks exactly like a wrong secret,
+	// which is why the handshake error names this as a cause.
+	target string
 
-	// signingKey is set only in signed mode, and the two modes are exclusive:
-	// accepting either would mean the weaker one is always available.
+	// secret is the whole transport configuration: one value per target, from
+	// which both keys are derived (derive.go). Nothing else is configured, and
+	// there is no second mode to choose between.
+	//
+	// This add-on still always serves HTTPS. There is no plaintext mode and no
+	// localhost exemption, but the reason is narrower than it used to be: the
+	// body carries declared secret_params — a member's plaintext credential and,
+	// on the purge path, an elevated target credential — and a request signature
+	// establishes neither the confidentiality of that body nor the authenticity
+	// of the response.
+	secret []byte
+
+	// signingKey is derived from secret, not configured. Kept as a field
+	// because the authenticator reads it and the derivation happens once.
 	signingKey []byte
 
 	nasURL string
@@ -82,9 +91,7 @@ type config struct {
 func loadConfig() (config, error) {
 	c := config{
 		listen:     envOr("LISTEN_ADDR", ":8443"),
-		certFile:   os.Getenv("TLS_CERT_FILE"),
-		keyFile:    os.Getenv("TLS_KEY_FILE"),
-		caFile:     os.Getenv("TLS_CLIENT_CA_FILE"),
+		target:     strings.TrimSpace(os.Getenv("ADDON_TARGET")),
 		nasURL:     os.Getenv("TRUENAS_URL"),
 		shareHost:  strings.TrimSpace(os.Getenv("TRUENAS_SHARE_HOST")),
 		statePath:  envOr("STATE_PATH", "/var/lib/syndra-truenas/state.db"),
@@ -105,13 +112,11 @@ func loadConfig() (config, error) {
 	}
 	c.nasAPIKey = apiKey
 
-	key, err := secretValue("SIGNING_KEY")
+	secret, err := secretValue("ADDON_SECRET")
 	if err != nil {
 		return config{}, err
 	}
-	if key != "" {
-		c.signingKey = []byte(key)
-	}
+	c.secret = []byte(secret)
 	if raw := os.Getenv("TRUENAS_API_KEY_EXPIRES_AT"); raw != "" {
 		t, err := time.Parse(time.RFC3339, raw)
 		if err != nil {
@@ -125,19 +130,23 @@ func loadConfig() (config, error) {
 		return config{}, errors.New("TRUENAS_URL is required")
 	case c.nasAPIKey == "":
 		return config{}, errors.New("TRUENAS_API_KEY is required")
-	case c.certFile == "" || c.keyFile == "":
-		// No plaintext fallback. An add-on that came up serving HTTP because
-		// its certificate was missing would authenticate nothing while
-		// reporting itself available.
-		return config{}, errors.New("TLS_CERT_FILE and TLS_KEY_FILE are required: this add-on does not serve plaintext")
-	case c.caFile == "" && len(c.signingKey) == 0:
-		// Exactly one authentication mode must be configured. Neither means
-		// anything on the internal network can order a credential reset.
-		return config{}, errors.New("configure TLS_CLIENT_CA_FILE (mutual TLS) or SIGNING_KEY_FILE (signed requests): one is required")
-	case c.caFile != "" && len(c.signingKey) > 0:
-		// Both is not "belt and braces", it is an ambiguity: a caller would
-		// choose, and the caller is the thing being authenticated.
-		return config{}, errors.New("configure exactly one of TLS_CLIENT_CA_FILE and SIGNING_KEY_FILE, not both")
+	case c.target == "":
+		// The HKDF salt. Without it the derivation is not merely unconfigured,
+		// it is a different derivation — so this must be an error rather than a
+		// default, which would silently produce keys the backend cannot match.
+		return config{}, errors.New("ADDON_TARGET is required: it is the derivation salt and must match the backend's ADDON_TARGETS entry")
+	case len(c.secret) == 0:
+		// Fail closed, for the reason the two-mode check used to carry: a
+		// component holding the target credential must not answer an
+		// unauthenticated caller. There is one mode now, so there is no
+		// ambiguity left to refuse — only its absence.
+		return config{}, errors.New("ADDON_SECRET (or ADDON_SECRET_FILE) is required: this add-on does not answer unauthenticated callers")
+	}
+
+	// Derived once, here, so a failure surfaces at startup rather than on the
+	// first request.
+	if c.signingKey, err = deriveHMACKey(c.secret, c.target); err != nil {
+		return config{}, err
 	}
 	for i := range c.supported {
 		c.supported[i] = strings.TrimSpace(c.supported[i])
@@ -246,12 +255,15 @@ func run() error {
 	go sweepIdempotency(ctx, store)
 
 	go func() {
-		mode := "mtls"
-		if len(cfg.signingKey) > 0 {
-			mode = "signed"
-		}
-		log.Printf("[STARTUP] listening on %s auth=%s", cfg.listen, mode)
-		if err := httpSrv.ListenAndServeTLS(cfg.certFile, cfg.keyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		// The public key, logged at startup. An operator diagnosing a pin
+		// failure needs to compare what this add-on serves against what the
+		// backend expects, and without this the only way to see it is to open
+		// a TLS connection to a service that is refusing them.
+		log.Printf("[STARTUP] listening on %s target=%s key=%x",
+			cfg.listen, cfg.target, servedPublicKey(httpSrv.TLSConfig))
+		// Empty paths: the certificate is already in TLSConfig, derived and
+		// self-signed in memory. There is no file to serve it from.
+		if err := httpSrv.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("[SERVE] %v", err)
 		}
 	}()
@@ -290,59 +302,42 @@ func sweepIdempotency(ctx context.Context, store *Store) {
 	}
 }
 
-// serverTLS builds the listener's configuration.
+// serverTLS builds the listener's configuration around the derived key.
 //
 // TLS 1.3 minimum: both ends are ours and ship together, so there is no legacy
 // peer to accommodate and every reason not to leave a downgrade available.
+//
+// No ClientCAs and no ClientAuth: the caller is authenticated by the signature
+// over its request, not by a certificate. The TLS here is carrying
+// confidentiality for a body that contains declared secret_params, and the
+// backend's half of the mutual authentication is its pin on the key derived
+// below — which it can only reproduce by holding the same secret.
 func serverTLS(cfg config) (*tls.Config, error) {
-	conf := &tls.Config{MinVersion: tls.VersionTLS13}
-	if cfg.caFile == "" {
-		return conf, nil
-	}
-	pem, err := os.ReadFile(cfg.caFile)
+	priv, err := deriveTLSKey(cfg.secret, cfg.target)
 	if err != nil {
-		return nil, fmt.Errorf("read client CA: %w", err)
+		return nil, err
 	}
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(pem) {
-		// An unparseable CA file must not degrade to "no client verification".
-		// That is the failure where both ends believe mutual TLS is on and
-		// neither of them is checking anything.
-		return nil, fmt.Errorf("client CA file %s contains no usable certificate", filepath.Base(cfg.caFile))
+	cert, err := selfSignedCert(priv, cfg.target)
+	if err != nil {
+		return nil, err
 	}
-	conf.ClientCAs = pool
-	// RequireAndVerify, never VerifyIfGiven: the second lets an anonymous
-	// caller through, which is the whole authentication in this mode.
-	conf.ClientAuth = tls.RequireAndVerifyClientCert
-	// And the certificate has to have been issued FOR this. Verification
-	// against the pool alone admits anything the private CA ever signed —
-	// including the add-on's own server certificate, which the same CA issues
-	// and which is mounted in this container. A client certificate is one with
-	// client authentication in its extended key usage; a server certificate
-	// presented as a client credential is a misuse the chain cannot see.
-	conf.VerifyPeerCertificate = requireClientAuthEKU
-	return conf, nil
+	return &tls.Config{
+		MinVersion:   tls.VersionTLS13,
+		Certificates: []tls.Certificate{cert},
+	}, nil
 }
 
-func requireClientAuthEKU(_ [][]byte, chains [][]*x509.Certificate) error {
-	for _, chain := range chains {
-		if len(chain) == 0 {
-			continue
-		}
-		leaf := chain[0]
-		if len(leaf.ExtKeyUsage) == 0 {
-			// Unconstrained. Old certificates in a lab deployment have no EKU
-			// at all, and refusing those would break a working install on an
-			// upgrade — so an absent EKU is accepted and a WRONG one is not.
-			return nil
-		}
-		for _, usage := range leaf.ExtKeyUsage {
-			if usage == x509.ExtKeyUsageClientAuth || usage == x509.ExtKeyUsageAny {
-				return nil
-			}
-		}
+// servedPublicKey is for the startup log only: the key an operator compares
+// against the backend's expectation when a pin fails.
+func servedPublicKey(conf *tls.Config) []byte {
+	if conf == nil || len(conf.Certificates) == 0 {
+		return nil
 	}
-	return errors.New("the client certificate is not marked for client authentication")
+	pub, ok := conf.Certificates[0].PrivateKey.(ed25519.PrivateKey)
+	if !ok {
+		return nil
+	}
+	return pub.Public().(ed25519.PublicKey)
 }
 
 // secretValue reads a secret from the file `<NAME>_FILE` points at, or from

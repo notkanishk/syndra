@@ -31,62 +31,35 @@ type Registration struct {
 	// no host port: one memory disclosure in the process holding the TrueNAS API
 	// key must not also expose the Zitadel service account.
 	BaseURL string
-	// Transport material for the mutually-authenticated client. Read here so a
-	// deployment misconfiguration is visible at startup rather than at the
-	// first mutating call.
+	// The transport secret for this target, resolved to bytes. One value, from
+	// which both derived keys come (derive.go).
 	//
-	// Two modes, and a registration MUST configure one of them. mTLS with a
-	// private CA is the default; signed requests carrying a timestamp and a
-	// body hash are the fallback where mTLS is impractical. A bare shared
-	// secret is neither, and is not offered: it authenticates the caller but
-	// binds nothing to the request, so an intercepted call replays verbatim.
-	ClientCertPath string
-	ClientKeyPath  string
-	CAPath         string
-	SigningKeyPath string
+	// There used to be two modes here — mutual TLS against a private CA, and
+	// signed requests — chosen between by which files were configured. Both are
+	// gone with the CA. What replaced them is not a weaker third option: the
+	// request is still signed over its timestamp, method, path and body, and
+	// the add-on is still verified, now by an exact key rather than by a chain.
+	// A bare shared secret PRESENTED as a credential remains not offered, for
+	// the reason it never was: it authenticates the caller and binds nothing to
+	// the request, so an intercepted call replays verbatim.
+	Secret []byte
+	// SecretPath is the file Secret came from, or empty when it was configured
+	// inline. Kept because it is the rotation signal: the credential cache
+	// watches this path's modification time.
+	SecretPath string
 }
-
-// mTLS reports whether this registration carries COMPLETE mutual-TLS material:
-// a client certificate, its key, and the private CA to verify the add-on with.
-//
-// The CA is not optional trimming. Omit it and the client verifies the add-on
-// against the system root store, which means an internal service on a private
-// CA would be authenticated by the public web PKI instead — the add-on's own
-// certificate would fail to verify, and any certificate a public CA issued
-// would pass. That is not weaker mutual TLS, it is a different and wrong trust
-// anchor, so an incomplete triple is not this mode.
-func (r Registration) mTLS() bool {
-	return r.ClientCertPath != "" && r.ClientKeyPath != "" && r.CAPath != ""
-}
-
-// partialMTLS reports material that was meant to be mutual TLS and is not
-// complete. Worth naming separately: it is the difference between "this
-// deployment chose signed requests" and "this deployment thinks it configured
-// mTLS", and only one of those should pass without a word.
-//
-// A private CA on its own is NOT incomplete mutual TLS. In signed mode it is
-// the anchor the add-on's server certificate is verified against — a deliberate
-// and recommended configuration, not a half-finished one — so warning about it
-// would train an operator to ignore the warning that matters.
-func (r Registration) partialMTLS() bool {
-	return (r.ClientCertPath != "" || r.ClientKeyPath != "") && !r.mTLS()
-}
-
-// signed reports whether this registration carries signing-key material.
-func (r Registration) signed() bool { return r.SigningKeyPath != "" }
 
 // AuthMode names how the backend authenticates to this add-on, for operator
-// surfaces and startup logging. Complete mTLS wins; incomplete mTLS is not a
-// mode and never silently becomes one.
+// surfaces and startup logging.
+//
+// One mode now, so this answers "derived" or "none" — and "none" is not a mode
+// the deployment can choose, only the absence of configuration, which Init
+// refuses to register.
 func (r Registration) AuthMode() string {
-	switch {
-	case r.mTLS():
-		return "mtls"
-	case r.signed():
-		return "signed"
-	default:
-		return "none"
+	if len(r.Secret) > 0 {
+		return "derived"
 	}
+	return "none"
 }
 
 // Addon is a registration plus whatever the backend has since learned about it.
@@ -162,6 +135,10 @@ var (
 //	ADDON_TRUENAS_SIGNING_KEY=/run/secrets/truenas-signing.key   # instead of the pair
 func Init(ctx context.Context) error {
 	fresh := map[string]*Addon{}
+	// Resolved secret -> the target that claimed it first, for the duplicate
+	// check below; and the targets refused because of one.
+	seen := map[string]string{}
+	refused := map[string]bool{}
 
 	for _, target := range splitTargets(getenv("ADDON_TARGETS")) {
 		prefix := "ADDON_" + strings.ToUpper(target) + "_"
@@ -174,33 +151,49 @@ func Init(ctx context.Context) error {
 			log.Printf("[ADDON] %s: %sBASE_URL %v; not registered", target, prefix, err)
 			continue
 		}
+		secret, err := resolveSecret(prefix+"SECRET", getenv)
+		if err != nil {
+			log.Printf("[ADDON] %s: %v; not registered", target, err)
+			continue
+		}
 		r := Registration{
-			Target:         target,
-			BaseURL:        strings.TrimSuffix(base, "/"),
-			ClientCertPath: strings.TrimSpace(getenv(prefix + "CLIENT_CERT")),
-			ClientKeyPath:  strings.TrimSpace(getenv(prefix + "CLIENT_KEY")),
-			CAPath:         strings.TrimSpace(getenv(prefix + "CA_CERT")),
-			SigningKeyPath: strings.TrimSpace(getenv(prefix + "SIGNING_KEY")),
+			Target:     target,
+			BaseURL:    strings.TrimSuffix(base, "/"),
+			Secret:     []byte(secret),
+			SecretPath: strings.TrimSpace(getenv(prefix + "SECRET_FILE")),
 		}
 		// Fail closed on transport authentication. An add-on holds the target
 		// credential and reaches physical infrastructure; calling one over an
 		// unauthenticated channel is worse than not having it. A deployment
-		// that configures neither mode has not deployed an add-on, so it does
-		// not register — and therefore gets no navigation entry promising an
+		// that configures no secret has not deployed an add-on, so it does not
+		// register — and therefore gets no navigation entry promising an
 		// operator something that must never be called.
 		if r.AuthMode() == "none" {
-			log.Printf("[ADDON] %s configures neither complete mTLS (%sCLIENT_CERT + %sCLIENT_KEY + %sCA_CERT) nor %sSIGNING_KEY; not registered",
-				target, prefix, prefix, prefix, prefix)
+			log.Printf("[ADDON] %s sets neither %sSECRET nor %sSECRET_FILE; not registered", target, prefix, prefix)
 			continue
 		}
-		// Incomplete mTLS material alongside a signing key is a working
-		// deployment, so it registers — but silently is the one way it must not
-		// happen. An operator who believes mutual TLS is on and is actually on
-		// signed requests has a wrong mental model of their own trust
-		// boundary, and nothing else in the system will ever tell them.
-		if r.partialMTLS() {
-			log.Printf("[ADDON] WARNING: %s has incomplete mTLS material (cert=%t key=%t ca=%t); proceeding with auth=%s",
-				target, r.ClientCertPath != "", r.ClientKeyPath != "", r.CAPath != "", r.AuthMode())
+		// Two targets sharing a secret is the one misconfiguration the
+		// derivation cannot survive: the salt keeps their keys distinct, but
+		// anything holding the value derives both, so a compromise of one
+		// add-on hands over the other. Generation covers first setup only — a
+		// copied .env block or a rotation that reuses a value reintroduces it
+		// with no symptom at all.
+		//
+		// Both are refused, never one in preference: registering either would
+		// leave an operator believing two add-ons are isolated when one
+		// credential opens both. Compared on RESOLVED bytes, because one target
+		// may be configured inline and the other by file.
+		if other, dup := seen[string(secret)]; dup {
+			log.Printf("[ADDON] %s and %s are configured with the SAME transport secret; neither is registered. "+
+				"Each target must have its own: a compromise of one add-on otherwise derives the other's keys.", other, target)
+			delete(fresh, other)
+			refused[other] = true
+			refused[target] = true
+			continue
+		}
+		seen[string(secret)] = target
+		if refused[target] {
+			continue
 		}
 		fresh[target] = &Addon{Registration: r}
 		log.Printf("[ADDON] Registered target=%s base=%s auth=%s", target, r.BaseURL, r.AuthMode())

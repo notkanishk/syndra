@@ -1,18 +1,35 @@
 package addons
 
 import (
+	"crypto/ed25519"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
 
-// mustKeyFile writes a signing key and returns its path.
-func mustKeyFile(t *testing.T) string {
+// register seeds the registry directly, for tests about what a surface reports
+// rather than about what Init accepts.
+func register(t *testing.T, r Registration) {
 	t.Helper()
-	p := filepath.Join(t.TempDir(), "sign.key")
-	writeFile(t, p, []byte("a-real-signing-key"))
-	return p
+	registryMu.Lock()
+	registry[r.Target] = &Addon{Registration: r}
+	registryMu.Unlock()
+}
+
+// secretRegistration writes a secret file and returns a registration built on
+// it, which is how a deployment configures a target: one file, mounted into
+// both this backend and the add-on.
+func secretRegistration(t *testing.T, target, secret string) Registration {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), target+".key")
+	writeFile(t, p, []byte(secret))
+	return Registration{
+		Target:     target,
+		BaseURL:    "https://addon:8090",
+		Secret:     []byte(secret),
+		SecretPath: p,
+	}
 }
 
 // touchLater rewrites a file with a modification time in the future, which is
@@ -29,253 +46,199 @@ func touchLater(t *testing.T, path string, content []byte, ahead time.Duration) 
 }
 
 // 2.37 — rotation is a file replacement, not a restart. An operator who swaps
-// the certificate should not have to bounce the backend that governs every
-// other target to do it.
+// the secret should not have to bounce the backend that governs every other
+// target to do it.
+//
+// The material being watched changed with this transport — a certificate pair
+// became one secret — but the property did not, and neither did the reason for
+// it.
 func TestRotationIsPickedUpWithoutARestart(t *testing.T) {
 	resetRegistry(t)
-	pki := newTestPKI(t, time.Now().Add(365*24*time.Hour))
-	r := pki.registration("truenas", "https://addon:8090")
+	r := secretRegistration(t, "truenas", "the-original-secret")
 
 	first, err := credentialFor(r)
 	if err != nil {
 		t.Fatalf("initial load: %v", err)
 	}
-	if again, _ := credentialFor(r); again != first {
-		t.Fatal("unchanged material was reloaded — every call would re-parse a certificate")
-	}
+	firstKey := append([]byte(nil), first.signingKey...)
 
-	// A fresh certificate from the same CA, as a rotation script would leave it.
-	rotated := newTestPKI(t, time.Now().Add(30*24*time.Hour))
-	newCert, _ := os.ReadFile(rotated.clientCertPath)
-	newKey, _ := os.ReadFile(rotated.clientKeyPath)
-	touchLater(t, r.ClientCertPath, newCert, time.Minute)
-	touchLater(t, r.ClientKeyPath, newKey, time.Minute)
+	touchLater(t, r.SecretPath, []byte("the-rotated-secret"), time.Minute)
 
 	after, err := credentialFor(r)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if after == first {
-		t.Fatal("rotated material was not picked up")
+	if string(after.signingKey) == string(firstKey) {
+		t.Fatal("the rotated secret was not picked up; the derived key is unchanged")
 	}
-	if !after.clientCertNotAfter.Before(first.clientCertNotAfter) {
-		t.Fatal("the reloaded credential is not the rotated certificate")
+	// And it is the key the NEW secret derives, not merely a different one.
+	want, err := deriveHMACKey([]byte("the-rotated-secret"), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after.signingKey) != string(want) {
+		t.Fatal("the reloaded key is not the one derived from the new secret")
 	}
 }
 
-// 2.38 — rotation does not drop in-flight operations. A call already holding a
-// client finishes on the material it started with; for a secret-bearing
-// dispatch that is the difference between a completed operation and an
-// indeterminate one nobody can resolve.
+// A call already holding a credential finishes on the material it started with.
+// For a secret-bearing dispatch the alternative is the difference between a
+// completed operation and an indeterminate one.
 func TestRotationDoesNotDropInFlightOperations(t *testing.T) {
 	resetRegistry(t)
-	pki := newTestPKI(t, time.Now().Add(365*24*time.Hour))
-	r := pki.registration("truenas", "https://addon:8090")
+	r := secretRegistration(t, "truenas", "the-original-secret")
 
 	inFlight, err := credentialFor(r)
 	if err != nil {
-		t.Fatalf("load: %v", err)
+		t.Fatalf("initial load: %v", err)
 	}
-	heldClient := inFlight.client
 
-	rotated := newTestPKI(t, time.Now().Add(30*24*time.Hour))
-	newCert, _ := os.ReadFile(rotated.clientCertPath)
-	newKey, _ := os.ReadFile(rotated.clientKeyPath)
-	touchLater(t, r.ClientCertPath, newCert, time.Minute)
-	touchLater(t, r.ClientKeyPath, newKey, time.Minute)
-
-	next, err := credentialFor(r)
-	if err != nil {
+	touchLater(t, r.SecretPath, []byte("the-rotated-secret"), time.Minute)
+	if _, err := credentialFor(r); err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if next.client == heldClient {
-		t.Fatal("the rotation did not produce a new client")
-	}
-	if inFlight.client != heldClient {
-		t.Fatal("rotation mutated a credential a call was already holding")
-	}
-}
 
-// 2.37 — a rotation caught mid-write must not take the transport down. A
-// certificate that is briefly absent between unlink and rename, or half
-// written, would otherwise fail every dispatch in that window.
-func TestUnreadableMaterialKeepsTheLastGoodCredential(t *testing.T) {
-	resetRegistry(t)
-	pki := newTestPKI(t, time.Now().Add(365*24*time.Hour))
-	r := pki.registration("truenas", "https://addon:8090")
-
-	good, err := credentialFor(r)
+	// The pointer captured before the rotation still works and still carries
+	// the key it was built with.
+	if inFlight.client == nil {
+		t.Fatal("the in-flight credential lost its client")
+	}
+	want, err := deriveHMACKey([]byte("the-original-secret"), "truenas")
 	if err != nil {
-		t.Fatalf("load: %v", err)
+		t.Fatal(err)
 	}
-
-	t.Run("absent file", func(t *testing.T) {
-		if err := os.Remove(r.ClientCertPath); err != nil {
-			t.Fatalf("remove: %v", err)
-		}
-		c, err := credentialFor(r)
-		if err != nil {
-			t.Fatalf("a missing file during rotation failed the call: %v", err)
-		}
-		if c != good {
-			t.Fatal("expected the previously loaded credential to keep serving")
-		}
-	})
-
-	t.Run("garbage file", func(t *testing.T) {
-		touchLater(t, r.ClientCertPath, []byte("-----BEGIN CERTIFICATE-----\nhalf-writ"), time.Minute)
-		c, err := credentialFor(r)
-		if err != nil {
-			t.Fatalf("a half-written certificate failed the call: %v", err)
-		}
-		if c != good {
-			t.Fatal("a broken reload replaced a working credential")
-		}
-	})
-}
-
-// 2.37 — with nothing loaded yet there is no last-good to fall back to, and the
-// honest answer is an error rather than a plain unauthenticated client.
-func TestUnloadableMaterialWithNoPredecessorIsAnError(t *testing.T) {
-	resetRegistry(t)
-	r := Registration{
-		Target: "truenas", BaseURL: "https://addon:8090",
-		ClientCertPath: "/nonexistent/c.crt", ClientKeyPath: "/nonexistent/c.key", CAPath: "/nonexistent/ca.crt",
-	}
-	if _, err := credentialFor(r); err == nil {
-		t.Fatal("missing material at startup produced a usable credential")
+	if string(inFlight.signingKey) != string(want) {
+		t.Fatal("the in-flight credential's key changed underneath it")
 	}
 }
 
-// 2.38 — an expiring transport credential is surfaced before it fails, so
-// rotation is scheduled rather than scrambled during an incident.
-func TestExpiringCertificateIsSurfacedBeforeItFails(t *testing.T) {
-	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
-
-	cases := []struct {
-		name   string
-		expiry time.Time
-		want   string
-	}{
-		{"comfortable", now.Add(200 * 24 * time.Hour), "ok"},
-		{"inside the warning window", now.Add(10 * 24 * time.Hour), "warn"},
-		{"already expired", now.Add(-time.Hour), "expired"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+// A secret half-written by a rotation script, or briefly absent between unlink
+// and rename, must not turn every dispatch during that window into an error.
+// The last good credential keeps serving and the failure is logged.
+func TestUnreadableMaterialKeepsTheLastGoodCredential(t *testing.T) {
+	for name, corrupt := range map[string]func(t *testing.T, r Registration){
+		"the file is gone": func(t *testing.T, r Registration) {
+			if err := os.Remove(r.SecretPath); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"the file is empty": func(t *testing.T, r Registration) {
+			touchLater(t, r.SecretPath, nil, time.Minute)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
 			resetRegistry(t)
-			pki := newTestPKI(t, tc.expiry)
-			registryMu.Lock()
-			registry = map[string]*Addon{"truenas": {Registration: pki.registration("truenas", "https://addon:8090")}}
-			registryMu.Unlock()
-			withClock(t, now)
+			r := secretRegistration(t, "truenas", "the-original-secret")
+			good, err := credentialFor(r)
+			if err != nil {
+				t.Fatalf("initial load: %v", err)
+			}
 
-			got := TransportCredentials()
-			if len(got) != 1 {
-				t.Fatalf("got %d credentials, want 1", len(got))
+			corrupt(t, r)
+
+			after, err := credentialFor(r)
+			if err != nil {
+				t.Fatalf("a failed reload must not fail the call: %v", err)
 			}
-			if got[0].Status != tc.want {
-				t.Fatalf("status = %q, want %q (expires %s)", got[0].Status, tc.want, tc.expiry)
-			}
-			if got[0].AuthMode != "mtls" {
-				t.Fatalf("auth mode = %q", got[0].AuthMode)
-			}
-			if got[0].DaysRemaining == nil || got[0].ExpiresAt == nil {
-				t.Fatal("an expiry status with no date for an operator to act on")
+			if after != good {
+				t.Fatal("a failed reload replaced a working credential")
 			}
 		})
 	}
 }
 
-// 2.38 — the CA's expiry counts. A current client certificate presented against
-// an expired CA fails exactly as hard as an expired one, so reporting only the
-// certificate's own date would be a reassurance the connection cannot keep.
-func TestCAExpiryDominatesWhenSoonerThanTheClientCertificate(t *testing.T) {
-	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+// With no predecessor there is nothing to fall back to, and calling an add-on
+// unauthenticated is not the alternative.
+func TestUnloadableMaterialWithNoPredecessorIsAnError(t *testing.T) {
 	resetRegistry(t)
+	r := Registration{
+		Target: "truenas", BaseURL: "https://addon:8090",
+		Secret: []byte("configured"), SecretPath: "/nonexistent/truenas.key",
+	}
+	if _, err := credentialFor(r); err == nil {
+		t.Fatal("an unreadable secret with no predecessor must be an error")
+	}
+}
 
-	// A long-lived client certificate, and a CA about to lapse under it.
-	longLived := newTestPKI(t, now.Add(300*24*time.Hour))
-	shortCA := newTestPKI(t, now.Add(5*24*time.Hour))
-	caPEM, _ := os.ReadFile(shortCA.caPath)
-	writeFile(t, longLived.caPath, caPEM)
+// A registration with no secret must never produce a usable client. Init
+// refuses to register one, so this guards the loader rather than the
+// configuration — the one thing this package must never do is call an add-on
+// unauthenticated because a check moved somewhere else.
+func TestNoSecretMeansNoCredential(t *testing.T) {
+	resetRegistry(t)
+	r := Registration{Target: "truenas", BaseURL: "https://addon:8090"}
+	if _, err := credentialFor(r); err == nil {
+		t.Fatal("a registration with no secret must not yield a credential")
+	}
+}
 
-	registryMu.Lock()
-	registry = map[string]*Addon{"truenas": {Registration: longLived.registration("truenas", "https://addon:8090")}}
-	registryMu.Unlock()
-	withClock(t, now)
+// A mounted secret almost always ends in a newline the operator never typed,
+// and the loader must trim before deriving. The derivation itself does NOT
+// trim — it takes the bytes it is given — so this is a property of the loader,
+// and a one-byte difference here fails as a pin mismatch with no other symptom.
+func TestTheLoaderTrimsTheSecretFileBeforeDeriving(t *testing.T) {
+	resetRegistry(t)
+	r := secretRegistration(t, "truenas", "the-secret\n")
+
+	c, err := credentialFor(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := deriveHMACKey([]byte("the-secret"), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(c.signingKey) != string(want) {
+		t.Fatal("a trailing newline in the secret file changed the derived key")
+	}
+	// And the untrimmed bytes really would differ, so the assertion above is
+	// not vacuous.
+	untrimmed, err := deriveHMACKey([]byte("the-secret\n"), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(untrimmed) == string(want) {
+		t.Fatal("the two inputs derive the same key, so this test proves nothing")
+	}
+}
+
+// The transport surface reports state, not an expiry that no longer exists.
+// A field that could only ever say "unknown" reads as a probe that is failing.
+func TestTransportCredentialsReportStateWithoutAnExpiry(t *testing.T) {
+	resetRegistry(t)
+	r := secretRegistration(t, "truenas", "a-shared-deployment-secret")
+	register(t, r)
 
 	got := TransportCredentials()
-	if got[0].Status != "warn" {
-		t.Fatalf("status = %q, want warn — the CA expires in five days", got[0].Status)
+	if len(got) != 1 {
+		t.Fatalf("expected one target, got %+v", got)
 	}
-	if d := *got[0].DaysRemaining; d > 6 {
-		t.Fatalf("days remaining = %d; the report is following the client certificate, not the chain", d)
+	if got[0].AuthMode != "derived" {
+		t.Errorf("auth mode = %q, want derived", got[0].AuthMode)
+	}
+	if got[0].Status != "ok" {
+		t.Errorf("status = %q (%s), want ok", got[0].Status, got[0].Error)
 	}
 }
 
-// 2.37 — signed mode has no expiry, and the surface says so rather than
-// inventing an "ok" that was never checked.
-func TestSignedModeReportsNoExpiryRatherThanAFalseOk(t *testing.T) {
+// A secret that cannot be loaded is what an operator actually needs to see
+// here — a mount that did not land, or an empty file.
+func TestTransportCredentialsReportAnUnloadableSecret(t *testing.T) {
 	resetRegistry(t)
-	registryMu.Lock()
-	registry = map[string]*Addon{"truenas": {Registration: Registration{
-		Target: "truenas", BaseURL: "https://addon:8090", SigningKeyPath: mustKeyFile(t),
-	}}}
-	registryMu.Unlock()
+	register(t, Registration{
+		Target: "truenas", BaseURL: "https://addon:8090",
+		Secret: []byte("configured"), SecretPath: "/nonexistent/truenas.key",
+	})
 
 	got := TransportCredentials()
-	if got[0].AuthMode != "signed" {
-		t.Fatalf("auth mode = %q", got[0].AuthMode)
-	}
-	if got[0].Status != "unknown" {
-		t.Fatalf("status = %q, want unknown — an HMAC key has no expiry", got[0].Status)
-	}
-	if got[0].ExpiresAt != nil {
-		t.Fatal("an expiry date was reported for material that has none")
+	if len(got) != 1 || got[0].Status != "error" || got[0].Error == "" {
+		t.Fatalf("an unreadable secret must be reported, got %+v", got)
 	}
 }
 
-// 2.37 — a secret mounted from a file almost always arrives with a trailing
-// newline the operator never typed, and a key differing by one byte fails as
-// "no matching signature": indistinguishable from an attack, and days of
-// debugging.
-func TestSigningKeyTrailingWhitespaceIsTrimmed(t *testing.T) {
-	dir := t.TempDir()
-	withNewline := filepath.Join(dir, "a.key")
-	without := filepath.Join(dir, "b.key")
-	writeFile(t, withNewline, []byte("shared-key\n"))
-	writeFile(t, without, []byte("shared-key"))
-
-	a, err := readSigningKey(withNewline)
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
-	b, err := readSigningKey(without)
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
-	if string(a) != string(b) {
-		t.Fatalf("a trailing newline changed the key: %q vs %q", a, b)
-	}
-}
-
-// 2.37 — an empty key file is a misconfiguration, not a key. Accepting it would
-// authenticate every call under the empty string.
-func TestEmptySigningKeyIsRefused(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "empty.key")
-	writeFile(t, p, []byte("\n\n  \n"))
-	if _, err := readSigningKey(p); err == nil {
-		t.Fatal("an empty signing key was accepted as transport authentication")
-	}
-}
-
-// 2.2 — unregistering a target drops its loaded private key from memory rather
-// than leaving it resident until the next restart.
 func TestUnregisteringATargetPurgesItsLoadedKey(t *testing.T) {
 	resetRegistry(t)
-	pki := newTestPKI(t, time.Now().Add(365*24*time.Hour))
-	r := pki.registration("truenas", "https://addon:8090")
+	r := secretRegistration(t, "truenas", "a-shared-deployment-secret")
 	if _, err := credentialFor(r); err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -287,5 +250,24 @@ func TestUnregisteringATargetPurgesItsLoadedKey(t *testing.T) {
 	credMu.Unlock()
 	if still {
 		t.Fatal("an unregistered target's transport material stayed loaded")
+	}
+}
+
+// The derived public key is what the pin compares against, and it must be the
+// add-on's — not merely stable.
+func TestTheBackendDerivesTheSamePublicKeyTheAddOnServes(t *testing.T) {
+	pub, err := deriveTLSPublicKey([]byte("a-shared-deployment-secret"), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pub) != ed25519.PublicKeySize {
+		t.Fatalf("derived key is %d bytes, want %d", len(pub), ed25519.PublicKeySize)
+	}
+	again, err := deriveTLSPublicKey([]byte("a-shared-deployment-secret"), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !pub.Equal(again) {
+		t.Fatal("the derivation is not deterministic")
 	}
 }

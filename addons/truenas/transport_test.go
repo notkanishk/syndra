@@ -112,21 +112,28 @@ func TestAnUnsignedOrWrongKeyRequestIsRefused(t *testing.T) {
 	}
 }
 
-// In mTLS mode the handshake authenticates, and all that remains is refusing a
-// request that somehow arrived without a verified chain — the shape a server
-// misconfigured to VerifyClientCertIfGiven would produce.
-func TestMutualTLSModeRefusesAnUnverifiedPeer(t *testing.T) {
+// An authenticator with no signing key authenticates nothing, so it must refuse
+// everything rather than admit everything.
+//
+// `loadConfig` cannot produce this state — it refuses to start without a
+// secret — so this guards the constructor, not the configuration. The mTLS mode
+// this replaced had the mirror-image hazard: it treated an empty signing key as
+// "the handshake did it", which was correct only for as long as a handshake
+// really had. An open door reached by an unreachable path is still an open
+// door, and the path stops being unreachable one refactor later.
+func TestAnAuthenticatorWithNoKeyRefusesEverything(t *testing.T) {
 	a := &authenticator{now: time.Now}
 
 	plain := httptest.NewRequest(http.MethodPost, "/operations/password.set", strings.NewReader(`{}`))
-	if _, err := a.verify(plain); !errors.Is(err, errNoClientIdentity) {
-		t.Fatalf("want errNoClientIdentity, got %v", err)
+	if _, err := a.verify(plain); !errors.Is(err, errNoSigningKey) {
+		t.Fatalf("want errNoSigningKey, got %v", err)
 	}
-	// A signature must not substitute for a certificate: accepting either would
-	// mean the weaker mode is always available.
+	// And a validly-signed request is refused too: with no key there is nothing
+	// to verify it against, so accepting it would be accepting the signature's
+	// mere presence.
 	signed := signedRequest(t, `{}`, time.Now(), testKey)
-	if _, err := a.verify(signed); !errors.Is(err, errNoClientIdentity) {
-		t.Fatalf("a signature must not stand in for a client certificate: %v", err)
+	if _, err := a.verify(signed); !errors.Is(err, errNoSigningKey) {
+		t.Fatalf("a signature must not be trusted by an authenticator holding no key: %v", err)
 	}
 }
 

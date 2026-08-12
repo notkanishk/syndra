@@ -279,12 +279,15 @@ func doAuthenticated(ctx context.Context, cred *credential, method, url string, 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if cred.mode == "signed" {
-		// req.URL.Path rather than the string this was built from: it is what
-		// the add-on will see after its own parse, and signing anything else
-		// would be signing a value the two ends could disagree about.
-		req.Header.Set(SignatureHeader, ComputeSignature(timeNow(), method, req.URL.Path, body, cred.signingKey))
-	}
+	// Every request is signed. There is no mode in which it is not: the
+	// signature is what authenticates the caller now that no client certificate
+	// exists, so a conditional here would be a path on which the add-on is
+	// called anonymously.
+	//
+	// req.URL.Path rather than the string this was built from: it is what the
+	// add-on will see after its own parse, and signing anything else would be
+	// signing a value the two ends could disagree about.
+	req.Header.Set(SignatureHeader, ComputeSignature(timeNow(), method, req.URL.Path, body, cred.signingKey))
 
 	httpResp, err := cred.client.Do(req)
 	if err != nil {

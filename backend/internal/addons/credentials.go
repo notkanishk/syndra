@@ -1,10 +1,8 @@
 package addons
 
 import (
-	"bytes"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"log"
@@ -30,13 +28,6 @@ type credential struct {
 	mode       string
 	signingKey []byte
 
-	// Expiry of the material, so it can be surfaced before it fails rather than
-	// discovered as a handshake error during an incident. Zero in signed mode:
-	// an HMAC key has no expiry, and inventing one would be a lie in a field an
-	// operator is meant to trust.
-	clientCertNotAfter time.Time
-	caNotAfter         time.Time
-
 	// sources is path -> modification time, the rotation signal.
 	sources map[string]time.Time
 }
@@ -46,17 +37,11 @@ var (
 	credCache = map[string]*credential{}
 )
 
-// credentialWarnDays is how far ahead an expiring transport certificate is
-// surfaced. Thirty days is enough for a rotation to be scheduled rather than
-// scrambled, and short enough that the warning still means something when it
-// appears.
-const credentialWarnDays = 30
-
 // materialPaths lists the files this registration is built from, in a stable
 // order.
 func (r Registration) materialPaths() []string {
 	var out []string
-	for _, p := range []string{r.ClientCertPath, r.ClientKeyPath, r.CAPath, r.SigningKeyPath} {
+	for _, p := range []string{r.SecretPath} {
 		if p != "" {
 			out = append(out, p)
 		}
@@ -148,53 +133,45 @@ func sameStamps(a, b map[string]time.Time) bool {
 
 func loadCredential(r Registration, stamps map[string]time.Time) (*credential, error) {
 	c := &credential{mode: r.AuthMode(), sources: stamps}
-
-	switch c.mode {
-	case "mtls":
-		pair, err := tls.LoadX509KeyPair(r.ClientCertPath, r.ClientKeyPath)
-		if err != nil {
-			return nil, fmt.Errorf("client keypair: %w", err)
-		}
-		leaf, err := x509.ParseCertificate(pair.Certificate[0])
-		if err != nil {
-			return nil, fmt.Errorf("client certificate: %w", err)
-		}
-		c.clientCertNotAfter = leaf.NotAfter
-
-		tlsCfg, err := serverTrust(r.CAPath)
-		if err != nil {
-			return nil, err
-		}
-		tlsCfg.Certificates = []tls.Certificate{pair}
-		c.caNotAfter = tlsCfg.notAfter
-		c.client = newAddonClient(tlsCfg.Config)
-
-	case "signed":
-		key, err := readSigningKey(r.SigningKeyPath)
-		if err != nil {
-			return nil, err
-		}
-		c.signingKey = key
-		// Signed mode is still TLS. The signature authenticates the request and
-		// does nothing for the response or for confidentiality: without TLS the
-		// secret-bearing body is readable on the wire and a forged 2xx is
-		// recorded as a completed mutation. Where a private CA is configured it
-		// is the anchor; otherwise the system roots are, which is weaker but is
-		// a real check rather than none.
-		tlsCfg, err := serverTrust(r.CAPath)
-		if err != nil {
-			return nil, err
-		}
-		c.caNotAfter = tlsCfg.notAfter
-		c.client = newAddonClient(tlsCfg.Config)
-
-	default:
-		// Init refuses to register an add-on with no transport mode, so this is
+	if len(r.Secret) == 0 {
+		// Init refuses to register a target with no secret, so this is
 		// unreachable through the normal path. It is still an error rather than
 		// a plain client: the one thing this package must never do is call an
 		// add-on unauthenticated because a check moved somewhere else.
-		return nil, fmt.Errorf("addon %s: no transport authentication configured", r.Target)
+		return nil, fmt.Errorf("addon %s: no transport secret configured", r.Target)
 	}
+
+	// The secret may have been replaced on disk since registration — that is
+	// what the rotation watch above detects — so it is re-read here rather than
+	// taken from the Registration captured at startup.
+	secret := r.Secret
+	if r.SecretPath != "" {
+		raw, err := os.ReadFile(r.SecretPath)
+		if err != nil {
+			return nil, fmt.Errorf("addon %s: read secret: %w", r.Target, err)
+		}
+		trimmed := strings.TrimSpace(string(raw))
+		if trimmed == "" {
+			return nil, fmt.Errorf("addon %s: secret file %s is empty", r.Target, r.SecretPath)
+		}
+		secret = []byte(trimmed)
+	}
+
+	key, err := deriveHMACKey(secret, r.Target)
+	if err != nil {
+		return nil, fmt.Errorf("addon %s: %w", r.Target, err)
+	}
+	c.signingKey = key
+
+	pub, err := deriveTLSPublicKey(secret, r.Target)
+	if err != nil {
+		return nil, fmt.Errorf("addon %s: %w", r.Target, err)
+	}
+	// No expiry to record. The add-on's certificate is minted in memory at
+	// every boot around a key that never changes unless the secret does, so
+	// there is nothing to renew and nothing to warn about. A health field
+	// reporting an expiry here would be reporting one that does not exist.
+	c.client = newAddonClient(pinnedTLSConfig(pub, r.Target))
 	return c, nil
 }
 
@@ -227,152 +204,40 @@ func newAddonClient(tlsCfg *tls.Config) *http.Client {
 	}
 }
 
-// trustConfig is a TLS client configuration plus the expiry of whatever anchors
-// it, so the caller does not have to re-read and re-parse the CA to report it.
-type trustConfig struct {
-	*tls.Config
-	notAfter time.Time
-}
-
-// serverTrust builds the client TLS configuration used to verify the ADD-ON.
-// Shared by both modes, because both need it: mutual TLS adds a client
-// certificate on top, it does not replace this.
-//
-// An empty caPath falls back to the system roots. That is the honest weaker
-// option for signed mode, and it is never reachable for mutual TLS, where
-// AuthMode requires the CA before it will call the mode mTLS at all.
-func serverTrust(caPath string) (trustConfig, error) {
-	cfg := trustConfig{Config: &tls.Config{
-		// Both ends of this connection are ours and ship together. There is no
-		// legacy peer to accommodate, so there is no reason to negotiate
-		// anything older.
-		MinVersion: tls.VersionTLS13,
-	}}
-	if caPath == "" {
-		return cfg, nil
-	}
-	caPEM, err := os.ReadFile(caPath)
-	if err != nil {
-		return cfg, fmt.Errorf("private CA: %w", err)
-	}
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(caPEM) {
-		return cfg, errors.New("private CA: no certificate found in PEM")
-	}
-	cfg.RootCAs = pool
-	cfg.notAfter = earliestNotAfter(caPEM)
-	return cfg, nil
-}
-
-// readSigningKey reads the HMAC key, rejecting an empty one.
-//
-// Trailing whitespace is trimmed. A secret mounted from a file almost always
-// arrives with a trailing newline the operator never typed, and a key that
-// differs from the add-on's by one byte fails as "no matching signature" —
-// indistinguishable from an attack, and days of debugging.
-func readSigningKey(path string) ([]byte, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("signing key: %w", err)
-	}
-	// TrimRight over the same cut set the twelve hand-written lines covered.
-	key := bytes.TrimRight(raw, "\r\n\t ")
-	if len(key) == 0 {
-		return nil, errors.New("signing key: file is empty")
-	}
-	return key, nil
-}
-
-// earliestNotAfter returns the soonest expiry among the certificates in a PEM
-// bundle. A chain is only valid until its first link expires.
-func earliestNotAfter(pemBytes []byte) time.Time {
-	var earliest time.Time
-	rest := pemBytes
-	for {
-		var block *pem.Block
-		block, rest = pem.Decode(rest)
-		if block == nil {
-			return earliest
-		}
-		if block.Type != "CERTIFICATE" {
-			continue
-		}
-		cert, err := x509.ParseCertificate(block.Bytes)
-		if err != nil {
-			continue
-		}
-		if earliest.IsZero() || cert.NotAfter.Before(earliest) {
-			earliest = cert.NotAfter
-		}
-	}
-}
 
 // TransportCredential is the operator-facing state of one add-on's transport
 // material.
+//
+// No expiry is reported, and that is the honest shape rather than an omission.
+// The add-on's certificate is minted in memory at every boot around a key
+// derived from the deployment secret, so nothing expires and nothing needs
+// renewing. The fields that used to carry a date are gone rather than reporting
+// "unknown" forever: a status field that can only ever say it does not know
+// reads as a probe that is failing, which is worse than the absence of one.
+//
+// What can still fail is loading the secret — a mount that did not land, an
+// empty file — and that is what an operator needs to see here.
 type TransportCredential struct {
 	Target   string `json:"target"`
 	AuthMode string `json:"auth_mode"`
-	// ExpiresAt is the soonest expiry among the material — client certificate
-	// and private CA both. A current client certificate presented against an
-	// expired CA fails exactly as hard as an expired one, so reporting only the
-	// certificate's own date would be a reassurance the connection cannot keep.
-	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
-	DaysRemaining *int       `json:"days_remaining,omitempty"`
-	// Status: ok | warn | expired | unknown. unknown covers signed mode, where
-	// there is no expiry to report, and material that could not be loaded.
+	// Status: ok | error.
 	Status string `json:"status"`
 	Error  string `json:"error,omitempty"`
 }
 
-// TransportCredentials reports every registered add-on's transport material and
-// how long it has left, so an expiring certificate is an item on a surface
-// rather than an outage.
+// TransportCredentials reports every registered add-on's transport state.
 func TransportCredentials() []TransportCredential {
-	now := timeNow().UTC()
 	regs := Registered()
 	out := make([]TransportCredential, 0, len(regs))
 	for _, r := range regs {
-		tc := TransportCredential{Target: r.Target, AuthMode: r.AuthMode(), Status: "unknown"}
-		c, err := credentialFor(r)
-		if err != nil {
+		tc := TransportCredential{Target: r.Target, AuthMode: r.AuthMode(), Status: "ok"}
+		if _, err := credentialFor(r); err != nil {
+			tc.Status = "error"
 			tc.Error = err.Error()
-			out = append(out, tc)
-			continue
-		}
-		expiry := soonest(c.clientCertNotAfter, c.caNotAfter)
-		if expiry.IsZero() {
-			// Signed mode. No expiry exists; saying "ok" would imply one was
-			// checked.
-			out = append(out, tc)
-			continue
-		}
-		days := int(expiry.Sub(now).Hours() / 24)
-		tc.ExpiresAt = &expiry
-		tc.DaysRemaining = &days
-		switch {
-		case !expiry.After(now):
-			tc.Status = "expired"
-		case days < credentialWarnDays:
-			tc.Status = "warn"
-		default:
-			tc.Status = "ok"
 		}
 		out = append(out, tc)
 	}
 	return out
-}
-
-func soonest(a, b time.Time) time.Time {
-	switch {
-	case a.IsZero():
-		return b
-	case b.IsZero():
-		return a
-	case b.Before(a):
-		return b
-	default:
-		return a
-	}
 }
 
 // dialFailed reports whether an error means the request never reached the
@@ -402,11 +267,17 @@ func dialFailed(err error) bool {
 	var verify *tls.CertificateVerificationError
 	var alert tls.AlertError
 	var record tls.RecordHeaderError
+	// The pin. It fails inside the handshake, so nothing was written — the same
+	// family as the certificate errors below, and it must classify the same way
+	// or a misconfigured deployment manufactures an indeterminate operation per
+	// call, each one claiming a mutation may have been applied.
+	var pin pinMismatchError
 	var authority x509.UnknownAuthorityError
 	var hostname x509.HostnameError
 	var certInvalid x509.CertificateInvalidError
 	switch {
-	case errors.As(err, &verify), errors.As(err, &alert), errors.As(err, &record),
+	case errors.As(err, &pin),
+		errors.As(err, &verify), errors.As(err, &alert), errors.As(err, &record),
 		errors.As(err, &authority), errors.As(err, &hostname), errors.As(err, &certInvalid):
 		return true
 	}

@@ -27,7 +27,7 @@ func scanFor(t *testing.T, what, s string) {
 // for without thinking, and a redaction that depends on every caller
 // remembering to redact is not a redaction.
 func TestSecretParamNeverAppearsInAnyRendering(t *testing.T) {
-	installAddon(t, Registration{Target: "truenas", BaseURL: "http://x", SigningKeyPath: "/k"}, goodManifest())
+	installAddon(t, Registration{Target: "truenas", BaseURL: "http://x", Secret: []byte("a-test-secret")}, goodManifest())
 	req := passwordSet(map[string]any{"password": theSecret, "username": "kanishk"})
 
 	scanFor(t, "String()", req.String())
@@ -57,7 +57,7 @@ func TestFailedCallLoggingCarriesNoSecret(t *testing.T) {
 	t.Cleanup(func() { log.SetOutput(saved) })
 
 	// No server: the call fails at dial, which is the path that logs.
-	installAddon(t, Registration{Target: "truenas", BaseURL: "https://127.0.0.1:1", SigningKeyPath: mustKeyFile(t)}, goodManifest())
+	installAddon(t, Registration{Target: "truenas", BaseURL: "https://127.0.0.1:1", Secret: []byte("a-test-secret")}, goodManifest())
 	resp := Call(context.Background(), passwordSet(map[string]any{"password": theSecret}))
 	if resp.Outcome == OutcomeSucceeded {
 		t.Fatal("setup: the call was supposed to fail")
@@ -100,7 +100,7 @@ func TestManifestOmittingAPolicySecretCannotMakeItLoggable(t *testing.T) {
 			m.Operations[i].SecretParams = nil
 		}
 	}
-	installAddon(t, Registration{Target: "truenas", BaseURL: "http://x", SigningKeyPath: "/k"}, m)
+	installAddon(t, Registration{Target: "truenas", BaseURL: "http://x", Secret: []byte("a-test-secret")}, m)
 
 	out := RedactedParams("truenas", "password.set", map[string]any{"password": theSecret})
 	if out["password"] != redactedValue {
@@ -112,7 +112,7 @@ func TestManifestOmittingAPolicySecretCannotMakeItLoggable(t *testing.T) {
 // this should not arise; "should not arise" is not a property worth betting a
 // password on when the alternative costs a dozen lines.
 func TestRedactionReachesNestedValues(t *testing.T) {
-	installAddon(t, Registration{Target: "truenas", BaseURL: "http://x", SigningKeyPath: "/k"}, goodManifest())
+	installAddon(t, Registration{Target: "truenas", BaseURL: "http://x", Secret: []byte("a-test-secret")}, goodManifest())
 
 	out := RedactedParams("truenas", "password.set", map[string]any{
 		"batch": []any{
@@ -127,7 +127,7 @@ func TestRedactionReachesNestedValues(t *testing.T) {
 // value the caller is about to send, turning a logging concern into a wrong
 // password on the target.
 func TestRedactionDoesNotMutateTheCallersParams(t *testing.T) {
-	installAddon(t, Registration{Target: "truenas", BaseURL: "http://x", SigningKeyPath: "/k"}, goodManifest())
+	installAddon(t, Registration{Target: "truenas", BaseURL: "http://x", Secret: []byte("a-test-secret")}, goodManifest())
 
 	params := map[string]any{"password": theSecret}
 	_ = RedactedParams("truenas", "password.set", params)

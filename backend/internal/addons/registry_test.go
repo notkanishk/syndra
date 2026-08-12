@@ -3,6 +3,8 @@ package addons
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -180,11 +182,9 @@ func registerTrueNAS(t *testing.T) *fakeTargetRegistry {
 	t.Helper()
 	resetRegistry(t)
 	withEnv(t, map[string]string{
-		"ADDON_TARGETS":             "truenas",
-		"ADDON_TRUENAS_BASE_URL":    "https://addon-truenas:8090/",
-		"ADDON_TRUENAS_CLIENT_CERT": "/run/secrets/c.crt",
-		"ADDON_TRUENAS_CLIENT_KEY":  "/run/secrets/c.key",
-		"ADDON_TRUENAS_CA_CERT":     "/run/secrets/ca.crt",
+		"ADDON_TARGETS":          "truenas",
+		"ADDON_TRUENAS_BASE_URL": "https://addon-truenas:8090/",
+		"ADDON_TRUENAS_SECRET":   "a-test-transport-secret-for-truenas",
 	})
 	f := &fakeTargetRegistry{}
 	withTargetRegistry(t, f)
@@ -213,8 +213,8 @@ func TestInitRegistersFromConfigWithoutFetching(t *testing.T) {
 	if reg[0].BaseURL != "https://addon-truenas:8090" {
 		t.Errorf("trailing slash must be trimmed so paths do not double up, got %q", reg[0].BaseURL)
 	}
-	if reg[0].ClientCertPath != "/run/secrets/c.crt" {
-		t.Errorf("transport material must be read at startup, got %q", reg[0].ClientCertPath)
+	if string(reg[0].Secret) != "a-test-transport-secret-for-truenas" {
+		t.Errorf("the transport secret must be resolved at startup, got %q", reg[0].Secret)
 	}
 }
 
@@ -413,9 +413,9 @@ func TestInitRegistersTheTargetInTheDatabase(t *testing.T) {
 func TestInitDisablesTargetsTheDeploymentNoLongerConfigures(t *testing.T) {
 	resetRegistry(t)
 	withEnv(t, map[string]string{
-		"ADDON_TARGETS":             "truenas",
-		"ADDON_TRUENAS_BASE_URL":    "https://addon-truenas:8090",
-		"ADDON_TRUENAS_SIGNING_KEY": "/run/secrets/s.key",
+		"ADDON_TARGETS":          "truenas",
+		"ADDON_TRUENAS_BASE_URL": "https://addon-truenas:8090",
+		"ADDON_TRUENAS_SECRET":   "a-test-secret",
 	})
 	f := &fakeTargetRegistry{active: []string{"truenas", "unifi"}}
 	withTargetRegistry(t, f)
@@ -433,9 +433,9 @@ func TestInitDisablesTargetsTheDeploymentNoLongerConfigures(t *testing.T) {
 func TestInitReportsARegistryFailure(t *testing.T) {
 	resetRegistry(t)
 	withEnv(t, map[string]string{
-		"ADDON_TARGETS":             "truenas",
-		"ADDON_TRUENAS_BASE_URL":    "https://addon-truenas:8090",
-		"ADDON_TRUENAS_SIGNING_KEY": "/run/secrets/s.key",
+		"ADDON_TARGETS":          "truenas",
+		"ADDON_TRUENAS_BASE_URL": "https://addon-truenas:8090",
+		"ADDON_TRUENAS_SECRET":   "a-test-secret",
 	})
 	withTargetRegistry(t, &fakeTargetRegistry{upsertErr: errors.New("connection refused")})
 	if err := Init(context.Background()); err == nil {
@@ -449,9 +449,9 @@ func TestInitReportsARegistryFailure(t *testing.T) {
 func TestSigningKeyIsAValidTransportMode(t *testing.T) {
 	resetRegistry(t)
 	withEnv(t, map[string]string{
-		"ADDON_TARGETS":             "truenas",
-		"ADDON_TRUENAS_BASE_URL":    "https://addon-truenas:8090",
-		"ADDON_TRUENAS_SIGNING_KEY": "/run/secrets/truenas-signing.key",
+		"ADDON_TARGETS":          "truenas",
+		"ADDON_TRUENAS_BASE_URL": "https://addon-truenas:8090",
+		"ADDON_TRUENAS_SECRET":   "an-inline-transport-secret",
 	})
 	withTargetRegistry(t, &fakeTargetRegistry{})
 	if err := Init(context.Background()); err != nil {
@@ -459,34 +459,87 @@ func TestSigningKeyIsAValidTransportMode(t *testing.T) {
 	}
 	reg := Registered()
 	if len(reg) != 1 {
-		t.Fatalf("a signing key alone must be enough to register, got %+v", reg)
+		t.Fatalf("an inline secret must be enough to register, got %+v", reg)
 	}
-	if reg[0].AuthMode() != "signed" {
-		t.Errorf("expected signed transport, got %q", reg[0].AuthMode())
+	if reg[0].AuthMode() != "derived" {
+		t.Errorf("expected derived transport, got %q", reg[0].AuthMode())
 	}
-	if reg[0].SigningKeyPath != "/run/secrets/truenas-signing.key" {
-		t.Errorf("the signing key reference must be read, got %q", reg[0].SigningKeyPath)
+	if string(reg[0].Secret) != "an-inline-transport-secret" {
+		t.Errorf("the secret must be resolved, got %q", reg[0].Secret)
 	}
 }
 
-// mTLS is the default and wins when both are configured, so a deployment
-// migrating between modes does not silently drop to the weaker one.
-func TestMTLSWinsWhenBothModesAreConfigured(t *testing.T) {
+// Two targets sharing one secret is the misconfiguration the derivation cannot
+// survive: the salt keeps their keys distinct, but anything holding the value
+// derives both, so a compromise of one add-on hands over the other.
+//
+// BOTH are refused, never one in preference. Registering either would leave an
+// operator believing two add-ons are isolated when one credential opens both —
+// and the surface would agree with them.
+func TestTwoTargetsSharingASecretAreBothRefused(t *testing.T) {
 	resetRegistry(t)
 	withEnv(t, map[string]string{
-		"ADDON_TARGETS":             "truenas",
-		"ADDON_TRUENAS_BASE_URL":    "https://addon-truenas:8090",
-		"ADDON_TRUENAS_CLIENT_CERT": "/run/secrets/c.crt",
-		"ADDON_TRUENAS_CLIENT_KEY":  "/run/secrets/c.key",
-		"ADDON_TRUENAS_CA_CERT":     "/run/secrets/ca.crt",
-		"ADDON_TRUENAS_SIGNING_KEY": "/run/secrets/s.key",
+		"ADDON_TARGETS":          "truenas,unifi",
+		"ADDON_TRUENAS_BASE_URL": "https://addon-truenas:8090",
+		"ADDON_TRUENAS_SECRET":   "the-same-secret-in-both-places",
+		"ADDON_UNIFI_BASE_URL":   "https://addon-unifi:8090",
+		"ADDON_UNIFI_SECRET":     "the-same-secret-in-both-places",
 	})
 	withTargetRegistry(t, &fakeTargetRegistry{})
 	if err := Init(context.Background()); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	if got := Registered()[0].AuthMode(); got != "mtls" {
-		t.Errorf("expected mtls to win, got %q", got)
+	if reg := Registered(); len(reg) != 0 {
+		t.Fatalf("neither target may register on a shared secret, got %+v", reg)
+	}
+}
+
+// Distinct secrets register normally. The guard above must refuse a collision,
+// not two add-ons.
+func TestTwoTargetsWithDistinctSecretsBothRegister(t *testing.T) {
+	resetRegistry(t)
+	withEnv(t, map[string]string{
+		"ADDON_TARGETS":          "truenas,unifi",
+		"ADDON_TRUENAS_BASE_URL": "https://addon-truenas:8090",
+		"ADDON_TRUENAS_SECRET":   "the-truenas-secret",
+		"ADDON_UNIFI_BASE_URL":   "https://addon-unifi:8090",
+		"ADDON_UNIFI_SECRET":     "the-unifi-secret",
+	})
+	withTargetRegistry(t, &fakeTargetRegistry{})
+	if err := Init(context.Background()); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if reg := Registered(); len(reg) != 2 {
+		t.Fatalf("two distinctly-configured targets must both register, got %+v", reg)
+	}
+}
+
+// The duplicate check compares RESOLVED bytes, not the configured strings. One
+// target inline and the other by file is the case that would otherwise slip
+// through — and it is the likelier one, since it is what a half-finished
+// migration to file-based secrets looks like.
+func TestADuplicateIsCaughtAcrossConfigurationForms(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "unifi.key")
+	// With a trailing newline, as every mounted secret has: the resolution must
+	// trim before comparing, or the duplicate hides behind one byte.
+	if err := os.WriteFile(path, []byte("the-same-secret-in-both-places\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resetRegistry(t)
+	withEnv(t, map[string]string{
+		"ADDON_TARGETS":           "truenas,unifi",
+		"ADDON_TRUENAS_BASE_URL":  "https://addon-truenas:8090",
+		"ADDON_TRUENAS_SECRET":    "the-same-secret-in-both-places",
+		"ADDON_UNIFI_BASE_URL":    "https://addon-unifi:8090",
+		"ADDON_UNIFI_SECRET_FILE": path,
+	})
+	withTargetRegistry(t, &fakeTargetRegistry{})
+	if err := Init(context.Background()); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if reg := Registered(); len(reg) != 0 {
+		t.Fatalf("a duplicate across configuration forms must refuse both, got %+v", reg)
 	}
 }
 
@@ -500,16 +553,15 @@ func TestNoTransportAuthMeansNoRegistration(t *testing.T) {
 			"ADDON_TARGETS":          "truenas",
 			"ADDON_TRUENAS_BASE_URL": "https://addon-truenas:8090",
 		},
-		"half a certificate pair": {
-			"ADDON_TARGETS":             "truenas",
-			"ADDON_TRUENAS_BASE_URL":    "https://addon-truenas:8090",
-			"ADDON_TRUENAS_CLIENT_CERT": "/run/secrets/c.crt",
+		"an empty inline secret": {
+			"ADDON_TARGETS":          "truenas",
+			"ADDON_TRUENAS_BASE_URL": "https://addon-truenas:8090",
+			"ADDON_TRUENAS_SECRET":   "   ",
 		},
-		"a certificate pair with no private CA": {
+		"a secret file that is not there": {
 			"ADDON_TARGETS":             "truenas",
 			"ADDON_TRUENAS_BASE_URL":    "https://addon-truenas:8090",
-			"ADDON_TRUENAS_CLIENT_CERT": "/run/secrets/c.crt",
-			"ADDON_TRUENAS_CLIENT_KEY":  "/run/secrets/c.key",
+			"ADDON_TRUENAS_SECRET_FILE": "/nonexistent/truenas.key",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -530,42 +582,17 @@ func TestNoTransportAuthMeansNoRegistration(t *testing.T) {
 	}
 }
 
-// mTLS means a client certificate, its key, AND the private CA the add-on is
-// verified against. Without the CA the client falls back to the system root
-// store, so an internal service on a private CA would be authenticated by the
-// public web PKI — a different and wrong trust anchor, not a weaker version of
-// the right one. An incomplete triple must never be reported as mtls.
-func TestIncompleteMTLSIsNotMTLS(t *testing.T) {
-	cases := map[string]Registration{
-		"no CA":          {ClientCertPath: "c", ClientKeyPath: "k"},
-		"no client key":  {ClientCertPath: "c", CAPath: "ca"},
-		"no client cert": {ClientKeyPath: "k", CAPath: "ca"},
+// One mode, so AuthMode has one thing to say and one absence to report. The
+// two-mode machinery this replaced — complete-mTLS-wins, partial-mTLS-warns —
+// is gone with the certificates, and its tests with it: they asserted a choice
+// that no longer exists, and a test describing a decision the code does not
+// make is the shape §32 records.
+func TestAuthModeReportsDerivedOrNothing(t *testing.T) {
+	if got := (Registration{Secret: []byte("x")}).AuthMode(); got != "derived" {
+		t.Errorf("a configured secret must report derived, got %q", got)
 	}
-	for name, r := range cases {
-		if r.AuthMode() == "mtls" {
-			t.Errorf("%s: incomplete material reported as mtls", name)
-		}
-	}
-	full := Registration{ClientCertPath: "c", ClientKeyPath: "k", CAPath: "ca"}
-	if full.AuthMode() != "mtls" {
-		t.Errorf("a complete triple must be mtls, got %q", full.AuthMode())
-	}
-}
-
-// Incomplete mTLS material alongside a signing key is a working deployment, so
-// it registers on the signing key — but an operator who believes mutual TLS is
-// on and is actually on signed requests has a wrong model of their own trust
-// boundary, so the downgrade is never silent.
-func TestPartialMTLSFallsBackToSignedAndIsFlagged(t *testing.T) {
-	r := Registration{ClientCertPath: "c", ClientKeyPath: "k", SigningKeyPath: "s"}
-	if r.AuthMode() != "signed" {
-		t.Errorf("incomplete mTLS with a signing key must resolve to signed, got %q", r.AuthMode())
-	}
-	if !r.partialMTLS() {
-		t.Error("the incomplete mTLS material must be detectable, or the downgrade is silent")
-	}
-	if (Registration{SigningKeyPath: "s"}).partialMTLS() {
-		t.Error("a deployment that chose signed requests has nothing incomplete to report")
+	if got := (Registration{}).AuthMode(); got != "none" {
+		t.Errorf("no secret must report none, got %q", got)
 	}
 }
 
@@ -580,11 +607,11 @@ func TestRefreshAllBoundsEachTargetSeparately(t *testing.T) {
 	// "zfast" is cancelled unasked. Reverse the names and a sequential
 	// implementation passes this test by luck, which is worse than no test.
 	withEnv(t, map[string]string{
-		"ADDON_TARGETS":           "aslow,zfast",
-		"ADDON_ASLOW_BASE_URL":    "https://slow:8090",
-		"ADDON_ASLOW_SIGNING_KEY": "/run/secrets/s.key",
-		"ADDON_ZFAST_BASE_URL":    "https://fast:8090",
-		"ADDON_ZFAST_SIGNING_KEY": "/run/secrets/s.key",
+		"ADDON_TARGETS":        "aslow,zfast",
+		"ADDON_ASLOW_BASE_URL": "https://slow:8090",
+		"ADDON_ASLOW_SECRET":   "the-slow-secret",
+		"ADDON_ZFAST_BASE_URL": "https://fast:8090",
+		"ADDON_ZFAST_SECRET":   "the-fast-secret",
 	})
 	withTargetRegistry(t, &fakeTargetRegistry{})
 	withClock(t, time.Unix(1770000000, 0))
