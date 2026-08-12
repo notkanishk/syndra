@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -35,6 +36,10 @@ func resetGovernanceDeps(t *testing.T) {
 	origHoldsDue := svcAllowancesDueForReview
 	t.Cleanup(func() { svcAllowancesDueForReview = origHoldsDue })
 	svcAllowancesDueForReview = func(context.Context) ([]db.Allowance, error) { return nil, nil }
+	// And the unreconciled-target read the summary grew, same reason again.
+	origUnreconciled := svcGetUnreconciledTargets
+	t.Cleanup(func() { svcGetUnreconciledTargets = origUnreconciled })
+	svcGetUnreconciledTargets = func(context.Context) ([]models.UnreconciledTarget, error) { return nil, nil }
 	origGetRequests := svcGetAccessRequests
 	origGetExpiring := svcGetExpiringDirectGrants
 	origGetAllBundles := svcGetAllBundles
@@ -646,4 +651,78 @@ func TestAnUnreadableAllowanceBandIsSaidOutLoudInTheView(t *testing.T) {
 	if view.Allowances == nil {
 		t.Error("and the band must be a list rather than nil, so a surface renders empty rather than crashing")
 	}
+}
+
+// A target Syndra has not been able to read reaches the governance summary.
+//
+// The whole point is that its absence is indistinguishable from good news. A
+// nightly sweep that has not reached a target for a week produces no drift
+// findings for it, and a drift count of zero beside a silent target reads as "a
+// quiet week" on every surface an operator opens. The record existed and was
+// written correctly; nothing read it back.
+func TestGovernanceReportsTargetsItCannotVouchFor(t *testing.T) {
+	resetGovernanceDeps(t)
+	stubGovernanceReads(t)
+
+	since := time.Now().Add(-7 * 24 * time.Hour)
+	seen := since.Add(-time.Hour)
+	svcGetUnreconciledTargets = func(context.Context) ([]models.UnreconciledTarget, error) {
+		return []models.UnreconciledTarget{{
+			Target: "truenas", Since: since, LastSeen: &seen,
+			Reason: "addon truenas: dial tcp: connect: connection refused",
+		}}, nil
+	}
+
+	summary, err := Governance(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summary.UnreconciledTargets) != 1 {
+		t.Fatalf("expected the unreadable target to be reported, got %+v", summary.UnreconciledTargets)
+	}
+	got := summary.UnreconciledTargets[0]
+	if got.Target != "truenas" || !got.Since.Equal(since) {
+		t.Errorf("row does not carry the target and the age it is owed: %+v", got)
+	}
+	// The reason travels, because "unreachable" and "answered but refused the
+	// read" send an operator to different machines.
+	if got.Reason == "" {
+		t.Error("the reason for the outage was dropped")
+	}
+}
+
+// A failed read of that record degrades to empty rather than failing the
+// summary — but it must not be silent, because empty here MEANS "nothing is
+// unreadable", which is the exact false quiet this field exists to break.
+func TestGovernanceSurvivesAFailedUnreconciledRead(t *testing.T) {
+	resetGovernanceDeps(t)
+	stubGovernanceReads(t)
+
+	svcGetUnreconciledTargets = func(context.Context) ([]models.UnreconciledTarget, error) {
+		return nil, errors.New("the reconciliation table is unavailable")
+	}
+
+	summary, err := Governance(context.Background())
+	if err != nil {
+		t.Fatalf("a failed read must not take the summary down: %v", err)
+	}
+	if summary.UnreconciledTargets == nil {
+		t.Fatal("the field must serialise as [] rather than null")
+	}
+}
+
+// stubGovernanceReads fills in the reads Governance makes that these two tests
+// are not about.
+func stubGovernanceReads(t *testing.T) {
+	t.Helper()
+	svcGetAccessRequests = func(context.Context, string) ([]models.AccessRequest, error) { return nil, nil }
+	svcGetExpiringDirectGrants = func(context.Context, time.Duration) ([]models.DirectGrant, error) {
+		return nil, nil
+	}
+	svcGetAllBundles = func(context.Context) ([]models.Bundle, error) { return []models.Bundle{}, nil }
+	svcGetBundlesForUser = func(context.Context, string) ([]models.Bundle, error) { return nil, nil }
+	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) {
+		return nil, nil
+	}
+	svcGetRolesForBundle = func(context.Context, string) ([]models.BundleRole, error) { return nil, nil }
 }

@@ -545,6 +545,34 @@ type GovernanceSummary struct {
 	CleanupHints       []string                  `json:"cleanup_hints"`
 	PendingPropagation PendingPropagationSummary `json:"pending_propagation"`
 	Drift              DriftSummary              `json:"drift"`
+	// UnreconciledTargets are the targets Syndra currently cannot vouch for.
+	//
+	// It belongs beside the drift count and not inside it, because it is the
+	// reason a drift count may be wrong: a nightly sweep that has been unable to
+	// reach a target for a week looks, on every surface an operator opens, like
+	// a week with no drift. The absence of findings and the absence of readings
+	// are the same silence, and only one of them is good news.
+	UnreconciledTargets []UnreconciledTarget `json:"unreconciled_targets"`
+}
+
+// UnreconciledTarget is one target Syndra has not read for itself, and since
+// when.
+//
+// Restated here rather than reusing `db.TargetReconciliation` because `models`
+// must not import `db`; the mapping happens at the service seam. Only the
+// unreconciled rows reach this type, so `Since` is never nil — the "reconciled
+// fine" case is an absence from the list rather than a row saying so.
+type UnreconciledTarget struct {
+	Target string `json:"target"`
+	// Since is when Syndra stopped being able to vouch for it. Preserved across
+	// repeated failed sweeps, so the age grows rather than resetting every tick.
+	Since time.Time `json:"since"`
+	// LastSeen is the last time Syndra read the target for itself, which may be
+	// long before Since or absent entirely for a target never read.
+	LastSeen *time.Time `json:"last_seen,omitempty"`
+	// Reason is the first failure of the outage, not the latest — the one that
+	// started it is the one that explains it.
+	Reason string `json:"reason,omitempty"`
 }
 
 // PendingPropagationSummary surfaces the outbox depth + reachability so the UI

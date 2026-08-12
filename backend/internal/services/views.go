@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -703,6 +704,20 @@ func governanceFromSnapshot(snap *accessSnapshot) (models.GovernanceSummary, err
 		topDrift = []models.DriftItem{}
 	}
 
+	// The targets Syndra cannot vouch for. Non-fatal like the two counts above,
+	// and for the same reason — but note what degrading to empty means here: it
+	// reports "nothing is unreadable" when the read itself failed. That is the
+	// same false quiet this field exists to break, so the failure is logged
+	// rather than swallowed silently.
+	unreconciled, err := svcGetUnreconciledTargets(snap.ctx)
+	if err != nil {
+		log.Printf("[GOVERNANCE] could not read unreconciled targets: %v (degrading to none)", err)
+		unreconciled = nil
+	}
+	if unreconciled == nil {
+		unreconciled = []models.UnreconciledTarget{}
+	}
+
 	return models.GovernanceSummary{
 		PendingRequests: requests,
 		ExpiringGrants:  expiring,
@@ -711,7 +726,8 @@ func governanceFromSnapshot(snap *accessSnapshot) (models.GovernanceSummary, err
 			Count:            pendingCount,
 			ZitadelReachable: svcZitadelReachable(snap.ctx),
 		},
-		Drift: models.DriftSummary{Count: driftCount, Top: topDrift},
+		Drift:               models.DriftSummary{Count: driftCount, Top: topDrift},
+		UnreconciledTargets: unreconciled,
 	}, nil
 }
 

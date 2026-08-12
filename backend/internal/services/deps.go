@@ -56,6 +56,34 @@ var (
 		}
 		return items[:n], nil
 	}
+	// The targets Syndra cannot currently vouch for, mapped out of db's row
+	// type at the seam because models must not import db.
+	//
+	// This read had no consumer at all until now: the scheduled sweep wrote the
+	// record and every operator surface read the drift count beside it, which
+	// says nothing when the sweep could not reach the target in the first place.
+	svcGetUnreconciledTargets = func(ctx context.Context) ([]models.UnreconciledTarget, error) {
+		rows, err := db.GetUnreconciledTargets(ctx)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]models.UnreconciledTarget, 0, len(rows))
+		for _, r := range rows {
+			if r.UnreconciledSince == nil {
+				// The query filters these out; a row here would mean the filter
+				// changed underneath, and rendering "unreconciled since nothing"
+				// is worse than omitting it.
+				continue
+			}
+			out = append(out, models.UnreconciledTarget{
+				Target:   r.Target,
+				Since:    *r.UnreconciledSince,
+				LastSeen: r.LastCurrentReadAt,
+				Reason:   r.UnreconciledReason,
+			})
+		}
+		return out, nil
+	}
 	svcGetBundlesForUser = db.GetBundlesForUser
 	svcGetRolesForBundle = db.GetRolesForBundle
 	// What a bundle grants TODAY: the latest published version, which is what a

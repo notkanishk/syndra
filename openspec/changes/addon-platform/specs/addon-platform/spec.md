@@ -303,6 +303,27 @@ A failure in the backend's OWN reads MUST NOT be recorded against the target. It
 - **THEN** the sweep MUST diff against that read
 - **AND** changes made during the outage MUST be classified on their own merits, not as a backlog of outage artefacts
 
+### Requirement: An unreconciled target MUST reach the operator's own queue
+
+Recording that a target could not be read MUST be accompanied by a surface that reports it where the operator already looks, and it MUST NOT be left to a record only the sweep writes. The record's whole purpose is that its subject produces no other signal: a target the sweep cannot read yields no drift findings for it, so a week of blindness and a week of good behaviour render identically on every count derived from findings.
+
+The surface MUST count toward whatever the operator's landing view uses to decide it has nothing to say. A view that reports "nothing needs you" while a target has gone unread for a week states the exact opposite of what is known, and the absence of findings is the mechanism by which it would.
+
+It MUST report the age of the outage rather than its tick count, and MUST carry the recorded reason: a target that did not answer and a target that answered and refused the read send an operator to different machines. A failure to read the record itself MUST NOT be reported as an empty record — that is the same false quiet — and MUST be logged.
+
+#### Scenario: A sweep has been unable to read a target for a week
+
+- **WHEN** a target has been recorded unreconciled and nothing else is in the operator's queue
+- **THEN** the landing view MUST NOT report that nothing needs them
+- **AND** MUST name the target, how long it has gone unread, and the recorded reason
+- **AND** MUST say that the absence of findings on that target is not evidence of its cleanliness
+
+#### Scenario: The unreconciled record cannot be read
+
+- **WHEN** the read of that record fails
+- **THEN** the summary MUST still be served
+- **AND** the failure MUST be logged rather than rendered as "no targets are unreadable"
+
 ### Requirement: Add-on transport MUST be mutually authenticated and bind the request
 
 Calls between the backend and an add-on MUST use mutual TLS verified against the deployment's own private certificate authority, or signed requests carrying a timestamp and a hash of the body where mutual TLS is impractical. A bearer shared secret alone MUST NOT be sufficient, because it authenticates the caller without binding anything to the request. The private CA is not optional trimming of the mutual-TLS mode: without it the backend verifies the add-on against the public web PKI, under which the add-on's own certificate fails and any publicly issued certificate passes — a different and wrong trust anchor rather than a weaker version of the right one. A registration carrying incomplete mutual-TLS material MUST NOT be treated as mutually authenticated, and a registration carrying neither complete mode MUST NOT register at all. Every registered add-on's base URL MUST be HTTPS, and a target configured otherwise MUST NOT register: a client's transport settings are consulted only where a TLS handshake occurs, so a plaintext base URL means no certificate is presented and no authority is consulted while the registration still reports itself mutually authenticated. Signed-request mode MUST also run over TLS, because a request signature establishes neither the confidentiality of a secret-bearing body nor the authenticity of the response, and an unauthenticated response allows an on-path peer to forge a success the backend records as a completed mutation. The registered base URL MUST be the only authority the backend contacts for that target: an add-on's response MUST NOT redirect it. A followed redirect re-sends the body of a mutating call to a host the add-on chose, carrying the request signature that authenticates it there, and the redirect's own success would then be recorded against a target that never acted.

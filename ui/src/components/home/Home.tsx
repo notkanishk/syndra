@@ -10,7 +10,7 @@ import { ErrorState, RowSkeleton } from "@/components/states";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
-import { useGovernanceSummary } from "@/lib/queries/useGovernance";
+import { useGovernanceSummary, type UnreconciledTarget } from "@/lib/queries/useGovernance";
 import {
   useDecideRequest,
   useRequestsAdmin,
@@ -21,6 +21,7 @@ import { toastDrain } from "@/lib/drain-toast";
 import { useCreateGrant } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
 import { useIsAdvanced } from "@/lib/ui-view";
+import { targetLabel } from "@/lib/nav";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { formatShortDate, formatWeekday, daysUntil } from "@/lib/format";
 
@@ -69,9 +70,14 @@ export function Home({ session }: { session: SessionUser }) {
   const expiring = summary.data?.expiring_grants ?? [];
   const propagation = summary.data?.pending_propagation;
   const drift = summary.data?.drift;
+  const unvouched = summary.data?.unreconciled_targets ?? [];
 
+  // Counted, and that is the whole point of it. An unreadable target produces
+  // no drift findings, so a week of silence lands here as blocks === 0 and the
+  // page says "Nothing needs you" — the one sentence that must never be said
+  // about a system nobody has been able to look at.
   const blocks = advanced
-    ? pending.length + expiring.length + (propagation?.count ?? 0) + (drift?.count ?? 0)
+    ? pending.length + expiring.length + (propagation?.count ?? 0) + (drift?.count ?? 0) + unvouched.length
     : pending.length + expiring.length;
 
   const who = firstName(session);
@@ -131,6 +137,10 @@ export function Home({ session }: { session: SessionUser }) {
               reachable={propagation!.zitadel_reachable}
             />
           )}
+          {/* Above unexplained access, because it qualifies it: a target Syndra
+              cannot read contributes no findings, so the count below is a
+              statement about the targets it COULD read. */}
+          {advanced && unvouched.length > 0 && <UnvouchedTargets targets={unvouched} />}
           {advanced && (drift?.count ?? 0) > 0 && <UnexplainedAccess count={drift!.count} />}
 
           {!advanced && (
@@ -327,6 +337,43 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           Disabled — identity provider unreachable. Writes stay queued; nothing is lost.
         </div>
       )}
+    </Card>
+  );
+}
+
+/**
+ * Targets Syndra has not been able to read for itself.
+ *
+ * Danger rather than warn, and above the drift count rather than beside it. The
+ * failure mode this exists for is not that something is broken — it is that
+ * nothing looks broken: a sweep that cannot reach a target finds no drift on
+ * it, so a week of blindness and a week of good behaviour render identically
+ * everywhere else in the product.
+ *
+ * The age is the number the operator acts on ("since when", not "for how many
+ * ticks"), and the reason travels with it because "unreachable" and "answered
+ * and refused the read" send them to different machines.
+ */
+function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
+  return (
+    <Card>
+      <CardHeader title="Targets Syndra can't vouch for" count={targets.length} tone="danger" />
+      {targets.map((t, i) => (
+        <CardRow key={t.target} first={i === 0} className="flex-wrap">
+          <div className="flex-1 text-[14.5px]">
+            <strong className="font-semibold">{targetLabel(t.target)}</strong> hasn&rsquo;t been
+            read since <Relative iso={t.since} />.
+            <span className="text-faint">
+              {" "}
+              Nothing found on it means nothing was looked at — not that it is clean.
+            </span>
+            {t.reason && <div className="mt-1 text-[13px] text-faint">{t.reason}</div>}
+          </div>
+          <ButtonLink href={`/system/targets/${t.target}`} size="sm">
+            Open target
+          </ButtonLink>
+        </CardRow>
+      ))}
     </Card>
   );
 }

@@ -35,12 +35,21 @@ export interface DriftSummary {
   top?: DriftItem[];
 }
 
+/** A target Syndra has not been able to read for itself, and since when. */
+export interface UnreconciledTarget {
+  target: string;
+  since: string;
+  last_seen?: string | null;
+  reason?: string;
+}
+
 export interface GovernanceSummary {
   pending_requests: Array<{ id: string }>;
   expiring_grants: ExpiringGrant[];
   cleanup_hints: string[];
   pending_propagation: PendingPropagationSummary;
   drift: DriftSummary;
+  unreconciled_targets: UnreconciledTarget[];
 }
 
 const KEYS = {
@@ -64,6 +73,9 @@ export function useGovernanceSummary() {
         cleanup_hints: Array.isArray(data?.cleanup_hints) ? data.cleanup_hints : [],
         pending_propagation: data?.pending_propagation ?? { count: 0, zitadel_reachable: true },
         drift: data?.drift ?? { count: 0, top: [] },
+        unreconciled_targets: Array.isArray(data?.unreconciled_targets)
+          ? data.unreconciled_targets
+          : [],
       };
     },
   });

@@ -143,11 +143,14 @@ Everything else is healthy: index tracks HEAD, embeddings are local-semantic (`X
 
 ---
 
-## 4a. Add-on platform — complete, with one handover
+## 4a. Add-on platform — complete
 
-`changes/addon-platform` is done, with three rows unticked and each one explained
-in that file's header: none is an unfound defect, and one is a deliberate
-departure from what the row asks for. The backend's IAM half, the TrueNAS add-on,
+`changes/addon-platform` is done — **every row is ticked**, including the four
+handover screens this section used to list as owed. (It said "three rows
+unticked" and "each has a backend endpoint and no screen"; both were true when
+written and neither is now. The entry below is what the section looked like
+before, kept because the reasoning about §13/§17 is still the thing to read
+first.) The backend's IAM half, the TrueNAS add-on,
 the dispatcher joining them, the lifecycle trigger that fires it, the unmanaged
 inventory, provisional plans, the mutation-log anchor, and the retirement of the
 LLDAP bridge are all in and green. What remains is a **visual pass on three
@@ -166,8 +169,9 @@ Neither suite could see it, because each was written against its own fake and
 the two fakes agreed with each other. The contract is an artifact now
 (`addons/contract/*.json`), asserted from both ends.
 
-**What the handover covers, and nothing else does yet.** Each has a backend
-endpoint and no screen:
+**~~What the handover covers, and nothing else does yet.~~ All four are built**
+— `ConvergeEntitlements.tsx`, `MappingManagement.tsx`, `DormantAccounts.tsx`
+and the allowance surfaces. Listed as they were scoped:
 
 1. **Entitlement plan-then-apply UI** (9.3–9.6) — `POST /targets/{t}/entitlements/rehearse` and `.../apply`. The apply carries the plan id, never the original submission.
 2. **Mapping management with version history** (9.7–9.8) — `rehearse-edit`, `rehearse-delete`, and `PATCH`/`DELETE` citing a plan id. The blast-radius acknowledgement is enforced by the backend; the UI has to show the number.
@@ -239,11 +243,18 @@ Compose service block (§32.3).
 
 ## 4c. Owed operator surfaces
 
-- **The unreconciled-target record has no dashboard.** `target_reconciliation` (migration 000026, change `addon-platform` 1.14) records when Syndra last saw each target for itself and since when it has not. The on-demand sweep returns it on `DriftResult`, so [Reconcile now] shows it; the scheduled sweep writes it and nothing reads it back. `db.GetUnreconciledTargets` exists for that consumer and currently has none.
+- **~~The unreconciled-target record has no dashboard.~~ Built.** It is in the governance summary and on the home queue, and it counts toward the "nothing needs you" decision — which was the point, since an unread target produces no findings and a blind week otherwise renders exactly like a quiet one (`addon-platform` 1.14a). The note below is the state before that.
 
-  This matters most in exactly the case it was built for: a nightly sweep that has been unable to reach a target for a week looks, on every surface an operator actually opens, like a week with no drift. The natural home is the governance summary beside the drift count — which needs `TargetReconciliation` moved to `internal/models` first, since `models` must not import `db`. Deliberately not done inline with 1.14: a backend field with no rendering is not "saying so" to anybody, and inventing the callout unprompted is a design decision the IA change owns (`basic-advanced-ia`).
+  <details><summary>Previous entry</summary> `target_reconciliation` (migration 000026, change `addon-platform` 1.14) records when Syndra last saw each target for itself and since when it has not. The on-demand sweep returns it on `DriftResult`, so [Reconcile now] shows it; the scheduled sweep writes it and nothing reads it back. `db.GetUnreconciledTargets` exists for that consumer and currently has none.
 
-- **The log-integrity finding reaches one surface, and should reach the summary.** `addon_log_anchors` (migration 000033) records where each add-on's mutation-log head was and refuses to move past a truncation or a rewrite. `GET /api/v1/targets/{target}/health` now carries the finding (§19.6), so an operator who opens that target sees it — but `db.ListCompromisedLogs` still has no consumer, so nothing tells them to open it. The governance summary is the home, beside the drift count and the unreconciled-target record above; all three are the same missing callout.
+  This mattered most in exactly the case it was built for: a nightly sweep that has been unable to reach a target for a week looks, on every surface an operator actually opens, like a week with no drift. The natural home is the governance summary beside the drift count — which needs `TargetReconciliation` moved to `internal/models` first, since `models` must not import `db`. Deliberately not done inline with 1.14: a backend field with no rendering is not "saying so" to anybody, and inventing the callout unprompted is a design decision the IA change owns (`basic-advanced-ia`).
+  </details>
+
+- **~~The log-integrity finding reaches one surface, and should reach the summary.~~ Closed by deletion, deliberately.** `db.ListCompromisedLogs` no longer exists: it extended `anchorSelect`, whose `WHERE ($1 = '' OR target = $1)` needs an argument, and passed none — so pgx refused every call it was ever given. Having no caller is what hid that. The finding still reaches the operator on the target's own health card, which is where they act on it, and the listing comes back when a surface wants it, with a test. The note below is the state before that.
+
+  <details><summary>Previous entry</summary> `addon_log_anchors` (migration 000033) records where each add-on's mutation-log head was and refuses to move past a truncation or a rewrite. `GET /api/v1/targets/{target}/health` now carries the finding (§19.6), so an operator who opens that target sees it — but `db.ListCompromisedLogs` still has no consumer, so nothing tells them to open it. The governance summary is the home, beside the drift count and the unreconciled-target record above; all three are the same missing callout.
+
+  </details>
 
 ## 5. Declined / deliberately kept
 
