@@ -175,3 +175,53 @@ func TestAFailedProbeIsRetriedOnACooldownRatherThanEveryCall(t *testing.T) {
 		t.Fatalf("want the probe retried after the cooldown, got %d new calls", c.calls-before)
 	}
 }
+
+// The version strings real TrueNAS releases actually answer with.
+//
+// `TrueNAS-25.10.5` is not a guess: it is what `nas.example.org`
+// returned on the first connection to a real NAS, 2026-08-13. Splitting on "."
+// from the left made that `TrueNAS-25.10`, which matches no entry in
+// TRUENAS_SUPPORTED_MAJORS — so the add-on refused every mutation against a
+// release listed as supported, and said "outside the tested range" while naming
+// a major nobody had written down.
+//
+// The recorded fixture in this file carries a bare `25.04.2.1`, which is why no
+// test could see it: the parser and the fake agreed with each other, and the
+// target was the only thing that disagreed.
+func TestMajorOfHandlesTheVersionStringsTrueNASActuallyReturns(t *testing.T) {
+	for version, want := range map[string]string{
+		"TrueNAS-25.10.5":       "25.10", // observed, nas.example.org
+		"TrueNAS-SCALE-24.04.0": "24.04", // the older SCALE prefix
+		"25.04.2.1":             "25.04", // the bare form this suite recorded
+		"TrueNAS-13.0-U6":       "13.0",  // CORE, for the shape rather than support
+	} {
+		if got := majorOf(version); got != want {
+			t.Errorf("majorOf(%q) = %q, want %q", version, got, want)
+		}
+	}
+}
+
+// A string with no release number in it hands back what was read, so the
+// refusal quotes the target's own answer instead of an empty string an operator
+// cannot search for.
+func TestMajorOfKeepsAnUnparseableVersionVisible(t *testing.T) {
+	if got := majorOf("  nightly  "); got != "nightly" {
+		t.Errorf("majorOf = %q, want the trimmed input back", got)
+	}
+}
+
+// The gate itself, against the real string: this is the assertion that would
+// have caught it, and the one that keeps it caught.
+func TestARealVersionStringPassesTheSupportedGate(t *testing.T) {
+	n := newNAS(func() (rpc, error) {
+		return &recordedRPC{response: `{"jsonrpc":"2.0","id":1,"result":"TrueNAS-25.10.5"}`}, nil
+	}, []string{"25.04", "25.10", "26.04"})
+	n.probed = false
+	if _, err := n.SystemVersion(); err != nil {
+		t.Fatalf("version read: %v", err)
+	}
+	ok, note := n.MajorSupported()
+	if !ok {
+		t.Fatalf("a supported release was refused: %s", note)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -511,15 +512,40 @@ func (n *NAS) MajorSupported() (bool, string) {
 	return true, ""
 }
 
-// majorOf takes the leading `YY.MM` of a TrueNAS version string, which is what
-// its release line is named by.
+// majorOf takes the `YY.MM` of a TrueNAS version string, which is what its
+// release line is named by.
+//
+// It searches for the release number rather than assuming the string starts
+// with it, because TrueNAS does not: a real 25.10 answers `system.version` with
+// **`TrueNAS-25.10.5`**, and older SCALE releases answered `TrueNAS-SCALE-24.04.0`.
+// Splitting on "." from the left yielded `TrueNAS-25.10`, which matches no entry
+// in TRUENAS_SUPPORTED_MAJORS — so the add-on refused every mutation against a
+// version it explicitly supports, and reported the reason as "outside the tested
+// range" while naming a major nobody had ever written down.
+//
+// Found on the first connection to a real NAS. Nothing could have found it
+// earlier: the recorded fixture carried a bare `25.04.2.1`, so the parser and
+// the fake agreed with each other and the target was the only thing that
+// disagreed.
 func majorOf(version string) string {
-	parts := strings.SplitN(strings.TrimSpace(version), ".", 3)
-	if len(parts) < 2 {
-		return strings.TrimSpace(version)
+	if m := releaseNumber.FindString(version); m != "" {
+		return m
 	}
-	return parts[0] + "." + parts[1]
+	// No YY.MM anywhere: hand back what was read, so the refusal quotes the
+	// target's own answer rather than an empty string.
+	return strings.TrimSpace(version)
 }
+
+// releaseNumber is the first `N.N` in a version string. Anchored on digits
+// rather than on any prefix, because the prefixes are the part that varies
+// between products and releases.
+//
+// Not `\d{2}\.\d{2}`: that reads SCALE's YY.MM and silently fails to match
+// CORE's `TrueNAS-13.0-U6`, which would hand the whole string back to the
+// supported-majors gate and have it refuse "TrueNAS-13.0-U6" instead of "13.0".
+// CORE is out of scope for this add-on either way — but a refusal that names the
+// release is a refusal an operator can act on, and one that quotes a blob is not.
+var releaseNumber = regexp.MustCompile(`\d+\.\d+`)
 
 // dialTrueNAS is the real dialer: one WebSocket, authenticated by API key.
 //
