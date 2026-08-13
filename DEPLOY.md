@@ -626,17 +626,108 @@ one's, so doing them out of order costs an afternoon.
 
 **1 — The NAS-side identity.** Roles in TrueNAS attach to *groups*, never
 directly to users, and an API key inherits whatever its linked user's groups
-carry. So: a group, a privilege naming the roles, a user in that group, a key on
-that user.
+carry. So the order is: a group, a privilege naming the roles, a user in that
+group, a key on that user. Four objects, and each one is useless without the
+next.
 
-- `Credentials > Groups > Add` — a group, e.g. `syndra-addon`. No sudo.
-- `Credentials > Groups > Privileges > Add` — name it, put `syndra-addon` in
-  **Local Groups**, and in **Roles** select `ACCOUNT_WRITE` and
-  `SYSTEM_AUDIT_READ`. Not `FULL_ADMIN`.
-- `Credentials > Users > Add` — e.g. `syndra`, primary group `syndra-addon`.
-  No home directory, no shell, SSH off. It never logs in interactively.
-- `Credentials > Users >` select the row `> Access > View API Keys > Add` —
-  set an expiry, and record it. Copy the key **now**; TrueNAS shows it once.
+**a. The group.** `Credentials > Groups > Add`
+
+| Field | Value | Why |
+|---|---|---|
+| Name | `syndra-addon` | The privilege binds to this name. |
+| GID | leave auto | Nothing outside TrueNAS references it. |
+| Samba Authentication | **off** | This account manages SMB users; it is not one. |
+| Allow sudo commands | **off** | It never runs commands. There is no shell on this account to run them from. |
+
+**b. The privilege — this is where the roles live.**
+`Credentials > Groups > Privileges > Add`
+
+| Field | Value |
+|---|---|
+| Name | `syndra-addon` |
+| Local Groups | `syndra-addon` (the group from (a)) |
+| Roles | `ACCOUNT_WRITE`, `READONLY_ADMIN`, `SYSTEM_AUDIT_READ` |
+| Web Shell Access | **off** |
+
+`ACCOUNT_WRITE` is the only *write* role, and it is the whole of what the add-on
+may change: `user.create`, `user.update`, `user.delete`. Never `FULL_ADMIN`.
+
+`READONLY_ADMIN` looks broad and is not a widening of this credential. It grants
+every `*_READ` role and no write, and the add-on needs four of them —
+`system.info` and `system.version` (system), `pool.query` (pools),
+`service.query` (services), `sharing.smb.query` (activity reports). **The
+version read is not optional:** the add-on calls `system.version` at startup and
+treats a failure as *the target is unreachable*, so a privilege without it
+produces a NAS that reports as down while answering perfectly. If you prefer to
+enumerate instead, the specific roles are `SYSTEM_GENERAL_READ`, `POOL_READ`,
+`SERVICE_READ` and `SHARING_SMB_READ` — check them against your release's
+[RBAC reference][truenas-rbac], because role names have been added and split
+between majors, and a name that is missing from the dropdown is a name that does
+not exist on your version.
+
+**c. The user.** `Credentials > Users > Add`
+
+| Field | Value | Why |
+|---|---|---|
+| Full Name | `Syndra add-on` | What an admin sees in an audit entry. |
+| Username | `syndra` | Also what appears in `audit.query` rows. |
+| Email | blank | It receives nothing. |
+| Password | see the note below | |
+| UID | leave auto | |
+| Primary Group | `syndra-addon` | **The whole point.** The privilege reaches this user only through this group. |
+| Auxiliary Groups | none | Especially not `builtin_administrators`, which would make every role above decoration. |
+| Home Directory | `/var/empty` | |
+| Home Directory Permissions | leave default | It never writes there. |
+| SSH public key | blank | |
+| Allow SSH login with password | **off** | |
+| Shell | `nologin` | |
+| Lock User | **off** | A locked account cannot authenticate at all, including by key. |
+| Samba Authentication | **off** | It manages SMB users; it is not one. |
+
+> **Password vs API key, the one field worth a second look.** The key is the
+> credential — nothing in Syndra ever sends this account's password. Try
+> **Disable Password: Yes** first. If the add-on then logs `login failed`, set a
+> long random password (a password manager entry nobody types) and leave the key
+> as the only thing that authenticates: some releases refuse API-key auth for an
+> account with no password set at all, and the two failures are indistinguishable
+> from the add-on's side.
+
+**d. The API key.** `Credentials > Users >` select `syndra` `> ⋮ > API Keys`
+(older releases: `Access > View API Keys`) `> Add`
+
+| Field | Value |
+|---|---|
+| Name | `syndra-addon` |
+| Expires | set a real date — a year is reasonable |
+| Reset | not applicable on a new key |
+
+**Copy the key now.** TrueNAS shows it exactly once, and there is no way to read
+it back — a lost key is re-minted, not recovered. Put the expiry date into
+`TRUENAS_API_KEY_EXPIRES_AT` in the same edit as the key itself: the add-on
+surfaces it on `/health` so the expiry arrives as a warning rather than as an
+outage that looks like a network fault.
+
+**e. Wire it into Syndra.** In `.env` on the deployment host:
+
+```bash
+TRUENAS_URL=wss://nas.example.org/api/current
+TRUENAS_API_KEY=<the key you just copied>
+TRUENAS_API_KEY_EXPIRES_AT=2027-08-13T00:00:00Z
+TRUENAS_VERIFY_TLS=false        # the NAS serves a self-signed certificate; see 5a
+TRUENAS_SHARE_HOST=<the name members type into a file manager>
+ADDON_TARGETS=truenas
+COMPOSE_PROFILES=truenas
+```
+
+```bash
+docker compose up -d
+./scripts/smoke-test-addon.sh truenas
+```
+
+> **`wss://`, never `ws://`.** TrueNAS **revokes** a user-linked API key
+> presented over plaintext transport. A `ws://` typo does not fail with an auth
+> error you can retry — it destroys the credential, and the fix is minting a new
+> one and doing (d) again.
 
 > **`ACCOUNT_WRITE` includes deletion.** `user.delete` requires exactly the role
 > `user.create` and `user.update` require, and TrueNAS has no narrower one — see
@@ -646,10 +737,10 @@ that user.
 > to a credential issued for that one call. It does **not** mean the standing key
 > cannot delete an account. Do not write it down as if it did.
 
-> **HTTPS is not optional on this path.** TrueNAS automatically **revokes** a
-> user-linked API key presented over plaintext transport. A misconfigured
-> `TRUENAS_URL` of `ws://` does not fail with an auth error you can retry — it
-> destroys the credential, and the fix is minting a new one.
+> **The purge key is minted later, not now.** `account.purge` takes an
+> `elevated_key` as a declared secret parameter at the moment of use; nothing
+> stores it. Mint it when you first purge an account, on the same user, with the
+> same `ACCOUNT_WRITE` role — and delete it afterwards.
 
 **2 — Reachability.** Set `TRUENAS_URL=wss://nas.example.org/api/current`
 (step 5a) and leave `TRUENAS_VERIFY_TLS=true`. Routing through the proxy is what
