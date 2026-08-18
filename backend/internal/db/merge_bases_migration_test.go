@@ -113,3 +113,43 @@ func TestMergeFindingsMigration_DedupesOneStandingFindingPerField(t *testing.T) 
 		}
 	}
 }
+
+// The memory that a write landed (000044).
+//
+// A grant applied and removed between two sweeps has no observation behind it,
+// so its absence reads as a write that never happened — and gets replayed,
+// restoring access somebody removed on purpose. The outbox cannot answer it:
+// terminal rows are pruned, and there is no `confirmed` state by design.
+func TestPropagationsMigration_KeepsTheEvidenceTheOutboxDiscards(t *testing.T) {
+	up, err := os.ReadFile("../../db/migrations/000044_target_propagations.up.sql")
+	if err != nil {
+		t.Fatalf("read up migration: %v", err)
+	}
+	sql := string(up)
+
+	for _, want := range []string{
+		"CREATE TABLE IF NOT EXISTS target_propagations",
+		// One row per thing written, overwritten by each later success: the
+		// question is "when did this last land", not a history of every apply.
+		"PRIMARY KEY (target, subject_id, field)",
+		"applied_at TIMESTAMPTZ  NOT NULL",
+		// The thread back to what authorised the write, kept past the outbox
+		// row's own retention.
+		"outbox_id  UUID",
+		"actor      VARCHAR(255) NOT NULL",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("000044 up migration missing %q", want)
+		}
+	}
+}
+
+func TestPropagationsMigration_DownDropsWhatUpCreated(t *testing.T) {
+	down, err := os.ReadFile("../../db/migrations/000044_target_propagations.down.sql")
+	if err != nil {
+		t.Fatalf("read down migration: %v", err)
+	}
+	if !strings.Contains(string(down), "DROP TABLE IF EXISTS target_propagations") {
+		t.Error("the down migration must drop the table the up one created")
+	}
+}

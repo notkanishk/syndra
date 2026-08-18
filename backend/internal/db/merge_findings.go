@@ -24,6 +24,16 @@ import (
 // differently.
 var ErrNoSuchMergeFinding = errors.New("db: no standing merge finding")
 
+// ErrMergeFindingDecided refuses a second answer to a question somebody has
+// already answered.
+//
+// The decisions here are opposites — recreate the account, or stop managing it
+// — and the first one's work is queued the moment it is made. Taking the second
+// would make the outcome depend on which request arrived last, and for
+// `unbound` it would release the account on the target while a re-provision sat
+// in the outbox.
+var ErrMergeFindingDecided = errors.New("db: that finding has already been decided")
+
 // Merge finding resolutions, as the surface offers them.
 const (
 	// ResolutionKeepOurs applies Syndra's state over the target's. The old
@@ -185,17 +195,29 @@ func CountStandingMergeFindings(ctx context.Context) (int, error) {
 func GetStandingMergeFinding(ctx context.Context, id string) (MergeFinding, error) {
 	const q = `
 		SELECT id, target, subject_id, field, outcome, base_value, ours_value, theirs_value,
-		       detected_at, last_seen_at
+		       detected_at, last_seen_at, decision, decided_by, decided_at
 		FROM target_merge_findings
 		WHERE id = $1::uuid AND resolved_at IS NULL`
 	var f MergeFinding
 	var base, ours, theirs []byte
+	var decision, decidedBy *string
 	err := querier(ctx).QueryRow(ctx, q, id).Scan(&f.ID, &f.Target, &f.SubjectID, &f.Field,
-		&f.Outcome, &base, &ours, &theirs, &f.DetectedAt, &f.LastSeenAt)
+		&f.Outcome, &base, &ours, &theirs, &f.DetectedAt, &f.LastSeenAt,
+		&decision, &decidedBy, &f.DecidedAt)
 	if err != nil {
 		return MergeFinding{}, fmt.Errorf("%w: %s", ErrNoSuchMergeFinding, id)
 	}
 	f.Base, f.Ours, f.Theirs = json.RawMessage(base), json.RawMessage(ours), json.RawMessage(theirs)
+	// The decision travels, and dropping it here was not a cosmetic omission: a
+	// caller reading this row saw an undecided finding and acted on it, so a
+	// second request could answer a question somebody had already answered
+	// differently — after the first answer had queued work.
+	if decision != nil {
+		f.Decision = *decision
+	}
+	if decidedBy != nil {
+		f.DecidedBy = *decidedBy
+	}
 	return f, nil
 }
 
@@ -218,19 +240,55 @@ func RecordMergeDecision(ctx context.Context, id, actor, decision string) (Merge
 	case !isMergeResolution(decision):
 		return MergeFinding{}, fmt.Errorf("record merge decision: %q is not a decision", decision)
 	}
+	// `decision IS NULL` is the whole guarantee. Without it this was an
+	// unconditional overwrite: a second request could replace a decision whose
+	// work was already queued, and for `unbound` that meant releasing the
+	// account on the target while a re-provision sat in the outbox.
+	//
+	// One writer wins and the loser is told so. Fail-closed rather than
+	// last-write-wins, because the two answers here are opposites — recreate the
+	// account, or stop managing it — and silently taking the second would make
+	// the outcome depend on which HTTP request happened to arrive last.
 	const q = `
 		UPDATE target_merge_findings
 		SET decision = $3, decided_by = $2, decided_at = NOW()
-		WHERE id = $1::uuid AND resolved_at IS NULL
+		WHERE id = $1::uuid AND resolved_at IS NULL AND decision IS NULL
 		RETURNING id, target, subject_id, field, outcome, detected_at, last_seen_at`
 	var f MergeFinding
 	err := querier(ctx).QueryRow(ctx, q, id, actor, decision).Scan(&f.ID, &f.Target,
 		&f.SubjectID, &f.Field, &f.Outcome, &f.DetectedAt, &f.LastSeenAt)
 	if err != nil {
+		// Either it is gone, or somebody decided first. Told apart here, because
+		// they are different sentences to an operator: one is "that is already
+		// settled", the other is "somebody else just answered this".
+		if standing, readErr := GetStandingMergeFinding(ctx, id); readErr == nil && standing.Decision != "" {
+			return MergeFinding{}, fmt.Errorf("%w: %s already decided as %s by %s",
+				ErrMergeFindingDecided, id, standing.Decision, standing.DecidedBy)
+		}
 		return MergeFinding{}, fmt.Errorf("%w: %s", ErrNoSuchMergeFinding, id)
 	}
 	f.Decision, f.DecidedBy = decision, actor
 	return f, nil
+}
+
+// ReleaseMergeDecision undoes a reservation whose work did not happen.
+//
+// The reservation is taken before the target is called, so that no second
+// request can decide the opposite while the first is mid-flight. If that call
+// then fails, the reservation must go — otherwise one unreachable add-on wedges
+// the finding as decided-but-never-done, and the surface offers no way back.
+//
+// Conditional on the decision still being the one this caller made. A
+// reservation somebody else has since replaced is not this caller's to clear.
+func ReleaseMergeDecision(ctx context.Context, id, actor, decision string) error {
+	const q = `
+		UPDATE target_merge_findings
+		SET decision = NULL, decided_by = NULL, decided_at = NULL
+		WHERE id = $1::uuid AND resolved_at IS NULL AND decision = $3 AND decided_by = $2`
+	if _, err := querier(ctx).Exec(ctx, q, id, actor, decision); err != nil {
+		return fmt.Errorf("release merge decision %s: %w", id, err)
+	}
+	return nil
 }
 
 func isMergeResolution(v string) bool {

@@ -18,9 +18,9 @@ func withTriageDeps(t *testing.T, items []models.DriftItem, users map[string]mod
 	origAssigned := svcDbGetAssignedUserCounts
 	origRefs := svcDbGetAllReferencedRoleKeys
 	origFind := directoryFindUser
-	origGrants, origBases := svcGetAllDirectGrants, svcMergeBases
+	origGrants, origBases, origLanded := svcGetAllDirectGrants, svcMergeBases, svcPropagations
 	t.Cleanup(func() {
-		svcGetAllDirectGrants, svcMergeBases = origGrants, origBases
+		svcGetAllDirectGrants, svcMergeBases, svcPropagations = origGrants, origBases, origLanded
 	})
 	// No ledger and no observations by default: a row with no history is still
 	// a row, and every test written before provenance existed asserts what one
@@ -28,6 +28,9 @@ func withTriageDeps(t *testing.T, items []models.DriftItem, users map[string]mod
 	svcGetAllDirectGrants = func(context.Context, bool) ([]models.DirectGrant, error) { return nil, nil }
 	svcMergeBases = func(context.Context, string) (map[string]db.MergeBase, error) {
 		return map[string]db.MergeBase{}, nil
+	}
+	svcPropagations = func(context.Context, string) (map[string]map[string]db.Propagation, error) {
+		return map[string]map[string]db.Propagation{}, nil
 	}
 	t.Cleanup(func() {
 		svcGetPendingDriftItems = origDrift
@@ -419,5 +422,46 @@ func TestDriftTriage_AnUnobservedGrantIsNotDated(t *testing.T) {
 	}
 	if rows[0].Provenance == nil || rows[0].Provenance.LastObservedAt != nil {
 		t.Fatalf("nobody saw the target holding this one: %+v", rows[0].Provenance)
+	}
+}
+
+// The memory that the write LANDED, which is the half no read can supply.
+//
+// A grant applied at noon and removed at one was never observed by any sweep,
+// so the base says nothing about it — and the row then reads as "expected,
+// missing", which is the sentence for a write that never happened. What Syndra
+// actually knows is stronger: the target accepted this, at a time, on somebody's
+// approval.
+func TestDriftTriage_ARemovalCarriesWhenTheWriteLanded(t *testing.T) {
+	applied := time.Date(2026, 8, 19, 12, 4, 0, 0, time.UTC)
+
+	withTriageDeps(t, []models.DriftItem{{
+		ID: "d1", Target: db.TargetZitadel, UserID: "u1", ProjectID: "p1",
+		RoleKeys: []string{"viewer"}, DriftType: db.DriftSyndraOnly,
+		Status: "pending_triage", DetectedAt: applied.Add(time.Hour),
+	}}, nil)
+	svcGetAllDirectGrants = func(context.Context, bool) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{UserID: "u1", ProjectID: "p1", RoleKey: "viewer", GrantedBy: "op-ada"}}, nil
+	}
+	// No observation at all: no sweep ran between the write and the removal.
+	svcPropagations = func(context.Context, string) (map[string]map[string]db.Propagation, error) {
+		return map[string]map[string]db.Propagation{
+			"u1": {"p1/viewer": {SubjectID: "u1", Field: "p1/viewer", AppliedAt: applied, Actor: "op-marta"}},
+		}, nil
+	}
+
+	rows, err := DriftTriageQueue(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := rows[0].Provenance
+	if p == nil || p.AppliedAt == nil || !p.AppliedAt.Equal(applied) {
+		t.Fatalf("the row must remember that the write landed: %+v", p)
+	}
+	if p.AppliedBy != "op-marta" {
+		t.Fatalf("and who it was attributed to: %+v", p)
+	}
+	if p.LastObservedAt != nil {
+		t.Fatalf("nothing observed it, and that stays true: %+v", p)
 	}
 }

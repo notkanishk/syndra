@@ -649,6 +649,20 @@ function explainDrift(item: DriftTriageItem): string {
     // somebody undid. Told with its history, the row is recognisably the same
     // entitlement Syndra applied rather than a stranger.
     const p = item.provenance;
+    // The write landing is the stronger evidence and, for a grant applied and
+    // removed between two sweeps, the only evidence: nothing ever read it, so
+    // the observation below does not exist. Told first for that reason.
+    if (p?.applied_at) {
+      const who = p.granted_by ? ` by ${p.granted_by}` : "";
+      const why = p.reason ? ` — ${p.reason}` : "";
+      const held = p.last_observed_at
+        ? ` The identity provider was still holding it on ${formatLongDate(p.last_observed_at)}.`
+        : "";
+      const removedBy = item.upstream_actor ? ` Removed by ${item.upstream_actor}.` : "";
+      return `Granted${who}${why}. Syndra applied it on ${formatLongDate(
+        p.applied_at,
+      )} and the identity provider accepted it.${held} It is not there now, so somebody removed it.${removedBy}`;
+    }
     if (p?.last_observed_at) {
       const who = p.granted_by ? ` by ${p.granted_by}` : "";
       const when = p.granted_at ? ` on ${formatLongDate(p.granted_at)}` : "";

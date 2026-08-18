@@ -332,6 +332,17 @@ func ValidateMappingField(declared []string, field string) error {
 // that missed those would deprovision somebody the moment their access stopped
 // being hand-granted. It reuses the same collector the access views are built
 // from, so "what does this person hold" has one answer in the product.
+// HeldRoles is the roles a subject effectively holds — direct, through a
+// bundle, or derived by a rule.
+//
+// Exported for the surfaces that have to say WHICH policy produces a value for
+// one person. The mappings for a field are per role, so listing all of them
+// would name policies that reach this subject not at all, and a blast radius
+// somebody read off an unrelated mapping is worse than none.
+func HeldRoles(ctx context.Context, subjectID string) ([]db.RoleRef, error) {
+	return svcEffectiveRoleRefs(ctx, subjectID)
+}
+
 func effectiveRoleRefs(ctx context.Context, subjectID string) ([]db.RoleRef, error) {
 	roleMap, _, err := collectUserRolesHook(ctx, subjectID)
 	if err != nil {

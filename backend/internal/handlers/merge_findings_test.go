@@ -30,8 +30,12 @@ type findingHarness struct {
 	allowances []db.Allowance
 	resolved   []string
 	decided    []string
-	forgotten  []string
-	allowErr   error
+	// Reservations taken and given back. The reservation is what stops a second
+	// request deciding the opposite while the first is calling the target.
+	reservationsCleared []string
+	decideErr           error
+	forgotten           []string
+	allowErr            error
 	// The add-on's half of a release. Recorded so a test can assert that the
 	// backend never forgets its own record without the add-on confirming it let
 	// go — the split-store failure `account.release` exists to close.
@@ -44,8 +48,10 @@ func stubFindings(t *testing.T, h *findingHarness) {
 	t.Helper()
 	get, resolve := dbGetStandingMergeFinding, dbResolveMergeFinding
 	converge, allow := dbRecordSystemConvergence, dbCreateAllowance
-	decide := dbRecordMergeDecision
-	t.Cleanup(func() { dbRecordMergeDecision = decide })
+	decide, releaseDecision := dbRecordMergeDecision, dbReleaseMergeDecision
+	t.Cleanup(func() {
+		dbRecordMergeDecision, dbReleaseMergeDecision = decide, releaseDecision
+	})
 	resolveSet, inTx := svcResolveEntitlementsFor, svcInTxLockingAccess
 	forget, forgetBase := dbForgetTargetBinding, dbForgetMergeBase
 	dispatch := svcDispatchOperation
@@ -79,8 +85,15 @@ func stubFindings(t *testing.T, h *findingHarness) {
 		return h.finding, nil
 	}
 	dbRecordMergeDecision = func(_ context.Context, id, actor, decision string) (db.MergeFinding, error) {
+		if h.decideErr != nil {
+			return db.MergeFinding{}, h.decideErr
+		}
 		h.decided = append(h.decided, decision)
 		return h.finding, nil
+	}
+	dbReleaseMergeDecision = func(_ context.Context, _, _, decision string) error {
+		h.reservationsCleared = append(h.reservationsCleared, decision)
+		return nil
 	}
 	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
 		h.converged = append(h.converged, c)
@@ -318,6 +331,13 @@ func TestUnbindingIsRefusedWhenTheAddOnDoesNotConfirm(t *testing.T) {
 	if len(h.resolved) != 0 {
 		t.Fatal("a release nobody confirmed must leave the finding standing")
 	}
+	// The reservation was taken before the call and given back after it failed.
+	// Left standing, one unreachable add-on would wedge the finding as
+	// decided-but-never-done with no way back through this surface.
+	if len(h.decided) != 1 || len(h.reservationsCleared) != 1 {
+		t.Fatalf("the reservation must be taken and then released: taken=%v cleared=%v",
+			h.decided, h.reservationsCleared)
+	}
 }
 
 // Which buttons a surface renders is not validation. `unbound` against a value
@@ -364,9 +384,21 @@ func TestKeepingOursIsRefusedForAnAccountThatIsGone(t *testing.T) {
 func stubFindingsList(t *testing.T, findings []db.MergeFinding, mappings []db.RoleMapping, holders []string) {
 	t.Helper()
 	list, listMappings, count := dbStandingMergeFindings, dbListRoleMappings, dbMappingHolders
+	roles := svcHeldRoles
 	t.Cleanup(func() {
 		dbStandingMergeFindings, dbListRoleMappings, dbMappingHolders = list, listMappings, count
+		svcHeldRoles = roles
 	})
+	// The subject holds every mapped role by default. A test about SCOPING says
+	// otherwise; every other test is about something else and should not have to
+	// restate the role graph.
+	svcHeldRoles = func(context.Context, string) ([]db.RoleRef, error) {
+		refs := make([]db.RoleRef, 0, len(mappings))
+		for _, m := range mappings {
+			refs = append(refs, db.RoleRef{ProjectID: m.ProjectID, RoleKey: m.RoleKey})
+		}
+		return refs, nil
+	}
 	dbStandingMergeFindings = func(context.Context, string) ([]db.MergeFinding, error) { return findings, nil }
 	dbListRoleMappings = func(context.Context, string) ([]db.RoleMapping, error) { return mappings, nil }
 	dbMappingHolders = func(context.Context, string, string) ([]string, error) { return holders, nil }
@@ -478,8 +510,13 @@ func TestUnbindingSettlesImmediately(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if len(h.resolved) != 1 || len(h.decided) != 0 {
-		t.Fatalf("unbinding settles rather than waits: resolved=%v decided=%v", h.resolved, h.decided)
+	// Reserved first, then settled: the reservation is what stops a second
+	// request choosing the opposite while the add-on is being called.
+	if len(h.decided) != 1 || h.decided[0] != db.ResolutionUnbound {
+		t.Fatalf("unbinding must reserve before it releases: %v", h.decided)
+	}
+	if len(h.resolved) != 1 {
+		t.Fatalf("unbinding settles rather than waits: resolved=%v", h.resolved)
 	}
 	if !strings.Contains(rr.Body.String(), `"resolved":true`) {
 		t.Fatalf("the answer must say it is settled: %s", rr.Body.String())
@@ -500,5 +537,134 @@ func TestADecisionSaysItIsWaitingRatherThanDone(t *testing.T) {
 	}
 	if !strings.Contains(body, "until a reconciliation sees the target agree") {
 		t.Fatalf("the answer must say what it is waiting for: %s", body)
+	}
+}
+
+// A decided finding is answered, and the API has to say so.
+//
+// The surface hid its controls after a decision, and that was the whole of the
+// protection: the read dropped the decision fields, so a second request saw an
+// undecided finding and the write overwrote the first answer. The two answers
+// here are opposites — recreate the account, or stop managing it — and for
+// `unbound` the second one released the account on the target while the first
+// one's re-provision sat in the outbox.
+func TestASecondDecisionIsRefusedRatherThanOverwriting(t *testing.T) {
+	h := &findingHarness{finding: db.MergeFinding{
+		ID: "f1", Target: "truenas", SubjectID: "sub-1", Outcome: "deleted_upstream",
+		Decision: db.ResolutionReprovisioned, DecidedBy: "op-ada",
+	}}
+	stubFindings(t, h)
+
+	rr := resolveFinding(t, `{"resolution":"unbound","reason":"changed my mind"}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("want 409, got %d: %s", rr.Code, rr.Body.String())
+	}
+	// It names who decided, because a second operator has to know somebody
+	// chose — not merely that their own request failed.
+	if !strings.Contains(rr.Body.String(), "op-ada") {
+		t.Fatalf("the refusal must name who decided: %s", rr.Body.String())
+	}
+	if len(h.dispatched) != 0 {
+		t.Fatal("the add-on must never be called for a finding somebody already answered")
+	}
+	if len(h.decided) != 0 || len(h.resolved) != 0 {
+		t.Fatal("nothing may be written over an existing decision")
+	}
+}
+
+// And the race the reading cannot close. Two requests read an undecided
+// finding; the reservation is a conditional write, so one wins and the other is
+// told — before either has called the target.
+func TestALostRaceForTheReservationNeverReachesTheTarget(t *testing.T) {
+	h := &findingHarness{
+		finding: db.MergeFinding{
+			ID: "f1", Target: "truenas", SubjectID: "sub-1", Outcome: "deleted_upstream",
+		},
+		decideErr: db.ErrMergeFindingDecided,
+	}
+	stubFindings(t, h)
+
+	rr := resolveFinding(t, `{"resolution":"unbound","reason":"tidying up"}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("want 409, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(h.dispatched) != 0 {
+		t.Fatal("a lost race must not release the account")
+	}
+	if len(h.forgotten) != 0 || len(h.resolved) != 0 {
+		t.Fatal("a lost race must write nothing")
+	}
+}
+
+// The same guard for the decisions that queue work rather than calling a
+// target: a second keep-ours after a take-theirs would queue a convergence over
+// somebody else's answer.
+func TestASecondValueDecisionIsRefused(t *testing.T) {
+	h := &findingHarness{finding: db.MergeFinding{
+		ID: "f1", Target: "truenas", SubjectID: "sub-1", Field: "enabled",
+		Outcome: "theirs_only", Theirs: json.RawMessage(`false`),
+		Decision: db.ResolutionTakeTheirs, DecidedBy: "op-marta",
+	}}
+	stubFindings(t, h)
+
+	rr := resolveFinding(t, `{"resolution":"keep_ours","reason":"actually put it back"}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("want 409, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(h.converged) != 0 {
+		t.Fatal("nothing may be queued over an existing decision")
+	}
+}
+
+// The blast radius has to be THIS decision's.
+//
+// Mappings are per role, and a subject's value comes only from the ones whose
+// role they hold. Listing every mapping on the field presents unrelated
+// policies as the thing to edit, with holder counts belonging to people this
+// finding is not about — and a number an operator reads off the wrong mapping is
+// worse than no number, because they will act on it.
+func TestThePolicyHintNamesOnlyTheMappingsThisSubjectHolds(t *testing.T) {
+	stubFindingsList(t,
+		[]db.MergeFinding{theirsOnly("group", `["electronics"]`)},
+		[]db.RoleMapping{
+			{ID: "m1", Target: "truenas", ProjectID: "p1", RoleKey: "lab_tech", Field: "group", Value: "lab_makers"},
+			{ID: "m2", Target: "truenas", ProjectID: "p1", RoleKey: "faculty", Field: "group", Value: "staff"},
+		},
+		[]string{"u1", "u2", "u3"})
+	// They hold only one of the two.
+	svcHeldRoles = func(context.Context, string) ([]db.RoleRef, error) {
+		return []db.RoleRef{{ProjectID: "p1", RoleKey: "lab_tech"}}, nil
+	}
+
+	row := firstFinding(t, listFindings(t))
+	policy, ok := row["policy"].([]any)
+	if !ok || len(policy) != 1 {
+		t.Fatalf("only the mapping this person's role produces: %v", row["policy"])
+	}
+	if policy[0].(map[string]any)["role_key"] != "lab_tech" {
+		t.Fatalf("wrong mapping named: %v", policy[0])
+	}
+}
+
+// And when the roles cannot be read, no policy is named. "We could not tell
+// which" and "all of them" are different answers, and only one is true.
+func TestAnUnreadableRoleGraphNamesNoPolicyRatherThanAllOfThem(t *testing.T) {
+	stubFindingsList(t,
+		[]db.MergeFinding{theirsOnly("group", `["electronics"]`)},
+		[]db.RoleMapping{
+			{ID: "m1", Target: "truenas", ProjectID: "p1", RoleKey: "lab_tech", Field: "group", Value: "lab_makers"},
+		},
+		[]string{"u1"})
+	svcHeldRoles = func(context.Context, string) ([]db.RoleRef, error) {
+		return nil, errors.New("the directory is away")
+	}
+
+	row := firstFinding(t, listFindings(t))
+	if row["policy"] != nil {
+		t.Fatalf("an unknown role graph must not present every mapping as governing: %v", row["policy"])
+	}
+	// The sentence stays: the value still cannot be adopted for one person.
+	if why, _ := row["why_not"].(string); why == "" {
+		t.Fatal("the refusal must still be explained")
 	}
 }

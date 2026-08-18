@@ -215,6 +215,12 @@ var (
 	// that needs to see the call not happen.
 	saveMergeBase = db.RecordMergeBase
 
+	// The memory that a write landed. A seam because the assertion that matters
+	// is which rows produce one: an `add` that the target accepted, and never a
+	// revoke — remembering a removal as "applied" would make the next pass argue
+	// the target should still hold it.
+	savePropagation = db.RecordPropagation
+
 	subjectEmail = func(ctx context.Context, subjectID string) string {
 		profile, found, err := directory.Default.FindUser(ctx, subjectID)
 		if err != nil || !found {

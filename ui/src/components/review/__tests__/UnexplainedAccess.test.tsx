@@ -399,3 +399,24 @@ it("still calls an unobserved grant a write that never landed", () => {
 
   expect(screen.getByText(/never been seen holding it/i)).toBeTruthy();
 });
+
+// The strongest thing Syndra can say, and the only thing it can say about a
+// grant applied and removed between two sweeps: the target ACCEPTED this write,
+// at a known time. No read ever saw that one.
+it("tells a removal by when the write landed, even with nothing ever observed", () => {
+  drift.data = [
+    item({
+      drift_type: "syndra_only",
+      provenance: {
+        granted_by: "op-ada",
+        reason: "inducted on the laser",
+        applied_at: "2026-08-19T12:04:00Z",
+      },
+    }),
+  ];
+  renderTriage();
+
+  expect(screen.getByText(/Syndra applied it on/i)).toBeTruthy();
+  expect(screen.getByText(/accepted it/i)).toBeTruthy();
+  expect(screen.getByText(/somebody removed it/i)).toBeTruthy();
+});
