@@ -168,21 +168,46 @@ func TestContractVersionIsDeclaredOnEveryMutatingEnvelope(t *testing.T) {
 	}
 }
 
-// The response direction, which the artifacts do not cover and which has now
-// grown a field.
+// The reply leg, against the artifact the add-on produces.
 //
-// The add-on reports `observed` — the managed fields as the TARGET holds them
-// after a write — and `unverified` when the write landed and could not be read
-// back. Neither is consumed here yet; the consumer is the merge base. What must
-// be true today is that they cannot BREAK anything, and that is a property of
-// this decoder rather than of anybody's intentions: the request direction is
-// strict on the add-on's side, and the assumption that the reply direction is
-// lenient is exactly the kind of assumption this contract exists to stop being
-// an assumption.
-func TestAnApplyOutcomeCarryingObservedValuesStillDecodes(t *testing.T) {
+// This direction had no fixture, and the safety of adding `observed` to it
+// rested on "the backend decodes leniently" — true, and written in a comment,
+// which is the form an assumption takes right up until it is wrong. It is now
+// the same kind of artifact as the three request bodies, held from both ends:
+// the add-on's suite asserts it ENCODES this document, and this asserts the
+// backend decodes it and keeps every field it reads.
+func TestTheAddOnsApplyOutcomeDecodesHere(t *testing.T) {
+	var out ApplyResponse
+	if err := json.Unmarshal(contractFixture(t, "apply_response.json"), &out); err != nil {
+		t.Fatalf("the add-on's apply outcome was refused: %v", err)
+	}
+	// Every field this side reads, named individually. A list is a third place
+	// to forget something — but the alternative here, a whole-struct zero check,
+	// would fail on the fields this side deliberately does not decode.
+	if out.Effect != "applied" {
+		t.Errorf("effect did not arrive: %q", out.Effect)
+	}
+	if out.Username != "maya.chen" || out.UID != 3042 {
+		t.Errorf("the account identity did not arrive: %q/%d", out.Username, out.UID)
+	}
+	if out.Fingerprint == "" {
+		t.Error("fingerprint did not arrive")
+	}
+	if out.Detail == "" {
+		t.Error("detail did not arrive — it is the only prose this side renders")
+	}
+}
+
+// And the leniency itself, asserted rather than assumed. `observed` is not read
+// here yet; its consumer is the merge base. What must be true TODAY is that a
+// field this side does not declare cannot break the call — which is the mirror
+// of the defect the request fixtures exist for, where a field the add-on did
+// not declare would have failed every apply in production.
+func TestAnOutcomeCarryingFieldsThisSideIgnoresStillDecodes(t *testing.T) {
 	body := []byte(`{"subject":"sub-1","effect":"applied","detail":"Updated ada.",
 		"username":"ada","uid":3001,"fingerprint":"abc123",
-		"observed":{"group":["lab_makers"],"enabled":true},"unverified":false}`)
+		"observed":{"group":["lab_makers"],"enabled":true},
+		"consequence":"ignored here","a_field_from_a_newer_addon":42}`)
 
 	var out ApplyResponse
 	if err := json.Unmarshal(body, &out); err != nil {

@@ -131,3 +131,78 @@ func TestContractBodiesReachTheHandlers(t *testing.T) {
 		})
 	}
 }
+
+// The reply leg, where this add-on is the producer.
+//
+// The other three fixtures pin what the backend sends and this module decodes
+// strictly. This one pins what this module SENDS, because the field that
+// carries a merge base is on the reply and nothing held the two ends together
+// on that direction at all — the safety of adding `observed` rested on "the
+// backend decodes leniently", which was true and was an assumption written in a
+// comment. The backend's own suite now decodes this same document.
+func TestTheApplyOutcomeMatchesContract(t *testing.T) {
+	// Built from the fixture's own values, so a failure is about the SHAPE.
+	body, err := json.Marshal(ApplyOutcome{
+		Subject:     "289471021834760193",
+		Effect:      EffectApplied,
+		Detail:      "Added fabrication. Unlocked the account.",
+		Consequence: "In lab_makers, fabrication. Enabled, SMB on.",
+		Username:    "maya.chen",
+		UID:         3042,
+		Fingerprint: "sha256:9d1c4f0b7e2a",
+		Observed: map[string]any{
+			FieldGroup:      []string{"fabrication", "lab_makers"},
+			FieldEnabled:    true,
+			FieldSMBEnabled: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("encode outcome: %v", err)
+	}
+	sameContractJSON(t, body, contractFixture(t, "apply_response.json"), "ApplyOutcome")
+}
+
+// An unverified apply is the same document with the observation removed, and
+// that is a contract statement rather than an implementation detail: a consumer
+// storing `observed` as a merge base must be unable to receive one from a write
+// nobody read back.
+func TestAnUnverifiedOutcomeCarriesNoObservation(t *testing.T) {
+	body, err := json.Marshal(ApplyOutcome{
+		Subject: "289471021834760193", Effect: EffectApplied, Unverified: true,
+		Detail:   "Unlocked the account. The account could not be read back afterwards, so what the target now holds has not been confirmed.",
+		Username: "maya.chen", UID: 3042,
+	})
+	if err != nil {
+		t.Fatalf("encode outcome: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded["unverified"] != true {
+		t.Errorf("an unverified outcome must say so on the wire: %s", body)
+	}
+	for _, absent := range []string{"observed", "fingerprint"} {
+		if _, present := decoded[absent]; present {
+			t.Errorf("an unverified outcome must carry no %s: %s", absent, body)
+		}
+	}
+}
+
+// sameContractJSON compares two documents by value, ignoring key order and
+// whitespace. Anything else would make formatting a contract change.
+func sameContractJSON(t *testing.T, got, want []byte, what string) {
+	t.Helper()
+	var g, w any
+	if err := json.Unmarshal(got, &g); err != nil {
+		t.Fatalf("%s: produced document does not parse: %v", what, err)
+	}
+	if err := json.Unmarshal(want, &w); err != nil {
+		t.Fatalf("%s: fixture does not parse: %v", what, err)
+	}
+	gn, _ := json.Marshal(g)
+	wn, _ := json.Marshal(w)
+	if !bytes.Equal(gn, wn) {
+		t.Errorf("%s: the encoded document does not match the contract fixture\n got: %s\nwant: %s", what, gn, wn)
+	}
+}
