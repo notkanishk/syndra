@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Syndra — sign in (design reference)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: #0a0b08;
+    color: #f3f5ef;
+    font-family: Figtree, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: #9b7bff; }
+  a:hover { color: #b9a2ff; }
+
+  .stage {
+    position: relative;
+    min-height: max(100vh, 800px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 56px;
+  }
+
+  /* --- ambient light ------------------------------------------------ */
+  .floor {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 420px;
+    background: radial-gradient(50% 100% at 50% 100%, rgba(127,90,240,.2), transparent 72%);
+  }
+  .pool, .pool-amber {
+    position: absolute; left: 50%; bottom: 196px;
+    width: 820px; height: 290px;
+    transform: translateX(-50%);
+    filter: blur(48px);
+  }
+  .pool       { background: radial-gradient(50% 50% at 50% 50%, rgba(127,90,240,.3), rgba(127,90,240,.08) 46%, transparent 72%); }
+  .pool-amber { background: radial-gradient(50% 50% at 50% 50%, rgba(245,165,36,.26), rgba(245,120,36,.07) 46%, transparent 72%); opacity: 0; }
+  .grain {
+    position: absolute; inset: 0;
+    opacity: .4;
+    mix-blend-mode: overlay;
+    /* NOTE: no ";" may appear inside a data URI written into an inline style attribute */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* --- text --------------------------------------------------------- */
+  .eyebrow {
+    position: absolute; top: 44px; left: 0; right: 0;
+    text-align: center;
+    font-size: 13px; letter-spacing: .18em; text-transform: uppercase;
+    color: rgba(243,245,239,.4);
+  }
+  .base {
+    position: absolute; bottom: 44px; left: 0; right: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+  }
+  .syn p {
+    margin: 0; max-width: 560px; text-align: center;
+    font-size: 17px; line-height: 1.6; color: rgba(243,245,239,.55);
+    text-wrap: pretty;
+  }
+  .credit {
+    display: flex; align-items: center; gap: 14px;
+    font-size: 12.5px; letter-spacing: .05em; color: rgba(243,245,239,.3);
+  }
+  .credit .dot { width: 3px; height: 3px; border-radius: 999px; background: rgba(243,245,239,.25); }
+
+  .message {
+    position: absolute; left: 0; right: 0; bottom: 74px;
+    display: flex; flex-direction: column; align-items: center; gap: 7px;
+    opacity: 0; pointer-events: none;
+  }
+  .message .head { font-size: 16px; font-weight: 600; }
+  .message .sub  { font-size: 14.5px; color: rgba(243,245,239,.5); }
+  .handoff .head { color: #c9b6ff; }
+  .error   .head { color: #f5a524; }
+
+  /* --- the arch ----------------------------------------------------- */
+  .group {
+    position: relative;
+    width: 430px; height: 392px;
+    margin-top: -52px;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+    padding: 0 44px;
+  }
+  .arch-clip { position: absolute; left: 0; top: 0; width: 100%; height: 392px; overflow: hidden; }
+  .arch {
+    position: absolute; left: 0; top: 0; width: 100%; height: 392px;
+    border: 1.5px solid rgba(155,123,255,.5);
+    border-bottom: none;
+    border-radius: 190px 190px 0 0;
+    transition: border-color .7s ease;
+    -webkit-mask-image: linear-gradient(to bottom, #000 6%, rgba(0,0,0,.5) 54%, transparent 95%);
+            mask-image: linear-gradient(to bottom, #000 6%, rgba(0,0,0,.5) 54%, transparent 95%);
+  }
+  .wash {
+    position: absolute; inset: 0;
+    border-radius: 190px 190px 0 0;
+    background: linear-gradient(to top, rgba(127,90,240,.15), transparent 62%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent 99%);
+            mask-image: linear-gradient(to bottom, #000 60%, transparent 99%);
+  }
+
+  /* --- the orb ------------------------------------------------------ */
+  .orb-slot { position: absolute; top: 54px; left: 0; right: 0; display: flex; justify-content: center; }
+  .orb { position: relative; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; }
+  .orb-base, .orb-lit { position: absolute; inset: 0; border-radius: 999px; }
+  .orb-base {
+    border: 1.5px solid rgba(155,123,255,.22);
+    -webkit-mask-image: radial-gradient(closest-side, #000 88%, rgba(0,0,0,.5) 97%, transparent 100%);
+            mask-image: radial-gradient(closest-side, #000 88%, rgba(0,0,0,.5) 97%, transparent 100%);
+  }
+  .orb-lit {
+    border: 1.5px solid rgba(206,188,255,.92);
+    opacity: .5;
+    transition: opacity .25s ease-out;
+    -webkit-mask-image: linear-gradient(180deg, #000 4%, transparent 76%);
+            mask-image: linear-gradient(180deg, #000 4%, transparent 76%);
+  }
+  .orb-glow {
+    position: absolute; inset: -16px; border-radius: 999px;
+    background: radial-gradient(closest-side, rgba(170,142,255,.3), transparent 76%);
+    opacity: 0; transition: opacity .3s ease-out;
+  }
+  .orb-dot {
+    width: 16px; height: 16px; border-radius: 999px;
+    background: #9b7bff;
+    box-shadow: 0 0 34px 6px rgba(155,123,255,.55);
+  }
+
+  /* --- wordmark and button ------------------------------------------ */
+  .wordmark {
+    position: relative;
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-size: 58px; font-weight: 600; line-height: 1; letter-spacing: -.03em;
+    margin-bottom: 34px;
+  }
+  .signin {
+    position: relative;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    background: #7f5af0; color: #f7f4ff;
+    border: none; border-radius: 14px;
+    padding: 16px 30px;
+    font-family: Figtree, sans-serif; font-size: 15.5px; font-weight: 600;
+    cursor: pointer;
+    transform: translateY(calc(50% + 14px));
+    box-shadow: 0 26px 60px -18px rgba(127,90,240,.85),
+                0 8px 24px -8px rgba(127,90,240,.6),
+                0 0 70px 10px rgba(127,90,240,.18);
+  }
+  .signin:focus-visible { outline: 2px solid #c9b6ff; outline-offset: 4px; }
+  .signin .arrow { font-size: 17px; line-height: 1; }
+
+  /* demo controls — not part of the design */
+  .demo {
+    position: fixed; top: 16px; right: 16px; z-index: 10;
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; max-width: 420px;
+  }
+  .demo button {
+    background: rgba(255,255,255,.07); color: rgba(243,245,239,.75);
+    border: none; border-radius: 999px; padding: 8px 14px;
+    font-family: Figtree, sans-serif; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .orb-lit { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="demo">
+  <button type="button" data-demo="replay">Replay entrance</button>
+  <button type="button" data-demo="signin">Sign-in transition</button>
+  <button type="button" data-demo="fail">Provider unreachable</button>
+  <button type="button" data-demo="breath">Breathing · off</button>
+  <button type="button" data-demo="grain">Animated grain · off</button>
+</div>
+
+<main class="stage" data-stage>
+  <div class="floor"></div>
+  <div class="pool" data-pool></div>
+  <div class="pool-amber" data-pool-amber></div>
+  <div class="grain" data-grain></div>
+
+  <div class="eyebrow" data-eyebrow>Makerspace Syndra</div>
+
+  <div class="group" data-group>
+    <span class="arch-clip" data-arch-clip><span class="arch" data-arch></span></span>
+    <span class="wash" data-wash></span>
+    <div class="orb-slot">
+      <span class="orb" data-orb>
+        <span class="orb-base"></span>
+        <span class="orb-lit" data-orb-lit></span>
+        <span class="orb-glow" data-orb-glow></span>
+        <span class="orb-dot"></span>
+      </span>
+    </div>
+    <div class="wordmark" data-word>Syndra</div>
+    <button class="signin" type="button" data-btn>
+      <span data-btn-label>Sign in with Zitadel</span><span class="arrow">→</span>
+    </button>
+  </div>
+
+  <div class="base">
+    <div class="syn" data-syn>
+      <p>Syn — the goddess who keeps the door, and the defence called upon at trial.</p>
+    </div>
+    <div class="credit" data-credit>
+      <span>Built in the lab it runs.</span>
+      <span class="dot"></span>
+      <span>Powered by Zitadel</span>
+    </div>
+  </div>
+
+  <div class="message handoff" data-handoff>
+    <div class="head">Handing you to Zitadel.</div>
+    <div class="sub">You'll come back here signed in.</div>
+  </div>
+
+  <div class="message error" data-error>
+    <div class="head">Zitadel didn't answer.</div>
+    <div class="sub">Nothing was signed in. Try again in a minute, or find a steward in the space.</div>
+  </div>
+</main>
+
+<script>
+(function () {
+  var stage = document.querySelector('[data-stage]');
+  var q = function (s) { return stage.querySelector(s); };
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var ARCH_MASK = 'linear-gradient(to bottom, #000 6%, rgba(0,0,0,.5) 54%, transparent 95%)';
+  var BTN_SHADOW = '0 26px 60px -18px rgba(127,90,240,.85), 0 8px 24px -8px rgba(127,90,240,.6), 0 0 70px 10px rgba(127,90,240,.18)';
+
+  // Every animation started is kept so it can be cancelled by reference.
+  // Do NOT rely on element.getAnimations() — finished fill:'both' animations
+  // drop out of it while their filled values still win over inline styles.
+  var running = [];
+  var breath = null, grain = null, focusLock = false;
+
+  function play(sel, frames, opts) {
+    var e = q(sel); if (!e) return null;
+    var o = { fill: 'both', easing: 'cubic-bezier(.22,.61,.36,1)' };
+    for (var k in opts) o[k] = opts[k];
+    var a = e.animate(frames, o);
+    running.push(a);
+    return a;
+  }
+
+  function set(sel, props) {
+    var e = q(sel); if (!e) return;
+    for (var k in props) e.style[k] = props[k];
+  }
+
+  function rest() {
+    running.forEach(function (a) { try { a.cancel(); } catch (err) {} });
+    running = [];
+    set('[data-arch]', { maskImage: ARCH_MASK, webkitMaskImage: ARCH_MASK, borderColor: 'rgba(155,123,255,.5)', opacity: '1' });
+    set('[data-arch-clip]', { height: '392px' });
+    set('[data-wash]', { opacity: '1' });
+    set('[data-pool]', { opacity: '1', transform: 'translateX(-50%)', filter: 'blur(48px)' });
+    set('[data-pool-amber]', { opacity: '0' });
+    set('[data-handoff]', { opacity: '0', transform: 'none' });
+    set('[data-error]', { opacity: '0', transform: 'none' });
+    set('[data-orb]', { opacity: '1', transform: 'none' });
+    set('[data-orb-glow]', { opacity: '0' });
+    set('[data-word]', { opacity: '1', transform: 'none' });
+    set('[data-btn]', {
+      opacity: '1', transform: 'translateY(calc(50% + 14px))',
+      background: 'rgb(127,90,240)', color: 'rgb(247,244,255)', boxShadow: BTN_SHADOW
+    });
+    set('[data-syn]', { opacity: '1', transform: 'none' });
+    set('[data-eyebrow]', { opacity: '1', transform: 'none' });
+    set('[data-credit]', { opacity: '1' });
+    q('[data-btn-label]').textContent = 'Sign in with Zitadel';
+  }
+
+  // --- entrance ------------------------------------------------------
+  function entrance() {
+    rest();
+    if (reduce) return;
+    var E = 'cubic-bezier(.16,1,.3,1)';
+    play('[data-pool]',      [{ opacity: 0 }, { opacity: 1 }], { duration: 1500, delay: 150 });
+    play('[data-arch-clip]', [{ height: '0px' }, { height: '392px' }], { duration: 950, delay: 120, easing: E });
+    play('[data-wash]',      [{ opacity: 0 }, { opacity: 1 }], { duration: 900, delay: 560 });
+    play('[data-eyebrow]',   [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 700, delay: 300 });
+    play('[data-orb]',       [{ opacity: 0, transform: 'scale(.6)' }, { opacity: 1, transform: 'scale(1)' }], { duration: 800, delay: 640, easing: E });
+    play('[data-word]',      [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], { duration: 750, delay: 820 });
+    play('[data-btn]',       [{ opacity: 0, transform: 'translateY(calc(50% + 26px))' }, { opacity: 1, transform: 'translateY(calc(50% + 14px))' }], { duration: 750, delay: 1000 });
+    play('[data-syn]',       [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 750, delay: 1180 });
+    play('[data-credit]',    [{ opacity: 0 }, { opacity: 1 }], { duration: 700, delay: 1360 });
+  }
+
+  // --- sign-in: the door opens ---------------------------------------
+  function signIn() {
+    rest();
+    var label = q('[data-btn-label]');
+    play('[data-btn]', [
+      { transform: 'translateY(calc(50% + 14px)) scale(1)' },
+      { transform: 'translateY(calc(50% + 14px)) scale(.975)', offset: .4 },
+      { transform: 'translateY(calc(50% + 14px)) scale(1)' }
+    ], { duration: 320 });
+    setTimeout(function () { label.textContent = 'Opening…'; }, 200);
+    play('[data-btn]', [
+      { background: 'rgb(127,90,240)', color: 'rgb(247,244,255)', boxShadow: BTN_SHADOW },
+      { background: 'rgba(127,90,240,.34)', color: 'rgba(247,244,255,.62)', boxShadow: '0 10px 26px -16px rgba(127,90,240,.5), 0 4px 12px -8px rgba(127,90,240,.25), 0 0 34px 4px rgba(127,90,240,.06)' }
+    ], { duration: 700, delay: 200 });
+    play('[data-arch-clip]', [{ height: '392px' }, { height: '196px' }], { duration: 900, delay: 220, easing: 'cubic-bezier(.16,1,.3,1)' });
+    play('[data-arch]',      [{ opacity: 1 }, { opacity: 0 }], { duration: 950, delay: 220 });
+    play('[data-wash]',      [{ opacity: 1 }, { opacity: 0 }], { duration: 780, delay: 200 });
+    play('[data-pool]',      [{ filter: 'blur(48px) brightness(1)' }, { filter: 'blur(48px) brightness(1.75)' }], { duration: 1000, delay: 200 });
+    play('[data-orb-glow]',  [{ opacity: 0 }, { opacity: 1 }], { duration: 800, delay: 200 });
+    play('[data-syn]',       [{ opacity: 1 }, { opacity: 0 }], { duration: 400 });
+    play('[data-handoff]',   [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 700, delay: 400 });
+    // In production: window.location.assign(zitadelAuthorizeUrl) right here.
+  }
+
+  // --- failure: the door stays shut -----------------------------------
+  function fail() {
+    rest();
+    var arch = q('[data-arch]');
+    arch.style.maskImage = 'none';
+    arch.style.webkitMaskImage = 'none';
+    arch.style.borderColor = 'rgba(245,165,36,.5)';   // set, not animated — see rest()
+    play('[data-pool]',       [{ opacity: 1 }, { opacity: .15 }], { duration: 800 });
+    play('[data-pool-amber]', [{ opacity: 0 }, { opacity: 1 }], { duration: 800 });
+    play('[data-orb]',        [{ opacity: 1 }, { opacity: .35 }], { duration: 700 });
+    play('[data-syn]',        [{ opacity: 1 }, { opacity: 0 }], { duration: 400 });
+    play('[data-error]',      [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 700, delay: 350 });
+  }
+
+  // --- cursor-lit ring -------------------------------------------------
+  if (!reduce) {
+    window.addEventListener('pointermove', function (e) {
+      if (focusLock) return;
+      var core = q('[data-orb]'), ring = q('[data-orb-lit]');
+      if (!core || !ring) return;
+      var r = core.getBoundingClientRect();
+      var dx = e.clientX - (r.left + r.width / 2);
+      var dy = e.clientY - (r.top + r.height / 2);
+      var deg = Math.atan2(dx, -dy) * 180 / Math.PI + 180;   // point the gradient AWAY from the cursor
+      var near = Math.max(0, 1 - Math.hypot(dx, dy) / 420);
+      var mask = 'linear-gradient(' + deg.toFixed(1) + 'deg, #000 4%, transparent ' + (70 + near * 14).toFixed(0) + '%)';
+      ring.style.webkitMaskImage = mask;
+      ring.style.maskImage = mask;
+      ring.style.opacity = (0.4 + near * 0.6).toFixed(3);
+      q('[data-orb-glow]').style.opacity = (near * near).toFixed(3);
+    }, { passive: true });
+  }
+
+  // keyboard parity: focusing the button lights the ring from below
+  var btn = q('[data-btn]');
+  btn.addEventListener('focus', function () {
+    focusLock = true;
+    var ring = q('[data-orb-lit]');
+    var m = 'linear-gradient(0deg, #000 4%, transparent 80%)';
+    ring.style.webkitMaskImage = m;
+    ring.style.maskImage = m;
+    ring.style.opacity = '1';
+    q('[data-orb-glow]').style.opacity = '.9';
+  });
+  btn.addEventListener('blur', function () {
+    focusLock = false;
+    q('[data-orb-glow]').style.opacity = '0';
+    q('[data-orb-lit]').style.opacity = '.5';
+  });
+  btn.addEventListener('click', signIn);
+
+  // --- optional ambience ----------------------------------------------
+  function toggleBreath(b) {
+    if (breath) { breath.cancel(); breath = null; b.textContent = 'Breathing · off'; return; }
+    breath = q('[data-pool]').animate(
+      [{ transform: 'translateX(-50%) scale(1)' }, { transform: 'translateX(-50%) scale(1.06)' }],
+      { duration: 10000, direction: 'alternate', iterations: Infinity, easing: 'ease-in-out' }
+    );
+    b.textContent = 'Breathing · on';
+  }
+  function toggleGrain(b) {
+    if (grain) { grain.cancel(); grain = null; b.textContent = 'Animated grain · off'; return; }
+    var pos = ['0px 0px', '-37px 21px', '52px -14px', '-19px -46px', '31px 38px', '-58px 7px'];
+    var frames = pos.map(function (p, i) { return { backgroundPosition: p, offset: i / pos.length, easing: 'steps(1, end)' }; });
+    frames.push({ backgroundPosition: pos[0], offset: 1 });
+    grain = q('[data-grain]').animate(frames, { duration: 750, iterations: Infinity });
+    b.textContent = 'Animated grain · on';
+  }
+
+  document.querySelectorAll('[data-demo]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var k = b.getAttribute('data-demo');
+      if (k === 'replay') entrance();
+      else if (k === 'signin') signIn();
+      else if (k === 'fail') fail();
+      else if (k === 'breath') toggleBreath(b);
+      else if (k === 'grain') toggleGrain(b);
+    });
+  });
+
+  entrance();
+})();
+</script>
+</body>
+</html>
