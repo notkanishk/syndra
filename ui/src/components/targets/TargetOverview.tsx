@@ -5,6 +5,7 @@ import { useState } from "react";
 import { EmptyState, ListStates } from "@/components/states";
 import { MappingManagement } from "@/components/targets/MappingManagement";
 import { DormantAccounts } from "@/components/targets/DormantAccounts";
+import { MergeFindings } from "@/components/targets/MergeFindings";
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
 import { Mono } from "@/components/ui/Badge";
@@ -118,6 +119,11 @@ export function TargetOverview({ target }: { target: string }) {
             )}
           </Card>
         )}
+
+        {/* Above the reconcile control on purpose: pressing [Reconcile now]
+            with disputed values outstanding does not resolve them, and an
+            operator who reads the button first will assume it did. */}
+        <MergeFindings target={target} />
 
         <ReconcileControl target={target} />
 
