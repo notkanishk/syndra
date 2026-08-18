@@ -86,6 +86,53 @@ T absent, O present      deleted upstream
 made the change Syndra was going to make has not drifted, and telling them they
 have is how a system trains people to ignore it.
 
+## 3a. The subject-level rule, which is stricter than the field-level one
+
+The merge is per field. **Convergence is not**, and the reason is mechanical
+rather than philosophical: an apply carries the WHOLE managed set for a subject,
+not one field. A subject with a fast-forward on `group` and a conflict on
+`enabled` cannot have the first applied without the second being overwritten.
+
+So a subject is converged only when EVERY managed field is one an unattended
+pass may resolve. Anything else and the subject is not planned at all — planning
+it would produce an `apply` effect, and the queueing loop acts on those.
+
+Applying a partial set is not the escape it looks like. Desired state is
+level-triggered: the fields it omits are the ones Syndra does not manage, so a
+partial apply says "Syndra no longer manages `enabled`", which is a policy
+statement nobody made.
+
+## 3b. Zitadel, which has the same defect in its own shape
+
+The add-on sweep is not the only reconciler. The Zitadel sweep re-enqueued an
+`add` for every direct grant the ledger intends and Zitadel does not have — and
+that absence has the same two causes wanting opposite answers: the grant was
+never projected, or somebody removed it in Zitadel by hand.
+
+Nothing could tell them apart. The ledger holds intent, the outbox has no
+`confirmed` state by design and is pruned, and `zitadel_grants_index` — the one
+artefact that knew Zitadel had held a grant — is DELETED by `grant.removed`, the
+very event that takes it away. So every hand revocation was silently replayed.
+
+Its observer is **the sweep's own complete read**, which is the honest one
+available: there is no read-back to record, and the pass already enumerates
+every grant Zitadel holds. Same table and same meaning as the add-on's — what
+the target was seen holding, per subject — with the user as the subject and
+their grants as the fields, keyed `project/role`. One vocabulary, so a second
+reconciler cannot invent a second definition of what a base is.
+
+A grant Zitadel was last seen holding and does not have now becomes a
+`syndra_only` drift item: the drift type this schema has always declared and
+nothing had ever written, because the only thing that ever happened to that
+state was the replay.
+
+**The base does not advance past an unresolved finding.** Overwriting it would
+make the next pass read the target's current state as the last agreed one,
+classify the missing grant as never-projected, and replay it — the same silent
+revert, one pass later, arriving through the bookkeeping instead of the loop.
+The same rule governs the add-on sweep, which records observations only for
+subjects with nothing outstanding.
+
 ## 4. What a sweep may do
 
 A sweep may apply `fast-forward` and record `already merged`. It may **not**
@@ -163,7 +210,14 @@ conflict dialog has a convenient button would be the worst available reason to
 introduce it, and it would put a grant somewhere no access review looks.
 
 Each resolution records the base afterwards, which is what stops a resolved
-conflict from returning. A finding whose only honest resolution is "change the
+conflict from returning. `keep ours` gets that for free: it queues a convergence,
+and the apply's own read-back is what writes the new base.
+
+There is a fifth outcome nobody chooses. A finding whose difference has STOPPED
+EXISTING — because a policy changed, or the target did — is closed as `agreed`,
+attributed to the sweep. That is not automatic resolution: nothing was decided
+and nothing was written. Leaving it open is the other way to make a queue
+unreadable, filling it with problems that are already over. A finding whose only honest resolution is "change the
 policy" stays open until the policy changes and the next pass agrees — it is not
 dismissible, because dismissing it is the ignore flag §7 refuses.
 
@@ -178,6 +232,25 @@ This is the case that already bit — stub-era bindings queueing a create every
 six hours against a production NAS. It is fixed today by refusing to converge
 them; this change makes that refusal a named state with a resolution instead of
 a special case with none.
+
+## 6a. Where THEIRS comes from
+
+The classifier needs the target's current value per field, and the backend could
+not read one: `/subjects` reported identity and lifecycle facts, not entitlement
+values.
+
+The add-on now serves each account's state in ENTITLEMENT vocabulary — the field
+names its own manifest declares — beside the raw ones. Mapping `groups` to
+`group` or `locked` to `enabled` in the backend would put what TrueNAS calls
+things inside the component that must not know, and the next add-on would need a
+second mapping beside it. `readSubjects` already refuses that leak for exactly
+this reason; this follows it.
+
+An add-on that reports no state at all leaves the current values UNKNOWN, and
+unknown is not "the target holds nothing". Such a subject drops its base and
+classifies as baseless, converging as it did before — because the alternative,
+comparing against a base with nothing on the other side, would raise a finding
+for every managed subject on a deployment mid-upgrade.
 
 ## 7. What this does NOT change
 

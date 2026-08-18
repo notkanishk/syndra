@@ -35,6 +35,10 @@ type addonHarness struct {
 	requeued   []string
 	released   []string
 	attempts   int
+	// bases is what the drain recorded as the target's observed state. The
+	// assertions on it are mostly negative: an apply the add-on could not read
+	// back must record NOTHING here.
+	bases []db.MergeBase
 }
 
 func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarness {
@@ -65,6 +69,10 @@ func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarne
 		return "", false, nil
 	}))
 	t.Cleanup(swap(&saveConflict, func(context.Context, db.BindingConflict) error { return nil }))
+	t.Cleanup(swap(&saveMergeBase, func(_ context.Context, b db.MergeBase) error {
+		h.bases = append(h.bases, b)
+		return nil
+	}))
 	t.Cleanup(swap(&readIntent, func(context.Context, string) (db.EntitlementIntent, error) {
 		return h.intent, h.intentErr
 	}))
@@ -674,5 +682,74 @@ func TestAConflictWithNoTraceableHolderStillSettlesTerminally(t *testing.T) {
 	}
 	if res.Failed != 1 || res.Applied != 0 {
 		t.Fatalf("the row still settles terminally whatever the finding did: %+v", res)
+	}
+}
+
+// The merge base is written from what the add-on OBSERVED, and from nothing
+// else (change `reconciliation-as-merge`).
+//
+// This is the failure mode the whole change exists to prevent, reached through
+// the error path: a write that landed and could not be read back must leave the
+// subject baseless rather than based on what Syndra asked for. A base equal to
+// the desired state by construction can never produce a conflict, so recording
+// one here would restore the old behaviour while looking like the new one.
+
+func TestAConfirmedApplyRecordsWhatTheTargetReported(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.resp = addons.ApplyResponse{
+		Outcome: addons.OutcomeSucceeded, Username: "ada", UID: 3001,
+		Observed: map[string]json.RawMessage{
+			"group":   json.RawMessage(`["lab_makers"]`),
+			"enabled": json.RawMessage(`true`),
+		},
+	}
+
+	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.bases) != 1 {
+		t.Fatalf("want one recorded base: %+v", h.bases)
+	}
+	base := h.bases[0]
+	if base.Target != "truenas" || base.SubjectID != "sub-1" {
+		t.Fatalf("the base must name what it is about: %+v", base)
+	}
+	if string(base.Base["enabled"]) != "true" {
+		t.Fatalf("the base must hold what the target reported: %v", base.Base)
+	}
+}
+
+func TestAnUnverifiedApplyRecordsNoBase(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	// The write landed; the read after it did not. The add-on says so and sends
+	// no observation.
+	h.resp = addons.ApplyResponse{
+		Outcome: addons.OutcomeSucceeded, Username: "ada", UID: 3001, Unverified: true,
+	}
+
+	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.bases) != 0 {
+		t.Fatalf("an unverified apply must record no base: %+v", h.bases)
+	}
+	// And it is still an apply. The mutation happened, and settling the row as
+	// failed would re-drive something already done.
+	if len(h.applied) != 1 {
+		t.Fatalf("the row must still settle as applied: %v", h.applied)
+	}
+}
+
+// An add-on too old to send observations lands in the same state, which is why
+// absence is legible rather than an error.
+func TestAnApplyWithNoObservationRecordsNoBase(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "ada", UID: 3001}
+
+	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.bases) != 0 {
+		t.Fatalf("no observation means no base: %+v", h.bases)
 	}
 }
