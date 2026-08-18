@@ -27,8 +27,9 @@ remove. The create path's own comment states the rule the update path breaks:
 > a fingerprint computed from a state this add-on invented is a fingerprint the
 > next plan verifies against nothing
 
-So this change now owns that fix, and it is a prerequisite rather than a
-consequence:
+That fix is a prerequisite rather than a consequence, and it shipped ahead of
+this change as `apply-reads-back-what-it-wrote`. What it established, and what
+this design may now rely on:
 
 **Every successful mutation MUST be followed by a read of the account as the
 target then holds it.** Both paths converge on `readBack`, and the fingerprint
@@ -38,10 +39,15 @@ this is the same call the add-on makes twice a pass, not a new class of work.
 **The base travels in the apply response, as observed values.** The outcome
 carries an `observed` map of managed field to the value the target reported,
 beside the fingerprint it already carries. The backend stores that map as the
-base for `(subject, target)`; it never derives one from what it asked for. The
-field is additive and declared in `addons/contract/apply_response.json`, because
-the one defect class this boundary has produced twice is a field one side sends
-and the other's strict decoder never declared.
+base for `(subject, target)`; it never derives one from what it asked for.
+
+The field is additive, and its safety is asserted rather than assumed: the
+request direction is decoded strictly by the add-on, the reply direction is not,
+and the backend's own decoder is tested against an outcome carrying `observed`
+and `unverified`. There is no `apply_response.json` artifact yet — the contract
+fixtures cover the request direction only. Adding one belongs with the consumer
+that reads these fields, and until then the decode test is what holds the two
+sides together.
 
 **A read-back that fails does not produce a base.** The write happened; that is
 reported as it is today. What must not happen is a base recorded from intent

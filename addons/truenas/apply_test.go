@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,10 @@ import (
 // things that must never happen quietly: adopting somebody else's account, and
 // renaming one that already exists.
 
+// errReadAfterWrite is the target going unreadable between the write and the
+// read that verifies it — the one state the read-back introduces.
+var errReadAfterWrite = errors.New("the target stopped answering")
+
 // mutatingRPC records every write so a test can assert that none happened.
 type mutatingRPC struct {
 	fakeRPC
@@ -26,6 +31,16 @@ type mutatingRPC struct {
 	// different numbers on a real target, and a fake that used one for both
 	// would agree with the bug where a write lands on the wrong account.
 	nextID int64
+	// divergeOn makes the target store something other than what was written,
+	// keyed by the update field. Normalisation, coercion and silent refusal all
+	// look like this from outside, and all of them are invisible to an answer
+	// assembled from the request.
+	divergeOn map[string]any
+	// failReadAfterUpdate makes the account unreadable once a write has landed:
+	// the mutation happened and its result cannot be seen, which is the one
+	// state the read-back adds and the one that must not be reported as either
+	// a clean success or a failure.
+	failReadAfterUpdate bool
 }
 
 // remember adds a created account to the fixture the next read serves.
@@ -66,6 +81,10 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 		m.fakeRPC.calls = append(m.fakeRPC.calls, method)
 		return nil, m.fakeRPC.err
 	}
+	if m.failReadAfterUpdate && len(m.updates) > 0 && method == "user.query" {
+		m.fakeRPC.calls = append(m.fakeRPC.calls, method)
+		return nil, errReadAfterWrite
+	}
 	// Recorded like every other call, so an assertion about WHICH account a
 	// write addressed has something to read.
 	m.fakeRPC.calls = append(m.fakeRPC.calls, method)
@@ -76,6 +95,7 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 		if len(args) == 2 {
 			if u, ok := args[1].(map[string]any); ok {
 				m.updates = append(m.updates, u)
+				m.applyUpdate(args[0], u)
 			}
 		}
 		return envelope(`null`), nil
@@ -103,6 +123,40 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 	m.fakeRPC.calls = m.fakeRPC.calls[:len(m.fakeRPC.calls)-1]
 	m.fakeRPC.params = m.fakeRPC.params[:len(m.fakeRPC.params)-1]
 	return m.fakeRPC.Call(method, timeout, params)
+}
+
+// applyUpdate makes the fixture agree with the write, the way a target does.
+//
+// It did not, and that was a fake agreeing with the defect: the apply built its
+// answer from the values it had REQUESTED, so a fixture that never moved was
+// indistinguishable from one that had. With the read-back in place the fixture
+// has to move, and `divergeOn` is how a test makes it move to something else —
+// which is the case the projection could never see.
+func (m *mutatingRPC) applyUpdate(id any, update map[string]any) {
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(orEmptyList(m.fakeRPC.users)), &rows); err != nil {
+		return
+	}
+	want := fmt.Sprintf("%v", id)
+	for i := range rows {
+		if fmt.Sprintf("%v", rows[i]["id"]) != want {
+			continue
+		}
+		for k, v := range update {
+			if m.divergeOn != nil {
+				if got, ok := m.divergeOn[k]; ok {
+					v = got
+				}
+			}
+			switch k {
+			case "locked", "smb", "groups":
+				rows[i][k] = v
+			}
+		}
+	}
+	if encoded, err := json.Marshal(rows); err == nil {
+		m.fakeRPC.users = string(encoded)
+	}
 }
 
 func strconvI(n int64) string {
@@ -830,5 +884,107 @@ func TestATruncatedReadStillConvergesASubjectItFound(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("a subject the read found must still converge, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// The shipped defect, and the three cases that prove it is gone.
+//
+// `converge` used to answer with a projection: `applied := *current`, the
+// REQUESTED values written over the managed fields, and a fingerprint of that.
+// So the dominant path — every update to an account that already exists —
+// reported intent in the shape of an observation, and the next plan's staleness
+// check compared its fingerprint against a claim rather than against the target.
+// The create path's own comment had stated the rule since the day it was
+// written: a fingerprint computed from a state this add-on invented is a
+// fingerprint the next plan verifies against nothing.
+
+// A target that stores something other than what was asked for. Normalisation,
+// coercion and silent refusal all look like this, and the projection reported
+// every one of them as a clean, confirmed write.
+func TestTheFingerprintComesFromTheReadAndNotFromTheRequest(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":true,"smb":false,"groups":[42]}]`)
+	// The write says unlock; the target keeps it locked.
+	m.divergeOn = map[string]any{"locked": true}
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu",
+		"desired":{"group":["lab_makers"],"enabled":true}}`)
+	out := decodeOutcome(t, rr)
+	if out.Effect != EffectApplied {
+		t.Fatalf("want applied: %s", rr.Body.String())
+	}
+
+	// The invariant, stated as the next plan would: the fingerprint this apply
+	// reports must equal the one a fresh read produces. Under the projection it
+	// equalled a fingerprint of the request, and no read anywhere agreed with it.
+	after, err := s.readBack("ada")
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if want := fingerprintSubject(after); out.Fingerprint != want {
+		t.Fatalf("the fingerprint must digest what the target holds\n  got  %s\n  want %s",
+			out.Fingerprint, want)
+	}
+	if enabled, ok := out.Observed[FieldEnabled].(bool); !ok || enabled {
+		t.Fatalf("observed must report what the target stored, not what was asked: %v", out.Observed)
+	}
+}
+
+// Managed fields only. An unmanaged one is not "unchanged", it is out of scope,
+// and reporting it would invite a base claiming authority over something Syndra
+// never set.
+func TestObservedCarriesOnlyTheFieldsTheApplyManages(t *testing.T) {
+	s, _ := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41,42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu",
+		"desired":{"enabled":false}}`)
+	out := decodeOutcome(t, rr)
+	if _, present := out.Observed[FieldEnabled]; !present {
+		t.Fatalf("the managed field must be observed: %v", out.Observed)
+	}
+	for _, unmanaged := range []string{FieldGroup, FieldSMBEnabled} {
+		if _, present := out.Observed[unmanaged]; present {
+			t.Errorf("%s is not managed by this apply and must not be reported as observed: %v",
+				unmanaged, out.Observed)
+		}
+	}
+}
+
+// The write landed and its result cannot be read. Both facts are reported: the
+// effect is `applied`, because it was, and everything that would have to be an
+// observation is absent. Calling it a failure invites a retry of a mutation
+// already performed; calling it an ordinary success hands the next plan a
+// fingerprint nobody read — which is the defect, arriving through the error path.
+func TestAWriteThatCannotBeReadBackIsReportedAsUnverified(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":true,"smb":false,"groups":[42]}]`)
+	m.failReadAfterUpdate = true
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu",
+		"desired":{"group":["lab_makers"],"enabled":true}}`)
+	out := decodeOutcome(t, rr)
+	if out.Effect != EffectApplied || !out.Unverified {
+		t.Fatalf("want an applied-but-unverified outcome: %s", rr.Body.String())
+	}
+	if out.Fingerprint != "" {
+		t.Errorf("an unverified apply must carry no fingerprint, got %q", out.Fingerprint)
+	}
+	if out.Observed != nil {
+		t.Errorf("an unverified apply must carry no observed values, got %v", out.Observed)
+	}
+	if !strings.Contains(out.Consequence, "not been confirmed") {
+		t.Errorf("the operator must be told the result is unconfirmed: %q", out.Consequence)
+	}
+	// And exactly one write. The failure is in the read that follows it, and a
+	// retry inside the add-on would repeat a mutation nobody has verified.
+	if len(m.updates) != 1 {
+		t.Fatalf("want exactly one write, got %d", len(m.updates))
 	}
 }

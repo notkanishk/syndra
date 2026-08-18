@@ -167,3 +167,46 @@ func TestContractVersionIsDeclaredOnEveryMutatingEnvelope(t *testing.T) {
 		}
 	}
 }
+
+// The response direction, which the artifacts do not cover and which has now
+// grown a field.
+//
+// The add-on reports `observed` — the managed fields as the TARGET holds them
+// after a write — and `unverified` when the write landed and could not be read
+// back. Neither is consumed here yet; the consumer is the merge base. What must
+// be true today is that they cannot BREAK anything, and that is a property of
+// this decoder rather than of anybody's intentions: the request direction is
+// strict on the add-on's side, and the assumption that the reply direction is
+// lenient is exactly the kind of assumption this contract exists to stop being
+// an assumption.
+func TestAnApplyOutcomeCarryingObservedValuesStillDecodes(t *testing.T) {
+	body := []byte(`{"subject":"sub-1","effect":"applied","detail":"Updated ada.",
+		"username":"ada","uid":3001,"fingerprint":"abc123",
+		"observed":{"group":["lab_makers"],"enabled":true},"unverified":false}`)
+
+	var out ApplyResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("the backend must tolerate fields it does not read: %v", err)
+	}
+	if out.Effect != "applied" || out.Username != "ada" || out.Fingerprint != "abc123" {
+		t.Fatalf("the fields this side does read must survive: %+v", out)
+	}
+}
+
+// And the unverified case, whose sentence has to reach a surface. It travels in
+// `detail` because that is the field this struct decodes — a statement carried
+// only in `consequence` would be read by nobody, since nothing on this side
+// looks at that key.
+func TestAnUnverifiedApplyCarriesItsSentenceWhereTheBackendReadsIt(t *testing.T) {
+	body := []byte(`{"subject":"sub-1","effect":"applied","unverified":true,
+		"detail":"Updated ada. The account could not be read back afterwards, so what the target now holds has not been confirmed.",
+		"consequence":"ignored by this side"}`)
+
+	var out ApplyResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !bytes.Contains([]byte(out.Detail), []byte("has not been confirmed")) {
+		t.Fatalf("the operator-facing sentence must be in a field this side decodes: %q", out.Detail)
+	}
+}
