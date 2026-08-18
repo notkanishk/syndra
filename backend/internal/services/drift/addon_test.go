@@ -337,3 +337,54 @@ func TestAnAccountBoundToAnotherSubjectIsNeverOfferedForAdoption(t *testing.T) {
 		t.Errorf("a bound uid owns the account whatever it is currently called: %+v", got)
 	}
 }
+
+// A binding whose account is gone from the target is a finding, never a
+// convergence.
+//
+// The plan for one says "create", so queueing it recreates an account somebody
+// deleted. This is not hypothetical: three stub-era bindings sat in a live
+// deployment pointed at a production NAS, re-queueing every six hours, and the
+// only thing that had kept them from landing was an unrelated bug in account
+// creation. Fixing that bug turned them into three real accounts waiting for
+// somebody to press a button.
+func TestABindingWhoseAccountIsGoneIsReportedNotQueued(t *testing.T) {
+	present := []addons.TargetAccount{{Username: "ada", UID: 3001}}
+	bindings := []db.TargetBinding{
+		{SubjectID: "sub-live", Username: "ada", AccountUID: uidPtr(3001)},
+		{SubjectID: "sub-gone", Username: "alice", AccountUID: uidPtr(3999)},
+	}
+
+	live, stale := partitionByPresence(bindings, present)
+	if len(live) != 1 || live[0].SubjectID != "sub-live" {
+		t.Fatalf("live = %+v, want only sub-live", live)
+	}
+	if len(stale) != 1 || stale[0].Username != "alice" || stale[0].UID != 3999 {
+		t.Fatalf("stale = %+v, want alice/3999", stale)
+	}
+}
+
+// A rename keeps the uid; a recreated account keeps the name. Either is still
+// the account, and neither is stale.
+func TestAMatchOnEitherIdentityCountsAsPresent(t *testing.T) {
+	renamed := []addons.TargetAccount{{Username: "ada-smith", UID: 3001}}
+	recreated := []addons.TargetAccount{{Username: "ada", UID: 4242}}
+	b := []db.TargetBinding{{SubjectID: "s", Username: "ada", AccountUID: uidPtr(3001)}}
+
+	if live, stale := partitionByPresence(b, renamed); len(live) != 1 || len(stale) != 0 {
+		t.Error("a renamed account was reported as gone; the uid still matches")
+	}
+	if live, stale := partitionByPresence(b, recreated); len(live) != 1 || len(stale) != 0 {
+		t.Error("a recreated account was reported as gone; the name still matches")
+	}
+}
+
+// A binding from before uids were recorded must not be condemned for it.
+func TestABindingWithNoRecordedUIDMatchesOnName(t *testing.T) {
+	b := []db.TargetBinding{{SubjectID: "s", Username: "ada"}}
+	live, stale := partitionByPresence(b, []addons.TargetAccount{{Username: "ada", UID: 3001}})
+	if len(live) != 1 || len(stale) != 0 {
+		t.Fatalf("live=%d stale=%d; a uid-less binding whose name is present is present", len(live), len(stale))
+	}
+}
+
+func uidPtr(v int64) *int64 { return &v }

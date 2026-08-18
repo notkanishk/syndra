@@ -11,6 +11,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/services/drift"
 )
 
 // §23 — the surface has always said "this stays until somebody resolves it".
@@ -305,5 +306,64 @@ func TestTheRosterReportsATransportSecretThatStoppedLoading(t *testing.T) {
 	// smear one target's failure across the roster.
 	if byTarget["unifi"].TransportStatus != "ok" {
 		t.Errorf("the healthy target reports %q", byTarget["unifi"].TransportStatus)
+	}
+}
+
+// An operator can ask a target to reconcile now, and gets what the pass found.
+//
+// Until this existed, `ReconcileAddon` ran only from the six-hour scheduler:
+// [Reconcile now] covered Zitadel and nothing else, so the answer to "is this
+// target in step?" was to wait and read a log line.
+func TestATargetCanBeReconciledOnDemand(t *testing.T) {
+	origGet, origRec := addonsGet, svcReconcileAddon
+	t.Cleanup(func() { addonsGet, svcReconcileAddon = origGet, origRec })
+
+	addonsGet = func(string) (*addons.Addon, error) { return &addons.Addon{}, nil }
+	called := ""
+	svcReconcileAddon = func(_ context.Context, target string) (drift.AddonReconcileResult, error) {
+		called = target
+		return drift.AddonReconcileResult{
+			Target: target, Bound: 4, Queued: 1, Current: true,
+			Stale: []drift.StaleBinding{{SubjectID: "s", Username: "alice", UID: 3999}},
+		}, nil
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/targets/truenas/reconcile", nil)
+	req.SetPathValue("target", "truenas")
+	handleReconcileTarget(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if called != "truenas" {
+		t.Errorf("reconciled %q", called)
+	}
+	var got drift.AddonReconcileResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	// The stale bindings are the point of reading the result: they are what a
+	// sweep refuses to act on and an operator has to decide about.
+	if len(got.Stale) != 1 || got.Stale[0].Username != "alice" {
+		t.Errorf("the stale bindings did not survive the response: %+v", got.Stale)
+	}
+}
+
+// A target the deployment does not register cannot be reconciled, and the
+// refusal says which of the two it is — an empty pass reported as a healthy one
+// is the failure this prevents.
+func TestReconcilingAnUnregisteredTargetIsRefused(t *testing.T) {
+	origGet := addonsGet
+	t.Cleanup(func() { addonsGet = origGet })
+	addonsGet = func(string) (*addons.Addon, error) { return nil, addons.ErrNotRegistered }
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/targets/unifi/reconcile", nil)
+	req.SetPathValue("target", "unifi")
+	handleReconcileTarget(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 }

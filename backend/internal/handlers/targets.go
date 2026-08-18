@@ -402,3 +402,29 @@ func handleResolveBindingConflict(w http.ResponseWriter, r *http.Request) {
 			"Until it drains the account still holds whatever the change that caused this wrote to it.",
 	})
 }
+
+// handleReconcileTarget runs one add-on target's reconciliation now.
+//
+// The scheduler has driven `ReconcileAddon` since it was written and nothing
+// else could: [Reconcile now] existed for Zitadel and for no target, so an
+// operator asking "is this in step?" had to wait up to six hours and read a log
+// line. The same pass, on demand, returning what it found.
+//
+// It queues; it does not apply. Every convergence it records waits for the
+// drain like any other add-on row, which is what makes an operator-triggered
+// sweep safe to press twice.
+func handleReconcileTarget(w http.ResponseWriter, r *http.Request) {
+	target := r.PathValue("target")
+	if _, err := addonsGet(target); err != nil {
+		// Registered is a deployment fact; reconciling one that is not
+		// registered would report an empty pass as a healthy one.
+		jsonErrorResponse(w, http.StatusNotFound, "TARGET_NOT_REGISTERED", err.Error())
+		return
+	}
+	res, err := svcReconcileAddon(r.Context(), target)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusBadGateway, "RECONCILE_FAILED", err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, res)
+}
