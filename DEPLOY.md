@@ -754,12 +754,21 @@ means turning verification off. Set `TRUENAS_SHARE_HOST` to the name a member
 types into a file manager — it feeds the manifest's connection block, and unset,
 the member's page silently omits the mount instructions.
 
-`TRUENAS_SHARE_HOST` is **not** the proxy name. Caddy terminates HTTP; SMB is
-tcp/445 and does not pass through it, so a member told to mount
-`nas.example.org` would be pointed at a host answering on 443 and nothing
-else. Name the NAS directly. The two variables describe two different paths to
-the same machine, which is exactly why the add-on never derives one from the
-other.
+**Whether `TRUENAS_SHARE_HOST` is the same name depends on one thing**: does the
+API name resolve to the NAS itself, or to a reverse proxy?
+
+- **A direct DNS record** — an AdGuard/Unbound entry pointing at the NAS — serves
+  both. `wss://nas.example.org/api/current` and
+  `smb://nas.example.org/main` reach the same machine, and the two
+  variables carry the same value.
+- **Behind a proxy** they must differ. A proxy terminates HTTP; SMB is tcp/445
+  and does not pass through it, so a member told to mount the proxy name is
+  pointed at a host answering on 443 and nothing else.
+
+The add-on never derives one from the other in either case, because that answer
+is a fact about somebody's network rather than something readable off a URL —
+and getting it wrong produces mount instructions that fail for every member at
+once, with nothing in Syndra able to notice.
 
 **3 — The backend↔add-on channel.** Nothing to do.
 
