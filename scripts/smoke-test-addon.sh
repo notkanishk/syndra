@@ -51,7 +51,13 @@ else
     "640 0:65532") pass "0640 root:65532, as both readers need" ;;
     *) fail "the secret is $PERMS, expected 640 0:65532" \
          "The add-on runs as uid 65532 and reads it by group; the backend reads" \
-         "it as owner. Recreate the volume: $COMPOSE down && docker volume rm ${TARGET}_addon_secret" ;;
+         "it as owner. Recreate the volume:" \
+         "  $COMPOSE stop backend $SERVICE" \
+         "  docker volume rm \"\$(docker volume ls -q --filter name=_${TARGET}_addon_secret)\"" \
+         "  $COMPOSE up -d" \
+         "(the volume carries the COMPOSE PROJECT prefix — \`docker volume rm" \
+         "${TARGET}_addon_secret\` silently CREATES an empty volume of that name" \
+         "instead of removing the real one, which is how this line was wrong)" ;;
   esac
 fi
 
