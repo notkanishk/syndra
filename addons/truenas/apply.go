@@ -80,9 +80,55 @@ type ApplyOutcome struct {
 	// Fingerprint is the subject's state AFTER this call, so the next plan
 	// starts from something current.
 	Fingerprint string `json:"fingerprint,omitempty"`
+	// Observed is the managed fields as the TARGET reported them after the
+	// write, never as this add-on asked for them.
+	//
+	// The distinction is the whole point of the field. A value assembled from
+	// the request agrees with the request by construction, so it can confirm
+	// nothing and, recorded as a merge base, would make every later difference
+	// resolve as "the target is wrong" — which is the state this add-on was in.
+	// Absent when the read after the write did not happen; see Unverified.
+	Observed map[string]any `json:"observed,omitempty"`
+	// Unverified says the mutation landed and its result could not be read.
+	//
+	// A separate axis from the effect, deliberately. "Did the write happen" and
+	// "do we know what it produced" are different questions, and collapsing
+	// them either reports a completed write as failed — inviting a retry of
+	// something already done — or reports an unverified state as confirmed,
+	// which is the lie this whole change is about. Fingerprint and Observed are
+	// both omitted whenever this is set, so nothing downstream can mistake an
+	// assumption for a reading.
+	Unverified bool `json:"unverified,omitempty"`
 	// Conflict is set when an unbound account already holds the derived name.
 	// The operation stops and this carries what an operator needs to decide.
 	Conflict *BindingConflict `json:"conflict,omitempty"`
+}
+
+// observedFields is the managed half of a subject as the target reports it.
+//
+// Managed fields only, matching what the merge compares: an unmanaged field is
+// not "unchanged", it is out of scope, and carrying it would invite a base that
+// claims authority over something Syndra never set.
+func observedFields(desired desiredState, s *Subject) map[string]any {
+	if s == nil {
+		return nil
+	}
+	out := map[string]any{}
+	if desired.managed[FieldGroup] {
+		groups := append([]string(nil), s.Groups...)
+		sort.Strings(groups)
+		out[FieldGroup] = groups
+	}
+	if desired.managed[FieldEnabled] {
+		out[FieldEnabled] = s.Enabled
+	}
+	if desired.managed[FieldSMBEnabled] {
+		out[FieldSMBEnabled] = s.SMBEnabled
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // Effects, matching the backend's vocabulary so one renderer serves both.
@@ -482,25 +528,63 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 	if err := s.nas.call("user.update", []any{current.ID, update}, nil); err != nil {
 		return ApplyOutcome{}, statusFor(err), err
 	}
-	applied := *current
-	if desired.managed[FieldGroup] {
-		applied.Groups = desired.groups
-	}
-	if desired.managed[FieldEnabled] {
-		applied.Enabled = desired.enabled
-	}
-	if desired.managed[FieldSMBEnabled] && !smbPending {
-		applied.SMBEnabled = desired.smbEnabled
+
+	// Read back what the target now holds. This used to be
+	//
+	//     applied := *current                      // then overwrite the
+	//     applied.Groups = desired.groups          // managed fields with the
+	//     applied.Enabled = desired.enabled        // values we REQUESTED
+	//
+	// and fingerprint that. Which meant the dominant path — every update to an
+	// account that already exists — reported intent in the shape of an
+	// observation. The create path's own comment already stated the rule it
+	// broke: a fingerprint computed from a state this add-on invented is a
+	// fingerprint the next plan verifies against nothing.
+	//
+	// It is not hypothetical. `smb` is refused on an account with no password;
+	// TrueNAS normalises and resolves values on write; a middleware that
+	// coerces a field answers 200 and stores something else. In every one of
+	// those the projection says the write landed as asked, the next plan
+	// compares its fingerprint against that claim, and the check passes over a
+	// difference it exists to catch.
+	//
+	// The same call the plan path already makes, so this is a second read per
+	// applied subject rather than a new class of work.
+	applied, err := s.readBack(current.Username)
+	if err != nil {
+		// The write happened and its result is unknown. Reported as both of
+		// those things: the effect is `applied`, because it was, and nothing
+		// that would have to be an observation is sent. Recording it as a
+		// failure would invite a retry of a mutation already performed;
+		// recording it as an ordinary success would hand the next plan a
+		// fingerprint nobody read.
+		s.record("apply.unverified", req.Subject, req.Actor, req.CallID, "succeeded")
+		return ApplyOutcome{
+			Subject: req.Subject, Effect: EffectApplied, Unverified: true,
+			// The statement goes in the DETAIL, not only in the consequence:
+			// the backend decodes `detail` and does not decode `consequence`,
+			// so a sentence that lives only in the second reaches no operator
+			// surface at all. The flag beside it is for the consumer that will
+			// store bases; the sentence is for the person reading today.
+			Detail: describeChange(update, desired.groups) +
+				" The account could not be read back afterwards, so what the target now holds has not been confirmed.",
+			Consequence: "The change was written to " + current.Username +
+				" and the account could not be read back, so what the target now holds " +
+				"has not been confirmed. The next plan reads it fresh.",
+			Username: current.Username,
+			UID:      current.UID,
+		}, http.StatusOK, nil
 	}
 
 	s.record("apply", req.Subject, req.Actor, req.CallID, "succeeded")
 	return ApplyOutcome{
 		Subject: req.Subject, Effect: EffectApplied,
 		Detail:      describeChange(update, desired.groups),
-		Consequence: describeHolding(applied),
+		Consequence: describeHolding(*applied),
 		Username:    applied.Username,
 		UID:         applied.UID,
-		Fingerprint: fingerprintSubject(&applied),
+		Fingerprint: fingerprintSubject(applied),
+		Observed:    observedFields(desired, applied),
 	}, http.StatusOK, nil
 }
 
@@ -580,6 +664,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		Username:    binding.Username,
 		UID:         created.UID,
 		Fingerprint: fingerprintSubject(created),
+		Observed:    observedFields(desired, created),
 	}, http.StatusOK, nil
 }
 

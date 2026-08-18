@@ -7,10 +7,16 @@ create path only; `convergeExisting` fingerprints a projection built from the
 REQUESTED values. Nothing downstream can be built on that, so it is fixed here
 and first.
 
-- [ ] 0.1 **Every successful mutation is followed by a read of the account as the target then holds it.** `convergeExisting` calls `readBack` after `user.update` and fingerprints the READ, not `applied := *current` with the requested fields written over it. The create path's own comment already states the rule this breaks — "a fingerprint computed from a state this add-on invented is a fingerprint the next plan verifies against nothing"
-- [ ] 0.2 **The observed managed-field values travel in the apply response** as an `observed` map beside the fingerprint, and are declared in `addons/contract/apply_response.json`. The one defect class this boundary has produced twice is a field one side sends and the other's strict decoder never declared
-- [ ] 0.3 **A failed read-back produces no base, and never a base from intent.** The outcome stays `applied` — the write happened — with no `observed`; the backend records nothing and the subject converges two-way on the next pass, exactly as one that has never been applied. An add-on too old to send `observed` lands in the same state
-- [ ] 0.4 Test: an update whose read-back fails records NO base. This is the failure mode the whole change exists to prevent, arriving through the error path, and it is the one a green suite would most plausibly miss
+**Shipped as its own change: `apply-reads-back-what-it-wrote`.** 0.1–0.3 are done and
+mutation-checked there; they are left here because this change's foundation is
+what they are, and a prerequisite that vanishes once ticked is one nobody can
+audit later.
+
+- [x] 0.1 **Every successful mutation is followed by a read of the account as the target then holds it.** `convergeExisting` calls `readBack` after `user.update` and fingerprints the READ, not `applied := *current` with the requested fields written over it. The create path's own comment already states the rule this breaks — "a fingerprint computed from a state this add-on invented is a fingerprint the next plan verifies against nothing"
+- [x] 0.2 **The observed managed-field values travel in the apply response** as an `observed` map beside the fingerprint. The one defect class this boundary has produced twice is a field one side sends and the other's decoder refuses, so the backend's own decoder is TESTED against an outcome carrying it rather than assumed to tolerate it
+- [ ] 0.2a A response-direction contract artifact (`addons/contract/apply_response.json`). The fixtures cover the request direction only; this lands with the consumer that reads `observed`, which is this change
+- [x] 0.3 **A failed read-back produces no base, and never a base from intent.** The outcome stays `applied` — the write happened — with no `observed`; the backend records nothing and the subject converges two-way on the next pass, exactly as one that has never been applied. An add-on too old to send `observed` lands in the same state
+- [ ] 0.4 Test: an update whose read-back fails records NO base — the backend half, which needs the base store to exist. The add-on half (no fingerprint, no observed, one write) is covered in `apply-reads-back-what-it-wrote` 2.4. This is the failure mode the whole change exists to prevent, arriving through the error path, and it is the one a green suite would most plausibly miss
 
 ## 1. The base
 
