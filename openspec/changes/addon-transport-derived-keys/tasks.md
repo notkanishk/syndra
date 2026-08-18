@@ -143,3 +143,23 @@ whole point is that the two ends resolve configuration identically.
   that a caller would otherwise choose which one authenticates it.
 - **No nonce store.** Replay protection continues to rest on the operation
   identifier and the plan fingerprints, exactly as specified today.
+
+## 9. What the first real write taught, and what was built from it
+
+Every row here exists because a live TrueNAS refused something. None of it was
+findable from either suite: the recorded fixtures answered the refused payloads
+with successes, so the code, the fakes and the tests agreed with each other
+while the feature could not create an account.
+
+- [x] 9.1 **Account creation, fixed.** `user.create` sends `password_disabled: true` — Syndra has no password at creation and must not invent one — and `smb: false` explicitly, because TrueNAS refuses SMB alongside disabled password authentication
+- [x] 9.2 **The password call carries three fields because the target only accepts them together.** `password_disabled: false` (an update carrying only `password` is ACCEPTED and leaves authentication disabled — the member is told their password was set by an account that still refuses them) and `smb`, since a later standalone enable is refused with `Password must be reset in order to enable SMB authentication`
+- [x] 9.3 **The convergence no longer attempts a flip the target will refuse.** A member who has not set a password converges to "waiting for a password before SMB can be enabled" rather than failing the whole apply on every pass
+- [x] 9.4 **A refusal names the schema field it rejected.** `rejected: user_create.password`, and still never the middleware's prose — a field path is a key of the request schema and cannot carry a value, while the message is free text from a call whose parameters can include a member's credential. That distinction was an afternoon
+- [x] 9.5 **The add-on refuses to adopt or delete its own service account.** It asks the target who it is (`auth.me`) rather than being told. The live inventory offered `syndra` — the account the API key belongs to — beside a real member's, with an Adopt button on both; purging it would delete the credential Syndra reaches the target with, unrecoverably. Enforced in the add-on because it is the only component that knows, and surfaced in the UI so the refusal is explained before it is met
+- [x] 9.6 **A binding whose account is gone is a finding, not a convergence.** The plan for one says "create". Three stub-era bindings sat in a live deployment pointed at a production NAS, re-queueing every six hours, and the only thing keeping them from landing was 9.1 being broken. Fixing 9.1 turned them into three real accounts waiting for a button press
+- [x] 9.7 **Fixtures are recorded from a real target, refusals included.** `scripts/record-truenas-fixtures.sh --write`, and `truenas_rules_test.go` derives its assertions from the recording rather than from anybody's memory — each fires only because the target refused something, with a vacuity test so the suite cannot pass because nothing was recorded
+- [x] 9.8 **Health says which of three states the key's expiry is in**, so `none` (deliberate) and `unrecorded` (nobody said, and it can still expire) stop being the same empty field
+- [x] 9.9 **Health carries the unaudited SMB share list**, so an operator learns auditing is off without running the activity report they had no reason to run — with `shares_readable` beside it, because "nothing is unaudited" and "could not look" must not render identically. Both live shares on the deployment this was written against have auditing off
+- [x] 9.10 **Add-on targets can be reconciled on demand.** `ReconcileAddon` had run only from the six-hour scheduler; [Reconcile now] existed for Zitadel and no target
+- [ ] 9.11 **Reconciliation is a two-way diff and should be a three-way merge.** Proposed separately as `reconciliation-as-merge`: without a merge base, "Syndra moved", "the target was changed by hand" and "both moved differently" are the same difference, and the system resolves all three by overwriting. 9.6 is one hand-cut case of that general shape
+
