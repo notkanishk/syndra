@@ -94,6 +94,13 @@ func resetRegistry(t *testing.T) {
 		credMu.Lock()
 		credCache = map[string]*credential{}
 		credMu.Unlock()
+		// The on-demand manifest read's own state goes with it. It is keyed by
+		// target and remembers when it last tried, so a target name reused
+		// across tests would otherwise inherit the previous test's cooldown and
+		// silently skip the read the next test is asserting.
+		manifestRetryMu.Lock()
+		manifestRetries = map[string]*manifestRetry{}
+		manifestRetryMu.Unlock()
 	}
 	clear()
 	t.Cleanup(clear)
@@ -273,8 +280,15 @@ func TestUnregisteredAddonIsNotCallable(t *testing.T) {
 // third distinct state, not an absence and not an unknown operation.
 func TestRegisteredWithoutManifestIsNotCallable(t *testing.T) {
 	registerTrueNAS(t)
+	// The fetch seam is stubbed to fail because resolving now ATTEMPTS one read
+	// for a target that has no manifest. Left unstubbed this test would make a
+	// real HTTP call to the registered address.
+	calls := withManifest(t, Manifest{}, errors.New("nothing is listening"))
 	if _, err := ResolveOperation("truenas", "health.get"); !errors.Is(err, ErrNoManifest) {
 		t.Errorf("expected ErrNoManifest before any refresh, got %v", err)
+	}
+	if *calls != 1 {
+		t.Errorf("the refusal must cost exactly one read, got %d", *calls)
 	}
 	a, err := Get("truenas")
 	if err != nil {
@@ -686,5 +700,132 @@ func TestRefreshAllBoundsEachTargetSeparately(t *testing.T) {
 	slow, _ := Get("aslow")
 	if slow.LastError() == nil {
 		t.Error("the unreachable target must record its own failure")
+	}
+}
+
+// 11.7 — the start-up race, and the four limits that keep its fix from becoming
+// its own outage.
+//
+// `RefreshAll` runs once at start-up and then on a period. An add-on still
+// starting during that first pass left its target refused until the next tick,
+// while the add-on was up and answering. Met on the dev deployment: `docker
+// compose up -d` raced the add-on's start and a release came back `no accepted
+// manifest` against a target that was fine.
+
+func TestACallReadsTheManifestTheStartupPassMissed(t *testing.T) {
+	registerTrueNAS(t)
+	calls := withManifest(t, goodManifest(), nil)
+	withClock(t, time.Unix(1770000000, 0))
+
+	// No Refresh first: this is the state a backend that started ahead of its
+	// add-on is in.
+	if _, err := ResolveOperation("truenas", "health.get"); err != nil {
+		t.Fatalf("a target whose add-on is up must become callable on demand: %v", err)
+	}
+	if *calls != 1 {
+		t.Fatalf("want exactly one capability read, got %d", *calls)
+	}
+}
+
+// The single flight. A burst of refused calls must produce ONE capability read
+// between them — the retry must not become the thing that keeps a starting
+// add-on down.
+func TestABurstOfCallsCostsOneManifestRead(t *testing.T) {
+	registerTrueNAS(t)
+	var mu sync.Mutex
+	calls := 0
+	saved := fetchAddonManifest
+	fetchAddonManifest = func(context.Context, Registration) (Manifest, error) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		// Long enough that every other goroutine is queued behind this one when
+		// it returns, which is the case the re-check inside the lock exists for.
+		time.Sleep(20 * time.Millisecond)
+		return goodManifest(), nil
+	}
+	t.Cleanup(func() { fetchAddonManifest = saved })
+	withClock(t, time.Unix(1770000000, 0))
+
+	var wg sync.WaitGroup
+	for i := 0; i < 12; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := ResolveOperation("truenas", "health.get"); err != nil {
+				t.Errorf("resolve: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if calls != 1 {
+		t.Fatalf("twelve concurrent calls must read the manifest once, got %d", calls)
+	}
+}
+
+// And once, never a loop. A target that genuinely has no manifest must refuse
+// quickly: the calls arriving after a failed attempt cost nothing until the
+// cooldown expires.
+func TestARefusedManifestReadIsNotRetriedPerCall(t *testing.T) {
+	registerTrueNAS(t)
+	calls := withManifest(t, Manifest{}, errors.New("connection refused"))
+	withClock(t, time.Unix(1770000000, 0))
+
+	for i := 0; i < 5; i++ {
+		if _, err := ResolveOperation("truenas", "health.get"); !errors.Is(err, ErrNoManifest) {
+			t.Fatalf("want ErrNoManifest, got %v", err)
+		}
+	}
+	if *calls != 1 {
+		t.Fatalf("five refused calls must not buy five reads, got %d", *calls)
+	}
+}
+
+// The cooldown ends. An add-on that comes up a minute later is picked up by the
+// next call rather than by the next tick, which is the whole point.
+func TestTheReadIsTriedAgainOnceTheCooldownHasPassed(t *testing.T) {
+	registerTrueNAS(t)
+	at := time.Unix(1770000000, 0)
+	withClock(t, at)
+	saved := fetchAddonManifest
+	calls := 0
+	fetchAddonManifest = func(context.Context, Registration) (Manifest, error) {
+		calls++
+		if calls == 1 {
+			return Manifest{}, errors.New("connection refused")
+		}
+		return goodManifest(), nil
+	}
+	t.Cleanup(func() { fetchAddonManifest = saved })
+
+	if _, err := ResolveOperation("truenas", "health.get"); !errors.Is(err, ErrNoManifest) {
+		t.Fatalf("want ErrNoManifest while the add-on is down, got %v", err)
+	}
+	timeNow = func() time.Time { return at.Add(manifestRetryCooldown + time.Second) }
+	if _, err := ResolveOperation("truenas", "health.get"); err != nil {
+		t.Fatalf("an add-on that came up must be picked up by a call: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("want one read per side of the cooldown, got %d", calls)
+	}
+}
+
+// The limit that keeps this from eating a decision. A manifest that WAS read and
+// whose operation is not offered is a refusal an operator must act on; re-reading
+// it would turn that into a loop, and would hide the reason.
+func TestAnOperationRefusalNeverTriggersAManifestRead(t *testing.T) {
+	m := goodManifest()
+	m.Operations = []Operation{{ID: "health.get", Scope: ScopeAdmin, Available: true}}
+	installAddon(t, Registration{Target: "truenas", BaseURL: "http://x", Secret: []byte("a-test-secret")}, m)
+	calls := withManifest(t, goodManifest(), nil)
+
+	if _, err := ResolveOperation("truenas", "account.purge"); !errors.Is(err, ErrUnknownOperation) {
+		t.Fatalf("want ErrUnknownOperation, got %v", err)
+	}
+	if *calls != 0 {
+		t.Fatalf("a held manifest must never be re-read by a refusal, got %d reads", *calls)
 	}
 }

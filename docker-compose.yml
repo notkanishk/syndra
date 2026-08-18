@@ -261,6 +261,14 @@ services:
     # the transport material are in place, and register it with
     # ADDON_TARGETS=truenas on the backend.
     profiles: ["truenas"]
+    # Deliberately NOT a `depends_on` of the backend, in either direction. This
+    # service is profile-gated, and a dependency on it makes `docker compose up`
+    # fail outright on every deployment that runs no NAS. The start-up race it
+    # would narrow — backend up before the add-on serves a manifest — is closed
+    # in the backend instead, by an on-demand capability read (registry.go,
+    # refreshForManifest). Ordering could only ever narrow that window anyway:
+    # nothing `depends_on` expresses promises the add-on has SERVED a manifest
+    # by the time the backend asks for one.
     environment:
       - LISTEN_ADDR=:8443
       # This add-on's name in the deployment, and the HKDF salt. It MUST equal
