@@ -32,7 +32,12 @@ type server struct {
 	log       *MutationLog
 	life      *lifecycle
 	keyExpiry time.Time
-	product   string
+	// keyNeverExpires is the operator saying so, rather than this add-on
+	// inferring it from an absent date. A key with no expiry and a key whose
+	// expiry nobody wrote down look identical from here, and only one of them
+	// is a problem.
+	keyNeverExpires bool
+	product         string
 	// connection is how a member reaches the target, for the instructions on
 	// their own page. Nil when the deployment has not said, and the manifest
 	// then omits it rather than guessing from the API URL — a share path that
@@ -140,6 +145,25 @@ type Health struct {
 	VersionNote    string  `json:"version_note,omitempty"`
 	LastReadAt     *string `json:"last_read_at,omitempty"`
 	KeyExpiresAt   *string `json:"key_expires_at,omitempty"`
+	// KeyExpiry says which of three states the credential is in, so an absent
+	// date is never read as a probe that failed. `set` carries a date above;
+	// `none` is a key the operator deliberately issued without an expiry;
+	// `unrecorded` is a date nobody told this add-on, which is the one an
+	// operator should act on — a key CAN expire without Syndra knowing, and a
+	// silently expired key looks exactly like an outage.
+	KeyExpiry string `json:"key_expiry"`
+	// UnauditedShares names SMB shares with auditing switched off.
+	//
+	// On the health surface rather than only inside `activity.get`, because an
+	// activity report that comes back empty is indistinguishable from a member
+	// who did nothing — and the operator only learns the difference by running
+	// the report they had no reason to run. Every share unaudited means the
+	// feature cannot work at all, and that is a deployment fact worth knowing
+	// before somebody depends on it.
+	UnauditedShares []string `json:"unaudited_shares,omitempty"`
+	// SharesReadable is whether the share list could be read at all. Without
+	// it, "no unaudited shares" and "could not look" are the same empty list.
+	SharesReadable bool `json:"shares_readable"`
 	// CircuitOpen says the add-on is refusing its own calls. Distinct from
 	// unreachable: an operator seeing only "unreachable" looks at the network,
 	// when what happened is that this backed off to avoid a lockout.
@@ -189,9 +213,23 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request, _ []byte) 
 		formatted := t.UTC().Format(time.RFC3339)
 		h.LastReadAt = &formatted
 	}
-	if !s.keyExpiry.IsZero() {
+	switch {
+	case !s.keyExpiry.IsZero():
 		formatted := s.keyExpiry.UTC().Format(time.RFC3339)
 		h.KeyExpiresAt = &formatted
+		h.KeyExpiry = "set"
+	case s.keyNeverExpires:
+		h.KeyExpiry = "none"
+	default:
+		h.KeyExpiry = "unrecorded"
+	}
+	// Read on the health path so it is seen without anyone asking for it, and
+	// only when the target is answering — a share list that could not be read
+	// is reported as unreadable rather than as "nothing is unaudited".
+	if h.Reachable {
+		if shares, err := s.unauditedShares(); err == nil {
+			h.SharesReadable, h.UnauditedShares = true, shares
+		}
 	}
 	if snap, found, err := s.store.GetSnapshot(); err == nil && found {
 		formatted := snap.TakenAt.UTC().Format(time.RFC3339)

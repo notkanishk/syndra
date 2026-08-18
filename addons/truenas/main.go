@@ -76,16 +76,20 @@ type config struct {
 	// internal address while SMB is published on another. Optional — unset, the
 	// manifest carries no connection block and the member's page omits the
 	// instructions rather than printing a host that does not answer.
-	shareHost  string
-	nasAPIKey  string
-	nasVerify  bool
-	keyExpiry  time.Time
-	supported  []string
-	statePath  string
-	logDir     string
-	logMaxSize int64
-	logKeep    int
-	lifecycle  string
+	shareHost string
+	nasAPIKey string
+	nasVerify bool
+	keyExpiry time.Time
+	// keyNeverExpires is TRUENAS_API_KEY_EXPIRES_AT=never — an operator stating
+	// that the key was issued without one. Distinct from unset, which means
+	// nobody has said either way.
+	keyNeverExpires bool
+	supported       []string
+	statePath       string
+	logDir          string
+	logMaxSize      int64
+	logKeep         int
+	lifecycle       string
 }
 
 func loadConfig() (config, error) {
@@ -117,7 +121,13 @@ func loadConfig() (config, error) {
 		return config{}, err
 	}
 	c.secret = []byte(secret)
-	if raw := os.Getenv("TRUENAS_API_KEY_EXPIRES_AT"); raw != "" {
+	if raw := strings.TrimSpace(os.Getenv("TRUENAS_API_KEY_EXPIRES_AT")); strings.EqualFold(raw, "never") {
+		// Said out loud, so /health reports a deliberate choice rather than an
+		// absence. A key that genuinely has no expiry and one whose expiry
+		// nobody recorded are the same empty field, and the second is the one
+		// that turns into an outage nobody can explain.
+		c.keyNeverExpires = true
+	} else if raw != "" {
 		t, err := time.Parse(time.RFC3339, raw)
 		if err != nil {
 			return config{}, fmt.Errorf("TRUENAS_API_KEY_EXPIRES_AT must be RFC3339: %w", err)
@@ -208,13 +218,14 @@ func run() error {
 	}
 
 	srv := &server{
-		auth:      &authenticator{signingKey: cfg.signingKey, now: time.Now},
-		nas:       nas,
-		store:     store,
-		log:       mlog,
-		life:      life,
-		keyExpiry: cfg.keyExpiry,
-		product:   "truenas_scale",
+		auth:            &authenticator{signingKey: cfg.signingKey, now: time.Now},
+		nas:             nas,
+		store:           store,
+		log:             mlog,
+		life:            life,
+		keyExpiry:       cfg.keyExpiry,
+		keyNeverExpires: cfg.keyNeverExpires,
+		product:         "truenas_scale",
 		// Nil unless the deployment named a share host. The manifest omits the
 		// block, and the member's page omits the instructions with it.
 		connection: shareConnection(cfg.shareHost),
