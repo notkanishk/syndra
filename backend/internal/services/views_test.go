@@ -36,6 +36,12 @@ func resetGovernanceDeps(t *testing.T) {
 	origHoldsDue := svcAllowancesDueForReview
 	t.Cleanup(func() { svcAllowancesDueForReview = origHoldsDue })
 	svcAllowancesDueForReview = func(context.Context) ([]db.Allowance, error) { return nil, nil }
+	// And the merge-finding count, same reason again: the summary counts the
+	// differences a reconciliation was not entitled to resolve, and an unstubbed
+	// count reaches a nil pool.
+	origFindings := svcCountMergeFindings
+	t.Cleanup(func() { svcCountMergeFindings = origFindings })
+	svcCountMergeFindings = func(context.Context) int { return 0 }
 	// And the unreconciled-target read the summary grew, same reason again.
 	origUnreconciled := svcGetUnreconciledTargets
 	t.Cleanup(func() { svcGetUnreconciledTargets = origUnreconciled })
@@ -725,4 +731,32 @@ func stubGovernanceReads(t *testing.T) {
 		return nil, nil
 	}
 	svcGetRolesForBundle = func(context.Context, string) ([]models.BundleRole, error) { return nil, nil }
+}
+
+// The count that keeps a finding from sitting behind a page saying nothing
+// needs a person.
+//
+// Beside the drift count and not inside it: drift is access nobody can explain,
+// and a merge finding is a disagreement everybody can explain and nobody has
+// decided. Summing them would make one number that answers neither question.
+func TestGovernance_CountsStandingMergeFindings(t *testing.T) {
+	resetGovernanceDeps(t)
+	svcCountMergeFindings = func(context.Context) int { return 3 }
+	svcGetAccessRequests = func(context.Context, string) ([]models.AccessRequest, error) { return nil, nil }
+	svcGetExpiringDirectGrants = func(context.Context, time.Duration) ([]models.DirectGrant, error) { return nil, nil }
+	svcGetAllBundles = func(context.Context) ([]models.Bundle, error) { return []models.Bundle{}, nil }
+	svcGetBundlesForUser = func(context.Context, string) ([]models.Bundle, error) { return nil, nil }
+	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) { return nil, nil }
+	svcGetRolesForBundle = func(context.Context, string) ([]models.BundleRole, error) { return nil, nil }
+
+	summary, err := Governance(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.MergeFindings != 3 {
+		t.Fatalf("want 3 standing findings, got %d", summary.MergeFindings)
+	}
+	if summary.Drift.Count == 3 {
+		t.Error("findings must not be folded into the drift count")
+	}
 }
