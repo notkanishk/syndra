@@ -534,6 +534,101 @@ func (a *Addon) LastError() error {
 	return a.lastErr
 }
 
+// hasManifest answers the one question the retry below is about, and takes the
+// read lock for exactly as long as that answer.
+func hasManifest(target string) bool {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	a := registry[target]
+	return a != nil && a.manifest != nil
+}
+
+// manifestRetry is one target's on-demand refresh, serialised.
+//
+// Its mutex is the single-flight: concurrent callers queue on it, and the one
+// that gets through re-checks whether the manifest has since arrived, so a burst
+// of refused calls costs ONE capability read between them rather than one each.
+// `last` is when that read was attempted, which is what stops the burst after a
+// failed one from buying another read per caller.
+type manifestRetry struct {
+	mu   sync.Mutex
+	last time.Time
+}
+
+var (
+	manifestRetryMu sync.Mutex
+	manifestRetries = map[string]*manifestRetry{}
+)
+
+func retryStateFor(target string) *manifestRetry {
+	manifestRetryMu.Lock()
+	defer manifestRetryMu.Unlock()
+	g := manifestRetries[target]
+	if g == nil {
+		g = &manifestRetry{}
+		manifestRetries[target] = g
+	}
+	return g
+}
+
+// refreshForManifest reads a target's capabilities once when it has none, and
+// reports whether it has one afterwards.
+//
+// `RefreshAll` runs at start-up and then on a period. An add-on that was still
+// starting during that first pass leaves its target with no accepted manifest,
+// and every call on it is refused until the next tick — while the add-on is up,
+// healthy and answering. Met on a real deployment: `docker compose up -d` raced
+// the add-on's start, and a release was refused with `no accepted manifest`
+// against a target that was fine.
+//
+// Availability rather than correctness: nothing is written, and the refusal is
+// honest about what the backend knows. What makes it worth closing is that the
+// fault is invisible from the target's own side, so the machine an operator
+// inspects is the one that is working.
+//
+// Deliberately narrow, and each limit is load-bearing:
+//
+//   - ONLY for a missing manifest. A manifest that was read and then refused —
+//     contract skew, an operation policy does not allow — is a decision, and
+//     re-reading it would turn a refusal an operator must act on into a loop.
+//     That is why this is reached from the `a.manifest == nil` path alone.
+//   - ONCE per call, never a loop. A target that genuinely has no manifest must
+//     still refuse quickly.
+//   - Single-flighted per target, so the retry does not become the thing that
+//     keeps a starting add-on down.
+//   - Rate-limited by its own cooldown, so calls arriving after a failed attempt
+//     refuse immediately rather than each buying another read.
+//
+// Compose ordering narrows the window this closes; it cannot close it. Nothing
+// `depends_on` can express promises the add-on has SERVED a manifest by the time
+// the backend asks for one.
+func refreshForManifest(target string) bool {
+	g := retryStateFor(target)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	// Re-checked inside the lock: whoever held it before this caller may have
+	// been the one read that succeeded.
+	if hasManifest(target) {
+		return true
+	}
+	if !g.last.IsZero() && timeNow().Sub(g.last) < manifestRetryCooldown {
+		return false
+	}
+	g.last = timeNow()
+
+	// Its own bounded context, and not the caller's. A caller that has already
+	// spent most of its budget must not turn this into a read that gives up
+	// before the add-on can answer, leaving the next caller to pay for it again.
+	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
+	defer cancel()
+	if err := Refresh(ctx, target); err != nil {
+		log.Printf("[ADDON] on-demand manifest read for %s: %v", target, err)
+		return false
+	}
+	return hasManifest(target)
+}
+
 // ResolveOperation is the callability gate: every invocation path goes through
 // it,
 // and it refuses anything the effective set does not offer or the add-on cannot
@@ -543,6 +638,11 @@ func ResolveOperation(target, id string) (EffectiveOperation, error) {
 	a, err := Get(target)
 	if err != nil {
 		return EffectiveOperation{}, err
+	}
+	// The one on-demand manifest read. Outside the lock, because the read it
+	// may perform takes the write lock.
+	if !hasManifest(target) && !refreshForManifest(target) {
+		return EffectiveOperation{}, fmt.Errorf("%w: %s", ErrNoManifest, target)
 	}
 	registryMu.RLock()
 	defer registryMu.RUnlock()
