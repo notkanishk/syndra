@@ -71,7 +71,34 @@ export function MergeFindings({ target }: { target: string }) {
               <div className="px-5 pb-3 text-[13.5px] text-muted">
                 {describe(f)}
               </div>
-              {f.decision ? (
+              {f.decision === "unbound" ? (
+                // Decided as unbound and still standing means the unbind did not
+                // finish: it settles immediately when it works, because nothing
+                // will ever observe that subject again. So this row is a repair,
+                // not a wait — and hiding its control is what turned a
+                // recoverable half-write into a wedge.
+                <CardRow className="flex-wrap">
+                  <span className="text-[13px] text-warn-text">
+                    The target may already have released this account and Syndra&rsquo;s records
+                    were not updated. Nothing on the target changes if you press again.
+                  </span>
+                  <span className="flex-1" />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    isPending={resolve.isPending}
+                    onClick={() =>
+                      resolve.mutate({
+                        id: f.id,
+                        resolution: "unbound",
+                        reason: "Finishing an unbind that did not complete",
+                      })
+                    }
+                  >
+                    Finish unbinding
+                  </Button>
+                </CardRow>
+              ) : f.decision ? (
                 // Decided and waiting. The convergence is queued or the policy
                 // has changed; the row closes when a pass sees the target agree.
                 // Saying "resolved" here would be the surface claiming the

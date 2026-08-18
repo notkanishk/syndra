@@ -41,6 +41,8 @@ func stubDrainDeps(t *testing.T) {
 		// The memory that a write landed. Stubbed like every other durable
 		// write here, so a drain test cannot reach a nil pool.
 		swap(&savePropagation, func(context.Context, db.Propagation) error { return nil }),
+		swap(&forgetPropagatedFields, func(context.Context, string, string, []string) error { return nil }),
+		swap(&forgetPropagatedFieldsExcept, func(context.Context, string, string, string, []string) error { return nil }),
 		swap(&markFailed, func(context.Context, string, string) error { return nil }),
 		swap(&requeue, func(context.Context, string, string) (int, error) { return 0, nil }),
 		swap(&reconcileLedger, func(context.Context, string) error { return nil }),
@@ -927,5 +929,76 @@ func TestDrainBatch_NeverClaimsARowForAnotherTarget(t *testing.T) {
 	// operator has to do something about.
 	if len(res.Awaiting) != 1 || res.Awaiting[0] != "truenas" {
 		t.Errorf("awaiting = %v, want the undispatchable target named once", res.Awaiting)
+	}
+}
+
+// The memory of a landed write must not outlive Syndra's own removal of it.
+//
+// It exists so a later absence reads as somebody's removal rather than as a
+// write that never happened. Kept past a revoke, it becomes a lie about the
+// future: grant the role again, have the new write fail to reach the target,
+// and the stale memory says the target was holding it — so the pass reports a
+// hand removal and suppresses the replay that would have restored the access
+// somebody just asked for.
+
+func TestARevokeThatLandsForgetsWhatItRemoved(t *testing.T) {
+	stubDrainDeps(t)
+	var forgotten []string
+	defer swap(&forgetPropagatedFields, func(_ context.Context, _, subject string, fields []string) error {
+		if subject != "u1" {
+			t.Fatalf("wrong subject: %q", subject)
+		}
+		forgotten = append(forgotten, fields...)
+		return nil
+	})()
+	remembered := 0
+	defer swap(&savePropagation, func(context.Context, db.Propagation) error { remembered++; return nil })()
+
+	err := applyRow(context.Background(), models.PendingPropagation{
+		ID: "o1", Target: db.TargetZitadel, OpType: "revoke",
+		UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(forgotten) != 1 || forgotten[0] != "p1/viewer" {
+		t.Fatalf("a revoke must forget exactly what it removed: %v", forgotten)
+	}
+	// And must never record itself as a landing. Remembering a removal as
+	// applied would make the next pass argue the target should still hold it.
+	if remembered != 0 {
+		t.Fatalf("a revoke is not a landing, got %d recorded", remembered)
+	}
+}
+
+// A replace states the WHOLE desired set for one grant, so anything remembered
+// under that project and absent from it has just been removed — the same defect,
+// reached by the operation that removes without saying so.
+func TestAReplaceForgetsTheRolesItDroppedAndRemembersTheRest(t *testing.T) {
+	stubDrainDeps(t)
+	var kept []string
+	var prefix string
+	defer swap(&forgetPropagatedFieldsExcept, func(_ context.Context, _, _, p string, keep []string) error {
+		prefix, kept = p, keep
+		return nil
+	})()
+	landed := []string{}
+	defer swap(&savePropagation, func(_ context.Context, p db.Propagation) error {
+		landed = append(landed, p.Field)
+		return nil
+	})()
+
+	err := applyRow(context.Background(), models.PendingPropagation{
+		ID: "o2", Target: db.TargetZitadel, OpType: "replace",
+		UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer", "editor"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(landed) != 2 {
+		t.Fatalf("what the replace wrote must be remembered: %v", landed)
+	}
+	if prefix != "p1" || len(kept) != 2 {
+		t.Fatalf("the prune must be scoped to the project and keep what was written: prefix=%q keep=%v", prefix, kept)
 	}
 }

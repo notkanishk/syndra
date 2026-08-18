@@ -98,6 +98,54 @@ func PropagationsFor(ctx context.Context, target string) (map[string]map[string]
 	return out, nil
 }
 
+// ForgetPropagatedFields drops the memory for specific things that were removed.
+//
+// A landed write is remembered so that a later absence reads as a removal rather
+// than as a write that never happened. The moment SYNDRA removes the same thing,
+// that memory becomes a lie about the future: re-grant the role later, have the
+// new write fail to land, and the stale memory says the target was holding it —
+// so the reconciliation reports a hand removal and suppresses the replay that
+// would have restored the access.
+//
+// So a revoke that lands forgets exactly what it removed.
+func ForgetPropagatedFields(ctx context.Context, target, subjectID string, fields []string) error {
+	if len(fields) == 0 {
+		return nil
+	}
+	const q = `
+		DELETE FROM target_propagations
+		WHERE target = $1 AND subject_id = $2 AND field = ANY($3)`
+	if _, err := querier(ctx).Exec(ctx, q, target, subjectID, fields); err != nil {
+		return fmt.Errorf("forget propagated fields for %s on %s: %w", subjectID, target, err)
+	}
+	return nil
+}
+
+// ForgetPropagatedFieldsExcept drops everything remembered under a prefix that
+// is not in the set just written.
+//
+// The replace case. A replace states the WHOLE desired set for one grant, so
+// anything remembered under that prefix and absent from it has just been
+// removed — and leaving it remembered would make a later failed re-grant look
+// like somebody's hand removal, exactly as a stale revoke would.
+//
+// Prefix rather than an explicit list, because the caller knows what it wrote
+// and not what was remembered before it.
+func ForgetPropagatedFieldsExcept(ctx context.Context, target, subjectID, prefix string, keep []string) error {
+	if strings.TrimSpace(prefix) == "" {
+		return fmt.Errorf("forget propagated fields: no prefix")
+	}
+	const q = `
+		DELETE FROM target_propagations
+		WHERE target = $1 AND subject_id = $2
+		  AND field LIKE $3 || '/%'
+		  AND NOT (field = ANY($4))`
+	if _, err := querier(ctx).Exec(ctx, q, target, subjectID, prefix, keep); err != nil {
+		return fmt.Errorf("prune propagated fields for %s on %s: %w", subjectID, target, err)
+	}
+	return nil
+}
+
 // ForgetPropagations drops everything remembered for a subject on a target.
 //
 // Goes with a binding being released or an account purged, like the merge base:
