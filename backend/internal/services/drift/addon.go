@@ -340,9 +340,24 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 			base = nil
 		}
 		state := merge.Classify(b.SubjectID, set, theirs, base)
-		findings = append(findings, state.Findings()...)
+		found := state.Findings()
+		findings = append(findings, found...)
+		persistFindings(ctx, target, state, found)
 		if !state.Convergeable() {
 			continue
+		}
+		// The observation, for the fields this pass could account for. Recorded
+		// by the SWEEP as well as by the apply, because `already merged` writes
+		// nothing to the target and would otherwise be re-detected forever: a
+		// hand-made change that matched Syndra's intent would be reported as an
+		// agreement on every pass until something else happened to that subject.
+		//
+		// Only for a subject with nothing outstanding. Advancing a base past a
+		// difference nobody has resolved would make the next pass read the
+		// target's current state as the last agreed one — the silent revert,
+		// through the bookkeeping.
+		if len(found) == 0 && theirs != nil {
+			observeState(ctx, target, b.SubjectID, set, theirs)
 		}
 
 		desired[b.SubjectID] = set
@@ -383,6 +398,68 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 		queued++
 	}
 	return queued, findings, nil
+}
+
+// persistFindings makes this pass's unresolvable differences outlive it, and
+// closes the ones that have stopped existing.
+//
+// Both directions matter. A finding left as sweep output is visible to whoever
+// ran the sweep and to nobody else; a finding left standing after its difference
+// is gone fills the queue with problems that are already over. Neither is a
+// resolution — the first is a record, the second is the record ending.
+//
+// Failures are logged and counted as unrecorded findings by the caller's own
+// reason, never fatal: a pass that could not write one finding must still write
+// the rest.
+func persistFindings(ctx context.Context, target string, state merge.Subject, found []merge.SubjectFinding) {
+	open := make(map[string]bool, len(found))
+	for _, f := range found {
+		open[f.Field] = true
+		if err := saveMergeFinding(ctx, db.MergeFinding{
+			Target: target, SubjectID: f.SubjectID, Field: f.Field,
+			Outcome: string(f.Outcome), Base: f.Base, Ours: f.Ours, Theirs: f.Theirs,
+		}); err != nil {
+			log.Printf("[ADDON-RECONCILE] could not record a %s finding for %s on %s: %v",
+				f.Outcome, f.SubjectID, target, err)
+		}
+	}
+	// Every managed field this pass could account for closes whatever was
+	// standing against it. The classifier has just said the two sides agree, or
+	// that Syndra alone moved — in either case the disagreement recorded earlier
+	// is over.
+	for _, f := range state.Fields {
+		if open[f.Field] {
+			continue
+		}
+		if err := clearMergeFinding(ctx, target, state.SubjectID, f.Field, reconcileActor); err != nil {
+			log.Printf("[ADDON-RECONCILE] could not close a settled finding for %s on %s: %v",
+				state.SubjectID, target, err)
+		}
+	}
+}
+
+// observeState records what the target was seen holding, for the managed fields.
+//
+// Managed only, matching what the apply's read-back records: an unmanaged field
+// is out of scope, and a base claiming authority over one would raise findings
+// about values nobody here decided.
+func observeState(ctx context.Context, target, subjectID string,
+	managed, theirs map[string]json.RawMessage) {
+	observed := make(map[string]json.RawMessage, len(managed))
+	for field := range managed {
+		if value, seen := theirs[field]; seen {
+			observed[field] = value
+		}
+	}
+	if len(observed) == 0 {
+		return
+	}
+	if err := saveMergeBase(ctx, db.MergeBase{
+		Target: target, SubjectID: subjectID, Base: observed,
+	}); err != nil {
+		log.Printf("[ADDON-RECONCILE] could not record what %s was seen holding on %s: %v",
+			subjectID, target, err)
+	}
 }
 
 // accountState indexes the target's current values by the identity a binding is

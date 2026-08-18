@@ -279,6 +279,11 @@ func NewRouter() http.Handler {
 	// account name, because the row it acts on is the binding — whose account
 	// may no longer exist to be named.
 	mux.HandleFunc("POST /api/v1/targets/{target}/bindings/{subject}/release", withCORS(withOperatorAuth(handleReleaseBinding)))
+	// The differences a reconciliation could not resolve, and the operator's
+	// answer to one. On the target rather than under a global queue: the three
+	// values in a finding mean nothing without the target they were read from.
+	mux.HandleFunc("GET /api/v1/targets/{target}/merge-findings", withCORS(withOperatorAuth(handleMergeFindings)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/merge-findings/{id}/resolve", withCORS(withOperatorAuth(handleResolveMergeFinding)))
 
 	// Access withdrawn that has not gone away. Beside drift triage, never inside
 	// it: drift is access that appeared without an explanation, and this is

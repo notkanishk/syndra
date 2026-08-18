@@ -728,6 +728,7 @@ func governanceFromSnapshot(snap *accessSnapshot) (models.GovernanceSummary, err
 		},
 		Drift:               models.DriftSummary{Count: driftCount, Top: topDrift},
 		UnreconciledTargets: unreconciled,
+		MergeFindings:       svcCountMergeFindings(snap.ctx),
 	}, nil
 }
 
