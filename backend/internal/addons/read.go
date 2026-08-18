@@ -209,6 +209,21 @@ type TargetAccount struct {
 	// rename. It is what a binding is matched on, so that an account renamed out
 	// of band is recognised rather than reported as somebody else's.
 	UID int64 `json:"uid"`
+	// PasswordSet is whether the account has a usable credential yet.
+	//
+	// Not an entitlement: it is a fact about the target that decides whether one
+	// can be applied. An account Syndra created has no password until its member
+	// sets one, and TrueNAS refuses SMB on an account in that state — so a
+	// member entitled to a share sits in a legitimate pending state that looks,
+	// on every surface, exactly like nothing having happened.
+	PasswordSet bool `json:"password_set"`
+	// Self marks the add-on's own service account on the target.
+	//
+	// It is a real, genuinely unmanaged account, and it is the one whose
+	// deletion removes Syndra's access to the target altogether. The add-on
+	// refuses to adopt or purge it whatever any caller asks; this is carried so
+	// an operator surface can say so BEFORE somebody meets the refusal.
+	Self bool `json:"self,omitempty"`
 }
 
 // SubjectsResult is a full state read.
