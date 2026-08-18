@@ -183,6 +183,17 @@ export function useResolveBindingConflict(target: string) {
 export interface UnmanagedAccount {
   username: string;
   uid?: number;
+  /**
+   * The add-on's own service account on the target.
+   *
+   * A real, genuinely unmanaged account — and the one whose deletion removes
+   * Syndra's access to the target altogether. The add-on refuses to adopt or
+   * purge it whatever any caller asks; this is here so the row says so instead
+   * of offering an action that will be refused.
+   */
+  self?: boolean;
+  /** Whether the account has a usable credential yet. */
+  password_set?: boolean;
 }
 
 /**

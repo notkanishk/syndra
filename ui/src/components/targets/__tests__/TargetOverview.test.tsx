@@ -74,6 +74,33 @@ function renderTarget() {
 }
 
 describe("one target's page", () => {
+  it("never offers Syndra's own account for adoption, and says why", () => {
+    // It is a real unmanaged account on the target, so it is listed. Adopting
+    // it hands Syndra's own credential to a member; purging it deletes the
+    // account Syndra reaches the target with. The add-on refuses both — this
+    // says so before anybody meets the refusal.
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = {
+      target: "truenas",
+      bound: 0,
+      current: true,
+      // A fresh read, because adoption is gated on one — without it the whole
+      // list renders unadoptable and this test would pass for the wrong reason.
+      read_at: new Date().toISOString(),
+      unmanaged: [
+        { username: "sai", uid: 3000 },
+        { username: "syndra", uid: 3001, self: true },
+      ],
+    };
+    renderTarget();
+
+    expect(screen.getByText(/not adoptable/i)).toBeTruthy();
+    // The ordinary account beside it is still adoptable, so the guard is not
+    // just hiding the whole list.
+    expect(screen.getAllByRole("button", { name: /adopt/i }).length).toBe(1);
+  });
+
   it("warns when the key's expiry is unrecorded, and stays quiet when there is none", () => {
     // A key CAN expire without Syndra knowing, and the day it does the target
     // simply stops answering — which reads as an outage and sends an operator

@@ -780,7 +780,17 @@ function Inventory({ target }: { target: string }) {
                 <span className="text-[13px] text-faint">uid {account.uid}</span>
               )}
               <span className="flex-1" />
-              {tooOldToAdopt ? (
+              {account.self ? (
+                // Syndra's own credential. Listed, because it IS on the target
+                // and hiding it would leave an operator wondering where it
+                // went — but never offered: adopting it hands Syndra's own
+                // access to a member, and purging it deletes the credential
+                // Syndra reaches this target with. The add-on refuses both; this
+                // says so before anybody meets the refusal.
+                <span className="text-[13px] text-faint">
+                  Syndra&rsquo;s own account on this target — not adoptable
+                </span>
+              ) : tooOldToAdopt ? (
                 // The reason as text, never a tooltip. A disabled control whose
                 // reason lives in a `title` is a control nobody can find out
                 // about on a keyboard or a phone.

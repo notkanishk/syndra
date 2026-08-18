@@ -34,6 +34,17 @@ import (
 type UnmanagedAccount struct {
 	Username string `json:"username"`
 	UID      int64  `json:"uid,omitempty"`
+	// Self marks the add-on's own service account.
+	//
+	// It is genuinely unmanaged and genuinely on the target, so it belongs in
+	// this list — but it is the one account whose deletion removes Syndra's
+	// access to the target altogether, and the add-on refuses to adopt or purge
+	// it whatever any caller asks. Carried so a surface can say that before an
+	// operator meets the refusal, and so the row is never offered as an action.
+	Self bool `json:"self,omitempty"`
+	// PasswordSet is whether the account has a usable credential. An account
+	// with none cannot have SMB enabled, whatever entitlement it is given.
+	PasswordSet bool `json:"password_set"`
 }
 
 // AddonReconcileResult is what one pass saw and did.
@@ -246,7 +257,11 @@ func unmanaged(accounts []addons.TargetAccount, bindings []db.TargetBinding) []U
 		if _, bound := byName[a.Username]; bound {
 			continue
 		}
-		out = append(out, UnmanagedAccount{Username: a.Username, UID: a.UID})
+		out = append(out, UnmanagedAccount{
+			Username: a.Username, UID: a.UID,
+			Self:        a.Self,
+			PasswordSet: a.PasswordSet,
+		})
 	}
 	return out
 }
