@@ -382,7 +382,13 @@ func applyRow(ctx context.Context, row models.PendingPropagation) error {
 			return err
 		}
 	}
-	rememberPropagation(ctx, row)
+	// BEFORE the terminal markApplied, and its error is returned — the same
+	// ordering, and the same reason, as the ledger reconcile above: a row whose
+	// durable side-effects did not all land must stay in_flight and be reclaimed
+	// rather than be stranded terminal with a store that disagrees with it.
+	if err := rememberPropagation(ctx, row); err != nil {
+		return err
+	}
 	return markApplied(ctx, row.ID)
 }
 
@@ -399,10 +405,22 @@ func applyRow(ctx context.Context, row models.PendingPropagation) error {
 // remembering that as "this was applied" would make the next pass argue that the
 // target should still hold it.
 //
-// Non-fatal. The write happened either way; failing to remember it costs one
-// pass of attribution, not correctness — and settling the row as failed would
-// re-drive a mutation that already landed.
-func rememberPropagation(ctx context.Context, row models.PendingPropagation) {
+// The two halves fail differently, and the asymmetry is the whole of this
+// function's error handling.
+//
+// FAILING TO RECORD a landing is non-fatal. The write happened either way, and
+// the missing memory costs one pass of attribution: a later absence reads as a
+// write that never landed, which is the conservative reading — the change is
+// replayed rather than reported, and nobody's decision is quietly reverted.
+//
+// FAILING TO REMOVE one is not. Stale memory does not merely say less, it says
+// the OPPOSITE of what is true: the target was holding this. Grant the role
+// again, have the new write fail to reach the target, and the pass reads that
+// stale evidence as somebody's hand removal and suppresses the replay that would
+// have restored the access. So the error is returned, the outbox row stays
+// in_flight, and the next drain reclaims it — safe, because the revoke it
+// re-attempts is idempotent and the deletion it retries is too.
+func rememberPropagation(ctx context.Context, row models.PendingPropagation) error {
 	switch row.OpType {
 	case "revoke":
 		// A removal Syndra made FORGETS what it removed, and this is not
@@ -418,12 +436,12 @@ func rememberPropagation(ctx context.Context, row models.PendingPropagation) {
 			fields = append(fields, row.ProjectID+"/"+role)
 		}
 		if err := forgetPropagatedFields(ctx, row.Target, row.UserID, fields); err != nil {
-			log.Printf("[DRAIN] %s revoked and its memory could not be cleared: %v (non-fatal)", row.ID, err)
+			return fmt.Errorf("revoke %s landed and its memory could not be cleared: %w", row.ID, err)
 		}
-		return
+		return nil
 	case "add", "replace":
 	default:
-		return
+		return nil
 	}
 
 	for _, role := range row.RoleKeys {
@@ -446,9 +464,10 @@ func rememberPropagation(ctx context.Context, row models.PendingPropagation) {
 			keep = append(keep, row.ProjectID+"/"+role)
 		}
 		if err := forgetPropagatedFieldsExcept(ctx, row.Target, row.UserID, row.ProjectID, keep); err != nil {
-			log.Printf("[DRAIN] %s replaced and stale memory could not be pruned: %v (non-fatal)", row.ID, err)
+			return fmt.Errorf("replace %s landed and stale memory could not be pruned: %w", row.ID, err)
 		}
 	}
+	return nil
 }
 
 // alreadyExists is a latency optimization, NOT a correctness gate — Zitadel's

@@ -1002,3 +1002,75 @@ func TestAReplaceForgetsTheRolesItDroppedAndRemembersTheRest(t *testing.T) {
 		t.Fatalf("the prune must be scoped to the project and keep what was written: prefix=%q keep=%v", prefix, kept)
 	}
 }
+
+// The two halves of the memory fail differently, and settling on the wrong one
+// is what this pair asserts.
+//
+// A missing record of a landing says LESS than the truth: a later absence reads
+// as a write that never happened, so the change is replayed rather than
+// reported. Conservative, and nobody's decision is quietly reverted.
+//
+// Stale memory says the OPPOSITE of the truth: the target was holding this. A
+// later re-grant whose write fails is then read as somebody's hand removal, and
+// the replay that would have restored the access is suppressed. So the row must
+// not settle until that memory is gone.
+
+func TestARevokeWhoseMemoryCannotBeClearedDoesNotSettle(t *testing.T) {
+	stubDrainDeps(t)
+	defer swap(&forgetPropagatedFields, func(context.Context, string, string, []string) error {
+		return errors.New("the database went away")
+	})()
+	settled := 0
+	defer swap(&markApplied, func(context.Context, string) error { settled++; return nil })()
+
+	err := applyRow(context.Background(), models.PendingPropagation{
+		ID: "o1", Target: db.TargetZitadel, OpType: "revoke",
+		UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"},
+	})
+	if err == nil {
+		t.Fatal("a revoke whose stale memory survives must not report success")
+	}
+	// Left in_flight, so the next drain reclaims it. Safe: the revoke it
+	// re-attempts is idempotent, and so is the deletion it retries.
+	if settled != 0 {
+		t.Fatalf("the row must stay reclaimable, got %d settles", settled)
+	}
+}
+
+func TestAReplaceWhoseStaleMemorySurvivesDoesNotSettle(t *testing.T) {
+	stubDrainDeps(t)
+	defer swap(&forgetPropagatedFieldsExcept, func(context.Context, string, string, string, []string) error {
+		return errors.New("the database went away")
+	})()
+	settled := 0
+	defer swap(&markApplied, func(context.Context, string) error { settled++; return nil })()
+
+	err := applyRow(context.Background(), models.PendingPropagation{
+		ID: "o2", Target: db.TargetZitadel, OpType: "replace",
+		UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"},
+	})
+	if err == nil || settled != 0 {
+		t.Fatalf("a replace with stale memory left behind must stay reclaimable: err=%v settles=%d", err, settled)
+	}
+}
+
+// And the other direction stays non-fatal. The write happened; refusing to
+// settle it because a record of it did not land would re-drive a mutation that
+// already reached the target, to gain evidence whose absence is already the safe
+// reading.
+func TestAnAddThatCannotBeRememberedStillSettles(t *testing.T) {
+	stubDrainDeps(t)
+	defer swap(&savePropagation, func(context.Context, db.Propagation) error {
+		return errors.New("the database went away")
+	})()
+	settled := 0
+	defer swap(&markApplied, func(context.Context, string) error { settled++; return nil })()
+
+	err := applyRow(context.Background(), models.PendingPropagation{
+		ID: "o3", Target: db.TargetZitadel, OpType: "add",
+		UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"},
+	})
+	if err != nil || settled != 1 {
+		t.Fatalf("a landed add must settle even unremembered: err=%v settles=%d", err, settled)
+	}
+}
