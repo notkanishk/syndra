@@ -123,6 +123,9 @@ var (
 	// A seam because the assertion that matters is what a row looks like WITHOUT
 	// it: a finding with no history is still a finding worth triaging.
 	svcMergeBases = db.MergeBasesFor
+	// The memory that a write landed, for the half of a removal's history that
+	// no read can supply.
+	svcPropagations = db.PropagationsFor
 	// Direct-grant removal: ledger delete + audit + the caller-computed
 	// effective-access delta, in one transaction.
 	svcDeleteDirectGrantAndEnqueue        = db.DeleteDirectGrantAndEnqueue

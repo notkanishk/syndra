@@ -38,6 +38,9 @@ func stubDrainDeps(t *testing.T) {
 		swap(&registeredAddons, func() []addons.Registration { return nil }),
 		swap(&undispatchable, func(context.Context, string, string) (string, error) { return "", nil }),
 		swap(&markApplied, func(context.Context, string) error { return nil }),
+		// The memory that a write landed. Stubbed like every other durable
+		// write here, so a drain test cannot reach a nil pool.
+		swap(&savePropagation, func(context.Context, db.Propagation) error { return nil }),
 		swap(&markFailed, func(context.Context, string, string) error { return nil }),
 		swap(&requeue, func(context.Context, string, string) (int, error) { return 0, nil }),
 		swap(&reconcileLedger, func(context.Context, string) error { return nil }),

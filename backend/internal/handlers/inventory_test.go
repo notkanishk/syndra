@@ -223,6 +223,7 @@ func stubSweep(t *testing.T, h *sweepHarness) {
 		dbForgetMergeBase = forgetBase
 	})
 	dbForgetMergeBase = func(context.Context, string, string) error { return nil }
+	dbForgetPropagations = func(context.Context, string, string) error { return nil }
 
 	// The backend's half of a purge. Stubbed rather than left to the pool,
 	// because it had no caller at all until §23 — and a nil-pool panic is how
@@ -420,9 +421,10 @@ type releaseHarness struct {
 func stubRelease(t *testing.T, h *releaseHarness) {
 	t.Helper()
 	dispatch, forget, forgetBase := svcDispatchOperation, dbForgetTargetBinding, dbForgetMergeBase
+	forgetLanded := dbForgetPropagations
 	t.Cleanup(func() {
 		svcDispatchOperation, dbForgetTargetBinding = dispatch, forget
-		dbForgetMergeBase = forgetBase
+		dbForgetMergeBase, dbForgetPropagations = forgetBase, forgetLanded
 	})
 	// What the target was last seen holding goes with the binding. Stubbed
 	// here so a test can assert it happened — the failure it prevents is
@@ -432,6 +434,7 @@ func stubRelease(t *testing.T, h *releaseHarness) {
 		h.basesForgotten = append(h.basesForgotten, subject)
 		return nil
 	}
+	dbForgetPropagations = func(context.Context, string, string) error { return nil }
 
 	svcDispatchOperation = func(_ context.Context, req addonop.Request) (addonop.Result, error) {
 		h.dispatched = append(h.dispatched, req)

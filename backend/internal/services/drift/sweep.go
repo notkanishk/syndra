@@ -188,6 +188,17 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 		log.Printf("[DRIFT] merge bases unavailable for %s, replaying without them: %v", target, err)
 		bases = map[string]db.MergeBase{}
 	}
+	// And what Syndra LANDED, which is the stronger evidence and the one a sweep
+	// cannot produce for itself. A grant applied and removed between two passes
+	// was never observed by any read — the base has nothing about it — so
+	// without this its absence reads as a write that never happened, and it is
+	// replayed. The target accepting the write says otherwise, and says it from
+	// the moment the write happened rather than from the next sweep.
+	landed, err := listPropagations(ctx, target)
+	if err != nil {
+		log.Printf("[DRIFT] propagation memory unavailable for %s: %v", target, err)
+		landed = map[string]map[string]db.Propagation{}
+	}
 	observedByHand := map[services.HolderKey]bool{}
 
 	for _, dg := range direct {
@@ -195,7 +206,8 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 		if zitSet[k] {
 			continue // present in Zitadel — no drift
 		}
-		if wasObserved(bases, dg.UserID, dg.ProjectID, dg.RoleKey) {
+		if wasObserved(bases, dg.UserID, dg.ProjectID, dg.RoleKey) ||
+			hasLanded(landed, dg.UserID, dg.ProjectID, dg.RoleKey) {
 			// Zitadel held this the last time the sweep looked, and does not
 			// now. Somebody removed it there. Recorded as a finding for triage
 			// rather than replayed — `syndra_only` is the drift type this
@@ -382,6 +394,23 @@ func wasObserved(bases map[string]db.MergeBase, userID, projectID, roleKey strin
 	}
 	_, held := base.Base[grantField(projectID, roleKey)]
 	return held
+}
+
+// hasLanded reports whether Syndra ever wrote this grant and the target
+// accepted it.
+//
+// The other half of "was this ever really there". `wasObserved` answers it from
+// a READ, which only exists if a sweep happened to run between the write and the
+// removal; this answers it from the WRITE, which is recorded the moment the
+// target acknowledges. A grant applied at noon and removed at one is invisible
+// to the first and plain to the second.
+func hasLanded(landed map[string]map[string]db.Propagation, userID, projectID, roleKey string) bool {
+	fields, found := landed[userID]
+	if !found {
+		return false
+	}
+	_, ok := fields[grantField(projectID, roleKey)]
+	return ok
 }
 
 // recordObservedGrants writes what this pass saw Zitadel holding.

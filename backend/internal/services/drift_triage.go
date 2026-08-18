@@ -190,6 +190,36 @@ func grantProvenance(ctx context.Context, items []models.DriftItem) map[string]m
 		}
 	}
 
+	// When the target ACCEPTED the write. Read before the observations, because
+	// it is the stronger of the two and the only one that exists for a grant
+	// applied and removed between two sweeps.
+	landed, err := svcPropagations(ctx, db.TargetZitadel)
+	if err != nil {
+		log.Printf("[DRIFT-TRIAGE] could not read the propagation memory: %v", err)
+	} else {
+		for _, item := range items {
+			if len(item.RoleKeys) == 0 {
+				continue
+			}
+			key := grantKey(item.UserID, item.ProjectID, item.RoleKeys[0])
+			p, found := out[key]
+			if !found {
+				continue
+			}
+			fields, seen := landed[item.UserID]
+			if !seen {
+				continue
+			}
+			landing, ok := fields[item.ProjectID+"/"+item.RoleKeys[0]]
+			if !ok {
+				continue
+			}
+			applied := landing.AppliedAt
+			p.AppliedAt, p.AppliedBy = &applied, landing.Actor
+			out[key] = p
+		}
+	}
+
 	// When the target was last seen holding it. Keyed by subject, so one read
 	// per queue rather than one per row.
 	bases, err := svcMergeBases(ctx, db.TargetZitadel)

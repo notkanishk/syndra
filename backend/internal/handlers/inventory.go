@@ -290,6 +290,13 @@ func forgetMergeBase(ctx context.Context, target, subject string) {
 		log.Printf("[TARGETS] stopped managing %s on %s and could not forget what it was last seen holding: %v",
 			subject, target, err)
 	}
+	// The record of what Syndra landed goes too, and for the same reason: it is
+	// evidence about an account this deployment no longer manages, and it would
+	// be read as evidence about whatever that subject is bound to next.
+	if err := dbForgetPropagations(ctx, target, subject); err != nil {
+		log.Printf("[TARGETS] stopped managing %s on %s and could not forget what it had landed there: %v",
+			subject, target, err)
+	}
 }
 
 func releaseRefusal(err error) string {

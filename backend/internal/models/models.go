@@ -487,6 +487,16 @@ type GrantProvenance struct {
 	// different findings wearing the same row.
 	Source    string `json:"source,omitempty"`
 	SourceRef string `json:"source_ref,omitempty"`
+	// AppliedAt is when the TARGET ACCEPTED Syndra's write, with AppliedBy the
+	// actor the propagation was attributed to.
+	//
+	// The strongest thing Syndra can say about a removed entitlement, and the
+	// only one available when no read ever saw it: a grant applied at noon and
+	// removed at one is invisible to every observation and plain here. "Syndra
+	// applied this at 12:04 on Marta's approval, and it is not there now" is a
+	// different row from "expected, missing".
+	AppliedAt *time.Time `json:"applied_at,omitempty"`
+	AppliedBy string     `json:"applied_by,omitempty"`
 	// LastObservedAt is when a complete read last saw the TARGET holding it.
 	// The pair (granted, last observed) is what makes a removal legible: it
 	// existed, it was live this morning, it is gone now.

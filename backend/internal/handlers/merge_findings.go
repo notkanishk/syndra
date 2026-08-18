@@ -95,6 +95,7 @@ func handleMergeFindings(w http.ResponseWriter, r *http.Request) {
 func decorate(ctx context.Context, target string, findings []db.MergeFinding) []findingView {
 	out := make([]findingView, 0, len(findings))
 	mappings := mappingsByField(ctx, target)
+	held := heldRolesFor(ctx, findings)
 	for _, f := range findings {
 		view := findingView{MergeFinding: f}
 		switch {
@@ -104,7 +105,7 @@ func decorate(ctx context.Context, target string, findings []db.MergeFinding) []
 		case !services.IsLifecycleField(f.Field):
 			view.WhyNot = f.Field + " comes from this target's role mappings, which have no per-person form. " +
 				"Editing one changes it for every holder of that role."
-			view.Policy = mappings[f.Field]
+			view.Policy = governing(mappings[f.Field], held[f.SubjectID])
 		case isPermissive(f.Theirs):
 			view.WhyNot = f.Field + " is on because this person holds a mapped role for this target. " +
 				"There is no per-person way to switch it on; grant them a role that maps here."
@@ -144,6 +145,61 @@ func mappingsByField(ctx context.Context, target string) map[string][]governingP
 			MappingID: m.ID, ProjectID: m.ProjectID, RoleKey: m.RoleKey,
 			Value: m.Value, Holders: len(holders),
 		})
+	}
+	return out
+}
+
+// heldRolesFor is the roles each subject in the queue effectively holds, read
+// once per subject rather than once per finding.
+//
+// A subject whose roles cannot be read is left absent, and `governing` then
+// shows no policy at all. That is deliberate: the alternative is listing every
+// mapping on the field, which names policies that do not reach this person —
+// and a blast radius somebody read off an unrelated mapping is worse than none,
+// because it is a number they will act on.
+func heldRolesFor(ctx context.Context, findings []db.MergeFinding) map[string]map[string]bool {
+	out := map[string]map[string]bool{}
+	for _, f := range findings {
+		if _, done := out[f.SubjectID]; done {
+			continue
+		}
+		refs, err := svcHeldRoles(ctx, f.SubjectID)
+		if err != nil {
+			log.Printf("[FINDINGS] could not read the roles %s holds: %v", f.SubjectID, err)
+			continue
+		}
+		roles := make(map[string]bool, len(refs))
+		for _, ref := range refs {
+			roles[ref.ProjectID+"/"+ref.RoleKey] = true
+		}
+		out[f.SubjectID] = roles
+	}
+	return out
+}
+
+// governing narrows a field's mappings to the ones that produce THIS subject's
+// value.
+//
+// Mappings are per role, and a subject's desired state comes only from the ones
+// whose role they hold. Listing the rest would present unrelated policies as the
+// thing to edit, with holder counts belonging to people this finding is not
+// about — a blast radius that is not this decision's.
+//
+// No held roles means no governing policy, and an empty list rather than the
+// full one. "We could not tell which" and "all of them" are different answers,
+// and only one of them is true.
+func governing(all []governingPolicy, held map[string]bool) []governingPolicy {
+	if len(held) == 0 {
+		return nil
+	}
+	out := make([]governingPolicy, 0, len(all))
+	for _, p := range all {
+		if held[p.ProjectID+"/"+p.RoleKey] {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
@@ -207,16 +263,47 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 		writeResolutionError(w, err)
 		return
 	}
+	if finding.Decision != "" {
+		// Answered already. Refused here for the reading, and refused again
+		// atomically below — this check is the message, not the guarantee.
+		writeResolutionError(w, fmt.Errorf("%w: %s already decided as %s by %s",
+			db.ErrMergeFindingDecided, id, finding.Decision, finding.DecidedBy))
+		return
+	}
 
-	// The target call happens BEFORE the transaction, never inside it. An
-	// add-on that takes thirty seconds to answer would otherwise hold the access
-	// lock for thirty seconds, and a lock held across a network call to a
-	// machine that may be down is an outage on this side of the wire.
+	// `unbound` is the one resolution that calls the target, and the only one
+	// whose work cannot be undone by a later decision. So the decision is
+	// RESERVED first — one conditional write, under the same uniqueness the
+	// standing row already has — and only then is the add-on told to let go.
+	//
+	// The order is the whole fix. Releasing first and deciding afterwards let a
+	// second request choose the opposite while the first was mid-flight: the
+	// add-on let go of an account a queued re-provision was about to recreate,
+	// and the transaction discovered the changed row only after the network call
+	// had already happened.
+	//
+	// The call stays OUTSIDE the transaction. An add-on that takes thirty
+	// seconds to answer would otherwise hold the access lock for thirty seconds,
+	// and a lock held across a call to a machine that may be down is an outage
+	// on this side of the wire.
 	if req.Resolution == db.ResolutionUnbound {
-		if err := releaseOnTarget(r.Context(), finding, actor); err != nil {
+		reserved, err := dbRecordMergeDecision(r.Context(), id, actor, req.Resolution)
+		if err != nil {
 			writeResolutionError(w, err)
 			return
 		}
+		if err := releaseOnTarget(r.Context(), finding, actor); err != nil {
+			// The reservation goes with the work that did not happen. Left
+			// standing, one unreachable add-on would wedge the finding as
+			// decided-but-never-done with no way back through this surface.
+			if rerr := dbReleaseMergeDecision(r.Context(), id, actor, req.Resolution); rerr != nil {
+				log.Printf("[FINDINGS] %s: the release failed and its reservation could not be cleared: %v",
+					id, rerr)
+			}
+			writeResolutionError(w, err)
+			return
+		}
+		_ = reserved
 	}
 
 	var resolved db.MergeFinding
@@ -228,6 +315,10 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 		current, err := dbGetStandingMergeFinding(ctx, id)
 		if err != nil {
 			return err
+		}
+		if current.Decision != "" && req.Resolution != db.ResolutionUnbound {
+			return fmt.Errorf("%w: %s already decided as %s by %s",
+				db.ErrMergeFindingDecided, id, current.Decision, current.DecidedBy)
 		}
 		if err := performResolution(ctx, current, req, actor); err != nil {
 			return err
@@ -286,6 +377,11 @@ func writeResolutionError(w http.ResponseWriter, err error) {
 		jsonValidationErrorResponse(w, err.Error(), map[string]string{"resolution": "unbounded"})
 	case errors.Is(err, errReleaseNotConfirmed):
 		jsonErrorResponse(w, http.StatusBadGateway, "RELEASE_NOT_CONFIRMED", err.Error())
+	case errors.Is(err, db.ErrMergeFindingDecided):
+		// 409, and it names who. The two answers here are opposites, so a second
+		// operator has to know that somebody chose — not merely that their own
+		// request failed.
+		jsonErrorResponse(w, http.StatusConflict, "ALREADY_DECIDED", err.Error())
 	default:
 		jsonErrorResponse(w, http.StatusInternalServerError, "RESOLVE_FAILED", err.Error())
 	}

@@ -50,6 +50,11 @@ export interface GrantProvenance {
   source_ref?: string;
   last_observed_at?: string;
   expires_at?: string;
+  /** When the target ACCEPTED Syndra's write, and who it was attributed to.
+   * The only evidence that exists for a grant applied and removed between two
+   * sweeps — no read ever saw that one. */
+  applied_at?: string;
+  applied_by?: string;
 }
 
 /**

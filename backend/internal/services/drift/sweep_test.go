@@ -38,6 +38,12 @@ func stubSweep(t *testing.T) {
 		return map[string]db.MergeBase{}, nil
 	}))
 	t.Cleanup(swap(&saveMergeBase, func(context.Context, db.MergeBase) error { return nil }))
+	// Nothing remembered as landed, by default. That is the rollout state and
+	// the one every pre-existing test asserts: with no evidence a grant was ever
+	// really there, its absence replays exactly as it did before.
+	t.Cleanup(swap(&listPropagations, func(context.Context, string) (map[string]map[string]db.Propagation, error) {
+		return map[string]map[string]db.Propagation{}, nil
+	}))
 	t.Cleanup(swap(&forgetMergeBase, func(context.Context, string, string) error { return nil }))
 	t.Cleanup(swap(&markUnreconciled, func(_ context.Context, target, reason string) (db.TargetReconciliation, error) {
 		since := time.Unix(1_760_000_000, 0)
@@ -770,5 +776,49 @@ func TestSweep_AUserWithNothingLeftLosesTheirObservation(t *testing.T) {
 	}
 	if len(forgotten) != 1 || forgotten[0] != "u-gone" {
 		t.Fatalf("want u-gone's observation dropped, got %v", forgotten)
+	}
+}
+
+// The grant applied and removed between two sweeps.
+//
+// No read ever saw it, so the merge base says nothing about it — and without
+// the memory that Syndra WROTE it and Zitadel accepted, its absence reads as a
+// write that never landed and gets replayed, silently restoring access somebody
+// removed on purpose. That is the whole failure this change exists to end,
+// surviving in the window between two passes.
+func TestSweep_AGrantRemovedBeforeAnySweepSawItIsStillTriaged(t *testing.T) {
+	stubSweep(t)
+	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
+	})()
+	// No observation at all — no sweep ran between the write and the removal.
+	defer swap(&listPropagations, func(context.Context, string) (map[string]map[string]db.Propagation, error) {
+		return map[string]map[string]db.Propagation{
+			"u1": {"p1/viewer": {Target: db.TargetZitadel, SubjectID: "u1", Field: "p1/viewer"}},
+		}, nil
+	})()
+
+	replayed := 0
+	defer swap(&insertPending, func(context.Context, string, string, string, []string, string, string, string, string) (string, error) {
+		replayed++
+		return "o1", nil
+	})()
+	findings := 0
+	defer swap(&upsertDriftItem, func(_ context.Context, _, _, _ string, _ []string, _, _, kind string) (string, bool, error) {
+		if kind == db.DriftSyndraOnly {
+			findings++
+		}
+		return "d1", true, nil
+	})()
+
+	res, err := Sweep(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayed != 0 {
+		t.Fatalf("a grant Syndra landed and somebody removed must not be replayed, got %d", replayed)
+	}
+	if findings != 1 || res.DriftItemsCreated != 1 {
+		t.Fatalf("it must be triaged instead: findings=%d created=%d", findings, res.DriftItemsCreated)
 	}
 }

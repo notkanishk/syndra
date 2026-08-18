@@ -382,7 +382,39 @@ func applyRow(ctx context.Context, row models.PendingPropagation) error {
 			return err
 		}
 	}
+	rememberPropagation(ctx, row)
 	return markApplied(ctx, row.ID)
+}
+
+// rememberPropagation records that the target ACCEPTED this write.
+//
+// The strongest evidence Syndra ever has about a target was being discarded:
+// the outbox has no `confirmed` state by design and its terminal rows are
+// pruned, and the grant index is deleted by the very event that removes a grant.
+// So a grant applied and removed between two sweeps had nothing behind it, and
+// the next reconciliation read its absence as a write that never landed — and
+// replayed it, restoring access somebody had removed on purpose.
+//
+// Only what ADDS access. A revoke landing is Syndra removing something, and
+// remembering that as "this was applied" would make the next pass argue that the
+// target should still hold it.
+//
+// Non-fatal. The write happened either way; failing to remember it costs one
+// pass of attribution, not correctness — and settling the row as failed would
+// re-drive a mutation that already landed.
+func rememberPropagation(ctx context.Context, row models.PendingPropagation) {
+	if row.OpType != "add" && row.OpType != "replace" {
+		return
+	}
+	for _, role := range row.RoleKeys {
+		if err := savePropagation(ctx, db.Propagation{
+			Target: row.Target, SubjectID: row.UserID,
+			Field:    row.ProjectID + "/" + role,
+			OutboxID: row.ID, Actor: row.InitiatedBy,
+		}); err != nil {
+			log.Printf("[DRAIN] %s landed and could not be remembered: %v (non-fatal)", row.ID, err)
+		}
+	}
 }
 
 // alreadyExists is a latency optimization, NOT a correctness gate — Zitadel's

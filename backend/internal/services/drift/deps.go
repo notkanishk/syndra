@@ -38,6 +38,11 @@ var (
 	// and forgotten when a user holds nothing. Seams, because the assertions
 	// that matter are about what is NOT written: a base must not advance past a
 	// finding, and nothing may be recorded from a truncated read.
+	// What Syndra landed and the target accepted. Read beside the bases, because
+	// the two answer "was this ever really there" from different sides — a read
+	// that may never have happened, and a write that certainly did.
+	listPropagations = db.PropagationsFor
+
 	saveMergeBase          = db.RecordMergeBase
 	forgetMergeBase        = db.ForgetMergeBase
 	pendingOutboxAddExists = db.PendingOutboxAddExists   // (ctx,target,user,project,role) (bool,err) — dedupes syndra_only replay
