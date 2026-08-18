@@ -89,3 +89,34 @@ Findings MUST be deduplicated per subject, target and field, so a pass on a sche
 - **WHEN** the same target-only difference is seen by several scheduled passes
 - **THEN** exactly one finding MUST exist for it
 - **AND** it MUST remain visible to an operator who did not run any of those passes
+
+### Requirement: A difference about something Syndra applied MUST be reported with its history
+
+A finding that reports the target no longer holding something Syndra intends MUST carry what Syndra knows about that entitlement: who decided it, when, why, and whether a person granted it or a policy derived it. It MUST also carry when a complete read last saw the target holding it, when one did.
+
+Without both, the finding is indistinguishable from an unexplained absence. The operator triaging it cannot tell a write that never landed from a decision somebody undid, and those want opposite actions — the first is retried, the second is a conversation with whoever made it.
+
+The history MUST be derived from the records that already hold it rather than copied onto the finding. A stored copy is a second account of the same events and disagrees with the first as soon as either moves.
+
+A finding about access Syndra has no record of MUST NOT carry any history, since any history attached to it would belong to something else.
+
+Where the change arrived as an event that names its author, the finding MUST record that author. A comparison of two states can say what differs and never who changed it, and "removed by a named person at a stated time" is a different triage row from "missing".
+
+#### Scenario: Access Syndra granted is removed on the target
+
+- **WHEN** a reconciliation reports that the target no longer holds an entitlement Syndra intends
+- **THEN** the finding MUST carry who granted it, when, and why
+- **AND** MUST carry when the target was last seen holding it
+- **AND** MUST identify it as the same entitlement Syndra applied rather than as a new finding
+
+#### Scenario: The removal arrives as an event
+
+- **WHEN** the target reports the removal with the identity of whoever made it
+- **THEN** the finding MUST be raised at that moment rather than at the next scheduled pass
+- **AND** MUST record that identity
+
+#### Scenario: The target was never seen holding it
+
+- **WHEN** no complete read has observed the target holding the entitlement
+- **THEN** the finding MUST NOT state when it was last held
+- **AND** MUST remain reportable as a write that has not landed
