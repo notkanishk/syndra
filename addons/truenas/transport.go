@@ -54,10 +54,10 @@ const signatureTolerance = 2 * time.Minute
 const maxRequestBytes = 1 << 20
 
 var (
-	errNoSignature      = errors.New("request carries no signature")
-	errBadSignature     = errors.New("signature does not match the body and timestamp")
-	errStaleSignature   = errors.New("signature timestamp is outside the accepted window")
-	errNoSigningKey     = errors.New("the add-on has no signing key and cannot authenticate anything")
+	errNoSignature    = errors.New("request carries no signature")
+	errBadSignature   = errors.New("signature does not match the body and timestamp")
+	errStaleSignature = errors.New("signature timestamp is outside the accepted window")
+	errNoSigningKey   = errors.New("the add-on has no signing key and cannot authenticate anything")
 )
 
 // authenticator decides whether a request came from the backend.
