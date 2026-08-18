@@ -48,6 +48,104 @@ function view(overrides: Partial<MyTargetView> = {}): MyTargetView {
   };
 }
 
+describe("an account that exists and will not let them in", () => {
+  it("says so, and points at the action that fixes it", () => {
+    // Syndra creates the account before any password exists, and the target
+    // disables password authentication until the member sets one. Without this
+    // the page showed an account name, working mount instructions and a green
+    // spine to somebody whose every connection attempt was refused.
+    state.targets = [
+      view({
+        storage: { username: "ada", usable: false, needs_password: true, smb_enabled: false },
+      }),
+    ];
+    renderStorage();
+
+    expect(screen.getByText(/not switched on yet/i)).toBeTruthy();
+    expect(screen.getByText(/refuse you until you set a password/i)).toBeTruthy();
+  });
+
+  it("does not tell a held account to set a password, because that would not help", () => {
+    state.targets = [
+      view({
+        credential: { set: true },
+        storage: { username: "ada", usable: false, needs_password: false, smb_enabled: false },
+      }),
+    ];
+    renderStorage();
+
+    expect(screen.getByText(/on hold/i)).toBeTruthy();
+    expect(screen.queryByText(/not switched on yet/i)).toBeNull();
+  });
+
+  it("says nothing at all when the account works", () => {
+    state.targets = [
+      view({
+        credential: { set: true },
+        storage: { username: "ada", usable: true, needs_password: false, smb_enabled: true },
+      }),
+    ];
+    renderStorage();
+
+    expect(screen.queryByText(/not switched on yet/i)).toBeNull();
+    expect(screen.queryByText(/on hold/i)).toBeNull();
+  });
+});
+
+describe("how much room a member is using", () => {
+  it("shows usage, and does not draw a full bar when there is no quota", () => {
+    // TrueNAS reports no quota field at all when none is set, which is the
+    // common case. Drawing 100% for "no limit" would be the most alarming
+    // possible way to say "you are fine".
+    state.targets = [
+      view({
+        credential: { set: true },
+        storage: {
+          username: "ada", usable: true, needs_password: false, smb_enabled: true,
+          usage_readable: true,
+          shares: [{ share: "main", used_bytes: 18368 }],
+        },
+      }),
+    ];
+    renderStorage();
+
+    expect(screen.getByText(/You are using/i)).toBeTruthy();
+    expect(screen.getByText(/17\.9 KiB/)).toBeTruthy();
+    expect(screen.getByText(/No limit set/i)).toBeTruthy();
+  });
+
+  it("shows the limit when there is one", () => {
+    state.targets = [
+      view({
+        credential: { set: true },
+        storage: {
+          username: "ada", usable: true, needs_password: false, smb_enabled: true,
+          usage_readable: true,
+          shares: [{ share: "main", used_bytes: 5 * 1024 * 1024 * 1024, quota_bytes: 10 * 1024 * 1024 * 1024 }],
+        },
+      }),
+    ];
+    renderStorage();
+
+    expect(screen.getByText(/5\.0 GiB of 10\.0 GiB/)).toBeTruthy();
+  });
+
+  it("says nothing when the usage could not be read, rather than showing zero", () => {
+    state.targets = [
+      view({
+        credential: { set: true },
+        storage: {
+          username: "ada", usable: true, needs_password: false, smb_enabled: true,
+          usage_readable: false, shares: [],
+        },
+      }),
+    ];
+    renderStorage();
+
+    expect(screen.queryByText(/You are using/i)).toBeNull();
+  });
+});
+
 function renderStorage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(

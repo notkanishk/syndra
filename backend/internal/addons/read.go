@@ -504,3 +504,85 @@ func ResolvesValue(ctx context.Context, target, field, value string) error {
 	// refusal actionable (16.8).
 	return fmt.Errorf("%w: %s has no %s named %q", ErrValueNotResolvable, target, field, value)
 }
+
+// StorageStatus is one member's own account on a target, as the target sees it
+// right now.
+type StorageStatus struct {
+	Username string `json:"username"`
+	// Usable is whether they can connect. NOT the same as the account
+	// existing: Syndra creates it before any password exists — it has none to
+	// set — and the target disables password authentication until the member
+	// sets one, so the account is present, correct, and refuses them.
+	Usable bool `json:"usable"`
+	// NeedsPassword is that state, named as the action that fixes it.
+	NeedsPassword bool `json:"needs_password"`
+	// SMBEnabled follows the password rather than the entitlement, because the
+	// target refuses share access on an account with no credential.
+	SMBEnabled bool `json:"smb_enabled"`
+	Shares     []struct {
+		Share      string `json:"share"`
+		UsedBytes  int64  `json:"used_bytes"`
+		QuotaBytes int64  `json:"quota_bytes,omitempty"`
+	} `json:"shares"`
+	// UsageReadable distinguishes "nothing used" from "could not look", which
+	// are the same zero otherwise.
+	UsageReadable bool `json:"usage_readable"`
+
+	Outcome Outcome `json:"-"`
+	Err     error   `json:"-"`
+}
+
+// MyStorage reads one member's own account state and usage.
+//
+// A READ, dispatched like `Health` rather than like an operation: it claims no
+// durable row, because it runs on an ordinary page load and a row per page view
+// would fill the operation log with events that changed nothing — the same
+// reason an unchanged apply issues no call.
+//
+// The subject is the caller's and the add-on takes no subject parameter at all,
+// so there is no shape in which this reports on somebody else.
+func MyStorage(ctx context.Context, target, subject string) StorageStatus {
+	a, err := Get(target)
+	if err != nil {
+		return StorageStatus{Outcome: OutcomeUnreached, Err: err}
+	}
+	if !a.br.allow(timeNow()) {
+		return StorageStatus{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %s", ErrCircuitOpen, target)}
+	}
+	cred, err := credentialFor(a.Registration)
+	if err != nil {
+		return StorageStatus{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: %w", target, err)}
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"contract_version": ContractVersion,
+		"call_id":          "read-" + target + "-" + subject,
+		"operation":        "storage.status",
+		"subject":          subject,
+		"actor":            subject,
+		"params":           map[string]any{},
+	})
+	if err != nil {
+		return StorageStatus{Outcome: OutcomeUnreached, Err: err}
+	}
+
+	resp := doAuthenticated(ctx, cred, http.MethodPost,
+		a.Registration.BaseURL+"/operations/storage.status", body, callTimeout)
+	a.br.record(timeNow(), resp)
+
+	out := StorageStatus{Outcome: resp.Outcome, Err: resp.Err}
+	if resp.Outcome != OutcomeSucceeded {
+		return out
+	}
+	var envelope struct {
+		Storage *StorageStatus `json:"storage"`
+	}
+	if err := json.Unmarshal(resp.Body, &envelope); err != nil || envelope.Storage == nil {
+		out.Outcome = OutcomeIndeterminate
+		out.Err = fmt.Errorf("addon %s: decode storage status: %w", target, err)
+		return out
+	}
+	status := *envelope.Storage
+	status.Outcome = OutcomeSucceeded
+	return status
+}

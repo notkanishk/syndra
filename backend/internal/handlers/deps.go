@@ -372,7 +372,11 @@ var (
 	// was written; an operator had no way to ask. [Reconcile now] existed for
 	// Zitadel and for nothing else, so the answer to "is this target in step?"
 	// was "wait up to six hours and read a log line".
-	svcReconcileAddon     = drift.ReconcileAddon
+	svcReconcileAddon = drift.ReconcileAddon
+	// A member's own account state and usage. A read, not an operation: it runs
+	// on an ordinary page load, and a durable row per page view would fill the
+	// operation log with events that changed nothing.
+	addonsMyStorage       = addons.MyStorage
 	svcDispatchOperation  = addonop.Dispatch
 	dbRecordTargetBinding = db.RecordTargetBinding
 )

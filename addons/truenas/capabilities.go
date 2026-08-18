@@ -125,6 +125,12 @@ func operationSet(probe capabilityProbe) []Operation {
 			ID: "account.adopt", Scope: "admin", Confirm: true,
 		},
 		{
+			// A member asking about their own account: can I use this yet, and
+			// how much room is left. No parameters at all, so there is no shape
+			// in which one member asks about another.
+			ID: "storage.status", Scope: "member", Confirm: false,
+		},
+		{
 			ID: "account.purge", Scope: "admin", Confirm: true,
 			// The delete-capable key the backend injects for this one call.
 			// Declared secret so every redaction rule that covers a member's

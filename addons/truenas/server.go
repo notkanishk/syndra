@@ -132,6 +132,13 @@ func methodsFor(operationID string) []string {
 		return []string{"audit.query", "sharing.smb.query"}
 	case "health.get":
 		return []string{"system.info", "alert.list", "pool.query", "service.query"}
+	case "storage.status":
+		// The account read is what the operation is FOR — a member who cannot
+		// be told their usage can still be told whether their account works,
+		// and that is the more urgent half. The quota read is best-effort
+		// inside the handler and is declared so a target lacking it says so at
+		// registration rather than at the moment a member opens the page.
+		return []string{"user.query", "sharing.smb.query", "pool.dataset.get_quota"}
 	}
 	return nil
 }

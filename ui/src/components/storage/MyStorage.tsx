@@ -176,11 +176,114 @@ function TargetPanel({ view }: { view: MyTargetView }) {
         )}
 
         {held.length > 0 && <Withheld items={held} />}
+        <NotYetUsable view={view} />
         <CredentialForm view={view} />
+        <StorageUsage view={view} />
         <ConnectionInstructions view={view} />
       </div>
     </Card>
   );
+}
+
+/**
+ * The account exists and will not let them in yet.
+ *
+ * Syndra creates the account before any password exists — it has none to set —
+ * and the target disables password authentication until the member sets one. So
+ * this page could show an account name, working mount instructions and a green
+ * spine to somebody whose every connection attempt is refused, and nothing on
+ * it said why.
+ *
+ * Read from the TARGET, not from Syndra's record that a password was set: the
+ * record cannot say whether the target still accepts it.
+ *
+ * Framed as an unfinished step rather than a fault, because that is what it is,
+ * and the action is directly below.
+ */
+function NotYetUsable({ view }: { view: MyTargetView }) {
+  const storage = view.storage;
+  if (!storage || storage.usable) return null;
+
+  return (
+    <div className="rounded-card border border-warn-line bg-warn-soft px-4 py-3">
+      <p className="text-[14px] text-warn-text">
+        {storage.needs_password ? (
+          <>
+            <strong className="font-semibold">Your account is ready, but not switched on yet.</strong>{" "}
+            It will refuse you until you set a password below — that is what activates it.
+          </>
+        ) : (
+          <>
+            <strong className="font-semibold">Your account is on hold.</strong> It exists, and
+            the system is not accepting it right now. Setting a password will not change that;
+            an operator has to.
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * How much room they are using.
+ *
+ * The most-asked question a member has about storage, and until now Syndra
+ * could not answer it at all — the number lives on the target and nothing read
+ * it.
+ *
+ * A quota of zero is NOT a full bar: TrueNAS reports no quota field at all when
+ * none is set, which is the common case, and drawing 100% for "no limit" would
+ * be the most alarming possible way to say "you are fine".
+ */
+function StorageUsage({ view }: { view: MyTargetView }) {
+  const storage = view.storage;
+  if (!storage?.usage_readable || !storage.shares?.length) return null;
+
+  return (
+    <div className="grid gap-2">
+      <p className="text-[13px] text-label">You are using</p>
+      {storage.shares.map((share) => {
+        const limited = (share.quota_bytes ?? 0) > 0;
+        const pct = limited ? Math.min(100, (share.used_bytes / share.quota_bytes!) * 100) : 0;
+        return (
+          <div key={share.share} className="grid gap-1">
+            <div className="flex items-baseline gap-2 text-[14px]">
+              <span className="text-muted">{share.share}</span>
+              <span className="flex-1" />
+              <span className="font-mono text-[13.5px]">
+                {formatBytes(share.used_bytes)}
+                {limited ? ` of ${formatBytes(share.quota_bytes!)}` : ""}
+              </span>
+            </div>
+            {limited ? (
+              <div className="h-1.5 w-full overflow-hidden rounded-pill bg-line">
+                <div
+                  className={pct >= 90 ? "h-full bg-warn" : "h-full bg-accent"}
+                  style={{ width: `${Math.max(pct, 1)}%` }}
+                />
+              </div>
+            ) : (
+              <p className="text-[12.5px] text-faint">No limit set on this share.</p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Bytes as a person reads them. Binary units, because that is what a file
+ *  manager will show them beside it. */
+function formatBytes(bytes: number): string {
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  // One decimal place above kibibytes; a member does not need "1.0 B".
+  return unit === 0 ? `${Math.round(value)} B` : `${value.toFixed(1)} ${units[unit]}`;
 }
 
 /**
