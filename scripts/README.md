@@ -11,6 +11,7 @@ Operational helpers. Most are also reachable through `make` targets — see the
 | `smoke-test-event-listener.sh` | Signed POST to `/api/webhooks/zitadel`, asserts event handling |
 | `smoke-test-lxc.sh` | Checks UI, API health, and container status on a deployed host |
 | `smoke-test-addon.sh` | Checks an add-on's bring-up leg by leg, stopping before the target itself |
+| `record-truenas-fixtures.sh` | Records what a real TrueNAS answers — and refuses — into the contract fixtures |
 | `lib/` | Shared shell helpers |
 
 ## gen-prod-env.sh

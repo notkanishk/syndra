@@ -2,29 +2,144 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 )
 
-// The rules TrueNAS 25.10.5 enforces on account writes, pinned as source guards.
+// The rules TrueNAS enforces on account writes, read from a RECORDING of a real
+// target and asserted against the payloads this add-on builds.
 //
-// Every one of these was learned by being refused by a real NAS on 2026-08-18,
-// and every one of them is invisible to a fake: the add-on's own recorded
-// fixtures answered `user.create` with a success for a payload the target
-// rejects outright. Account creation was broken against every supported release
-// and no test could see it, because the only party that knew the rule was the
-// target.
+// `addons/contract/truenas_observed.json` is written by
+// `scripts/record-truenas-fixtures.sh --write`, which asks a live NAS and
+// writes down what it answered — including its REFUSALS, which are the half no
+// hand-written fixture has ever contained and the half that hid a completely
+// broken account creation behind two green suites.
 //
-//	user_create.password        Password is required
-//	user_create.password_disabled
-//	                            Password authentication may not be disabled
-//	                            for SMB users.
-//	user_update.smb             Password must be reset in order to enable SMB
-//	                            authentication
-//
-// These read the payload the add-on BUILDS rather than mocking a response,
-// because the defect was never in how a response was handled — it was in what
-// was sent.
+// Every serious defect this add-on shipped had one shape: a fixture somebody
+// wrote by hand, agreeing with the code that read it, disagreeing with the
+// target. The recording cannot drift that way, and these tests derive what the
+// code must do FROM it rather than from anybody's memory of a debugging
+// session.
+
+type observedRules struct {
+	ProductVersion string `json:"product_version"`
+	WriteRules     []struct {
+		Case             string   `json:"case"`
+		Method           string   `json:"method"`
+		Accepted         bool     `json:"accepted"`
+		RefusedFields    []string `json:"refused_fields"`
+		PasswordDisabled *bool    `json:"password_disabled"`
+	} `json:"write_rules"`
+}
+
+func observed(t *testing.T) observedRules {
+	t.Helper()
+	raw, err := os.ReadFile("../contract/truenas_observed.json")
+	if err != nil {
+		t.Skipf("no recording yet (%v). Run scripts/record-truenas-fixtures.sh --write "+
+			"against a real target; these rules cannot be known any other way.", err)
+	}
+	var o observedRules
+	if err := json.Unmarshal(raw, &o); err != nil {
+		t.Fatalf("the recording does not parse: %v", err)
+	}
+	if o.ProductVersion == "" {
+		t.Fatal("the recording does not name the release it came from; a fixture from " +
+			"one major says nothing about another")
+	}
+	return o
+}
+
+func rule(t *testing.T, o observedRules, name string) (refused []string, accepted bool, found bool) {
+	t.Helper()
+	for _, r := range o.WriteRules {
+		if r.Case == name {
+			return r.RefusedFields, r.Accepted, true
+		}
+	}
+	return nil, false, false
+}
+
+// Every rule below is DERIVED from the recording: the assertion fires only
+// because the target refused something, and stops firing if a later release
+// stops refusing it.
+func TestTheCreatePayloadSatisfiesWhatTheTargetRefused(t *testing.T) {
+	o := observed(t)
+	src := source(t, "apply.go")
+	create := between(t, src, "create := map[string]any{", "}")
+
+	if fields, _, found := rule(t, o, "create with no credential decision"); found && len(fields) > 0 {
+		// The target refused a create carrying no password decision, naming
+		// exactly which field it wanted.
+		if !strings.Contains(create, "password_disabled") && !strings.Contains(create, `"password"`) {
+			t.Errorf("%s refused a create with no credential decision (%s), and this "+
+				"payload still sends neither. Account creation cannot work.",
+				o.ProductVersion, strings.Join(fields, ", "))
+		}
+	}
+
+	if fields, _, found := rule(t, o, "create with smb and disabled password"); found && len(fields) > 0 {
+		if strings.Contains(create, "desired.smbEnabled") {
+			t.Errorf("%s refuses SMB alongside disabled password authentication (%s), "+
+				"and this payload still asks for SMB from the desired state.",
+				o.ProductVersion, strings.Join(fields, ", "))
+		}
+	}
+}
+
+func TestThePasswordPathSatisfiesWhatTheTargetRefused(t *testing.T) {
+	o := observed(t)
+	src := source(t, "operations.go")
+
+	// The recording captured the trap directly: an update carrying only
+	// `password` is ACCEPTED and leaves password_disabled true.
+	for _, r := range o.WriteRules {
+		if r.Case == "password alone, resulting password_disabled" && r.PasswordDisabled != nil && *r.PasswordDisabled {
+			if !strings.Contains(src, `"password_disabled": false`) {
+				t.Errorf("on %s an update carrying only a password leaves authentication "+
+					"DISABLED, so the member is told their password was set by an account "+
+					"that still refuses them. The password path must clear it.", o.ProductVersion)
+			}
+		}
+	}
+
+	if fields, _, found := rule(t, o, "enable smb in a later call"); found && len(fields) > 0 {
+		if !strings.Contains(src, "desiredSMB(") {
+			t.Errorf("%s refuses a standalone SMB enable (%s), so the only call that can "+
+				"turn it on is the one setting the password — and this path never does.",
+				o.ProductVersion, strings.Join(fields, ", "))
+		}
+		if !strings.Contains(source(t, "apply.go"), "smbPending") {
+			t.Errorf("%s refuses a standalone SMB enable, so the convergence must not "+
+				"attempt one; without that it fails on every pass for an account whose "+
+				"member has not set a password.", o.ProductVersion)
+		}
+	}
+}
+
+// The recording must actually contain the refusals, or every assertion above is
+// vacuous and the suite is green because nothing was recorded.
+func TestTheRecordingCarriesTheRefusalsTheseRulesRestOn(t *testing.T) {
+	o := observed(t)
+	for _, name := range []string{
+		"create with no credential decision",
+		"create with smb and disabled password",
+		"enable smb in a later call",
+	} {
+		fields, _, found := rule(t, o, name)
+		if !found {
+			t.Errorf("the recording has no case %q — re-run "+
+				"scripts/record-truenas-fixtures.sh --write", name)
+			continue
+		}
+		if len(fields) == 0 {
+			t.Errorf("case %q recorded no refused field. Either the target stopped "+
+				"refusing it — in which case the rules above are obsolete and should be "+
+				"revisited — or the probe did not reach it.", name)
+		}
+	}
+}
 
 // A create must decide the credential question, and Syndra's answer is "there
 // is no credential yet".

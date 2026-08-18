@@ -1,0 +1,113 @@
+{
+  "_comment": "Recorded from a real target by scripts/record-truenas-fixtures.sh. Do not hand-edit: a fixture somebody can write by hand is a fixture that can agree with the code and disagree with the target.",
+  "reads": {
+    "system.version": "TrueNAS-25.10.5",
+    "auth.me": {
+      "keys": [
+        "account_attributes",
+        "attributes",
+        "grouplist",
+        "local",
+        "privilege",
+        "pw_dir",
+        "pw_gecos",
+        "pw_gid",
+        "pw_name",
+        "pw_shell",
+        "pw_uid",
+        "sid",
+        "source",
+        "two_factor_config"
+      ]
+    },
+    "user.query": {
+      "keys": [
+        "id",
+        "locked",
+        "password_disabled",
+        "smb",
+        "uid",
+        "username"
+      ]
+    },
+    "group.query": {
+      "keys": [
+        "gid",
+        "group",
+        "id"
+      ]
+    },
+    "sharing.smb.query": {
+      "keys": [
+        "audit",
+        "name"
+      ]
+    }
+  },
+  "write_rules": [
+    {
+      "case": "create with no credential decision",
+      "method": "user.create",
+      "refused_fields": [
+        "user_create.password"
+      ],
+      "code": -32602
+    },
+    {
+      "case": "create with smb and disabled password",
+      "method": "user.create",
+      "refused_fields": [
+        "user_create.password_disabled"
+      ],
+      "code": -32602
+    },
+    {
+      "case": "create with password auth disabled",
+      "method": "user.create",
+      "accepted": true
+    },
+    {
+      "case": "user.create returns",
+      "returns": "record",
+      "keys": [
+        "api_keys",
+        "builtin",
+        "email",
+        "full_name",
+        "group",
+        "groups",
+        "home",
+        "id",
+        "immutable",
+        "last_password_change",
+        "local",
+        "locked"
+      ]
+    },
+    {
+      "case": "password alone leaves auth disabled",
+      "method": "user.update",
+      "accepted": true
+    },
+    {
+      "case": "password alone, resulting password_disabled",
+      "password_disabled": true
+    },
+    {
+      "case": "enable smb in a later call",
+      "method": "user.update",
+      "refused_fields": [
+        "user_update.password_disabled",
+        "user_update.smb"
+      ],
+      "code": -32602
+    },
+    {
+      "case": "password, enable auth and smb together",
+      "method": "user.update",
+      "accepted": true
+    }
+  ],
+  "product_version": "TrueNAS-25.10.5",
+  "probe_account_removed": true
+}
