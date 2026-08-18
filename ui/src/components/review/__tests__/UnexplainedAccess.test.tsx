@@ -358,4 +358,44 @@ it("does not call an add-on role retired", () => {
   ];
   renderTriage();
   expect(screen.queryByText("Role not in catalogue")).not.toBeInTheDocument();
+
+});
+
+// A grant somebody removed by hand is the SAME entitlement Syndra applied,
+// and the row has to say so. Told as "a queued write that never landed" — the
+// sentence every syndra_only row used to get — it reads as a stranger, and
+// the operator's next move is wrong.
+it("tells a removal as the history of the grant Syndra applied", () => {
+  drift.data = [
+    item({
+      drift_type: "syndra_only",
+      upstream_actor: "op-marta",
+      provenance: {
+        granted_by: "op-ada",
+        granted_at: "2026-08-03T09:00:00Z",
+        reason: "inducted on the laser",
+        last_observed_at: "2026-08-19T03:00:00Z",
+      },
+    }),
+  ];
+  renderTriage();
+
+  expect(screen.getByText(/Granted by op-ada/i)).toBeTruthy();
+  expect(screen.getByText(/inducted on the laser/i)).toBeTruthy();
+  expect(screen.getByText(/does not now, so somebody removed it there/i)).toBeTruthy();
+  expect(screen.getByText(/Removed by op-marta/i)).toBeTruthy();
+});
+
+// And one nobody ever saw the target holding keeps the old reading, which is
+// the honest one for it: a write that never landed.
+it("still calls an unobserved grant a write that never landed", () => {
+  drift.data = [
+    item({
+      drift_type: "syndra_only",
+      provenance: { granted_by: "op-ada", granted_at: "2026-08-03T09:00:00Z" },
+    }),
+  ];
+  renderTriage();
+
+  expect(screen.getByText(/never been seen holding it/i)).toBeTruthy();
 });

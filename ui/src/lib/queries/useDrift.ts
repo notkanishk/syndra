@@ -34,6 +34,22 @@ export interface DriftTriageItem extends DriftItem {
   user_status?: string;
   user_is_service_account: boolean;
   other_items_for_user: number;
+  /** Where the access came from, for a row about access Syndra intends. It is
+   * what makes a removal legible: the same entitlement Syndra applied, not a
+   * finding that appeared from nowhere. */
+  provenance?: GrantProvenance;
+}
+
+/** The decision behind an entitlement, and when the target was last seen
+ * holding it. */
+export interface GrantProvenance {
+  granted_by?: string;
+  granted_at?: string;
+  reason?: string;
+  source?: string;
+  source_ref?: string;
+  last_observed_at?: string;
+  expires_at?: string;
 }
 
 /**

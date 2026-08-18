@@ -805,3 +805,88 @@ func TestProcessGrantAdded_ExpectedGrantNoDrift(t *testing.T) {
 		t.Fatal("a grant Syndra already expects must not be flagged as drift")
 	}
 }
+
+// --- The removal half, which had none (change `reconciliation-as-merge`) ---
+//
+// A grant Syndra intends, removed in Zitadel by hand, was found only by the
+// six-hourly sweep — which compares two sets and therefore cannot say who
+// removed it, and until the merge base existed it replayed the grant instead of
+// reporting it. The event knows both things the comparison cannot: who, and
+// when.
+
+func TestProcessGrantRemoved_ARemovalOfSomethingSyndraIntendsIsAFinding(t *testing.T) {
+	setupNoopWebhookDeps(t)
+	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return true, nil }
+
+	var kind, actor, user string
+	dbUpsertDriftItemWithEvidence = func(_ context.Context, _, u, _ string, _ []string, _, source, dtype string, ev db.DriftEvidence) (string, bool, error) {
+		user, kind, actor = u, dtype, ev.UpstreamActor
+		if source != "webhook" {
+			t.Fatalf("detection_source must be webhook, got %q", source)
+		}
+		return "d1", true, nil
+	}
+
+	ev := WebhookPayload{
+		EventType: "grant_removed", UserID: "u1", SourceProject: "p1",
+		RoleKeys: []string{"operator"}, GrantID: "g1", EditorID: "op-marta",
+	}
+	if err := processGrantRemoved(context.Background(), ev, "evt-1"); err != nil {
+		t.Fatal(err)
+	}
+	if user != "u1" || kind != db.DriftSyndraOnly {
+		t.Fatalf("want a syndra_only finding for u1, got user=%q type=%q", user, kind)
+	}
+	// The half a set comparison can never supply.
+	if actor != "op-marta" {
+		t.Fatalf("the finding must name who removed it, got %q", actor)
+	}
+}
+
+// A removal of access Syndra never intended is the two sides agreeing, reached
+// from the other direction. Not a finding.
+func TestProcessGrantRemoved_ARemovalSyndraDidNotIntendIsNotAFinding(t *testing.T) {
+	setupNoopWebhookDeps(t)
+	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return false, nil }
+	called := false
+	dbUpsertDriftItemWithEvidence = func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
+		called = true
+		return "", false, nil
+	}
+
+	ev := WebhookPayload{EventType: "grant_removed", UserID: "u1", SourceProject: "p1", RoleKeys: []string{"viewer"}}
+	if err := processGrantRemoved(context.Background(), ev, "evt-1"); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Fatal("Zitadel and Syndra agreeing is not a finding")
+	}
+}
+
+// The order that makes the check mean anything. The cascade below removes
+// derived intent, so asking after it would answer about the world the cascade
+// made rather than the one the removal happened in.
+func TestProcessGrantRemoved_DetectionRunsBeforeTheCascade(t *testing.T) {
+	setupNoopWebhookDeps(t)
+	seq := []string{}
+	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) {
+		seq = append(seq, "expects")
+		return true, nil
+	}
+	dbUpsertDriftItemWithEvidence = func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
+		seq = append(seq, "finding")
+		return "d1", true, nil
+	}
+	webhookRevokeMappingRules = func(context.Context, string, string, string) error {
+		seq = append(seq, "cascade")
+		return nil
+	}
+
+	ev := WebhookPayload{EventType: "grant_removed", UserID: "u1", SourceProject: "p1", RoleKeys: []string{"operator"}}
+	if err := processGrantRemoved(context.Background(), ev, "evt-1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(seq) < 3 || seq[len(seq)-1] != "cascade" {
+		t.Fatalf("the finding must be raised before the cascade runs: %v", seq)
+	}
+}
