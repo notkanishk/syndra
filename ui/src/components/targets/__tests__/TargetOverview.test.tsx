@@ -14,6 +14,7 @@ const state = {
   health: {} as TargetHealth,
   inventory: {} as TargetInventory,
   resolved: [] as Array<{ head: string; note: string }>,
+  reconcile: undefined as undefined | Record<string, unknown>,
   ownerDecided: [] as Array<{ id: string; owner: string; note: string }>,
 };
 
@@ -33,6 +34,12 @@ vi.mock("@/lib/queries/useTargets", async () => {
     }),
     useAdoptAccount: () => ({ mutate: vi.fn(), isPending: false }),
     useSetLifecycle: () => ({ mutate: vi.fn(), isPending: false }),
+    useReconcileTarget: () => ({
+      mutate: vi.fn(),
+      isPending: false,
+      data: state.reconcile,
+      error: null,
+    }),
     useResolveBindingConflict: () => ({
       mutate: (input: { id: string; owner: string; note: string }) => state.ownerDecided.push(input),
       isPending: false,
@@ -67,6 +74,66 @@ function renderTarget() {
 }
 
 describe("one target's page", () => {
+  it("warns when the key's expiry is unrecorded, and stays quiet when there is none", () => {
+    // A key CAN expire without Syndra knowing, and the day it does the target
+    // simply stops answering — which reads as an outage and sends an operator
+    // to the NAS. An operator who states there is no expiry gets no warning.
+    state.roster = [summary([])];
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+
+    state.health = { reachable: true, lifecycle: "active", key_expiry: "unrecorded" };
+    const { unmount } = renderTarget();
+    expect(screen.getByText(/expiry not recorded/i)).toBeTruthy();
+    unmount();
+
+    state.health = { reachable: true, lifecycle: "active", key_expiry: "none" };
+    renderTarget();
+    expect(screen.queryByText(/expiry not recorded/i)).toBeNull();
+  });
+
+  it("says SMB auditing is off before anyone runs an empty activity report", () => {
+    state.roster = [summary([])];
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.health = {
+      reachable: true,
+      lifecycle: "active",
+      shares_readable: true,
+      unaudited_shares: ["gitlab_data", "main"],
+    };
+    renderTarget();
+
+    expect(screen.getByText(/auditing is off/i)).toBeTruthy();
+    expect(screen.getByText("gitlab_data")).toBeTruthy();
+  });
+
+  it("does not claim auditing is fine when the share list could not be read", () => {
+    state.roster = [summary([])];
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    // shares_readable false: the difference between "nothing is unaudited" and
+    // "could not look", which must not render identically.
+    state.health = { reachable: true, lifecycle: "active", shares_readable: false };
+    renderTarget();
+
+    expect(screen.queryByText(/auditing is off/i)).toBeNull();
+  });
+
+  it("shows bindings that point at nothing, and says they were not converged", () => {
+    // The sweep refuses to act on these: the plan for one says "create", so
+    // acting would recreate an account somebody deleted.
+    state.roster = [summary([])];
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.health = { reachable: true, lifecycle: "active" };
+    state.reconcile = {
+      target: "truenas", bound: 4, queued: 1, current: true,
+      stale: [{ subject_id: "s1", username: "alice", uid: 3999 }],
+    };
+    renderTarget();
+
+    expect(screen.getByText(/point at an account that is no longer/i)).toBeTruthy();
+    expect(screen.getByText("alice")).toBeTruthy();
+    expect(screen.getByText(/yours to decide/i)).toBeTruthy();
+  });
+
   it("says a transport secret that stopped loading is a fault on THIS host", () => {
     // Above the reachability reading and worded away from the target on
     // purpose. An unreadable secret also makes the add-on look unreachable, and
@@ -224,6 +291,7 @@ describe("one target's page", () => {
 describe("resolving a log finding", () => {
   function renderWithFinding() {
     state.resolved = [];
+    state.reconcile = undefined;
     state.roster = [summary([])];
     state.health = {
       target: "truenas",

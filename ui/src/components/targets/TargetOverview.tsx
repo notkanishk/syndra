@@ -7,6 +7,7 @@ import { MappingManagement } from "@/components/targets/MappingManagement";
 import { DormantAccounts } from "@/components/targets/DormantAccounts";
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
+import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -18,6 +19,7 @@ import { UserName } from "@/components/names";
 import { targetLabel } from "@/lib/nav";
 import {
   useAdoptAccount,
+  useReconcileTarget,
   useSetLifecycle,
   useTargetHealth,
   useResolveBindingConflict,
@@ -116,6 +118,8 @@ export function TargetOverview({ target }: { target: string }) {
           </Card>
         )}
 
+        <ReconcileControl target={target} />
+
         <LifecycleControl target={target} health={health.data} />
       </div>
     </>
@@ -133,6 +137,86 @@ export function TargetOverview({ target }: { target: string }) {
  * because an operator who reads `circuit_open` as "the target is down" looks at
  * the wrong machine entirely.
  */
+/**
+ * Reconcile now, and what the pass found.
+ *
+ * The sweep runs every six hours and writes a log line nobody reads. An
+ * operator asking "is this target in step?" had no way to ask it — the button
+ * existed for Zitadel and for no target.
+ *
+ * The result is rendered rather than toasted, because the interesting half is
+ * not "done": it is the STALE bindings, which the sweep deliberately refuses to
+ * act on and which nothing else surfaces. A binding whose account is gone plans
+ * as a create, and acting on it would recreate an account somebody deleted.
+ */
+function ReconcileControl({ target }: { target: string }) {
+  const run = useReconcileTarget(target);
+  const result = run.data;
+
+  return (
+    <Card>
+      <CardHeader
+        title="Reconciliation"
+        note="Reads the target and queues what is already owed. Queueing is not applying."
+      />
+      <CardRow>
+        <div className="flex-1 text-[14.5px] text-muted">
+          {result
+            ? `${result.bound} managed · ${result.queued} queued · ${result.stale?.length ?? 0} pointing at nothing`
+            : "The scheduled sweep runs every six hours."}
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          isPending={run.isPending}
+          onClick={() => run.mutate()}
+        >
+          Reconcile now
+        </Button>
+      </CardRow>
+
+      {run.error && (
+        <CardRow>
+          <span className="text-[13.5px] text-danger-text">
+            {run.error instanceof Error ? run.error.message : "The pass did not complete."}
+          </span>
+        </CardRow>
+      )}
+
+      {result && !result.current && (
+        // A pass that concluded nothing must not read as a clean one.
+        <CardRow>
+          <span className="text-[13.5px] text-warn-text">
+            Nothing was concluded: {result.reason || "the target could not be read for itself"}.
+          </span>
+        </CardRow>
+      )}
+
+      {(result?.stale?.length ?? 0) > 0 && (
+        <>
+          <CardRow>
+            <span className="text-[14px] font-semibold text-warn-text">
+              {result!.stale!.length} binding{result!.stale!.length === 1 ? "" : "s"} point at an
+              account that is no longer on the target
+            </span>
+          </CardRow>
+          {result!.stale!.map((b) => (
+            <CardRow key={b.subject_id} className="flex-wrap">
+              <Mono>{b.username}</Mono>
+              {b.uid ? <span className="text-[13px] text-faint">uid {b.uid}</span> : null}
+              <span className="flex-1" />
+              <span className="text-[13px] text-faint">
+                Not converged. Re-provisioning would recreate a deleted account, so this is
+                yours to decide.
+              </span>
+            </CardRow>
+          ))}
+        </>
+      )}
+    </Card>
+  );
+}
+
 /**
  * What the roster's `auth_mode` means in words.
  *
@@ -217,6 +301,34 @@ function Health({
             {health.in_flight} call{health.in_flight === 1 ? "" : "s"} issued before the drain{" "}
             {health.in_flight === 1 ? "has" : "have"} not come back. This is what to wait for
             before pulling a credential out from under one.
+          </Reading>
+        )}
+
+        {/* A credential whose expiry nobody recorded. Not amber for its own
+            sake: the key CAN expire without Syndra knowing, and the day it does
+            the target simply stops answering — which reads as an outage and
+            sends an operator to the NAS. `none` is an operator's deliberate
+            choice and says nothing here. */}
+        {health?.reachable && health.key_expiry === "unrecorded" && (
+          <Reading tone="warn" label="Key expiry not recorded">
+            Syndra does not know when this target&rsquo;s API key expires. If it has an
+            expiry, set <Mono>TRUENAS_API_KEY_EXPIRES_AT</Mono> so this warns before it
+            fails; if it has none, set it to <Mono>never</Mono> to say so.
+          </Reading>
+        )}
+
+        {/* Auditing off means activity reports are empty, and an empty report
+            is indistinguishable from a member who did nothing. Said here so it
+            is learned before somebody depends on it. */}
+        {health?.reachable && health.shares_readable && (health.unaudited_shares?.length ?? 0) > 0 && (
+          <Reading tone="warn" label="SMB auditing is off">
+            {health.unaudited_shares!.length === 1 ? "Share" : "Shares"}{" "}
+            {health.unaudited_shares!.map((s) => (
+              <Mono key={s}>{s}</Mono>
+            ))}{" "}
+            {health.unaudited_shares!.length === 1 ? "has" : "have"} auditing disabled, so a
+            member&rsquo;s activity report comes back empty whether or not they used it.
+            Enable it per share on the target: Shares → SMB → Edit → Advanced.
           </Reading>
         )}
 
