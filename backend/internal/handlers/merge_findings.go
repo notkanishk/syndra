@@ -263,7 +263,23 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 		writeResolutionError(w, err)
 		return
 	}
-	if finding.Decision != "" {
+	// A finding already answered is refused — with ONE exception, and it is the
+	// repair path.
+	//
+	// `unbound` calls the target and then writes this side. If that write fails
+	// after the add-on has already let go, the two stores are split exactly the
+	// way this resolution exists to prevent: the add-on has forgotten the
+	// binding, the backend row remains, and the reservation makes every retry a
+	// 409 — a wedge with no way out through this surface.
+	//
+	// So the SAME decision, repeated, is allowed to run again. It is safe
+	// because every step is idempotent: `account.release` answers a subject it
+	// does not bind as done rather than refused, and forgetting a row that is
+	// already gone is a no-op. A DIFFERENT decision is still refused, because
+	// the two answers are opposites.
+	repair := finding.Decision != "" && finding.Decision == req.Resolution &&
+		req.Resolution == db.ResolutionUnbound
+	if finding.Decision != "" && !repair {
 		// Answered already. Refused here for the reading, and refused again
 		// atomically below — this check is the message, not the guarantee.
 		writeResolutionError(w, fmt.Errorf("%w: %s already decided as %s by %s",
@@ -287,23 +303,29 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 	// and a lock held across a call to a machine that may be down is an outage
 	// on this side of the wire.
 	if req.Resolution == db.ResolutionUnbound {
-		reserved, err := dbRecordMergeDecision(r.Context(), id, actor, req.Resolution)
-		if err != nil {
-			writeResolutionError(w, err)
-			return
+		if !repair {
+			if _, err := dbRecordMergeDecision(r.Context(), id, actor, req.Resolution); err != nil {
+				writeResolutionError(w, err)
+				return
+			}
 		}
 		if err := releaseOnTarget(r.Context(), finding, actor); err != nil {
 			// The reservation goes with the work that did not happen. Left
 			// standing, one unreachable add-on would wedge the finding as
 			// decided-but-never-done with no way back through this surface.
-			if rerr := dbReleaseMergeDecision(r.Context(), id, actor, req.Resolution); rerr != nil {
-				log.Printf("[FINDINGS] %s: the release failed and its reservation could not be cleared: %v",
-					id, rerr)
+			//
+			// Not on a repair: that reservation is somebody's earlier answer,
+			// and this attempt failing does not un-answer it — nor should it
+			// drop the only record that the add-on may already have let go.
+			if !repair {
+				if rerr := dbReleaseMergeDecision(r.Context(), id, actor, req.Resolution); rerr != nil {
+					log.Printf("[FINDINGS] %s: the release failed and its reservation could not be cleared: %v",
+						id, rerr)
+				}
 			}
 			writeResolutionError(w, err)
 			return
 		}
-		_ = reserved
 	}
 
 	var resolved db.MergeFinding
@@ -315,6 +337,12 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 		current, err := dbGetStandingMergeFinding(ctx, id)
 		if err != nil {
 			return err
+		}
+		if current.Decision != "" && current.Decision != req.Resolution {
+			// Somebody changed the answer between the reservation and here.
+			// Refused rather than finished under the other decision's name.
+			return fmt.Errorf("%w: %s already decided as %s by %s",
+				db.ErrMergeFindingDecided, id, current.Decision, current.DecidedBy)
 		}
 		if current.Decision != "" && req.Resolution != db.ResolutionUnbound {
 			return fmt.Errorf("%w: %s already decided as %s by %s",
@@ -346,6 +374,22 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
+		// A failure AFTER the add-on let go is the state this path exists to
+		// survive, so it is reported as what it is rather than as a generic
+		// error: the target half is done, this side is not, and pressing again
+		// finishes it. Silence here is what turned a recoverable half-write into
+		// a wedge — the operator saw an error, the controls disappeared, and
+		// every retry came back 409.
+		if req.Resolution == db.ResolutionUnbound && !errors.Is(err, db.ErrMergeFindingDecided) {
+			jsonResponse(w, http.StatusAccepted, map[string]any{
+				"resolved": false, "decided": true, "resolution": req.Resolution,
+				"repair_needed": true,
+				"detail": "The target released the account and Syndra's own records were not updated. " +
+					"Nothing on the target changed. Press unbind again to finish it — every step is safe to repeat.",
+				"error": err.Error(),
+			})
+			return
+		}
 		writeResolutionError(w, err)
 		return
 	}

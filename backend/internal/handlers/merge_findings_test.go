@@ -34,8 +34,11 @@ type findingHarness struct {
 	// request deciding the opposite while the first is calling the target.
 	reservationsCleared []string
 	decideErr           error
-	forgotten           []string
-	allowErr            error
+	// forgetErr fails THIS side after the add-on has already let go — the
+	// half-done unbind the repair path exists for.
+	forgetErr error
+	forgotten []string
+	allowErr  error
 	// The add-on's half of a release. Recorded so a test can assert that the
 	// backend never forgets its own record without the add-on confirming it let
 	// go — the split-store failure `account.release` exists to close.
@@ -110,6 +113,9 @@ func stubFindings(t *testing.T, h *findingHarness) {
 		return map[string]json.RawMessage{"enabled": json.RawMessage(`true`)}, nil
 	}
 	dbForgetTargetBinding = func(_ context.Context, _, subject string) error {
+		if h.forgetErr != nil {
+			return h.forgetErr
+		}
 		h.forgotten = append(h.forgotten, subject)
 		return nil
 	}
@@ -666,5 +672,84 @@ func TestAnUnreadableRoleGraphNamesNoPolicyRatherThanAllOfThem(t *testing.T) {
 	// The sentence stays: the value still cannot be adopted for one person.
 	if why, _ := row["why_not"].(string); why == "" {
 		t.Fatal("the refusal must still be explained")
+	}
+}
+
+// The half-done unbind, which the reservation itself could turn into a wedge.
+//
+// `account.release` lands, this side's write fails: the add-on has forgotten
+// the binding, the backend row remains, and the reservation makes every retry a
+// 409. Split stores, controls gone, no way out through the surface — the exact
+// state this resolution exists to prevent, reached through its own failure path.
+func TestAReleaseThatLandedAndDidNotFinishSaysSoAndStaysRepeatable(t *testing.T) {
+	h := &findingHarness{
+		finding: db.MergeFinding{
+			ID: "f1", Target: "truenas", SubjectID: "sub-1", Outcome: "deleted_upstream",
+		},
+		forgetErr: errors.New("the database went away"),
+	}
+	stubFindings(t, h)
+
+	rr := resolveFinding(t, `{"resolution":"unbound","reason":"removed on purpose"}`)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("want 202, got %d: %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"repair_needed":true`) {
+		t.Fatalf("the half-done state must be named: %s", body)
+	}
+	if !strings.Contains(body, "Press unbind again") {
+		t.Fatalf("the answer must name the repair: %s", body)
+	}
+	// The reservation stays. It is the record that the add-on may already have
+	// let go, and clearing it would lose that.
+	if len(h.reservationsCleared) != 0 {
+		t.Fatalf("a landed release must not have its reservation cleared: %v", h.reservationsCleared)
+	}
+}
+
+// And pressing again finishes it. Every step is idempotent: the add-on answers
+// a subject it does not bind as done, and forgetting a row that is already gone
+// is a no-op.
+func TestRepeatingAHalfDoneUnbindFinishesIt(t *testing.T) {
+	h := &findingHarness{finding: db.MergeFinding{
+		ID: "f1", Target: "truenas", SubjectID: "sub-1", Outcome: "deleted_upstream",
+		// The earlier attempt's reservation, still standing.
+		Decision: db.ResolutionUnbound, DecidedBy: "op-ada",
+	}}
+	stubFindings(t, h)
+
+	rr := resolveFinding(t, `{"resolution":"unbound","reason":"finishing what was started"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(h.dispatched) != 1 {
+		t.Fatalf("the release is re-issued, and the add-on answers it as done: %+v", h.dispatched)
+	}
+	if len(h.forgotten) != 1 || len(h.resolved) != 1 {
+		t.Fatalf("this side must finish: forgotten=%v resolved=%v", h.forgotten, h.resolved)
+	}
+	// No second reservation: the first one is still the decision.
+	if len(h.decided) != 0 {
+		t.Fatalf("a repair must not re-decide: %v", h.decided)
+	}
+}
+
+// A repair is only ever the SAME answer. Somebody arriving with the opposite
+// one after an unbind was reserved is still refused — those two are not
+// interchangeable, whatever state the first is in.
+func TestARepairIsNotAWayToChangeTheAnswer(t *testing.T) {
+	h := &findingHarness{finding: db.MergeFinding{
+		ID: "f1", Target: "truenas", SubjectID: "sub-1", Outcome: "deleted_upstream",
+		Decision: db.ResolutionUnbound, DecidedBy: "op-ada",
+	}}
+	stubFindings(t, h)
+
+	rr := resolveFinding(t, `{"resolution":"reprovisioned","reason":"actually put it back"}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("want 409, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(h.converged) != 0 || len(h.dispatched) != 0 {
+		t.Fatal("a refused change of answer must do nothing")
 	}
 }

@@ -188,3 +188,26 @@ describe("differences waiting on a decision", () => {
     expect(screen.queryByText("Decide")).toBeNull();
   });
 });
+
+// An unbind settles immediately when it works, so one still standing is a
+// repair rather than a wait. Hiding its control is what turned a recoverable
+// half-write into a wedge: the add-on had let go, the backend row remained, and
+// every retry came back refused.
+it("offers to finish an unbind that did not complete", () => {
+  state.findings = [
+    finding({
+      outcome: "deleted_upstream",
+      field: undefined,
+      decision: "unbound",
+      decided_by: "op-ada",
+    }),
+  ];
+  state.resolved = [];
+  state.error = null;
+  renderFindings();
+
+  expect(screen.getByText(/may already have released this account/i)).toBeTruthy();
+  fireEvent.click(screen.getByText("Finish unbinding"));
+  expect(state.resolved).toHaveLength(1);
+  expect(state.resolved[0].resolution).toBe("unbound");
+});

@@ -220,6 +220,11 @@ var (
 	// revoke — remembering a removal as "applied" would make the next pass argue
 	// the target should still hold it.
 	savePropagation = db.RecordPropagation
+	// The other half, and the one whose absence is a defect rather than a gap:
+	// a removal Syndra made must forget what it removed, or a later failed
+	// re-grant is read as somebody's hand removal and never replayed.
+	forgetPropagatedFields       = db.ForgetPropagatedFields
+	forgetPropagatedFieldsExcept = db.ForgetPropagatedFieldsExcept
 
 	subjectEmail = func(ctx context.Context, subjectID string) string {
 		profile, found, err := directory.Default.FindUser(ctx, subjectID)

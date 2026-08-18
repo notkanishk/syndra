@@ -403,9 +403,29 @@ func applyRow(ctx context.Context, row models.PendingPropagation) error {
 // pass of attribution, not correctness — and settling the row as failed would
 // re-drive a mutation that already landed.
 func rememberPropagation(ctx context.Context, row models.PendingPropagation) {
-	if row.OpType != "add" && row.OpType != "replace" {
+	switch row.OpType {
+	case "revoke":
+		// A removal Syndra made FORGETS what it removed, and this is not
+		// bookkeeping tidiness. The memory exists so a later absence reads as
+		// somebody's removal rather than as a write that never landed; kept past
+		// Syndra's own revoke, it becomes a lie about the future. Grant the role
+		// again, have that new write fail to reach the target, and the stale
+		// memory says the target was holding it — so the pass reports a hand
+		// removal and suppresses the replay that would have restored the access
+		// somebody just asked for.
+		fields := make([]string, 0, len(row.RoleKeys))
+		for _, role := range row.RoleKeys {
+			fields = append(fields, row.ProjectID+"/"+role)
+		}
+		if err := forgetPropagatedFields(ctx, row.Target, row.UserID, fields); err != nil {
+			log.Printf("[DRAIN] %s revoked and its memory could not be cleared: %v (non-fatal)", row.ID, err)
+		}
+		return
+	case "add", "replace":
+	default:
 		return
 	}
+
 	for _, role := range row.RoleKeys {
 		if err := savePropagation(ctx, db.Propagation{
 			Target: row.Target, SubjectID: row.UserID,
@@ -413,6 +433,20 @@ func rememberPropagation(ctx context.Context, row models.PendingPropagation) {
 			OutboxID: row.ID, Actor: row.InitiatedBy,
 		}); err != nil {
 			log.Printf("[DRAIN] %s landed and could not be remembered: %v (non-fatal)", row.ID, err)
+		}
+	}
+
+	if row.OpType == "replace" {
+		// A replace states the WHOLE desired set for one grant, so anything
+		// remembered under that project and absent from it was just removed.
+		// Same reasoning as the revoke above, reached by the operation that
+		// removes without saying so.
+		keep := make([]string, 0, len(row.RoleKeys))
+		for _, role := range row.RoleKeys {
+			keep = append(keep, row.ProjectID+"/"+role)
+		}
+		if err := forgetPropagatedFieldsExcept(ctx, row.Target, row.UserID, row.ProjectID, keep); err != nil {
+			log.Printf("[DRAIN] %s replaced and stale memory could not be pruned: %v (non-fatal)", row.ID, err)
 		}
 	}
 }
