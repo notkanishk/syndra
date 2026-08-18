@@ -195,6 +195,14 @@ type Subject struct {
 	Groups     []string `json:"groups"`
 	Enabled    bool     `json:"enabled"`
 	SMBEnabled bool     `json:"smb_enabled"`
+	// PasswordSet is whether the account has a usable credential.
+	//
+	// Not an entitlement and never mapped to one: it is a fact about the target
+	// that decides whether an entitlement can be applied at all. TrueNAS
+	// refuses `smb: true` on an account whose password authentication is
+	// disabled, so a convergence that ignored this would fail on every pass
+	// against every account created before its member set a password.
+	PasswordSet bool `json:"password_set"`
 }
 
 var snapshotKey = []byte("latest")
