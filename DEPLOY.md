@@ -702,10 +702,14 @@ not exist on your version.
 | Reset | not applicable on a new key |
 
 **Copy the key now.** TrueNAS shows it exactly once, and there is no way to read
-it back — a lost key is re-minted, not recovered. Put the expiry date into
-`TRUENAS_API_KEY_EXPIRES_AT` in the same edit as the key itself: the add-on
-surfaces it on `/health` so the expiry arrives as a warning rather than as an
-outage that looks like a network fault.
+it back — a lost key is re-minted, not recovered.
+
+Then answer the expiry question in the same edit, because the third answer is
+the one that bites. Put the date into `TRUENAS_API_KEY_EXPIRES_AT`, or the
+literal `never` if you issued the key without one. Left unset, `/health` reports
+`key_expiry: unrecorded` and the target page asks — a key can expire without
+Syndra knowing, and the day it does the target simply stops answering, which
+reads as a network fault and sends you to the NAS.
 
 **e. Wire it into Syndra.** In `.env` on the deployment host:
 
