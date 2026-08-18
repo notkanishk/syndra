@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"sync"
@@ -92,6 +93,11 @@ type NAS struct {
 	// untested one is refused rather than attempted (§Risks).
 	version       string
 	supportedMajs map[string]bool
+	// selfName and selfUID are the target account this add-on's API key belongs
+	// to, read from `auth.me`. Held so the add-on can refuse to hand its own
+	// credential's account to an operator as something to adopt or delete.
+	selfName string
+	selfUID  int64
 	// probed says the version and method list have been read for the CURRENT
 	// connection. Reset by every dial, because a reconnect may land on an
 	// upgraded target — and because a version read once at startup leaves an
@@ -192,7 +198,47 @@ func (n *NAS) ensureProbed() {
 		n.mu.Unlock()
 		return
 	}
+	n.readSelf()
 	n.loadMethods()
+}
+
+// readSelf learns which target account this add-on's own credential belongs to.
+//
+// Without it, the add-on's TrueNAS service account is just another row in
+// `user.query`: it shows up in the unmanaged inventory, offering an operator
+// the choice to adopt it — and, one confirmation later, to PURGE it. Deleting
+// that account does not break a member's access, it deletes the credential
+// Syndra authenticates with, and no operation afterwards can put it back.
+//
+// A read of the target's own opinion rather than a configured name, because a
+// name in `.env` would be a second definition of an identity the API key
+// already carries, and the two would disagree the first time a key was reissued
+// against a different user.
+//
+// Non-fatal by design. Not knowing means the guards below refuse to vouch for
+// anything, which is the safe direction: they only ever REMOVE an account from
+// what an operator may act on.
+func (n *NAS) readSelf() {
+	var me struct {
+		Name string `json:"pw_name"`
+		UID  int64  `json:"pw_uid"`
+	}
+	if err := n.call("auth.me", []any{}, &me); err != nil {
+		log.Printf("[NAS] could not read this add-on's own account (auth.me): %v; "+
+			"its TrueNAS account will appear as an ordinary unmanaged one", err)
+		return
+	}
+	n.mu.Lock()
+	n.selfName, n.selfUID = me.Name, me.UID
+	n.mu.Unlock()
+}
+
+// Self is the target account this add-on authenticates as, and whether it is
+// known at all.
+func (n *NAS) Self() (string, int64, bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.selfName, n.selfUID, n.selfName != ""
 }
 
 // Probe forces a connection and reads what the gates depend on.
@@ -351,7 +397,58 @@ func (n *NAS) classifyRefusal(e *rpcError) error {
 type rpcError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+	// Data carries the middleware's structured complaint. Only the FIELD PATHS
+	// inside it are ever read — see validationFields.
+	Data struct {
+		// Extra is `[["user_create.password", "Password is required", 22], ...]`
+		// on a validation refusal, and something else entirely on anything else,
+		// which is why it is decoded loosely and read defensively.
+		Extra []json.RawMessage `json:"extra"`
+	} `json:"data"`
 }
+
+// validationFields returns the field PATHS a refusal named, and nothing else.
+//
+// The paths, never the messages. A message is free text the middleware built,
+// and `user.update({password})` puts a member's credential in the parameters of
+// the very call most likely to produce one — which is why this file's rule is
+// that the target's own text does not leave it. A path like
+// `user_create.password` is structural: it names a field of the REQUEST SCHEMA,
+// it cannot contain a value, and it is the entire difference between "the
+// target refused the call (target error code -32602)" and knowing that the
+// payload is missing a password.
+//
+// That difference was an afternoon: account creation had never worked against
+// any release, and the add-on reported only the numeric code while the target
+// had been saying `user_create.password: Password is required` all along.
+func (e *rpcError) validationFields() []string {
+	var out []string
+	for _, raw := range e.Data.Extra {
+		// Each entry is a positional array whose first element is the path.
+		var entry []json.RawMessage
+		if err := json.Unmarshal(raw, &entry); err != nil || len(entry) == 0 {
+			continue
+		}
+		var field string
+		if err := json.Unmarshal(entry[0], &field); err != nil {
+			continue
+		}
+		if field = strings.TrimSpace(field); field == "" {
+			continue
+		}
+		// Belt and braces: a path is an identifier chain. Anything carrying a
+		// space, a quote or a non-ASCII byte is not one, and is dropped rather
+		// than forwarded on the assumption that it must be.
+		if !fieldPath.MatchString(field) {
+			continue
+		}
+		out = append(out, field)
+	}
+	return out
+}
+
+// fieldPath is what a schema path looks like and nothing wider.
+var fieldPath = regexp.MustCompile(`^[A-Za-z0-9_.\[\]-]{1,120}$`)
 
 func (e *rpcError) Error() string { return e.Message }
 
@@ -393,6 +490,10 @@ func callOnce(c rpc, method string, params any, out any) error {
 		return fmt.Errorf("%s: %w", method, err)
 	}
 	if refusal != nil {
+		if fields := refusal.validationFields(); len(fields) > 0 {
+			return fmt.Errorf("%s: %w (target error code %d, rejected: %s)",
+				method, ErrTargetRefused, refusal.Code, strings.Join(fields, ", "))
+		}
 		return fmt.Errorf("%s: %w (target error code %d)", method, ErrTargetRefused, refusal.Code)
 	}
 	if out == nil {

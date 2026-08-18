@@ -144,6 +144,7 @@ func (s *server) readSubjects() (Snapshot, error) {
 		return Snapshot{}, err
 	}
 
+	selfName, _, _ := s.nas.Self()
 	subjects := make([]Subject, 0, len(users))
 	for _, u := range users {
 		groups := make([]string, 0, len(u.Groups))
@@ -167,6 +168,11 @@ func (s *server) readSubjects() (Snapshot, error) {
 			// for it" from "SMB is off because the target will not accept it
 			// yet". They converge differently.
 			PasswordSet: !u.PasswordDisabled,
+			// Whether this row is the add-on's own service account. Reported
+			// rather than hidden: an operator who sees the account they know
+			// exists simply vanish from the inventory learns nothing, while one
+			// who sees it labelled learns why it is not on offer.
+			Self: selfName != "" && strings.EqualFold(u.Username, selfName),
 		})
 	}
 	return Snapshot{TakenAt: time.Now().UTC(), Subjects: subjects, Truncated: truncated}, nil

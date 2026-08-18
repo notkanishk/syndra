@@ -284,6 +284,33 @@ func (s *server) desiredSMB(subject string) (bool, bool) {
 	return false, false
 }
 
+// refuseSelfAccount rejects an operation aimed at the add-on's own target
+// account.
+//
+// The account this add-on's API key belongs to is an ordinary row in
+// `user.query`, so without this it appears in the unmanaged inventory as
+// something to adopt — and one confirmation later, to purge. Deleting it does
+// not remove a member's access: it deletes the credential Syndra reaches the
+// target with, and nothing on either side can put it back. The operator would
+// be left with a target reporting itself unreachable and an add-on that cannot
+// say why.
+//
+// Enforced HERE, in the add-on, because this is the only component that knows
+// which account that is — it asks the target rather than being told — and a
+// guard in a caller is a guard the next caller does not have.
+//
+// Unknown identity refuses nothing. `auth.me` is a read that can fail, and
+// treating "I could not find out" as "this is me" would block adoption of every
+// account on the target.
+func (s *server) refuseSelfAccount(username string) error {
+	name, _, known := s.nas.Self()
+	if !known || !strings.EqualFold(strings.TrimSpace(username), name) {
+		return nil
+	}
+	return fmt.Errorf("%s is the account this add-on authenticates to the target with; "+
+		"adopting or deleting it would remove Syndra's own access and cannot be undone", name)
+}
+
 // rotatePassword mints a new credential, applies it, and returns nothing.
 //
 // The credential half of a revocation. Established SMB sessions survive until
@@ -352,6 +379,12 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	}
 	binding, err := s.boundAccount(req.Subject)
 	if err != nil {
+		return OperationResult{}, http.StatusUnprocessableEntity, err
+	}
+	// Checked again here and not only at adoption. A binding can predate this
+	// guard, or predate a key reissued against a different account, and this is
+	// the one operation that cannot be undone.
+	if err := s.refuseSelfAccount(binding.Username); err != nil {
 		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
 
@@ -562,6 +595,12 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 	}
 	if strings.TrimSpace(req.Subject) == "" {
 		return OperationResult{}, http.StatusBadRequest, fmt.Errorf("no subject to bind it to")
+	}
+	// Before the lookup, not after. The account exists and would resolve
+	// perfectly well; the reason it is not on offer has nothing to do with
+	// whether it can be found.
+	if err := s.refuseSelfAccount(username); err != nil {
+		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
 
 	// Already bound to this subject: reported as done rather than refused. The

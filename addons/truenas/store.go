@@ -203,6 +203,14 @@ type Subject struct {
 	// disabled, so a convergence that ignored this would fail on every pass
 	// against every account created before its member set a password.
 	PasswordSet bool `json:"password_set"`
+	// Self marks the add-on's own service account on the target.
+	//
+	// Carried to the backend so an operator surface can label it rather than
+	// offering it: it is a real account, it is genuinely unmanaged, and it is
+	// the one account whose deletion removes Syndra's access to the target
+	// altogether. The add-on refuses to adopt or purge it whatever any caller
+	// asks, so this exists to explain the refusal before somebody meets it.
+	Self bool `json:"self,omitempty"`
 }
 
 var snapshotKey = []byte("latest")
