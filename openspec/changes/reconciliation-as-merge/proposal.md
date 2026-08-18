@@ -48,17 +48,22 @@ cannot produce a conflict — only a winner.
 
 ## What changes
 
-Record the base. At every successful apply the add-on already reads the account
-back to compute a fingerprint; that read-back is the base, and storing it costs
-one column.
+Record the base — and **first, make there be one to record.** This proposal
+originally said the add-on already reads the account back at every successful
+apply. It does so when it CREATES an account; when it updates one that exists it
+builds the answer from the values it requested and fingerprints that, so the
+dominant path reports intent in the shape of an observation. Reading back every
+successful mutation is therefore part of this change rather than an assumption
+of it, and until it lands there is nothing here worth storing. The base is then
+one column, written from the observed values the response carries.
 
 Then classify instead of overwrite:
 
 - **unchanged** — `THEIRS == BASE`, `OURS == BASE`. Nothing to do, and no write.
 - **fast-forward** — `THEIRS == BASE`, `OURS` moved. Apply. This is the ordinary case.
 - **already merged** — `THEIRS == OURS`. Somebody did it by hand and got it right; record the base and write nothing.
-- **theirs-only** — `OURS == BASE`, `THEIRS` moved. This is drift, and it is the case the drift queue exists for.
-- **conflict** — both moved, differently. **Never resolved by a sweep.** An operator chooses, and the choice is a real one: keep Syndra's intent, adopt the target's state into the mapping, or edit.
+- **theirs-only** — `OURS == BASE`, `THEIRS` moved. This is drift, and it is the case the drift queue exists for. A **durable finding**, deduplicated per field: it is what a hand edit on the NAS looks like, and left as the output of the pass that found it, it is visible to whoever ran that pass and to nobody else.
+- **conflict** — both moved, differently. **Never resolved by a sweep.** An operator chooses, and the choice is bounded by where desired state can actually live: keep Syndra's intent always; adopt the target's value only where a per-subject decision can express it — a restrictive lifecycle value becomes a deny allowance, which gives the hand edit an author, a reason and an end date; otherwise the finding names the role mapping that produces the value and how many people it reaches, and the resolution is an edit to that policy. No per-subject additive grant is invented to make the dialog convenient.
 - **deleted upstream** — `THEIRS` is gone and `OURS` still names it. Today's stale binding, now a named state rather than a special case.
 
 A conflict is not a failure. It is the system declining to guess, which is what
