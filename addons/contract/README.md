@@ -18,6 +18,23 @@ So each fixture is held from both ends:
 | `apply_request.json` | `json.Marshal(applyEnvelope{…})` is byte-equal after normalisation | `decodeStrict` into `ApplyRequest` succeeds and every field lands |
 | `operation_request.json` | `json.Marshal(callEnvelope{…})` is byte-equal after normalisation | `decodeStrict` into `OperationRequest` succeeds and every field lands |
 | `plan_request.json` | `json.Marshal(planEnvelope{…})` is byte-equal after normalisation | `decodeStrict` into `PlanRequest` succeeds and every field lands |
+| `apply_response.json` | decodes into `ApplyResponse` and every field this side reads lands | `json.Marshal(ApplyOutcome{…})` is byte-equal after normalisation |
+
+`apply_response.json` runs the other way, because the add-on is the producer on
+the reply leg. Two things follow from that and both are deliberate.
+
+The backend does NOT decode strictly here. That is a choice, not an oversight —
+an add-on ahead of its backend must not break it by reporting more than it is
+asked about — and it is the reason this fixture exists at all: "the reply
+direction is lenient" was an assumption held in one comment, and an assumption
+about a boundary is exactly what the other three files were written to stop.
+
+It pins the SUCCESSFUL shape only. A refusal, a binding conflict and an
+unverified apply are mutually exclusive with it and with each other, so a single
+"fully populated" document cannot represent them; each is asserted in the suite
+that produces or consumes it. `observed` is the managed fields as the TARGET
+reported them after the write — never as the add-on requested them, which is the
+whole of `apply-reads-back-what-it-wrote`.
 
 Every field is populated on purpose. A field the sender drops and a field the
 receiver never declared both fail, because the comparison is over the whole
