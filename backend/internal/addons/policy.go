@@ -114,6 +114,17 @@ var operationPolicy = map[string]OperationPolicy{
 		Scope:   ScopeAdmin,
 		Confirm: false,
 	},
+	// Stop managing an account without touching it.
+	//
+	// The safe half of a purge, and the resolution the reconciliation surface
+	// names when a binding points at an account that is gone. Confirmed, because
+	// it changes who Syndra believes an account belongs to — but it is not
+	// destructive, and it must stay available when the target is unreachable,
+	// which is exactly when an operator is most likely to need it.
+	"account.release": {
+		Scope:   ScopeAdmin,
+		Confirm: true,
+	},
 	// A member asking about their own storage account: whether it can be used
 	// yet, and how much room is left.
 	//

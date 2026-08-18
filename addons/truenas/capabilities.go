@@ -131,6 +131,12 @@ func operationSet(probe capabilityProbe) []Operation {
 			ID: "storage.status", Scope: "member", Confirm: false,
 		},
 		{
+			// Stop managing an account without touching it. The safe half of a
+			// purge, and the other resolution for a binding that points at the
+			// wrong person or at an account that is gone.
+			ID: "account.release", Scope: "admin", Confirm: true,
+		},
+		{
 			ID: "account.purge", Scope: "admin", Confirm: true,
 			// The delete-capable key the backend injects for this one call.
 			// Declared secret so every redaction rule that covers a member's
