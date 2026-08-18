@@ -341,6 +341,19 @@ type TargetHealth struct {
 	SnapshotTakenAt string `json:"snapshot_taken_at,omitempty"`
 	LastReadAt      string `json:"last_read_at,omitempty"`
 	KeyExpiresAt    string `json:"key_expires_at,omitempty"`
+	// KeyExpiry says which of three states the credential is in, so an absent
+	// date is never read as a probe that failed: `set`, `none` (issued without
+	// one, deliberately) or `unrecorded` (nobody told Syndra, and the key can
+	// still expire — at which point the target simply stops answering and reads
+	// as an outage).
+	KeyExpiry string `json:"key_expiry,omitempty"`
+	// UnauditedShares names SMB shares with auditing off, and SharesReadable
+	// says whether the list could be read at all. Without the second, "nothing
+	// is unaudited" and "could not look" are the same empty list — and an
+	// activity report on an unaudited share comes back empty whether or not the
+	// member used it.
+	UnauditedShares []string `json:"unaudited_shares,omitempty"`
+	SharesReadable  bool     `json:"shares_readable"`
 
 	Outcome Outcome `json:"-"`
 	Status  int     `json:"-"`
