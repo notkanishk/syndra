@@ -61,6 +61,14 @@ type MergeFinding struct {
 	Theirs     json.RawMessage `json:"theirs,omitempty"`
 	DetectedAt time.Time       `json:"detected_at"`
 	LastSeenAt time.Time       `json:"last_seen_at"`
+	// Decision is what somebody chose before the target caught up. A decided
+	// finding is still STANDING: keeping Syndra's state queues a convergence,
+	// and closing the row at the moment of the decision would claim a difference
+	// was over while it was still there — which the next pass would then raise
+	// again as a second finding about the same field.
+	Decision  string     `json:"decision,omitempty"`
+	DecidedBy string     `json:"decided_by,omitempty"`
+	DecidedAt *time.Time `json:"decided_at,omitempty"`
 }
 
 // RecordMergeFinding raises a finding, or refreshes the one already standing.
@@ -115,11 +123,12 @@ func nullableJSON(raw json.RawMessage) any {
 	return string(raw)
 }
 
-// StandingMergeFindings is what is still waiting for a person on one target.
+// StandingMergeFindings is what is still standing on one target: undecided, or
+// decided and not yet caught up with.
 func StandingMergeFindings(ctx context.Context, target string) ([]MergeFinding, error) {
 	const q = `
 		SELECT id, target, subject_id, field, outcome, base_value, ours_value, theirs_value,
-		       detected_at, last_seen_at
+		       detected_at, last_seen_at, decision, decided_by, decided_at
 		FROM target_merge_findings
 		WHERE target = $1 AND resolved_at IS NULL
 		ORDER BY detected_at DESC`
@@ -133,11 +142,19 @@ func StandingMergeFindings(ctx context.Context, target string) ([]MergeFinding, 
 	for rows.Next() {
 		var f MergeFinding
 		var base, ours, theirs []byte
+		var decision, decidedBy *string
 		if err := rows.Scan(&f.ID, &f.Target, &f.SubjectID, &f.Field, &f.Outcome,
-			&base, &ours, &theirs, &f.DetectedAt, &f.LastSeenAt); err != nil {
+			&base, &ours, &theirs, &f.DetectedAt, &f.LastSeenAt,
+			&decision, &decidedBy, &f.DecidedAt); err != nil {
 			return nil, fmt.Errorf("scan merge finding on %s: %w", target, err)
 		}
 		f.Base, f.Ours, f.Theirs = json.RawMessage(base), json.RawMessage(ours), json.RawMessage(theirs)
+		if decision != nil {
+			f.Decision = *decision
+		}
+		if decidedBy != nil {
+			f.DecidedBy = *decidedBy
+		}
 		out = append(out, f)
 	}
 	if err := rows.Err(); err != nil {
@@ -182,6 +199,48 @@ func GetStandingMergeFinding(ctx context.Context, id string) (MergeFinding, erro
 	return f, nil
 }
 
+// RecordMergeDecision writes what somebody chose, and leaves the finding
+// standing.
+//
+// Standing is the point. The decision queues work — a convergence for keeping
+// Syndra's state, a policy change for adopting the target's — and the difference
+// is still there until that work lands. Closing the row now would claim
+// otherwise, and the next sweep would raise a second finding about the same
+// field, so one decision would produce a queue that refills itself every six
+// hours until the drain caught up.
+//
+// The row closes when a pass observes that the two sides agree, carrying this
+// decision rather than the anonymous `agreed`.
+func RecordMergeDecision(ctx context.Context, id, actor, decision string) (MergeFinding, error) {
+	switch {
+	case strings.TrimSpace(actor) == "":
+		return MergeFinding{}, fmt.Errorf("record merge decision: no actor")
+	case !isMergeResolution(decision):
+		return MergeFinding{}, fmt.Errorf("record merge decision: %q is not a decision", decision)
+	}
+	const q = `
+		UPDATE target_merge_findings
+		SET decision = $3, decided_by = $2, decided_at = NOW()
+		WHERE id = $1::uuid AND resolved_at IS NULL
+		RETURNING id, target, subject_id, field, outcome, detected_at, last_seen_at`
+	var f MergeFinding
+	err := querier(ctx).QueryRow(ctx, q, id, actor, decision).Scan(&f.ID, &f.Target,
+		&f.SubjectID, &f.Field, &f.Outcome, &f.DetectedAt, &f.LastSeenAt)
+	if err != nil {
+		return MergeFinding{}, fmt.Errorf("%w: %s", ErrNoSuchMergeFinding, id)
+	}
+	f.Decision, f.DecidedBy = decision, actor
+	return f, nil
+}
+
+func isMergeResolution(v string) bool {
+	switch v {
+	case ResolutionKeepOurs, ResolutionTakeTheirs, ResolutionReprovisioned, ResolutionUnbound:
+		return true
+	}
+	return false
+}
+
 // ClearMergeFinding closes a finding whose difference no longer exists.
 //
 // Attributed to the sweep rather than left unattributed, because the schema
@@ -192,9 +251,15 @@ func GetStandingMergeFinding(ctx context.Context, id string) (MergeFinding, erro
 // caller is a sweep that just classified state — it knows what agrees, not which
 // row said otherwise.
 func ClearMergeFinding(ctx context.Context, target, subjectID, field, actor string) error {
+	// A decided finding closes carrying WHAT WAS DECIDED, and attributed to
+	// whoever decided it. The sweep only observed that the difference is over;
+	// saying it resolved one somebody else answered would erase the only record
+	// that a person was involved.
 	const q = `
 		UPDATE target_merge_findings
-		SET resolved_at = NOW(), resolved_by = $4, resolution = $5
+		SET resolved_at = NOW(),
+		    resolved_by = COALESCE(NULLIF(decided_by, ''), $4),
+		    resolution  = COALESCE(decision, $5)
 		WHERE target = $1 AND subject_id = $2 AND field = $3 AND resolved_at IS NULL`
 	if _, err := querier(ctx).Exec(ctx, q, target, subjectID, field, actor, ResolutionAgreed); err != nil {
 		return fmt.Errorf("clear merge finding for %s on %s: %w", subjectID, target, err)

@@ -681,8 +681,13 @@ func TestASettledDifferenceClosesItsFinding(t *testing.T) {
 	if len(h.findingsWritten) != 0 {
 		t.Fatalf("agreement is not a finding: %+v", h.findingsWritten)
 	}
-	if len(h.findingsCleared) != 1 || h.findingsCleared[0] != "sub-1/enabled" {
+	// Two closes: the field whose difference is over, and the account-level slot
+	// — the account is present, so anything that said it was gone is over too.
+	if !contains(h.findingsCleared, "sub-1/enabled") {
 		t.Fatalf("a settled difference must close whatever was standing: %v", h.findingsCleared)
+	}
+	if !contains(h.findingsCleared, "sub-1/") {
+		t.Fatalf("a present account must close a standing deleted-upstream: %v", h.findingsCleared)
 	}
 }
 
@@ -711,5 +716,66 @@ func TestAnAgreementIsObservedSoItIsNotRediscoveredForever(t *testing.T) {
 	}
 	if string(h.basesWritten[0].Base["enabled"]) != "true" {
 		t.Fatalf("the base must hold what the target reported: %v", h.basesWritten[0].Base)
+	}
+}
+
+func contains(all []string, want string) bool {
+	for _, v := range all {
+		if v == want {
+			return true
+		}
+	}
+	return false
+}
+
+// `deleted_upstream` is a finding like the others, and it was the one left as
+// sweep output: returned in the response and written nowhere, so it lived
+// exactly as long as the request that carried it — gone on refresh, absent from
+// the decision queue, uncounted by governance.
+func TestAnAbsentAccountsFindingIsPersisted(t *testing.T) {
+	h := &addonReconcileHarness{
+		read:     currentRead(addons.TargetAccount{Username: "someone-else", UID: 4000}),
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "ada", AccountUID: uid(3001)}},
+	}
+	stubAddonReconcile(t, h)
+
+	if _, err := ReconcileAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.findingsWritten) != 1 {
+		t.Fatalf("want one persisted finding: %+v", h.findingsWritten)
+	}
+	f := h.findingsWritten[0]
+	if f.Outcome != string(merge.DeletedUpstream) || f.SubjectID != "sub-1" || f.Field != "" {
+		t.Fatalf("want an account-level deleted_upstream row: %+v", f)
+	}
+}
+
+// A pass that could not write down what it found has not reconciled the target,
+// whatever its read managed. The failures were logged and the target was then
+// marked reconciled — so the surface reported a clean pass over findings nobody
+// would ever see.
+func TestAFindingThatCouldNotBeWrittenLeavesTheTargetUnreconciled(t *testing.T) {
+	h := &addonReconcileHarness{
+		read: currentRead(addons.TargetAccount{
+			Username: "ada", UID: 3001, State: state(map[string]any{"enabled": false}),
+		}),
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "ada", AccountUID: uid(3001)}},
+		bases:    baseFor("sub-1", map[string]any{"enabled": true}),
+	}
+	stubAddonReconcile(t, h)
+	saveMergeFinding = func(context.Context, db.MergeFinding) error {
+		return errors.New("the database went away")
+	}
+
+	res, err := ReconcileAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.reconciled {
+		t.Fatal("a pass that lost a finding must not claim it read the target cleanly")
+	}
+	if res.Reason != db.UnreconciledFindingsUnrecorded {
+		t.Fatalf("want the findings-unrecorded reason, got %q", res.Reason)
 	}
 }

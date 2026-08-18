@@ -71,7 +71,18 @@ export function MergeFindings({ target }: { target: string }) {
               <div className="px-5 pb-3 text-[13.5px] text-muted">
                 {describe(f)}
               </div>
-              {deciding === f.id ? (
+              {f.decision ? (
+                // Decided and waiting. The convergence is queued or the policy
+                // has changed; the row closes when a pass sees the target agree.
+                // Saying "resolved" here would be the surface claiming the
+                // difference is over while it is still on the target.
+                <CardRow>
+                  <span className="text-[13px] text-faint">
+                    {decisionLabel(f.decision)} by <UserName id={f.decided_by ?? ""} /> ·
+                    waiting for the target to agree
+                  </span>
+                </CardRow>
+              ) : deciding === f.id ? (
                 <DecisionForm
                   finding={f}
                   pending={resolve.isPending}
@@ -113,6 +124,19 @@ function describe(f: MergeFinding): string {
       return `It was ${was} when Syndra last saw it, and is ${show(f.theirs)} now. Syndra did not change it, so somebody changed it on the target.`;
     case "conflict":
       return `It was ${was} when Syndra last saw it. Syndra now wants ${show(f.ours)} and the target has ${show(f.theirs)} — both moved, differently.`;
+  }
+}
+
+function decisionLabel(decision: string): string {
+  switch (decision) {
+    case "keep_ours":
+      return "Keeping Syndra's";
+    case "take_theirs":
+      return "Taking the target's";
+    case "reprovisioned":
+      return "Provisioning it again";
+    default:
+      return decision;
   }
 }
 
@@ -170,32 +194,53 @@ function DecisionForm({
         >
           {gone ? "Provision it again" : "Keep Syndra's"}
         </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          isPending={pending}
-          disabled={!reason.trim()}
-          onClick={() =>
-            onResolve({
-              id: finding.id,
-              resolution: gone ? "unbound" : "take_theirs",
-              // A suspension adopted from the target is a decision that has to
-              // end or be looked at again — the schema underneath refuses one
-              // with neither. Six months is the review interval, not an expiry:
-              // this is somebody else's decision being written down, and
-              // guessing when it should lapse would be inventing policy.
-              ...(gone ? {} : { review_date: sixMonthsOut() }),
-              reason,
-            })
-          }
-        >
-          {gone ? "Stop managing it" : "Take the target's"}
-        </Button>
+        {(gone || finding.adoptable) && (
+          <Button
+            size="sm"
+            variant="outline"
+            isPending={pending}
+            disabled={!reason.trim()}
+            onClick={() =>
+              onResolve({
+                id: finding.id,
+                resolution: gone ? "unbound" : "take_theirs",
+                // A suspension adopted from the target is a decision that has to
+                // end or be looked at again — the schema underneath refuses one
+                // with neither. Six months is the review interval, not an expiry:
+                // this is somebody else's decision being written down, and
+                // guessing when it should lapse would be inventing policy.
+                ...(gone ? {} : { review_date: sixMonthsOut() }),
+                reason,
+              })
+            }
+          >
+            {gone ? "Stop managing it" : "Take the target's"}
+          </Button>
+        )}
         <span className="flex-1" />
         <Button size="sm" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
       </div>
+      {!gone && !finding.adoptable && (
+        // The alternative to a button that cannot work. Adopting a group value
+        // has nowhere to live — it belongs to a mapping that reaches every
+        // holder of that role — so the surface says which mapping and how many
+        // people, and the operator goes and changes the policy.
+        //
+        // Rendered as text rather than as a disabled control: a disabled button
+        // whose reason lives in a tooltip is a reason nobody on a keyboard or a
+        // phone can find.
+        <div className="grid gap-1 text-[13px] text-muted">
+          <span>{finding.why_not}</span>
+          {(finding.policy ?? []).map((p) => (
+            <span key={p.mapping_id} className="text-faint">
+              <span className="font-mono">{p.role_key}</span> → {p.value} ·{" "}
+              {p.holders} {p.holders === 1 ? "person holds" : "people hold"} that role
+            </span>
+          ))}
+        </div>
+      )}
       {Boolean(error) && (
         // The refusals are the useful half. Adopting a group value has nowhere
         // to live — it belongs to a mapping that reaches every holder of that
