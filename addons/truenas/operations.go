@@ -225,7 +225,25 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 	if err != nil {
 		return OperationResult{}, statusForLookup(err), lookupRefusal(err)
 	}
-	if err := s.nas.call("user.update", []any{id, map[string]any{"password": password}}, nil); err != nil {
+	// Three fields, one call, and the grouping is forced by the target.
+	//
+	// `password_disabled` must be cleared in the SAME update: setting only
+	// `password` is accepted and leaves password authentication disabled, so
+	// the member gets a success message and an account that still refuses
+	// them. Verified against TrueNAS 25.10.5 — the call returns ok and
+	// `password_disabled` stays true.
+	//
+	// And SMB can only be enabled here. TrueNAS refuses `smb: true` on an
+	// account with no password, and refuses it again in a later call with
+	// `Password must be reset in order to enable SMB authentication` — the
+	// only accepted ordering is the password and the SMB flag arriving
+	// together. So a member setting their first password is also the moment
+	// their share access becomes possible.
+	update := map[string]any{"password": password, "password_disabled": false}
+	if smb, known := s.desiredSMB(req.Subject); known && smb {
+		update["smb"] = true
+	}
+	if err := s.nas.call("user.update", []any{id, update}, nil); err != nil {
 		// A sentence an operator can read, not the security boundary. The
 		// client wrapper already classifies rather than wraps, so the target's
 		// own text — built from a call whose parameters include the password —
@@ -240,6 +258,30 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 		Operation: "password.set", Subject: req.Subject, Outcome: "succeeded",
 		Detail: "The credential was set on " + binding.Username + ".",
 	}, http.StatusOK, nil
+}
+
+// desiredSMB reports the SMB state last applied for a subject, and whether
+// anything is known about it at all.
+//
+// Read from the mirror rather than taken as a parameter: `password.set` is a
+// member-scoped call carrying a credential and nothing else, and letting a
+// caller pass an entitlement alongside it would make a password change a way to
+// grant share access. The mirror is what the last convergence decided.
+func (s *server) desiredSMB(subject string) (bool, bool) {
+	snap, ok, err := s.store.GetSnapshot()
+	if err != nil || !ok {
+		return false, false
+	}
+	binding, err := s.boundAccount(subject)
+	if err != nil {
+		return false, false
+	}
+	for _, sub := range snap.Subjects {
+		if sub.UID == binding.UID {
+			return sub.SMBEnabled, true
+		}
+	}
+	return false, false
 }
 
 // rotatePassword mints a new credential, applies it, and returns nothing.
@@ -260,7 +302,13 @@ func (s *server) rotatePassword(req OperationRequest) (OperationResult, int, err
 	if err != nil {
 		return OperationResult{}, statusForLookup(err), lookupRefusal(err)
 	}
-	if err := s.nas.call("user.update", []any{id, map[string]any{"password": minted}}, nil); err != nil {
+	// `password_disabled` cleared here too, for the reason it is cleared in
+	// setPassword: an update carrying only `password` is accepted and leaves
+	// authentication disabled. A rotation deliberately does NOT touch `smb` —
+	// it is the credential half of a revocation, and turning share access on
+	// during one would be the opposite of what it is for.
+	if err := s.nas.call("user.update", []any{id,
+		map[string]any{"password": minted, "password_disabled": false}}, nil); err != nil {
 		return OperationResult{}, statusFor(err), fmt.Errorf("the target refused the rotation")
 	}
 	s.record("password.rotate", req.Subject, req.Actor, req.CallID, "succeeded")

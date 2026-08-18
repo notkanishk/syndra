@@ -41,6 +41,14 @@ type nasUser struct {
 	UID      int64  `json:"uid"`
 	Locked   bool   `json:"locked"`
 	SMB      bool   `json:"smb"`
+	// PasswordDisabled is the account having no usable credential yet.
+	//
+	// Read because TrueNAS couples it to SMB and refuses the pair: an account
+	// with password authentication disabled CANNOT have `smb` turned on, and
+	// the refusal arrives as a validation error on every convergence. Syndra
+	// creates accounts before any password exists — the member sets their own
+	// — so this is the normal state of a fresh account, not an edge case.
+	PasswordDisabled bool `json:"password_disabled"`
 	// Builtin is the target's own word for an account that came with the
 	// operating system — root, daemon, nobody, and thirty more.
 	//
@@ -103,7 +111,7 @@ func (s *server) readSubjects() (Snapshot, error) {
 	query := []any{
 		[]any{},
 		map[string]any{
-			"select": []string{"id", "username", "uid", "locked", "smb", "groups", "builtin"},
+			"select": []string{"id", "username", "uid", "locked", "smb", "groups", "builtin", "password_disabled"},
 			"limit":  subjectReadCap + 1,
 		},
 	}
@@ -155,6 +163,10 @@ func (s *server) readSubjects() (Snapshot, error) {
 			// not know what TrueNAS calls things.
 			Enabled:    !u.Locked,
 			SMBEnabled: u.SMB,
+			// Carried so the apply can tell "SMB is off because nobody asked
+			// for it" from "SMB is off because the target will not accept it
+			// yet". They converge differently.
+			PasswordSet: !u.PasswordDisabled,
 		})
 	}
 	return Snapshot{TakenAt: time.Now().UTC(), Subjects: subjects, Truncated: truncated}, nil

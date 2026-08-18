@@ -437,10 +437,34 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 	if desired.managed[FieldEnabled] && current.Enabled != desired.enabled {
 		update["locked"] = !desired.enabled
 	}
+	// Turning SMB ON requires a credential to hash, and TrueNAS says so by
+	// refusing the call — not by ignoring the field. Attempting it against an
+	// account whose member has not set a password yet fails the whole apply,
+	// on every pass, for a state the target considers normal. Turning it OFF is
+	// always allowed, and is the half that matters for revocation.
+	smbPending := false
 	if desired.managed[FieldSMBEnabled] && current.SMBEnabled != desired.smbEnabled {
-		update["smb"] = desired.smbEnabled
+		if desired.smbEnabled && !current.PasswordSet {
+			smbPending = true
+		} else {
+			update["smb"] = desired.smbEnabled
+		}
 	}
 
+	if len(update) == 0 && smbPending {
+		// Nothing to write, and something still wanted. Reported as its own
+		// outcome rather than as no-change: "already in the requested state" is
+		// false, and reporting it would leave an operator believing SMB is on.
+		return ApplyOutcome{
+			Subject: req.Subject, Effect: EffectNoChange,
+			Detail: "Waiting for " + current.Username + " to set a password before SMB can be enabled.",
+			Consequence: "The account exists and is otherwise converged. TrueNAS refuses SMB " +
+				"on an account with no password, so this completes itself when the member sets one.",
+			Username:    current.Username,
+			UID:         current.UID,
+			Fingerprint: fingerprintSubject(current),
+		}, http.StatusOK, nil
+	}
 	if len(update) == 0 {
 		// Re-applying an unchanged set issues no mutating call at all. Not an
 		// optimisation: the drain re-drives rows, so an apply that wrote every
@@ -465,7 +489,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 	if desired.managed[FieldEnabled] {
 		applied.Enabled = desired.enabled
 	}
-	if desired.managed[FieldSMBEnabled] {
+	if desired.managed[FieldSMBEnabled] && !smbPending {
 		applied.SMBEnabled = desired.smbEnabled
 	}
 
@@ -502,8 +526,22 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		// be one more thing that disagrees with Zitadel.
 		"full_name":    binding.Username,
 		"group_create": true,
-		"smb":          desired.managed[FieldSMBEnabled] && desired.smbEnabled,
-		"locked":       desired.managed[FieldEnabled] && !desired.enabled,
+		// A credential decision is REQUIRED at creation: TrueNAS refuses
+		// `user.create` with neither `password` nor `password_disabled`
+		// (`user_create.password: Password is required`). Syndra has no
+		// password here and must not invent one — the member sets their own
+		// through `password.set`, and a random one minted here would be a
+		// credential that exists, is returned in the create response, and
+		// nobody asked for.
+		"password_disabled": true,
+		// And SMB is NOT requested here even when it is wanted, because
+		// TrueNAS refuses the pair outright: `Password authentication may not
+		// be disabled for SMB users.` It is turned on by the same call that
+		// sets the first password, which is the only ordering TrueNAS accepts
+		// — a later `user.update({smb: true})` is refused with `Password must
+		// be reset in order to enable SMB authentication`.
+		"smb":    false,
+		"locked": desired.managed[FieldEnabled] && !desired.enabled,
 	}
 	if desired.managed[FieldGroup] {
 		create["groups"] = groupIDs
