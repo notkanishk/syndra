@@ -274,6 +274,11 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/targets/{target}/accounts/dormant", withCORS(withOperatorAuth(handleDormantAccounts)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/accounts/dormant/sweep", withCORS(withOperatorAuth(handleDormantSweep)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/inventory/{username}/adopt", withCORS(withOperatorAuth(handleAdoptAccount)))
+	// Letting a binding go: the other resolution the reconciliation names, and
+	// the only one that was unreachable. Keyed on the subject rather than the
+	// account name, because the row it acts on is the binding — whose account
+	// may no longer exist to be named.
+	mux.HandleFunc("POST /api/v1/targets/{target}/bindings/{subject}/release", withCORS(withOperatorAuth(handleReleaseBinding)))
 
 	// Access withdrawn that has not gone away. Beside drift triage, never inside
 	// it: drift is access that appeared without an explanation, and this is

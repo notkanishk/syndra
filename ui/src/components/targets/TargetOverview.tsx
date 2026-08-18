@@ -20,6 +20,7 @@ import { targetLabel } from "@/lib/nav";
 import {
   useAdoptAccount,
   useReconcileTarget,
+  useReleaseBinding,
   useSetLifecycle,
   useTargetHealth,
   useResolveBindingConflict,
@@ -151,6 +152,14 @@ export function TargetOverview({ target }: { target: string }) {
  */
 function ReconcileControl({ target }: { target: string }) {
   const run = useReconcileTarget(target);
+  const release = useReleaseBinding(target);
+  // Which row asked, and which rows have already let go. The reconcile result
+  // is a mutation's answer rather than a query, so a released row would keep
+  // listing itself until somebody pressed Reconcile again — and a row that
+  // still says "points at nothing" after being acted on reads as a press that
+  // did not work.
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [released, setReleased] = useState<string[]>([]);
   const result = run.data;
 
   return (
@@ -205,12 +214,66 @@ function ReconcileControl({ target }: { target: string }) {
               <Mono>{b.username}</Mono>
               {b.uid ? <span className="text-[13px] text-faint">uid {b.uid}</span> : null}
               <span className="flex-1" />
-              <span className="text-[13px] text-faint">
-                Not converged. Re-provisioning would recreate a deleted account, so this is
-                yours to decide.
-              </span>
+              {released.includes(b.subject_id) ? (
+                <span className="text-[13px] text-faint">
+                  Released. Nothing on the target was changed.
+                </span>
+              ) : confirming === b.subject_id ? (
+                <>
+                  {/* What it does, in the sentence next to the button that does
+                      it. The word "forget" is doing real work here: an operator
+                      reading it as "delete" is the one misreading this row can
+                      afford least, given the account it names is already gone. */}
+                  <span className="text-[13px] text-muted">
+                    Syndra stops managing <span className="font-mono">{b.username}</span>.
+                    Nothing is deleted, and the binding can be made again by adopting the
+                    account if it comes back.
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    isPending={release.isPending}
+                    onClick={() =>
+                      release.mutate(b.subject_id, {
+                        onSuccess: () => {
+                          setReleased((prev) => [...prev, b.subject_id]);
+                          setConfirming(null);
+                        },
+                      })
+                    }
+                  >
+                    Forget it
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <span className="text-[13px] text-faint">
+                    Not converged. Re-provisioning would recreate a deleted account, so this
+                    is yours to decide.
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setConfirming(b.subject_id)}
+                  >
+                    Forget this binding
+                  </Button>
+                </>
+              )}
             </CardRow>
           ))}
+          {release.error && (
+            <CardRow>
+              <span className="text-[13.5px] text-danger-text">
+                {release.error instanceof Error
+                  ? release.error.message
+                  : "The binding was not released."}
+              </span>
+            </CardRow>
+          )}
         </>
       )}
     </Card>

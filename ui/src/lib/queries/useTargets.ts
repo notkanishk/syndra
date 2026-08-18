@@ -289,6 +289,47 @@ export function useReconcileTarget(target: string) {
   });
 }
 
+/**
+ * Letting a binding go — Syndra stops managing the account, and the account
+ * itself is not touched.
+ *
+ * The other resolution the reconciliation names for a binding whose account is
+ * gone. Confirmed at the call for the same reason adoption is: the backend
+ * refuses without it, and a confirmation only this file knows about is a
+ * suggestion.
+ *
+ * Reversible in the sense that matters — the account reappears in the unmanaged
+ * inventory and can be adopted again — which is why it is a press and not a
+ * typed name. The unrecoverable neighbour is `account.purge`, and the two must
+ * not feel the same.
+ */
+export function useReleaseBinding(target: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (subjectId: string) =>
+      request<ReleaseResult>(
+        `/targets/${target}/bindings/${encodeURIComponent(subjectId)}/release`,
+        { method: "POST", body: { confirmed: true } },
+      ),
+    onSuccess: () => {
+      // The roster, the health card and the inventory all count bindings, and
+      // the released account joins the unmanaged list. Leaving any of them
+      // stale shows a row that has left one list without arriving in another.
+      client.invalidateQueries({ queryKey: ["targets", target] });
+      client.invalidateQueries({ queryKey: ["governance"] });
+    },
+  });
+}
+
+export interface ReleaseResult {
+  status: string;
+  operation?: string;
+  detail?: string;
+  /** Set when the add-on let go and Syndra's own copy did not. Pressing again
+   * repairs it, and the copy says so. */
+  warning?: string;
+}
+
 export interface StaleBinding {
   subject_id: string;
   username: string;

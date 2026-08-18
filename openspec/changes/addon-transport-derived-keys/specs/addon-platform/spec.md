@@ -286,3 +286,36 @@ The surface MUST state that the fault is on the Syndra host rather than on the t
 - **WHEN** one registered target's secret cannot be loaded and another's can
 - **THEN** only the affected target MUST report the failure
 
+
+### Requirement: Releasing a binding MUST forget every store that records it, and MUST be reachable
+
+Syndra MUST offer a way to stop managing a target account without deleting it, and that way MUST be reachable from the surface that names it. The reconciliation surface reports a binding whose account is no longer on the target and states its two resolutions — re-provision, or let it go — and a surface that names two resolutions while implementing one is resolved the wrong way, in the direction of the one it implements. The one it implemented deletes the account.
+
+A release MUST NOT write anything on the target. The operator is deciding that Syndra stops claiming an account, not deciding anything about the account: it keeps working for whoever uses it, and appears as unmanaged on the next inventory read, which is what it then is.
+
+A release MUST forget the binding in BOTH the add-on's store and the backend's. The add-on's binding is what an apply consults; the backend's row is what the inventory, the roster and the reconciliation read. Forgetting one leaves the account managed by half the system — withheld from the unmanaged inventory because the backend still claims it, and planned against an add-on that no longer binds it.
+
+A release MUST NOT forget the backend's row on an outcome the target did not confirm. An unconfirmed answer is not evidence the add-on let go, and dropping the row against one manufactures the same split in the more dangerous direction.
+
+An add-on MUST answer a release for a subject it does not bind as done rather than as a refusal, so that a deployment whose two stores have already diverged is repaired by pressing the same control.
+
+The operation MUST require a confirmation, and the refusal for a missing one MUST state what is being confirmed. It MUST NOT require the target to be reachable: an operator is most likely to need it when the target is not.
+
+#### Scenario: An operator releases a binding whose account is gone
+
+- **WHEN** an operator releases a binding from the reconciliation surface
+- **THEN** the add-on MUST forget its binding and MUST call no target method that writes
+- **AND** the backend MUST forget its own row for that target and subject
+- **AND** the answer MUST state that nothing on the target was changed
+
+#### Scenario: The target does not confirm the release
+
+- **WHEN** a release returns an outcome that is neither success nor a refusal
+- **THEN** the backend MUST keep its binding row
+- **AND** MUST report the release as unconfirmed rather than as done
+
+#### Scenario: Only one of the two stores was forgotten
+
+- **WHEN** the add-on has released a binding and the backend's row could not be removed
+- **THEN** the operator MUST be told the copy remains and that repeating the release repairs it
+- **AND** a repeated release MUST succeed rather than be refused as unbound

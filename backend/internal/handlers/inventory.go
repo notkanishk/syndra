@@ -156,17 +156,127 @@ func handleAdoptAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeAdoptionError(w http.ResponseWriter, err error) {
+	writeOperationError(w, err, "ADOPTION_FAILED",
+		"Adopting an account hands its home directory, shares and group memberships to that person. Confirm to continue.")
+}
+
+// writeOperationError answers a dispatch that never reached an outcome.
+//
+// The refusal an operator meets is the confirmation one, and it is the reason
+// this takes the sentence rather than composing one: "confirm to continue" with
+// no statement of what is being confirmed is the shape of dialog people click
+// through. Everything below it is a protocol fault and reads the same whichever
+// operation asked.
+func writeOperationError(w http.ResponseWriter, err error, code, confirmation string) {
 	switch {
 	case errors.Is(err, addonop.ErrConfirmationRequired):
-		jsonErrorResponse(w, http.StatusUnprocessableEntity, "CONFIRMATION_REQUIRED",
-			"Adopting an account hands its home directory, shares and group memberships to that person. Confirm to continue.")
+		jsonErrorResponse(w, http.StatusUnprocessableEntity, "CONFIRMATION_REQUIRED", confirmation)
 	case errors.Is(err, addons.ErrNotRegistered):
 		jsonErrorResponse(w, http.StatusNotFound, "TARGET_NOT_REGISTERED", err.Error())
 	case errors.As(err, new(*addons.ErrOperationUnavailable)):
 		jsonErrorResponse(w, http.StatusConflict, "OPERATION_UNAVAILABLE", err.Error())
 	default:
-		jsonErrorResponse(w, http.StatusBadGateway, "ADOPTION_FAILED", err.Error())
+		jsonErrorResponse(w, http.StatusBadGateway, code, err.Error())
 	}
+}
+
+type releaseRequest struct {
+	// Confirmed is the operator saying it out loud, and the backend refuses
+	// without it for the same reason every other confirmed operation does.
+	Confirmed bool `json:"confirmed"`
+}
+
+// handleReleaseBinding stops Syndra managing an account, and touches the
+// account not at all.
+//
+// The safe half of a purge, and the second of the two resolutions the
+// reconciliation surface names for a binding whose account is no longer on the
+// target: re-provision it, or let it go. The add-on implemented letting go and
+// nothing could reach it — a surface that names two resolutions and offers one
+// is a surface that gets resolved the wrong way, and the one it offered was the
+// irreversible one.
+//
+// BOTH stores are forgotten, and that is the whole point of this handler
+// existing rather than the frontend calling the operation. The add-on's binding
+// is what an apply consults; the backend's row is what the inventory, the roster
+// and the reconciliation read. A release that drops one of them leaves the
+// account managed by half the system: absent from the unmanaged inventory
+// because the backend still claims it, and planned against an add-on that no
+// longer binds it. The dormant sweep learned this the expensive way and its
+// comment says so; this is the same lesson applied before it costs anything.
+func handleReleaseBinding(w http.ResponseWriter, r *http.Request) {
+	target, subject := r.PathValue("target"), r.PathValue("subject")
+	var req releaseRequest
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
+	}
+
+	res, err := svcDispatchOperation(r.Context(), addonop.Request{
+		Target:    target,
+		Operation: "account.release",
+		ActorID:   resolveActor(r, ""),
+		SubjectID: subject,
+		Confirmed: req.Confirmed,
+	})
+	if err != nil {
+		writeOperationError(w, err, "RELEASE_FAILED",
+			"Syndra will stop managing that account. Nothing on the target changes and the account keeps working. Confirm to continue.")
+		return
+	}
+
+	switch res.Outcome {
+	case addons.OutcomeSucceeded:
+		// Falls through to the backend's half below. The add-on answers a
+		// subject it does not bind as succeeded rather than refused, which is
+		// what makes this handler able to repair a split: an operator whose
+		// backend row outlived the add-on's binding presses the same button.
+	case addons.OutcomeRejected:
+		jsonErrorResponse(w, http.StatusConflict, "RELEASE_REFUSED", releaseRefusal(res.Err))
+		return
+	default:
+		// Nothing forgotten. The add-on's store is the authority on whether it
+		// still binds this subject, and dropping the backend's copy against an
+		// answer nobody received would manufacture the split this handler exists
+		// to close.
+		jsonResponse(w, http.StatusAccepted, map[string]any{
+			"status":    "unconfirmed",
+			"operation": res.OperationID,
+			"outcome":   res.Outcome,
+			"detail":    "The target did not confirm the release. Nothing was changed here; try again once it is reachable.",
+		})
+		return
+	}
+
+	if err := dbForgetTargetBinding(r.Context(), target, subject); err != nil {
+		// The add-on has already let go. Reported as a partial rather than a
+		// failure, because pressing again is safe and is exactly the repair:
+		// the add-on answers the second release as done, and this line runs
+		// again.
+		jsonResponse(w, http.StatusAccepted, map[string]any{
+			"status":    "released",
+			"operation": res.OperationID,
+			"warning":   "The add-on released the binding and Syndra's own copy of it was not removed. Press release again to repair it.",
+		})
+		return
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"status":    "released",
+		"operation": res.OperationID,
+		"outcome":   res.Outcome,
+		// Said in full, because "released" alone is a word an operator can read
+		// as "removed". The account is untouched, and the next inventory read
+		// offers it for adoption — which is what it now is.
+		"detail": "Syndra no longer manages that account. Nothing on the target was changed, and it will appear as an unmanaged account on the next read.",
+	})
+}
+
+func releaseRefusal(err error) string {
+	if err == nil {
+		return "The target refused the release."
+	}
+	return "The target refused the release: " + err.Error()
 }
 
 type lifecycleRequest struct {
