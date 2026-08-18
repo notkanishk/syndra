@@ -265,6 +265,10 @@ func NewRouter() http.Handler {
 	// moves out of it, because that decision hands somebody else's home
 	// directory to a member if it is wrong.
 	mux.HandleFunc("GET /api/v1/targets/{target}/inventory", withCORS(withOperatorAuth(handleTargetInventory)))
+	// The add-on equivalent of governance/drift/reconcile, which covers Zitadel
+	// only. Operator-gated and idempotent: it reads the target and queues what
+	// is already owed, and queueing is not applying.
+	mux.HandleFunc("POST /api/v1/targets/{target}/reconcile", withCORS(withOperatorAuth(handleReconcileTarget)))
 	// Accounts Syndra created whose reason for existing has gone. A read; the
 	// removal runs through the ordinary plan-then-apply path.
 	mux.HandleFunc("GET /api/v1/targets/{target}/accounts/dormant", withCORS(withOperatorAuth(handleDormantAccounts)))

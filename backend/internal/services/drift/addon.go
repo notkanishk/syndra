@@ -53,6 +53,11 @@ type AddonReconcileResult struct {
 	// Queued counts the convergences this pass enqueued. Never "fixed": they
 	// wait for the drain like every other add-on row.
 	Queued int `json:"queued"`
+	// Stale are bindings whose account is no longer on the target. Reported and
+	// NOT queued: the plan for one of these says "create", and a sweep that
+	// acted on it would recreate an account somebody deleted. Which way to
+	// resolve it — re-provision or unbind — is an operator's decision.
+	Stale []StaleBinding `json:"stale,omitempty"`
 	// ReadAt and Current describe the state read everything above came from.
 	ReadAt  time.Time `json:"read_at"`
 	Current bool      `json:"current"`
@@ -153,7 +158,25 @@ func ReconcileAddon(ctx context.Context, target string) (AddonReconcileResult, e
 	// trimmed, that is what an operator needs to see first.
 	res.LogVerdict = anchorLog(ctx, target)
 
-	queued, convergeErr := convergeBound(ctx, target, bindings)
+	// A binding whose account is not on the target is not a convergence, it is
+	// a finding.
+	//
+	// The plan for one says "create", and queueing that recreates an account
+	// somebody deleted — or, as happened here, creates accounts that only ever
+	// existed against a test stub. Three stub-era bindings sat in a live
+	// deployment pointed at a production NAS, re-queueing every six hours, and
+	// the only thing that had kept them from landing was an unrelated bug in
+	// account creation. Fixing that bug turned them into three real accounts
+	// waiting for somebody to press a button.
+	//
+	// So a binding is converged only while the account it names is still there.
+	// The rest are separated out and reported, because "this binding points at
+	// nothing" is an operator's decision — re-provision, or unbind — and not one
+	// a sweep may take by writing.
+	live, stale := partitionByPresence(bindings, read.Accounts)
+	res.Stale = stale
+
+	queued, convergeErr := convergeBound(ctx, target, live)
 	res.Queued = queued
 
 	reason := ""
@@ -286,6 +309,53 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 		queued++
 	}
 	return queued, nil
+}
+
+// partitionByPresence splits bindings into those whose account is still on the
+// target and those whose is not.
+//
+// Matched on UID first and username second, in that order and for the same
+// reason the binding records both: a rename keeps the uid, and a recreated
+// account keeps the name. A binding that matches on neither names an account
+// that is not there.
+//
+// A binding with no recorded uid is treated as present when the name matches,
+// because the alternative — calling it stale — would report every
+// operator-adopted binding from before uids were recorded as broken.
+func partitionByPresence(bindings []db.TargetBinding, accounts []addons.TargetAccount) (live []db.TargetBinding, stale []StaleBinding) {
+	byUID := make(map[int64]struct{}, len(accounts))
+	byName := make(map[string]struct{}, len(accounts))
+	for _, a := range accounts {
+		byUID[a.UID] = struct{}{}
+		byName[a.Username] = struct{}{}
+	}
+	for _, b := range bindings {
+		if b.AccountUID != nil {
+			if _, ok := byUID[*b.AccountUID]; ok {
+				live = append(live, b)
+				continue
+			}
+		}
+		if _, ok := byName[b.Username]; ok {
+			live = append(live, b)
+			continue
+		}
+		uid := int64(0)
+		if b.AccountUID != nil {
+			uid = *b.AccountUID
+		}
+		stale = append(stale, StaleBinding{SubjectID: b.SubjectID, Username: b.Username, UID: uid})
+	}
+	return live, stale
+}
+
+// StaleBinding is a managed subject whose account is no longer on the target.
+type StaleBinding struct {
+	SubjectID string `json:"subject_id"`
+	Username  string `json:"username"`
+	// UID is the account the binding recorded, or 0 for a binding made before
+	// uids were kept.
+	UID int64 `json:"uid,omitempty"`
 }
 
 // reconcileActor is who a reconciliation-sourced convergence is attributed to.

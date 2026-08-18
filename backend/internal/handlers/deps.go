@@ -367,7 +367,12 @@ var (
 
 // The unmanaged inventory and its one action (1.18/1.19, 6.8).
 var (
-	svcTargetInventory    = drift.Inventory
+	svcTargetInventory = drift.Inventory
+	// On-demand add-on reconciliation. The scheduler has driven this since it
+	// was written; an operator had no way to ask. [Reconcile now] existed for
+	// Zitadel and for nothing else, so the answer to "is this target in step?"
+	// was "wait up to six hours and read a log line".
+	svcReconcileAddon     = drift.ReconcileAddon
 	svcDispatchOperation  = addonop.Dispatch
 	dbRecordTargetBinding = db.RecordTargetBinding
 )
