@@ -160,6 +160,12 @@ function ReconcileControl({ target }: { target: string }) {
   // did not work.
   const [confirming, setConfirming] = useState<string | null>(null);
   const [released, setReleased] = useState<string[]>([]);
+  // A 2xx that is not a release. `request` resolves on any 2xx, and the backend
+  // answers 202 for two states that are emphatically NOT done: the target did
+  // not confirm, and the add-on let go while Syndra's own copy did not. The
+  // second is a split binding, and both are repaired by pressing again — so the
+  // press must stay on screen, which is what marking the row released removed.
+  const [unfinished, setUnfinished] = useState<Record<string, string>>({});
   const result = run.data;
 
   return (
@@ -235,9 +241,22 @@ function ReconcileControl({ target }: { target: string }) {
                     isPending={release.isPending}
                     onClick={() =>
                       release.mutate(b.subject_id, {
-                        onSuccess: () => {
-                          setReleased((prev) => [...prev, b.subject_id]);
-                          setConfirming(null);
+                        onSuccess: (res) => {
+                          // Released, and nothing left over. Anything else keeps
+                          // the row and its control, and says what the backend
+                          // said — including the sentence naming the repair.
+                          if (res.status === "released" && !res.warning) {
+                            setReleased((prev) => [...prev, b.subject_id]);
+                            setConfirming(null);
+                            return;
+                          }
+                          setUnfinished((prev) => ({
+                            ...prev,
+                            [b.subject_id]:
+                              res.warning ||
+                              res.detail ||
+                              "The release was not confirmed. Nothing was changed here.",
+                          }));
                         },
                       })
                     }
@@ -247,6 +266,11 @@ function ReconcileControl({ target }: { target: string }) {
                   <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>
                     Cancel
                   </Button>
+                  {unfinished[b.subject_id] && (
+                    <span className="w-full text-[13px] text-warn-text">
+                      {unfinished[b.subject_id]}
+                    </span>
+                  )}
                 </>
               ) : (
                 <>

@@ -259,6 +259,12 @@ Compose service block (§32.3).
 
   </details>
 
+- **A target whose first manifest read fails stays uncallable for a quarter of an hour.** `cmd/api/main.go` calls `addons.RefreshAll` once at start-up and then on a `periodic.Runner` tick; a target whose add-on was still starting during that first pass has no accepted manifest, and every operation on it is refused with `ErrNoManifest` (`internal/addons/registry.go:90`) until the next tick. Met on the dev deployment: `docker compose up -d` raced the add-on's start, and `POST /targets/truenas/bindings/{subject}/release` answered `502 addon: no accepted manifest for this target: truenas` while the add-on was up, healthy and answering `/capabilities`. A `docker compose restart backend` cleared it.
+
+  Availability rather than correctness — nothing is written, and the refusal is honest about what the backend knows. What makes it worth fixing is that the failure is invisible from the target's own side: the add-on is running, its health is green, and the operator surface says `callable: false` with a `last_error` from a read minutes old, so the machine an operator inspects is the one that is fine.
+
+  The fix is a bounded refresh-and-retry on `ErrNoManifest` in the dispatch path, single-flighted per target so a burst of refused calls produces ONE capability read rather than one each — the retry must not become the thing that keeps a starting add-on down. Retried once, never in a loop: a target that genuinely has no manifest must still refuse quickly. Complemented by Compose ordering, which narrows the window rather than closing it — `depends_on` cannot promise the add-on has served a manifest by the time the backend asks, and a fix that relies on ordering alone reappears the first time a restart takes longer than expected.
+
 ## 5. Declined / deliberately kept
 
 Don't re-litigate these without new information.

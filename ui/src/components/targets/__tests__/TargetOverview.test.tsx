@@ -16,6 +16,7 @@ const state = {
   resolved: [] as Array<{ head: string; note: string }>,
   reconcile: undefined as undefined | Record<string, unknown>,
   released: [] as string[],
+  releaseResult: { status: "released" } as Record<string, unknown>,
   ownerDecided: [] as Array<{ id: string; owner: string; note: string }>,
 };
 
@@ -37,7 +38,7 @@ vi.mock("@/lib/queries/useTargets", async () => {
     useReleaseBinding: () => ({
       mutate: (subjectId: string, opts?: { onSuccess?: (r: unknown) => void }) => {
         state.released.push(subjectId);
-        opts?.onSuccess?.({ status: "released" });
+        opts?.onSuccess?.(state.releaseResult);
       },
       isPending: false,
       error: null,
@@ -176,6 +177,7 @@ describe("one target's page", () => {
   // because "forget" next to a row about a missing account reads as "remove".
   it("lets a stale binding go, and never on the first press", () => {
     state.released = [];
+    state.releaseResult = { status: "released" };
     state.roster = [summary([])];
     state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
     state.health = { reachable: true, lifecycle: "active" };
@@ -195,6 +197,60 @@ describe("one target's page", () => {
     // result is a mutation's answer, so nothing refetches it.
     expect(screen.getByText(/Released\. Nothing on the target was changed/i)).toBeTruthy();
     expect(screen.queryByText(/yours to decide/i)).toBeNull();
+  });
+
+  // 202 resolves like 200 — `request` rejects on non-2xx only — and the backend
+  // answers 202 for two states that are not a release. Reading either as done
+  // retires the only control that repairs it, and one of them is a binding the
+  // add-on dropped while Syndra kept its own copy.
+  it("does not call an unconfirmed release done, and keeps the control", () => {
+    state.released = [];
+    state.releaseResult = {
+      status: "unconfirmed",
+      detail: "The target did not confirm the release. Nothing was changed here.",
+    };
+    state.roster = [summary([])];
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.health = { reachable: true, lifecycle: "active" };
+    state.reconcile = {
+      target: "truenas", bound: 4, queued: 1, current: true,
+      stale: [{ subject_id: "s1", username: "alice", uid: 3999 }],
+    };
+    renderTarget();
+
+    fireEvent.click(screen.getByText("Forget this binding"));
+    fireEvent.click(screen.getByText("Forget it"));
+
+    expect(screen.queryByText(/Released\. Nothing on the target was changed/i)).toBeNull();
+    expect(screen.getByText(/did not confirm the release/i)).toBeTruthy();
+    expect(screen.getByText("Forget it")).toBeTruthy();
+  });
+
+  // The split case. The add-on let go, Syndra's copy did not, and the answer
+  // says pressing again repairs it — so the button that presses again has to
+  // still be there, and the sentence has to be the backend's own.
+  it("keeps a half-done release on screen with its repair", () => {
+    state.released = [];
+    state.releaseResult = {
+      status: "released",
+      warning:
+        "The add-on released the binding and Syndra's own copy of it was not removed. Press release again to repair it.",
+    };
+    state.roster = [summary([])];
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.health = { reachable: true, lifecycle: "active" };
+    state.reconcile = {
+      target: "truenas", bound: 4, queued: 1, current: true,
+      stale: [{ subject_id: "s1", username: "alice", uid: 3999 }],
+    };
+    renderTarget();
+
+    fireEvent.click(screen.getByText("Forget this binding"));
+    fireEvent.click(screen.getByText("Forget it"));
+
+    expect(screen.queryByText(/Released\. Nothing on the target was changed/i)).toBeNull();
+    expect(screen.getByText(/Press release again to repair it/i)).toBeTruthy();
+    expect(screen.getByText("Forget it")).toBeTruthy();
   });
 
   it("says a transport secret that stopped loading is a fault on THIS host", () => {
