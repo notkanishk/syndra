@@ -178,6 +178,8 @@ func (s *server) runOperation(name string, req OperationRequest) (OperationResul
 		return s.purgeAccount(req)
 	case "account.adopt":
 		return s.adoptAccount(req)
+	case "account.release":
+		return s.releaseAccount(req)
 	case "activity.get":
 		return s.smbActivity(req)
 	case "storage.status":
@@ -313,6 +315,49 @@ func (s *server) refuseSelfAccount(username string) error {
 	}
 	return fmt.Errorf("%s is the account this add-on authenticates to the target with; "+
 		"adopting or deleting it would remove Syndra's own access and cannot be undone", name)
+}
+
+// releaseAccount forgets a binding and touches the target not at all.
+//
+// The safe half of a purge, and until now it did not exist: `DeleteBinding` was
+// reachable only THROUGH `account.purge`, so the only way to stop managing an
+// account was to delete it. An operator whose binding pointed at the wrong
+// person, or at an account that is gone, had one button and it was the
+// irreversible one.
+//
+// It is the answer to the state the reconciliation reports as "this binding
+// names an account that is no longer here": re-provision, or let it go. A
+// surface that names two resolutions and implements one is a surface that will
+// be resolved the wrong way.
+//
+// Writes nothing on the target ON PURPOSE, and says so in its own result: an
+// operator releasing a binding is deciding Syndra should stop claiming the
+// account, not deciding anything about the account. The account keeps working
+// for whoever is using it, and appears in the unmanaged inventory on the next
+// read — which is exactly what it now is.
+func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, error) {
+	binding, found, err := s.store.GetBinding(req.Subject)
+	if err != nil {
+		return OperationResult{}, http.StatusInternalServerError, err
+	}
+	if !found {
+		// Already released. Reported as done rather than refused, for the same
+		// reason a repeated adoption is: two operators on two screens must not
+		// produce an error for the second one.
+		return OperationResult{
+			Operation: "account.release", Subject: req.Subject, Outcome: "succeeded",
+			Detail: "No account was bound to this subject.",
+		}, http.StatusOK, nil
+	}
+	if err := s.store.DeleteBinding(req.Subject); err != nil {
+		return OperationResult{}, http.StatusInternalServerError, fmt.Errorf("the binding could not be released")
+	}
+	s.record("account.release", req.Subject, req.Actor, req.CallID, "succeeded")
+	return OperationResult{
+		Operation: "account.release", Subject: req.Subject, Outcome: "succeeded",
+		Detail: "Syndra no longer manages " + binding.Username +
+			". Nothing on the target was changed — the account still exists and still works.",
+	}, http.StatusOK, nil
 }
 
 // rotatePassword mints a new credential, applies it, and returns nothing.

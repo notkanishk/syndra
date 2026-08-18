@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -84,5 +85,49 @@ func TestTheDatasetIsDerivedFromTheSharePath(t *testing.T) {
 		if got := datasetOf(path); got != want {
 			t.Errorf("datasetOf(%q) = %q, want %q", path, got, want)
 		}
+	}
+}
+
+// Releasing forgets the binding and touches the target not at all.
+//
+// Until this existed, `DeleteBinding` was reachable only through
+// `account.purge` — so the only way to stop managing an account was to DELETE
+// it. An operator whose binding pointed at the wrong person had one button and
+// it was the irreversible one, and the reconciliation surface that says "re-
+// provision or unbind" was naming a resolution nothing implemented.
+func TestReleasingForgetsTheBindingAndLeavesTheAccount(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+		t.Fatal(err)
+	}
+
+	res, status, err := s.releaseAccount(OperationRequest{Subject: "sub-1", Actor: "op"})
+	if err != nil || status != 200 {
+		t.Fatalf("status=%d err=%v", status, err)
+	}
+	if _, found, _ := s.store.GetBinding("sub-1"); found {
+		t.Error("the binding survived the release")
+	}
+	// The account is the point: a release must not be a quiet delete.
+	for _, call := range m.calls {
+		if strings.Contains(call, "user.delete") || strings.Contains(call, "user.update") {
+			t.Errorf("release wrote to the target: %s", call)
+		}
+	}
+	if !strings.Contains(res.Detail, "still exists") {
+		t.Errorf("the result does not say the account was left alone: %q", res.Detail)
+	}
+}
+
+// Releasing twice is done, not an error — two operators on two screens must not
+// produce a failure for the second one.
+func TestReleasingWhatIsNotBoundIsAlreadyDone(t *testing.T) {
+	s, _ := applyServer(t, `[]`)
+	res, status, err := s.releaseAccount(OperationRequest{Subject: "sub-none"})
+	if err != nil || status != 200 {
+		t.Fatalf("status=%d err=%v", status, err)
+	}
+	if res.Outcome != "succeeded" {
+		t.Errorf("outcome = %q", res.Outcome)
 	}
 }

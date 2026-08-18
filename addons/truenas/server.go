@@ -121,6 +121,12 @@ func methodsFor(operationID string) []string {
 		return []string{"user.update"}
 	case "account.purge":
 		return []string{"user.delete"}
+	case "account.release":
+		// NO target methods. Releasing is a local decision to stop claiming an
+		// account, and declaring a dependency it does not have would make it
+		// unavailable on a target that is merely unreachable — which is exactly
+		// when an operator is most likely to need it.
+		return nil
 	case "account.adopt":
 		// The read it verifies the account with. It writes nothing on the
 		// target — the binding is local — so this is the whole dependency.
