@@ -253,7 +253,7 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request, _ []byte) 
 
 // SubjectsResponse carries the read AND how much to trust it.
 type SubjectsResponse struct {
-	Subjects []Subject `json:"subjects"`
+	Subjects []SubjectView `json:"subjects"`
 	// Current says this came from the target just now. The backend's drift
 	// sweep consumes only current reads: comparing desired state against an
 	// ageing mirror would report every intervening change as out-of-band, so an
@@ -264,6 +264,32 @@ type SubjectsResponse struct {
 	// unusable for concluding an ABSENCE, which is what half the drift diff
 	// does — so the flag travels separately from `Current`.
 	Truncated bool `json:"truncated"`
+}
+
+// SubjectView is one account as served: everything the Subject holds, plus the
+// same state expressed in ENTITLEMENT vocabulary.
+//
+// `state` exists because reconciliation compares three values per field and had
+// only two — and the third comparison has to be against the target's current
+// value, which the backend could not read off this response. It could have been
+// mapped there, from `groups` to `group` and `locked` to `enabled`; that would
+// put "what TrueNAS calls things" in the component that must not know, which is
+// the translation `readSubjects` already refuses to leak.
+//
+// Derived at serving time rather than stored on the Subject. Two fields holding
+// one fact is the defect shape this branch keeps meeting, and the snapshot would
+// otherwise carry both.
+type SubjectView struct {
+	Subject
+	State map[string]any `json:"state"`
+}
+
+func subjectViews(subjects []Subject) []SubjectView {
+	out := make([]SubjectView, 0, len(subjects))
+	for i := range subjects {
+		out = append(out, SubjectView{Subject: subjects[i], State: entitlementState(&subjects[i])})
+	}
+	return out
 }
 
 // handleSubjects serves the full state read, live if it can and from the mirror
@@ -278,7 +304,7 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 			log.Printf("[STORE] could not persist snapshot: %v", putErr)
 		}
 		writeJSON(w, http.StatusOK, SubjectsResponse{
-			Subjects: snap.Subjects, Current: true,
+			Subjects: subjectViews(snap.Subjects), Current: true,
 			TakenAt: snap.TakenAt.UTC().Format(time.RFC3339), Truncated: snap.Truncated,
 		})
 		return
@@ -294,7 +320,7 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 		return
 	}
 	writeJSON(w, http.StatusOK, SubjectsResponse{
-		Subjects: cached.Subjects, Current: false,
+		Subjects: subjectViews(cached.Subjects), Current: false,
 		TakenAt: cached.TakenAt.UTC().Format(time.RFC3339), Truncated: cached.Truncated,
 	})
 }

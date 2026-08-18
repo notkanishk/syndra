@@ -217,9 +217,12 @@ type sweepHarness struct {
 func stubSweep(t *testing.T, h *sweepHarness) {
 	t.Helper()
 	dormant, dispatch, forget := svcDormantAccounts, svcDispatchOperation, dbForgetTargetBinding
+	forgetBase := dbForgetMergeBase
 	t.Cleanup(func() {
 		svcDormantAccounts, svcDispatchOperation, dbForgetTargetBinding = dormant, dispatch, forget
+		dbForgetMergeBase = forgetBase
 	})
+	dbForgetMergeBase = func(context.Context, string, string) error { return nil }
 
 	// The backend's half of a purge. Stubbed rather than left to the pool,
 	// because it had no caller at all until §23 — and a nil-pool panic is how
@@ -405,18 +408,30 @@ func TestAnUnconfirmedPurgeKeepsTheBinding(t *testing.T) {
 // planned against an add-on that no longer binds it.
 
 type releaseHarness struct {
-	outcome     addons.Outcome
-	addonErr    error
-	dispatchErr error
-	forgetErr   error
-	dispatched  []addonop.Request
-	forgotten   []string
+	outcome        addons.Outcome
+	addonErr       error
+	dispatchErr    error
+	forgetErr      error
+	dispatched     []addonop.Request
+	forgotten      []string
+	basesForgotten []string
 }
 
 func stubRelease(t *testing.T, h *releaseHarness) {
 	t.Helper()
-	dispatch, forget := svcDispatchOperation, dbForgetTargetBinding
-	t.Cleanup(func() { svcDispatchOperation, dbForgetTargetBinding = dispatch, forget })
+	dispatch, forget, forgetBase := svcDispatchOperation, dbForgetTargetBinding, dbForgetMergeBase
+	t.Cleanup(func() {
+		svcDispatchOperation, dbForgetTargetBinding = dispatch, forget
+		dbForgetMergeBase = forgetBase
+	})
+	// What the target was last seen holding goes with the binding. Stubbed
+	// here so a test can assert it happened — the failure it prevents is
+	// invisible until the subject is bound to a different account and compared
+	// against an observation that was never about them.
+	dbForgetMergeBase = func(_ context.Context, _, subject string) error {
+		h.basesForgotten = append(h.basesForgotten, subject)
+		return nil
+	}
 
 	svcDispatchOperation = func(_ context.Context, req addonop.Request) (addonop.Result, error) {
 		h.dispatched = append(h.dispatched, req)
@@ -538,5 +553,23 @@ func TestAReleaseThatCouldNotForgetSaysSoAndStaysRepeatable(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), "Press release again") {
 		t.Fatalf("a half-done release must name its repair: %s", rr.Body.String())
+	}
+}
+
+// The observation goes with the binding, on both paths that end management.
+//
+// A merge base outliving its binding is a claim about an account nobody manages
+// any more. If that subject is later bound to a DIFFERENT account, the stale
+// observation is what the next reconciliation compares against — and the finding
+// it produces would carry, as "what it used to be", somebody else's state.
+func TestAReleaseForgetsWhatTheTargetWasLastSeenHolding(t *testing.T) {
+	h := &releaseHarness{}
+	stubRelease(t, h)
+
+	if rr := release(t, `{"confirmed":true}`); rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(h.basesForgotten) != 1 || h.basesForgotten[0] != "u1" {
+		t.Fatalf("the merge base must go with the binding: %v", h.basesForgotten)
 	}
 }

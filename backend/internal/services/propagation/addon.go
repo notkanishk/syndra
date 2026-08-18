@@ -233,6 +233,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 			res.Failed++
 			return false
 		}
+		recordMergeBase(ctx, intent, resp)
 		if err := markApplied(ctx, row.ID); err != nil {
 			res.settleFailure(row.ID, "apply", err)
 			return false
@@ -431,6 +432,43 @@ func recordBinding(ctx context.Context, intent db.EntitlementIntent, resp addons
 		return err
 	}
 	return nil
+}
+
+// recordMergeBase stores what the target reported after this write.
+//
+// The merge base is what lets the next reconciliation say WHO changed a value.
+// Without it every difference is a two-way diff, which produces no conflict —
+// only a winner, always Syndra, so a hand edit on the target is silently
+// reverted.
+//
+// Two things it must never do, and both are refusals rather than conventions:
+//
+// It records nothing when the add-on reported no observation. `unverified`
+// means the write landed and could not be read back, and `observed` is then
+// absent by construction — recording anything for that subject would mean
+// recording what Syndra ASKED for, which is the exact failure the base exists to
+// prevent, arriving through the error path. The subject stays baseless, which
+// the classifier already handles as "no cause can be determined".
+//
+// And it is non-fatal. The convergence happened; failing to write the base does
+// not un-apply it, and settling the row as failed would re-drive a mutation that
+// already landed. What a missing base costs is one pass of attribution, which
+// the next successful apply restores.
+func recordMergeBase(ctx context.Context, intent db.EntitlementIntent, resp addons.ApplyResponse) {
+	if resp.Unverified || len(resp.Observed) == 0 {
+		// Logged, because a target that never reports observations leaves every
+		// subject baseless and every difference unattributable — a silent
+		// degradation of the whole mechanism, visible nowhere else.
+		log.Printf("[ADDON-DRAIN] %s on %s reported no observed state (unverified=%t); no merge base recorded",
+			intent.SubjectID, intent.Target, resp.Unverified)
+		return
+	}
+	if err := saveMergeBase(ctx, db.MergeBase{
+		Target: intent.Target, SubjectID: intent.SubjectID, Base: resp.Observed,
+	}); err != nil {
+		log.Printf("[ADDON-DRAIN] converged %s on %s and could not record its merge base: %v (non-fatal)",
+			intent.SubjectID, intent.Target, err)
+	}
 }
 
 // recordConflict persists the disagreement, naming both claimants.

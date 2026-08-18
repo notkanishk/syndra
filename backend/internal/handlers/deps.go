@@ -403,9 +403,14 @@ var (
 	addonsConnection = addons.ConnectionFor
 	// The backend's memory of an add-on's mutation log, read beside that add-on's
 	// own account of itself. Two authorities on purpose.
-	svcDormantAccounts         = services.DormantAccounts
-	dbListMappingHistory       = db.ListMappingHistory
-	dbForgetTargetBinding      = db.ForgetTargetBinding
+	svcDormantAccounts    = services.DormantAccounts
+	dbListMappingHistory  = db.ListMappingHistory
+	dbForgetTargetBinding = db.ForgetTargetBinding
+	// The merge base goes with the binding, always. One left behind is a claim
+	// about an account nobody manages any more — and if that subject is later
+	// bound to a DIFFERENT account, it would be compared against a person it
+	// was never about.
+	dbForgetMergeBase          = db.ForgetMergeBase
 	dbGetLogAnchor             = db.GetLogAnchor
 	dbStandingBindingConflicts = db.StandingBindingConflicts
 	dbResolveBindingConflict   = db.ResolveBindingConflict

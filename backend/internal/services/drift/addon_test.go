@@ -11,6 +11,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/services/merge"
 )
 
 // 1.18/1.19 — the first sweep against a target that was already in use.
@@ -28,6 +29,11 @@ type addonReconcileHarness struct {
 	converged  []db.SystemConvergence
 	marked     []string
 	reconciled bool
+	// bases is what the target last reported for each subject. Empty by
+	// default, which is the ROLLOUT state — every binding made before the merge
+	// base existed has none — so every test written before this mechanism keeps
+	// asserting the behaviour a baseless subject must still have.
+	bases map[string]db.MergeBase
 }
 
 func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
@@ -35,11 +41,19 @@ func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
 	origSubjects, origPlan, origBindings := addonSubjects, addonPlan, listBindings
 	origRecord, origResolve := recordConvergence, resolveIntent
 	origUnrec, origRec := markUnreconciled, markReconciled
+	origBases := listMergeBases
 	t.Cleanup(func() {
 		addonSubjects, addonPlan, listBindings = origSubjects, origPlan, origBindings
 		recordConvergence, resolveIntent = origRecord, origResolve
 		markUnreconciled, markReconciled = origUnrec, origRec
+		listMergeBases = origBases
 	})
+	listMergeBases = func(context.Context, string) (map[string]db.MergeBase, error) {
+		if h.bases == nil {
+			return map[string]db.MergeBase{}, nil
+		}
+		return h.bases, nil
+	}
 
 	addonSubjects = func(context.Context, string) addons.SubjectsResult { return h.read }
 	listBindings = func(context.Context, string) ([]db.TargetBinding, error) { return h.bindings, nil }
@@ -388,3 +402,204 @@ func TestABindingWithNoRecordedUIDMatchesOnName(t *testing.T) {
 }
 
 func uidPtr(v int64) *int64 { return &v }
+
+// The merge, in the sweep (change `reconciliation-as-merge`).
+//
+// The classifier's own suite proves the six outcomes. What these prove is the
+// consequence: which subjects this pass is willing to ASK the target about, and
+// therefore which it can queue a write for. A subject whose difference the pass
+// may not resolve is never planned, because planning it produces an `apply`
+// effect and the queueing loop acts on those.
+
+func state(fields map[string]any) map[string]json.RawMessage {
+	out := map[string]json.RawMessage{}
+	for k, v := range fields {
+		encoded, err := json.Marshal(v)
+		if err != nil {
+			panic(err)
+		}
+		out[k] = encoded
+	}
+	return out
+}
+
+func baseFor(subject string, fields map[string]any) map[string]db.MergeBase {
+	return map[string]db.MergeBase{
+		subject: {Target: "truenas", SubjectID: subject, Base: state(fields)},
+	}
+}
+
+// A hand edit on the target. Syndra has not moved, so there is nothing to apply
+// — and the previous behaviour, applying anyway, is precisely the silent revert
+// this change exists to stop.
+func TestAHandEditOnTheTargetIsNotQueuedAndBecomesAFinding(t *testing.T) {
+	h := &addonReconcileHarness{
+		read: currentRead(addons.TargetAccount{
+			Username: "ada", UID: 3001, State: state(map[string]any{"enabled": false}),
+		}),
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "ada", AccountUID: uid(3001)}},
+		// Syndra wants enabled=true (the harness's resolveIntent), and the last
+		// thing the target reported was enabled=true. So the target moved.
+		bases: baseFor("sub-1", map[string]any{"enabled": true}),
+	}
+	stubAddonReconcile(t, h)
+
+	res, err := ReconcileAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(h.planAsked) != 0 {
+		t.Fatalf("a subject the pass may not resolve must not be planned: %+v", h.planAsked)
+	}
+	if res.Queued != 0 || len(h.converged) != 0 {
+		t.Fatalf("nothing may be queued for a hand edit: queued=%d converged=%+v", res.Queued, h.converged)
+	}
+	if len(res.Findings) != 1 || res.Findings[0].Outcome != merge.TheirsOnly {
+		t.Fatalf("want one theirs_only finding: %+v", res.Findings)
+	}
+	if res.Findings[0].SubjectID != "sub-1" || res.Findings[0].Field != "enabled" {
+		t.Fatalf("the finding must name the subject and the field: %+v", res.Findings[0])
+	}
+}
+
+// And the ordinary case still converges. Syndra moved, the target did not.
+func TestAFastForwardIsStillQueued(t *testing.T) {
+	h := &addonReconcileHarness{
+		read: currentRead(addons.TargetAccount{
+			Username: "ada", UID: 3001, State: state(map[string]any{"enabled": false}),
+		}),
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "ada", AccountUID: uid(3001)}},
+		// The target still holds what it last reported; the desired state moved.
+		bases: baseFor("sub-1", map[string]any{"enabled": false}),
+		plan: addons.PlanResult{Outcome: addons.OutcomeSucceeded, Outcomes: []addons.SubjectOutcome{
+			{Subject: "sub-1", Effect: db.PlanEffectApply},
+		}},
+	}
+	stubAddonReconcile(t, h)
+
+	res, err := ReconcileAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(h.planAsked) != 1 {
+		t.Fatalf("a fast-forward must be planned: %+v", h.planAsked)
+	}
+	if res.Queued != 1 {
+		t.Fatalf("a fast-forward must be queued, got %d", res.Queued)
+	}
+	if len(res.Findings) != 0 {
+		t.Fatalf("a fast-forward is not a finding: %+v", res.Findings)
+	}
+}
+
+// Both moved, differently. The finding carries all three values, because "what
+// was it before" is the question an operator asks first.
+func TestAConflictIsReportedWithAllThreeValues(t *testing.T) {
+	h := &addonReconcileHarness{
+		read: currentRead(addons.TargetAccount{
+			Username: "ada", UID: 3001, State: state(map[string]any{"enabled": false}),
+		}),
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "ada", AccountUID: uid(3001)}},
+		// Base differs from both: Syndra now wants true, the target now has
+		// false, and neither is what was last observed.
+		bases: map[string]db.MergeBase{"sub-1": {
+			Target: "truenas", SubjectID: "sub-1",
+			Base: map[string]json.RawMessage{"enabled": json.RawMessage(`"unknown"`)},
+		}},
+	}
+	stubAddonReconcile(t, h)
+
+	res, err := ReconcileAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Queued != 0 || len(h.planAsked) != 0 {
+		t.Fatal("a conflict is never resolved by an unattended pass")
+	}
+	if len(res.Findings) != 1 || res.Findings[0].Outcome != merge.Conflict {
+		t.Fatalf("want one conflict: %+v", res.Findings)
+	}
+	f := res.Findings[0]
+	if len(f.Base) == 0 || len(f.Ours) == 0 || len(f.Theirs) == 0 {
+		t.Fatalf("a conflict must carry all three values: %+v", f)
+	}
+}
+
+// The account is gone. Reported as an account-level finding beside the stale
+// binding it already produced — same state, named in the merge's vocabulary.
+func TestAnAbsentAccountIsReportedAsDeletedUpstream(t *testing.T) {
+	h := &addonReconcileHarness{
+		read:     currentRead(addons.TargetAccount{Username: "someone-else", UID: 4000}),
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "ada", AccountUID: uid(3001)}},
+	}
+	stubAddonReconcile(t, h)
+
+	res, err := ReconcileAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Queued != 0 {
+		t.Fatal("an absent account must never be queued — the plan for one says create")
+	}
+	if len(res.Findings) != 1 || res.Findings[0].Outcome != merge.DeletedUpstream {
+		t.Fatalf("want one deleted_upstream finding: %+v", res.Findings)
+	}
+	if res.Findings[0].Field != "" {
+		t.Errorf("deleted upstream is about the account, not a field: %+v", res.Findings[0])
+	}
+	// The existing surface keeps its row. Two vocabularies for one state is a
+	// migration, not a rename.
+	if len(res.Stale) != 1 {
+		t.Errorf("the stale binding must still be reported: %+v", res.Stale)
+	}
+}
+
+// The rollout rule, at the sweep level: a binding made before any base existed
+// converges exactly as it did, and raises nothing.
+func TestABaselessSubjectConvergesAndRaisesNothing(t *testing.T) {
+	h := &addonReconcileHarness{
+		read: currentRead(addons.TargetAccount{
+			Username: "ada", UID: 3001, State: state(map[string]any{"enabled": false}),
+		}),
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "ada", AccountUID: uid(3001)}},
+		plan: addons.PlanResult{Outcome: addons.OutcomeSucceeded, Outcomes: []addons.SubjectOutcome{
+			{Subject: "sub-1", Effect: db.PlanEffectApply},
+		}},
+	}
+	stubAddonReconcile(t, h)
+
+	res, err := ReconcileAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Queued != 1 {
+		t.Fatalf("no base means converge as before, got %d queued", res.Queued)
+	}
+	if len(res.Findings) != 0 {
+		t.Fatalf("no base means no cause, which is not a finding: %+v", res.Findings)
+	}
+}
+
+// An add-on too old to report state leaves every subject with unknown current
+// values. That must degrade to the pre-merge behaviour rather than to a target
+// that looks emptied — the same failure as concluding an absence from a read
+// that did not happen.
+func TestAnAddOnThatReportsNoStateStillConverges(t *testing.T) {
+	h := &addonReconcileHarness{
+		read:     currentRead(addons.TargetAccount{Username: "ada", UID: 3001}),
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "ada", AccountUID: uid(3001)}},
+		bases:    baseFor("sub-1", map[string]any{"enabled": true}),
+		plan: addons.PlanResult{Outcome: addons.OutcomeSucceeded, Outcomes: []addons.SubjectOutcome{
+			{Subject: "sub-1", Effect: db.PlanEffectApply},
+		}},
+	}
+	stubAddonReconcile(t, h)
+
+	res, err := ReconcileAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Queued != 1 {
+		t.Fatalf("an add-on that reports no state must converge as before, got %d", res.Queued)
+	}
+}
