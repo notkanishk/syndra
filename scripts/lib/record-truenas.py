@@ -21,6 +21,14 @@ import websockets
 URL = os.environ["TRUENAS_URL"]
 KEY = os.environ["TRUENAS_API_KEY"]
 WRITE = os.environ.get("WRITE") == "yes"
+
+# Verified by default, and the same variable the add-on reads (main.go, envBool
+# TRUENAS_VERIFY_TLS). This probe authenticates with the target's API key, so an
+# unverified context hands that key to anyone who can answer for the NAS's
+# address — the wss:// check in the wrapper stops the key travelling in clear,
+# and stops nothing else. An unparseable value verifies: the fallback of a
+# security switch is the safe side, never the convenient one.
+VERIFY = os.environ.get("TRUENAS_VERIFY_TLS", "").strip().lower() not in ("0", "f", "false")
 PROBE_USER = "syndra-fixture-probe"
 FIELD = re.compile(r"^[A-Za-z0-9_.\[\]-]{1,120}$")
 
@@ -42,7 +50,18 @@ async def main():
         "reads": {},
         "write_rules": [],
     }
-    async with websockets.connect(URL, ssl=ssl._create_unverified_context(), max_size=None) as ws:
+    if VERIFY:
+        ctx = ssl.create_default_context()
+    else:
+        # Opted out explicitly, and said out loud. A self-signed NAS certificate
+        # is the honest reason for this, and the operator is told what it costs
+        # rather than finding out from the default.
+        print("warning: TRUENAS_VERIFY_TLS is off — this sends TRUENAS_API_KEY over an "
+              "unauthenticated TLS session. Record from a network you trust, or put a "
+              "trusted certificate on the NAS.", file=sys.stderr)
+        ctx = ssl._create_unverified_context()
+
+    async with websockets.connect(URL, ssl=ctx, max_size=None) as ws:
         n = [0]
 
         async def rpc(method, params):

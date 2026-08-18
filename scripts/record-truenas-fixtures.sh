@@ -30,6 +30,10 @@ usage: scripts/record-truenas-fixtures.sh [--write]
   Reads TRUENAS_URL and TRUENAS_API_KEY from ./.env (or the environment) and
   records what that target answers into addons/contract/truenas_observed.json.
 
+  TRUENAS_VERIFY_TLS is honoured exactly as the add-on honours it, and defaults
+  to true here as it does there. This probe authenticates with the API key, so
+  turning it off hands that key to whatever answers for the NAS's address.
+
   --write   also record the WRITE rules, by creating and deleting a throwaway
             account (syndra-fixture-probe). Without it only reads are recorded,
             and the write rules keep whatever was recorded last.
@@ -65,6 +69,7 @@ echo "==> recording from $TRUENAS_URL (write probes: $WRITE)"
 
 docker run --rm -i \
   -e TRUENAS_URL -e TRUENAS_API_KEY -e WRITE="$WRITE" \
+  -e TRUENAS_VERIFY_TLS="${TRUENAS_VERIFY_TLS:-true}" \
   --entrypoint sh python:3.12-alpine -c \
   'pip -q install websockets >/dev/null 2>&1 && python - ' < scripts/lib/record-truenas.py > "$OUT.tmp"
 

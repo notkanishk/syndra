@@ -393,3 +393,150 @@ func TestAnUnconfirmedPurgeKeepsTheBinding(t *testing.T) {
 		t.Fatalf("an unconfirmed purge must leave the binding in place: %v", h.forgotten)
 	}
 }
+
+// Releasing a binding — the safe half of a purge, and the half that had no
+// route at all. The add-on implemented it, backend policy declared it, and
+// nothing could call it: the reconciliation surface named two resolutions for a
+// binding whose account is gone and offered only the irreversible one.
+//
+// Every test here is about the SECOND store. The add-on drops its own binding;
+// if the backend keeps its row the account stays managed by half the system —
+// missing from the unmanaged inventory because this side still claims it, and
+// planned against an add-on that no longer binds it.
+
+type releaseHarness struct {
+	outcome     addons.Outcome
+	addonErr    error
+	dispatchErr error
+	forgetErr   error
+	dispatched  []addonop.Request
+	forgotten   []string
+}
+
+func stubRelease(t *testing.T, h *releaseHarness) {
+	t.Helper()
+	dispatch, forget := svcDispatchOperation, dbForgetTargetBinding
+	t.Cleanup(func() { svcDispatchOperation, dbForgetTargetBinding = dispatch, forget })
+
+	svcDispatchOperation = func(_ context.Context, req addonop.Request) (addonop.Result, error) {
+		h.dispatched = append(h.dispatched, req)
+		if h.dispatchErr != nil {
+			return addonop.Result{}, h.dispatchErr
+		}
+		outcome := h.outcome
+		if outcome == "" {
+			outcome = addons.OutcomeSucceeded
+		}
+		return addonop.Result{OperationID: "op_r", Outcome: outcome, Err: h.addonErr}, nil
+	}
+	dbForgetTargetBinding = func(_ context.Context, _, subject string) error {
+		h.forgotten = append(h.forgotten, subject)
+		return h.forgetErr
+	}
+}
+
+func release(t *testing.T, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/truenas/bindings/u1/release", strings.NewReader(body))
+	r.SetPathValue("target", "truenas")
+	r.SetPathValue("subject", "u1")
+	rr := httptest.NewRecorder()
+	handleReleaseBinding(rr, r)
+	return rr
+}
+
+func TestAReleaseForgetsBothStores(t *testing.T) {
+	h := &releaseHarness{}
+	stubRelease(t, h)
+
+	rr := release(t, `{"confirmed":true}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(h.dispatched) != 1 || h.dispatched[0].Operation != "account.release" {
+		t.Fatalf("the add-on's binding must be released too: %+v", h.dispatched)
+	}
+	if h.dispatched[0].SubjectID != "u1" || !h.dispatched[0].Confirmed {
+		t.Fatalf("the subject and the confirmation must travel with the call: %+v", h.dispatched[0])
+	}
+	if len(h.forgotten) != 1 || h.forgotten[0] != "u1" {
+		t.Fatalf("Syndra's own copy of the binding must go with it: %v", h.forgotten)
+	}
+	// The word "released" alone reads as "removed" to somebody scanning. What
+	// happened to the account is stated, because nothing happened to it.
+	if !strings.Contains(rr.Body.String(), "Nothing on the target was changed") {
+		t.Fatalf("a release must say the account was left alone: %s", rr.Body.String())
+	}
+}
+
+// An answer nobody received is not a release. Dropping the backend's row
+// against an indeterminate outcome manufactures exactly the split this handler
+// exists to close, in the direction that hurts: the add-on still binds the
+// account and this side offers it for adoption.
+func TestAnUnconfirmedReleaseKeepsTheBinding(t *testing.T) {
+	h := &releaseHarness{outcome: addons.OutcomeIndeterminate}
+	stubRelease(t, h)
+
+	rr := release(t, `{"confirmed":true}`)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("want 202, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(h.forgotten) != 0 {
+		t.Fatalf("an unconfirmed release must leave the binding in place: %v", h.forgotten)
+	}
+}
+
+// A refusal is answered as one. The add-on refuses a release of the account it
+// authenticates to the target with, and reporting that as done would leave an
+// operator believing a binding was gone while both stores still hold it.
+func TestARefusedReleaseIsNotReportedAsReleased(t *testing.T) {
+	h := &releaseHarness{outcome: addons.OutcomeRejected, addonErr: errors.New("that is Syndra's own account")}
+	stubRelease(t, h)
+
+	rr := release(t, `{"confirmed":true}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("want 409, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(h.forgotten) != 0 {
+		t.Fatalf("a refused release must not forget the binding: %v", h.forgotten)
+	}
+	if !strings.Contains(rr.Body.String(), "Syndra's own account") {
+		t.Fatalf("the target's reason must reach the operator: %s", rr.Body.String())
+	}
+}
+
+// Backend policy marks this confirmed, and the refusal has to name what is being
+// confirmed. "Confirm to continue" with no sentence is the shape of dialog
+// people click through.
+func TestAnUnconfirmedReleaseIsRefusedWithItsConsequence(t *testing.T) {
+	h := &releaseHarness{dispatchErr: addonop.ErrConfirmationRequired}
+	stubRelease(t, h)
+
+	rr := release(t, `{"confirmed":false}`)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "stop managing") {
+		t.Fatalf("the confirmation must say what it confirms: %s", rr.Body.String())
+	}
+	if len(h.forgotten) != 0 {
+		t.Fatalf("nothing is forgotten without a confirmation: %v", h.forgotten)
+	}
+}
+
+// The half-done case, which is the one that has to be repairable. The add-on let
+// go and this side could not: the operator is told to press again, and pressing
+// again works because the add-on answers a subject it no longer binds as
+// succeeded rather than refused.
+func TestAReleaseThatCouldNotForgetSaysSoAndStaysRepeatable(t *testing.T) {
+	h := &releaseHarness{forgetErr: errors.New("database is away")}
+	stubRelease(t, h)
+
+	rr := release(t, `{"confirmed":true}`)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("want 202, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "Press release again") {
+		t.Fatalf("a half-done release must name its repair: %s", rr.Body.String())
+	}
+}

@@ -108,3 +108,33 @@ func composeAddOnBlock(t *testing.T) string {
 	}
 	return body
 }
+
+// The fixture recorder authenticates with the same API key this add-on does, so
+// it verifies TLS on the same terms — and the same variable, because two switches
+// spelled differently are two policies.
+//
+// It recorded with an unconditional `ssl._create_unverified_context()`: the
+// wrapper refuses a `ws://` URL because TrueNAS revokes a key presented in
+// clear, and then the probe accepted any certificate at all, which hands that
+// same key to whatever can answer for the NAS's address. The `wss://` check
+// bought nothing.
+//
+// A grep, deliberately. The recorder is Python run inside a throwaway container
+// and there is no Go test that can execute it; what can be asserted from here is
+// that the unconditional form is not in the file and the variable is.
+func TestTheFixtureRecorderDoesNotSkipTLSVerificationByDefault(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "scripts", "lib", "record-truenas.py"))
+	if err != nil {
+		t.Fatalf("reading the recorder: %v", err)
+	}
+	src := string(raw)
+	if strings.Contains(src, "ssl=ssl._create_unverified_context()") {
+		t.Fatal("the recorder builds an unverified TLS context inline, so every recording sends " +
+			"TRUENAS_API_KEY to whatever answers for the NAS's address. Verify by default and " +
+			"let TRUENAS_VERIFY_TLS opt out, as the add-on does")
+	}
+	if !strings.Contains(src, "TRUENAS_VERIFY_TLS") {
+		t.Fatal("the recorder must read TRUENAS_VERIFY_TLS — the add-on's own switch — rather " +
+			"than deciding for itself")
+	}
+}

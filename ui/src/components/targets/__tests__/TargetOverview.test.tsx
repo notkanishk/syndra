@@ -15,6 +15,7 @@ const state = {
   inventory: {} as TargetInventory,
   resolved: [] as Array<{ head: string; note: string }>,
   reconcile: undefined as undefined | Record<string, unknown>,
+  released: [] as string[],
   ownerDecided: [] as Array<{ id: string; owner: string; note: string }>,
 };
 
@@ -33,6 +34,14 @@ vi.mock("@/lib/queries/useTargets", async () => {
       refetch: vi.fn(),
     }),
     useAdoptAccount: () => ({ mutate: vi.fn(), isPending: false }),
+    useReleaseBinding: () => ({
+      mutate: (subjectId: string, opts?: { onSuccess?: (r: unknown) => void }) => {
+        state.released.push(subjectId);
+        opts?.onSuccess?.({ status: "released" });
+      },
+      isPending: false,
+      error: null,
+    }),
     useSetLifecycle: () => ({ mutate: vi.fn(), isPending: false }),
     useReconcileTarget: () => ({
       mutate: vi.fn(),
@@ -159,6 +168,33 @@ describe("one target's page", () => {
     expect(screen.getByText(/point at an account that is no longer/i)).toBeTruthy();
     expect(screen.getByText("alice")).toBeTruthy();
     expect(screen.getByText(/yours to decide/i)).toBeTruthy();
+  });
+
+  // The surface named two resolutions — re-provision, or let it go — and could
+  // reach neither. Letting go now exists; the first press must not do it, and
+  // the sentence beside the second one has to say the account is not deleted,
+  // because "forget" next to a row about a missing account reads as "remove".
+  it("lets a stale binding go, and never on the first press", () => {
+    state.released = [];
+    state.roster = [summary([])];
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.health = { reachable: true, lifecycle: "active" };
+    state.reconcile = {
+      target: "truenas", bound: 4, queued: 1, current: true,
+      stale: [{ subject_id: "s1", username: "alice", uid: 3999 }],
+    };
+    renderTarget();
+
+    fireEvent.click(screen.getByText("Forget this binding"));
+    expect(state.released).toEqual([]);
+    expect(screen.getByText(/Nothing is deleted/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Forget it"));
+    expect(state.released).toEqual(["s1"]);
+    // The row it acted on must stop saying it is unresolved. The reconcile
+    // result is a mutation's answer, so nothing refetches it.
+    expect(screen.getByText(/Released\. Nothing on the target was changed/i)).toBeTruthy();
+    expect(screen.queryByText(/yours to decide/i)).toBeNull();
   });
 
   it("says a transport secret that stopped loading is a fault on THIS host", () => {
