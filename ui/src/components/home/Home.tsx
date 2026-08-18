@@ -71,13 +71,23 @@ export function Home({ session }: { session: SessionUser }) {
   const propagation = summary.data?.pending_propagation;
   const drift = summary.data?.drift;
   const unvouched = summary.data?.unreconciled_targets ?? [];
+  // Differences a reconciliation refused to resolve. Counted for the same
+  // reason the unreadable targets are: each one is a person's decision that has
+  // not been made, and a page that omits them says "nothing needs you" while
+  // somebody's access sits disputed.
+  const findings = summary.data?.merge_findings ?? 0;
 
   // Counted, and that is the whole point of it. An unreadable target produces
   // no drift findings, so a week of silence lands here as blocks === 0 and the
   // page says "Nothing needs you" — the one sentence that must never be said
   // about a system nobody has been able to look at.
   const blocks = advanced
-    ? pending.length + expiring.length + (propagation?.count ?? 0) + (drift?.count ?? 0) + unvouched.length
+    ? pending.length +
+      expiring.length +
+      (propagation?.count ?? 0) +
+      (drift?.count ?? 0) +
+      unvouched.length +
+      findings
     : pending.length + expiring.length;
 
   const who = firstName(session);

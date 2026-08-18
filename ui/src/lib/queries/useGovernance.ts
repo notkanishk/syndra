@@ -50,6 +50,12 @@ export interface GovernanceSummary {
   pending_propagation: PendingPropagationSummary;
   drift: DriftSummary;
   unreconciled_targets: UnreconciledTarget[];
+  /** Differences a reconciliation found and was not entitled to resolve: a
+   * value the target moved and Syndra did not, a value both moved differently,
+   * or an account that is gone. Counted beside drift rather than inside it —
+   * drift is access nobody can explain, this is a disagreement everybody can
+   * explain and nobody has decided. */
+  merge_findings?: number;
 }
 
 const KEYS = {

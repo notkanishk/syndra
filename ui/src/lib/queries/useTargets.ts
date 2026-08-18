@@ -330,6 +330,79 @@ export interface ReleaseResult {
   warning?: string;
 }
 
+/**
+ * The differences a reconciliation found and was not entitled to resolve.
+ *
+ * Three kinds, and the surface must keep them apart: the target moved and
+ * Syndra did not, both moved differently, or the account is gone. They read as
+ * one "out of step" only to somebody who does not have to act on them.
+ */
+export interface MergeFinding {
+  id: string;
+  target: string;
+  subject_id: string;
+  /** Empty for an account-level finding — `deleted_upstream` is about the
+   * account existing, not about any value. */
+  field?: string;
+  outcome: "theirs_only" | "conflict" | "deleted_upstream";
+  /** What the target last reported, what Syndra wants, and what the target has
+   * now. All three, because "what was it before" is the question asked first. */
+  base?: unknown;
+  ours?: unknown;
+  theirs?: unknown;
+  detected_at: string;
+  last_seen_at: string;
+}
+
+export function useMergeFindings(target: string | undefined) {
+  return useQuery({
+    queryKey: ["targets", target, "merge-findings"],
+    queryFn: async () =>
+      (await request<{ findings: MergeFinding[] }>(`/targets/${target}/merge-findings`)).findings ?? [],
+    enabled: Boolean(target),
+  });
+}
+
+export interface ResolveFindingInput {
+  id: string;
+  resolution: "keep_ours" | "take_theirs" | "reprovisioned" | "unbound";
+  reason: string;
+  expires_at?: string;
+  review_date?: string;
+}
+
+/**
+ * Carrying out the operator's decision.
+ *
+ * The backend performs the resolution and only then closes the finding, and it
+ * refuses the adoptions that have nowhere to live — a group value belongs to a
+ * role mapping that reaches every holder of that role. Those refusals arrive
+ * here as errors with the policy named in them, and they are rendered rather
+ * than swallowed: the alternative is a button that silently does nothing.
+ */
+export function useResolveMergeFinding(target: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ResolveFindingInput) =>
+      request<{ resolved: boolean }>(
+        `/targets/${target}/merge-findings/${encodeURIComponent(input.id)}/resolve`,
+        {
+          method: "POST",
+          body: {
+            resolution: input.resolution,
+            reason: input.reason,
+            ...(input.expires_at ? { expires_at: input.expires_at } : {}),
+            ...(input.review_date ? { review_date: input.review_date } : {}),
+          },
+        },
+      ),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["targets", target] });
+      client.invalidateQueries({ queryKey: ["governance"] });
+    },
+  });
+}
+
 export interface StaleBinding {
   subject_id: string;
   username: string;
