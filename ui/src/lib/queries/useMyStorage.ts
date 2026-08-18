@@ -51,6 +51,25 @@ export interface MyTargetView {
    * omits the instructions rather than printing one that does not answer.
    */
   connection?: { protocol: string; host: string };
+  /**
+   * What the TARGET says about this account right now.
+   *
+   * Not the same as `credential` above, which is Syndra's record that a
+   * password was set. That record cannot say whether the target still accepts
+   * it — and an account Syndra created has password authentication disabled
+   * until its member sets one, so it exists, is correct, and refuses them.
+   */
+  storage?: {
+    username: string;
+    /** Whether they can connect right now. */
+    usable: boolean;
+    /** The one action that fixes it, when that is what is wrong. */
+    needs_password: boolean;
+    smb_enabled: boolean;
+    shares?: Array<{ share: string; used_bytes: number; quota_bytes?: number }>;
+    /** "Nothing used" and "could not look" are the same zero without this. */
+    usage_readable?: boolean;
+  };
 }
 
 export function useMyStorage() {

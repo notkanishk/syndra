@@ -114,6 +114,20 @@ var operationPolicy = map[string]OperationPolicy{
 		Scope:   ScopeAdmin,
 		Confirm: false,
 	},
+	// A member asking about their own storage account: whether it can be used
+	// yet, and how much room is left.
+	//
+	// Member scope and NO parameters — deliberately none, rather than a subject
+	// parameter the handler would have to check. A member-scoped operation acts
+	// only on the authenticated actor, and an operation that takes no subject at
+	// all cannot be pointed at somebody else by any caller, including a future
+	// one that forgets to check.
+	//
+	// No confirmation: it writes nothing.
+	"storage.status": {
+		Scope:   ScopeMember,
+		Confirm: false,
+	},
 }
 
 // EffectiveOperation is an operation as the backend will actually offer it:

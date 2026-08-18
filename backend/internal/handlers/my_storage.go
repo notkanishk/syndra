@@ -59,6 +59,15 @@ type myTargetView struct {
 	// Reachable says the add-on answered. A member whose target is down is told
 	// so rather than shown a credential form that will fail.
 	Reachable bool `json:"reachable"`
+	// Storage is what the TARGET says about this account: whether it can be
+	// used yet, and how much room is left.
+	//
+	// Distinct from Credential above, which is Syndra's own record that a
+	// password was set. That record cannot say whether the target still accepts
+	// it, and the difference is not academic: an account Syndra created has
+	// password authentication disabled until the member sets one, so it exists,
+	// is correct, and refuses them.
+	Storage *addons.StorageStatus `json:"storage,omitempty"`
 	// RecordedAt dates the middle state — entitled, no account yet — which is
 	// the ordinary experience of every new member because these changes wait
 	// for an operator rather than for a timer.
@@ -199,6 +208,17 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 	if view.Account != nil {
 		if connection, err := addonsConnection(target); err == nil {
 			view.Connection = connection
+		}
+		// What the target says about their account right now, which is the only
+		// authority on whether it can actually be used. Syndra's own record
+		// says a credential was set; it cannot say whether the target still
+		// accepts it, and the gap between those is a member staring at working
+		// instructions that refuse them.
+		//
+		// Best-effort: a page that cannot read usage is still worth serving,
+		// and every field it fills is additive.
+		if status := addonsMyStorage(r.Context(), target, subject); status.Outcome == addons.OutcomeSucceeded {
+			view.Storage = &status
 		}
 	}
 	return view, nil

@@ -61,7 +61,9 @@ type OperationResult struct {
 	Rotated bool `json:"rotated,omitempty"`
 	// Activity and Health are the read-only operations' payloads.
 	Activity *ActivityReport `json:"activity,omitempty"`
-	Health   *TargetHealth   `json:"health,omitempty"`
+	// Storage is a member's own account state and usage (storage.status).
+	Storage *StorageStatus `json:"storage,omitempty"`
+	Health  *TargetHealth  `json:"health,omitempty"`
 	// AccountUID is the unix identity of the account an adoption bound.
 	//
 	// Returned because the backend keeps its own copy of the binding and had no
@@ -178,6 +180,8 @@ func (s *server) runOperation(name string, req OperationRequest) (OperationResul
 		return s.adoptAccount(req)
 	case "activity.get":
 		return s.smbActivity(req)
+	case "storage.status":
+		return s.storageStatus(req)
 	case "health.get":
 		return s.targetHealth(req)
 	}
