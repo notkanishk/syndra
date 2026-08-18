@@ -137,7 +137,7 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 				continue // marked external on THIS target — silently filtered
 			}
 			if _, inserted, err := upsertDriftItem(ctx, target, g.UserID, g.ProjectID,
-				[]string{rk}, g.ID, "reconciliation_sweep", "target_only"); err != nil {
+				[]string{rk}, g.ID, "reconciliation_sweep", db.DriftTargetOnly); err != nil {
 				log.Printf("[DRIFT] upsert target_only failed user=%s project=%s role=%s: %v", g.UserID, g.ProjectID, rk, err)
 				res.WriteFailures++
 			} else if inserted {
@@ -204,7 +204,7 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 			// replay.
 			observedByHand[k] = true
 			if _, inserted, err := upsertDriftItem(ctx, target, dg.UserID, dg.ProjectID,
-				[]string{dg.RoleKey}, "", "reconciliation_sweep", "syndra_only"); err != nil {
+				[]string{dg.RoleKey}, "", "reconciliation_sweep", db.DriftSyndraOnly); err != nil {
 				log.Printf("[DRIFT] upsert syndra_only failed user=%s project=%s role=%s: %v",
 					dg.UserID, dg.ProjectID, dg.RoleKey, err)
 				res.WriteFailures++

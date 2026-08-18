@@ -643,7 +643,27 @@ function ResolutionDialog({
  */
 function explainDrift(item: DriftTriageItem): string {
   if (item.drift_type === "syndra_only") {
-    return "Syndra expects this grant but the identity provider doesn't have it — usually a queued write that never landed.";
+    // The row used to say "usually a queued write that never landed" for every
+    // one of these, which is the wrong half of the story whenever the target was
+    // seen HOLDING it: that is not a write that never happened, it is one
+    // somebody undid. Told with its history, the row is recognisably the same
+    // entitlement Syndra applied rather than a stranger.
+    const p = item.provenance;
+    if (p?.last_observed_at) {
+      const who = p.granted_by ? ` by ${p.granted_by}` : "";
+      const when = p.granted_at ? ` on ${formatLongDate(p.granted_at)}` : "";
+      const why = p.reason ? ` — ${p.reason}` : "";
+      const removedBy = item.upstream_actor ? ` Removed by ${item.upstream_actor}.` : "";
+      return `Granted${who}${when}${why}. The identity provider was still holding it on ${formatLongDate(
+        p.last_observed_at,
+      )} and does not now, so somebody removed it there.${removedBy}`;
+    }
+    if (p?.granted_at) {
+      return `Granted${p.granted_by ? ` by ${p.granted_by}` : ""} on ${formatLongDate(
+        p.granted_at,
+      )}. The identity provider has never been seen holding it, so this is most likely a write that never landed.`;
+    }
+    return "Syndra expects this grant but the identity provider doesn't have it, and there is no record of it ever being held there.";
   }
   const when = item.upstream_created_at ? ` on ${formatLongDate(item.upstream_created_at)}` : "";
   const who = item.upstream_actor ? ` by ${item.upstream_actor}` : "";

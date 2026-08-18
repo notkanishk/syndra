@@ -119,6 +119,10 @@ var (
 	// suspension that ended is part of the answer to what has been decided.
 	svcAllowancesForSubject = db.AllowancesForSubject
 	svcGetAllDirectGrants   = db.GetAllDirectGrants
+	// What each target was last seen holding, for the drift queue's provenance.
+	// A seam because the assertion that matters is what a row looks like WITHOUT
+	// it: a finding with no history is still a finding worth triaging.
+	svcMergeBases = db.MergeBasesFor
 	// Direct-grant removal: ledger delete + audit + the caller-computed
 	// effective-access delta, in one transaction.
 	svcDeleteDirectGrantAndEnqueue        = db.DeleteDirectGrantAndEnqueue

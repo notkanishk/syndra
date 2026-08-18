@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -17,6 +18,17 @@ func withTriageDeps(t *testing.T, items []models.DriftItem, users map[string]mod
 	origAssigned := svcDbGetAssignedUserCounts
 	origRefs := svcDbGetAllReferencedRoleKeys
 	origFind := directoryFindUser
+	origGrants, origBases := svcGetAllDirectGrants, svcMergeBases
+	t.Cleanup(func() {
+		svcGetAllDirectGrants, svcMergeBases = origGrants, origBases
+	})
+	// No ledger and no observations by default: a row with no history is still
+	// a row, and every test written before provenance existed asserts what one
+	// looks like.
+	svcGetAllDirectGrants = func(context.Context, bool) ([]models.DirectGrant, error) { return nil, nil }
+	svcMergeBases = func(context.Context, string) (map[string]db.MergeBase, error) {
+		return map[string]db.MergeBase{}, nil
+	}
 	t.Cleanup(func() {
 		svcGetPendingDriftItems = origDrift
 		svcDbGetAllLocalRoles = origLocal
@@ -301,5 +313,111 @@ func TestDriftTriageRows_EmptySubsetLoadsNothing(t *testing.T) {
 	got, err := DriftTriageRows(context.Background(), nil)
 	if err != nil || got == nil || len(got) != 0 {
 		t.Fatalf("want an empty slice and no error, got %#v / %v", got, err)
+	}
+}
+
+// A removal Syndra can recognise (change `reconciliation-as-merge`).
+//
+// A `syndra_only` row is produced by comparing two sets, and on the row it reads
+// exactly like an unexplained absence — an operator triaging it has no way to
+// know that Syndra granted this deliberately, who did, why, or that the target
+// was holding it as recently as this morning. Every one of those changes what
+// they should do about it.
+
+func TestDriftTriage_ARemovedGrantCarriesItsOwnHistory(t *testing.T) {
+	granted := time.Date(2026, 8, 3, 9, 0, 0, 0, time.UTC)
+	observed := time.Date(2026, 8, 19, 3, 0, 0, 0, time.UTC)
+
+	withTriageDeps(t, []models.DriftItem{{
+		ID: "d1", Target: db.TargetZitadel, UserID: "u1", ProjectID: "p_laser",
+		RoleKeys: []string{"operator"}, DriftType: db.DriftSyndraOnly,
+		Status: "pending_triage", DetectedAt: observed.Add(time.Hour),
+	}}, nil)
+	svcGetAllDirectGrants = func(context.Context, bool) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{
+			UserID: "u1", ProjectID: "p_laser", RoleKey: "operator",
+			GrantedBy: "op-ada", Reason: "inducted on the laser", CreatedAt: granted,
+			Source: "direct",
+		}}, nil
+	}
+	svcMergeBases = func(context.Context, string) (map[string]db.MergeBase, error) {
+		return map[string]db.MergeBase{"u1": {
+			Target: db.TargetZitadel, SubjectID: "u1", ObservedAt: observed,
+			Base: map[string]json.RawMessage{"p_laser/operator": json.RawMessage(`true`)},
+		}}, nil
+	}
+
+	rows, err := DriftTriageQueue(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("want one row, got %d", len(rows))
+	}
+	p := rows[0].Provenance
+	if p == nil {
+		t.Fatal("a removal of something Syndra applied must not read as a stranger")
+	}
+	if p.GrantedBy != "op-ada" || p.Reason != "inducted on the laser" {
+		t.Fatalf("the decision behind the access must travel: %+v", p)
+	}
+	if p.GrantedAt == nil || !p.GrantedAt.Equal(granted) {
+		t.Fatalf("when it was granted: %+v", p)
+	}
+	// The half that makes a removal legible: it was live at 03:00 and is gone
+	// now, rather than a row that appeared from nowhere.
+	if p.LastObservedAt == nil || !p.LastObservedAt.Equal(observed) {
+		t.Fatalf("when the target was last seen holding it: %+v", p)
+	}
+}
+
+// Access Syndra has no record of gets no history, because any history attached
+// to it would be somebody else's.
+func TestDriftTriage_UnexplainedAccessCarriesNoProvenance(t *testing.T) {
+	withTriageDeps(t, []models.DriftItem{{
+		ID: "d1", Target: db.TargetZitadel, UserID: "u1", ProjectID: "p_laser",
+		RoleKeys: []string{"operator"}, DriftType: db.DriftTargetOnly,
+		Status: "pending_triage", DetectedAt: time.Now(),
+	}}, nil)
+	svcGetAllDirectGrants = func(context.Context, bool) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{
+			UserID: "u1", ProjectID: "p_laser", RoleKey: "operator", GrantedBy: "op-ada",
+		}}, nil
+	}
+
+	rows, err := DriftTriageQueue(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[0].Provenance != nil {
+		t.Fatalf("a target_only row is access Syndra never applied: %+v", rows[0].Provenance)
+	}
+}
+
+// A grant the last complete read did not see is dated with nothing rather than
+// with the subject's observation time, which would be a claim about a grant
+// nobody observed.
+func TestDriftTriage_AnUnobservedGrantIsNotDated(t *testing.T) {
+	withTriageDeps(t, []models.DriftItem{{
+		ID: "d1", Target: db.TargetZitadel, UserID: "u1", ProjectID: "p_laser",
+		RoleKeys: []string{"operator"}, DriftType: db.DriftSyndraOnly,
+		Status: "pending_triage", DetectedAt: time.Now(),
+	}}, nil)
+	svcGetAllDirectGrants = func(context.Context, bool) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{UserID: "u1", ProjectID: "p_laser", RoleKey: "operator", GrantedBy: "op-ada"}}, nil
+	}
+	svcMergeBases = func(context.Context, string) (map[string]db.MergeBase, error) {
+		return map[string]db.MergeBase{"u1": {
+			Target: db.TargetZitadel, SubjectID: "u1", ObservedAt: time.Now(),
+			Base: map[string]json.RawMessage{"p_wiki/read": json.RawMessage(`true`)},
+		}}, nil
+	}
+
+	rows, err := DriftTriageQueue(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[0].Provenance == nil || rows[0].Provenance.LastObservedAt != nil {
+		t.Fatalf("nobody saw the target holding this one: %+v", rows[0].Provenance)
 	}
 }

@@ -10,6 +10,18 @@ import (
 	"syndra/internal/models"
 )
 
+// The two kinds of difference this system records, named rather than spelled
+// out at each use.
+//
+// `target_only` is access on the target that Syndra cannot explain. `syndra_only`
+// is the mirror: access Syndra intends that the target does not have — which,
+// once a merge base can say the target was HOLDING it, means somebody removed it
+// out of band rather than that it was never applied.
+const (
+	DriftTargetOnly = "target_only"
+	DriftSyndraOnly = "syndra_only"
+)
+
 // DriftFilter narrows a drift listing. Empty fields are ignored.
 type DriftFilter struct {
 	Target          string

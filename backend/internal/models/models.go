@@ -469,6 +469,33 @@ type DriftItem struct {
 	LastSeenAt        *time.Time `json:"last_seen_at,omitempty"`
 }
 
+// GrantProvenance is where an entitlement came from, and when the target was
+// last seen holding it.
+//
+// It answers one question: is this the same thing Syndra applied? A drift row
+// that cannot answer it makes every removal look like a stranger.
+type GrantProvenance struct {
+	// GrantedBy, GrantedAt and Reason are the decision Syndra recorded when the
+	// access was given. Empty when the ledger no longer holds it — which is
+	// itself an answer, and a different one.
+	GrantedBy string     `json:"granted_by,omitempty"`
+	GrantedAt *time.Time `json:"granted_at,omitempty"`
+	Reason    string     `json:"reason,omitempty"`
+	// Source says whether a person granted this directly or a bundle or rule
+	// derived it, with SourceRef naming which. "The rule that gives every
+	// member the workshop role" and "somebody granted this by hand" are
+	// different findings wearing the same row.
+	Source    string `json:"source,omitempty"`
+	SourceRef string `json:"source_ref,omitempty"`
+	// LastObservedAt is when a complete read last saw the TARGET holding it.
+	// The pair (granted, last observed) is what makes a removal legible: it
+	// existed, it was live this morning, it is gone now.
+	LastObservedAt *time.Time `json:"last_observed_at,omitempty"`
+	// ExpiresAt is when the grant was due to lapse anyway. A removal three days
+	// before an expiry is a different conversation from one with none.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+}
+
 // DriftTriageItem is a DriftItem enriched for the triage queue: enough context
 // on the row to answer "what is this, and what happens if I revoke it" without
 // a click. Computed on read; nothing here is persisted.
@@ -496,6 +523,21 @@ type DriftTriageItem struct {
 	// wrong verb and "owned elsewhere" is almost always the right one.
 	UserStatus           string `json:"user_status,omitempty"`
 	UserIsServiceAccount bool   `json:"user_is_service_account"`
+
+	// Provenance is the history of the grant this row is about, for a
+	// `syndra_only` row: the same entitlement Syndra applied, not an
+	// independent finding that appeared from nowhere.
+	//
+	// A removal detected by comparing two sets reads, on the row, exactly like
+	// an unexplained absence — and an operator triaging it has no way to know
+	// that Syndra granted this deliberately, who did, why, and that the target
+	// was holding it as recently as this morning. Every one of those changes
+	// what they should do about it.
+	//
+	// Computed on read from the ledger and the last observation, never stored:
+	// a copy would be a second account of the same history, free to disagree
+	// with the row it came from.
+	Provenance *GrantProvenance `json:"provenance,omitempty"`
 
 	// OtherItemsForUser is how many OTHER pending items this same person has.
 	// "Marta has 2 more items" is the context that changes a revoke decision.

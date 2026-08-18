@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 
@@ -90,6 +91,10 @@ func enrichForTriage(ctx context.Context, items, population []models.DriftItem) 
 		counted[item.ID] = true
 	}
 
+	// The history behind a `syndra_only` row, looked up once for the whole
+	// queue rather than once per row.
+	provenance := grantProvenance(ctx, items)
+
 	out := make([]models.DriftTriageItem, 0, len(items))
 	for _, item := range items {
 		// Subtract this row only if the population actually contains it.
@@ -113,6 +118,11 @@ func enrichForTriage(ctx context.Context, items, population []models.DriftItem) 
 			enriched.UserStatus = user.Status
 			enriched.UserIsServiceAccount = isServiceAccount(user)
 		}
+		if len(item.RoleKeys) > 0 {
+			if p, found := provenance[grantKey(item.UserID, item.ProjectID, item.RoleKeys[0])]; found {
+				enriched.Provenance = &p
+			}
+		}
 		out = append(out, enriched)
 	}
 
@@ -124,6 +134,94 @@ func enrichForTriage(ctx context.Context, items, population []models.DriftItem) 
 		return out[i].DetectedAt.Before(out[j].DetectedAt)
 	})
 	return out, nil
+}
+
+func grantKey(userID, projectID, roleKey string) string {
+	return userID + "\x00" + projectID + "\x00" + roleKey
+}
+
+// grantProvenance answers, per drift row, whether this is the same entitlement
+// Syndra applied — and if so, what Syndra knows about it.
+//
+// Only for `syndra_only` rows. A `target_only` row is by definition access
+// Syndra has no record of, and attaching a history to one would be attaching
+// somebody else's.
+//
+// Two sources, and each answers half the question. The ledger says who decided
+// this access, when, why, and whether a person granted it or a rule derived it.
+// The merge base says when a complete read last saw the TARGET holding it. The
+// pair is what makes a removal legible: it existed, it was live this morning,
+// it is gone now — rather than a row that appeared from nowhere and reads like a
+// stranger.
+//
+// Both reads fail soft. A row without its history is still a finding worth
+// triaging; refusing to render the queue because a lookup failed would hide the
+// findings themselves, which is the more expensive silence.
+func grantProvenance(ctx context.Context, items []models.DriftItem) map[string]models.GrantProvenance {
+	out := map[string]models.GrantProvenance{}
+	wanted := map[string]bool{}
+	for _, item := range items {
+		if item.DriftType != db.DriftSyndraOnly || len(item.RoleKeys) == 0 {
+			continue
+		}
+		wanted[grantKey(item.UserID, item.ProjectID, item.RoleKeys[0])] = true
+	}
+	if len(wanted) == 0 {
+		return out
+	}
+
+	// Expired grants included: a grant that lapsed while a removal was standing
+	// is exactly the case where "it was due to end anyway" changes what an
+	// operator does, and excluding it would report the history as absent.
+	grants, err := svcGetAllDirectGrants(ctx, true)
+	if err != nil {
+		log.Printf("[DRIFT-TRIAGE] could not read the ledger for provenance: %v", err)
+		return out
+	}
+	for _, g := range grants {
+		key := grantKey(g.UserID, g.ProjectID, g.RoleKey)
+		if !wanted[key] {
+			continue
+		}
+		granted := g.CreatedAt
+		out[key] = models.GrantProvenance{
+			GrantedBy: g.GrantedBy, GrantedAt: &granted, Reason: g.Reason,
+			Source: g.Source, SourceRef: g.SourceRef, ExpiresAt: g.ExpiresAt,
+		}
+	}
+
+	// When the target was last seen holding it. Keyed by subject, so one read
+	// per queue rather than one per row.
+	bases, err := svcMergeBases(ctx, db.TargetZitadel)
+	if err != nil {
+		log.Printf("[DRIFT-TRIAGE] could not read observations for provenance: %v", err)
+		return out
+	}
+	for _, item := range items {
+		if len(item.RoleKeys) == 0 {
+			continue
+		}
+		key := grantKey(item.UserID, item.ProjectID, item.RoleKeys[0])
+		p, found := out[key]
+		if !found {
+			continue
+		}
+		base, seen := bases[item.UserID]
+		if !seen {
+			continue
+		}
+		if _, held := base.Base[item.ProjectID+"/"+item.RoleKeys[0]]; !held {
+			// The base does not name this grant, so the last complete read did
+			// not see the target holding it. Left absent rather than dated with
+			// the subject's observation time, which would be a claim about a
+			// grant nobody observed.
+			continue
+		}
+		observed := base.ObservedAt
+		p.LastObservedAt = &observed
+		out[key] = p
+	}
+	return out
 }
 
 // hasRoleCatalogue reports whether the target's access is described by Syndra's
