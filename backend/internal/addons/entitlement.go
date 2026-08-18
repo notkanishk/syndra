@@ -73,6 +73,16 @@ type ApplyResponse struct {
 	// Fingerprint is the subject's state afterwards, so the next plan starts
 	// from something current rather than from a read the backend has to make.
 	Fingerprint string `json:"fingerprint"`
+	// Observed is the managed fields as the TARGET reported them after the
+	// write, which is what becomes the merge base. Never what was requested: a
+	// base that equals the desired state by construction can never produce a
+	// conflict, which is the behaviour the base exists to replace.
+	Observed map[string]json.RawMessage `json:"observed,omitempty"`
+	// Unverified says the write landed and could not be read back. The apply is
+	// still an apply — the effect says so — but nothing here may be recorded as
+	// an observation, and that is the point of carrying it separately from the
+	// outcome rather than folding it in.
+	Unverified bool `json:"unverified,omitempty"`
 	// Code is the add-on's own error code on a refusal, from a closed set it
 	// declares. Read for one reason: `PLAN_STALE` is the refusal that means the
 	// subject moved since the diff was approved, and the operator action for it

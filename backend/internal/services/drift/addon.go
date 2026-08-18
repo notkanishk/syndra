@@ -9,6 +9,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/services/merge"
 )
 
 // Reconciling an add-on target (design §9, §15; change `addon-platform` 1.18,
@@ -64,6 +65,13 @@ type AddonReconcileResult struct {
 	// Queued counts the convergences this pass enqueued. Never "fixed": they
 	// wait for the drain like every other add-on row.
 	Queued int `json:"queued"`
+	// Findings are the differences this pass may not resolve: a value the
+	// target moved and Syndra did not, or one both moved differently. Carried
+	// on the result for the caller that renders a pass, and persisted
+	// separately, because a finding that lives only in the return value of the
+	// sweep that found it is visible to whoever ran that sweep and to nobody
+	// else.
+	Findings []merge.SubjectFinding `json:"findings,omitempty"`
 	// Stale are bindings whose account is no longer on the target. Reported and
 	// NOT queued: the plan for one of these says "create", and a sweep that
 	// acted on it would recreate an account somebody deleted. Which way to
@@ -187,8 +195,16 @@ func ReconcileAddon(ctx context.Context, target string) (AddonReconcileResult, e
 	live, stale := partitionByPresence(bindings, read.Accounts)
 	res.Stale = stale
 
-	queued, convergeErr := convergeBound(ctx, target, live)
+	queued, findings, convergeErr := convergeBound(ctx, target, live, read.Accounts)
 	res.Queued = queued
+	// The absent accounts are findings of the same kind, reached by a different
+	// route: `deleted_upstream` is one of the outcomes, and reporting it beside
+	// the field-level ones is what stops it being a special case with its own
+	// vocabulary. `Stale` stays for the surfaces already built on it.
+	for _, b := range stale {
+		findings = append(findings, merge.Absent(b.SubjectID).Findings()...)
+	}
+	res.Findings = findings
 
 	reason := ""
 	switch {
@@ -277,20 +293,63 @@ func unmanaged(accounts []addons.TargetAccount, bindings []db.TargetBinding) []U
 // something an operator has to decide — a binding conflict, most often — and
 // queueing a convergence for it would be the sweep inferring a decision it is
 // specifically forbidden from inferring.
-func convergeBound(ctx context.Context, target string, bindings []db.TargetBinding) (int, error) {
+func convergeBound(ctx context.Context, target string, bindings []db.TargetBinding,
+	accounts []addons.TargetAccount) (int, []merge.SubjectFinding, error) {
+	findings := make([]merge.SubjectFinding, 0)
 	if len(bindings) == 0 {
-		return 0, nil
+		return 0, findings, nil
 	}
+
+	// The third state, read once for the whole cohort. A read that fails is not
+	// a reason to stop: every subject then classifies as having no base, which
+	// converges exactly as this sweep did before the mechanism existed. Failing
+	// the pass instead would make a table this system can rebuild from its next
+	// applies into a hard dependency of reconciliation.
+	bases, err := listMergeBases(ctx, target)
+	if err != nil {
+		log.Printf("[ADDON-RECONCILE] %s: merge bases unavailable, classifying without them: %v", target, err)
+		bases = map[string]db.MergeBase{}
+	}
+	current := stateByBinding(accounts)
 
 	subjects := make([]addons.PlanSubject, 0, len(bindings))
 	desired := make(map[string]map[string]json.RawMessage, len(bindings))
 	for _, b := range bindings {
 		set, err := resolveIntent(ctx, b.SubjectID, target)
 		if err != nil {
-			return 0, fmt.Errorf("resolve %s: %w", b.SubjectID, err)
+			return 0, findings, fmt.Errorf("resolve %s: %w", b.SubjectID, err)
 		}
+
+		// The classification, before anything is planned. A subject whose
+		// difference this pass may not resolve is never asked about: planning it
+		// would produce an `apply` effect, and the loop below queues those.
+		theirs := current.of(b)
+		base := baseOf(bases, b.SubjectID)
+		if theirs == nil {
+			// The add-on reported no current state for this account — an add-on
+			// older than the merge, or a read that carried none. Nothing can be
+			// compared, so nothing is attributed: the base is dropped and the
+			// subject classifies as baseless, which converges exactly as this
+			// sweep did before.
+			//
+			// Keeping the base here would be worse than useless. Every managed
+			// field would read as "the target no longer reports it", and a
+			// deployment mid-upgrade would raise a finding for every subject it
+			// manages — the manufactured-finding failure, arriving through a
+			// version skew nobody chose.
+			base = nil
+		}
+		state := merge.Classify(b.SubjectID, set, theirs, base)
+		findings = append(findings, state.Findings()...)
+		if !state.Convergeable() {
+			continue
+		}
+
 		desired[b.SubjectID] = set
 		subjects = append(subjects, addons.PlanSubject{Subject: b.SubjectID, Desired: set})
+	}
+	if len(subjects) == 0 {
+		return 0, findings, nil
 	}
 
 	// Acknowledged, because this cohort is not an operator's selection — it is
@@ -298,7 +357,7 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 	// nobody to ask.
 	answer := addonPlan(ctx, target, subjects, true)
 	if answer.Outcome != addons.OutcomeSucceeded {
-		return 0, fmt.Errorf("the target could not say what would change: %v", answer.Err)
+		return 0, findings, fmt.Errorf("the target could not say what would change: %v", answer.Err)
 	}
 
 	queued := 0
@@ -319,11 +378,61 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 			Reason:  "Periodic reconciliation found the target out of step",
 			Desired: set,
 		}); err != nil {
-			return queued, fmt.Errorf("queue convergence for %s: %w", out.Subject, err)
+			return queued, findings, fmt.Errorf("queue convergence for %s: %w", out.Subject, err)
 		}
 		queued++
 	}
-	return queued, nil
+	return queued, findings, nil
+}
+
+// accountState indexes the target's current values by the identity a binding is
+// matched on.
+//
+// UID first and name second, in that order and for the reason every other match
+// in this file uses it: a rename moves the name and leaves the uid, and matching
+// by name alone would compare one member's binding against another account.
+type accountState struct {
+	byUID  map[int64]map[string]json.RawMessage
+	byName map[string]map[string]json.RawMessage
+}
+
+func stateByBinding(accounts []addons.TargetAccount) accountState {
+	out := accountState{
+		byUID:  make(map[int64]map[string]json.RawMessage, len(accounts)),
+		byName: make(map[string]map[string]json.RawMessage, len(accounts)),
+	}
+	for _, a := range accounts {
+		if a.State == nil {
+			continue
+		}
+		if a.UID != 0 {
+			out.byUID[a.UID] = a.State
+		}
+		out.byName[a.Username] = a.State
+	}
+	return out
+}
+
+func (s accountState) of(b db.TargetBinding) map[string]json.RawMessage {
+	if b.AccountUID != nil {
+		if state, ok := s.byUID[*b.AccountUID]; ok {
+			return state
+		}
+	}
+	return s.byName[b.Username]
+}
+
+// baseOf is one subject's last observed state, or nil.
+//
+// Nil is a legitimate answer and never an error: every binding made before this
+// mechanism existed has none, and the classifier treats that as "no cause can be
+// determined", which converges as before.
+func baseOf(bases map[string]db.MergeBase, subjectID string) map[string]json.RawMessage {
+	base, found := bases[subjectID]
+	if !found {
+		return nil
+	}
+	return base.Base
 }
 
 // partitionByPresence splits bindings into those whose account is still on the

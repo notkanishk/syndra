@@ -2,6 +2,7 @@ package drift
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -30,6 +31,14 @@ func stubSweep(t *testing.T) {
 	t.Cleanup(swap(&insertPending, func(context.Context, string, string, string, []string, string, string, string, string) (string, error) {
 		return "o1", nil
 	}))
+	// No observation of anything, which is the ROLLOUT state: a deployment that
+	// has not swept since the base existed knows nothing about what Zitadel was
+	// last seen holding, and every grant must replay exactly as it did before.
+	t.Cleanup(swap(&listMergeBases, func(context.Context, string) (map[string]db.MergeBase, error) {
+		return map[string]db.MergeBase{}, nil
+	}))
+	t.Cleanup(swap(&saveMergeBase, func(context.Context, db.MergeBase) error { return nil }))
+	t.Cleanup(swap(&forgetMergeBase, func(context.Context, string, string) error { return nil }))
 	t.Cleanup(swap(&markUnreconciled, func(_ context.Context, target, reason string) (db.TargetReconciliation, error) {
 		since := time.Unix(1_760_000_000, 0)
 		return db.TargetReconciliation{Target: target, UnreconciledSince: &since, UnreconciledReason: reason}, nil
@@ -579,5 +588,187 @@ func TestSweep_DoesNotReplayARoleARevocationIsRemoving(t *testing.T) {
 	}
 	if res.ReEnqueued != 0 {
 		t.Fatalf("nothing was replayed, so nothing may be counted as replayed: %+v", res)
+	}
+}
+
+// The Zitadel half of `reconciliation-as-merge`.
+//
+// This sweep's replay loop concludes from an absence — Syndra intends a grant,
+// Zitadel does not have it — and that absence has two causes wanting opposite
+// answers: the grant was never projected, or somebody removed it in Zitadel by
+// hand. Nothing here could tell them apart, so every one was replayed, and a
+// person's decision to remove access was silently undone by a background pass
+// with no record that either thing happened.
+
+func grantsFor(userID, projectID string, roles ...string) map[string]db.MergeBase {
+	fields := map[string]json.RawMessage{}
+	for _, r := range roles {
+		fields[projectID+"/"+r] = json.RawMessage(`true`)
+	}
+	return map[string]db.MergeBase{userID: {Target: db.TargetZitadel, SubjectID: userID, Base: fields}}
+}
+
+func TestSweep_AGrantRemovedInZitadelIsTriagedRatherThanReplayed(t *testing.T) {
+	stubSweep(t)
+	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
+	})()
+	// Zitadel was seen holding it, and holds nothing now.
+	defer swap(&listMergeBases, func(context.Context, string) (map[string]db.MergeBase, error) {
+		return grantsFor("u1", "p1", "viewer"), nil
+	})()
+
+	replayed := 0
+	defer swap(&insertPending, func(context.Context, string, string, string, []string, string, string, string, string) (string, error) {
+		replayed++
+		return "o1", nil
+	})()
+	findings := []string{}
+	defer swap(&upsertDriftItem, func(_ context.Context, _, user, project string, roles []string, _, _, kind string) (string, bool, error) {
+		findings = append(findings, kind+":"+user+"/"+project+"/"+roles[0])
+		return "d1", true, nil
+	})()
+
+	res, err := Sweep(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayed != 0 {
+		t.Fatalf("a grant somebody removed by hand must not be replayed, got %d replays", replayed)
+	}
+	if len(findings) != 1 || findings[0] != "syndra_only:u1/p1/viewer" {
+		t.Fatalf("want one syndra_only finding, got %v", findings)
+	}
+	if res.ReEnqueued != 0 || res.DriftItemsCreated != 1 {
+		t.Fatalf("re_enqueued=%d drift_created=%d", res.ReEnqueued, res.DriftItemsCreated)
+	}
+}
+
+// And the other cause keeps its old answer. A grant Zitadel was never seen
+// holding was never projected, and replaying it is the entire purpose of this
+// loop.
+func TestSweep_AGrantThatWasNeverProjectedIsStillReplayed(t *testing.T) {
+	stubSweep(t)
+	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
+	})()
+
+	replayed := 0
+	defer swap(&insertPending, func(context.Context, string, string, string, []string, string, string, string, string) (string, error) {
+		replayed++
+		return "o1", nil
+	})()
+	findings := 0
+	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
+		findings++
+		return "d1", true, nil
+	})()
+
+	res, err := Sweep(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayed != 1 || res.ReEnqueued != 1 {
+		t.Fatalf("an unobserved grant must replay: replays=%d re_enqueued=%d", replayed, res.ReEnqueued)
+	}
+	if findings != 0 {
+		t.Fatalf("no cause can be determined without an observation, which is not a finding: %d", findings)
+	}
+}
+
+// The bookkeeping half, and the one that decides whether the fix survives its
+// own second pass. Advancing the base past an unresolved finding would make the
+// next sweep read Zitadel's current state as the last agreed one, classify the
+// missing grant as never-projected, and replay it — the same silent revert, one
+// pass later.
+func TestSweep_TheBaseDoesNotAdvancePastAnUnresolvedFinding(t *testing.T) {
+	stubSweep(t)
+	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
+	})()
+	defer swap(&listMergeBases, func(context.Context, string) (map[string]db.MergeBase, error) {
+		return grantsFor("u1", "p1", "viewer"), nil
+	})()
+	// Zitadel still holds another role for the same user, so the base is
+	// rewritten and the question is what it keeps.
+	defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+		return &zitadel.SearchResult[zitadel.UserGrant]{Items: []zitadel.UserGrant{
+			{ID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"editor"}},
+		}}, nil
+	})()
+	defer swap(&svcGetExclusions, func(context.Context, string) ([]models.ExternalGrantExclusion, error) {
+		// So the editor grant is not itself reported as target_only noise.
+		return []models.ExternalGrantExclusion{{Target: db.TargetZitadel, UserID: "u1", ProjectID: "p1", RoleKey: "editor"}}, nil
+	})()
+
+	var written []db.MergeBase
+	defer swap(&saveMergeBase, func(_ context.Context, b db.MergeBase) error {
+		written = append(written, b)
+		return nil
+	})()
+
+	if _, err := Sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(written) != 1 {
+		t.Fatalf("want one observation for u1, got %+v", written)
+	}
+	base := written[0].Base
+	if _, kept := base["p1/viewer"]; !kept {
+		t.Fatalf("the grant under a finding must keep its observation: %v", base)
+	}
+	if _, seen := base["p1/editor"]; !seen {
+		t.Fatalf("what the pass actually saw must be recorded: %v", base)
+	}
+}
+
+// A capped read cannot observe an absence, and a base is a statement about what
+// the target holds. The truncated branch already refuses to conclude; it must
+// also refuse to record.
+func TestSweep_ATruncatedReadRecordsNoObservation(t *testing.T) {
+	stubSweep(t)
+	defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+		items := make([]zitadel.UserGrant, driftSafetyCap)
+		for i := range items {
+			items[i] = zitadel.UserGrant{ID: "g", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}
+		}
+		return &zitadel.SearchResult[zitadel.UserGrant]{Items: items, Total: driftSafetyCap * 2}, nil
+	})()
+
+	wrote := 0
+	defer swap(&saveMergeBase, func(context.Context, db.MergeBase) error { wrote++; return nil })()
+
+	res, err := Sweep(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Truncated {
+		t.Fatal("this test needs a truncated read")
+	}
+	if wrote != 0 {
+		t.Fatalf("a capped read must record no observation, got %d", wrote)
+	}
+}
+
+// A user Zitadel holds nothing for any more is an observation of an absence —
+// only concludable from a complete read, which this is. Their base goes, so the
+// next pass does not compare a re-grant against grants nobody holds.
+func TestSweep_AUserWithNothingLeftLosesTheirObservation(t *testing.T) {
+	stubSweep(t)
+	defer swap(&listMergeBases, func(context.Context, string) (map[string]db.MergeBase, error) {
+		return grantsFor("u-gone", "p1", "viewer"), nil
+	})()
+
+	forgotten := []string{}
+	defer swap(&forgetMergeBase, func(_ context.Context, _, subject string) error {
+		forgotten = append(forgotten, subject)
+		return nil
+	})()
+
+	if _, err := Sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(forgotten) != 1 || forgotten[0] != "u-gone" {
+		t.Fatalf("want u-gone's observation dropped, got %v", forgotten)
 	}
 }

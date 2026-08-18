@@ -32,7 +32,14 @@ var (
 	svcGetExclusions         = func(ctx context.Context, target string) ([]models.ExternalGrantExclusion, error) {
 		return db.GetExclusions(ctx, target)
 	}
-	upsertDriftItem        = db.UpsertDriftItem          // (ctx,target,user,project,roleKeys,grantID,source,type) (id,inserted,err)
+	upsertDriftItem = db.UpsertDriftItem // (ctx,target,user,project,roleKeys,grantID,source,type) (id,inserted,err)
+
+	// The merge base, written by the Zitadel sweep from its own complete read
+	// and forgotten when a user holds nothing. Seams, because the assertions
+	// that matter are about what is NOT written: a base must not advance past a
+	// finding, and nothing may be recorded from a truncated read.
+	saveMergeBase          = db.RecordMergeBase
+	forgetMergeBase        = db.ForgetMergeBase
 	pendingOutboxAddExists = db.PendingOutboxAddExists   // (ctx,target,user,project,role) (bool,err) — dedupes syndra_only replay
 	insertPending          = db.InsertPendingPropagation // re-enqueue path (syndra_only) — Zitadel-shaped by construction
 
@@ -80,6 +87,13 @@ var (
 	// the strongest evidence this system produces.
 	addonHealth   = addons.Health
 	anchorLogHead = db.RecordLogHead
+
+	// The merge bases for a whole target, read once per pass. Its own seam
+	// because the assertions that matter are about what the sweep does WITHOUT
+	// one: a subject with no base must converge exactly as it did before this
+	// mechanism existed, and a test proving that has to be able to answer with
+	// nothing.
+	listMergeBases = db.MergeBasesFor
 
 	resolveIntent = func(ctx context.Context, subjectID, target string) (map[string]json.RawMessage, error) {
 		set, err := services.ResolveEntitlements(ctx, subjectID, target)

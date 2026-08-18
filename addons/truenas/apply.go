@@ -110,25 +110,44 @@ type ApplyOutcome struct {
 // not "unchanged", it is out of scope, and carrying it would invite a base that
 // claims authority over something Syndra never set.
 func observedFields(desired desiredState, s *Subject) map[string]any {
-	if s == nil {
+	state := entitlementState(s)
+	if state == nil {
 		return nil
 	}
 	out := map[string]any{}
-	if desired.managed[FieldGroup] {
-		groups := append([]string(nil), s.Groups...)
-		sort.Strings(groups)
-		out[FieldGroup] = groups
-	}
-	if desired.managed[FieldEnabled] {
-		out[FieldEnabled] = s.Enabled
-	}
-	if desired.managed[FieldSMBEnabled] {
-		out[FieldSMBEnabled] = s.SMBEnabled
+	for field, value := range state {
+		if desired.managed[field] {
+			out[field] = value
+		}
 	}
 	if len(out) == 0 {
 		return nil
 	}
 	return out
+}
+
+// entitlementState is a subject in the vocabulary the manifest declares, rather
+// than the vocabulary the NAS uses.
+//
+// One definition, used by both directions: the observed values an apply reports
+// after a write, and the current values `/subjects` serves for a reconciliation
+// to compare against. Two functions producing this map would be two answers to
+// "what does this account hold", and the pair would disagree the first time a
+// field was added to one of them.
+//
+// Groups are sorted because membership is a SET, and a target that returns them
+// in its own order would otherwise read as a change on every pass.
+func entitlementState(s *Subject) map[string]any {
+	if s == nil {
+		return nil
+	}
+	groups := append([]string(nil), s.Groups...)
+	sort.Strings(groups)
+	return map[string]any{
+		FieldGroup:      groups,
+		FieldEnabled:    s.Enabled,
+		FieldSMBEnabled: s.SMBEnabled,
+	}
 }
 
 // Effects, matching the backend's vocabulary so one renderer serves both.

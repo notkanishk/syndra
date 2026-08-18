@@ -209,6 +209,12 @@ var (
 	bindingHolder = db.BindingHolder
 	saveConflict  = db.RecordBindingConflict
 
+	// The merge base, written from what the add-on OBSERVED after the write.
+	// Its own seam because the assertion that matters is negative: an apply the
+	// add-on could not read back must record nothing here, and a test proving
+	// that needs to see the call not happen.
+	saveMergeBase = db.RecordMergeBase
+
 	subjectEmail = func(ctx context.Context, subjectID string) string {
 		profile, found, err := directory.Default.FindUser(ctx, subjectID)
 		if err != nil || !found {

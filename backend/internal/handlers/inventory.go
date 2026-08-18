@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -248,6 +249,10 @@ func handleReleaseBinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The observation goes with the binding. Both are records of an account this
+	// deployment no longer manages, and a base that outlives its binding is
+	// compared on the next pass against whatever that subject is bound to next.
+	forgetMergeBase(r.Context(), target, subject)
 	if err := dbForgetTargetBinding(r.Context(), target, subject); err != nil {
 		// The add-on has already let go. Reported as a partial rather than a
 		// failure, because pressing again is safe and is exactly the repair:
@@ -270,6 +275,21 @@ func handleReleaseBinding(w http.ResponseWriter, r *http.Request) {
 		// offers it for adoption — which is what it now is.
 		"detail": "Syndra no longer manages that account. Nothing on the target was changed, and it will appear as an unmanaged account on the next read.",
 	})
+}
+
+// forgetMergeBase drops what the target was last seen holding for a subject
+// this deployment has stopped managing.
+//
+// Logged rather than returned, on both paths that call it. The account is gone
+// or the binding is released either way; failing to drop an observation costs
+// one misattributed classification on a later pass, and reporting a completed
+// release as failed would invite a retry of the one thing that has already
+// happened.
+func forgetMergeBase(ctx context.Context, target, subject string) {
+	if err := dbForgetMergeBase(ctx, target, subject); err != nil {
+		log.Printf("[TARGETS] stopped managing %s on %s and could not forget what it was last seen holding: %v",
+			subject, target, err)
+	}
 }
 
 func releaseRefusal(err error) string {
@@ -456,6 +476,7 @@ func handleDormantSweep(w http.ResponseWriter, r *http.Request) {
 			// reporting a completed purge as refused would invite a retry of
 			// the one operation where retrying is not free. A stale binding is
 			// visible on the roster; an unexplained second purge is not.
+			forgetMergeBase(r.Context(), target, subject)
 			if err := dbForgetTargetBinding(r.Context(), target, subject); err != nil {
 				log.Printf("[DORMANT] purged %s on %s and could not forget its binding: %v", name, target, err)
 			}

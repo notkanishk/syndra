@@ -224,6 +224,20 @@ type TargetAccount struct {
 	// refuses to adopt or purge it whatever any caller asks; this is carried so
 	// an operator surface can say so BEFORE somebody meets the refusal.
 	Self bool `json:"self,omitempty"`
+	// State is what the account currently holds, keyed by the field names the
+	// target's own manifest declares — THEIRS, in the three-way comparison
+	// reconciliation performs (change `reconciliation-as-merge`).
+	//
+	// Sent by the add-on in entitlement vocabulary rather than derived here from
+	// the target's own words. Mapping `groups` to `group` or `locked` to
+	// `enabled` in this package would put what TrueNAS calls things inside the
+	// component that must not know, and the next add-on would need a second
+	// mapping beside it.
+	//
+	// Empty from an add-on that predates it, which reads as a subject whose
+	// current values are unknown — and an unknown current value is not compared,
+	// it converges as it did before.
+	State map[string]json.RawMessage `json:"state,omitempty"`
 }
 
 // SubjectsResult is a full state read.

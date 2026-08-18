@@ -2,6 +2,7 @@ package drift
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -162,10 +163,55 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	}
 
 	zitSet := buildHolderSet(nil, zit)
+
+	// The third state, for the half of this sweep that WRITES (change
+	// `reconciliation-as-merge`).
+	//
+	// Everything below concludes from an absence: Syndra intends a grant and
+	// Zitadel does not have it. That absence has two causes and they want
+	// opposite answers — the grant was never projected, in which case replaying
+	// it is the whole point of this loop; or somebody removed it in Zitadel by
+	// hand, in which case replaying it silently reverts a person's decision and
+	// leaves no record that they made one.
+	//
+	// Nothing here could tell them apart. The ledger holds intent, the outbox is
+	// pruned, and the grant index is DELETED on `grant.removed` — so the one
+	// artefact that would have said "Zitadel held this once" is the one an
+	// out-of-band removal erases. The base is what the sweep itself last
+	// observed, recorded from its own current read at the end of this function.
+	//
+	// A base that cannot be read is not a reason to stop: every grant then
+	// classifies as never-observed and this loop behaves exactly as it did
+	// before, which is the same rollout rule the add-on sweep follows.
+	bases, err := listMergeBases(ctx, target)
+	if err != nil {
+		log.Printf("[DRIFT] merge bases unavailable for %s, replaying without them: %v", target, err)
+		bases = map[string]db.MergeBase{}
+	}
+	observedByHand := map[services.HolderKey]bool{}
+
 	for _, dg := range direct {
 		k := services.HolderKey{UserID: dg.UserID, ProjectID: dg.ProjectID, RoleKey: dg.RoleKey}
 		if zitSet[k] {
 			continue // present in Zitadel — no drift
+		}
+		if wasObserved(bases, dg.UserID, dg.ProjectID, dg.RoleKey) {
+			// Zitadel held this the last time the sweep looked, and does not
+			// now. Somebody removed it there. Recorded as a finding for triage
+			// rather than replayed — `syndra_only` is the drift type this
+			// schema has always declared and nothing has ever written, because
+			// the only thing that ever happened to this state was a silent
+			// replay.
+			observedByHand[k] = true
+			if _, inserted, err := upsertDriftItem(ctx, target, dg.UserID, dg.ProjectID,
+				[]string{dg.RoleKey}, "", "reconciliation_sweep", "syndra_only"); err != nil {
+				log.Printf("[DRIFT] upsert syndra_only failed user=%s project=%s role=%s: %v",
+					dg.UserID, dg.ProjectID, dg.RoleKey, err)
+				res.WriteFailures++
+			} else if inserted {
+				res.DriftItemsCreated++
+			}
+			continue
 		}
 		// Skip if an undrained add is already queued for this triple — otherwise a
 		// persistently-missing grant would pile a fresh duplicate outbox row every
@@ -208,6 +254,20 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	// the sweep — but declaring the target reconciled on top of that clears
 	// `unreconciled_since` and claims a picture the surface does not have. The
 	// read was current; the record of what it found is not.
+	// The observation, recorded last and only from a read that concluded.
+	//
+	// A base is what the target was SEEN holding, so it may only be written from
+	// a current, untruncated read that this pass consumed in full — the same
+	// conditions that entitle the sweep to call the target reconciled at all.
+	//
+	// And never for a grant this pass could not resolve. Advancing the base past
+	// an unresolved difference would erase the evidence that produced the
+	// finding: the next pass would see Zitadel's current state as the last
+	// agreed one, classify the missing grant as never-projected, and replay it —
+	// the silent revert, one pass later. The base moves when a person decides,
+	// not when a sweep notices.
+	recordObservedGrants(ctx, target, zit, observedByHand, bases, &res)
+
 	if res.WriteFailures > 0 {
 		res.Reconciliation = recordUnreconciled(ctx, target, db.UnreconciledFindingsUnrecorded)
 	} else {
@@ -286,5 +346,115 @@ func fetchAllZitadelGrants(ctx context.Context) ([]zitadel.UserGrant, bool, erro
 			return all, true, nil
 		}
 		offset += len(page.Items)
+	}
+}
+
+// The merge base, in Zitadel's vocabulary (change `reconciliation-as-merge`).
+//
+// The add-on targets record one per subject from what the add-on read back after
+// each apply. Zitadel has no read-back to record: the outbox has no `confirmed`
+// state by design, terminal rows are pruned, and the grant index — the one place
+// that knew Zitadel had held a grant — is deleted by the very event that removes
+// it. So the observer here is the sweep itself, which already performs a
+// complete read of every grant Zitadel holds.
+//
+// Same table and same meaning as the add-on's: what the target was seen holding,
+// per subject. The subject is the user, and the fields are their grants, keyed
+// `project/role` — one vocabulary, so a second reconciler cannot drift into a
+// second definition of what a base is.
+
+// grantField names one grant the way the base stores it.
+func grantField(projectID, roleKey string) string {
+	return projectID + "/" + roleKey
+}
+
+// wasObserved reports whether Zitadel was last seen holding this grant.
+//
+// False for anything never observed, which is every grant on a deployment that
+// has not swept since this landed. That is the rollout rule, and it is the safe
+// direction: an unobserved grant replays exactly as it did before, and the first
+// complete sweep records what it saw so the pass after it can tell the two
+// causes apart.
+func wasObserved(bases map[string]db.MergeBase, userID, projectID, roleKey string) bool {
+	base, found := bases[userID]
+	if !found {
+		return false
+	}
+	_, held := base.Base[grantField(projectID, roleKey)]
+	return held
+}
+
+// recordObservedGrants writes what this pass saw Zitadel holding.
+//
+// Per user, as the whole set, which makes it self-pruning: a grant that is no
+// longer held simply does not appear, so a revoke Syndra itself performed leaves
+// no stale observation behind to be compared against a later re-grant.
+//
+// With one exception, and it is the load-bearing part: a grant this pass raised
+// a finding about keeps its previous observation. Overwriting it would say
+// Zitadel's current state is the last agreed one — and the next pass would then
+// classify the missing grant as never-projected and replay it, which is the
+// silent revert this whole change removes, arriving one pass later through the
+// bookkeeping instead of through the loop.
+//
+// Non-fatal, and counted. A failure here costs attribution on the next pass, not
+// correctness on this one — but a pass whose observations did not land has not
+// recorded what it saw, which is what `WriteFailures` means everywhere else in
+// this sweep.
+func recordObservedGrants(ctx context.Context, target string, zit []zitadel.UserGrant,
+	unresolved map[services.HolderKey]bool, previous map[string]db.MergeBase, res *DriftResult) {
+	observed := map[string]map[string]json.RawMessage{}
+	for _, g := range zit {
+		for _, rk := range g.RoleKeys {
+			held, ok := observed[g.UserID]
+			if !ok {
+				held = map[string]json.RawMessage{}
+				observed[g.UserID] = held
+			}
+			held[grantField(g.ProjectID, rk)] = json.RawMessage(`true`)
+		}
+	}
+
+	// Every grant under an unresolved finding keeps what was observed before,
+	// and the user keeps a row even if this read saw nothing else of theirs.
+	for k := range unresolved {
+		prior, found := previous[k.UserID]
+		if !found {
+			continue
+		}
+		field := grantField(k.ProjectID, k.RoleKey)
+		value, held := prior.Base[field]
+		if !held {
+			continue
+		}
+		fields, ok := observed[k.UserID]
+		if !ok {
+			fields = map[string]json.RawMessage{}
+			observed[k.UserID] = fields
+		}
+		fields[field] = value
+	}
+
+	for userID, fields := range observed {
+		if err := saveMergeBase(ctx, db.MergeBase{
+			Target: target, SubjectID: userID, Base: fields,
+		}); err != nil {
+			log.Printf("[DRIFT] could not record what %s was seen holding for %s: %v", target, userID, err)
+			res.WriteFailures++
+		}
+	}
+
+	// A user Zitadel holds nothing for, whose base still claims it does, is an
+	// observation too — of an absence, which is the one thing this sweep is
+	// entitled to conclude only from a complete read. Their base is dropped so
+	// the next pass does not compare against grants nobody holds.
+	for userID := range previous {
+		if _, seen := observed[userID]; seen {
+			continue
+		}
+		if err := forgetMergeBase(ctx, target, userID); err != nil {
+			log.Printf("[DRIFT] could not forget %s's stale observation on %s: %v", userID, target, err)
+			res.WriteFailures++
+		}
 	}
 }
