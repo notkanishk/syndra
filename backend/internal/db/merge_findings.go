@@ -1,0 +1,236 @@
+package db
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+)
+
+// The differences a reconciliation may not resolve (change
+// `reconciliation-as-merge`).
+//
+// A pass that can name the CAUSE of a difference can also say which causes are
+// not its to act on: the target moved and Syndra did not, both moved
+// differently, or the account is gone. Each needs a person, and a state that
+// needs a person has to outlive the pass that found it — the same reason
+// `target_binding_conflicts` exists, learned again on the state that occurs most.
+
+// ErrNoSuchMergeFinding is a finding cited that does not exist or is already
+// resolved. Refused rather than treated as done: resolving one twice would let
+// a second operator believe they made a decision somebody else had already made
+// differently.
+var ErrNoSuchMergeFinding = errors.New("db: no standing merge finding")
+
+// Merge finding resolutions, as the surface offers them.
+const (
+	// ResolutionKeepOurs applies Syndra's state over the target's. The old
+	// default, now a decision with a name on it.
+	ResolutionKeepOurs = "keep_ours"
+	// ResolutionTakeTheirs adopts the target's value into the desired state,
+	// through a per-subject decision that can actually hold it.
+	ResolutionTakeTheirs = "take_theirs"
+	// ResolutionReprovisioned answers a deleted-upstream account by making it
+	// again.
+	ResolutionReprovisioned = "reprovisioned"
+	// ResolutionUnbound answers it the other way: Syndra stops managing the
+	// account rather than recreating it.
+	ResolutionUnbound = "unbound"
+	// ResolutionAgreed is the one nobody chooses. The two sides now match — a
+	// policy changed, or the target did — so the disagreement this row records
+	// has stopped existing. Closing it is not automatic resolution: nothing was
+	// decided and nothing was written. Leaving it open would be the other way to
+	// make a queue unreadable, filling it with problems that are already over.
+	ResolutionAgreed = "agreed"
+)
+
+// MergeFinding is one standing difference.
+type MergeFinding struct {
+	ID        string `json:"id"`
+	Target    string `json:"target"`
+	SubjectID string `json:"subject_id"`
+	// Field is empty for an account-level finding.
+	Field   string `json:"field,omitempty"`
+	Outcome string `json:"outcome"`
+	// The three values as the classifier saw them. Absent for a
+	// `deleted_upstream`, which is about the account rather than a value.
+	Base       json.RawMessage `json:"base,omitempty"`
+	Ours       json.RawMessage `json:"ours,omitempty"`
+	Theirs     json.RawMessage `json:"theirs,omitempty"`
+	DetectedAt time.Time       `json:"detected_at"`
+	LastSeenAt time.Time       `json:"last_seen_at"`
+}
+
+// RecordMergeFinding raises a finding, or refreshes the one already standing.
+//
+// Idempotent on the (target, subject, field) a finding is about. A sweep every
+// six hours against one unresolved hand edit must produce one row rather than
+// four a day: a single problem reported as a growing list reads as it getting
+// worse, and a queue that grows on its own is one people stop opening.
+//
+// The values are refreshed rather than left alone, because a standing finding
+// can MOVE — somebody edits the target again while it is open — and an operator
+// deciding from the values first recorded would be deciding about a state that
+// no longer exists. `detected_at` does not move: when this first became true is
+// the age the surface sorts on.
+func RecordMergeFinding(ctx context.Context, f MergeFinding) error {
+	switch {
+	case strings.TrimSpace(f.Target) == "":
+		return fmt.Errorf("record merge finding: no target")
+	case strings.TrimSpace(f.SubjectID) == "":
+		return fmt.Errorf("record merge finding: no subject")
+	case strings.TrimSpace(f.Outcome) == "":
+		return fmt.Errorf("record merge finding for %s: no outcome", f.SubjectID)
+	}
+
+	const q = `
+		INSERT INTO target_merge_findings
+			(target, subject_id, field, outcome, base_value, ours_value, theirs_value)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (target, subject_id, field) WHERE resolved_at IS NULL
+		DO UPDATE SET
+			outcome      = EXCLUDED.outcome,
+			base_value   = EXCLUDED.base_value,
+			ours_value   = EXCLUDED.ours_value,
+			theirs_value = EXCLUDED.theirs_value,
+			last_seen_at = NOW()`
+	if _, err := querier(ctx).Exec(ctx, q, f.Target, f.SubjectID, f.Field, f.Outcome,
+		nullableJSON(f.Base), nullableJSON(f.Ours), nullableJSON(f.Theirs)); err != nil {
+		return fmt.Errorf("record merge finding for %s on %s: %w", f.SubjectID, f.Target, err)
+	}
+	return nil
+}
+
+// nullableJSON keeps an absent value absent.
+//
+// A `deleted_upstream` has no values at all, and writing `null` as a JSON
+// document rather than as SQL NULL would make "the target reported null" and
+// "there was nothing to report" the same row.
+func nullableJSON(raw json.RawMessage) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	return string(raw)
+}
+
+// StandingMergeFindings is what is still waiting for a person on one target.
+func StandingMergeFindings(ctx context.Context, target string) ([]MergeFinding, error) {
+	const q = `
+		SELECT id, target, subject_id, field, outcome, base_value, ours_value, theirs_value,
+		       detected_at, last_seen_at
+		FROM target_merge_findings
+		WHERE target = $1 AND resolved_at IS NULL
+		ORDER BY detected_at DESC`
+	rows, err := querier(ctx).Query(ctx, q, target)
+	if err != nil {
+		return nil, fmt.Errorf("read merge findings for %s: %w", target, err)
+	}
+	defer rows.Close()
+
+	out := []MergeFinding{}
+	for rows.Next() {
+		var f MergeFinding
+		var base, ours, theirs []byte
+		if err := rows.Scan(&f.ID, &f.Target, &f.SubjectID, &f.Field, &f.Outcome,
+			&base, &ours, &theirs, &f.DetectedAt, &f.LastSeenAt); err != nil {
+			return nil, fmt.Errorf("scan merge finding on %s: %w", target, err)
+		}
+		f.Base, f.Ours, f.Theirs = json.RawMessage(base), json.RawMessage(ours), json.RawMessage(theirs)
+		out = append(out, f)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read merge findings for %s: %w", target, err)
+	}
+	return out, nil
+}
+
+// CountStandingMergeFindings is the governance summary's read.
+//
+// A count rather than the rows, because the landing page's question is whether
+// anything needs a person — and a finding that cannot be counted there sits
+// behind a page that says nothing does.
+func CountStandingMergeFindings(ctx context.Context) (int, error) {
+	const q = `SELECT COUNT(*) FROM target_merge_findings WHERE resolved_at IS NULL`
+	var n int
+	if err := querier(ctx).QueryRow(ctx, q).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count merge findings: %w", err)
+	}
+	return n, nil
+}
+
+// GetStandingMergeFinding reads one, so a resolution acts on what it cites.
+//
+// Read inside the resolving transaction rather than trusted from the request:
+// the resolution's meaning depends on the finding's outcome and field, and a
+// caller naming an id is not a caller who has seen the row.
+func GetStandingMergeFinding(ctx context.Context, id string) (MergeFinding, error) {
+	const q = `
+		SELECT id, target, subject_id, field, outcome, base_value, ours_value, theirs_value,
+		       detected_at, last_seen_at
+		FROM target_merge_findings
+		WHERE id = $1::uuid AND resolved_at IS NULL`
+	var f MergeFinding
+	var base, ours, theirs []byte
+	err := querier(ctx).QueryRow(ctx, q, id).Scan(&f.ID, &f.Target, &f.SubjectID, &f.Field,
+		&f.Outcome, &base, &ours, &theirs, &f.DetectedAt, &f.LastSeenAt)
+	if err != nil {
+		return MergeFinding{}, fmt.Errorf("%w: %s", ErrNoSuchMergeFinding, id)
+	}
+	f.Base, f.Ours, f.Theirs = json.RawMessage(base), json.RawMessage(ours), json.RawMessage(theirs)
+	return f, nil
+}
+
+// ClearMergeFinding closes a finding whose difference no longer exists.
+//
+// Attributed to the sweep rather than left unattributed, because the schema
+// refuses a resolution with no actor and because "who closed this" has a real
+// answer here: nobody decided, a pass observed that the two sides now agree.
+//
+// Keyed on the finding's subject and field rather than on an id, since the
+// caller is a sweep that just classified state — it knows what agrees, not which
+// row said otherwise.
+func ClearMergeFinding(ctx context.Context, target, subjectID, field, actor string) error {
+	const q = `
+		UPDATE target_merge_findings
+		SET resolved_at = NOW(), resolved_by = $4, resolution = $5
+		WHERE target = $1 AND subject_id = $2 AND field = $3 AND resolved_at IS NULL`
+	if _, err := querier(ctx).Exec(ctx, q, target, subjectID, field, actor, ResolutionAgreed); err != nil {
+		return fmt.Errorf("clear merge finding for %s on %s: %w", subjectID, target, err)
+	}
+	return nil
+}
+
+// ResolveMergeFinding closes one, naming who decided and what they decided.
+//
+// It does not perform the resolution. Applying Syndra's state queues a
+// convergence; adopting the target's value writes a per-subject decision; both
+// happen in the service layer, and both must be durable before this row is
+// closed — a finding marked resolved by an action that then failed is a
+// difference nothing will raise again until it changes a second time.
+func ResolveMergeFinding(ctx context.Context, id, actor, resolution string) (MergeFinding, error) {
+	switch {
+	case strings.TrimSpace(actor) == "":
+		return MergeFinding{}, fmt.Errorf("resolve merge finding: no actor")
+	case resolution != ResolutionKeepOurs && resolution != ResolutionTakeTheirs &&
+		resolution != ResolutionReprovisioned && resolution != ResolutionUnbound:
+		// `agreed` is deliberately not accepted here. It is what a sweep writes
+		// when a difference stops existing, and a person choosing it would be
+		// dismissing a finding by asserting something they have not checked.
+		return MergeFinding{}, fmt.Errorf("resolve merge finding: %q is not a resolution", resolution)
+	}
+
+	const q = `
+		UPDATE target_merge_findings
+		SET resolved_at = NOW(), resolved_by = $2, resolution = $3
+		WHERE id = $1::uuid AND resolved_at IS NULL
+		RETURNING id, target, subject_id, field, outcome, detected_at, last_seen_at`
+	var f MergeFinding
+	err := querier(ctx).QueryRow(ctx, q, id, actor, resolution).Scan(&f.ID, &f.Target,
+		&f.SubjectID, &f.Field, &f.Outcome, &f.DetectedAt, &f.LastSeenAt)
+	if err != nil {
+		return MergeFinding{}, fmt.Errorf("%w: %s", ErrNoSuchMergeFinding, id)
+	}
+	return f, nil
+}

@@ -34,6 +34,11 @@ type addonReconcileHarness struct {
 	// base existed has none — so every test written before this mechanism keeps
 	// asserting the behaviour a baseless subject must still have.
 	bases map[string]db.MergeBase
+	// What the pass wrote down: the findings it raised, the ones it closed
+	// because their difference was over, and the observations it recorded.
+	findingsWritten []db.MergeFinding
+	findingsCleared []string
+	basesWritten    []db.MergeBase
 }
 
 func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
@@ -48,6 +53,22 @@ func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
 		markUnreconciled, markReconciled = origUnrec, origRec
 		listMergeBases = origBases
 	})
+	origSave, origClear, origBase := saveMergeFinding, clearMergeFinding, saveMergeBase
+	t.Cleanup(func() {
+		saveMergeFinding, clearMergeFinding, saveMergeBase = origSave, origClear, origBase
+	})
+	saveMergeFinding = func(_ context.Context, f db.MergeFinding) error {
+		h.findingsWritten = append(h.findingsWritten, f)
+		return nil
+	}
+	clearMergeFinding = func(_ context.Context, _, subject, field, _ string) error {
+		h.findingsCleared = append(h.findingsCleared, subject+"/"+field)
+		return nil
+	}
+	saveMergeBase = func(_ context.Context, b db.MergeBase) error {
+		h.basesWritten = append(h.basesWritten, b)
+		return nil
+	}
 	listMergeBases = func(context.Context, string) (map[string]db.MergeBase, error) {
 		if h.bases == nil {
 			return map[string]db.MergeBase{}, nil
@@ -601,5 +622,94 @@ func TestAnAddOnThatReportsNoStateStillConverges(t *testing.T) {
 	}
 	if res.Queued != 1 {
 		t.Fatalf("an add-on that reports no state must converge as before, got %d", res.Queued)
+	}
+}
+
+// Durable, or it is not a finding.
+//
+// The state most likely to have been left as sweep output is the one that
+// occurs most: `theirs_only` is what a hand edit on the target looks like, and
+// as a return value it is visible to whoever ran the pass and to nobody else.
+func TestAFindingOutlivesThePassThatFoundIt(t *testing.T) {
+	h := &addonReconcileHarness{
+		read: currentRead(addons.TargetAccount{
+			Username: "ada", UID: 3001, State: state(map[string]any{"enabled": false}),
+		}),
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "ada", AccountUID: uid(3001)}},
+		bases:    baseFor("sub-1", map[string]any{"enabled": true}),
+	}
+	stubAddonReconcile(t, h)
+
+	if _, err := ReconcileAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.findingsWritten) != 1 {
+		t.Fatalf("want one persisted finding: %+v", h.findingsWritten)
+	}
+	f := h.findingsWritten[0]
+	if f.SubjectID != "sub-1" || f.Field != "enabled" || f.Outcome != string(merge.TheirsOnly) {
+		t.Fatalf("the finding must carry what it is about: %+v", f)
+	}
+	if len(f.Base) == 0 || len(f.Ours) == 0 || len(f.Theirs) == 0 {
+		t.Fatalf("all three values travel with it: %+v", f)
+	}
+	// And nothing is observed for a subject with an outstanding difference.
+	// Advancing the base here would make the next pass read the target's
+	// current state as the last agreed one and revert the edit.
+	if len(h.basesWritten) != 0 {
+		t.Fatalf("a base must not advance past an unresolved finding: %+v", h.basesWritten)
+	}
+}
+
+// A difference that has stopped existing stops being a finding. Nothing is
+// decided and nothing is written to the target — the disagreement is simply
+// over, and a queue full of problems that are already finished is as unreadable
+// as one full of noise.
+func TestASettledDifferenceClosesItsFinding(t *testing.T) {
+	h := &addonReconcileHarness{
+		read: currentRead(addons.TargetAccount{
+			Username: "ada", UID: 3001, State: state(map[string]any{"enabled": true}),
+		}),
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "ada", AccountUID: uid(3001)}},
+		bases:    baseFor("sub-1", map[string]any{"enabled": true}),
+	}
+	stubAddonReconcile(t, h)
+
+	if _, err := ReconcileAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.findingsWritten) != 0 {
+		t.Fatalf("agreement is not a finding: %+v", h.findingsWritten)
+	}
+	if len(h.findingsCleared) != 1 || h.findingsCleared[0] != "sub-1/enabled" {
+		t.Fatalf("a settled difference must close whatever was standing: %v", h.findingsCleared)
+	}
+}
+
+// `already merged` writes nothing to the target, so nothing else would ever
+// record it. Without the sweep observing it, a hand-made change that matched
+// Syndra's intent would be re-detected as an agreement on every pass forever.
+func TestAnAgreementIsObservedSoItIsNotRediscoveredForever(t *testing.T) {
+	h := &addonReconcileHarness{
+		read: currentRead(addons.TargetAccount{
+			Username: "ada", UID: 3001, State: state(map[string]any{"enabled": true}),
+		}),
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "ada", AccountUID: uid(3001)}},
+		// The last observation disagrees with both sides, which now agree.
+		bases: baseFor("sub-1", map[string]any{"enabled": false}),
+	}
+	stubAddonReconcile(t, h)
+
+	if _, err := ReconcileAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.findingsWritten) != 0 {
+		t.Fatalf("somebody who made the change Syndra wanted has not drifted: %+v", h.findingsWritten)
+	}
+	if len(h.basesWritten) != 1 {
+		t.Fatalf("the agreement must be recorded: %+v", h.basesWritten)
+	}
+	if string(h.basesWritten[0].Base["enabled"]) != "true" {
+		t.Fatalf("the base must hold what the target reported: %v", h.basesWritten[0].Base)
 	}
 }

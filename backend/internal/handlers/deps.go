@@ -410,7 +410,16 @@ var (
 	// about an account nobody manages any more — and if that subject is later
 	// bound to a DIFFERENT account, it would be compared against a person it
 	// was never about.
-	dbForgetMergeBase          = db.ForgetMergeBase
+	dbForgetMergeBase = db.ForgetMergeBase
+
+	// The findings a reconciliation could not resolve, and the operator's answer
+	// to one. Separate seams because the assertion that matters spans them: the
+	// resolution must be WRITTEN before the finding is closed, and a test proving
+	// that has to be able to fail the first and watch the second not happen.
+	dbStandingMergeFindings    = db.StandingMergeFindings
+	dbGetStandingMergeFinding  = db.GetStandingMergeFinding
+	dbResolveMergeFinding      = db.ResolveMergeFinding
+	dbCountMergeFindings       = db.CountStandingMergeFindings
 	dbGetLogAnchor             = db.GetLogAnchor
 	dbStandingBindingConflicts = db.StandingBindingConflicts
 	dbResolveBindingConflict   = db.ResolveBindingConflict

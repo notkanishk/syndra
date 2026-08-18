@@ -95,6 +95,12 @@ var (
 	// nothing.
 	listMergeBases = db.MergeBasesFor
 
+	// The durable half. Separate seams from the base's, because the assertions
+	// are opposites: a finding must be WRITTEN for a difference the pass may not
+	// resolve, and a base must NOT be advanced past one.
+	saveMergeFinding  = db.RecordMergeFinding
+	clearMergeFinding = db.ClearMergeFinding
+
 	resolveIntent = func(ctx context.Context, subjectID, target string) (map[string]json.RawMessage, error) {
 		set, err := services.ResolveEntitlements(ctx, subjectID, target)
 		if err != nil {

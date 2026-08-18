@@ -553,6 +553,17 @@ type GovernanceSummary struct {
 	// a week with no drift. The absence of findings and the absence of readings
 	// are the same silence, and only one of them is good news.
 	UnreconciledTargets []UnreconciledTarget `json:"unreconciled_targets"`
+	// MergeFindings is how many differences a reconciliation found and was not
+	// entitled to resolve — a value the target moved and Syndra did not, a value
+	// both moved differently, or an account that is gone.
+	//
+	// Counted here beside the drift count and not inside it, because they are
+	// different questions: drift is access nobody can explain, and this is a
+	// disagreement about access everybody can explain and nobody has decided.
+	// A finding that cannot be counted on this page sits behind a landing screen
+	// saying nothing needs a person — which is the one thing it must never say
+	// while one does.
+	MergeFindings int `json:"merge_findings"`
 }
 
 // UnreconciledTarget is one target Syndra has not read for itself, and since

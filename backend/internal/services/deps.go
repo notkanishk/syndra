@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"log"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
@@ -34,7 +35,22 @@ var (
 	// round-trip to Zitadel would be wasteful. In local-policy-only mode the
 	// client is nil → reachable=false, which correctly disables "Resume now".
 	svcCountPendingPropagations = db.CountPendingPropagations
-	svcZitadelReachable         = func(ctx context.Context) bool {
+	// The standing merge findings, as a count for the landing page.
+	//
+	// Swallows its own error and answers zero, deliberately: the governance
+	// summary is a page of several independent readings, and one unreadable
+	// count must not blank the rest. The count being wrong is visible on the
+	// target's own page, which is where the findings themselves live.
+	svcCountMergeFindings = func(ctx context.Context) int {
+		n, err := db.CountStandingMergeFindings(ctx)
+		if err != nil {
+			log.Printf("[GOVERNANCE] could not count standing merge findings: %v", err)
+			return 0
+		}
+		return n
+	}
+
+	svcZitadelReachable = func(ctx context.Context) bool {
 		return zitadel.MgmtClient != nil
 	}
 
