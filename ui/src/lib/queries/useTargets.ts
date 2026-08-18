@@ -66,6 +66,19 @@ export interface TargetHealth {
   snapshot_taken_at?: string;
   last_read_at?: string;
   key_expires_at?: string;
+  /**
+   * Which of three states the credential is in. `set` carries a date above;
+   * `none` is a key issued deliberately without an expiry; `unrecorded` is a
+   * date nobody told Syndra — the one worth acting on, because a key CAN expire
+   * without Syndra knowing and a silently expired key looks like an outage.
+   */
+  key_expiry?: "set" | "none" | "unrecorded";
+  /** SMB shares with auditing switched off. Activity reports for a member on
+   * one of these can only ever come back empty. */
+  unaudited_shares?: string[];
+  /** Whether the share list could be read at all — "nothing is unaudited" and
+   * "could not look" must not render as the same thing. */
+  shares_readable?: boolean;
   detail?: string;
   /**
    * The backend's memory of this target's mutation log, when it is carrying a
@@ -247,6 +260,42 @@ export function useAdoptAccount(target: string) {
       client.invalidateQueries({ queryKey: ["targets", target, "health"] });
     },
   });
+}
+
+/**
+ * Reconciling one target now, rather than waiting for the six-hour sweep.
+ *
+ * It queues and does not apply, which is what makes it safe to press twice.
+ */
+export function useReconcileTarget(target: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => request<TargetReconcileResult>(`/targets/${target}/reconcile`, { method: "POST" }),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["targets", target] });
+      client.invalidateQueries({ queryKey: ["governance"] });
+    },
+  });
+}
+
+export interface StaleBinding {
+  subject_id: string;
+  username: string;
+  uid?: number;
+}
+
+export interface TargetReconcileResult {
+  target: string;
+  bound: number;
+  queued: number;
+  current: boolean;
+  truncated?: boolean;
+  reason?: string;
+  unmanaged?: Array<{ username: string; uid: number }>;
+  /** Bindings whose account is no longer on the target. Never converged — the
+   * plan for one says "create", and acting on it would recreate an account
+   * somebody deleted. */
+  stale?: StaleBinding[];
 }
 
 /** Stopping or resuming an add-on's writing, without a redeploy. */
