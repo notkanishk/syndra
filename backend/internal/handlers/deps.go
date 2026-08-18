@@ -419,6 +419,7 @@ var (
 	dbStandingMergeFindings    = db.StandingMergeFindings
 	dbGetStandingMergeFinding  = db.GetStandingMergeFinding
 	dbResolveMergeFinding      = db.ResolveMergeFinding
+	dbRecordMergeDecision      = db.RecordMergeDecision
 	dbCountMergeFindings       = db.CountStandingMergeFindings
 	dbGetLogAnchor             = db.GetLogAnchor
 	dbStandingBindingConflicts = db.StandingBindingConflicts

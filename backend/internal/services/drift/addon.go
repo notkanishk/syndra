@@ -195,19 +195,36 @@ func ReconcileAddon(ctx context.Context, target string) (AddonReconcileResult, e
 	live, stale := partitionByPresence(bindings, read.Accounts)
 	res.Stale = stale
 
-	queued, findings, convergeErr := convergeBound(ctx, target, live, read.Accounts)
+	unrecorded := 0
+	queued, findings, convergeErr := convergeBound(ctx, target, live, read.Accounts, &unrecorded)
 	res.Queued = queued
 	// The absent accounts are findings of the same kind, reached by a different
 	// route: `deleted_upstream` is one of the outcomes, and reporting it beside
 	// the field-level ones is what stops it being a special case with its own
 	// vocabulary. `Stale` stays for the surfaces already built on it.
+	//
+	// PERSISTED, like every other finding. Returned-only, it lived for exactly
+	// as long as the HTTP response that carried it: gone on refresh, absent
+	// from the target's decision queue, uncounted by governance — which is the
+	// failure this whole table exists to prevent, and it was reintroduced on the
+	// one outcome that names a deleted account.
 	for _, b := range stale {
-		findings = append(findings, merge.Absent(b.SubjectID).Findings()...)
+		absent := merge.Absent(b.SubjectID).Findings()
+		findings = append(findings, absent...)
+		unrecorded += persistFindings(ctx, target, merge.Absent(b.SubjectID), absent)
 	}
 	res.Findings = findings
 
 	reason := ""
 	switch {
+	case unrecorded > 0:
+		// A pass that could not write down what it found has not reconciled the
+		// target, whatever its read managed. The same rule the Zitadel sweep
+		// applies to its own write failures, and it was missing here: the
+		// failures were logged and the target was then marked reconciled, so the
+		// surface reported a clean pass over findings nobody would ever see.
+		log.Printf("[ADDON-RECONCILE] %s: %d finding(s) could not be recorded", target, unrecorded)
+		reason = db.UnreconciledFindingsUnrecorded
 	case convergeErr != nil:
 		// The picture is current and the record of it is not. Same operator
 		// consequence as any other unrecorded finding: the surface understates
@@ -294,7 +311,7 @@ func unmanaged(accounts []addons.TargetAccount, bindings []db.TargetBinding) []U
 // queueing a convergence for it would be the sweep inferring a decision it is
 // specifically forbidden from inferring.
 func convergeBound(ctx context.Context, target string, bindings []db.TargetBinding,
-	accounts []addons.TargetAccount) (int, []merge.SubjectFinding, error) {
+	accounts []addons.TargetAccount, unrecorded *int) (int, []merge.SubjectFinding, error) {
 	findings := make([]merge.SubjectFinding, 0)
 	if len(bindings) == 0 {
 		return 0, findings, nil
@@ -342,7 +359,7 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 		state := merge.Classify(b.SubjectID, set, theirs, base)
 		found := state.Findings()
 		findings = append(findings, found...)
-		persistFindings(ctx, target, state, found)
+		*unrecorded += persistFindings(ctx, target, state, found)
 		if !state.Convergeable() {
 			continue
 		}
@@ -411,7 +428,8 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 // Failures are logged and counted as unrecorded findings by the caller's own
 // reason, never fatal: a pass that could not write one finding must still write
 // the rest.
-func persistFindings(ctx context.Context, target string, state merge.Subject, found []merge.SubjectFinding) {
+func persistFindings(ctx context.Context, target string, state merge.Subject, found []merge.SubjectFinding) int {
+	failed := 0
 	open := make(map[string]bool, len(found))
 	for _, f := range found {
 		open[f.Field] = true
@@ -421,7 +439,22 @@ func persistFindings(ctx context.Context, target string, state merge.Subject, fo
 		}); err != nil {
 			log.Printf("[ADDON-RECONCILE] could not record a %s finding for %s on %s: %v",
 				f.Outcome, f.SubjectID, target, err)
+			failed++
 		}
+	}
+	if state.Absent {
+		// Nothing to close. An absent account has no fields, and the loop below
+		// would clear nothing — but running it would also clear the
+		// account-level finding this call just raised.
+		return failed
+	}
+	// The account is present, so whatever said it was gone is over. Cleared
+	// here rather than by any field: `deleted_upstream` occupies the empty-field
+	// slot, and the loop below only ever names real fields.
+	if err := clearMergeFinding(ctx, target, state.SubjectID, "", reconcileActor); err != nil {
+		log.Printf("[ADDON-RECONCILE] could not close a settled deleted-upstream finding for %s on %s: %v",
+			state.SubjectID, target, err)
+		failed++
 	}
 	// Every managed field this pass could account for closes whatever was
 	// standing against it. The classifier has just said the two sides agree, or
@@ -434,8 +467,10 @@ func persistFindings(ctx context.Context, target string, state merge.Subject, fo
 		if err := clearMergeFinding(ctx, target, state.SubjectID, f.Field, reconcileActor); err != nil {
 			log.Printf("[ADDON-RECONCILE] could not close a settled finding for %s on %s: %v",
 				state.SubjectID, target, err)
+			failed++
 		}
 	}
+	return failed
 }
 
 // observeState records what the target was seen holding, for the managed fields.

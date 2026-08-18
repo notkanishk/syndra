@@ -352,6 +352,31 @@ export interface MergeFinding {
   theirs?: unknown;
   detected_at: string;
   last_seen_at: string;
+  /** Whether the target's value can be held for this ONE subject. True only for
+   * a lifecycle field the target turned off, which becomes a deny allowance.
+   * Computed by the backend: which fields have a per-subject home is a fact
+   * about the entitlement model, and a copy of that rule here would be a second
+   * definition. */
+  adoptable?: boolean;
+  /** The sentence shown instead of an adopt button, when there is no home. */
+  why_not?: string;
+  /** What would have to change instead, with how far editing it reaches. */
+  policy?: GoverningPolicy[];
+  /** What somebody already chose. A decided finding is still standing: the work
+   * it queued has not landed, and the row closes when a pass sees the target
+   * agree. */
+  decision?: string;
+  decided_by?: string;
+  decided_at?: string;
+}
+
+/** A mapping that produces a field's value, and its blast radius. */
+export interface GoverningPolicy {
+  mapping_id: string;
+  project_id: string;
+  role_key: string;
+  value: string;
+  holders: number;
 }
 
 export function useMergeFindings(target: string | undefined) {
