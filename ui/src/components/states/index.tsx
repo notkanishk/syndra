@@ -3,6 +3,8 @@
 import Link from "next/link";
 
 import { ApiError } from "@/lib/api-client";
+import { Button } from "@/components/ui/Button";
+import { CopyableValue } from "@/components/ui/CopyableValue";
 // The prose a failure wears lives in one place, shared with every surface that
 // reports a mutation. A read that fails and a write that fails were describing
 // the same 403 in two files until this import existed.
@@ -138,17 +140,20 @@ export function ErrorState({
     >
       <div className={`type-empty-title ${bare ? "text-danger-text" : ""}`}>{title}</div>
       <p className="text-[14px] text-muted">{`${sentence(detail)} ${NOTHING_CHANGED}`}</p>
-      <div className="mt-1.5 flex items-center gap-2">
+      {/* The shared control, not a hand-rolled pill: a browser pass found this
+          one rendering at 32px on a phone while every `Button` in the product
+          cleared 44, because the floor lives in `buttonClasses` and this had
+          walked around it. */}
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
         {onRetry && (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="rounded-pill bg-tint-3 px-4 py-1.5 text-[13px] font-semibold text-ink motion-tint hover:bg-tint-2"
-          >
+          <Button variant="ghost" size="sm" onClick={onRetry}>
             Try again
-          </button>
+          </Button>
         )}
-        {requestId && <span className="type-mono text-faint">{requestId}</span>}
+        {/* A labelled copy row rather than bare mono: an operator pasting this
+            into a message needs to be able to say what it is, and it is the
+            one thing here that gets the failure looked at. */}
+        {requestId && <CopyableValue value={requestId} label="Request id" className="mt-1" />}
       </div>
     </div>
   );
