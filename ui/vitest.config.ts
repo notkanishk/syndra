@@ -15,6 +15,13 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // jsdom defaults to `about:blank`, which is an opaque origin, and an
+    // opaque origin has no usable storage — `localStorage.setItem` is not a
+    // function there. Everything in this product that remembers a choice goes
+    // through localStorage: the theme, the Basic/Advanced view, the drift
+    // chime. Without an origin none of them can be tested at all, which is
+    // why none of them were.
+    environmentOptions: { jsdom: { url: "http://localhost" } },
     setupFiles: ["./src/test-setup.ts"],
   },
 });
