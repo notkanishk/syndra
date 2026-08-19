@@ -43,9 +43,25 @@ if (typeof window !== "undefined") {
   Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true });
 }
 
+// jsdom implements no clipboard either, and copy rows now ask whether one
+// exists BEFORE they offer to copy — so without this every test would see the
+// insecure-origin fallback and assert against a browser nobody was describing.
+// The default is a working clipboard, which is the secure origin most of the
+// product assumes; a test that means the http LAN removes it deliberately.
+function installClipboard() {
+  if (typeof navigator === "undefined") return;
+  Object.defineProperty(navigator, "clipboard", {
+    value: { writeText: () => Promise.resolve() },
+    configurable: true,
+  });
+}
+
+installClipboard();
+
 beforeEach(() => {
   resetMediaQueries();
   installMatchMedia();
+  installClipboard();
   if (typeof window !== "undefined") window.localStorage.clear();
 });
 
