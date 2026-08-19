@@ -350,7 +350,7 @@ function ProfileForm({
                   type="button"
                   aria-label={`Remove ${extra.key || "claim"}`}
                   onClick={() => setExtras((prev) => prev.filter((_, i) => i !== index))}
-                  className="rounded-pill border border-line-strong px-3 py-1.5 text-[13px] text-muted hover:text-ink"
+                  className="min-h-[44px] rounded-pill border border-line-strong px-3 text-[13px] text-muted hover:text-ink desktop:min-h-0 desktop:py-1.5"
                 >
                   Remove
                 </button>

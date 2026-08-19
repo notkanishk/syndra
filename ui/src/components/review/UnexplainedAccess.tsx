@@ -293,7 +293,7 @@ export function UnexplainedAccess() {
                   <button
                     type="button"
                     onClick={() => setLimit(items.length)}
-                    className="rounded-pill border border-line-strong px-4 py-1.5 text-[13.5px] font-semibold motion-tint hover:bg-[var(--hover)]"
+                    className="min-h-[44px] rounded-pill border border-line-strong px-4 text-[13.5px] font-semibold motion-tint hover:bg-[var(--hover)] desktop:min-h-0 desktop:py-1.5"
                   >
                     Show all {items.length}
                   </button>

@@ -93,7 +93,7 @@ export function FilterPills<T extends string>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(option.value)}
-            className={`rounded-pill px-3.5 py-1.5 text-[13px] motion-tint ${
+            className={`min-h-[44px] rounded-pill px-3.5 text-[13px] motion-tint desktop:min-h-0 desktop:py-1.5 ${
               active ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
             }`}
           >
