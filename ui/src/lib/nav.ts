@@ -165,9 +165,14 @@ export function targetLabel(target: string): string {
 }
 
 /**
- * Member — two destinations, and that is deliberate. No Home: a member's
- * landing IS their access, so a separate landing would be an empty room in
- * front of the only room. The view switch is not rendered for members at all.
+ * Member — three destinations. No Home: a member's landing IS their access, so
+ * a separate landing would be an empty room in front of the only room. The view
+ * switch is not rendered for members at all.
+ *
+ * This comment said "two" until the storage row shipped, which is the same
+ * drift that put the row in the rail and not in the middleware — a developer
+ * reads the sentence before they trust the array, and the count is quoted
+ * elsewhere as a fact about the product.
  */
 export const MEMBER_NAV: NavEntry[] = [
   leaf("My access", "/"),
