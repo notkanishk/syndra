@@ -1,22 +1,18 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { buildRedirectUrl } from "@/lib/request-url";
+// The member allowlist is `lib/nav`'s, not a copy of it. This file used to
+// declare its own, and the two drifted the day the storage row was added: the
+// rail offered every member a destination middleware then redirected them off.
+// A route a member may reach is navigation structure, and navigation structure
+// lives in one file. Safe on the Edge runtime where lib/session is not —
+// lib/nav imports nothing at all, so nothing follows it into the bundle.
+import { memberMayVisit } from "@/lib/nav";
 
 // Must match SESSION_COOKIE_NAME in lib/session.ts. Declared locally because
 // this file runs on the Edge runtime and importing lib/session would pull
 // node:crypto (used for cookie signing, SC4) into the Edge bundle.
 const SESSION_COOKIE_NAME = "syndra_session";
-
-/**
- * Members reach exactly two destinations. Everything else is not rendered and
- * not reachable for them — the backend 403s the underlying reads regardless,
- * and this keeps a hand-typed URL from landing on a page that will only fail.
- *
- * An allowlist rather than a denylist on purpose: a new operator route added
- * to the rail is protected by default, instead of being exposed until somebody
- * remembers to add it here.
- */
-const MEMBER_ALLOWED_PATHS = ["/", "/requests", "/login"];
 
 type SessionState =
   | { kind: "valid"; userId: string; role: string }
@@ -124,11 +120,9 @@ export async function middleware(request: NextRequest) {
     return redirectTo(request, "/");
   }
 
-  if (
-    session.kind === "valid" &&
-    session.role === "user" &&
-    !MEMBER_ALLOWED_PATHS.includes(pathname)
-  ) {
+  // `/login` needs no seat on the allowlist: a valid session was already sent
+  // away from it two guards above, and an absent one never reaches this check.
+  if (session.kind === "valid" && session.role === "user" && !memberMayVisit(pathname)) {
     return redirectTo(request, "/");
   }
 
