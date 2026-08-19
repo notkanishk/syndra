@@ -21,14 +21,52 @@ interface ModalProps {
   children: React.ReactNode;
 }
 
+/**
+ * One dialog, two shapes.
+ *
+ * Above the tablet breakpoint these are centred cards at their stated widths.
+ * Below it every one of them rises from the bottom edge as a sheet, because a
+ * centred card at 390px is a sheet with worse manners: it wastes both margins,
+ * puts its actions in the middle of the screen where no thumb rests, and gives
+ * a keyboard nothing to dock against.
+ *
+ * The height each size takes on a phone is a judgement about what it holds:
+ *
+ *  - `sm` is a rename field or a single confirmation. It takes its content's
+ *    height and no more — a one-field sheet at full height is a ceremony the
+ *    field has not earned.
+ *  - `md` acts on one named subject, so it stops 96px short of the top and the
+ *    person or target being acted on stays visible behind it. An operator who
+ *    cannot see who they are acting on is the failure this margin exists for.
+ *  - `lg` is a plan, a payload or a picker — the content *is* the subject, so
+ *    it goes full height and its footer stays pinned.
+ */
 const SIZE_CLASS: Record<NonNullable<ModalProps["size"]>, string> = {
-  sm: "max-w-[420px]",
-  md: "max-w-[520px]",
-  lg: "max-w-[760px]",
+  sm: "max-w-[420px] max-h-[86dvh] tablet:max-h-[calc(100dvh-32px)]",
+  md: "max-w-[520px] max-h-[calc(100dvh-96px)] tablet:max-h-[calc(100dvh-32px)]",
+  lg: "max-w-[760px] h-[calc(100dvh-24px)] tablet:h-auto tablet:max-h-[calc(100dvh-32px)]",
 };
 
 const FOCUSABLE_SELECTOR =
   "button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
+
+/**
+ * The panel's focusable elements, in order, minus anything deliberately taken
+ * out of the tab order.
+ *
+ * The selector alone is not enough: `button:not([disabled])` matches a button
+ * carrying `tabindex="-1"`, because the negative-tabindex clause is a separate
+ * alternative rather than a filter over the others. Without this the sheet's
+ * grabber — a redundant touch affordance and the panel's first child — took
+ * the focus every dialog gives on open, so every dialog opened with the cursor
+ * on "close it".
+ */
+function focusableIn(panel: HTMLElement | null): HTMLElement[] {
+  if (!panel) return [];
+  return Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    (element) => element.tabIndex >= 0,
+  );
+}
 
 /**
  * Shared dialog behaviour for Modal and Drawer: focus the first focusable
@@ -58,7 +96,7 @@ export function useDialogFocusTrap(
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
-    panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)[0]?.focus();
+    focusableIn(panelRef.current)[0]?.focus();
 
     function handleKey(event: KeyboardEvent) {
       if (event.key === "Escape" && !busyRef.current) {
@@ -68,7 +106,7 @@ export function useDialogFocusTrap(
       }
       if (event.key !== "Tab") return;
       if (!panelRef.current) return;
-      const list = panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+      const list = focusableIn(panelRef.current);
       if (list.length === 0) return;
       const first = list[0];
       const last = list[list.length - 1];
@@ -109,7 +147,7 @@ export function Modal({
       aria-modal="true"
       aria-labelledby={labelledBy}
       aria-describedby={describedBy}
-      className="settle-scrim fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4"
+      className="settle-scrim fixed inset-0 z-50 flex items-end justify-center bg-black/55 tablet:items-center tablet:px-4"
       onClick={(event) => {
         if (event.target === event.currentTarget && !busy) onClose();
       }}
@@ -127,11 +165,54 @@ export function Modal({
           gutter the scrim already sets on the horizontal axis. */}
       <div
         ref={panelRef}
-        className={`flex w-full ${SIZE_CLASS[size]} settle-in max-h-[calc(100dvh-32px)] flex-col overflow-y-auto rounded-[22px] border border-line-strong bg-surface-2 shadow-dialog`}
+        className={`flex w-full ${SIZE_CLASS[size]} settle-in flex-col overflow-y-auto rounded-t-[24px] border border-line-strong bg-surface-2 pb-[env(safe-area-inset-bottom)] shadow-dialog tablet:rounded-[22px] tablet:pb-0`}
       >
+        <SheetGrabber busy={busy} onClose={onClose} />
         {children}
       </div>
     </div>
+  );
+}
+
+/**
+ * The sheet's own dismissal, and the one case where it refuses.
+ *
+ * Only on a phone — a centred dialog has a scrim to click and a visible edge,
+ * where a sheet has neither below the fold. While an action is in flight the
+ * grabber is replaced rather than merely disabled: a sheet that silently
+ * ignores a drag or a tap reads as a frozen application, and the operator's
+ * next move is to reload the page in the middle of a mutation.
+ */
+function SheetGrabber({ busy, onClose }: { busy: boolean; onClose: () => void }) {
+  if (busy) {
+    return (
+      <div className="flex flex-none flex-col items-center gap-1.5 pb-1 pt-3 tablet:hidden">
+        <span aria-hidden className="h-1 w-[38px] rounded-pill bg-accent/40" />
+        <span className="text-[12.5px] text-faint">Working — this can&apos;t be closed yet.</span>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      // "Dismiss", not "Close": a rehearsal's done step carries a named Close
+      // control, and two controls answering to one name makes "the dialog is
+      // finished" and "the sheet has a handle" indistinguishable to anything
+      // querying by accessible name — a screen reader included.
+      aria-label="Dismiss"
+      // Out of the tab order deliberately. It is a redundant affordance — Esc
+      // dismisses, the scrim dismisses, and every sheet carries a named
+      // control in its footer — and as the panel's first focusable element it
+      // would take the focus the trap gives on open, so every dialog would
+      // open with the cursor on "close it" rather than on the first thing the
+      // operator came to do.
+      tabIndex={-1}
+      className="mx-auto flex h-[26px] w-full max-w-[120px] flex-none items-center justify-center tablet:hidden"
+    >
+      <span aria-hidden className="h-1 w-[38px] rounded-pill bg-ink/20" />
+    </button>
   );
 }
 
