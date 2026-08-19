@@ -35,6 +35,26 @@ win**. Extracted contradictions, worst first:
 | Nav-sheet rows at 42px, indented children at **40px**; segments at 38px; the header **view pill at 34px** | "44px minimum" | **Rules win, and this one is not close.** The view pill is a primary control that changes what the whole application shows. 34px is below every published touch guideline. |
 | Two-button action bars at `gap:10px` — including the figure whose own caption claims 12px | "12px between a destructive control and a benign one" | **Rules win.** The rule exists so a thumb travelling to Cancel cannot land on Revoke. |
 
+### The tablet rail keeps its labels
+
+MOBILE.md's tablet rule collapses the rail to **64px, icons and badges only,
+labels dropped**. That instruction assumes an icon set this product does not
+have and has deliberately avoided: the README's assets section is
+"**no images, no icon fonts, no SVG illustrations anywhere**", and the rail's
+own affordance is a 6px dot beside a word. A 64px rail here would be fourteen
+identical dots.
+
+The deeper reason is the product's voice. This is an application that refuses to
+truncate a role description because "can cut unsupervised" versus "may enter and
+watch" is the whole difference, and that forbids tooltips because a label that
+has to be hovered is a label nobody can act on. Replacing eight words with eight
+glyphs contradicts the argument the rest of the interface is making.
+
+So at 720–1080 the rail stays at 252px with its labels. A 744px tablet gives the
+content column 492px, which is more than a phone and enough for the three
+columns the same rule asks for. Revisit if a real icon language is ever
+introduced — but introducing one to satisfy a rail is the tail wagging the dog.
+
 Where the board shows **structure** the rules do not cover — a full-height sheet
 with no grabber and a `Close` control, a sheet docked above the keyboard with
 borders on all sides — the board is followed. A drawing is authoritative about
