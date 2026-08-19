@@ -201,31 +201,34 @@ export function navLeaves(entries: NavEntry[]): NavLeaf[] {
 }
 
 /**
- * Every route a member may reach. Anything else is not rendered and not
- * reachable for them — the backend 403s the underlying reads regardless, and
- * an affordance that will fail is worse than no affordance.
+ * Every route a member may reach — **derived from the rail they are shown**,
+ * never restated. Anything else is not rendered and not reachable for them:
+ * the backend 403s the underlying reads regardless, and an affordance that
+ * will fail is worse than no affordance.
  *
- * This is the only such list. `middleware.ts` reads `memberMayVisit` rather
- * than keeping its own: the two were separate until the storage row shipped in
- * one and not the other, and every member who tapped it was redirected off
- * their own page.
+ * The derivation is the point. A hand-written copy of `MEMBER_NAV` is what
+ * this already was in `middleware.ts`, and the storage row shipped into one
+ * and not the other — every member who tapped it was redirected off their own
+ * page. A second copy here would be the same bug waiting on the next row, and
+ * an equality test only catches it when somebody runs the tests. A row added
+ * to `MEMBER_NAV` is reachable in the same commit.
  *
  * An allowlist rather than a denylist on purpose — a new operator route is
  * protected the moment it exists, instead of being exposed until somebody
  * remembers to add it here.
  */
-export const MEMBER_ROUTES = ["/", "/requests", "/storage"];
+export const MEMBER_ROUTES = navLeaves(MEMBER_NAV).map((leaf) => leaf.href);
 
 /**
- * Sub-paths belong to their parent, matching `leafMatches`. `/storage` grows a
- * per-target child the moment a second add-on ships, and a member refused
- * entry to `/storage/truenas` is this same bug with a different route in it.
- * `/` is exact, or it would admit everything.
+ * Reachability is `leafMatches` over the member's own leaves, so the rule the
+ * middleware enforces is exactly the rule the rail highlights. It follows a
+ * leaf's `pattern` if it ever gains one — `/projects/{id}/roles/{key}` is why
+ * that field exists, and a member leaf with a detail route would need it.
+ * Otherwise a sub-path belongs to its parent, so `/storage/{target}` is
+ * reachable the day it exists; `/` matches exactly, or it admits everything.
  */
 export function memberMayVisit(pathname: string): boolean {
-  return MEMBER_ROUTES.some(
-    (route) => pathname === route || (route !== "/" && pathname.startsWith(`${route}/`)),
-  );
+  return navLeaves(MEMBER_NAV).some((leaf) => leafMatches(leaf, pathname));
 }
 
 export interface Crumb {
