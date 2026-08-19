@@ -2,6 +2,7 @@
 
 import Sidebar from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
+import { TouchNav } from "@/components/shell/TouchNav";
 import { DegradedBanner } from "@/components/states/DegradedBanner";
 import { PageCrumbProvider } from "@/lib/page-crumb";
 import type { SessionUser } from "@/lib/session";
@@ -19,7 +20,24 @@ import { UiViewProvider } from "@/lib/ui-view";
  *
  * The scroll container carries an id because a scoped jump from Basic into
  * Advanced scrolls THIS element rather than calling scrollIntoView, which
- * would also move the page sideways in a narrow viewport.
+ * would also move the page sideways in a narrow viewport. It stays the
+ * scroller at every width for the same reason: moving scrolling to the body on
+ * a phone would make that jump a silent no-op rather than an error.
+ *
+ * Below the tablet breakpoint the same tree stacks instead:
+ *
+ *   ┌───────────────────────────────────┐
+ *   │ top bar                           │
+ *   ├───────────────────────────────────┤
+ *   │ content, 16px gutters             │
+ *   ├───────────────────────────────────┤
+ *   │ tab bar / go-to bar, safe area    │
+ *   └───────────────────────────────────┘
+ *
+ * `h-dvh` and not `h-screen`: `100vh` on a phone is the viewport with the URL
+ * bar retracted, so the bottom of a `h-screen overflow-hidden` shell sits
+ * permanently under it — and the bottom of this shell is where every primary
+ * action lives.
  */
 export function AppShell({
   session,
@@ -31,15 +49,16 @@ export function AppShell({
   return (
     <UiViewProvider isOperator={session.role === "admin"}>
       <PageCrumbProvider>
-        <div className="flex h-screen overflow-hidden bg-canvas">
+        <div className="flex h-dvh flex-col overflow-hidden bg-canvas tablet:flex-row">
           <Sidebar />
           <div className="flex min-w-0 flex-1 flex-col">
             <TopBar session={session} />
             <div id="app-scroll" className="flex-1 overflow-y-auto">
               <DegradedBanner />
-              <main className="px-[26px] pb-9 pt-[30px]">{children}</main>
+              <main className="px-4 pb-9 pt-5 tablet:px-[26px] tablet:pt-[30px]">{children}</main>
             </div>
           </div>
+          <TouchNav />
         </div>
       </PageCrumbProvider>
     </UiViewProvider>

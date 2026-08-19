@@ -5,7 +5,10 @@ import { usePathname } from "next/navigation";
 
 import { useTargets } from "@/lib/queries/useTargets";
 import { useIndicators, type Indicators } from "@/lib/queries/useIndicators";
-import { leafMatches, navFor, targetNav, type BadgeTone, type NavLeaf } from "@/lib/nav";
+import { leafMatches, navFor, targetNav, type NavLeaf } from "@/lib/nav";
+// Shared with the tab bar, because the rail and the tab bar are two renderings
+// of one tree and a count that is danger in one cannot be accent in the other.
+import { BADGE_TONE } from "@/components/shell/navTones";
 import { useUiView } from "@/lib/ui-view";
 import { useFlashOnChange } from "@/lib/useFlashOnChange";
 import { SyndraMark } from "./SyndraMark";
@@ -39,7 +42,11 @@ export default function Sidebar() {
     audience === "member" ? "Member" : audience === "advanced" ? "Advanced" : "Basic";
 
   return (
-    <div className="flex w-[252px] flex-none flex-col gap-5 overflow-y-auto border-r border-line bg-rail px-3 pb-[22px] pt-5">
+    // Hidden below tablet rather than unmounted. It keeps polling there, which
+    // is deliberate — the tab bar reads the same query, so one poll serves both
+    // — and it means a rotation does not remount the rail and reset the
+    // `settled` guard that stops every badge flashing on arrival.
+    <div className="hidden w-[252px] flex-none flex-col gap-5 overflow-y-auto border-r border-line bg-rail px-3 pb-[22px] pt-5 tablet:flex">
       <div className="flex items-center gap-2.5 px-2">
         <SyndraMark />
         <span className="font-display text-[18px] font-semibold tracking-[-0.01em]">Syndra</span>
@@ -84,11 +91,6 @@ export default function Sidebar() {
   );
 }
 
-const BADGE_TONE: Record<BadgeTone, string> = {
-  accent: "bg-accent-dense text-accent-ink",
-  warn: "bg-warn text-warn-ink",
-  danger: "bg-danger text-danger-ink",
-};
 
 function NavRow({
   item,
