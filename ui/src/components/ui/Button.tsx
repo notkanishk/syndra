@@ -131,7 +131,19 @@ function buttonClasses({
   disabled?: boolean;
   className?: string;
 }): string {
-  const sizeClass = size === "sm" ? "px-3.5 py-1.5 text-[13px]" : "px-4 py-[7px] text-[13.5px]";
+  // Every button in the product clears 44px until the desktop breakpoint, and
+  // returns to its dense size above it. This is the single highest-leverage
+  // line in the touch work: `sm` rendered about 30px tall and `md` about 32,
+  // so without it every control in Syndra — approve, revoke, refresh, resume —
+  // was a target a finger misses, and fixing them individually would be
+  // several hundred edits that the next new button would not inherit.
+  //
+  // The floor stays up through the tablet range deliberately. 720–1080 is a
+  // floor operator holding a tablet, which is still a thumb.
+  const sizeClass =
+    size === "sm"
+      ? "min-h-[44px] px-3.5 text-[13px] desktop:min-h-0 desktop:py-1.5"
+      : "min-h-[44px] px-4 text-[13.5px] desktop:min-h-0 desktop:py-[7px]";
   // `press`, and a 3% scale-down rather than a translate, so the button stays
   // under the finger. Destructive buttons behave identically — muscle memory
   // must never depend on what a button does.

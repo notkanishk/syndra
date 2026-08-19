@@ -120,7 +120,22 @@ export function ReadFreshness({
 
   return (
     <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] ${className}`}>
-      {reading === "live" && <span aria-hidden className="size-1.5 rounded-pill bg-healthy" />}
+      {/* A dot for every reading, not only the healthy one. It is the thing
+          the eye reaches before the sentence, and its absence on three of the
+          four readings made "no dot" mean both "ageing" and "stale".
+          `provisional` is a ring rather than a fill, because it is the one
+          reading that is neither healthy nor broken: the read answered, and
+          the target could not confirm it. */}
+      <span
+        aria-hidden
+        className={`size-1.5 flex-none rounded-pill ${
+          reading === "live" || reading === "ageing"
+            ? "bg-healthy"
+            : reading === "stale"
+              ? "bg-warn"
+              : "border border-muted"
+        }`}
+      />
       <span className={TONE[reading]}>{sentence(reading, subject, age)}</span>
       {state.truncated && (
         // Its own clause, never folded into the age. A capped read is complete
