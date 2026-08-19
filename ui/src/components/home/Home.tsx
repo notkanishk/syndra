@@ -17,7 +17,9 @@ import {
   type AccessRequest,
 } from "@/lib/queries/useRequests";
 import { useDrainPropagations } from "@/lib/queries/usePropagation";
-import { toastDrain } from "@/lib/drain-toast";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { outcomeFromDrain } from "@/lib/drain-outcome";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useCreateGrant } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
 import { useIsAdvanced } from "@/lib/ui-view";
@@ -315,6 +317,7 @@ function ExpiringRow({
 
 function PendingChanges({ count, reachable }: { count: number; reachable: boolean }) {
   const drain = useDrainPropagations();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   return (
     <Card>
@@ -330,16 +333,27 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           disabled={!reachable}
           isPending={drain.isPending}
           onClick={async () => {
+            setOutcome(null);
             try {
-              toastDrain(await drain.mutateAsync());
+              setOutcome(outcomeFromDrain(await drain.mutateAsync()));
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The drain didn't start.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
           Resume now
         </Button>
       </CardRow>
+
+      {/* The result sits in the block that ran it, at row weight rather than
+          as a bordered box inside a bordered card. Today is a landing an
+          operator scans, so an outcome here has to be legible at a glance and
+          must not restyle the block around it. */}
+      {outcome && (
+        <CardRow>
+          <ActionOutcome outcome={outcome} placement="inline" />
+        </CardRow>
+      )}
       {!reachable && (
         // A disabled action states its reason in the row, not on hover: hover
         // doesn't exist on touch and doesn't survive a screenshot.

@@ -79,6 +79,10 @@ export function ActionOutcome({
         {statesNothingChanged(outcome.kind) ? ` ${NOTHING_CHANGED}` : ""}
       </p>
 
+      {outcome.detail && (
+        <p className="text-[13px] leading-[1.5] text-faint">{outcome.detail}</p>
+      )}
+
       {/* Labelled, because an operator pasting this into a message needs to
           say what it is, and a bare hex string in a chat window is a riddle
           for whoever receives it. */}
