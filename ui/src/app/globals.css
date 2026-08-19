@@ -100,6 +100,31 @@
   --radius-nav: 12px;
   --radius-pill: 999px;
 
+  /* ── Breakpoints ─────────────────────────────────────────────────────────
+   * Three states, not four. Three is enough to specify and few enough to
+   * test, and each one is a different device in somebody's hands rather than
+   * an arbitrary step on a scale.
+   *
+   *   below 720px   phone   — single column, tab bar, dialogs become sheets
+   *   720–1080px    tablet  — rail returns collapsed to 64px, up to three
+   *                           table columns, sheets become dialogs again.
+   *                           Still touch: targets stay 44px.
+   *   above 1080px  desktop — the product as it already is, unchanged
+   *
+   * These override Tailwind's stock scale deliberately. The defaults are
+   * 40/48/64/80rem and none of them fall where this shell actually breaks:
+   * the rail is 252px and the widest fixed table row sums to roughly 950px,
+   * so a `lg:` at 64rem would collapse columns a whole device too early.
+   * Naming them after the device also means a component reads
+   * `tablet:` rather than `md:`, and a reviewer can tell whether the author
+   * meant a device or a number.
+   *
+   * `phone` has no token: it is the unprefixed base. Mobile-first is not a
+   * preference here, it is what stops a phone paying for a desktop layout it
+   * then has to override. */
+  --breakpoint-tablet: 45rem; /* 720px */
+  --breakpoint-desktop: 67.5rem; /* 1080px */
+
   /* ── Motion ──────────────────────────────────────────────────────────────
    * Six durations for the whole product, and nothing on the critical path is
    * slower than 260ms: an operator clearing a queue of twelve should never

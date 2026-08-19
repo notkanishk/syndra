@@ -1,6 +1,7 @@
 "use client";
 
-import type { BulkEffect, BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
+import type { BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
+import { PLAN_EFFECT_LABEL, PLAN_EFFECT_TONE } from "@/lib/outcome";
 
 /**
  * The rehearsal, rendered.
@@ -16,17 +17,11 @@ import type { BulkEffect, BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGra
  * they will approve without reading.
  */
 
-const EFFECT_STYLE: Record<BulkEffect, { label: string; className: string }> = {
-  apply: { label: "Will change", className: "bg-accent-soft text-accent-text" },
-  applied: { label: "Applied", className: "bg-accent-soft text-accent-text" },
-  no_change: { label: "No change", className: "bg-tint-2 text-muted" },
-  blocked: { label: "Refused", className: "bg-warn-soft text-warn-text" },
-  failed: { label: "Failed", className: "bg-danger-soft text-danger-text" },
-  // Not success and not failure: recorded here, not yet in Zitadel. It takes the
-  // warning tone rather than the accent one, because the operator has to know
-  // the change has not landed on the door yet.
-  queued: { label: "Queued", className: "bg-warn-soft text-warn-text" },
-};
+// The six words live in lib/outcome, shared with every other surface that
+// reports what happened. They were declared here first, privately, which is
+// how a plan and the row that ran it could have come to describe the same
+// result in two vocabularies. `queued` keeps the warning tone rather than the
+// accent one — recorded here, not yet at the target.
 
 export function PlanReview({ plan }: { plan: BulkPlan | null }) {
   if (!plan) return null;
@@ -43,7 +38,8 @@ export function PlanReview({ plan }: { plan: BulkPlan | null }) {
 }
 
 function PlanRow({ outcome }: { outcome: BulkOutcome }) {
-  const style = EFFECT_STYLE[outcome.effect] ?? EFFECT_STYLE.no_change;
+  const label = PLAN_EFFECT_LABEL[outcome.effect] ?? PLAN_EFFECT_LABEL.no_change;
+  const tone = PLAN_EFFECT_TONE[outcome.effect] ?? PLAN_EFFECT_TONE.no_change;
 
   return (
     <div className="row-divider flex items-start gap-4 px-4 py-3">
@@ -61,8 +57,8 @@ function PlanRow({ outcome }: { outcome: BulkOutcome }) {
           ) : null}
         </span>
       </span>
-      <span className={`shrink-0 rounded-pill px-2.5 py-1 text-[12px] font-semibold ${style.className}`}>
-        {style.label}
+      <span className={`shrink-0 rounded-pill px-2.5 py-1 text-[12px] font-semibold ${tone}`}>
+        {label}
       </span>
     </div>
   );

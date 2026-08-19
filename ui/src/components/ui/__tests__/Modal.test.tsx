@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { Modal } from "@/components/ui/Modal";
+import { Modal, ModalFooter } from "@/components/ui/Modal";
 
 describe("Modal", () => {
   it("does not render when open=false", () => {
@@ -98,5 +98,38 @@ describe("Modal", () => {
     const inside = screen.getByRole("button", { name: "Inside" });
     fireEvent.click(inside);
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // jsdom loads no stylesheets and computes no layout, so a tall dialog cannot
+  // be measured here — `getBoundingClientRect` is zero for everything. What can
+  // be asserted is the contract that makes the overflow reachable: the panel is
+  // bounded and scrolls, rather than clipping. The bug this replaces clipped a
+  // long plan and took the confirm button with it, silently, with no scrollbar
+  // to admit it.
+  it("bounds the panel to the viewport and scrolls rather than clipping", () => {
+    render(
+      <Modal open={true} onClose={() => {}}>
+        <button type="button">Inside</button>
+      </Modal>,
+    );
+    const panel = screen.getByRole("button", { name: "Inside" }).parentElement!;
+    expect(panel.className).toContain("overflow-y-auto");
+    expect(panel.className).toContain("max-h-[calc(100dvh-32px)]");
+    expect(panel.className, "clipping is what hid the footer").not.toContain("overflow-hidden");
+  });
+
+  it("keeps the footer in reach when the panel scrolls", () => {
+    render(
+      <Modal open={true} onClose={() => {}}>
+        <ModalFooter>
+          <button type="button">Confirm</button>
+        </ModalFooter>
+      </Modal>,
+    );
+    const footer = screen.getByRole("button", { name: "Confirm" }).parentElement!.parentElement!;
+    expect(footer.className).toContain("sticky");
+    expect(footer.className).toContain("bottom-0");
+    // Opaque, or scrolled content shows through the actions sitting over it.
+    expect(footer.className).toContain("bg-surface-2");
   });
 });

@@ -3,6 +3,10 @@
 import Link from "next/link";
 
 import { ApiError } from "@/lib/api-client";
+// The prose a failure wears lives in one place, shared with every surface that
+// reports a mutation. A read that fails and a write that fails were describing
+// the same 403 in two files until this import existed.
+import { NOTHING_CHANGED, describeFailure, sentence } from "@/lib/outcome";
 
 /**
  * Four states, every list view. Not three — degraded is real and specific and
@@ -120,7 +124,7 @@ export function ErrorState({
   onRetry?: () => void;
   bare?: boolean;
 }) {
-  const detail = describeError(error);
+  const detail = describeFailure(error);
   const requestId = error instanceof ApiError ? error.details?.request_id : undefined;
 
   return (
@@ -133,7 +137,7 @@ export function ErrorState({
       }
     >
       <div className={`type-empty-title ${bare ? "text-danger-text" : ""}`}>{title}</div>
-      <p className="text-[14px] text-muted">{sentence(detail)} Nothing was changed.</p>
+      <p className="text-[14px] text-muted">{`${sentence(detail)} ${NOTHING_CHANGED}`}</p>
       <div className="mt-1.5 flex items-center gap-2">
         {onRetry && (
           <button
@@ -148,23 +152,6 @@ export function ErrorState({
       </div>
     </div>
   );
-}
-
-/** Ends a fragment with a full stop so it doesn't run into the next sentence. */
-function sentence(text: string): string {
-  const trimmed = text.trim();
-  if (!trimmed) return "";
-  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
-}
-
-function describeError(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (error.status === 403) return "You don't have access to this.";
-    if (error.status === 404) return "It no longer exists.";
-    return error.message;
-  }
-  if (error instanceof Error) return error.message;
-  return "The request failed.";
 }
 
 /**
