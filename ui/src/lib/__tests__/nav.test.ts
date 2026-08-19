@@ -138,7 +138,14 @@ describe("member reachability", () => {
         true,
       );
     }
-    expect(MEMBER_ROUTES).toEqual(navLeaves(MEMBER_NAV).map((leaf) => leaf.href));
+  });
+
+  // Not the source of truth — MEMBER_ROUTES is derived, so asserting it
+  // against navLeaves would only prove `map` works. This is a canary: widening
+  // what a member can reach is a decision, and it should fail a test on the
+  // way in rather than arriving as a side effect of adding a rail row.
+  it("names exactly the three destinations a member has today", () => {
+    expect(MEMBER_ROUTES).toEqual(["/", "/requests", "/storage"]);
   });
 
   it("refuses every operator destination", () => {
