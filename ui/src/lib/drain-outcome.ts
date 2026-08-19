@@ -1,3 +1,4 @@
+import type { ActionOutcome, OutcomeKind } from "@/lib/outcome";
 import type { DrainResult } from "@/lib/queries/usePropagation";
 
 export type DrainTone = "success" | "warning" | "error" | "info";
@@ -120,6 +121,32 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
   }
 
   return { tone: failed ? "warning" : "success", message: `${counts}.` };
+}
+
+/**
+ * The same drain, in the vocabulary every other action reports in.
+ *
+ * `describeDrain` keeps its own tones because they carry a distinction the
+ * five outcome words do not: `info` is "this pass was a no-op", which is
+ * neither applied nor failed. The mapping is where that judgement is spent:
+ *
+ *  - a pass that moved writes and stopped nothing is **applied**
+ *  - a pass that left work outstanding — requeued, unrecorded, or one target's
+ *    pass halted while others went through — is **queued**, because that is
+ *    exactly what it is: recorded here, not yet at the target
+ *  - a pass that sent nothing is **failed**
+ *  - a pass with nothing to do is **no change**, which is a fact about the
+ *    queue and not an achievement
+ *
+ * Warning becomes `queued` rather than `failed` deliberately. "Resume again"
+ * is not a failure, and an operator who reads it as one goes looking for a
+ * broken machine instead of pressing the button again.
+ */
+export function outcomeFromDrain(result: DrainResult | undefined): ActionOutcome {
+  const { tone, message, detail } = describeDrain(result);
+  const kind: OutcomeKind =
+    tone === "success" ? "applied" : tone === "warning" ? "queued" : tone === "error" ? "failed" : "no_change";
+  return { kind, message, detail };
 }
 
 /**

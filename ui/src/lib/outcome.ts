@@ -28,6 +28,12 @@ export interface ActionOutcome {
    * not for the row that recorded it.
    */
   message: string;
+  /**
+   * The nuance behind the headline, when there is any — which rows were left
+   * queued, what resuming will and will not pick up. A drain has this almost
+   * always and a single grant almost never.
+   */
+  detail?: string;
   /** Present on refused and failed, so it can be quoted to whoever runs this. */
   requestId?: string;
 }
