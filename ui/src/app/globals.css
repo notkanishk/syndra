@@ -237,6 +237,32 @@
 }
 
 @layer base {
+  /* ── The space navigation occupies ───────────────────────────────────────
+   * Zero at every width where navigation is a rail, and the tab bar's real
+   * height below the tablet breakpoint.
+   *
+   * Anything anchored to the bottom of the viewport offsets by this rather
+   * than by a number of its own. There is exactly one such thing today — the
+   * convergence dock — and one is already enough for the number to have
+   * drifted: a second author reading "bottom-6" has no way to know a tab bar
+   * appeared underneath it.
+   *
+   * `sticky` chrome inside the scroll container needs none of this. The tab
+   * bar is a flex sibling rather than an overlay, so the scroll container
+   * already ends where the tab bar begins — which is why the selection bar
+   * required no change at all.
+   * ─────────────────────────────────────────────────────────────────────── */
+  :root {
+    --touch-nav-height: 0px;
+  }
+
+  @media (max-width: 44.99rem) {
+    :root {
+      /* 52px tab + 8px top padding + 8px bottom padding + the row's own gap. */
+      --touch-nav-height: 76px;
+    }
+  }
+
   /* ── Brand violet ────────────────────────────────────────────────────────
    * The accent the brand locks. Declared once and theme-independent, because
    * a ramp is a ramp — the themes decide what they spend it on. Both rooms
