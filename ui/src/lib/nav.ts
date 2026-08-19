@@ -204,11 +204,28 @@ export function navLeaves(entries: NavEntry[]): NavLeaf[] {
  * Every route a member may reach. Anything else is not rendered and not
  * reachable for them — the backend 403s the underlying reads regardless, and
  * an affordance that will fail is worse than no affordance.
+ *
+ * This is the only such list. `middleware.ts` reads `memberMayVisit` rather
+ * than keeping its own: the two were separate until the storage row shipped in
+ * one and not the other, and every member who tapped it was redirected off
+ * their own page.
+ *
+ * An allowlist rather than a denylist on purpose — a new operator route is
+ * protected the moment it exists, instead of being exposed until somebody
+ * remembers to add it here.
  */
 export const MEMBER_ROUTES = ["/", "/requests", "/storage"];
 
+/**
+ * Sub-paths belong to their parent, matching `leafMatches`. `/storage` grows a
+ * per-target child the moment a second add-on ships, and a member refused
+ * entry to `/storage/truenas` is this same bug with a different route in it.
+ * `/` is exact, or it would admit everything.
+ */
 export function memberMayVisit(pathname: string): boolean {
-  return MEMBER_ROUTES.includes(pathname);
+  return MEMBER_ROUTES.some(
+    (route) => pathname === route || (route !== "/" && pathname.startsWith(`${route}/`)),
+  );
 }
 
 export interface Crumb {

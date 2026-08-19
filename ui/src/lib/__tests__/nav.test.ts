@@ -128,12 +128,37 @@ describe("breadcrumbs", () => {
 });
 
 describe("member reachability", () => {
-  it("allows only the two member destinations", () => {
-    expect(memberMayVisit("/")).toBe(true);
-    expect(memberMayVisit("/requests")).toBe(true);
+  // Every row the member rail renders, not a hand-written subset: a
+  // destination offered and then refused is the bug this pairing exists to
+  // prevent, and a literal list here would drift the same way the middleware's
+  // did.
+  it("allows every destination the member rail offers", () => {
+    for (const leaf of navLeaves(MEMBER_NAV)) {
+      expect(memberMayVisit(leaf.href), `${leaf.label} is offered and must be reachable`).toBe(
+        true,
+      );
+    }
+    expect(MEMBER_ROUTES).toEqual(navLeaves(MEMBER_NAV).map((leaf) => leaf.href));
+  });
+
+  it("refuses every operator destination", () => {
     for (const route of ["/users", "/bundles", "/governance/drift", "/applications", "/audit"]) {
       expect(memberMayVisit(route), `${route} must not be reachable`).toBe(false);
     }
+  });
+
+  // `/storage` grows a per-target child as soon as a second add-on ships.
+  it("admits a child of a member destination", () => {
+    expect(memberMayVisit("/storage/truenas")).toBe(true);
+    expect(memberMayVisit("/requests/req_01")).toBe(true);
+  });
+
+  // The prefix must end at a segment boundary, or `/storage-admin` walks in on
+  // the strength of sharing seven characters with a route a member may reach.
+  it("does not admit a route that merely starts with one", () => {
+    expect(memberMayVisit("/storage-admin")).toBe(false);
+    expect(memberMayVisit("/requests-review")).toBe(false);
+    expect(memberMayVisit("/users"), "root must not match by prefix").toBe(false);
   });
 });
 
