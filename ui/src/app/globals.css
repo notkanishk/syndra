@@ -484,9 +484,24 @@
  * might paste into a terminal or a config file is JetBrains Mono.
  * ───────────────────────────────────────────────────────────────────────── */
 
+/* ── The display roles scale with the room ───────────────────────────────
+ * A 40px page title is right at 1280 and absurd at 390: it takes three lines
+ * and the first thing a phone shows an operator is the word they already knew
+ * they had tapped. The mobile spec sets the page title at 26px.
+ *
+ * `clamp` rather than a breakpoint step, for two reasons. It has no cliff — a
+ * 700px tablet gets a size between the two rather than one of them — and the
+ * fixed part is in `rem`, so a reader who has raised their platform's text
+ * size gets the increase rather than having it overridden by a px constant.
+ *
+ * Only the display roles move. Body, table cell and mono stay put: they are
+ * already at their legibility floor, and scaling them down is the one thing
+ * the type floor exists to forbid.
+ * ──────────────────────────────────────────────────────────────────────── */
+
 @utility type-greeting {
   font-family: var(--font-bricolage), sans-serif;
-  font-size: 42px;
+  font-size: clamp(28px, calc(1.26rem + 2.03vw), 42px);
   font-weight: 500;
   line-height: 1.05;
   letter-spacing: -0.02em;
@@ -494,7 +509,7 @@
 
 @utility type-page-title {
   font-family: var(--font-bricolage), sans-serif;
-  font-size: 40px;
+  font-size: clamp(26px, calc(1.13rem + 2.03vw), 40px);
   font-weight: 500;
   line-height: 1.04;
   letter-spacing: -0.02em;
@@ -502,21 +517,21 @@
 
 @utility type-section-title {
   font-family: var(--font-bricolage), sans-serif;
-  font-size: 32px;
+  font-size: clamp(22px, calc(1.02rem + 1.45vw), 32px);
   font-weight: 500;
   letter-spacing: -0.02em;
 }
 
 @utility type-card-title {
   font-family: var(--font-bricolage), sans-serif;
-  font-size: 22px;
+  font-size: clamp(19px, calc(1.08rem + 0.43vw), 22px);
   font-weight: 600;
   line-height: 1.2;
 }
 
 @utility type-dialog-title {
   font-family: var(--font-bricolage), sans-serif;
-  font-size: 26px;
+  font-size: clamp(22px, calc(1.23rem + 0.58vw), 26px);
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.15;
@@ -524,7 +539,7 @@
 
 @utility type-empty-title {
   font-family: var(--font-bricolage), sans-serif;
-  font-size: 22px;
+  font-size: clamp(19px, calc(1.08rem + 0.43vw), 22px);
   font-weight: 600;
 }
 
