@@ -117,9 +117,17 @@ export function Modal({
       {/* The scrim fades, then the card rises 10px from 97% a beat behind it.
           It never zooms out of screen centre — the destination is where the
           dialog will live, so the eye lands there and stays. */}
+      {/* The panel is bounded by the viewport and scrolls inside that bound.
+          It used to be `overflow-hidden` with no height at all, which does not
+          shrink a tall dialog — it clips it, and the clipped part is the
+          footer, so a long plan or a full role list ended with its confirm
+          button unreachable and no scrollbar to say so. `dvh` rather than `vh`
+          because a mobile URL bar makes those two different numbers, and the
+          one that lies is the one that hides the button. 32px keeps the
+          gutter the scrim already sets on the horizontal axis. */}
       <div
         ref={panelRef}
-        className={`w-full ${SIZE_CLASS[size]} settle-in overflow-hidden rounded-[22px] border border-line-strong bg-surface-2 shadow-dialog`}
+        className={`flex w-full ${SIZE_CLASS[size]} settle-in max-h-[calc(100dvh-32px)] flex-col overflow-y-auto rounded-[22px] border border-line-strong bg-surface-2 shadow-dialog`}
       >
         {children}
       </div>
@@ -157,8 +165,14 @@ export function ModalFooter({
   children: React.ReactNode;
   note?: React.ReactNode;
 }) {
+  // Sticky to the panel's own bottom edge, and opaque, so a dialog long enough
+  // to scroll keeps its actions in reach instead of burying them under the
+  // fold. On a dialog short enough not to scroll this is inert — sticky only
+  // engages inside a scrolling container — so nothing about the common case
+  // moves. `bg-surface-2` is the panel's own colour, which is why the seam is
+  // invisible until content passes behind it.
   return (
-    <div className="flex flex-col gap-2.5 px-6 pb-[22px] pt-5">
+    <div className="sticky bottom-0 flex flex-none flex-col gap-2.5 bg-surface-2 px-6 pb-[22px] pt-5">
       <div className="flex flex-wrap items-center gap-2.5">{children}</div>
       {note && <div className="text-[12.5px] leading-[1.5] text-faint">{note}</div>}
     </div>
