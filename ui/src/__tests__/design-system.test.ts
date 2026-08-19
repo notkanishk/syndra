@@ -156,6 +156,24 @@ describe("design system", () => {
     }
   });
 
+  // Three device states, named after devices. A component that writes
+  // `tablet:` says which hand is holding the thing; one that writes `md:`
+  // says 48rem, which is not where this shell breaks — the rail is 252px and
+  // the widest fixed row is roughly 950px, so a stock `lg:` would collapse
+  // columns a whole device early. Deleting these silently returns every
+  // responsive class in the product to a scale nobody chose.
+  it("names its breakpoints after devices, at the widths the design fixed", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+
+    expect(css).toContain("--breakpoint-tablet: 45rem");
+    expect(css).toContain("--breakpoint-desktop: 67.5rem");
+
+    // Phone is the unprefixed base and must not acquire a token: giving it
+    // one invites `phone:` classes, which is a desktop-first layout wearing
+    // mobile-first names.
+    expect(css, "phone is the base, not a variant").not.toContain("--breakpoint-phone");
+  });
+
   it("keeps the retired palette out of globals.css", () => {
     const css = readFileSync(GLOBALS_CSS, "utf8");
     for (const token of RETIRED_CSS_TOKENS) {
