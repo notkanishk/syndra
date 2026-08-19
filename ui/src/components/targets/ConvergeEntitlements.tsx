@@ -91,7 +91,19 @@ export function ConvergeEntitlements({
  */
 function PlanProvenance({ plan }: { plan: EntitlementPlan }) {
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex justify-center px-6">
+    // Above the page, below a dialog. It sat at z-60 — the highest number in
+    // the product — which put a passive freshness read on top of the scrim of
+    // any dialog the operator opened, including the ones asking them to type a
+    // name before something irreversible happens.
+    //
+    // The bottom offset clears whatever navigation occupies, which is nothing
+    // on a rail and a tab bar on a phone. Reading the token rather than
+    // guessing a number is what stops this dock and the tab bar disagreeing
+    // the next time either one changes height.
+    <div
+      className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-6"
+      style={{ bottom: "calc(var(--touch-nav-height) + 24px)" }}
+    >
       <div className="pointer-events-auto rounded-pill border border-line bg-surface-1 px-4 py-2 shadow-popover">
         <ReadFreshness
           subject="This plan's view of the target"

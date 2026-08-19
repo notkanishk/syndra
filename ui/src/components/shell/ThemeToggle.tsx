@@ -15,7 +15,6 @@ export function ThemeToggle() {
       type="button"
       onClick={toggle}
       aria-label={`Switch to ${next} theme`}
-      title={`Switch to ${next} theme`}
       className="flex h-8 w-8 items-center justify-center rounded-pill border border-line-strong text-muted motion-tint hover:text-ink"
     >
       {theme === "dark" ? <SunIcon /> : <MoonIcon />}
