@@ -118,6 +118,45 @@ describe("Modal", () => {
     expect(panel.className, "clipping is what hid the footer").not.toContain("overflow-hidden");
   });
 
+  // The grabber is a redundant pointer affordance, and it is the panel's first
+  // child. Left in the tab order it takes the focus the trap gives on open, so
+  // every dialog in the product opens with the cursor on "get rid of this"
+  // rather than on the thing the operator came to do.
+  it("never opens a dialog with focus on its own dismissal", async () => {
+    render(
+      <Modal open={true} onClose={() => {}}>
+        <button type="button">First</button>
+      </Modal>,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.getByRole("button", { name: "First" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Dismiss" }).tabIndex).toBe(-1);
+  });
+
+  // A rehearsal's done step carries a named "Close". Two controls answering to
+  // one accessible name make "this dialog is finished" and "this sheet has a
+  // handle" indistinguishable to anything querying by name.
+  it("does not name its handle after any control a dialog already has", () => {
+    render(
+      <Modal open={true} onClose={() => {}}>
+        <button type="button">Close</button>
+      </Modal>,
+    );
+    expect(screen.getAllByRole("button", { name: "Close" })).toHaveLength(1);
+  });
+
+  it("says why it cannot be dismissed while an action is in flight", () => {
+    render(
+      <Modal open={true} onClose={() => {}} busy>
+        <button type="button">Inside</button>
+      </Modal>,
+    );
+    // Silently ignoring a drag or a tap reads as a frozen app, and the
+    // operator's next move is to reload the page mid-mutation.
+    expect(screen.getByText("Working — this can't be closed yet.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();
+  });
+
   it("keeps the footer in reach when the panel scrolls", () => {
     render(
       <Modal open={true} onClose={() => {}}>
