@@ -69,16 +69,24 @@ export default function ProjectsPage() {
             <Link
               key={entry.project.id}
               href={`/projects/${entry.project.id}`}
-              className="row-divider flex items-center gap-[18px] px-5 py-3.5 motion-tint hover:bg-[var(--hover)]"
+              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]"
             >
-              <span className="min-w-0 flex-1 truncate text-[15.5px] font-semibold">
+              <span className="w-full truncate text-[15.5px] font-semibold tablet:min-w-0 tablet:flex-1">
                 {entry.project.name}
               </span>
-              <span className="w-[70px] text-right text-[15px]">{entry.member_count}</span>
-              <span className="w-[60px] text-right text-[15px]">
-                {entry.active_role_keys.length}
+              <span className="text-[15px] tablet:w-[70px] tablet:text-right">
+                {entry.member_count}
+                <span className="text-[13px] text-faint tablet:hidden">
+                  {entry.member_count === 1 ? " person" : " people"}
+                </span>
               </span>
-              <span className="flex w-[240px] flex-wrap gap-1.5">
+              <span className="text-[15px] tablet:w-[60px] tablet:text-right">
+                {entry.active_role_keys.length}
+                <span className="text-[13px] text-faint tablet:hidden">
+                  {entry.active_role_keys.length === 1 ? " role" : " roles"}
+                </span>
+              </span>
+              <span className="flex w-full flex-wrap gap-1.5 tablet:w-[240px]">
                 {(appsByProject.get(entry.project.id) ?? []).map((name) => (
                   <span
                     key={name}

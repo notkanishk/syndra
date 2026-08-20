@@ -201,7 +201,7 @@ function MemberRow({
     });
 
   return (
-    <div className="row-divider flex items-center gap-[18px] px-5 py-3">
+    <div className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:items-center tablet:gap-[18px]">
       <Avatar name={member.user.name} />
       <Link
         href={`/users/${member.user.id}`}
