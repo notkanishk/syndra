@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { createContext, useContext, useEffect, useRef } from "react";
 
 /**
  * The dialog primitive. Destructive actions ALWAYS open one of these — never a
@@ -46,6 +46,24 @@ const SIZE_CLASS: Record<NonNullable<ModalProps["size"]>, string> = {
   md: "max-w-[520px] max-h-[calc(100dvh-96px)] tablet:max-h-[calc(100dvh-32px)]",
   lg: "max-w-[760px] h-[calc(100dvh-24px)] tablet:h-auto tablet:max-h-[calc(100dvh-32px)]",
 };
+
+/**
+ * Whether a dialog is already open above this point in the tree.
+ *
+ * Push, never stack. A second sheet rising over the first leaves two scrims,
+ * two focus traps competing for Tab, and a dismiss gesture whose meaning
+ * depends on which one is on top — and on a phone the pair eat the screen
+ * between them. Nothing in the product nests a dialog today; this is what
+ * makes that a property rather than a coincidence, because the failure is
+ * invisible on a desktop mock and total on a 390px screen.
+ *
+ * A second dialog still renders — refusing to would replace a layout problem
+ * with a missing confirmation, which is worse — but it says so loudly enough
+ * that it does not reach a phone. Where two steps are genuinely needed, the
+ * second replaces the first's content inside the same panel and the first's
+ * title becomes a back-line.
+ */
+const InsideDialog = createContext(false);
 
 const FOCUSABLE_SELECTOR =
   "button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
@@ -137,11 +155,20 @@ export function Modal({
   children,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const nested = useContext(InsideDialog);
   useDialogFocusTrap(panelRef, open, busy, onClose);
+
+  if (open && nested && process.env.NODE_ENV !== "production") {
+    console.error(
+      "Modal: a dialog opened inside another dialog. Sheets push, they do not stack — " +
+        "replace the first sheet's content and make its title a back-line instead.",
+    );
+  }
 
   if (!open) return null;
 
   return (
+    <InsideDialog.Provider value={true}>
     <div
       role="dialog"
       aria-modal="true"
@@ -171,6 +198,7 @@ export function Modal({
         {children}
       </div>
     </div>
+    </InsideDialog.Provider>
   );
 }
 
