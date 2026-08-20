@@ -257,7 +257,10 @@ export function SelectAllRow({
 }) {
   const things = `${inScope} ${inScope === 1 ? noun[0] : noun[1]}`;
   const label = allSelected ? "Clear the selection" : `Select these ${things}`;
-  const wider = total !== undefined && total > inScope;
+  // The second number answers "these, as opposed to what?" — a question only
+  // the Select label asks. Left under "Clear the selection" it reads as a
+  // claim about what clearing would do.
+  const wider = !allSelected && total !== undefined && total > inScope;
 
   return (
     <label className="row-divider flex min-h-[44px] cursor-pointer select-none items-center gap-2 px-5 py-2">

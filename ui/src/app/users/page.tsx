@@ -35,6 +35,7 @@ import { useProjects } from "@/lib/queries/useProjects";
 import { useRoleMembers } from "@/lib/queries/useRoleMembers";
 import { useUsers, type UserListEntry } from "@/lib/queries/useUsers";
 import { useDebounce } from "@/lib/useDebounce";
+import { useIsTouch } from "@/lib/useViewport";
 import { daysUntil } from "@/lib/format";
 
 /** Explicit pagination, never infinite scroll: a queue you can reach the end of. */
@@ -405,6 +406,7 @@ function PersonRow({
   selection: RowSelection;
 }) {
   const selected = selection.isSelected(entry.user.id);
+  const touch = useIsTouch();
   // A departed account still belongs in the list — it is often exactly who you
   // came looking for — but it reads at reduced contrast so a live person is
   // never mistaken for one who left.
@@ -416,8 +418,13 @@ function PersonRow({
         <Avatar name={entry.user.name} />
         <span className="min-w-0">
           {/* In bulk mode the row is a control, so the name becomes the only
-              link out — clicking anywhere else selects rather than navigates. */}
-          {bulkMode ? (
+              link out — clicking anywhere else selects rather than navigates.
+              With a mouse that is a precise escape hatch. With a thumb it is a
+              trap: the name is the largest thing in the row and the obvious
+              place to press, and pressing it leaves the mode and drops the
+              operator on somebody else's page mid-selection. Below the desktop
+              breakpoint the whole row selects, which is what A4 asked for. */}
+          {bulkMode && !touch ? (
             <Link
               href={`/users/${entry.user.id}`}
               onClick={(event) => event.stopPropagation()}

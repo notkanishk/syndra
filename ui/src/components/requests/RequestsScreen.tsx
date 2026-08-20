@@ -522,7 +522,7 @@ function RequestDialog({
                 type="button"
                 aria-pressed={howLong === value}
                 onClick={() => setHowLong(value)}
-                className={`rounded-pill px-3.5 py-[7px] text-[13px] font-semibold motion-tint ${
+                className={`min-h-[44px] rounded-pill px-3.5 py-[7px] text-[13px] font-semibold motion-tint desktop:min-h-0 ${
                   howLong === value ? "bg-accent-dense text-accent-ink" : "bg-tint-2 text-ink"
                 }`}
               >
