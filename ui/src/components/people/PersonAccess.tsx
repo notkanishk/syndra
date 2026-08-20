@@ -124,7 +124,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                 // The id stays reachable — this is the one page where an
                 // operator genuinely needs it — but it sits last, after every
                 // human-readable fact, and never stands in for a name.
-                <Mono key="id" title="Zitadel user id">
+                <Mono key="id">
                   {user.id}
                 </Mono>,
                 // Operator-only for the same reason the Activity tab is: /audit
@@ -378,8 +378,12 @@ function ZitadelGrantId({
   if (loading) return null;
   if (unreachable) {
     return (
-      <span className="text-[13px] text-faint" title="Zitadel could not be read just now">
-        Zitadel grant · unavailable
+      // The reason is the sentence, not a tooltip. This was the only
+      // explanation anywhere for why the id is missing, and it was reachable
+      // by hover alone — so on a phone the row said "unavailable" and nothing
+      // else, which reads as a defect in Syndra rather than a read that failed.
+      <span className="text-[13px] text-faint">
+        Zitadel grant · unavailable — it could not be read just now
       </span>
     );
   }
@@ -392,7 +396,7 @@ function ZitadelGrantId({
   }
   return (
     <span className="text-[13px] text-faint">
-      Zitadel grant · <Mono title="Zitadel user-grant id">{id}</Mono>
+      Zitadel grant · <Mono>{id}</Mono>
     </span>
   );
 }
