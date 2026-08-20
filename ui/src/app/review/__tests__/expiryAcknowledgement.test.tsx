@@ -37,7 +37,6 @@ vi.mock("@/components/people/BulkDialog", () => ({
   },
 }));
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 
 function grant(over: Partial<ExpiringGrantRow> = {}): ExpiringGrantRow {
   return {

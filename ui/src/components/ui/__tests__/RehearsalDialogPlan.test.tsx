@@ -6,10 +6,6 @@ import { RehearsalDialog, queuedNote } from "@/components/ui/RehearsalDialog";
 import { ApiError } from "@/lib/api-client";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
 
-vi.mock("sonner", () => ({
-  toast: Object.assign(vi.fn(), { success: vi.fn(), warning: vi.fn(), error: vi.fn() }),
-}));
-
 /**
  * 3.8/3.9 — the dialog holds the approval and recovers from a stale one.
  *
@@ -152,7 +148,7 @@ describe("a stale approval", () => {
 
   // Five of the six codes carry no details, so keying the banner on the moved
   // list alone swapped the approved plan for a fresh one with nothing on screen
-  // but a transient toast. An operator could then press Apply believing they
+  // but nothing on screen saying so. An operator could then press Apply believing they
   // had already read this diff.
   it.each(staleCodes)("says the plan is new even when %s names no rows", async (code) => {
     onApply = vi.fn().mockRejectedValue(new ApiError(409, { error: code, message: "no good" }));

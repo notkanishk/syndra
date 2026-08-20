@@ -174,6 +174,27 @@ describe("design system", () => {
     expect(css, "phone is the base, not a variant").not.toContain("--breakpoint-phone");
   });
 
+  // An action's result is reported by the surface that ran it: the row in the
+  // row, a sheet as its own result, a plan on its result step. A toast breaks
+  // that by construction — it reports every action in the same corner
+  // regardless of where the operator is looking, covers the value they just
+  // acted on, and removes the only account of what happened after four
+  // seconds. It came out of the product in one pass; this is what stops it
+  // arriving back one call site at a time.
+  it("reports outcomes where they happened, never in a corner", () => {
+    const found: string[] = [];
+    for (const file of walk(SRC_ROOT)) {
+      const source = readFileSync(file, "utf8");
+      if (
+        /from ["']sonner["']/.test(source) ||
+        /\btoast\.(success|error|warning|info)\(/.test(source)
+      ) {
+        found.push(file.replace(SRC_ROOT, "src"));
+      }
+    }
+    expect(found, "use ActionOutcome — see lib/outcome.ts").toEqual([]);
+  });
+
   it("keeps the retired palette out of globals.css", () => {
     const css = readFileSync(GLOBALS_CSS, "utf8");
     for (const token of RETIRED_CSS_TOKENS) {

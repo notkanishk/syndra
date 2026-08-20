@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AddRolesToBundle } from "@/components/bundles/AddRolesToBundle";
 import { BundleVersions } from "@/components/bundles/BundleVersions";
@@ -164,6 +165,7 @@ function BundleWorkspace({
   const roles = useBundleRoles(bundleId);
   const impact = useBundleImpact(bundleId);
   const setWelcome = useSetWelcomeBundle();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<BundleRoleRow | null>(null);
   const [adding, setAdding] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -306,9 +308,13 @@ function BundleWorkspace({
             onClick={async () => {
               try {
                 await setWelcome.mutateAsync(bundleId);
-                toast.success(`${name} is now the default for new members.`);
+                setOutcome({
+                  kind: "applied",
+                  message: `${name} is now the default for new members`,
+                  detail: "Members who joined before this keep what they already hold.",
+                });
               } catch (error) {
-                toast.error(error instanceof Error ? error.message : "That didn't save.");
+                setOutcome(outcomeFromError(error));
               }
             }}
           >
@@ -417,6 +423,7 @@ function RenameBundleDialog({
   onClose: () => void;
 }) {
   const update = useUpdateBundle();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [nextName, setNextName] = useState(name);
   const [nextDescription, setNextDescription] = useState(description);
 
@@ -448,6 +455,8 @@ function RenameBundleDialog({
           />
         </div>
       </div>
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter>
         <Button
           variant="accent"
@@ -461,10 +470,13 @@ function RenameBundleDialog({
                 name: trimmed,
                 description: nextDescription,
               });
-              toast.success(trimmed === name ? "Description saved." : `Now called ${trimmed}.`);
+              setOutcome({
+                kind: "applied",
+                message: trimmed === name ? "Description saved" : `Now called ${trimmed}`,
+              });
               onClose();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "That didn't save.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
@@ -507,6 +519,7 @@ function DeleteBundleDialog({
   onDeleted: () => void;
 }) {
   const remove = useDeleteBundle();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   return (
     <Modal
@@ -548,6 +561,8 @@ function DeleteBundleDialog({
         </div>
       </div>
 
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter note="Emptying the bundle instead leaves it assignable and grants nothing.">
         <Button
           variant="dangerConfirm"
@@ -556,19 +571,33 @@ function DeleteBundleDialog({
             try {
               const result = await remove.mutateAsync(bundleId);
               const n = result.cascade?.enqueued ?? 0;
-              toast.success(
+              const auto = result.cascade?.mode === "auto";
+              // The welcome-bundle consequence is folded into the same report
+              // rather than fired as a second notification. It is the same
+              // event, and it is the half an operator most needs: from now on
+              // a new member receives nothing.
+              const orphaned = result.was_welcome
+                ? " New members no longer receive a bundle — set another as the default."
+                : "";
+              setOutcome(
                 n === 0
-                  ? `${name} deleted. Nobody's access changed.`
-                  : result.cascade.mode === "auto"
-                    ? `${name} deleted. ${n} ${n === 1 ? "change" : "changes"} applied.`
-                    : `${name} deleted. ${n} ${n === 1 ? "change is" : "changes are"} waiting under Pending changes.`,
+                  ? {
+                      kind: "applied",
+                      message: `${name} deleted`,
+                      detail: `Nobody's access changed — it carried nothing anybody held.${orphaned}`,
+                    }
+                  : {
+                      kind: auto ? "applied" : "queued",
+                      message: `${name} deleted — ${n} ${n === 1 ? "change" : "changes"} ${
+                        auto ? "applied" : "waiting"
+                      }`,
+                      detail: auto
+                        ? `Its withdrawals went with it.${orphaned}`
+                        : `They sit under Pending changes until somebody resumes the queue.${orphaned}`,
+                    },
               );
-              if (result.was_welcome) {
-                toast.warning("New members no longer receive a bundle. Set another as the default.");
-              }
-              onDeleted();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The bundle wasn't deleted.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
@@ -614,6 +643,7 @@ function RemovalImpact({
   const impact = useBundleImpact(bundleId);
   const rules = useMappingRules();
   const remove = useRemoveBundleRole(bundleId);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const holders = impact.data?.users ?? [];
 
@@ -705,12 +735,15 @@ function RemovalImpact({
                 projectId: role.zitadel_project_id,
                 roleKey: role.zitadel_role_key,
               });
-              toast.success(`Dropped from ${bundleName}'s working copy.`, {
-                description: "Nobody loses it until you publish a version and move them onto it.",
+              setOutcome({
+                // Nobody's access moved: the working copy did. Same distinction
+                // the add-roles panel makes, in the other direction.
+                kind: "no_change",
+                message: `Dropped from ${bundleName}'s working copy`,
+                detail: "Nobody loses it until you publish a version and move them onto it.",
               });
-              onCancel();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The edit didn't save.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
@@ -758,6 +791,7 @@ function HoldersPanel({
 
 function CreateBundleDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const create = useCreateBundle();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
@@ -790,6 +824,8 @@ function CreateBundleDialog({ open, onClose }: { open: boolean; onClose: () => v
           />
         </div>
       </div>
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter>
         <Button
           variant="accent"
@@ -798,12 +834,16 @@ function CreateBundleDialog({ open, onClose }: { open: boolean; onClose: () => v
           onClick={async () => {
             try {
               await create.mutateAsync({ name: name.trim(), description });
-              toast.success(`${name} created. It carries no roles yet.`);
+              setOutcome({
+                kind: "applied",
+                message: `${name} created`,
+                detail: "It carries no roles yet, so holding it grants nothing.",
+              });
               setName("");
               setDescription("");
               onClose();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "That didn't save.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >

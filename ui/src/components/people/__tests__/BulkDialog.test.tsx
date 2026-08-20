@@ -47,7 +47,6 @@ vi.mock("@/lib/queries/useBundles", () => ({
   useBundles: () => ({ data: [{ id: "b1", name: "Safety" }] }),
 }));
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 function plan(overrides: Partial<BulkPlan> = {}): BulkPlan {
   return {
