@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    The mark as a MASKABLE icon, which is a different drawing rather than the
+    same one scaled.
+
+    A launcher crops this to whatever shape it uses — circle, squircle,
+    rounded square — and the specification only guarantees the middle 80%
+    survives. So two things change from `app/icon.svg`:
+
+    1. The mark is inset into that safe zone. It occupies a 320px circle
+       centred in 512, which leaves 96px on every side: comfortably inside the
+       guaranteed area even under a circular crop.
+
+    2. The ground is painted. A transparent maskable icon is composited onto
+       whatever colour the launcher picks, and this mark is an arc that FADES —
+       it needs a known ground to fade into or the falloff reads as a smudge
+       over somebody's wallpaper.
+
+    Colours are literal and dark-only. Unlike the favicon there is no
+    `prefers-color-scheme` to follow: the icon sits on a home screen, not in a
+    browser, and it is the dark product's mark.
+  -->
+  <defs>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#9b7bff" stop-opacity=".55" />
+      <stop offset="1" stop-color="#9b7bff" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="#080906" />
+
+  <!-- Same geometry as the favicon, scaled 10× and centred: r 15.25 → 152.5. -->
+  <circle cx="256" cy="256" r="152.5" fill="none" stroke="#9b7bff" stroke-opacity=".22"
+          stroke-width="15" />
+
+  <!-- Lit from the apex: a wide dim band with a narrow bright one inside it. -->
+  <path d="M103.5 282.5A152.5 152.5 0 1 1 408.5 282.5" fill="none" stroke="#cebcff"
+        stroke-width="15" stroke-opacity=".26" stroke-linecap="round" />
+  <path d="M121.9 139.7A152.5 152.5 0 0 1 390.1 139.7" fill="none" stroke="#cebcff"
+        stroke-width="15" stroke-opacity=".62" stroke-linecap="round" />
+
+  <circle cx="256" cy="256" r="110" fill="url(#glow)" />
+  <circle cx="256" cy="256" r="56" fill="#9b7bff" />
+</svg>

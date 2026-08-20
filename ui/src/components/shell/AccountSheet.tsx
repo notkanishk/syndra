@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Modal, ModalHeader } from "@/components/ui/Modal";
 import type { SessionUser } from "@/lib/session";
 import { useTheme } from "@/lib/theme";
+import { useInstallPrompt } from "@/lib/useInstallPrompt";
 
 /**
  * Who you are signed in as, and the two things that belong to this device.
@@ -21,6 +22,7 @@ import { useTheme } from "@/lib/theme";
 export function AccountSheet({ session }: { session: SessionUser }) {
   const [open, setOpen] = useState(false);
   const { theme, toggle } = useTheme();
+  const installer = useInstallPrompt();
 
   return (
     <>
@@ -77,6 +79,22 @@ export function AccountSheet({ session }: { session: SessionUser }) {
             <span>Appearance</span>
             <span className="text-muted">{theme === "dark" ? "Dark" : "Light"}</span>
           </button>
+
+          {/* Offered here rather than as a banner on arrival. A first-load
+              prompt interrupts somebody who came to read one thing and gets
+              dismissed by reflex; this is where a member already is when they
+              are thinking about the app rather than about a machine they want
+              to book. Absent entirely when there is nothing to offer. */}
+          {installer && (
+            <button
+              type="button"
+              onClick={() => void installer.install()}
+              className="flex min-h-[44px] items-center justify-between rounded-inner border border-line px-4 text-[14.5px] motion-press"
+            >
+              <span>Install on this phone</span>
+              <span className="text-muted">Adds an icon</span>
+            </button>
+          )}
         </div>
 
         {/* Below a hairline and last, because it is the one thing here that
