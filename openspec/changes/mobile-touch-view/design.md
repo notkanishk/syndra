@@ -153,6 +153,31 @@ add-on grows that read, the sheet **states that the size is unknown** rather
 than implying zero or omitting the clause. This is a copy change to the one bulk
 action in the product and should be re-read by design when the field lands.
 
+## 7a. Three more places where the copy names a fact nobody holds
+
+§7 is not the only one. The design reply is written as though the product
+knows more than it does, and in each case the honest version is the same move:
+say what is true, offer what works, and do not invent the missing half.
+
+- **B14 · the empty member landing.** The reply: *"Nobody has given you access
+  yet. Ask Kabir Rao, who looks after Fabrication."* Nothing in Syndra records
+  who looks after a project — there is no owner field on a project, in the
+  models or in the API — so the name would be fabricated, on the one screen
+  whose whole job is telling somebody with no access what to do next. It
+  carries the action instead, and does not claim to know who.
+- **B8 · the request form's free-text escape.** The reply: *"Can't find it?
+  Describe what you need and we'll route it."* A request is a project and a
+  role; there is no field for prose and nothing that would route it. A form
+  that accepted the sentence would be dropping it. What is true is that Why
+  reaches the decider verbatim, so the escape points there.
+- **A4 · the count in every bar verb.** The reply puts it in each button —
+  *"Rehearse removal for 9 people"*. In a bar with five sibling verbs that is
+  the same number five times beside a sentence that already states it. The
+  count is stated once, in the sentence; the verbs carry the step. Where a
+  verb applies on tap rather than opening a plan — Automatic rules is the only
+  such surface — it does state its own count, because there is no plan coming
+  to state it.
+
 ## 8. What the tests can and cannot see
 
 jsdom loads no stylesheets and computes no layout, so **a CSS breakpoint is not

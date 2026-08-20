@@ -83,9 +83,13 @@ blocks what follows it; the two marked independent can run at any time.
 - [x] 4.1 `Modal` renders as a sheet below tablet: 420 short, 520 stopping 96px
   short of the top, 760 full-height with a sticky footer. Reuses
   `useDialogFocusTrap` unchanged.
-- [ ] 4.2 Push, never stack. The second sheet replaces the first's content and
-  the first's title becomes a back-line; back walks up one level inside the
-  sheet before closing it.
+- [x] 4.2 Push, never stack. **Nothing in the product nests a dialog** — the
+  whole suite runs without tripping the guard, which is the evidence — so the
+  work was making that a property rather than a coincidence: a context says
+  whether a dialog is already open above this point, and a second one
+  complains in development. It still renders, because refusing would trade a
+  layout problem for a missing confirmation. The push-and-back-line shape is
+  specified and unbuilt, waiting for the first screen that needs two steps.
 - [x] 4.3 A busy sheet cannot be dismissed and says so — silently ignoring a
   dismissal reads as a frozen app.
 - [x] 4.4 Keyboard: the sheet's height is `min(content, space above keyboard)`
@@ -102,9 +106,16 @@ blocks what follows it; the two marked independent can run at any time.
   carries `Select` instead. `navigator.clipboard` is undefined on http, which is
   how this LAN deployment is reached — so the affordance that fails silently is
   the one members meet.
-- [ ] 5.4 Selection mode: a named `Select` control on all five surfaces, 24px
-  glyphs in 44px rows, select-all that states both numbers, and a count bar
-  naming the next step — "Rehearse removal for 9 people", never "Remove 9".
+- [x] 5.4 Selection mode, on all five surfaces plus the dormant sweep, which
+  had drawn its own 16px input — the smallest target in the product in front
+  of the most destructive action in it. Three things the old shape got wrong
+  beyond the glyph size: **select-all lived in the column header**, which does
+  not exist below the tablet breakpoint, so phones had no select-all at all;
+  **`BULK_MAX_USERS = 500` was exported and never read**, so a selection over
+  the ceiling met either a silent trim or a dead bar; and **nine bar verbs
+  named outcomes their taps do not produce** — every one of them opens a
+  rehearsal. Deviation from A4: the count is stated once, in the bar's
+  sentence, rather than repeated inside five sibling buttons.
 - [x] 5.5 The ladder with a keyboard up. `ConfirmByTyping` gains
   `autoCapitalize="none"` and an `inputMode`; mobile autocapitalisation is
   exactly the failure `typedMatches` was already made case-insensitive to
@@ -116,10 +127,28 @@ blocks what follows it; the two marked independent can run at any time.
 
 ## 6. Screens
 
-- [ ] 6.1–6.18 The Block B screens, per the design reply. Each carries its own
-  copy verbatim; the copy is normative.
-- [ ] 6.19 The dormant sweep states that the size is unknown rather than
-  implying zero — see design §7.
+- [~] 6.1–6.18 The Block B screens, per the design reply. Each carries its own
+  copy verbatim; the copy is normative. Three of the load-bearing ones landed
+  and each turned out to be a case where the design's copy could not be taken
+  literally, because the fact behind it does not exist:
+    - **B14 · member landing.** The empty member is told how to get access by
+      name — *"Ask Kabir Rao, who looks after Fabrication."* **No project
+      records an owner anywhere in the product**, and the empty member landing
+      is the worst place in Syndra to invent a person. It offers the action
+      instead and stops claiming to know who.
+    - **B18 · token simulator.** "No access at all through this app" gets its
+      own sentence naming the app and the person, and denying that it is an
+      error. It had been a `//` comment in the quietest type on the page.
+    - **B8 · requests.** The free-text escape cannot be a request: the API
+      carries a project and a role and nothing else, and a form accepting
+      free text would drop members' words. The escape points at Why, which
+      reaches the decider verbatim. A project with nothing defined in it was
+      an empty menu and is now a sentence.
+  The remaining fifteen are copy-and-layout work on screens that already
+  reflow correctly; none of them is blocked.
+- [x] 6.19 The dormant sweep states that the size is unknown rather than
+  implying zero — `filesSentence` was already right; this pass only confirmed
+  it and gave the row a target a thumb can hit.
 
 ## 7. Platform
 
@@ -134,6 +163,11 @@ blocks what follows it; the two marked independent can run at any time.
 
 ## 8. Verification
 
-- [x] 8.1 Browser pass at 390 / 744 / 1280 for every route touched.
+- [x] 8.1 Browser pass at 390 / 744 / 1280 for every route touched, and a
+  second pass at a **real** 390 after the selection work — Chrome's window
+  floor is ~500px, so `resize_page` alone had been measuring a wider screen
+  than it reported. It found five targets no class contract could: a selected
+  row whose name still navigated away, a 19px "Select similar", a 42px row
+  expander, three 34px duration pills and a 26px sheet grabber.
 - [ ] 8.2 The per-route a11y checklist `BIA-36` and `ISC-43` already owe, now
   including touch targets and dynamic type.
