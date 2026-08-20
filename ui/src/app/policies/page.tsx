@@ -140,7 +140,7 @@ export default function AutomaticRulesPage() {
           {rows.map((rule) => (
             <div
               key={rule.id}
-              className={`row-divider flex w-full items-center gap-[18px] px-5 ${
+              className={`row-divider flex w-full min-h-[60px] items-center gap-3 px-5 tablet:gap-[18px] ${
                 selection.isSelected(rule.id) ? "bg-accent-soft/30" : ""
               }`}
             >
@@ -150,13 +150,13 @@ export default function AutomaticRulesPage() {
               <button
                 type="button"
                 onClick={() => setEditing(rule)}
-                className="flex min-w-0 flex-1 flex-wrap items-center gap-[18px] py-3.5 text-left motion-tint hover:bg-[var(--hover)]"
+                className="flex min-w-0 flex-1 flex-col items-start gap-1.5 py-3.5 text-left motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px]"
               >
-                <Mono className="w-[110px] shrink-0 truncate text-faint">
+                <Mono className="truncate text-faint tablet:w-[110px] tablet:shrink-0">
                   {shortRuleId(rule.id)}
                 </Mono>
 
-                <span className="min-w-[320px] flex-1 text-[14.5px]">
+                <span className="w-full text-[14.5px] tablet:min-w-[320px] tablet:flex-1">
                   <span className="text-muted">
                     <ProjectName id={rule.source_project} /> / <Mono>{rule.source_role}</Mono>
                   </span>
@@ -166,9 +166,14 @@ export default function AutomaticRulesPage() {
                   </span>
                 </span>
 
-                <span className="w-[90px] text-right text-[15px]">{rule.holder_count ?? 0}</span>
+                <span className="text-[15px] tablet:w-[90px] tablet:text-right">
+                  {rule.holder_count ?? 0}
+                  <span className="text-[13px] text-faint tablet:hidden">
+                    {(rule.holder_count ?? 0) === 1 ? " holder" : " holders"}
+                  </span>
+                </span>
 
-                <span className="flex w-[150px] justify-end">
+                <span className="flex tablet:w-[150px] tablet:justify-end">
                   {/*
                     Amber for "Immediate": it is not an error, but it is the
                     setting where a bad rule reaches every holder before anybody
