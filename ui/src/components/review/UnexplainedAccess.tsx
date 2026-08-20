@@ -2,9 +2,9 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
@@ -36,6 +36,7 @@ import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
 import { useReconciliationDiff } from "@/lib/queries/useGrants";
 import { Relative } from "@/components/ui/Time";
 import { formatLongDate, formatRelative } from "@/lib/format";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 
 type Tab = "triage" | "reconciliation";
 type Resolution = "attribute" | "revoke" | "external";
@@ -81,6 +82,7 @@ export function UnexplainedAccess() {
   const projects = useProjects();
   const filtered = Boolean(source || projectId);
   const reconcile = useReconcileNow();
+  const [scanOutcome, setScanOutcome] = useState<Outcome | null>(null);
 
   const [pending, setPending] = useState<{ item: DriftTriageItem; resolution: Resolution } | null>(
     null,
@@ -178,11 +180,19 @@ export function UnexplainedAccess() {
             <Button
               isPending={reconcile.isPending}
               onClick={async () => {
+                setScanOutcome(null);
                 try {
                   await reconcile.mutateAsync();
-                  toast.success("Scan finished.");
+                  // A scan is a read, so it applies nothing — saying "applied"
+                  // about a comparison would be the queue claiming it had
+                  // acted on what it found.
+                  setScanOutcome({
+                    kind: "no_change",
+                    message: "Compared again",
+                    detail: "The queue below is what the comparison found just now.",
+                  });
                 } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "The scan didn't run.");
+                  setScanOutcome(outcomeFromError(error));
                 }
               }}
             >
@@ -191,6 +201,9 @@ export function UnexplainedAccess() {
           </>
         }
       />
+
+      {/* Under the control that ran it, above the queue it describes. */}
+      {scanOutcome && <ActionOutcome outcome={scanOutcome} />}
 
       <div className="flex gap-2">
         {(["triage", "reconciliation"] as const).map((entry) => (
@@ -542,6 +555,7 @@ function ResolutionDialog({
   onClose: () => void;
 }) {
   const attribute = useAttributeDrift();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const revoke = useRevokeDrift();
   const external = useMarkExternalDrift();
 
@@ -608,6 +622,11 @@ function ResolutionDialog({
           </>
         )}
       </div>
+      {/* The dialog states what it did, and for a revocation that is that
+          nothing has reached the target yet — the access is still there until
+          the drain runs. */}
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter>
         <Button
           variant={copy.variant}
@@ -621,10 +640,18 @@ function ResolutionDialog({
               } else {
                 await external.mutateAsync({ id: item.id, body: {} });
               }
-              toast.success("Resolved.");
-              onClose();
+              setOutcome(
+                resolution === "revoke"
+                  ? {
+                      kind: "queued",
+                      message: "Revocation recorded",
+                      detail:
+                        "It reaches the target on the next drain. Until then the access is still there.",
+                    }
+                  : { kind: "applied", message: "Resolved" },
+              );
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "That didn't go through.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
