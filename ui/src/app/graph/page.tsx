@@ -144,7 +144,7 @@ export default function AccessMapPage() {
                       setFocusId(node.id);
                       setQuery("");
                     }}
-                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13.5px] hover:bg-[var(--hover)]"
+                    className="flex min-h-[44px] w-full items-center gap-2.5 px-3 text-left text-[13.5px] hover:bg-[var(--hover)] desktop:min-h-0 desktop:py-2"
                   >
                     <NodeGlyph kind={node.kind} />
                     <span className="truncate">{node.label}</span>
@@ -163,7 +163,7 @@ export default function AccessMapPage() {
                   type="button"
                   onClick={() => toggleKind(kind)}
                   aria-pressed={shown(kind)}
-                  className={`flex items-center gap-2.5 rounded-nav px-2 py-1.5 text-left motion-tint hover:bg-[var(--hover)] ${
+                  className={`flex min-h-[44px] items-center gap-2.5 rounded-nav px-2 text-left motion-tint hover:bg-[var(--hover)] desktop:min-h-0 desktop:py-1.5 ${
                     shown(kind) ? "" : "opacity-40"
                   }`}
                 >

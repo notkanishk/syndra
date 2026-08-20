@@ -212,7 +212,7 @@ export function UnexplainedAccess() {
             type="button"
             onClick={() => router.replace(entry === "triage" ? "?" : "?tab=reconciliation")}
             aria-current={tab === entry ? "page" : undefined}
-            className={`rounded-pill px-4 py-2 text-[14.5px] motion-tint ${
+            className={`min-h-[44px] rounded-pill px-4 text-[14.5px] motion-tint desktop:min-h-0 desktop:py-2 ${
               tab === entry ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
             }`}
           >

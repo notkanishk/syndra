@@ -29,7 +29,10 @@ export function UpstreamShell({
       <div>
         <Link
           href="/zitadel"
-          className="text-[13.5px] font-semibold text-accent-text motion-tint hover:brightness-110"
+          // Standalone navigation, not a link in a sentence: this is the
+          // back affordance on these two screens, and on a phone it is what a
+          // thumb reaches for first.
+          className="inline-flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent-text motion-tint hover:brightness-110"
         >
           ← Identity provider
         </Link>

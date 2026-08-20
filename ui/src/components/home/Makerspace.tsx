@@ -295,7 +295,10 @@ function RecentActivity() {
       <CardHeader
         title="Lately"
         action={
-          <Link href="/audit" className="text-[13.5px] font-semibold text-accent-text">
+          <Link
+            href="/audit"
+            className="inline-flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent-text"
+          >
             Full audit log →
           </Link>
         }
