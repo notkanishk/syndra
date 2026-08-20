@@ -85,6 +85,15 @@ function item(overrides: Partial<DriftTriageItem> = {}): DriftTriageItem {
   } as DriftTriageItem;
 }
 
+/**
+ * Selection is a mode now, announced by a named control, so a test that wants
+ * a checkbox has to ask for one the way an operator does. That is the point of
+ * the change: nothing about a row at rest suggests it is selectable.
+ */
+function enterSelect() {
+  fireEvent.click(screen.getByRole("button", { name: "Select" }));
+}
+
 function renderTriage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -132,12 +141,24 @@ describe("Unexplained access — triage", () => {
 
   it("offers bulk adopt and bulk mark-external once rows are selected — and never bulk revoke", () => {
     renderTriage();
+    enterSelect();
     fireEvent.click(screen.getAllByRole("checkbox")[1]);
 
+    // Both verbs name the next step — a plan — rather than the write at the end
+    // of it, because tapping either one resolves nothing on its own.
     const bar = screen.getByRole("region", { name: "Selection" });
-    expect(within(bar).getByRole("button", { name: "Adopt in Syndra" })).toBeInTheDocument();
-    expect(within(bar).getByRole("button", { name: "Mark as owned elsewhere" })).toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "Review adopting these" })).toBeInTheDocument();
+    expect(
+      within(bar).getByRole("button", { name: "Review marking these owned elsewhere" }),
+    ).toBeInTheDocument();
     expect(within(bar).queryByRole("button", { name: /Revoke/ })).not.toBeInTheDocument();
+  });
+
+  it("says nothing about selecting until the named control is tapped", () => {
+    renderTriage();
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    enterSelect();
+    expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0);
   });
 
   it("has a select-all that covers the whole queue, not the rendered page", () => {
@@ -145,9 +166,10 @@ describe("Unexplained access — triage", () => {
       item({ id: `d${index}`, user_id: `u${index}` }),
     );
     renderTriage();
+    enterSelect();
 
     // The queue pages at 12, but the queue is what you are triaging.
-    fireEvent.click(screen.getByRole("checkbox", { name: /Select all 20 unexplained items/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Select these 20 items/ }));
     expect(screen.getByText(/20 items selected/)).toBeInTheDocument();
   });
 
@@ -156,6 +178,7 @@ describe("Unexplained access — triage", () => {
       item({ id: `d${index}`, user_id: `u${index}` }),
     );
     renderTriage();
+    enterSelect();
 
     const boxes = screen.getAllByRole("checkbox").slice(1);
     fireEvent.click(boxes[0]);
@@ -169,7 +192,8 @@ describe("Unexplained access — triage", () => {
       item({ id: "d2", user_id: "u1", role_group: "Open bench" }),
     ];
     renderTriage();
-    fireEvent.click(screen.getByRole("checkbox", { name: /Select all/ }));
+    enterSelect();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Select these/ }));
 
     // Safety-gated is what the queue's own ordering keys on, so it is what an
     // operator needs before resolving several rows at once.
@@ -244,6 +268,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
   function selectTwo() {
     drift.data = [item({ id: "d1" }), item({ id: "d2", user_id: "u2" })];
     renderTriage();
+    enterSelect();
     fireEvent.click(screen.getAllByRole("checkbox")[1]);
     fireEvent.click(screen.getAllByRole("checkbox")[2]);
   }
@@ -260,7 +285,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       summary: { total: 2, apply: 1, no_change: 1, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
     selectTwo();
-    fireEvent.click(screen.getByRole("button", { name: "Adopt in Syndra" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review adopting these" }));
 
     // Rows are named, and the confirm button counts only what will change —
     // offering "Apply to 2" when one is already resolved would be a lie.
@@ -279,7 +304,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
     selectTwo();
-    fireEvent.click(screen.getByRole("button", { name: "Adopt in Syndra" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review adopting these" }));
 
     await waitFor(() => expect(bulk.rehearsals).toBeGreaterThan(0));
     expect(bulk.applies).toBe(0);
@@ -299,7 +324,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       summary: { total: 1, apply: 0, no_change: 1, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
     selectTwo();
-    fireEvent.click(screen.getByRole("button", { name: "Adopt in Syndra" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review adopting these" }));
 
     expect(await screen.findByRole("button", { name: "Nothing to apply" })).toBeDisabled();
   });
@@ -316,7 +341,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       summary: { total: 2, apply: 2, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
     selectTwo();
-    fireEvent.click(screen.getByRole("button", { name: "Adopt in Syndra" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review adopting these" }));
     fireEvent.click(await screen.findByRole("button", { name: "Apply to 2 items" }));
 
     // The result is a diff against the plan that was approved, not a fresh

@@ -12,7 +12,8 @@ import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import {
   RowCheckbox,
-  SelectAllCheckbox,
+  SelectAllRow,
+  SelectModeToggle,
   SelectionAction,
   SelectionBar,
 } from "@/components/ui/SelectionBar";
@@ -92,6 +93,10 @@ function OperatorQueue() {
   // a checkbox on a settled row would be offering an action that cannot happen.
   const openRows = useMemo(() => rows.filter((entry) => entry.status === "pending"), [rows]);
   const selection = useRowSelection(useMemo(() => openRows.map((entry) => entry.id), [openRows]));
+  // Deciding one request at a time is what this queue is for; the bulk verbs
+  // are the exception, so they arrive behind a named control rather than a
+  // column of checkboxes that is always in front of every row.
+  const [selecting, setSelecting] = useState(false);
 
   async function act(entry: AccessRequest, next: "approved" | "rejected") {
     setResolved((prev) => new Set(prev).add(entry.id));
@@ -119,6 +124,10 @@ function OperatorQueue() {
       <PageHeader
         title="Requests"
         actions={
+          <>
+          {openRows.length > 0 && (
+            <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
+          )}
           <FilterPills<StatusFilter>
             label="Filter by status"
             value={status}
@@ -131,22 +140,14 @@ function OperatorQueue() {
               { value: "all", label: "All" },
             ]}
           />
+          </>
         }
       />
 
       <Card>
         {openRows.length > 0 && (
           <CardColumns>
-            <span className="w-[26px]">
-              <SelectAllCheckbox
-                label={
-                  selection.allSelected
-                    ? "Clear the selection"
-                    : `Select all ${openRows.length} open requests`
-                }
-                {...selection.headerCheckboxProps}
-              />
-            </span>
+            {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
             <span className="w-[170px]">Who</span>
             <span className="w-[250px]">What they asked for</span>
             <span className="flex-1">Why</span>
@@ -154,6 +155,19 @@ function OperatorQueue() {
             <span className="w-[150px] text-right">Decision</span>
           </CardColumns>
         )}
+        {/* Only open requests can be selected; a decided one is not part of the
+            working set, so the first number here is the open count and the
+            second is everything the current filter shows. */}
+        {selecting && openRows.length > 0 && (
+          <SelectAllRow
+            inScope={openRows.length}
+            total={rows.length}
+            noun={["request", "requests"]}
+            allSelected={selection.allSelected}
+            {...selection.headerCheckboxProps}
+          />
+        )}
+
         <div data-selection-scope {...selection.containerProps}>
         <ListStates
           isLoading={requests.isLoading}
@@ -184,8 +198,8 @@ function OperatorQueue() {
               }`}
               {...selection.rowProps(entry.id)}
             >
-              {openRows.length > 0 && (
-                <span className="w-[26px]">
+              {selecting && openRows.length > 0 && (
+                <span className="w-11 shrink-0 desktop:w-[26px]">
                   {entry.status === "pending" ? (
                     <RowCheckbox
                       label="Select this request"
@@ -246,13 +260,16 @@ function OperatorQueue() {
       </Card>
 
       <SelectionBar
-        count={selection.count}
+        count={selecting ? selection.count : 0}
         noun={["request", "requests"]}
         onClear={selection.clear}
       >
-        <SelectionAction onClick={() => setBulkStatus("approved")}>Approve</SelectionAction>
+        {/* Both open a decision dialog rather than deciding. */}
+        <SelectionAction onClick={() => setBulkStatus("approved")}>
+          Review approving these
+        </SelectionAction>
         <SelectionAction tone="danger" onClick={() => setBulkStatus("rejected")}>
-          Deny
+          Review denying these
         </SelectionAction>
       </SelectionBar>
 

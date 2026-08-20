@@ -69,12 +69,20 @@ beforeEach(() => {
 });
 
 /**
- * The selection bar's Extend, not a row's. Both are named "Extend" — the bar is scoped by its
- * `role="region"` / `aria-label="Selection"`.
+ * Selection is a mode, announced by a named control. A test that wants a row checkbox has to ask
+ * for one the way an operator does — nothing about a row at rest says it can be ticked.
+ */
+function enterSelect() {
+  fireEvent.click(screen.getByRole("button", { name: "Select" }));
+}
+
+/**
+ * The selection bar's verb, not a row's. The row's says "Extend" because it extends; the bar's
+ * says what it actually does, which is open a plan.
  */
 function clickBulkExtend() {
   const bar = screen.getByRole("region", { name: "Selection" });
-  fireEvent.click(within(bar).getByRole("button", { name: "Extend" }));
+  fireEvent.click(within(bar).getByRole("button", { name: "Rehearse an extension" }));
 }
 
 describe("Expiring access — bulk extend scope", () => {
@@ -86,6 +94,7 @@ describe("Expiring access — bulk extend scope", () => {
       grant({ id: "g2", user_id: "u1", project_id: "pWood", role_key: "member" }),
     ];
     renderPage();
+    enterSelect();
 
     const checkboxes = screen.getAllByLabelText("Select this expiring grant");
     fireEvent.click(checkboxes[0]);
@@ -100,6 +109,7 @@ describe("Expiring access — bulk extend scope", () => {
   it("carries every ticked row when more than one is selected", () => {
     state.rows = [grant({ id: "g1", user_id: "u1" }), grant({ id: "g2", user_id: "u2" })];
     renderPage();
+    enterSelect();
 
     for (const box of screen.getAllByLabelText("Select this expiring grant")) {
       fireEvent.click(box);
@@ -219,6 +229,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
       }),
     ];
     renderPage();
+    enterSelect();
     expect(screen.getAllByLabelText("Select this expiring grant")).toHaveLength(1);
   });
 

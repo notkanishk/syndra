@@ -231,7 +231,9 @@ describe("People index — bulk mode", () => {
     nav.url = "/users?bulk=1";
     renderPeople();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /Select all 60 people/ }));
+    // Both numbers, in words: what ticking this selects, and how many exist
+    // beyond the filter. A bare "Select all" is the ambiguity worth removing.
+    fireEvent.click(screen.getByRole("checkbox", { name: /Select these 60 people/ }));
 
     // ...and says so, with a way back to just the visible page: selecting 60
     // when you meant 50 is dozens of people's access.
