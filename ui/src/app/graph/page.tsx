@@ -124,8 +124,8 @@ export default function AccessMapPage() {
         }
       />
 
-      <Card className="flex min-h-[560px] flex-col md:flex-row">
-        <div className="flex w-full flex-none flex-col gap-4 border-b border-line p-4 md:w-[228px] md:border-b-0 md:border-r">
+      <Card className="flex min-h-[560px] flex-col tablet:flex-row">
+        <div className="flex w-full flex-none flex-col gap-4 border-b border-line p-4 tablet:w-[228px] tablet:border-b-0 tablet:border-r">
           <div className="relative">
             <Input
               value={query}
@@ -250,7 +250,7 @@ export default function AccessMapPage() {
                 </span>
               </div>
 
-              <div className="flex flex-wrap items-stretch gap-0">
+              <div className="flex flex-col items-stretch gap-4 tablet:flex-row tablet:flex-wrap tablet:gap-0">
                 <NodeColumn
                   title="Feeds in"
                   entries={incoming}
@@ -258,7 +258,7 @@ export default function AccessMapPage() {
                   onFocus={setFocusId}
                 />
                 <Rail direction="in" />
-                <div className="flex w-[250px] flex-none items-center">
+                <div className="order-first flex w-full items-center tablet:order-none tablet:w-[250px] tablet:flex-none">
                   <div className="w-full rounded-card border-[1.5px] border-accent bg-accent-soft p-5">
                     <NodeGlyph kind={focus.kind} large />
                     <div className="mt-2.5 font-display text-[24px] font-semibold leading-[1.1]">
@@ -347,7 +347,7 @@ function RootView({
             </span>
           </div>
 
-          <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-2.5 tablet:grid-cols-2 desktop:grid-cols-3">
             {group.items.map((node) => (
               <button
                 key={node.id}
@@ -390,7 +390,7 @@ function NodeColumn({
   footer?: React.ReactNode;
 }) {
   return (
-    <div className="flex min-w-[240px] flex-1 flex-col gap-3">
+    <div className="flex w-full flex-col gap-3 tablet:min-w-[240px] tablet:flex-1">
       <div className="type-label">{title}</div>
       {entries.length === 0 ? (
         <div className="text-[13.5px] text-faint">{empty}</div>
@@ -431,7 +431,7 @@ function NodeColumn({
 /** A thin gradient connector fading toward the accent at the focused node. */
 function Rail({ direction }: { direction: "in" | "out" }) {
   return (
-    <div aria-hidden className="relative w-[54px] flex-none">
+    <div aria-hidden className="relative hidden w-[54px] flex-none tablet:block">
       <span
         className="absolute left-0 right-0 top-1/2 h-px"
         style={{

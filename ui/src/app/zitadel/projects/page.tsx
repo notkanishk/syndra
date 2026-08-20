@@ -43,7 +43,7 @@ export default function UpstreamProjectsPage() {
       syndraHref="/projects"
       syndraLabel="See the same projects as Syndra understands them"
     >
-      <div className="flex flex-wrap items-start gap-5">
+      <div className="flex flex-col items-stretch gap-5 tablet:flex-row tablet:flex-wrap tablet:items-start">
         <Card className="w-[280px] min-w-[240px] flex-none">
           <CardHeader title="Projects" count={rows.length} />
           <ListStates
@@ -77,7 +77,7 @@ export default function UpstreamProjectsPage() {
           </ListStates>
         </Card>
 
-        <Card className="min-w-[420px] flex-1">
+        <Card className="w-full tablet:min-w-[420px] tablet:flex-1">
           <CardHeader
             title="Roles in this project"
             count={roles.data?.items.length}
@@ -148,7 +148,7 @@ function RoleRow({
 
   return (
     <>
-      <div className="row-divider flex flex-wrap items-center gap-4 px-5 py-3">
+      <div className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-4">
         <span className="min-w-[200px] flex-1 truncate text-[14.5px]">
           {role.displayName || role.key} <Mono className="text-faint">{role.key}</Mono>
         </span>

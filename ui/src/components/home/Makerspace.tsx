@@ -40,7 +40,7 @@ export function Makerspace() {
       </div>
 
       <Health />
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 desktop:grid-cols-2">
         <Gaps />
         <AccessShape />
       </div>
@@ -64,7 +64,7 @@ function Health() {
   const unexplained = drift?.count ?? 0;
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 tablet:grid-cols-2 desktop:grid-cols-4">
       <HealthCell
         label="Identity provider"
         value={reachable ? "Reachable" : "Unreachable"}
