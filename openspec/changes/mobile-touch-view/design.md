@@ -178,6 +178,33 @@ say what is true, offer what works, and do not invent the missing half.
   such surface — it does state its own count, because there is no plan coming
   to state it.
 
+## 7b. Two more deviations, and one thing the design got backwards
+
+- **B15 · Today keeps no hollow seats.** The reply asks all six blocks to hold
+  their places at zero. They do not. Today's blocks are not one-liners —
+  Pending changes carries the drain control and its own outcome, Targets
+  Syndra can't vouch for lists each target with its age and its reason — so
+  six hollow cards would be a page of empty furniture rather than a stable
+  structure. The specific failure the seats guard against is already answered
+  here in words: a failed load says *"Couldn't check."* rather than *"Nothing
+  needs you"*, and the unvouched block states outright that nothing found
+  means nothing was looked at.
+- **B3 · the rule-delete copy is wrong for this product.** The reply asks for
+  *"This stops the rule causing anything new. The access it already caused
+  stays."* In Syndra deleting a rule **cascades revokes** — the access it
+  caused does not stay — so that sentence would be the most consequential lie
+  in the product, told at the exact moment it matters. The existing dialog
+  already says the true thing: how many people hold the triggering role, that
+  they lose the produced role unless a bundle or a direct grant also supplies
+  it, and whether the revokes go immediately or wait under Pending changes.
+- **B7 · the reopened row cannot be written yet.** *"Acknowledged on 12 Aug,
+  then the expiry moved to 30 Sep — this is back because it is no longer the
+  grant you acknowledged"* requires knowing which expiry was acknowledged.
+  `ExpiryAcknowledgement` records `by`, `at` and `note`. Until it records the
+  expiry it was about, the sentence is uncomputable, and guessing it from the
+  acknowledgement date would produce exactly the confident wrong claim the
+  sentence exists to prevent. Owed as a backend field.
+
 ## 8. What the tests can and cannot see
 
 jsdom loads no stylesheets and computes no layout, so **a CSS breakpoint is not
