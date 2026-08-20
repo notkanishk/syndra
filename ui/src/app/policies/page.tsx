@@ -107,10 +107,11 @@ export default function AutomaticRulesPage() {
         meta="Holding one role produces another, without anybody clicking."
         actions={
           <>
-            <SelectModeToggle
-              active={selecting}
-              onToggle={() => setSelecting((on) => !on)}
-            />
+            {/* No rules, nothing to select. A mode control over an empty list
+                is a button that does nothing and says otherwise. */}
+            {rows.length > 0 && (
+              <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
+            )}
             <Button variant="accent" onClick={() => setEditing("new")}>
               New rule
             </Button>

@@ -115,6 +115,26 @@ describe("select-all states both numbers", () => {
     ).toBeTruthy();
   });
 
+  // Once everything in scope is selected the label becomes "Clear the
+  // selection", and a second number underneath it stops being an answer to
+  // "these, as opposed to what?" and starts reading as a claim about what
+  // clearing would do.
+  it("drops the second number once the label stops asking the question", () => {
+    render(
+      <SelectAllRow
+        inScope={12}
+        total={340}
+        noun={["person", "people"]}
+        allSelected
+        checked
+        ref={() => {}}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByText("Clear the selection")).toBeTruthy();
+    expect(screen.queryByText(/match no filter/)).toBeNull();
+  });
+
   it("says nothing about a wider set when the filter is not narrowing anything", () => {
     render(
       <SelectAllRow

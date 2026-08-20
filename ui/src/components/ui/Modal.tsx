@@ -237,7 +237,10 @@ function SheetGrabber({ busy, onClose }: { busy: boolean; onClose: () => void })
       // open with the cursor on "close it" rather than on the first thing the
       // operator came to do.
       tabIndex={-1}
-      className="mx-auto flex h-[26px] w-full max-w-[120px] flex-none items-center justify-center tablet:hidden"
+      // 44px tall, 26px of it visible: the bar is a hairline and the target
+      // around it is a thumb. It draws no extra space because the padding
+      // eats into the header's own top gap.
+      className="-mb-[18px] mx-auto flex h-11 w-full max-w-[120px] flex-none items-center justify-center tablet:hidden"
     >
       <span aria-hidden className="h-1 w-[38px] rounded-pill bg-ink/20" />
     </button>

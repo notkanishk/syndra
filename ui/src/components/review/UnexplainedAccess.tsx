@@ -434,7 +434,7 @@ function TriageRow({
           type="button"
           onClick={onExpand}
           aria-expanded={expanded}
-          className="flex w-full min-w-0 items-center gap-2.5 text-left tablet:w-[186px]"
+          className="flex min-h-[44px] w-full min-w-0 items-center gap-2.5 text-left tablet:w-[186px] desktop:min-h-0"
         >
           <UserAvatar id={item.user_id} size="row" />
           <span className="min-w-0">
@@ -488,7 +488,7 @@ function TriageRow({
           <button
             type="button"
             onClick={onSelectSimilar}
-            className="text-[12.5px] font-semibold text-muted underline-offset-2 motion-tint hover:text-accent-text hover:underline"
+            className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted underline-offset-2 motion-tint hover:text-accent-text hover:underline desktop:min-h-0"
           >
             Select similar
           </button>
