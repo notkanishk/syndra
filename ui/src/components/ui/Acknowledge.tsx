@@ -116,6 +116,14 @@ export function ConfirmByTyping({
         disabled={disabled}
         autoComplete="off"
         spellCheck={false}
+        // A phone keyboard capitalises the first letter and offers to correct
+        // what it thinks is a misspelling — and what it is looking at is an
+        // account name. `typedMatches` already forgives case, which is the
+        // same failure seen from the other end; these stop the operator having
+        // to fight the keyboard to reach a control they have decided to use.
+        autoCapitalize="none"
+        autoCorrect="off"
+        inputMode="text"
         onChange={(e) => onChange(e.target.value)}
       />
     </div>

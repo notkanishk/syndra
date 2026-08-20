@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { targetLabel } from "@/lib/nav";
 import { useRevokeTargetAccess, type RevocationResult } from "@/lib/queries/useHolds";
+import { useIsTouch } from "@/lib/useViewport";
 
 /**
  * Taking somebody's access away on a target (6.17; design §27).
@@ -51,6 +52,7 @@ export function TakeAwayDialog({
   onClose: () => void;
 }) {
   const revoke = useRevokeTargetAccess(target, subjectId);
+  const touch = useIsTouch();
   const [reason, setReason] = useState("");
   const [reviewDate, setReviewDate] = useState("");
   const confirm = useTypedConfirmation(subjectName);
@@ -113,7 +115,12 @@ export function TakeAwayDialog({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="What happened — this is what somebody reads six months from now"
-            autoFocus
+            // Not on touch. Focusing on mount opens the keyboard the instant
+            // the sheet rises, which covers the sentence saying what this does
+            // to somebody's access — and that sentence is the most protected
+            // element on the screen. On a desktop there is no keyboard to
+            // raise and no reason to make the operator reach for the mouse.
+            autoFocus={!touch}
           />
           <span className="text-[13px] text-faint">
             Shown to them on their own page, and on every surface where they still
