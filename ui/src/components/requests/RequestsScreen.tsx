@@ -2,11 +2,11 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
@@ -35,6 +35,7 @@ import {
 } from "@/lib/queries/useRequests";
 import { Relative } from "@/components/ui/Time";
 import { describeDuration, formatLongDate } from "@/lib/format";
+import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
 import { daysUntilTermEnd } from "@/lib/term";
 
 type StatusFilter = "pending" | "approved" | "rejected" | "withdrawn" | "all";
@@ -79,6 +80,7 @@ function OperatorQueue() {
   const requests = useRequestsAdmin(status);
   const decide = useDecideRequest();
   const [resolved, setResolved] = useState<Set<string>>(new Set());
+  const [outcomes, setOutcomes] = useState<Record<string, ActionResult | null>>({});
   const [bulkStatus, setBulkStatus] = useState<"approved" | "rejected" | null>(null);
 
   const rows = useMemo(
@@ -95,14 +97,20 @@ function OperatorQueue() {
     setResolved((prev) => new Set(prev).add(entry.id));
     try {
       await decide.mutateAsync({ id: entry.id, status: next });
-      toast.success(next === "approved" ? "Approved." : "Denied.");
+      setOutcomes((prev) => ({
+        ...prev,
+        [entry.id]: {
+          kind: "applied",
+          message: next === "approved" ? "Approved" : "Denied",
+        },
+      }));
     } catch (error) {
       setResolved((prev) => {
         const copy = new Set(prev);
         copy.delete(entry.id);
         return copy;
       });
-      toast.error(error instanceof Error ? error.message : "The decision didn't go through.");
+      setOutcomes((prev) => ({ ...prev, [entry.id]: outcomeFromError(error) }));
     }
   }
 
@@ -223,6 +231,14 @@ function OperatorQueue() {
                   {requestOutcome(entry.status).operator}
                 </Badge>
               )}
+
+              {/* The row reports its own decision and keeps its seat. It
+                  leaves on the next read, not under the thumb that decided
+                  it — a row that vanishes on the tap takes the evidence of
+                  what just happened with it. */}
+              {outcomes[entry.id] && (
+                <ActionOutcome outcome={outcomes[entry.id]!} placement="inline" className="w-full" />
+              )}
             </div>
           ))}
         </ListStates>
@@ -268,6 +284,8 @@ function MemberRequests({ userId }: { userId: string }) {
   const linkedProject = params.get("project") ?? "";
   const linkedRole = params.get("role") ?? "";
   const [open, setOpen] = useState(Boolean(linkedProject));
+  // A member's own rows report their own withdrawals, in the row.
+  const [outcomes, setOutcomes] = useState<Record<string, ActionResult | null>>({});
 
   function closeDialog() {
     setOpen(false);
@@ -306,7 +324,10 @@ function MemberRequests({ userId }: { userId: string }) {
           }
         >
           {mine.map((entry) => (
-            <div key={entry.id} className="row-divider flex items-center gap-[18px] px-5 py-3.5">
+            <div
+              key={entry.id}
+              className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px]"
+            >
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[15px] font-semibold">
                   <ProjectName id={entry.project_id} />
@@ -332,11 +353,16 @@ function MemberRequests({ userId }: { userId: string }) {
                   onClick={async () => {
                     try {
                       await withdraw.mutateAsync(entry.id);
-                      toast.success("Withdrawn. Nobody will be asked to decide it.");
+                      setOutcomes((prev) => ({
+                        ...prev,
+                        [entry.id]: {
+                          kind: "applied",
+                          message: "You withdrew this",
+                          detail: "Nobody will be asked to decide it.",
+                        },
+                      }));
                     } catch (error) {
-                      toast.error(
-                        error instanceof Error ? error.message : "It couldn't be withdrawn.",
-                      );
+                      setOutcomes((prev) => ({ ...prev, [entry.id]: outcomeFromError(error) }));
                     }
                   }}
                 >
@@ -346,6 +372,10 @@ function MemberRequests({ userId }: { userId: string }) {
               <Badge tone={requestOutcome(entry.status).tone}>
                 {requestOutcome(entry.status).member}
               </Badge>
+
+              {outcomes[entry.id] && (
+                <ActionOutcome outcome={outcomes[entry.id]!} placement="inline" className="w-full" />
+              )}
             </div>
           ))}
         </ListStates>
@@ -376,6 +406,7 @@ function RequestDialog({
   const projects = useProjects();
   const roles = useGlobalRoleCatalog();
   const create = useCreateRequest();
+  const [askOutcome, setAskOutcome] = useState<ActionResult | null>(null);
 
   const [projectId, setProjectId] = useState(initial?.projectId ?? "");
   const [roleKey, setRoleKey] = useState(initial?.roleKey ?? "");
@@ -478,6 +509,11 @@ function RequestDialog({
           />
         </div>
       </div>
+      {/* The sheet becomes its own result. A member is being told who decides
+          and that nothing else is needed from them, and a dialog that closes
+          itself takes both sentences with it. */}
+      {askOutcome && <ActionOutcome outcome={askOutcome} className="mx-6 mb-1" />}
+
       <ModalFooter>
         <Button
           variant="accent"
@@ -491,10 +527,13 @@ function RequestDialog({
                 justification: why,
                 duration_days: days,
               });
-              toast.success("Asked. You'll see the answer here.");
-              onClose();
+              setAskOutcome({
+                kind: "applied",
+                message: "Asked",
+                detail: "You'll see the answer on this page — nothing else is needed from you.",
+              });
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "That didn't send.");
+              setAskOutcome(outcomeFromError(error));
             }
           }}
         >
