@@ -396,7 +396,7 @@ function PersonRow({
 
   const body = (
     <>
-      <span className="flex w-[250px] min-w-0 items-center gap-3">
+      <span className="flex w-full min-w-0 items-center gap-3 tablet:w-[250px]">
         <Avatar name={entry.user.name} />
         <span className="min-w-0">
           {/* In bulk mode the row is a control, so the name becomes the only
@@ -418,9 +418,9 @@ function PersonRow({
         </span>
       </span>
 
-      <span className="w-[150px] truncate text-[14px] text-muted">{entry.user.team || "—"}</span>
+      <span className="hidden w-[150px] truncate text-[14px] text-muted tablet:block">{entry.user.team || "—"}</span>
 
-      <span className="flex w-[220px] flex-wrap gap-1.5">
+      <span className="hidden w-[220px] flex-wrap gap-1.5 tablet:flex">
         {entry.bundle_names?.length ? (
           entry.bundle_names.map((name) => {
             // The version rides on the chip. "Lab Tech" and "Lab Tech v2" are
@@ -439,15 +439,20 @@ function PersonRow({
         )}
       </span>
 
-      <span className="min-w-0 flex-1 truncate text-[14px] text-muted">{describeAccess(entry)}</span>
+      <span className="min-w-0 text-[13px] text-muted tablet:flex-1 tablet:truncate tablet:text-[14px]">{describeAccess(entry)}</span>
 
-      <span className="w-[150px] text-right">
+      <span className="tablet:w-[150px] tablet:text-right">
         <NeedsAttention entry={entry} />
       </span>
     </>
   );
 
-  const shared = `row-divider flex items-center gap-[18px] px-5 py-3.5 motion-tint hover:bg-[var(--hover)] ${
+  // Stacked on a phone, columns above the tablet breakpoint. The cells that
+  // survive are the two an operator scans for — who this is, and whether
+  // anything about them needs doing — plus the sentence explaining why they
+  // are in the list. Team and bundles fold away: both are one tap deeper, on
+  // the person's own page, and neither is what this screen is scanned for.
+  const shared = `row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px] ${
     departed ? "opacity-60" : ""
   }`;
 
