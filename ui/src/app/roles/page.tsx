@@ -176,12 +176,12 @@ export default function RolesPage() {
             <Link
               key={`${role.project_id}:${role.role_key}`}
               href={`/projects/${role.project_id}/roles/${encodeURIComponent(role.role_key)}`}
-              className="row-divider flex items-center gap-[18px] px-5 py-3 motion-tint hover:bg-[var(--hover)]"
+              className="row-divider flex min-h-[60px] flex-col items-start gap-1 px-5 py-3 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]"
             >
-              <span className="w-[180px] truncate text-[14.5px] text-muted">
+              <span className="w-full truncate text-[12.5px] text-muted tablet:w-[180px] tablet:text-[14.5px]">
                 {role.project_name || role.project_id}
               </span>
-              <span className="min-w-0 flex-1">
+              <span className="w-full min-w-0 tablet:flex-1">
                 <span className="block truncate text-[15px] font-semibold">
                   {role.display_name || humanizeKey(role.role_key)}{" "}
                   <Mono className="font-normal text-faint">{role.role_key}</Mono>
@@ -192,7 +192,7 @@ export default function RolesPage() {
                   </span>
                 )}
               </span>
-              <span className="w-[130px] truncate text-[13.5px] text-muted">
+              <span className="hidden w-[130px] truncate text-[13.5px] text-muted tablet:block">
                 {role.group || "—"}
               </span>
               {/*
@@ -200,14 +200,19 @@ export default function RolesPage() {
                 still be the input to a mapping rule or a member of a bundle,
                 and "0 members" alone reads as safe to delete when it isn't.
               */}
-              <span className="w-[150px] truncate text-[13.5px] text-muted">
+              <span className="w-full text-[13.5px] text-muted tablet:w-[150px] tablet:truncate">
                 {role.is_unused ? (
                   <Badge tone="neutral">Unused</Badge>
                 ) : (
                   usedBy(role) || <span className="text-faint">—</span>
                 )}
               </span>
-              <span className="w-[80px] text-right text-[15px]">{role.assigned_user_count}</span>
+              <span className="text-[15px] tablet:w-[80px] tablet:text-right">
+                {role.assigned_user_count}
+                <span className="text-[13px] text-faint tablet:hidden">
+                  {role.assigned_user_count === 1 ? " member" : " members"}
+                </span>
+              </span>
             </Link>
           ))}
         </ListStates>

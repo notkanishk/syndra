@@ -171,7 +171,7 @@ function OperatorQueue() {
           {rows.map((entry) => (
             <div
               key={entry.id}
-              className={`row-divider flex items-center gap-[18px] px-5 py-3.5 ${
+              className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px] ${
                 selection.isSelected(entry.id) ? "bg-accent-soft/30" : ""
               }`}
               {...selection.rowProps(entry.id)}
@@ -187,10 +187,10 @@ function OperatorQueue() {
                 </span>
               )}
               <Avatar name={undefined} />
-              <div className="w-[170px] shrink-0 truncate text-[15px] font-semibold">
+              <div className="w-full truncate text-[15px] font-semibold tablet:w-[170px] tablet:shrink-0">
                 <UserName id={entry.requester_id} />
               </div>
-              <div className="w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
+              <div className="w-full text-[14.5px] text-ink/80 tablet:w-[250px] tablet:shrink-0 tablet:truncate">
                 <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
                 {/* Half of the ask. A decision made without it is a decision
                     about a different request. */}
@@ -198,15 +198,20 @@ function OperatorQueue() {
                   {describeDuration(entry.duration_days)}
                 </span>
               </div>
-              <div className="min-w-0 flex-1 truncate text-[14px] text-muted">
+              <div className="w-full min-w-0 text-[14px] text-muted tablet:flex-1 tablet:truncate">
                 {entry.justification ? `“${entry.justification}”` : "No reason given"}
               </div>
-              <div className="w-[66px] shrink-0 text-[13px] text-faint">
+              <div className="text-[13px] text-faint tablet:w-[66px] tablet:shrink-0">
                 <Relative iso={entry.created_at} />
               </div>
               {entry.status === "pending" ? (
-                <div className="flex shrink-0 gap-2">
-                  <Button variant="accent" size="sm" onClick={() => act(entry, "approved")}>
+                <div className="flex w-full flex-row-reverse gap-3 tablet:w-auto tablet:shrink-0 tablet:flex-row tablet:gap-2">
+                  <Button
+                    variant="accent"
+                    size="sm"
+                    className="flex-1 tablet:flex-none"
+                    onClick={() => act(entry, "approved")}
+                  >
                     Approve
                   </Button>
                   <Button size="sm" onClick={() => act(entry, "rejected")}>
