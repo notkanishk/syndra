@@ -198,5 +198,13 @@ blocks what follows it; the two marked independent can run at any time.
   than it reported. It found five targets no class contract could: a selected
   row whose name still navigated away, a 19px "Select similar", a 42px row
   expander, three 34px duration pills and a 26px sheet grabber.
+
+  **Final sweep, after all of the above:** every route in `nav.ts` plus the two
+  boundaries and the member's own screens, at a real 390 — **zero horizontal
+  overflow on every one, and no undersized control that is not an inline link
+  inside a sentence** (WCAG 2.5.8 exempts those, and all four found are the
+  last clause of a paragraph). Light theme verified on the screens this change
+  touched, and the over-ceiling bar computed at 4.9:1 light / 9.7:1 dark
+  against its own background, which is AA either way.
 - [ ] 8.2 The per-route a11y checklist `BIA-36` and `ISC-43` already owe, now
   including touch targets and dynamic type.
