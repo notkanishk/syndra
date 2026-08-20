@@ -27,6 +27,7 @@ import {
   type RoleMapping,
 } from "@/lib/queries/useMappings";
 import { targetLabel } from "@/lib/nav";
+import { useIsTouch } from "@/lib/useViewport";
 
 
 /**
@@ -188,6 +189,7 @@ function asPlan(op: string, previous: BulkPlan, result: MappingApplyResult): Bul
 function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose: () => void }) {
   const [value, setValue] = useState(mapping.value);
   const [rehearsed, setRehearsed] = useState<BulkPlan | null>(null);
+  const touch = useIsTouch();
 
   return (
     <RehearsalDialog
@@ -198,7 +200,10 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
       compose={
         <label className="grid gap-1.5 text-[14px]">
           <span>New value for {mapping.field}</span>
-          <Input value={value} onChange={(e) => setValue(e.target.value)} autoFocus />
+          {/* Same reason as the take-away dialog: on touch, focusing on mount
+              raises the keyboard over the lede saying that everybody holding
+              this role moves with the change. */}
+          <Input value={value} onChange={(e) => setValue(e.target.value)} autoFocus={!touch} />
           <span className="text-[13px] text-faint">
             Checked against {targetLabel(mapping.target)} before anything is planned — a
             value it does not recognise is refused here rather than at apply.
