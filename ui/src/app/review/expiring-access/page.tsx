@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 
-import { toast } from "sonner";
 
 import { AccessSource } from "@/components/access/AccessSource";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
@@ -28,8 +27,10 @@ import {
 } from "@/lib/queries/useExpiringAccess";
 import { useCreateGrant } from "@/lib/queries/useUsers";
 import { daysUntil, formatShortDate } from "@/lib/format";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 
-/** How long an extension buys. Stated in the button's toast, never implied. */
+/** How long an extension buys. Stated in the row's own result, never implied. */
 const EXTEND_DAYS = 90;
 
 /**
@@ -243,6 +244,7 @@ function ExpiringRow({
   // rather than creating a duplicate.
   const extend = useCreateGrant(grant.user_id);
   const clearAck = useClearExpiryAcknowledgement();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const remaining = daysUntil(grant.expires_at);
 
   return (
@@ -318,11 +320,13 @@ function ExpiringRow({
                 reason: "Extended from Expiring access",
                 duration_days: EXTEND_DAYS,
               });
-              toast.success(`Extended by ${EXTEND_DAYS} days.`);
+              setOutcome({
+                kind: "applied",
+                message: `Extended by ${EXTEND_DAYS} days`,
+                detail: "It leaves this queue on the next read.",
+              });
             } catch (error) {
-              toast.error(
-                error instanceof Error ? error.message : "The extension didn't go through.",
-              );
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
@@ -337,9 +341,13 @@ function ExpiringRow({
             onClick={async () => {
               try {
                 await clearAck.mutateAsync(grant.id);
-                toast.success("Back in the queue.");
+                setOutcome({
+                  kind: "applied",
+                  message: "Back in the queue",
+                  detail: "Undecided again, and asking.",
+                });
               } catch (error) {
-                toast.error(error instanceof Error ? error.message : "That didn't go through.");
+                setOutcome(outcomeFromError(error));
               }
             }}
           >
@@ -351,6 +359,10 @@ function ExpiringRow({
           </Button>
         )}
       </div>
+
+      {/* The row reports its own extension and keeps its seat: it leaves this
+          queue on the next read, not under the thumb that extended it. */}
+      {outcome && <ActionOutcome outcome={outcome} placement="inline" className="w-full" />}
     </div>
   );
 }
@@ -368,6 +380,7 @@ function LetItLapseDialog({
   onClose: () => void;
 }) {
   const acknowledge = useAcknowledgeExpiry();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [note, setNote] = useState("");
 
   const expiresAt = grant.expires_at;
@@ -416,6 +429,11 @@ function LetItLapseDialog({
         </div>
       </div>
 
+      {/* The dialog states what it did, and this is the one screen where that
+          sentence matters most: recording a decision changes nothing about the
+          access, and the dialog exists to say so. */}
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter note="Extend instead if the access should continue.">
         <Button
           variant="accent"
@@ -428,15 +446,18 @@ function LetItLapseDialog({
                 expiresAt,
                 note: note.trim(),
               });
-              toast.success("Recorded. It still lapses on its date.");
-              onClose();
+              setOutcome({
+                kind: "applied",
+                message: "Recorded",
+                detail:
+                  "Nothing about the access changed — it still lapses on its date. What changed is that the queue stops asking your colleagues a question you have answered.",
+              });
             } catch (error) {
-              // A 409 here is the reopen rule arriving early: the grant was extended while this
-              // dialog was open, so the date on screen is not the date the grant has. The message
-              // is the server's, which says to reload.
-              toast.error(
-                error instanceof Error ? error.message : "That didn't go through.",
-              );
+              // A 409 here is the reopen rule arriving early: the grant was
+              // extended while this dialog was open, so the date on screen is
+              // not the date the grant has. The server's message says to
+              // reload, and a refusal is what it should read as.
+              setOutcome(outcomeFromError(error));
             }
           }}
         >

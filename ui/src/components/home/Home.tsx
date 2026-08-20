@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { AccessSource } from "@/components/access/AccessSource";
 import { Makerspace } from "@/components/home/Makerspace";
@@ -171,10 +170,11 @@ export function Home({ session }: { session: SessionUser }) {
   );
 }
 
-/** Approve / Deny resolve in place with a toast and remove the row. They never navigate. */
+/** Approve / Deny resolve in place, on the row. They never navigate. */
 function OpenRequests({ requests }: { requests: AccessRequest[] }) {
   const decide = useDecideRequest();
   const [resolved, setResolved] = useState<Set<string>>(new Set());
+  const [outcomes, setOutcomes] = useState<Record<string, Outcome | null>>({});
 
   const visible = requests.filter((entry) => !resolved.has(entry.id));
   if (visible.length === 0) return null;
@@ -183,7 +183,13 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
     setResolved((prev) => new Set(prev).add(id));
     try {
       await decide.mutateAsync({ id, status });
-      toast.success(status === "approved" ? `Approved for ${who}` : `Denied for ${who}`);
+      setOutcomes((prev) => ({
+        ...prev,
+        [id]: {
+          kind: "applied",
+          message: status === "approved" ? `Approved for ${who}` : `Denied for ${who}`,
+        },
+      }));
     } catch (error) {
       // Put the row back: a row that vanished on a failed write would read as
       // a decision that was recorded.
@@ -192,7 +198,7 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
         next.delete(id);
         return next;
       });
-      toast.error(error instanceof Error ? error.message : "The decision didn't go through.");
+      setOutcomes((prev) => ({ ...prev, [id]: outcomeFromError(error) }));
     }
   }
 
@@ -234,6 +240,10 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
               Deny
             </Button>
           </div>
+
+          {outcomes[entry.id] && (
+            <ActionOutcome outcome={outcomes[entry.id]!} placement="inline" className="w-full" />
+          )}
         </CardRow>
       ))}
     </Card>
@@ -273,6 +283,7 @@ function ExpiringRow({
   // (user, project, role), so this renews in place rather than duplicating.
   const extend = useCreateGrant(grant.user_id);
   const remaining = daysUntil(grant.expires_at);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   return (
     <CardRow>
@@ -303,14 +314,20 @@ function ExpiringRow({
               reason: "Extended from Home",
               duration_days: 90,
             });
-            toast.success("Extended by 90 days.");
+            setOutcome({
+              kind: "applied",
+              message: "Extended by 90 days",
+              detail: "The row leaves this block on the next read.",
+            });
           } catch (error) {
-            toast.error(error instanceof Error ? error.message : "The extension didn't go through.");
+            setOutcome(outcomeFromError(error));
           }
         }}
       >
         Extend
       </Button>
+
+      {outcome && <ActionOutcome outcome={outcome} placement="inline" className="w-full" />}
     </CardRow>
   );
 }
