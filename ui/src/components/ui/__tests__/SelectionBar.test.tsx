@@ -1,0 +1,147 @@
+// @vitest-environment jsdom
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  SelectAllRow,
+  SelectModeToggle,
+  SelectionAction,
+  SelectionBar,
+} from "@/components/ui/SelectionBar";
+
+/**
+ * Three claims this bar is in a position to get wrong, all of them about a
+ * number that decides how many people lose access.
+ */
+describe("the selection bar over its ceiling", () => {
+  function overflowing(onTakeCeiling = vi.fn()) {
+    render(
+      <SelectionBar
+        count={640}
+        noun={["person", "people"]}
+        ceiling={500}
+        onTakeCeiling={onTakeCeiling}
+        onClear={() => {}}
+      >
+        <SelectionAction onClick={() => {}}>Rehearse removing a role</SelectionAction>
+      </SelectionBar>,
+    );
+    return screen.getByRole("region", { name: "Selection" });
+  }
+
+  it("states the number selected and the number that can run, not one or the other", () => {
+    const bar = overflowing();
+    expect(within(bar).getByText(/640 people/)).toBeTruthy();
+    expect(within(bar).getByText(/500 is the most that can run at once/)).toBeTruthy();
+  });
+
+  // The two easy wrong answers: run the first 500 and report success for a
+  // cohort nobody chose, or grey the bar out and leave the operator holding a
+  // selection with nothing to do and no stated reason.
+  it("withdraws the verbs and offers the one move that gets under the limit", () => {
+    const bar = overflowing();
+    expect(within(bar).queryByRole("button", { name: /Rehearse removing a role/ })).toBeNull();
+    const narrow = within(bar).getByRole("button", {
+      name: /Select the first 500 in the order shown/,
+    });
+    expect(narrow).toBeEnabled();
+  });
+
+  it("says which 500, because an arbitrary 500 is not a cohort", () => {
+    const bar = overflowing();
+    expect(within(bar).getByText(/in the order shown/)).toBeTruthy();
+  });
+
+  it("narrows on demand rather than on its own", () => {
+    const take = vi.fn();
+    const bar = overflowing(take);
+    expect(take).not.toHaveBeenCalled();
+    fireEvent.click(within(bar).getByRole("button", { name: /Select the first 500/ }));
+    expect(take).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a selection under the ceiling entirely alone", () => {
+    render(
+      <SelectionBar
+        count={9}
+        noun={["person", "people"]}
+        ceiling={500}
+        onTakeCeiling={() => {}}
+        onClear={() => {}}
+      >
+        <SelectionAction onClick={() => {}}>Rehearse removing a role</SelectionAction>
+      </SelectionBar>,
+    );
+    const bar = screen.getByRole("region", { name: "Selection" });
+    expect(within(bar).getByRole("button", { name: "Rehearse removing a role" })).toBeTruthy();
+    expect(within(bar).queryByText(/most that can run/)).toBeNull();
+  });
+});
+
+describe("select-all states both numbers", () => {
+  it("says what it selects and how many exist beyond the filter", () => {
+    render(
+      <SelectAllRow
+        inScope={12}
+        total={340}
+        noun={["person", "people"]}
+        allSelected={false}
+        checked={false}
+        ref={() => {}}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByText("Select these 12 people")).toBeTruthy();
+    expect(screen.getByText(/340 people match no filter/)).toBeTruthy();
+  });
+
+  // Both numbers have to reach a screen reader, not just the eye — which is
+  // why the wrapping label is the checkbox's accessible name and no aria-label
+  // overrides it with the shorter half.
+  it("announces the second number as part of the control's name", () => {
+    render(
+      <SelectAllRow
+        inScope={12}
+        total={340}
+        noun={["person", "people"]}
+        allSelected={false}
+        checked={false}
+        ref={() => {}}
+        onChange={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("checkbox", { name: /Select these 12 people.*340 people match no filter/ }),
+    ).toBeTruthy();
+  });
+
+  it("says nothing about a wider set when the filter is not narrowing anything", () => {
+    render(
+      <SelectAllRow
+        inScope={12}
+        total={12}
+        noun={["rule", "rules"]}
+        allSelected={false}
+        checked={false}
+        ref={() => {}}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/match no filter/)).toBeNull();
+  });
+});
+
+describe("the mode control", () => {
+  it("is the same control leaving as entering, and says which state it is in", () => {
+    const toggle = vi.fn();
+    const { rerender } = render(<SelectModeToggle active={false} onToggle={toggle} />);
+    const button = screen.getByRole("button", { name: "Select" });
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(button);
+    expect(toggle).toHaveBeenCalledTimes(1);
+
+    rerender(<SelectModeToggle active onToggle={toggle} />);
+    expect(screen.getByRole("button", { name: "Done selecting" })).toBeTruthy();
+  });
+});

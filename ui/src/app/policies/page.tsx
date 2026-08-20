@@ -14,7 +14,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Segmented, Select } from "@/components/ui/Select";
 import {
   RowCheckbox,
-  SelectAllCheckbox,
+  SelectAllRow,
+  SelectModeToggle,
   SelectionAction,
   SelectionBar,
 } from "@/components/ui/SelectionBar";
@@ -62,10 +63,16 @@ export default function AutomaticRulesPage() {
    * row's actions are on the row, and here the row's action is "open me".
    */
   const selection = useRowSelection(useMemo(() => rows.map((rule) => rule.id), [rows]));
+  // Selection is a mode, announced by a named control, rather than a column of
+  // checkboxes that is always there. Leaving the mode keeps what was chosen —
+  // the operator who taps Done to read a rule properly has not changed their
+  // mind about the other nine.
+  const [selecting, setSelecting] = useState(false);
   const bulkMode = useBulkSetConfirmationMode();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const chosen = rows.filter((rule) => selection.selected.has(rule.id));
+  const chosenThings = `${chosen.length} ${chosen.length === 1 ? "rule" : "rules"}`;
   const immediate = chosen.filter((rule) => rule.confirmation_mode === "auto").length;
   const composition =
     chosen.length === 0
@@ -99,27 +106,35 @@ export default function AutomaticRulesPage() {
         title="Automatic rules"
         meta="Holding one role produces another, without anybody clicking."
         actions={
-          <Button variant="accent" onClick={() => setEditing("new")}>
-            New rule
-          </Button>
+          <>
+            <SelectModeToggle
+              active={selecting}
+              onToggle={() => setSelecting((on) => !on)}
+            />
+            <Button variant="accent" onClick={() => setEditing("new")}>
+              New rule
+            </Button>
+          </>
         }
       />
 
       <Card>
         <CardColumns>
-          <span className="w-[18px]">
-            <SelectAllCheckbox
-              label={
-                selection.allSelected ? "Clear the selection" : `Select all ${rows.length} rules`
-              }
-              {...selection.headerCheckboxProps}
-            />
-          </span>
+          {selecting && <span className="w-11 shrink-0 desktop:w-[18px]" />}
           <span className="w-[110px]">Rule</span>
           <span className="flex-1">If … then</span>
           <span className="w-[90px] text-right">Holders</span>
           <span className="w-[150px] text-right">On fire</span>
         </CardColumns>
+
+        {selecting && rows.length > 0 && (
+          <SelectAllRow
+            inScope={rows.length}
+            noun={["rule", "rules"]}
+            allSelected={selection.allSelected}
+            {...selection.headerCheckboxProps}
+          />
+        )}
 
         <div data-selection-scope {...selection.containerProps}>
         <ListStates
@@ -144,9 +159,11 @@ export default function AutomaticRulesPage() {
                 selection.isSelected(rule.id) ? "bg-accent-soft/30" : ""
               }`}
             >
-              <span className="w-[18px] shrink-0">
-                <RowCheckbox label="Select this rule" {...selection.checkboxProps(rule.id)} />
-              </span>
+              {selecting && (
+                <span className="w-11 shrink-0 desktop:w-[18px]">
+                  <RowCheckbox label="Select this rule" {...selection.checkboxProps(rule.id)} />
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => setEditing(rule)}
@@ -191,7 +208,7 @@ export default function AutomaticRulesPage() {
       </Card>
 
       <SelectionBar
-        count={selection.count}
+        count={selecting ? selection.count : 0}
         noun={["rule", "rules"]}
         composition={composition}
         onClear={selection.clear}
@@ -200,15 +217,18 @@ export default function AutomaticRulesPage() {
           Immediate reads as the louder of the two because it is: a rule set to
           fire immediately reaches every holder before anybody can look at it.
         */}
+        {/* These two apply on tap — there is no plan to read first — so each
+            one states how many rules it is about to change rather than naming
+            the setting and leaving the count on the other side of the bar. */}
         <SelectionAction
           tone="danger"
           disabled={bulkMode.isPending}
           onClick={() => applyMode("auto")}
         >
-          Fire immediately
+          Set {chosenThings} to fire immediately
         </SelectionAction>
         <SelectionAction disabled={bulkMode.isPending} onClick={() => applyMode("manual")}>
-          Queue for confirmation
+          Set {chosenThings} to queue for confirmation
         </SelectionAction>
       </SelectionBar>
 

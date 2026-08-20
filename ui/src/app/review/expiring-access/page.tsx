@@ -10,7 +10,8 @@ import { BulkDialog } from "@/components/people/BulkDialog";
 import { Card, CardColumns } from "@/components/ui/Card";
 import {
   RowCheckbox,
-  SelectAllCheckbox,
+  SelectAllRow,
+  SelectModeToggle,
   SelectionAction,
   SelectionBar,
 } from "@/components/ui/SelectionBar";
@@ -67,6 +68,11 @@ export default function ExpiringAccessPage() {
   // Selection spans the undecided rows only. Extending is the one thing worth doing to a dozen at
   // once, and a row already dealt with is not part of the working set.
   const selection = useRowSelection(useMemo(() => undecided.map((grant) => grant.id), [undecided]));
+  // Selection is announced by a named control rather than by a permanent
+  // column of checkboxes. On this screen the row's own actions are the common
+  // case — most visits acknowledge one grant — and a checkbox in front of
+  // every row makes the rare bulk errand look like the point of the page.
+  const [selecting, setSelecting] = useState(false);
   const [extending, setExtending] = useState(false);
   const [lapsing, setLapsing] = useState<ExpiringGrantRow | null>(null);
 
@@ -91,20 +97,16 @@ export default function ExpiringAccessPage() {
       <PageHeader
         title="Expiring access"
         meta="Direct grants inside the next 30 days, soonest first. The sweep removes each one on its date whether or not you visit this page."
+        actions={
+          undecided.length > 0 ? (
+            <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
+          ) : undefined
+        }
       />
 
       <Card>
         <CardColumns>
-          <span className="w-[26px]">
-            <SelectAllCheckbox
-              label={
-                selection.allSelected
-                  ? "Clear the selection"
-                  : `Select all ${undecided.length} undecided expiring grants`
-              }
-              {...selection.headerCheckboxProps}
-            />
-          </span>
+          {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
           <span className="w-[210px]">Who</span>
           <span className="w-[260px]">What</span>
           <span className="w-[180px]">Granted</span>
@@ -112,6 +114,18 @@ export default function ExpiringAccessPage() {
           <span className="w-[110px] text-right">Remaining</span>
           <span className="w-[200px] text-right">Action</span>
         </CardColumns>
+
+        {/* Only the undecided rows can be selected, so the count here is the
+            undecided count and never the number of rows on screen. */}
+        {selecting && undecided.length > 0 && (
+          <SelectAllRow
+            inScope={undecided.length}
+            total={rows.length}
+            noun={["grant", "grants"]}
+            allSelected={selection.allSelected}
+            {...selection.headerCheckboxProps}
+          />
+        )}
 
         <div data-selection-scope {...selection.containerProps}>
         <ListStates
@@ -137,6 +151,7 @@ export default function ExpiringAccessPage() {
               key={grant.id}
               grant={grant}
               soonest={index === 0}
+              selecting={selecting}
               selection={selection}
               onLetLapse={() => setLapsing(grant)}
             />
@@ -164,6 +179,7 @@ export default function ExpiringAccessPage() {
                   key={grant.id}
                   grant={grant}
                   soonest={false}
+                  selecting={selecting}
                   selection={selection}
                   onLetLapse={() => setLapsing(grant)}
                 />
@@ -175,7 +191,7 @@ export default function ExpiringAccessPage() {
       </Card>
 
       <SelectionBar
-        count={selection.count}
+        count={selecting ? selection.count : 0}
         noun={["grant", "grants"]}
         composition={
           selectedUsers.length > 0
@@ -184,7 +200,10 @@ export default function ExpiringAccessPage() {
         }
         onClear={selection.clear}
       >
-        <SelectionAction onClick={() => setExtending(true)}>Extend</SelectionAction>
+        {/* Tapping this opens a plan, it does not extend anything. */}
+        <SelectionAction onClick={() => setExtending(true)}>
+          Rehearse an extension
+        </SelectionAction>
       </SelectionBar>
 
       {extending && (
@@ -230,11 +249,13 @@ export default function ExpiringAccessPage() {
 function ExpiringRow({
   grant,
   soonest,
+  selecting,
   selection,
   onLetLapse,
 }: {
   grant: ExpiringGrantRow;
   soonest: boolean;
+  selecting: boolean;
   selection: RowSelection;
   onLetLapse: () => void;
 }) {
@@ -250,17 +271,31 @@ function ExpiringRow({
   return (
     <div
       className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px] ${
-        soonest ? "border-l-[3px] border-warn bg-warn-soft" : "border-l-[3px] border-transparent"
+        soonest
+          ? "border-l-[3px] border-warn bg-warn-soft"
+          : selecting && ack
+            ? // A row selection cannot reach keeps a dashed edge while the mode
+              // is on, so an empty checkbox cell reads as "not eligible" rather
+              // than as a checkbox that failed to draw. Outside the mode there
+              // is nothing to be ineligible for, and the edge would be noise.
+              "border-l-[3px] border-dashed border-line-strong"
+            : "border-l-[3px] border-transparent"
       } ${ack ? "opacity-[.72]" : ""} ${selection.isSelected(grant.id) ? "bg-accent-soft/30" : ""}`}
       {...(ack ? {} : selection.rowProps(grant.id))}
     >
-      <span className="w-[26px]">
-        {/* No checkbox on a row somebody has dealt with — it is not part of the working set, and
-            offering it back into a bulk extend would undo a decision by accident. */}
-        {!ack && (
-          <RowCheckbox label="Select this expiring grant" {...selection.checkboxProps(grant.id)} />
-        )}
-      </span>
+      {selecting && (
+        <span className="w-11 shrink-0 desktop:w-[26px]">
+          {/* No checkbox on a row somebody has dealt with — it is not part of the working set, and
+              offering it back into a bulk extend would undo a decision by accident. The reason is
+              already on the row: who acknowledged it, and when. */}
+          {!ack && (
+            <RowCheckbox
+              label="Select this expiring grant"
+              {...selection.checkboxProps(grant.id)}
+            />
+          )}
+        </span>
+      )}
       <span className="flex w-full min-w-0 items-center gap-3 tablet:w-[210px]">
         <UserAvatar id={grant.user_id} />
         <span className="truncate text-[15px] font-semibold">

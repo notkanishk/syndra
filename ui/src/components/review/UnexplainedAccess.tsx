@@ -28,7 +28,8 @@ import {
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import {
   RowCheckbox,
-  SelectAllCheckbox,
+  SelectAllRow,
+  SelectModeToggle,
   SelectionAction,
   SelectionBar,
 } from "@/components/ui/SelectionBar";
@@ -97,6 +98,10 @@ export function UnexplainedAccess() {
   // exactly the case where paging four times before you can act is the tedium
   // worth removing.
   const selection = useRowSelection(useMemo(() => items.map((item) => item.id), [items]));
+  // A triage row is read before it is resolved — the whole column headed "Why
+  // Syndra can't explain it" is there to be read — so the checkboxes arrive
+  // behind a named control rather than in front of every row by default.
+  const [selecting, setSelecting] = useState(false);
   const oldest = items.reduce<string | null>(
     (acc, item) => (!acc || item.detected_at < acc ? item.detected_at : acc),
     null,
@@ -205,7 +210,7 @@ export function UnexplainedAccess() {
       {/* Under the control that ran it, above the queue it describes. */}
       {scanOutcome && <ActionOutcome outcome={scanOutcome} />}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {(["triage", "reconciliation"] as const).map((entry) => (
           <button
             key={entry}
@@ -226,28 +231,34 @@ export function UnexplainedAccess() {
             )}
           </button>
         ))}
+        {tab === "triage" && items.length > 0 && (
+          <>
+            <span className="flex-1" />
+            <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
+          </>
+        )}
       </div>
 
       {tab === "triage" ? (
         <>
           <Card>
             <CardColumns>
-              <span className="w-[18px]">
-                <SelectAllCheckbox
-                  label={
-                    selection.allSelected
-                      ? "Clear the selection"
-                      : `Select all ${items.length} unexplained items`
-                  }
-                  {...selection.headerCheckboxProps}
-                />
-              </span>
+              {selecting && <span className="w-11 shrink-0 desktop:w-[18px]" />}
               <span className="w-[186px]">Who</span>
               <span className="w-[250px]">What they can get into</span>
               <span className="flex-1">Why Syndra can&rsquo;t explain it</span>
               <span className="w-[96px]">Found</span>
               <span className="w-[300px] text-right">Resolve</span>
             </CardColumns>
+
+            {selecting && items.length > 0 && (
+              <SelectAllRow
+                inScope={items.length}
+                noun={["item", "items"]}
+                allSelected={selection.allSelected}
+                {...selection.headerCheckboxProps}
+              />
+            )}
 
             <div data-selection-scope {...selection.containerProps}>
             <ListStates
@@ -284,6 +295,7 @@ export function UnexplainedAccess() {
             >
               {visible.map((item, index) => (
                 <TriageRow
+                  selecting={selecting}
                   key={item.id}
                   item={item}
                   // Only the leading row carries the ranking border. If every
@@ -291,7 +303,12 @@ export function UnexplainedAccess() {
                   // meaning "start here".
                   leading={index === 0 && (item.role_group ?? "").toLowerCase().includes("safety")}
                   selection={selection}
-                  onSelectSimilar={() => selectSimilar(item)}
+                  // Selecting is what this does, so it turns the mode on rather
+                  // than filling a selection nothing on screen is showing.
+                  onSelectSimilar={() => {
+                    setSelecting(true);
+                    selectSimilar(item);
+                  }}
                   expanded={expanded === item.id}
                   onExpand={() => setExpanded((cur) => (cur === item.id ? null : item.id))}
                   onResolve={(resolution) => setPending({ item, resolution })}
@@ -317,14 +334,17 @@ export function UnexplainedAccess() {
           </Card>
 
           <SelectionBar
-            count={selection.count}
+            count={selecting ? selection.count : 0}
             noun={["item", "items"]}
             composition={composition}
             onClear={selection.clear}
           >
-            <SelectionAction onClick={() => setBulkOp("adopt")}>Adopt in Syndra</SelectionAction>
+            {/* Both open a plan; neither resolves anything on tap. */}
+            <SelectionAction onClick={() => setBulkOp("adopt")}>
+              Review adopting these
+            </SelectionAction>
             <SelectionAction onClick={() => setBulkOp("external")}>
-              Mark as owned elsewhere
+              Review marking these owned elsewhere
             </SelectionAction>
           </SelectionBar>
 
@@ -373,6 +393,7 @@ export function UnexplainedAccess() {
 function TriageRow({
   item,
   leading,
+  selecting,
   selection,
   onSelectSimilar,
   expanded,
@@ -381,6 +402,7 @@ function TriageRow({
 }: {
   item: DriftTriageItem;
   leading: boolean;
+  selecting: boolean;
   selection: RowSelection;
   onSelectSimilar: () => void;
   expanded: boolean;
@@ -401,10 +423,12 @@ function TriageRow({
         }`}
         {...selection.rowProps(item.id)}
       >
-        <RowCheckbox
-          label={`Select this unexplained grant`}
-          {...selection.checkboxProps(item.id)}
-        />
+        {selecting && (
+          <RowCheckbox
+            label="Select this unexplained grant"
+            {...selection.checkboxProps(item.id)}
+          />
+        )}
 
         <button
           type="button"
