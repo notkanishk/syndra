@@ -339,6 +339,12 @@ export function UnexplainedAccess() {
             composition={composition}
             onClear={selection.clear}
           >
+            {/* Revoke is missing from this bar on purpose, and its absence is
+                stated where somebody would go looking for it. An operator who
+                selects nine rows to revoke and finds two buttons that are not
+                Revoke concludes the bar is broken, or hunts. Neither is a
+                thing to leave anybody doing on this queue. */}
+            <span className="text-[13px] text-faint">Revoking is one row at a time.</span>
             {/* Both open a plan; neither resolves anything on tap. */}
             <SelectionAction onClick={() => setBulkOp("adopt")}>
               Review adopting these
