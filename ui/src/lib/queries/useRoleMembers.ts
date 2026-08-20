@@ -75,11 +75,29 @@ export function useRoleMembers(projectId: string, roleKey: string) {
  * object, leaves this row behind, and the next cache compile puts the access
  * straight back.
  */
+/**
+ * What the backend says the removal actually did.
+ *
+ * Removing one grant is not the same as removing the access: a role this
+ * person also holds through a bundle or a rule survives, and the closure diff
+ * that decides which is which is computed server-side. The UI must not have a
+ * second opinion about access, so the dialog states these rather than
+ * inferring anything.
+ */
+export interface DirectGrantRemoval {
+  /** Roles that genuinely went away upstream. */
+  revoked_roles?: string[];
+  /** Roles kept, because something else still supplies them. */
+  retained_roles?: string[];
+}
+
 export function useRemoveDirectGrant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ userId, grantId }: { userId: string; grantId: string }) =>
-      request(`/users/${userId}/grants/${grantId}?apply=true`, { method: "DELETE" }),
+      request<DirectGrantRemoval>(`/users/${userId}/grants/${grantId}?apply=true`, {
+        method: "DELETE",
+      }),
     onSuccess: (_data, { userId }) => {
       qc.invalidateQueries({ queryKey: ["users", "access", userId] });
       qc.invalidateQueries({ queryKey: ["users", "grants", userId] });
