@@ -477,6 +477,25 @@ function RequestDialog({
               </option>
             ))}
           </Select>
+          {/* Design asked for a free-text escape here — "Can't find it?
+              Describe what you need and we'll route it." A request without a
+              project and a role is not something this API can carry, and a
+              form that accepts one would be dropping members' words on the
+              floor. What is true is that Why reaches the person deciding
+              verbatim, so the escape points at the field that already works.
+              A place with nothing defined in it is its own dead end and gets
+              its own sentence rather than an empty menu. */}
+          {projectId && projectRoles.length === 0 ? (
+            <FieldHint>
+              Nothing is defined here yet, so there is nothing to ask for. Pick another place, or
+              ask a lab manager to set this one up.
+            </FieldHint>
+          ) : (
+            <FieldHint>
+              Can&rsquo;t find it? Pick the closest one and describe what you actually need in
+              Why — a lab manager reads that before deciding.
+            </FieldHint>
+          )}
         </div>
         <div>
           {/*
