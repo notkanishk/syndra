@@ -24,6 +24,7 @@ const state = vi.hoisted(() => ({
       last_seen?: string | null;
       reason?: string;
     }>,
+    merge_findings: 0,
   },
 }));
 
@@ -44,6 +45,9 @@ vi.mock("@/lib/queries/usePropagation", () => ({
 }));
 vi.mock("@/lib/queries/useUsers", () => ({
   useCreateGrant: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+vi.mock("@/lib/queries/useTargets", () => ({
+  useTargets: () => ({ data: [{ target: "truenas", registered: true }], isLoading: false }),
 }));
 vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => state.advanced }));
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));

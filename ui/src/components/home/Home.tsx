@@ -16,6 +16,7 @@ import {
   type AccessRequest,
 } from "@/lib/queries/useRequests";
 import { useDrainPropagations } from "@/lib/queries/usePropagation";
+import { useTargets } from "@/lib/queries/useTargets";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
@@ -153,6 +154,7 @@ export function Home({ session }: { session: SessionUser }) {
               statement about the targets it COULD read. */}
           {advanced && unvouched.length > 0 && <UnvouchedTargets targets={unvouched} />}
           {advanced && (drift?.count ?? 0) > 0 && <UnexplainedAccess count={drift!.count} />}
+          {advanced && findings > 0 && <MergeFindingsWaiting count={findings} />}
 
           {!advanced && (
             <p className="max-w-[820px] text-[14px] leading-[1.55] text-faint">
@@ -415,6 +417,45 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
           </ButtonLink>
         </CardRow>
       ))}
+    </Card>
+  );
+}
+
+/**
+ * Differences the reconciliation found and is not entitled to resolve.
+ *
+ * This count was already inside the headline's arithmetic and had no block of
+ * its own, so an operator on Advanced could read "6 things need you", scan the
+ * page, and find five. A number that names work with no way to reach it is
+ * worse than a number that is missing: it sends somebody looking for a screen
+ * that is not there, and then leaves them assuming they misread it.
+ *
+ * Findings live per target rather than in one queue, so this links to each
+ * registered target rather than inventing an index that does not exist. In
+ * this deployment that is one row.
+ */
+function MergeFindingsWaiting({ count }: { count: number }) {
+  const targets = useTargets();
+  const rows = targets.data ?? [];
+
+  return (
+    <Card>
+      <CardHeader title="Waiting on a decision" count={count} tone="warn" />
+      <CardRow className="flex-wrap">
+        <div className="flex-1 text-[14.5px]">
+          {count} {count === 1 ? "difference" : "differences"} the reconciliation found and
+          can&rsquo;t resolve on its own
+          <span className="text-faint">
+            {" "}
+            — each one is somebody&rsquo;s access sitting disputed until a person decides.
+          </span>
+        </div>
+        {rows.map((row) => (
+          <ButtonLink key={row.target} href={`/system/targets/${row.target}`} size="sm">
+            {rows.length === 1 ? "Open target" : `Open ${targetLabel(row.target)}`}
+          </ButtonLink>
+        ))}
+      </CardRow>
     </Card>
   );
 }
