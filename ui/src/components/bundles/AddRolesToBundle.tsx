@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { type ActionOutcome as Outcome } from "@/lib/outcome";
 import { humanizeKey } from "@/lib/format";
 import { useAddBundleRole, useBundleRoles } from "@/lib/queries/useBundles";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
@@ -52,6 +53,7 @@ export function AddRolesToBundle({
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [failure, setFailure] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const held = useMemo(
     () =>
@@ -126,22 +128,20 @@ export function AddRolesToBundle({
     setApplying(false);
 
     if (added > 0) {
-      // Nobody gets anything yet. Saying "14 holders get them" here is the
-      // same misreading the removal panel used to invite, in the opposite
-      // direction: it would report an edit as access already granted.
-      toast.success(
-        `${added} ${added === 1 ? "role" : "roles"} added to ${name}'s working copy.`,
-        {
-          description:
-            holders > 0
-              ? `Nobody has them yet. Publish a version to decide whether the ${holders} ${
-                  holders === 1 ? "person" : "people"
-                } holding ${name} get them.`
-              : "Publish a version to make them real.",
-        },
-      );
+      setOutcome({
+        // `no_change` about access, deliberately: the working copy moved and
+        // nobody's access did. Reporting this as `applied` is the misreading
+        // the removal panel used to invite, in the opposite direction.
+        kind: "no_change",
+        message: `${added} ${added === 1 ? "role" : "roles"} added to ${name}'s working copy`,
+        detail:
+          holders > 0
+            ? `Nobody has them yet. Publish a version to decide whether the ${holders} ${
+                holders === 1 ? "person" : "people"
+              } holding ${name} get them.`
+            : "Publish a version to make them real.",
+      });
     }
-    if (!stopped) onClose();
   }
 
   return (
@@ -215,6 +215,8 @@ export function AddRolesToBundle({
           {failure} The roles still ticked were not added — press Add again to resume.
         </div>
       )}
+
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter>
         <Button

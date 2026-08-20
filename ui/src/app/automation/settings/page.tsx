@@ -1,11 +1,14 @@
 "use client";
 
-import { toast } from "sonner";
+
+import { useState } from "react";
 
 import { ChimeToggle } from "@/components/settings/ChimeToggle";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Segmented } from "@/components/ui/Select";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import {
   useGlobalConfirmationDefault,
   useSetGlobalConfirmationDefault,
@@ -23,6 +26,7 @@ import {
 export default function AutomationSettingsPage() {
   const current = useGlobalConfirmationDefault();
   const save = useSetGlobalConfirmationDefault();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const mode = current.data === "auto" ? "auto" : "manual";
 
@@ -51,13 +55,18 @@ export default function AutomationSettingsPage() {
             onChange={async (next) => {
               try {
                 await save.mutateAsync(next);
-                toast.success(
-                  next === "auto"
-                    ? "New rules will apply immediately."
-                    : "New rules will queue for review.",
-                );
+                setOutcome({
+                  kind: "applied",
+                  message:
+                    next === "auto"
+                      ? "New rules will apply immediately"
+                      : "New rules will queue for review",
+                  // The sentence a settings page owes and rarely says: this
+                  // changed the default, not the rules that already exist.
+                  detail: "Existing rules keep the mode they were created with.",
+                });
               } catch (error) {
-                toast.error(error instanceof Error ? error.message : "That didn't save.");
+                setOutcome(outcomeFromError(error));
               }
             }}
             options={[
@@ -66,7 +75,11 @@ export default function AutomationSettingsPage() {
             ]}
           />
 
-          <div className="grid gap-3 md:grid-cols-2">
+          {/* Under the control that changed it. A setting that reports itself
+              somewhere else is a setting an operator cannot tell they changed. */}
+          {outcome && <ActionOutcome outcome={outcome} />}
+
+          <div className="grid gap-3 tablet:grid-cols-2">
             <div
               className={`rounded-inner border px-4 py-3.5 ${
                 mode === "manual" ? "border-accent-line bg-accent-soft" : "border-line"
