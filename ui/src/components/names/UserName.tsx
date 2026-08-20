@@ -55,13 +55,16 @@ export function UserName({ id, fallback = "—", showEmail = false, className = 
       );
     }
     // Resolution finished and nothing — not the catalog, not the backend's own
-    // lookup — could place this id. Say that in words. The id itself stays
-    // reachable through `title` for forensics, but it is never the label: an
-    // opaque subject id rendered where a name belongs reads as a bug to
-    // everyone who sees it, and usually is one.
+    // lookup — could place this id. Say that in words, and show the id rather
+    // than hiding it in a `title`: it is the forensic half of this row, touch
+    // cannot open a tooltip, and a screenshot sent to a colleague carries what
+    // is rendered and nothing else. It is never the label, though — an opaque
+    // subject id where a name belongs reads as a bug to everyone who sees it,
+    // and usually is one.
     return (
-      <span className={className} title={id}>
-        {fallback === "—" ? <span className="text-faint">Unknown account</span> : fallback}
+      <span className={className}>
+        {fallback === "—" ? <span className="text-faint">Unknown account</span> : fallback}{" "}
+        <span className="type-mono text-faint">{id}</span>
       </span>
     );
   }
