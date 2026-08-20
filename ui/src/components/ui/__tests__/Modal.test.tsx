@@ -172,3 +172,52 @@ describe("Modal", () => {
     expect(footer.className).toContain("bg-surface-2");
   });
 });
+
+/**
+ * The rule the sheet work turned into a property.
+ *
+ * Two dialogs at once is a desktop nuisance and a phone failure: two scrims,
+ * two focus traps arguing over Tab, and a dismiss whose meaning depends on
+ * which panel is on top. Nothing nests one today — this is what keeps that
+ * true after the next screen is written.
+ */
+describe("sheets push, they do not stack", () => {
+  it("complains loudly when a dialog opens inside a dialog", () => {
+    const complaint = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(
+      <Modal open onClose={() => {}} labelledBy="outer">
+        <Modal open onClose={() => {}} labelledBy="inner">
+          <p>second</p>
+        </Modal>
+      </Modal>,
+    );
+    expect(complaint).toHaveBeenCalledWith(expect.stringContaining("do not stack"));
+    complaint.mockRestore();
+  });
+
+  // It complains; it does not withhold. Refusing to render would trade a
+  // layout problem for a missing confirmation, which is the worse of the two.
+  it("still renders the inner one rather than swallowing a confirmation", () => {
+    const complaint = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(
+      <Modal open onClose={() => {}} labelledBy="outer">
+        <Modal open onClose={() => {}} labelledBy="inner">
+          <p>second</p>
+        </Modal>
+      </Modal>,
+    );
+    expect(screen.getByText("second")).toBeTruthy();
+    complaint.mockRestore();
+  });
+
+  it("says nothing about a single dialog", () => {
+    const complaint = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(
+      <Modal open onClose={() => {}} labelledBy="only">
+        <p>alone</p>
+      </Modal>,
+    );
+    expect(complaint).not.toHaveBeenCalled();
+    complaint.mockRestore();
+  });
+});
