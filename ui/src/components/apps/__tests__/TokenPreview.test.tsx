@@ -38,9 +38,14 @@ beforeEach(() => {
   };
 });
 
-function renderPreview() {
+function renderPreview(behindEdits = false) {
   return render(
-    <TokenPreview applicationId="a1" applicationName="Badge Reader" projectId="p1" />,
+    <TokenPreview
+      applicationId="a1"
+      applicationName="Badge Reader"
+      projectId="p1"
+      behindEdits={behindEdits}
+    />,
   );
 }
 
@@ -72,5 +77,30 @@ describe("a preview that would issue no roles", () => {
     };
     renderPreview();
     expect(screen.queryByText(/no roles for/)).toBeNull();
+  });
+});
+
+
+/**
+ * The preview reads the saved shape, which is exactly why it can be trusted —
+ * it comes from the same shaper the Actions v2 path uses — and exactly why it
+ * cannot show a draft. Silently showing the old shape while somebody edits is
+ * a preview of a shape nobody is looking at.
+ */
+describe("a preview standing behind unsaved edits", () => {
+  it("says which shape it is showing", async () => {
+    renderPreview(true);
+    expect(await screen.findByText(/Behind your edits/)).toBeTruthy();
+    expect(
+      screen.getByText(/The shape Badge Reader receives now — not the one being edited/),
+    ).toBeTruthy();
+  });
+
+  it("keeps its ordinary claim when there is nothing unsaved", async () => {
+    renderPreview(false);
+    expect(
+      await screen.findByText(/Exactly what Badge Reader would receive right now/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Behind your edits/)).toBeNull();
   });
 });

@@ -27,10 +27,22 @@ export function TokenPreview({
   applicationId,
   applicationName,
   projectId,
+  behindEdits = false,
 }: {
   applicationId: string;
   applicationName: string;
   projectId: string;
+  /**
+   * True while the editor beside this holds unsaved changes.
+   *
+   * This preview reads the SAVED shape from the same shaper the Actions v2
+   * path uses, which is the whole reason it can be trusted — and it is also
+   * why it cannot show a draft. So while a draft exists it says which shape it
+   * is showing instead of letting somebody read an old token as a preview of a
+   * new one. Side by side that is misleading; stacked on a phone, where the
+   * editor is a scroll away, the preview looks like the only thing on screen.
+   */
+  behindEdits?: boolean;
 }) {
   const users = useCatalogUsers();
   const [userId, setUserId] = useState("");
@@ -61,7 +73,9 @@ export function TokenPreview({
       <div className="px-[22px] pb-3.5 pt-5">
         <h2 className="type-card-title">Preview token</h2>
         <p className="mt-1 text-[14px] leading-[1.5] text-faint">
-          Exactly what {applicationName} would receive right now.
+          {behindEdits
+            ? `The shape ${applicationName} receives now — not the one being edited.`
+            : `Exactly what ${applicationName} would receive right now.`}
         </p>
       </div>
 
@@ -91,6 +105,13 @@ export function TokenPreview({
           Run
         </Button>
       </div>
+
+      {behindEdits && (
+        <div className="mx-[22px] mb-3 border-t border-dashed border-warn-line pt-3 text-[13.5px] leading-[1.5] text-warn-text">
+          Behind your edits. Save the shape to preview it — this is what the app receives until
+          then.
+        </div>
+      )}
 
       <div className="flex-1 px-[22px] pb-5">
         {simulation.isLoading ? (

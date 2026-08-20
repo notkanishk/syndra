@@ -44,12 +44,15 @@ export function TokenFormatEditor({
   applicationName,
   shape,
   siblingCount,
+  onDirtyChange,
 }: {
   projectId: string;
   applicationId: string;
   applicationName: string;
   shape: UseQueryResult<ClaimShape>;
   siblingCount: number;
+  /** True while the form holds edits the preview beside it has not seen. */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const override = shape.data?.overrides.find((entry) => entry.application_id === applicationId);
   const [scope, setScope] = useState<"project" | "app">("project");
@@ -113,10 +116,12 @@ export function TokenFormatEditor({
               : `Changing this changes what every app reading ${shape.data.project_name} receives.`
           }
           onSave={saveProjectDefault.mutateAsync}
+          onDirtyChange={onDirtyChange}
         />
       ) : (
         <AppOverrideForm
           key="app"
+          onDirtyChange={onDirtyChange}
           projectId={projectId}
           applicationId={applicationId}
           applicationName={applicationName}
@@ -136,12 +141,14 @@ function AppOverrideForm({
   applicationName,
   override,
   fallback,
+  onDirtyChange,
 }: {
   projectId: string;
   applicationId: string;
   applicationName: string;
   override?: ClaimProfile;
   fallback: ClaimProfile;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const save = useSaveAppClaimOverride(projectId);
   const drop = useDeleteAppClaimOverride(projectId);
@@ -196,6 +203,7 @@ function AppOverrideForm({
       profile={override}
       scopeNote={`Only ${applicationName} reads this key. Its siblings keep the project default.`}
       onSave={(body) => save.mutateAsync({ applicationId, ...body })}
+      onDirtyChange={onDirtyChange}
       onDelete={async () => {
         await drop.mutateAsync(applicationId);
         setOverrideOutcome({
@@ -216,11 +224,19 @@ function ProfileForm({
   scopeNote,
   onSave,
   onDelete,
+  onDirtyChange,
 }: {
   profile: ClaimProfile;
   scopeNote: string;
   onSave: (body: ClaimProfileInput) => Promise<unknown>;
   onDelete?: () => Promise<void>;
+  /**
+   * Reported upwards so the preview beside this form can admit it is showing
+   * the saved shape rather than the one being typed. Only one ProfileForm is
+   * mounted at a time — project scope and app override are exclusive — so a
+   * single boolean is the whole story.
+   */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const vocabulary = useClaimVocabulary();
   const [claimName, setClaimName] = useState(profile.claim_name);
@@ -233,6 +249,13 @@ function ProfileForm({
     claimName !== profile.claim_name ||
     format !== profile.format_type ||
     JSON.stringify(toExtras(profile)) !== JSON.stringify(extras);
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    // Unmounting mid-edit — switching scope, leaving the screen — must clear
+    // the claim, or the preview keeps apologising for edits that are gone.
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
 
   async function save() {
     setSaving(true);
