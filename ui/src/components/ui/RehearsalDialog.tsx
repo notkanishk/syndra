@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 
 import { ApiError } from "@/lib/api-client";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import {
+  outcomeFromError,
+  type ActionOutcome as Outcome,
+  type OutcomeKind,
+} from "@/lib/outcome";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PlanReview, applyLabel, planNote } from "@/components/ui/PlanReview";
@@ -31,7 +36,7 @@ import type { BulkPlan } from "@/lib/queries/useBulkGrants";
  */
 
 /**
- * The toast after an apply. It reports three populations, and the one that must
+ * What an apply reports. It states three populations, and the one that must
  * never be folded into the others is `queued`: those rows are recorded here and
  * have not reached Zitadel, so the access is still whatever it was. Announcing
  * "12 people updated" after a bulk removal that never left the outbox tells an
@@ -71,6 +76,20 @@ export function resultTone(plan: BulkPlan): "success" | "warning" | "error" {
   if (plan.summary.failed > 0) return "error";
   if (plan.summary.queued > 0) return "warning";
   return "success";
+}
+
+/**
+ * The same judgement, in the vocabulary every surface reports in.
+ *
+ * `queued` outranks a clean apply on purpose: a plan where anything is
+ * recorded-and-not-dispatched has not finished, and calling the whole thing
+ * applied because most of it was is how "12 people updated" gets said about a
+ * door that is still open.
+ */
+export function resultKind(plan: BulkPlan): OutcomeKind {
+  if (plan.summary.failed > 0) return "failed";
+  if (plan.summary.queued > 0) return "queued";
+  return "applied";
 }
 
 interface RehearsalDialogProps {
@@ -117,7 +136,7 @@ const STALE_PLAN_CODES = new Map<string, string>([
   ],
   ["PLAN_REQUEST_MISMATCH", "The request no longer matches the one this was approved for."],
   // The sixth. Its absence meant a plan cited on the wrong surface fell through
-  // to a bare toast, which is the one recovery path §8 exists to close.
+  // to a bare error with no recovery, which is the one path §8 exists to close.
   ["PLAN_NOT_CITABLE_HERE", "This approval belongs to a different surface and cannot be applied here."],
   // A re-plan is issued to the CURRENT operator, so it resolves this refusal
   // rather than merely reporting it — the same recovery as every code above.
@@ -184,18 +203,19 @@ export function RehearsalDialog({
    *
    * Only PLAN_STALE carries subjects. Keying the banner on that list alone left
    * the other five refusals swapping the approved plan for a freshly computed
-   * one with nothing on screen but a transient toast — so the operator could
+   * one with nothing on screen to say so — so the operator could
    * press Apply believing they had already read this diff, which is exactly the
    * gap the rehearsal exists to close, reintroduced in the recovery path.
    */
   const [stalePlan, setStalePlan] = useState<{ code: string; subjects: string[] } | null>(null);
   /** Set when the backend refuses to approve a change of this size unasked. */
   const [scope, setScope] = useState<{ affected: string; limit: string } | null>(null);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   /**
    * Rehearse. A blast-radius refusal is not a failure — it is the backend
    * asking the operator to say the number out loud — so it stops on its own
-   * step rather than closing the dialog with a toast.
+   * step rather than closing the dialog.
    */
   async function rehearse(acknowledgeScope: boolean) {
     setBusy(true);
@@ -213,7 +233,7 @@ export function RehearsalDialog({
         setStep("scope");
         return null;
       }
-      toast.error(error instanceof Error ? error.message : "That didn't go through.");
+      setOutcome(outcomeFromError(error));
       throw error;
     } finally {
       setBusy(false);
@@ -236,16 +256,25 @@ export function RehearsalDialog({
       setPlan(result);
       setStalePlan(null);
       setStep("result");
-      toast[resultTone(result)](resultMessage(result, noun), {
-        description: queuedNote(result),
+      // On the result step, which already existed — the notification was a
+      // second surface reporting what this step is for, and the one that
+      // removed itself after four seconds.
+      setOutcome({
+        kind: resultKind(result),
+        message: resultMessage(result, noun),
+        detail: queuedNote(result),
       });
     } catch (error) {
       const stale = stalePlanError(error);
       if (!stale) {
-        toast.error(error instanceof Error ? error.message : "That didn't go through.");
+        setOutcome(outcomeFromError(error));
         return;
       }
-      toast.warning(stale.message);
+      // Deliberately NOT an outcome block. The stale-plan banner below is
+      // this refusal's report and a better one — it names the subjects that
+      // moved — and two `role="alert"` regions saying the same thing is two
+      // things a screen reader has to hear before reaching the plan.
+      setOutcome(null);
       try {
         // Already acknowledged once if it needed to be: the cohort has not
         // grown, and making the operator confirm the size again to see what
@@ -258,7 +287,11 @@ export function RehearsalDialog({
         setStalePlan({ code: stale.code, subjects: Object.keys(stale.details ?? {}) });
         setStep("review");
       } catch {
-        toast.error("Couldn't re-plan against current state. Close and try again.");
+        setOutcome({
+          kind: "failed",
+          message: "Couldn't re-plan against current state",
+          detail: "Close and try again — nothing was applied.",
+        });
       }
     } finally {
       setBusy(false);
@@ -338,6 +371,11 @@ export function RehearsalDialog({
           <PlanReview plan={plan} />
         </>
       )}
+
+      {/* The plan's own result, on the step that exists for it. A refusal
+          appears on whichever step the operator is standing on, because that
+          is where they will look for the reason the button did nothing. */}
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter
         note={
