@@ -2,14 +2,17 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { RoleRef } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Relative } from "@/components/ui/Time";
 import { describeDuration } from "@/lib/format";
+// Aliased: this file already has an `Outcome`, which is the decision a request
+// received. This one is what the write did.
+import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
 import {
   useDecideRequest,
   useRequestsAdmin,
@@ -42,6 +45,7 @@ export function PersonRequests({
   const requests = useRequestsAdmin("all");
   const decide = useDecideRequest();
   const [resolved, setResolved] = useState<Set<string>>(new Set());
+  const [outcomes, setOutcomes] = useState<Record<string, ActionResult | null>>({});
 
   const mine = useMemo(
     () =>
@@ -55,9 +59,18 @@ export function PersonRequests({
 
   async function act(id: string, status: "approved" | "rejected") {
     setResolved((prev) => new Set(prev).add(id));
+    setOutcomes((prev) => ({ ...prev, [id]: null }));
     try {
       await decide.mutateAsync({ id, status });
-      toast.success(status === "approved" ? `Approved for ${name}` : `Denied for ${name}`);
+      // Reported on the row that ran it, and the row keeps its seat: it leaves
+      // on the next read rather than under the thumb that decided it.
+      setOutcomes((prev) => ({
+        ...prev,
+        [id]: {
+          kind: "applied",
+          message: status === "approved" ? `Approved for ${name}` : `Denied for ${name}`,
+        },
+      }));
     } catch (error) {
       // Put it back: a row that vanished on a failed write would read as a
       // decision that was recorded.
@@ -66,7 +79,7 @@ export function PersonRequests({
         next.delete(id);
         return next;
       });
-      toast.error(error instanceof Error ? error.message : "The decision didn't go through.");
+      setOutcomes((prev) => ({ ...prev, [id]: outcomeFromError(error) }));
     }
   }
 
@@ -101,6 +114,7 @@ export function PersonRequests({
             optimisticallyResolved={resolved.has(entry.id)}
             isPending={decide.isPending}
             onDecide={act}
+            outcome={outcomes[entry.id] ?? null}
           />
         ))}
       </ListStates>
@@ -124,30 +138,32 @@ function RequestRow({
   optimisticallyResolved,
   isPending,
   onDecide,
+  outcome,
 }: {
   entry: AccessRequest;
   isOperator: boolean;
   optimisticallyResolved: boolean;
   isPending: boolean;
   onDecide: (id: string, status: "approved" | "rejected") => void;
+  outcome: ActionResult | null;
 }) {
   const open = entry.status === "pending" && !optimisticallyResolved;
 
   return (
-    <div className="row-divider flex flex-wrap items-center gap-4 px-5 py-3.5">
-      <span className="w-[250px] shrink-0 truncate text-[14.5px]">
+    <div className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-4">
+      <span className="w-full text-[14.5px] tablet:w-[250px] tablet:shrink-0 tablet:truncate">
         <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
         <span className="block text-[12.5px] text-faint">
           {describeDuration(entry.duration_days)}
         </span>
       </span>
-      <span className="min-w-[200px] flex-1 truncate text-[14px] text-muted">
+      <span className="w-full text-[14px] text-muted tablet:min-w-[200px] tablet:flex-1 tablet:truncate">
         {entry.justification ? `“${entry.justification}”` : "No reason given"}
       </span>
-      <span className="w-[110px] shrink-0 text-[13px] text-faint">
+      <span className="text-[13px] text-faint tablet:w-[110px] tablet:shrink-0">
         <Relative iso={entry.created_at} />
       </span>
-      <span className="flex w-[190px] shrink-0 items-center justify-end gap-2">
+      <span className="flex w-full items-center gap-3 tablet:w-[190px] tablet:shrink-0 tablet:justify-end tablet:gap-2">
         {open && isOperator ? (
           <>
             <Button
@@ -166,6 +182,8 @@ function RequestRow({
           <Outcome status={optimisticallyResolved ? "approved" : entry.status} note={entry.review_note} />
         )}
       </span>
+
+      {outcome && <ActionOutcome outcome={outcome} placement="inline" className="w-full" />}
     </div>
   );
 }
