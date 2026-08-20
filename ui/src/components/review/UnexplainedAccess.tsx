@@ -383,7 +383,7 @@ function TriageRow({
   return (
     <div className={leading ? "border-l-[3px] border-danger" : "border-l-[3px] border-transparent"}>
       <div
-        className={`row-divider flex flex-wrap items-center gap-[18px] px-5 py-3.5 ${
+        className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px] ${
           selection.isSelected(item.id) ? "bg-accent-soft/30" : ""
         }`}
         {...selection.rowProps(item.id)}
@@ -397,7 +397,7 @@ function TriageRow({
           type="button"
           onClick={onExpand}
           aria-expanded={expanded}
-          className="flex w-[186px] min-w-0 items-center gap-2.5 text-left"
+          className="flex w-full min-w-0 items-center gap-2.5 text-left tablet:w-[186px]"
         >
           <UserAvatar id={item.user_id} size="row" />
           <span className="min-w-0">
@@ -410,18 +410,19 @@ function TriageRow({
           </span>
         </button>
 
-        <div className="w-[250px] min-w-0">
+        <div className="w-full min-w-0 tablet:w-[250px]">
           <div className="truncate text-[14px]">
             <ProjectName id={item.project_id} /> / <Mono>{role}</Mono>
           </div>
           <RiskPill item={item} />
         </div>
 
-        <p className="min-w-[220px] flex-1 text-[13.5px] leading-[1.5] text-muted">
+        <p className="w-full text-[13.5px] leading-[1.5] text-muted tablet:min-w-[220px] tablet:flex-1">
           {explainDrift(item)}
         </p>
 
-        <div className="w-[96px] text-[13px] text-faint">
+        <div className="text-[13px] text-faint tablet:w-[96px]">
+          <span className="tablet:hidden">Found </span>
           <Relative iso={item.detected_at} />
         </div>
 
@@ -430,7 +431,7 @@ function TriageRow({
           red OUTLINE here — the solid fill exists only on the confirming
           button inside its dialog.
         */}
-        <div className="flex w-[300px] shrink-0 flex-wrap justify-end gap-2">
+        <div className="flex w-full flex-wrap gap-3 tablet:w-[300px] tablet:shrink-0 tablet:justify-end tablet:gap-2">
           <Button
             variant={adoptPointless ? "ghost" : "accent"}
             size="sm"
