@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +26,8 @@ import {
   type RoleMapping,
 } from "@/lib/queries/useMappings";
 import { targetLabel } from "@/lib/nav";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useIsTouch } from "@/lib/useViewport";
 
 
@@ -272,6 +273,9 @@ function VersionHistory({ target }: { target: string }) {
   const history = useMappingHistory(target);
   const publish = usePublishMappingVersion(target);
   const [note, setNote] = useState("");
+  // Publishing and rolling back both report here: the version spine is the
+  // thing they change, and it is what the operator is looking at.
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   return (
     <Card>
@@ -303,7 +307,11 @@ function VersionHistory({ target }: { target: string }) {
               publish.mutate(note, {
                 onSuccess: (created) => {
                   setNote("");
-                  toast.success(`Published version ${created.version}.`);
+                  setOutcome({
+                    kind: "applied",
+                    message: `Published version ${created.version}`,
+                    detail: "Nobody moves onto it until holders are moved.",
+                  });
                 },
               })
             }
@@ -311,6 +319,8 @@ function VersionHistory({ target }: { target: string }) {
             {publish.isPending ? "Publishing…" : "Publish this set"}
           </Button>
         </div>
+
+        {outcome && <ActionOutcome outcome={outcome} className="mt-3" />}
       </div>
 
       <ListStates
@@ -355,6 +365,7 @@ function VersionRow({
 }) {
   const rollback = useRollbackMappingVersion(target);
   const [confirming, setConfirming] = useState(false);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   return (
     <div className={`row-divider px-5 py-3.5 ${current ? "bg-accent-soft" : ""}`}>
@@ -397,6 +408,10 @@ function VersionRow({
         )}
       </p>
 
+      {/* On the version row that was rolled back to, which is the row the
+          operator is looking at and the thing that changed. */}
+      {outcome && <ActionOutcome outcome={outcome} className="mt-3" />}
+
       {confirming && (
         <RollbackConfirm
           version={version}
@@ -410,12 +425,14 @@ function VersionRow({
                 // people they move are converged by the drain — a rollback that
                 // changed the definition and left the target alone is the
                 // definition and the world disagreeing, silently.
-                toast.warning(
-                  `Rolled back to version ${version.version}. ${result.queued_convergences} ${
-                    result.queued_convergences === 1 ? "person is" : "people are"
-                  } queued for convergence.`,
-                  { description: "Nothing has reached the target yet — resume the queue on Pending changes." },
-                );
+                setOutcome({
+                  kind: "queued",
+                  message: `Rolled back to version ${version.version} — ${
+                    result.queued_convergences
+                  } ${result.queued_convergences === 1 ? "person is" : "people are"} queued for convergence`,
+                  detail:
+                    "Nothing has reached the target yet — resume the queue on Pending changes.",
+                });
               },
             })
           }

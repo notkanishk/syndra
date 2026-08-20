@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
 
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Relative } from "@/components/ui/Time";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import {
   useClearShadowCredential,
   useSetShadowCredential,
@@ -129,6 +130,7 @@ function SetPasswordDialog({
   onClose: () => void;
 }) {
   const save = useSetShadowCredential(userId);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   /**
@@ -191,6 +193,8 @@ function SetPasswordDialog({
         )}
       </div>
 
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter note="Nobody, including a lab manager, can read this back to you afterwards.">
         <Button
           variant="accent"
@@ -200,8 +204,15 @@ function SetPasswordDialog({
           onClick={async () => {
             try {
               await save.mutateAsync(password);
-              toast.success(rotating ? "Workshop password changed." : "Workshop password set.");
-              onClose();
+              // When it will work, not that it works. The credential reaches
+              // the machine through the same queue everything else does, and a
+              // member told "set" who then cannot log in has been lied to by
+              // one word.
+              setOutcome({
+                kind: "queued",
+                message: rotating ? "Workshop password changed" : "Workshop password set",
+                detail: "It will work on the workshop machines within a few minutes.",
+              });
             } catch (error) {
               setRejection(
                 error instanceof Error ? error.message : "That password wasn't accepted.",
@@ -221,6 +232,7 @@ function SetPasswordDialog({
 
 function ClearPasswordDialog({ userId, onClose }: { userId: string; onClose: () => void }) {
   const clear = useClearShadowCredential(userId);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const audit = useShadowCredentialAudit(userId);
   const lastSet = (audit.data ?? []).find(
     (entry) => entry.action === "set" || entry.action === "rotated",
@@ -245,6 +257,8 @@ function ClearPasswordDialog({ userId, onClose }: { userId: string; onClose: () 
           this is only the password those machines check. You can set a new one at any time.
         </div>
       </div>
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter>
         <Button
           variant="dangerConfirm"
@@ -252,10 +266,13 @@ function ClearPasswordDialog({ userId, onClose }: { userId: string; onClose: () 
           onClick={async () => {
             try {
               await clear.mutateAsync();
-              toast.success("Workshop password removed.");
-              onClose();
+              setOutcome({
+                kind: "queued",
+                message: "Workshop password removed",
+                detail: "The machines stop accepting it within a few minutes.",
+              });
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "It wasn't removed.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
