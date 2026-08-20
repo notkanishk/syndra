@@ -27,7 +27,7 @@ blocks what follows it; the two marked independent can run at any time.
   `--breakpoint-desktop: 67.5rem` — with a canary, because deleting them
   silently returns every responsive class to Tailwind's stock scale while the
   class names keep compiling. `4e9ee9f`
-- [ ] 1.4 Record the board-versus-rules ruling where a builder will meet it:
+- [x] 1.4 Record the board-versus-rules ruling where a builder will meet it:
   `BOARD-SPEC.md` carries the extracted values, design.md §2 carries the ruling.
 
 ## 2. Confirmation, before any removal — *independent of layout*
@@ -45,73 +45,73 @@ blocks what follows it; the two marked independent can run at any time.
   `outcomeFromDrain` maps warning to `queued` rather than `failed` on purpose:
   "resume again" is not a failure, and an operator who reads it as one goes
   looking for a broken machine. `bf1a91c`
-- [ ] 2.3 Migrate the remaining toast sites — 83 across 20 files. ~40 are
+- [x] 2.3 Migrate the remaining toast sites — 83 across 20 files. ~40 are
   `toast.error` and are the only failure signal those screens have, so each one
   is replaced rather than dropped.
-- [ ] 2.4 Nine test files mock `sonner` and several assert on the mock; they
+- [x] 2.4 Nine test files mock `sonner` and several assert on the mock; they
   assert on the rendered outcome instead.
-- [ ] 2.5 Remove `sonner` from `package.json` and the `Toaster` from
+- [x] 2.5 Remove `sonner` from `package.json` and the `Toaster` from
   `providers.tsx`. A canary fails if either returns.
 
 ## 3. The shell
 
-- [ ] 3.1 `AppShell` at the breakpoint: `h-screen` → `h-dvh`, the flex flip, and
+- [x] 3.1 `AppShell` at the breakpoint: `h-screen` → `h-dvh`, the flex flip, and
   the safe-area insets. **`#app-scroll` stays the scroll container** —
   `ui-view.tsx` scrolls it by id for the Basic→Advanced reveal, and moving
   scrolling to the body makes that a silent no-op rather than an error.
-- [ ] 3.2 The tab bar, built from `navFor(audience)` unchanged. Member 3, Basic
+- [x] 3.2 The tab bar, built from `navFor(audience)` unchanged. Member 3, Basic
   4 with the Access group landing on Projects and carrying Roles and Apps as a
   header segment. No "More" tab — a fifth slot turns the rail's rule into "four
   things and a drawer of leftovers".
-- [ ] 3.3 The nav sheet for Advanced, with the Go-to bar. One dot in the highest
+- [x] 3.3 The nav sheet for Advanced, with the Go-to bar. One dot in the highest
   tone present and a count of **destinations** wanting attention, never a
   rolled-up item total: three findings plus eleven expiries plus three holds is
   seventeen of nothing.
-- [ ] 3.4 `Sidebar` mount decision. If it renders hidden the badge polls still
+- [x] 3.4 `Sidebar` mount decision. If it renders hidden the badge polls still
   run; if it unmounts, `useFlashOnChange`'s `settled` guard resets and every
   badge flashes on each sheet open — which is the exact failure that guard was
   written to prevent.
-- [ ] 3.5 `TopBar` triage: breadcrumb, view pill (44px, not the drawn 34), the
+- [x] 3.5 `TopBar` triage: breadcrumb, view pill (44px, not the drawn 34), the
   account sheet, and sign-out — which is a POST form and can move but cannot
   become a link.
-- [ ] 3.6 Bottom-anchored collisions: `SelectionBar` (`sticky bottom-4 z-20`)
+- [x] 3.6 Bottom-anchored collisions: `SelectionBar` (`sticky bottom-4 z-20`)
   and the converge dock (`fixed bottom-6 z-[60]`, above the Modal scrim) need
   the tab bar's height as an offset and a reconciled z-index.
 
 ## 4. Sheets
 
-- [ ] 4.1 `Modal` renders as a sheet below tablet: 420 short, 520 stopping 96px
+- [x] 4.1 `Modal` renders as a sheet below tablet: 420 short, 520 stopping 96px
   short of the top, 760 full-height with a sticky footer. Reuses
   `useDialogFocusTrap` unchanged.
 - [ ] 4.2 Push, never stack. The second sheet replaces the first's content and
   the first's title becomes a back-line; back walks up one level inside the
   sheet before closing it.
-- [ ] 4.3 A busy sheet cannot be dismissed and says so — silently ignoring a
+- [x] 4.3 A busy sheet cannot be dismissed and says so — silently ignoring a
   dismissal reads as a frozen app.
-- [ ] 4.4 Keyboard: the sheet's height is `min(content, space above keyboard)`
+- [x] 4.4 Keyboard: the sheet's height is `min(content, space above keyboard)`
   and the footer pins to the sheet's own bottom edge, never the viewport.
 
 ## 5. Rows, and the touch primitives
 
-- [ ] 5.1 `CardRow` gains an optional disclosure; `CardColumns` becomes
+- [x] 5.1 `CardRow` gains an optional disclosure; `CardColumns` becomes
   hideable centrally. Additive — every existing caller compiles unchanged.
-- [ ] 5.2 The 199 fixed-px cells across ~42 files, by density. Watch
+- [x] 5.2 The 199 fixed-px cells across ~42 files, by density. Watch
   `ListStates`'s `contents` wrapper: a per-row wrapper element changes what the
   flex parent sees and breaks the `arrive-list` stagger.
-- [ ] 5.3 The copy row learns it cannot copy **before** it is tapped, and
+- [x] 5.3 The copy row learns it cannot copy **before** it is tapped, and
   carries `Select` instead. `navigator.clipboard` is undefined on http, which is
   how this LAN deployment is reached — so the affordance that fails silently is
   the one members meet.
 - [ ] 5.4 Selection mode: a named `Select` control on all five surfaces, 24px
   glyphs in 44px rows, select-all that states both numbers, and a count bar
   naming the next step — "Rehearse removal for 9 people", never "Remove 9".
-- [ ] 5.5 The ladder with a keyboard up. `ConfirmByTyping` gains
+- [x] 5.5 The ladder with a keyboard up. `ConfirmByTyping` gains
   `autoCapitalize="none"` and an `inputMode`; mobile autocapitalisation is
   exactly the failure `typedMatches` was already made case-insensitive to
   forgive.
-- [ ] 5.6 The freshness strip as one component, **five flags** — `truncated` is
+- [x] 5.6 The freshness strip as one component, **five flags** — `truncated` is
   orthogonal — and the block/allow rule kept unsplit.
-- [ ] 5.7 The five `title` attributes move into row disclosures. The Zitadel-read
+- [x] 5.7 The five `title` attributes move into row disclosures. The Zitadel-read
   one is the important one: it is the only explanation for a failed read.
 
 ## 6. Screens
@@ -123,17 +123,17 @@ blocks what follows it; the two marked independent can run at any time.
 
 ## 7. Platform
 
-- [ ] 7.1 Offline, distinct from `degraded`. No client-side queue: a queue in
+- [x] 7.1 Offline, distinct from `degraded`. No client-side queue: a queue in
   the browser is a second, invisible ledger.
-- [ ] 7.2 Session return, and expiry mid-apply that loses neither the fact that
+- [x] 7.2 Session return, and expiry mid-apply that loses neither the fact that
   nothing changed nor the plan.
-- [ ] 7.3 Installable: icon, maskable variant, splash that does not animate, and
+- [x] 7.3 Installable: icon, maskable variant, splash that does not animate, and
   the prompt in the Account sheet rather than a first-load banner.
-- [ ] 7.4 Landscape. Rung 3 is refused with a stated reason rather than squeezed
+- [x] 7.4 Landscape. Rung 3 is refused with a stated reason rather than squeezed
   — the consequence sentence is the most protected element in the ladder.
 
 ## 8. Verification
 
-- [ ] 8.1 Browser pass at 390 / 744 / 1280 for every route touched.
+- [x] 8.1 Browser pass at 390 / 744 / 1280 for every route touched.
 - [ ] 8.2 The per-route a11y checklist `BIA-36` and `ISC-43` already owe, now
   including touch targets and dynamic type.
