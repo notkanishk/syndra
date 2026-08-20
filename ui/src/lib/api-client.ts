@@ -55,6 +55,33 @@ type RequestInitJSON = Omit<RequestInit, "body"> & {
 export async function request<T = unknown>(path: string, init?: RequestInitJSON): Promise<T> {
   const url = path.startsWith("/") ? `${API_BASE}${path}` : `${API_BASE}/${path}`;
 
+  // A mutation attempted with no network is refused here rather than sent.
+  //
+  // Refused, not failed, and the difference is what an operator does next: a
+  // refusal means nothing was attempted and the state they are looking at is
+  // the state that holds, where a failure leaves them wondering whether the
+  // write half-landed. `fetch` on a dead network rejects with a TypeError
+  // carrying no status, which reads as the second.
+  //
+  // Reads are left alone. A read that fails while offline fails harmlessly and
+  // its list already has an error state; blocking it here would only replace
+  // one honest failure with another.
+  //
+  // This is the whole of the offline write story. There is deliberately no
+  // client-side queue: a queue in the browser is a second ledger nobody can
+  // inspect, in a product whose argument is that Syndra decides and records.
+  const method = (init?.method ?? "GET").toUpperCase();
+  if (
+    method !== "GET" &&
+    typeof navigator !== "undefined" &&
+    navigator.onLine === false
+  ) {
+    throw new ApiError(0, {
+      error: "OFFLINE",
+      message: "You're offline, so this wasn't sent",
+    });
+  }
+
   const headers = new Headers(init?.headers);
   let body: BodyInit | undefined;
   if (init?.body !== undefined) {

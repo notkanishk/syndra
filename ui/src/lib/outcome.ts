@@ -110,10 +110,21 @@ export function describeFailure(error: unknown): string {
  */
 export function outcomeFromError(error: unknown): ActionOutcome {
   const requestId = error instanceof ApiError ? error.details?.request_id : undefined;
-  const refused = error instanceof ApiError && error.status >= 400 && error.status < 500;
+  // Offline is a refusal, not a failure. Nothing was attempted, so the state
+  // on screen is the state that holds — which is precisely what an operator
+  // needs to know, and the opposite of what a failure tells them.
+  const offline = error instanceof ApiError && error.code === "OFFLINE";
+  const refused =
+    offline || (error instanceof ApiError && error.status >= 400 && error.status < 500);
   return {
     kind: refused ? "refused" : "failed",
     message: describeFailure(error),
+    // Not "it will send when you're back". There is no client-side queue by
+    // design, so nothing sends itself, and saying otherwise would be the
+    // product promising something it has deliberately refused to build.
+    detail: offline
+      ? "Nothing was queued and nothing was sent. Try again once the connection is back."
+      : undefined,
     requestId: typeof requestId === "string" ? requestId : undefined,
   };
 }
