@@ -247,7 +247,7 @@ function ExpiringRow({
 
   return (
     <div
-      className={`row-divider flex flex-wrap items-center gap-[18px] px-5 py-3.5 ${
+      className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px] ${
         soonest ? "border-l-[3px] border-warn bg-warn-soft" : "border-l-[3px] border-transparent"
       } ${ack ? "opacity-[.72]" : ""} ${selection.isSelected(grant.id) ? "bg-accent-soft/30" : ""}`}
       {...(ack ? {} : selection.rowProps(grant.id))}
@@ -259,28 +259,28 @@ function ExpiringRow({
           <RowCheckbox label="Select this expiring grant" {...selection.checkboxProps(grant.id)} />
         )}
       </span>
-      <span className="flex w-[210px] min-w-0 items-center gap-3">
+      <span className="flex w-full min-w-0 items-center gap-3 tablet:w-[210px]">
         <UserAvatar id={grant.user_id} />
         <span className="truncate text-[15px] font-semibold">
           <UserName id={grant.user_id} />
         </span>
       </span>
 
-      <div className="w-[260px] shrink-0 truncate text-[14.5px] text-ink/80">
+      <div className="w-full text-[14.5px] text-ink/80 tablet:w-[260px] tablet:shrink-0 tablet:truncate">
         <RoleRef projectId={grant.project_id} roleKey={grant.role_key} />
       </div>
 
-      <div className="w-[180px] shrink-0 truncate text-[13.5px] text-faint">
+      <div className="hidden w-[180px] shrink-0 truncate text-[13.5px] text-faint tablet:block">
         by <UserName id={grant.granted_by} fallback="somebody no longer listed" />,{" "}
         {formatShortDate(grant.created_at)}
       </div>
 
-      <div className="flex min-w-[220px] flex-1 items-center gap-3">
+      <div className="flex w-full flex-wrap items-center gap-3 tablet:min-w-[220px] tablet:flex-1">
         <AccessSource kind="direct" />
         {ack ? (
           // Who and when, always. The point of a shared acknowledgement is that the next person
           // can see whose judgement they would be overriding.
-          <span className="min-w-0 truncate text-[14px] text-muted">
+          <span className="min-w-0 text-[14px] text-muted tablet:truncate">
             <span className="font-semibold text-ink/80">
               <UserName id={ack.by} fallback={ack.by} />
             </span>{" "}
@@ -288,21 +288,22 @@ function ExpiringRow({
             {ack.note ? ` — ${ack.note}` : ""}
           </span>
         ) : (
-          <span className="truncate text-[14px] text-muted">
+          <span className="text-[14px] text-muted tablet:truncate">
             No action — expires {formatShortDate(grant.expires_at)}
           </span>
         )}
       </div>
 
       <div
-        className={`w-[110px] shrink-0 text-right text-[13.5px] font-semibold ${
+        className={`text-[13.5px] font-semibold tablet:w-[110px] tablet:shrink-0 tablet:text-right ${
           soonest ? "text-warn-text" : "text-muted"
         }`}
       >
-        {remaining === null ? "—" : remaining <= 0 ? "today" : `${remaining} days`}
+        {remaining === null ? "—" : remaining <= 0 ? "expires today" : `${remaining} days left`}
+        <span className="tablet:hidden" />
       </div>
 
-      <div className="flex w-[200px] shrink-0 items-center justify-end gap-2">
+      <div className="flex w-full items-center gap-3 tablet:w-[200px] tablet:shrink-0 tablet:justify-end tablet:gap-2">
         {/* Extend stays on an acknowledged row. Changing your mind toward KEEPING somebody's
             access is the reversal that must never be harder than the one that lets it go. */}
         <Button
