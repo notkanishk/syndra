@@ -1,14 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Badge, Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { FieldHint, FieldLabel } from "@/components/ui/Input";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Segmented, Select } from "@/components/ui/Select";
 import {
@@ -62,6 +63,7 @@ export default function AutomaticRulesPage() {
    */
   const selection = useRowSelection(useMemo(() => rows.map((rule) => rule.id), [rows]));
   const bulkMode = useBulkSetConfirmationMode();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const chosen = rows.filter((rule) => selection.selected.has(rule.id));
   const immediate = chosen.filter((rule) => rule.confirmation_mode === "auto").length;
@@ -80,10 +82,14 @@ export default function AutomaticRulesPage() {
     const target = mode === "auto" ? "fire immediately" : "queue for confirmation";
     try {
       await bulkMode.mutateAsync({ kind: "rule", ids, mode });
-      toast.success(`${ids.length} ${ids.length === 1 ? "rule" : "rules"} now ${target}.`);
+      setOutcome({
+        kind: "applied",
+        message: `${ids.length} ${ids.length === 1 ? "rule" : "rules"} now ${target}`,
+        detail: "This changes what the rules do next, not what they have already done.",
+      });
       selection.clear();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Nothing was changed.");
+      setOutcome(outcomeFromError(error));
     }
   }
 
@@ -226,6 +232,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
   const catalog = useGlobalRoleCatalog();
   const create = useCreateMappingRule();
   const update = useUpdateMappingRule();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const setMode = useSetRuleConfirmationMode();
   const validate = useValidateMappingRule();
   /**
@@ -466,6 +473,8 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
         )}
       </div>
 
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter
         note={
           validated?.ok ? undefined : "Save is blocked until validation passes."
@@ -488,14 +497,22 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
                 if (mode !== rule.confirmation_mode) {
                   await setMode.mutateAsync({ id: rule.id, mode });
                 }
-                toast.success("Rule updated.");
+                setOutcome({
+                  kind: "applied",
+                  message: "Rule updated",
+                  detail: "It applies to what happens from now on.",
+                });
               } else {
                 await create.mutateAsync({ ...input, confirmation_mode: mode });
-                toast.success("Rule created.");
+                setOutcome({
+                  kind: "applied",
+                  message: "Rule created",
+                  detail: "It applies to what happens from now on.",
+                });
               }
               onClose();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The rule wasn't saved.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
@@ -508,7 +525,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
             try {
               await runValidation();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "Validation didn't run.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
@@ -551,6 +568,7 @@ function DeleteRuleConfirm({
   onDeleted: () => void;
 }) {
   const remove = useDeleteMappingRule();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const holders = rule.holder_count ?? 0;
 
   return (
@@ -587,6 +605,8 @@ function DeleteRuleConfirm({
         </div>
       </div>
 
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter note="Retarget the rule instead if you only want it to produce something else.">
         <Button
           variant="dangerConfirm"
@@ -595,16 +615,30 @@ function DeleteRuleConfirm({
             try {
               const result = await remove.mutateAsync(rule.id);
               const n = result.cascade?.enqueued ?? 0;
-              toast.success(
+              const auto = result.cascade?.mode === "auto";
+              setOutcome(
                 n === 0
-                  ? `${shortRuleId(rule.id)} deleted. Nobody's access changed.`
-                  : result.cascade.mode === "auto"
-                    ? `${shortRuleId(rule.id)} deleted. ${n} ${n === 1 ? "change" : "changes"} applied.`
-                    : `${shortRuleId(rule.id)} deleted. ${n} ${n === 1 ? "change is" : "changes are"} waiting under Pending changes.`,
+                  ? {
+                      kind: "applied",
+                      message: `${shortRuleId(rule.id)} deleted`,
+                      detail: "Nobody's access changed — the rule was producing nothing.",
+                    }
+                  : {
+                      // Queued unless the rule fired unattended: the
+                      // withdrawals it caused are recorded and wait for
+                      // somebody to resume the queue, and calling them applied
+                      // would say access is gone that is still there.
+                      kind: auto ? "applied" : "queued",
+                      message: `${shortRuleId(rule.id)} deleted — ${n} ${
+                        n === 1 ? "change" : "changes"
+                      } ${auto ? "applied" : "waiting"}`,
+                      detail: auto
+                        ? "The rule fired unattended, so its withdrawals went with it."
+                        : "They sit under Pending changes until somebody resumes the queue.",
+                    },
               );
-              onDeleted();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The rule wasn't deleted.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >

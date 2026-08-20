@@ -15,8 +15,7 @@
     "@tanstack/react-query-devtools": "^5.100.5",
     "next": "^15",
     "react": "^19",
-    "react-dom": "^19",
-    "sonner": "^2.0.7"
+    "react-dom": "^19"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

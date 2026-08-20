@@ -22,20 +22,6 @@ const bulk = vi.hoisted(() => ({
   applies: 0,
 }));
 
-const toasts = vi.hoisted(() => ({
-  success: [] as string[],
-  warning: [] as string[],
-  error: [] as string[],
-}));
-
-vi.mock("sonner", () => ({
-  toast: {
-    success: (message: string) => toasts.success.push(message),
-    warning: (message: string) => toasts.warning.push(message),
-    error: (message: string) => toasts.error.push(message),
-  },
-}));
-
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(""),
   useRouter: () => ({ replace: () => {} }),
@@ -119,9 +105,6 @@ beforeEach(() => {
   };
   bulk.rehearsals = 0;
   bulk.applies = 0;
-  toasts.success = [];
-  toasts.warning = [];
-  toasts.error = [];
 });
 
 describe("Unexplained access — triage", () => {

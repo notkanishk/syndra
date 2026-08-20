@@ -22,7 +22,6 @@ vi.mock("@/lib/queries/useShadowCredential", () => ({
   useClearShadowCredential: () => ({ mutateAsync: state.clear, isPending: false }),
 }));
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 
 beforeEach(() => {
   state.status = { has_credential: false };

@@ -41,7 +41,6 @@ vi.mock("@/lib/queries/useRoles", () => ({
 }));
 
 vi.mock("@/components/names", () => ({ ProjectName: () => null }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 
 function rule(overrides: Partial<MappingRuleRow> = {}): MappingRuleRow {
   return {

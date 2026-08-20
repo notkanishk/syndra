@@ -35,7 +35,6 @@ vi.mock("@/components/names", () => ({
   UserName: () => null,
 }));
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 
 function bundle(overrides: Partial<BundleRow> = {}): BundleRow {
   return {
