@@ -48,3 +48,21 @@ export function useIsPhone(): boolean {
 export function useIsTouch(): boolean {
   return useMediaQuery("(max-width: 67.49rem)");
 }
+
+/**
+ * Too little height to hold a consequence, a field and a keyboard at once.
+ *
+ * A phone in landscape is 390px tall, and a keyboard takes rather more than
+ * half of it. Everything else about landscape needs no special case — 844px
+ * of width is already past the tablet breakpoint, so the rail returns and
+ * sheets become centred dialogs on their own — but the type-the-name gate
+ * cannot fit, and the design's answer to not fitting is a rule rather than a
+ * squeeze: the consequence sentence is the most protected element on the
+ * screen and may not be the thing that scrolls away to make room.
+ *
+ * 26rem rather than a pixel value, so a reader who has raised their text size
+ * crosses the threshold earlier, which is exactly when they should.
+ */
+export function useIsShort(): boolean {
+  return useMediaQuery("(max-height: 26rem)");
+}
