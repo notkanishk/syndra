@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { DirectWriteWarning, UpstreamShell } from "@/components/upstream/UpstreamShell";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import {
@@ -142,6 +143,7 @@ function RoleRow({
   onEdit: () => void;
 }) {
   const remove = useUpstreamDeleteRole();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [confirming, setConfirming] = useState(false);
 
   return (
@@ -170,17 +172,27 @@ function RoleRow({
           <div className="px-6">
             <DirectWriteWarning what="Deleting a role removes it for every holder at once." />
           </div>
-          <ModalFooter>
+          {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
+          {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
+      <ModalFooter>
             <Button
               variant="dangerConfirm"
               isPending={remove.isPending}
               onClick={async () => {
                 try {
                   await remove.mutateAsync({ projectId, key: role.key });
-                  toast.success(`${role.key} deleted upstream.`);
-                  setConfirming(false);
+                  // "Applied", and it means it here in a way it does not
+                  // anywhere else in the product: this write went straight to
+                  // Zitadel with no plan, no queue and no ledger row behind it.
+                  setOutcome({
+                    kind: "applied",
+                    message: `${role.key} deleted in Zitadel`,
+                    detail: "Syndra has no record of this change beyond the audit line.",
+                  });
                 } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "That didn't go through.");
+                  setOutcome(outcomeFromError(error));
                 }
               }}
             >
@@ -204,6 +216,7 @@ function RoleDialog({
   onClose: () => void;
 }) {
   const create = useUpstreamCreateRole();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const update = useUpstreamUpdateRole();
   const [key, setKey] = useState(role?.key ?? "");
   const [displayName, setDisplayName] = useState(role?.displayName ?? "");
@@ -257,14 +270,22 @@ function RoleDialog({
             try {
               if (role) {
                 await update.mutateAsync({ projectId, key: role.key, displayName, group });
-                toast.success(`${role.key} updated upstream.`);
+                setOutcome({
+                  kind: "applied",
+                  message: `${role.key} updated in Zitadel`,
+                  detail: "Syndra has no record of this change beyond the audit line.",
+                });
               } else {
                 await create.mutateAsync({ projectId, key: key.trim(), displayName, group });
-                toast.success(`${key.trim()} created upstream.`);
+                setOutcome({
+                  kind: "applied",
+                  message: `${key.trim()} created in Zitadel`,
+                  detail: "Syndra has no record of this change beyond the audit line.",
+                });
               }
               onClose();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "That didn't go through.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >

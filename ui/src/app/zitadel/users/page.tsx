@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { DirectWriteWarning, UpstreamShell } from "@/components/upstream/UpstreamShell";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -126,6 +127,7 @@ export default function UpstreamUsersPage() {
 function UserGrants({ userId, name, state }: { userId: string; name: string; state: string }) {
   const grants = useUpstreamUserGrants(userId);
   const remove = useUpstreamRemoveGrant();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [assigning, setAssigning] = useState(false);
   const [editing, setEditing] = useState<{ grantId: string; roleKeys: string[]; projectId: string } | null>(
     null,
@@ -198,9 +200,13 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
                 onClick={async () => {
                   try {
                     await remove.mutateAsync({ userId, grantId: grant.id });
-                    toast.success("Grant removed upstream.");
+                    setOutcome({
+                      kind: "applied",
+                      message: "Grant removed in Zitadel",
+                      detail: "Syndra has no record of this change beyond the audit line.",
+                    });
                   } catch (error) {
-                    toast.error(error instanceof Error ? error.message : "That didn't go through.");
+                    setOutcome(outcomeFromError(error));
                   }
                 }}
               >
@@ -225,6 +231,7 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
   const roles = useUpstreamProjectRoles(projectId || null);
   const [keys, setKeys] = useState("");
   const assign = useUpstreamAssignGrant();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const parsed = keys
     .split(",")
@@ -269,6 +276,8 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
         </div>
         <DirectWriteWarning what="Syndra will see this as access it did not cause." />
       </div>
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter>
         <Button
           variant="danger"
@@ -277,10 +286,14 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
           onClick={async () => {
             try {
               await assign.mutateAsync({ userId, projectId, roleKeys: parsed });
-              toast.success("Grant assigned upstream.");
+              setOutcome({
+                kind: "applied",
+                message: "Grant assigned in Zitadel",
+                detail: "Syndra has no record of this change beyond the audit line.",
+              });
               onClose();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "That didn't go through.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
@@ -302,6 +315,7 @@ function EditRolesDialog({
   onClose: () => void;
 }) {
   const update = useUpstreamUpdateGrant();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [keys, setKeys] = useState(grant.roleKeys.join(", "));
 
   const parsed = keys
@@ -326,6 +340,8 @@ function EditRolesDialog({
         </div>
         <DirectWriteWarning what="Replacing a role set upstream can silently remove access Syndra thinks it granted." />
       </div>
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter>
         <Button
           variant="danger"
@@ -334,10 +350,14 @@ function EditRolesDialog({
           onClick={async () => {
             try {
               await update.mutateAsync({ userId, grantId: grant.grantId, roleKeys: parsed });
-              toast.success("Grant updated upstream.");
+              setOutcome({
+                kind: "applied",
+                message: "Grant updated in Zitadel",
+                detail: "Syndra has no record of this change beyond the audit line.",
+              });
               onClose();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "That didn't go through.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >

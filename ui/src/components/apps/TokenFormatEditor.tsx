@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { toast } from "sonner";
 
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { Segmented, Select } from "@/components/ui/Select";
 import { RowSkeleton, ErrorState } from "@/components/states";
 import {
@@ -144,6 +145,7 @@ function AppOverrideForm({
 }) {
   const save = useSaveAppClaimOverride(projectId);
   const drop = useDeleteAppClaimOverride(projectId);
+  const [overrideOutcome, setOverrideOutcome] = useState<Outcome | null>(null);
 
   if (!override) {
     return (
@@ -170,14 +172,20 @@ function AppOverrideForm({
                   attribute_claims: {},
                   static_claims: {},
                 });
-                toast.success(`${applicationName} now has its own claim.`);
+                setOverrideOutcome({
+                  kind: "applied",
+                  message: `${applicationName} now has its own claim`,
+                  detail: "Its siblings keep the project default.",
+                });
               } catch (error) {
-                toast.error(error instanceof Error ? error.message : "Couldn't create the override.");
+                setOverrideOutcome(outcomeFromError(error));
               }
             }}
           >
             Give {applicationName} its own claim
           </Button>
+
+          {overrideOutcome && <ActionOutcome outcome={overrideOutcome} className="mt-3" />}
         </div>
       </div>
     );
@@ -190,7 +198,10 @@ function AppOverrideForm({
       onSave={(body) => save.mutateAsync({ applicationId, ...body })}
       onDelete={async () => {
         await drop.mutateAsync(applicationId);
-        toast.success(`${applicationName} is back on the project default.`);
+        setOverrideOutcome({
+          kind: "applied",
+          message: `${applicationName} is back on the project default`,
+        });
       }}
     />
   );
@@ -216,6 +227,7 @@ function ProfileForm({
   const [format, setFormat] = useState<ClaimFormat>(profile.format_type);
   const [extras, setExtras] = useState<ExtraClaim[]>(() => toExtras(profile));
   const [saving, setSaving] = useState(false);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const dirty =
     claimName !== profile.claim_name ||
@@ -232,11 +244,17 @@ function ProfileForm({
         attribute_claims: attributes,
         static_claims: statics,
       });
-      toast.success("Token format saved. The next token carries it.");
+      // Never "applied": a claim edit changes the shape of the NEXT token, and
+      // every token already issued keeps the shape it was minted with.
+      setOutcome({
+        kind: "applied",
+        message: "Token format saved",
+        detail: "The next token this app issues carries it. Tokens already out keep their shape.",
+      });
     } catch (error) {
       // The backend rejects duplicate keys and malformed names; surfacing its
       // sentence verbatim is more useful than a generic failure.
-      toast.error(error instanceof Error ? error.message : "The change wasn't saved.");
+      setOutcome(outcomeFromError(error));
     } finally {
       setSaving(false);
     }
@@ -359,6 +377,11 @@ function ProfileForm({
           </div>
         )}
       </div>
+
+      {/* Under the control that saved it, and above nothing: an editor that
+          reports elsewhere leaves the operator unsure whether the shape on
+          screen is the shape that was written. */}
+      {outcome && <ActionOutcome outcome={outcome} />}
 
       <div className="flex flex-wrap items-center gap-2.5">
         <Button variant="accent" disabled={!dirty || !claimName.trim()} isPending={saving} onClick={save}>
