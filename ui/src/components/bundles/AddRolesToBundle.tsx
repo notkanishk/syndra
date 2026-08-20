@@ -183,7 +183,11 @@ export function AddRolesToBundle({
                 return (
                   <label
                     key={id}
-                    className={`row-divider flex items-center gap-3 py-2.5 text-[14.5px] ${
+                    // The label is the target, so it carries the floor rather
+                    // than the 16px glyph inside it. py-2.5 around 14.5px text
+                    // lands a pixel or two under 44 — close enough to look
+                    // right in a screenshot and not close enough to hit.
+                    className={`row-divider flex min-h-[44px] items-center gap-3 py-2.5 text-[14.5px] ${
                       already ? "text-faint" : "cursor-pointer"
                     }`}
                   >

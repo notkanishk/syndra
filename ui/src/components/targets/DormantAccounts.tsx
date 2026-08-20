@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
+import { RowCheckbox } from "@/components/ui/SelectionBar";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
@@ -106,10 +107,12 @@ export function DormantAccounts({ target }: { target: string }) {
               />
               {safe.map((account) => (
                 <CardRow key={account.account} className="flex-wrap">
-                  <input
-                    type="checkbox"
-                    aria-label={`Select ${account.account}`}
-                    className="size-4 shrink-0 accent-[var(--accent)]"
+                  {/* The same 24px glyph in a 44px box every other selectable
+                      list uses. This one had its own 16px input, which is the
+                      smallest target in the product in front of the most
+                      destructive action in it. */}
+                  <RowCheckbox
+                    label={`Select ${account.account}`}
                     checked={selected.has(account.account)}
                     onChange={() => toggle(account.account)}
                   />
