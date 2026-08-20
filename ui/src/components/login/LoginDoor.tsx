@@ -18,6 +18,12 @@ interface Props {
   identities: DemoIdentity[];
   /** Present when the visitor arrived back here from a failed round trip. */
   failure: LoginFailure | null;
+  /**
+   * Where to return them once they are through the door — already validated
+   * by `safeReturnPath`. Defaults to `/`: somebody who arrived here directly
+   * has no destination, and the door must not invent one.
+   */
+  next?: string;
 }
 
 /**
@@ -27,7 +33,7 @@ interface Props {
  * sign-up and no password reset: Zitadel is the sole identity provider and
  * owns all of that. What is left is a door, and whether it opens.
  */
-export function LoginDoor({ mode, identities, failure }: Props) {
+export function LoginDoor({ mode, identities, failure, next = "/" }: Props) {
   const stage = useRef<HTMLElement>(null);
   const door = useRef<Door | null>(null);
 
@@ -144,7 +150,7 @@ export function LoginDoor({ mode, identities, failure }: Props) {
         </h1>
 
         {mode === "oidc" ? (
-          <a href="/auth/zitadel" {...handlers}>
+          <a href={next === "/" ? "/auth/zitadel" : `/auth/zitadel?next=${encodeURIComponent(next)}`} {...handlers}>
             {action}
           </a>
         ) : (
@@ -188,6 +194,7 @@ export function LoginDoor({ mode, identities, failure }: Props) {
                 {identities.map((identity) => (
                   <form key={identity.id} action="/auth/login" method="post">
                     <input type="hidden" name="userId" value={identity.id} />
+                    <input type="hidden" name="next" value={next} />
                     <button type="submit" className="login-identity" data-door-identity>
                       {identity.name}{" "}
                       <span className="login-identity-role">

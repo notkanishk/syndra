@@ -114,11 +114,31 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
   if (!res.ok) {
     if (init?.preserveErrorBody) return parsed as T;
     // Session expired mid-SPA-session: /api/proxy is outside the middleware
-    // matcher, so without this the user is stuck on error toasts until their
-    // next full navigation (SC9). Redirect to re-auth; still throw so the
-    // caller's error path settles while the navigation happens.
+    // matcher, so without this the user is stuck on a failing screen until
+    // their next full navigation (SC9).
+    //
+    // A READ redirects to re-auth, carrying where they were so they come back
+    // to it — a member who tapped a link to their storage wants storage, not
+    // the landing.
+    //
+    // A MUTATION deliberately does not. Sessions here last weeks and are met
+    // on personal phones, so the way this is actually encountered is: an
+    // operator returns to a backgrounded tab, reads a plan, presses Apply, and
+    // the session is gone. Navigating away at that moment destroys the dialog,
+    // the plan they approved and any reason they had typed — and tells them
+    // nothing about whether the write landed. The refusal is reported in place
+    // instead, by the surface that ran it, which is the one thing this action
+    // needs to say: nothing was changed, and the plan is still here.
     if (res.status === 401 && typeof window !== "undefined" && window.location.pathname !== "/login") {
-      window.location.assign("/login");
+      if (method === "GET") {
+        const next = `${window.location.pathname}${window.location.search}`;
+        window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+      } else {
+        throw new ApiError(401, {
+          error: "SESSION_ENDED",
+          message: "Your session ended before this ran",
+        });
+      }
     }
     throw new ApiError(res.status, parsed as ApiErrorBody | string);
   }

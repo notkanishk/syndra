@@ -2,6 +2,8 @@
 
 import { useId, useState } from "react";
 
+import { useIsShort } from "@/lib/useViewport";
+
 import { Input } from "@/components/ui/Input";
 
 /**
@@ -105,6 +107,23 @@ export function ConfirmByTyping({
   disabled?: boolean;
 }) {
   const id = useId();
+  const short = useIsShort();
+
+  // A phone in landscape has about 190px above the keyboard, and this gate
+  // needs a consequence sentence, a field and an armed red button all visible
+  // at once. Squeezing it would mean scrolling the consequence out of view to
+  // make room for the control that acts on it, which is the one trade the
+  // ladder forbids — so the gate says it cannot be satisfied here rather than
+  // pretending. Rungs 1 and 2 are unaffected: neither needs a keyboard.
+  if (short) {
+    return (
+      <p className="rounded-inner border border-line-strong bg-surface-0 px-4 py-3 text-[14px] leading-[1.55] text-muted">
+        Turn your phone upright to confirm this. It needs the sentence above, the name typed,
+        and the button — and they do not fit beside a keyboard.
+      </p>
+    );
+  }
+
   return (
     <div className="grid gap-1.5">
       <label htmlFor={id} className="text-[13.5px] text-muted">

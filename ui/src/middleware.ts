@@ -78,12 +78,15 @@ async function readSession(request: NextRequest): Promise<SessionState> {
   }
 }
 
-function redirectTo(request: NextRequest, path: string, clearSession = false) {
+function redirectTo(request: NextRequest, path: string, clearSession = false, search = "") {
   // nextUrl carries the address this process was reached on, not the one the
   // browser used, so cloning it sent every unauthenticated request to the
   // container's own host:port — the redirect the user hits on literally every
   // click before signing in.
-  const url = buildRedirectUrl(request, path);
+  // `search` is passed explicitly rather than embedded in `path`:
+  // `buildRedirectUrl` clears the query on purpose, so a `?next=` written into
+  // the path would be dropped without a word.
+  const url = buildRedirectUrl(request, path, search);
   const response = NextResponse.redirect(url, { status: 307 });
   if (clearSession) {
     // Expire immediately — the user lands on /login able to re-auth instead
@@ -113,7 +116,16 @@ export async function middleware(request: NextRequest) {
   }
 
   if (session.kind === "missing" && pathname !== "/login") {
-    return redirectTo(request, "/login");
+    // Carry where they were, so signing in returns them to it. Sessions here
+    // last weeks and are met on personal phones: the way this is encountered
+    // is a member tapping a link to their storage days later, and landing on
+    // the home page after signing in means finding that link again.
+    //
+    // The path only — never the origin. `nextPath` is re-validated before it
+    // is used, but the value that reaches the cookie-issuing routes should not
+    // carry a host in the first place.
+    const next = `${pathname}${request.nextUrl.search}`;
+    return redirectTo(request, "/login", false, `?next=${encodeURIComponent(next)}`);
   }
 
   if (session.kind === "valid" && pathname === "/login") {

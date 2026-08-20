@@ -114,8 +114,11 @@ export function outcomeFromError(error: unknown): ActionOutcome {
   // on screen is the state that holds — which is precisely what an operator
   // needs to know, and the opposite of what a failure tells them.
   const offline = error instanceof ApiError && error.code === "OFFLINE";
+  const sessionEnded = error instanceof ApiError && error.code === "SESSION_ENDED";
   const refused =
-    offline || (error instanceof ApiError && error.status >= 400 && error.status < 500);
+    offline ||
+    sessionEnded ||
+    (error instanceof ApiError && error.status >= 400 && error.status < 500);
   return {
     kind: refused ? "refused" : "failed",
     message: describeFailure(error),
@@ -124,7 +127,12 @@ export function outcomeFromError(error: unknown): ActionOutcome {
     // product promising something it has deliberately refused to build.
     detail: offline
       ? "Nothing was queued and nothing was sent. Try again once the connection is back."
-      : undefined,
+      : sessionEnded
+        // Both halves, and neither may be dropped. "Nothing was changed" is
+        // what an operator needs before anything else; "still here" is what
+        // stops them abandoning a plan they had already read and approved.
+        ? "Nothing was changed, and what you were doing is still here. Sign in again and press it once more."
+        : undefined,
     requestId: typeof requestId === "string" ? requestId : undefined,
   };
 }
