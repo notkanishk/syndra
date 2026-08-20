@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { CHIME_FIRST_PLAY_EVENT, isChimeEnabled, setChimeEnabled } from "@/lib/driftChime";
+import { useReducedMotion } from "@/lib/useViewport";
 
 /**
  * The unexplained-access chime.
@@ -15,6 +16,11 @@ import { CHIME_FIRST_PLAY_EVENT, isChimeEnabled, setChimeEnabled } from "@/lib/d
 export function ChimeToggle() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [heard, setHeard] = useState(false);
+  // The chime is silenced for anybody who has asked for less motion — a sound
+  // that arrives unbidden is movement in the room. That is correct, and it
+  // means this control can otherwise say "Sound on" while guaranteeing
+  // silence, which is a lie the page is in a position to catch.
+  const quieted = useReducedMotion();
 
   useEffect(() => {
     setEnabled(isChimeEnabled());
@@ -43,6 +49,12 @@ export function ChimeToggle() {
       >
         {enabled ? "Sound on" : "Sound off"}
       </button>
+      {enabled && quieted && (
+        <span className="text-[12.5px] leading-[1.5] text-faint">
+          Nothing will play: this browser is set to reduce motion, and a sound arriving on its
+          own is movement.
+        </span>
+      )}
       {heard && <span className="text-[12.5px] text-faint">That was this.</span>}
     </span>
   );
