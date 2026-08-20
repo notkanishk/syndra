@@ -206,7 +206,7 @@ export default function PeoplePage() {
               type="button"
               onClick={() => (bulkMode ? exitBulk() : setParams({}, { bulk: "1" }))}
               aria-pressed={bulkMode}
-              className={`rounded-pill border px-4 py-[7px] text-[13.5px] font-semibold motion-tint ${
+              className={`min-h-[44px] rounded-pill border px-4 text-[13.5px] font-semibold motion-tint desktop:min-h-0 desktop:py-[7px] ${
                 bulkMode
                   ? "border-accent-line bg-accent-soft text-accent-text"
                   : "border-line-strong hover:bg-[var(--hover)]"
