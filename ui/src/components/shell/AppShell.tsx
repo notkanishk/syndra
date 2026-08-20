@@ -4,6 +4,7 @@ import Sidebar from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
 import { TouchNav } from "@/components/shell/TouchNav";
 import { DegradedBanner } from "@/components/states/DegradedBanner";
+import { OfflineBanner } from "@/components/states/OfflineBanner";
 import { PageCrumbProvider } from "@/lib/page-crumb";
 import type { SessionUser } from "@/lib/session";
 import { UiViewProvider } from "@/lib/ui-view";
@@ -54,6 +55,11 @@ export function AppShell({
           <div className="flex min-w-0 flex-1 flex-col">
             <TopBar session={session} />
             <div id="app-scroll" className="flex-1 overflow-y-auto">
+              {/* Above the degraded banner, because it qualifies it: with no
+                  network the mode read cannot refresh either, so a degraded
+                  banner underneath is reporting a state nobody can currently
+                  confirm. */}
+              <OfflineBanner />
               <DegradedBanner />
               <main className="px-4 pb-9 pt-5 tablet:px-[26px] tablet:pt-[30px]">{children}</main>
             </div>
