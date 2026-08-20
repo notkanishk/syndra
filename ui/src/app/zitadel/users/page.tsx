@@ -57,8 +57,8 @@ export default function UpstreamUsersPage() {
       syndraHref="/users"
       syndraLabel="See the same people as Syndra understands them"
     >
-      <div className="flex flex-wrap items-start gap-5">
-        <Card className="w-[320px] min-w-[260px] flex-none">
+      <div className="flex flex-col items-stretch gap-5 tablet:flex-row tablet:flex-wrap tablet:items-start">
+        <Card className="w-full tablet:w-[320px] tablet:min-w-[260px] tablet:flex-none">
           <CardHeader title="Accounts" count={rows.length} />
           <div className="row-divider px-4 py-3">
             <Input
@@ -110,7 +110,7 @@ export default function UpstreamUsersPage() {
           </ListStates>
         </Card>
 
-        <div className="min-w-[420px] flex-1">
+        <div className="w-full tablet:min-w-[420px] tablet:flex-1">
           {active ? (
             <UserGrants
               userId={active.id}
@@ -170,7 +170,7 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
         }
       >
         {rows.map((grant) => (
-          <div key={grant.id} className="row-divider flex flex-wrap items-center gap-4 px-5 py-3">
+          <div key={grant.id} className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-4">
             <span className="min-w-[200px] flex-1 truncate text-[14.5px]">
               <ProjectName id={grant.projectId} fallback={grant.projectId} />{" "}
               {grant.roleKeys.map((key) => (

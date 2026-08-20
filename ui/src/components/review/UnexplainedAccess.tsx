@@ -511,7 +511,7 @@ function RiskPill({ item }: { item: DriftTriageItem }) {
 /** Three columns: what a revoke costs, what an adopt records, and the evidence. */
 function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
   return (
-    <div className="row-divider grid gap-5 bg-surface-0 px-5 py-4 md:grid-cols-3">
+    <div className="row-divider grid gap-5 bg-surface-0 px-5 py-4 tablet:grid-cols-3">
       <div>
         <div className="type-label mb-1.5">If you revoke</div>
         <p className="text-[13.5px] leading-[1.55] text-muted">

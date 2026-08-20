@@ -76,8 +76,8 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
         }
       />
 
-      <div className="flex flex-wrap items-stretch gap-5">
-        <div className="min-w-[420px] flex-1">
+      <div className="flex flex-col items-stretch gap-5 tablet:flex-row tablet:flex-wrap">
+        <div className="w-full tablet:min-w-[420px] tablet:flex-1">
           <TokenFormatEditor
             projectId={app.application.project_id}
             applicationId={applicationId}
@@ -86,7 +86,7 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
             siblingCount={siblings.length}
           />
         </div>
-        <div className="min-w-[420px] flex-1">
+        <div className="w-full tablet:min-w-[420px] tablet:flex-1">
           <TokenPreview
             applicationId={applicationId}
             applicationName={app.application.name}
