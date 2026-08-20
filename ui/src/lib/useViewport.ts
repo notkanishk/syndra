@@ -50,6 +50,19 @@ export function useIsTouch(): boolean {
 }
 
 /**
+ * Whether this browser has asked for less movement.
+ *
+ * Read as a question rather than only obeyed in CSS, because two things in
+ * this product are decided by it rather than styled by it: the drift chime is
+ * silenced, and the control that offers the chime has to be able to say so.
+ * A toggle reading "Sound on" while guaranteeing silence is exactly the kind
+ * of claim this interface is not allowed to make.
+ */
+export function useReducedMotion(): boolean {
+  return useMediaQuery("(prefers-reduced-motion: reduce)");
+}
+
+/**
  * Too little height to hold a consequence, a field and a keyboard at once.
  *
  * A phone in landscape is 390px tall, and a keyboard takes rather more than

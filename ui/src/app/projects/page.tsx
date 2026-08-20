@@ -80,11 +80,23 @@ export default function ProjectsPage() {
                   {entry.member_count === 1 ? " person" : " people"}
                 </span>
               </span>
+              {/* A project with no roles is not a small number, it is a
+                  different fact: nothing in it can be granted to anybody, and
+                  a bare "0" beside a member count reads as a project that is
+                  merely quiet. */}
               <span className="text-[15px] tablet:w-[60px] tablet:text-right">
-                {entry.active_role_keys.length}
-                <span className="text-[13px] text-faint tablet:hidden">
-                  {entry.active_role_keys.length === 1 ? " role" : " roles"}
-                </span>
+                {entry.active_role_keys.length === 0 ? (
+                  <span className="text-[13px] text-faint">
+                    No roles yet — nothing here can be granted
+                  </span>
+                ) : (
+                  <>
+                    {entry.active_role_keys.length}
+                    <span className="text-[13px] text-faint tablet:hidden">
+                      {entry.active_role_keys.length === 1 ? " role" : " roles"}
+                    </span>
+                  </>
+                )}
               </span>
               <span className="flex w-full flex-wrap gap-1.5 tablet:w-[240px]">
                 {(appsByProject.get(entry.project.id) ?? []).map((name) => (
