@@ -127,25 +127,54 @@ blocks what follows it; the two marked independent can run at any time.
 
 ## 6. Screens
 
-- [~] 6.1–6.18 The Block B screens, per the design reply. Each carries its own
-  copy verbatim; the copy is normative. Three of the load-bearing ones landed
-  and each turned out to be a case where the design's copy could not be taken
-  literally, because the fact behind it does not exist:
-    - **B14 · member landing.** The empty member is told how to get access by
-      name — *"Ask Kabir Rao, who looks after Fabrication."* **No project
-      records an owner anywhere in the product**, and the empty member landing
-      is the worst place in Syndra to invent a person. It offers the action
-      instead and stops claiming to know who.
-    - **B18 · token simulator.** "No access at all through this app" gets its
-      own sentence naming the app and the person, and denying that it is an
-      error. It had been a `//` comment in the quietest type on the page.
-    - **B8 · requests.** The free-text escape cannot be a request: the API
-      carries a project and a role and nothing else, and a form accepting
-      free text would drop members' words. The escape points at Why, which
-      reaches the decider verbatim. A project with nothing defined in it was
-      an empty menu and is now a sentence.
-  The remaining fifteen are copy-and-layout work on screens that already
-  reflow correctly; none of them is blocked.
+- [~] 6.1–6.18 The Block B screens, per the design reply. Everything that was
+  a **defect or a missing safety statement** has landed; what remains is
+  layout preference on screens that already reflow with zero overflow at 390,
+  plus one item blocked on data nobody records.
+
+  **Landed, and each one turned out to be a claim the product was getting
+  wrong rather than a layout to redraw:**
+    - **B16 · when the app fails.** There was no `error.tsx` and no
+      `not-found.tsx` anywhere in the tree. A render that threw was a blank
+      screen with no identifier and no way back. No "Try again": a render that
+      threw on the data it was given throws again on the same data.
+    - **B11 · the four upstream consoles.** The least undoable writes in the
+      product — no rehearsal, no cascade preview, no ledger row — were the
+      only ones with no ceremony at all. All four now gate on a tick naming
+      what is missing, the consoles carry a standing line, and a failed read
+      says whose failure it is.
+    - **B15 · Today.** `merge_findings` was inside the headline's arithmetic
+      with no block on the page *and* was being dropped by the query mapper,
+      so the count had never once been non-zero. Both fixed; the headline went
+      17 → 19 against a backend reporting two.
+    - **B2 · token shape.** The preview went on claiming "exactly what this
+      app would receive right now" while the editor beside it held unsaved
+      edits. It now says which shape it is showing.
+    - **B14 · member landing**, **B18 · token simulator**, **B8 · requests**,
+      **B6 · unexplained access** — see design §7a for the three where the
+      design's copy names a fact nobody holds, and the bulk-revoke absence
+      that is now stated where an operator looks for it.
+
+  **Deliberate deviations, reasoned in design §7a and §7b:** the count is
+  stated once in the selection bar rather than in five sibling verbs; Today's
+  blocks do not keep hollow seats at zero; and the rule-delete copy is *not*
+  changed to "the access it already caused stays", which would be a lie here —
+  Syndra cascades revokes, and the dialog already says so accurately.
+
+  **Blocked, not skipped:** B7's reopened-row sentence — *"Acknowledged on 12
+  Aug, then the expiry moved to 30 Sep"* — needs the acknowledgement to record
+  *which* expiry was acknowledged. `ExpiryAcknowledgement` carries `by`, `at`
+  and `note` and nothing else, so the sentence cannot be computed. Same
+  category as §7: a backend field, not a UI change.
+
+  **Layout preference, deliberately not taken:** B3's four-step rule sheet,
+  B5's full-height picker and version spine, B10's eight panels as a scrolling
+  tab set, B17's map overlay and depth segment. Each of those screens was
+  measured at a real 390 with zero horizontal overflow and no undersized
+  control; redrawing them is a redesign, not a mobile fix. B12's *"4 new since
+  you opened this"* is moot — the audit feed has no live stream, so rows
+  cannot insert themselves under a reading thumb.
+
 - [x] 6.19 The dormant sweep states that the size is unknown rather than
   implying zero — `filesSentence` was already right; this pass only confirmed
   it and gave the row a target a thumb can hit.
