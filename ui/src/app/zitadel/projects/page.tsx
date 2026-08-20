@@ -51,7 +51,7 @@ export default function UpstreamProjectsPage() {
             error={projects.error}
             isEmpty={rows.length === 0}
             onRetry={() => projects.refetch()}
-            errorTitle="Couldn't read projects from the identity provider."
+            errorTitle="Couldn't read projects from the identity provider. Syndra itself is fine."
             skeleton={<RowSkeleton rows={5} avatar={false} label="Reading projects" />}
             empty={
               <EmptyState
@@ -101,7 +101,7 @@ export default function UpstreamProjectsPage() {
             error={roles.error}
             isEmpty={(roles.data?.items ?? []).length === 0}
             onRetry={() => roles.refetch()}
-            errorTitle="Couldn't read this project's roles."
+            errorTitle="Couldn't read this project's roles from the identity provider. Syndra itself is fine."
             skeleton={<RowSkeleton rows={4} avatar={false} label="Reading roles" />}
             empty={
               <EmptyState
@@ -145,6 +145,7 @@ function RoleRow({
   const remove = useUpstreamDeleteRole();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [acknowledged, setAcknowledged] = useState(false);
 
   return (
     <>
@@ -170,15 +171,18 @@ function RoleRow({
             lede="The role disappears from the identity provider, and everybody currently holding it loses it."
           />
           <div className="px-6">
-            <DirectWriteWarning what="Deleting a role removes it for every holder at once." />
+            <DirectWriteWarning
+              what="Deleting a role removes it for every holder at once."
+              acknowledged={acknowledged}
+              onAcknowledge={setAcknowledged}
+            />
           </div>
-          {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
-
           {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter>
             <Button
               variant="dangerConfirm"
+              disabled={!acknowledged}
               isPending={remove.isPending}
               onClick={async () => {
                 try {
@@ -221,6 +225,7 @@ function RoleDialog({
   const [key, setKey] = useState(role?.key ?? "");
   const [displayName, setDisplayName] = useState(role?.displayName ?? "");
   const [group, setGroup] = useState(role?.group ?? "");
+  const [acknowledged, setAcknowledged] = useState(false);
 
   const busy = create.isPending || update.isPending;
 
@@ -259,12 +264,16 @@ function RoleDialog({
             placeholder="Safety-gated"
           />
         </div>
-        <DirectWriteWarning what="Creating or renaming a role here happens outside Syndra's record." />
+        <DirectWriteWarning
+          what="Creating or renaming a role here happens outside Syndra's record."
+          acknowledged={acknowledged}
+          onAcknowledge={setAcknowledged}
+        />
       </div>
       <ModalFooter>
         <Button
           variant="danger"
-          disabled={!key.trim()}
+          disabled={!key.trim() || !acknowledged}
           isPending={busy}
           onClick={async () => {
             try {

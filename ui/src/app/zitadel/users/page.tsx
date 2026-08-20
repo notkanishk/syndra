@@ -73,7 +73,7 @@ export default function UpstreamUsersPage() {
             error={users.error}
             isEmpty={rows.length === 0}
             onRetry={() => users.refetch()}
-            errorTitle="Couldn't read users from the identity provider."
+            errorTitle="Couldn't read users from the identity provider. Syndra itself is fine."
             skeleton={<RowSkeleton rows={6} label="Reading users" />}
             empty={
               <EmptyState
@@ -160,7 +160,7 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
         error={grants.error}
         isEmpty={rows.length === 0}
         onRetry={() => grants.refetch()}
-        errorTitle="Couldn't read this person's grants."
+        errorTitle="Couldn't read this person's grants from the identity provider. Syndra itself is fine."
         skeleton={<RowSkeleton rows={3} avatar={false} label="Reading grants" />}
         empty={
           <EmptyState
@@ -232,6 +232,7 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
   const [keys, setKeys] = useState("");
   const assign = useUpstreamAssignGrant();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
 
   const parsed = keys
     .split(",")
@@ -274,14 +275,18 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
             </p>
           )}
         </div>
-        <DirectWriteWarning what="Syndra will see this as access it did not cause." />
+        <DirectWriteWarning
+          what="Syndra will see this as access it did not cause."
+          acknowledged={acknowledged}
+          onAcknowledge={setAcknowledged}
+        />
       </div>
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter>
         <Button
           variant="danger"
-          disabled={!projectId || parsed.length === 0}
+          disabled={!projectId || parsed.length === 0 || !acknowledged}
           isPending={assign.isPending}
           onClick={async () => {
             try {
@@ -317,6 +322,7 @@ function EditRolesDialog({
   const update = useUpstreamUpdateGrant();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [keys, setKeys] = useState(grant.roleKeys.join(", "));
+  const [acknowledged, setAcknowledged] = useState(false);
 
   const parsed = keys
     .split(",")
@@ -338,14 +344,18 @@ function EditRolesDialog({
             onChange={(event) => setKeys(event.target.value)}
           />
         </div>
-        <DirectWriteWarning what="Replacing a role set upstream can silently remove access Syndra thinks it granted." />
+        <DirectWriteWarning
+          what="Replacing a role set upstream can silently remove access Syndra thinks it granted."
+          acknowledged={acknowledged}
+          onAcknowledge={setAcknowledged}
+        />
       </div>
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter>
         <Button
           variant="danger"
-          disabled={parsed.length === 0}
+          disabled={parsed.length === 0 || !acknowledged}
           isPending={update.isPending}
           onClick={async () => {
             try {
