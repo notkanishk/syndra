@@ -52,6 +52,7 @@ export function TokenPreview({
   );
   const keys = Object.keys(claims).sort();
 
+  const previewName = users.data?.find((u) => u.id === userId)?.name ?? "";
   const payload = JSON.stringify(claims, null, 2);
   const emptyKeys = keys.filter((key) => isEmptyValue(claims[key]));
 
@@ -101,6 +102,20 @@ export function TokenPreview({
             onRetry={() => simulation.refetch()}
           />
         ) : (
+          <>
+          {/* No roles at all is the answer people come here for most often, and
+              a `//` comment inside a mono block is where it was being said —
+              in the quietest type on the screen, phrased as a fact about the
+              project rather than about the person somebody just picked. It is
+              also the reading most likely to be mistaken for a broken preview,
+              so the sentence rules that out in its own words. */}
+          {!simulation.isFetching && simulation.data && keys.length === 0 && (
+            <p className="mb-3 max-w-[60ch] text-[14px] leading-[1.5] text-muted">
+              {applicationName} would issue a token with no roles for{" "}
+              {previewName || "this person"}. That is not an error: nothing they hold is in
+              this app&rsquo;s project.
+            </p>
+          )}
           <div className="rounded-inner border border-line bg-surface-0 px-[18px] py-4 font-mono text-[13px] leading-[1.85]">
             <div className="text-ink/35">{"// effective_role_keys → claims"}</div>
             {keys.length === 0 && (
@@ -138,6 +153,7 @@ export function TokenPreview({
               </div>
             )}
           </div>
+          </>
         )}
 
         {showRaw && simulation.data && (
