@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { useEffect, useRef, useState } from "react";
 
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { selectContents, useClipboardAvailable } from "@/lib/clipboard";
 import { Select } from "@/components/ui/Select";
 import { useCatalogUsers } from "@/lib/queries/useCatalogUsers";
 import { useTokenSimulator } from "@/lib/queries/useApplications";
@@ -35,6 +35,10 @@ export function TokenPreview({
   const users = useCatalogUsers();
   const [userId, setUserId] = useState("");
   const [showRaw, setShowRaw] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const payloadRef = useRef<HTMLPreElement>(null);
+  const canCopy = useClipboardAvailable();
 
   useEffect(() => {
     if (!userId && (users.data?.length ?? 0) > 0) setUserId(users.data![0].id);
@@ -156,15 +160,37 @@ export function TokenPreview({
           </div>
         )}
 
+        {revealed && (
+          <pre
+            ref={payloadRef}
+            className="type-mono mt-3.5 max-h-[40vh] overflow-y-auto whitespace-pre-wrap break-all rounded-inner bg-surface-0 px-3.5 py-3 text-ink"
+          >
+            {payload}
+          </pre>
+        )}
+
         <div className="mt-3.5 flex gap-2.5">
+          {/* The button reports itself, the way every copy affordance in the
+              product now does — and says `Select` where the browser cannot
+              copy rather than failing silently on the tap. */}
           <Button
             size="sm"
             onClick={async () => {
-              await navigator.clipboard.writeText(payload);
-              toast.success("Payload copied.");
+              if (canCopy) {
+                await navigator.clipboard.writeText(payload);
+              } else {
+                // Nothing to select unless it is on screen. Revealing it is
+                // the honest fallback and it is what this value is anyway:
+                // evidence, which a token debug screen should be willing to
+                // show rather than only hand to a clipboard.
+                setRevealed(true);
+                requestAnimationFrame(() => selectContents(payloadRef.current));
+              }
+              setCopied(true);
+              setTimeout(() => setCopied(false), 900);
             }}
           >
-            Copy payload
+            {copied ? (canCopy ? "Copied" : "Selected") : canCopy ? "Copy payload" : "Select payload"}
           </Button>
           <Button size="sm" onClick={() => setShowRaw((value) => !value)}>
             {showRaw ? "Hide raw roles" : "Show raw roles"}
