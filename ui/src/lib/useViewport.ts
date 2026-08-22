@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 /**
  * The two breakpoints, as a question JavaScript can ask.
@@ -16,23 +16,38 @@ import { useEffect, useState } from "react";
  * a reader who has raised their platform's text size gets the earlier
  * breakpoint, which is what they were asking for.
  *
- * SSR-safe: the first render answers `false`, and the effect corrects it. The
- * callers are behavioural rather than structural, so a frame of the desktop
- * answer costs nothing — unlike a layout that would visibly reflow.
+ * Answered during render, not after it. An earlier version held the answer in
+ * state and corrected it from an effect, which is a frame of the desktop
+ * answer — and one of the callers cannot afford a frame. `autoFocus` is
+ * applied by React while it commits the node: by the time an effect flips the
+ * value, the keyboard is already open and flipping the prop does nothing. So
+ * `useSyncExternalStore`, whose whole job is a value read at render time from
+ * something outside React, with the server snapshot pinned to `false` so
+ * hydration still matches the HTML.
  */
 function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(false);
+  // One list per query, kept across renders: `getSnapshot` runs on every
+  // render, and a fresh `matchMedia` call each time would register a listener
+  // target nobody unsubscribes from.
+  const list = useMemo(
+    () => (typeof window === "undefined" ? null : (window.matchMedia?.(query) ?? null)),
+    [query],
+  );
 
-  useEffect(() => {
-    const list = window.matchMedia?.(query);
-    if (!list) return;
-    setMatches(list.matches);
-    const onChange = (event: MediaQueryListEvent) => setMatches(event.matches);
-    list.addEventListener("change", onChange);
-    return () => list.removeEventListener("change", onChange);
-  }, [query]);
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      if (!list) return () => {};
+      list.addEventListener("change", onStoreChange);
+      return () => list.removeEventListener("change", onStoreChange);
+    },
+    [list],
+  );
 
-  return matches;
+  return useSyncExternalStore(
+    subscribe,
+    () => list?.matches ?? false,
+    () => false,
+  );
 }
 
 /** Below the tablet breakpoint: one column, a tab bar, sheets. */
