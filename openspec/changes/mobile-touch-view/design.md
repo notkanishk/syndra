@@ -304,3 +304,92 @@ carries, and for the same reason — and dismissing goes through
 destination is the one exception and still closes directly: the navigation
 pushes its own entry on top, and racing `history.back()` against a Next.js push
 would undo the tap.
+
+## 10. The eight the audit left standing
+
+Named in the same audit as §9 and deliberately deferred at the time, then
+asked for. Six are the design's own rules broken in one place each; two are
+the platform.
+
+### The nav sheet had a second set of manners
+
+`Modal`'s grabber is `h-11` with `tabIndex={-1}`, and `focusableIn` carries
+four lines explaining why: as the panel's first focusable element it took the
+focus every dialog gives on open, so every dialog opened with the cursor on
+"close it". The nav sheet's grabber was written without either — 22px, in the
+tab order, and answering to "Close" where Modal's answers to "Dismiss". It now
+matches on all three. The negative margins are arithmetic, not taste: the box
+grew 22px and the bar has not moved a pixel.
+
+### `--touch-nav-height` measured a bar that does not exist
+
+The token said 76px. The tab-shaped bar is 8 + 52 + 8 = 68px **plus**
+`env(safe-area-inset-bottom)`, which the bar itself carries and the token
+ignored; the sheet-shaped bar is 60px + inset. `ConvergeEntitlements` puts the
+freshness dock at `calc(var(--touch-nav-height) + 24px)`, so on a notched
+iPhone the dock sat 2px inside the tab bar — the comment beside the token says
+reading it "stops this dock and the tab bar disagreeing", and they disagreed.
+Now `calc(68px + env(safe-area-inset-bottom))`, the taller of the two shapes so
+one number clears both.
+
+### The access source kept half its answer in a tooltip
+
+`AccessSourceList` collapses everything past the strongest source behind a
+`+N more` chip, and the names of those sources lived in a `title` attribute and
+nowhere else. A hover tooltip, on the component whose entire job is to answer
+"why does this person have this" — unreachable by touch, by keyboard and by a
+screen reader. It is a button now: the collapsed state is still the default,
+because "never a wall of chips" is the rule this component is built around, but
+the wall is one tap away rather than behind a pointer.
+
+### Two banners cannot both be the top one
+
+Offline and degraded were siblings, both `sticky top-0 z-40`. At the same
+offset and the same z-index the later one simply paints over the earlier, so
+degraded covered offline — inverting the ordering AppShell's own comment argues
+for. They share one sticky slot now. Degraded also carried `px-[26px]` with no
+`tablet:` split, so it had desktop gutters at 390px.
+
+### iOS had no icon to install
+
+`appleWebApp: { capable: true }` was set and there was no `apple-touch-icon`
+anywhere — the repository holds two SVGs and no raster. iOS ignores manifest
+icons entirely and rasterises nothing, so the installed app that members were
+given as the whole point of installability launched with a blank tile.
+`app/apple-icon.png` is 180×180, the mark at 150 centred on the dark ground the
+manifest already declares: iOS applies its own rounded-rect mask and the ring
+needs to clear the corners it cuts.
+
+### The type floor was stated and not enforced
+
+§2 rules "never below 12.5px anywhere" and calls it a legibility floor for
+somebody reading at arm's length in a workshop. `type-nav-group` sat at 10.5px
+— the smallest type in the product, and it carries the heading inside the
+mobile nav sheet. `type-label` sat at 11.5px across 29 sites. Both are at the
+floor now, and a test reads the sizes out of `globals.css` so the rule is
+enforced at the layer that owns it.
+
+**Still breaching, and not swept:** 22 inline `text-[11px]` / `text-[11.5px]` /
+`text-[12px]` across 17 components, including two in `ActionOutcome` and one in
+`WithheldPill`. Raising those is a layout change on seventeen screens with no
+browser pass behind it, which is 8.2's work rather than this one's. Recorded as
+10.7 rather than quietly left.
+
+### A destructive control at 30px
+
+The kebab in `PersonAccess` is the only route into the removal flow for a role,
+and it was a 30px box. `touch-targets.test.tsx` covers `Button` and
+`ButtonLink`, which is exactly why a raw `<button>` slipped past it. The ring
+is still 30px; the target around it is 44.
+
+The guard for this needed one more thing than a regex. Matching `<button` to
+the first `>` is wrong in JSX — `onClick={() => …}` closes the tag early, the
+className is never read, and the sweep reports a clean repository. The
+brace-aware extractor catches both the 30px kebab and the 22px grabber.
+
+### A NUL byte, hiding a line from every sweep
+
+`useRowSelection.ts:99` held `ids.join(…)` with a literal NUL rather than
+`\u0000`. `file` reports the source as `data` and `grep` skips it
+silently, so that line drops out of every text search of the repository —
+including the ones looking for bugs in it. Same byte, written as an escape.
