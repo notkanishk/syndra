@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TouchNav } from "@/components/shell/TouchNav";
 import type { Indicators } from "@/lib/queries/useIndicators";
@@ -140,5 +140,98 @@ describe("Advanced does not get a tab bar", () => {
     const sheet = screen.getByRole("dialog", { name: "Go to" });
     const row = within(sheet).getByRole("link", { name: /Unexplained access/ });
     expect(within(row).getByText("0"), "a hollow zero, not a vanished row").toBeTruthy();
+  });
+});
+
+/**
+ * The sheet pushes one history entry so the system back gesture closes it
+ * before it leaves the screen. Both halves of that bargain are tested here:
+ * exactly one entry however long the sheet stays open, and the entry spent
+ * rather than abandoned when the sheet is dismissed by hand.
+ */
+describe("the sheet is one level of history", () => {
+  // The sheet is Advanced's entry to the rail; Basic has no trigger for it.
+  beforeEach(() => {
+    view.audience = "advanced";
+  });
+
+  // These spy on `window.history`, which outlives the test. Without this the
+  // second spy in the file finds the first one still installed and counts its
+  // calls too.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function renderPolling() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // A fresh element each time: React bails out of a re-render given the same
+    // element reference, and this helper exists to force the re-render.
+    const tree = () => (
+      <QueryClientProvider client={client}>
+        <TouchNav />
+      </QueryClientProvider>
+    );
+    const utils = render(tree());
+    return { ...utils, poll: () => utils.rerender(tree()) };
+  }
+
+  function openSheet() {
+    fireEvent.click(screen.getByRole("button", { name: /Go to|Home/ }));
+    return screen.getByRole("dialog", { name: "Go to" });
+  }
+
+  it("pushes one entry however often the indicator poll re-renders", () => {
+    const push = vi.spyOn(window.history, "pushState");
+    const { poll } = renderPolling();
+    openSheet();
+    expect(push).toHaveBeenCalledTimes(1);
+
+    // Every 30 seconds `useIndicators` lands and this whole tree re-renders,
+    // handing the sheet a fresh `onClose`. That used to re-run the push.
+    indicators.data = { drift: 2 } as Indicators;
+    poll();
+    poll();
+
+    expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it("spends the entry when the grabber dismisses the sheet", () => {
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    renderPolling();
+    const sheet = openSheet();
+
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+
+    expect(back, "closing directly would leave a dead entry behind").toHaveBeenCalledTimes(1);
+  });
+
+  it("spends the entry when the scrim dismisses the sheet", () => {
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    renderPolling();
+    const sheet = openSheet();
+
+    fireEvent.click(sheet);
+
+    expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes on the back gesture itself", () => {
+    renderPolling();
+    openSheet();
+
+    fireEvent(window, new PopStateEvent("popstate"));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("leaves history alone when a destination is picked, so the tap navigates", () => {
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    renderPolling();
+    const sheet = openSheet();
+
+    fireEvent.click(within(sheet).getByRole("link", { name: /Bundles/ }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(back).not.toHaveBeenCalled();
   });
 });
