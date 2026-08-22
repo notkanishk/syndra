@@ -277,8 +277,21 @@ function NavSheet({
         <button
           type="button"
           onClick={dismiss}
-          aria-label="Close"
-          className="mx-auto mb-2.5 flex h-[22px] w-full max-w-[120px] items-center justify-center"
+          // "Dismiss", the same word Modal's grabber answers to. Two sheets
+          // whose handles have different names are two sheets to anything
+          // querying by accessible name, a screen reader included.
+          aria-label="Dismiss"
+          // Out of the tab order, for the reason `focusableIn` documents: as
+          // the panel's first focusable element it took the focus the trap
+          // gives on open, so the nav sheet opened with the cursor on "close
+          // it" rather than on where the operator came to go. Esc, the scrim
+          // and the back gesture all still dismiss.
+          tabIndex={-1}
+          // 44px of target around a 4px bar. The negative margins are the
+          // arithmetic that keeps the bar exactly where it was: the box grew
+          // 22px, so it starts 5px above the panel's own top padding and ends
+          // 7px into the gap it used to leave.
+          className="-mb-[7px] -mt-[5px] mx-auto flex h-11 w-full max-w-[120px] items-center justify-center"
         >
           <span aria-hidden className="h-1 w-[38px] rounded-pill bg-ink/20" />
         </button>

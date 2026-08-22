@@ -479,9 +479,18 @@ function RoleGroup({
                     grantId: grant?.id,
                   })
                 }
-                className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-pill border border-line-strong text-[15px] leading-none text-muted motion-tint hover:text-ink"
+                // 44px of target around a 30px ring: this is the only way into the
+                // removal flow for a role, so it is a destructive control and a
+                // mis-tap costs most here. The ring stays 30px; the box around it
+                // does not.
+                className="flex h-11 w-11 shrink-0 items-center justify-center text-[15px] leading-none text-muted motion-tint hover:text-ink desktop:h-[30px] desktop:w-[30px]"
               >
-                ⋯
+                <span
+                  aria-hidden
+                  className="flex h-[30px] w-[30px] items-center justify-center rounded-pill border border-line-strong"
+                >
+                  ⋯
+                </span>
               </button>
             )}
 

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -67,5 +67,33 @@ describe("<AccessSourceList/>", () => {
   it("says so plainly when there is no recorded source", () => {
     render(<AccessSourceList reasons={[]} />);
     expect(screen.getByText("No recorded source")).toBeInTheDocument();
+  });
+
+  /**
+   * The collapsed sources used to live in a `title` attribute and nowhere
+   * else — a hover tooltip on the component whose entire job is to answer
+   * "why does this person have this". Unreachable by touch, by keyboard, and
+   * by a screen reader.
+   */
+  it("opens the collapsed sources on a tap, and closes them again", () => {
+    render(<AccessSourceList reasons={[bundle, mapping, direct]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+2 more" }));
+    expect(screen.getByText("Via bundle")).toBeInTheDocument();
+    expect(screen.getByText("Automatic")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Fewer" }));
+    expect(screen.queryByText("Via bundle")).toBeNull();
+    expect(screen.getByRole("button", { name: "+2 more" })).toBeInTheDocument();
+  });
+
+  it("carries the names in the document, not in a tooltip", () => {
+    const { container } = render(<AccessSourceList reasons={[bundle, mapping, direct]} />);
+
+    expect(container.querySelector("[title]"), "a title attribute is hover-only").toBeNull();
+    const more = screen.getByRole("button", { name: "+2 more" });
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    // 44px of target: it is now a control, and controls clear the floor.
+    expect(more.className).toContain("h-11");
   });
 });
