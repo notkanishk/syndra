@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BADGE_TONE, DOT_TONE, loudestTone } from "@/components/shell/navTones";
 import { useDialogFocusTrap } from "@/components/ui/Modal";
@@ -224,18 +224,41 @@ function NavSheet({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const { view, isOperator, setView } = useUiView();
-  // Never busy: a nav sheet runs nothing, so nothing can make it undismissable.
-  useDialogFocusTrap(panelRef, true, false, onClose);
+
+  // Held in a ref for the same reason the focus trap holds its own: `onClose`
+  // is a fresh closure every render, and this component re-renders on the
+  // indicator poll every 30 seconds. With it in the dependency list the effect
+  // below tore down and re-ran on that timer, pushing a new history entry each
+  // time — a sheet left open for five minutes buried the screen behind it
+  // under ten dead entries.
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  });
 
   // A sheet is a level of history: the system back gesture closes it before it
   // leaves the screen. Without this, back from an open sheet abandons the
   // screen behind it and the sheet's own dismissal is never reachable.
   useEffect(() => {
     window.history.pushState({ syndraSheet: true }, "");
-    const onPop = () => onClose();
+    const onPop = () => closeRef.current();
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, [onClose]);
+  }, []);
+
+  // Dismissing goes back rather than closing directly, so the entry pushed
+  // above is spent rather than left behind. Closing the sheet by grabber and
+  // then pressing back used to do nothing at all: the first press only ate the
+  // entry the sheet never cleaned up.
+  //
+  // Picking a destination is the exception and keeps calling `onClose`: the
+  // navigation pushes its own entry on top, so back from the new screen lands
+  // on this one — and racing `history.back()` against a Next.js push would
+  // undo the navigation the tap asked for.
+  const dismiss = useCallback(() => window.history.back(), []);
+
+  // Never busy: a nav sheet runs nothing, so nothing can make it undismissable.
+  useDialogFocusTrap(panelRef, true, false, dismiss);
 
   return (
     <div
@@ -244,7 +267,7 @@ function NavSheet({
       aria-label="Go to"
       className="settle-scrim fixed inset-0 z-50 flex items-end bg-black/70"
       onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) dismiss();
       }}
     >
       <div
@@ -253,7 +276,7 @@ function NavSheet({
       >
         <button
           type="button"
-          onClick={onClose}
+          onClick={dismiss}
           aria-label="Close"
           className="mx-auto mb-2.5 flex h-[22px] w-full max-w-[120px] items-center justify-center"
         >
