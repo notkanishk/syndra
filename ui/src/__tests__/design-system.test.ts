@@ -133,6 +133,33 @@ function atRuleBody(css: string, prelude: string): string {
   return "";
 }
 
+/**
+ * Every opening `<tag …>` in a source file, brace-aware.
+ *
+ * A regex stopping at the first `>` is wrong for JSX: `onClick={() => …}`
+ * closes the tag early and the className never gets read. That false negative
+ * is why the touch-floor sweep below reported a clean repository while a 30px
+ * destructive control sat in it.
+ */
+function openingTags(source: string, tag: string): Array<{ at: number; text: string }> {
+  const found: Array<{ at: number; text: string }> = [];
+  const open = new RegExp(`<${tag}\\b`, "g");
+  for (const match of Array.from(source.matchAll(open))) {
+    const at = match.index;
+    let depth = 0;
+    for (let i = at; i < source.length; i += 1) {
+      const char = source[i];
+      if (char === "{") depth += 1;
+      else if (char === "}") depth -= 1;
+      else if (char === ">" && depth === 0) {
+        found.push({ at, text: source.slice(at, i + 1) });
+        break;
+      }
+    }
+  }
+  return found;
+}
+
 function describeOffenders(list: Array<{ file: string; matches: string[] }>): string {
   return list.map((entry) => `  - ${entry.file}: ${entry.matches.join(", ")}`).join("\n");
 }
@@ -414,5 +441,111 @@ describe("design system", () => {
       found,
       `Focus outline removed without a replacement:\n${describeOffenders(found)}`,
     ).toEqual([]);
+  });
+
+  // "Never below 12.5px anywhere" — a legibility floor for somebody reading at
+  // arm's length in a workshop, not a preference. `type-nav-group` sat at
+  // 10.5px, which made the heading inside the mobile nav sheet the smallest
+  // type in the product.
+  it("keeps every named type role above the legibility floor", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const under: string[] = [];
+    // Array.from rather than iterating the matcher: this file is type-checked
+    // by a target that predates iterating an iterator directly, the same
+    // reason the helpers above spell out their Sets and Maps.
+    const roles = Array.from(
+      css.matchAll(/@utility\s+(type-[\w-]+)\s*\{[^}]*?font-size:\s*([\d.]+)px/g),
+    );
+    for (const [, name, size] of roles) {
+      if (Number(size) < 12.5) under.push(`${name} at ${size}px`);
+    }
+    expect(under, `Type roles below the 12.5px floor: ${under.join(", ")}`).toEqual([]);
+  });
+
+  // The tab bar carries `pb-[env(safe-area-inset-bottom)]`, so on a notched
+  // phone it is up to 34px taller than its own content. A token that states a
+  // bare pixel height puts anything positioned off it UNDER the bar — which is
+  // exactly where the freshness dock landed, 2px inside it.
+  it("measures the tab bar including the inset the device reserves", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const declared = /--touch-nav-height:\s*([^;]+);/g;
+    const values = Array.from(css.matchAll(declared), (match) => match[1].trim());
+
+    expect(values.length, "the token must be declared").toBeGreaterThan(0);
+    const onPhone = values.filter((value) => value !== "0px");
+    expect(onPhone.length, "the phone value must be declared").toBeGreaterThan(0);
+    for (const value of onPhone) {
+      expect(value, `--touch-nav-height: ${value} ignores the safe area`).toContain(
+        "env(safe-area-inset-bottom)",
+      );
+    }
+  });
+
+  // A NUL written raw makes the file binary to `grep` and `file`, so the line
+  // holding it drops out of every text sweep of the repository — including the
+  // sweeps looking for bugs. `\u0000` is the same byte and stays greppable.
+  it("no source file carries a raw NUL byte", () => {
+    const found: Array<{ file: string; matches: string[] }> = [];
+    for (const file of Array.from(walk(SRC_ROOT))) {
+      if (readFileSync(file, "utf8").includes("\u0000")) {
+        found.push({ file: file.replace(SRC_ROOT, "src"), matches: ["raw NUL"] });
+      }
+    }
+    expect(
+      found,
+      `Files invisible to grep:\n${describeOffenders(found)}`,
+    ).toEqual([]);
+  });
+
+  // Every control that goes through `Button` clears the floor, and
+  // touch-targets.test.tsx holds that contract. This is the other half: a raw
+  // `<button>` skips `buttonClasses` entirely, which is how a 22px sheet
+  // grabber and a 30px destructive kebab both shipped. It reads the literal
+  // height off the tag rather than measuring anything, so it is a net rather
+  // than a proof — but it is the net those two fell through.
+  it("no raw button states a height below the touch floor", () => {
+    const under: string[] = [];
+    for (const file of Array.from(walk(SRC_ROOT))) {
+      if (!file.endsWith(".tsx")) continue;
+      const source = readFileSync(file, "utf8");
+      for (const tag of openingTags(source, "button")) {
+        const declared = /className=(?:"([^"]*)"|\{`([^`]*)`\})/.exec(tag.text);
+        if (!declared) continue;
+        const classes = declared[1] ?? declared[2] ?? "";
+        const height = /(?:^|\s)(?:min-)?h-\[(\d+(?:\.\d+)?)px\]/.exec(classes);
+        if (!height || Number(height[1]) >= 44) continue;
+        // An explicit 44 anywhere in the string is the escape: a small ring
+        // inside a full-size box is the fix, not a violation.
+        if (/min-h-\[44px\]|min-h-11|(?:^|\s)h-11/.test(classes)) continue;
+        const line = source.slice(0, tag.at).split("\n").length;
+        under.push(`${file.replace(SRC_ROOT, "src")}:${line} h-[${height[1]}px]`);
+      }
+    }
+    expect(under, `Controls under the 44px floor:\n  ${under.join("\n  ")}`).toEqual([]);
+  });
+
+  // Two banners each sticking to `top-0` at the same z-index do not stack —
+  // the later one paints over the earlier, which put the degraded banner on
+  // top of the offline banner and inverted the ordering AppShell argues for.
+  // One sticky slot holding both is the fix, so neither may reclaim its own.
+  it("gives the two banners one sticky slot between them", () => {
+    for (const name of ["states/OfflineBanner.tsx", "states/DegradedBanner.tsx"]) {
+      const source = readFileSync(resolve(SRC_ROOT, "components", name), "utf8");
+      expect(source, `${name} must not stick on its own`).not.toContain("sticky top-0");
+    }
+    const shell = readFileSync(resolve(SRC_ROOT, "components/shell/AppShell.tsx"), "utf8");
+    const slot = /<div className="sticky top-0 z-40">\s*<OfflineBanner \/>\s*<DegradedBanner \/>/;
+    expect(slot.test(shell), "AppShell must hold both banners in one sticky slot").toBe(true);
+  });
+
+  // iOS ignores manifest icons entirely and rasterises nothing, so without a
+  // PNG the installed app — the whole reason members were given one — launches
+  // with a blank tile.
+  it("ships a raster touch icon, because iOS reads no other kind", () => {
+    const icon = resolve(SRC_ROOT, "app/apple-icon.png");
+    expect(statSync(icon).isFile(), "app/apple-icon.png must exist").toBe(true);
+    // PNG magic, so a placeholder or a renamed SVG fails here rather than on a
+    // home screen.
+    expect(Array.from(readFileSync(icon).subarray(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
   });
 });
