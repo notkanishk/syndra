@@ -208,3 +208,35 @@ blocks what follows it; the two marked independent can run at any time.
   against its own background, which is AA either way.
 - [ ] 8.2 The per-route a11y checklist `BIA-36` and `ISC-43` already owe, now
   including touch targets and dynamic type.
+
+## 9. Audit follow-up
+
+Three regressions found by auditing the finished branch. See design §9.
+
+- [x] 9.1 Five mutations held an outcome in state and rendered nothing — the
+  welcome-bundle toggle, the bundle working-copy role drop, the bulk
+  confirmation-mode verbs, the upstream role editor and the upstream grant
+  removal. Each had a `toast.error` before this change, so the replacement had
+  removed the only failure signal. All five now render `ActionOutcome` where
+  the action ran, covered by `policies/__tests__/bulkOutcome.test.tsx`.
+- [x] 9.1a The upstream role dialog also set an `applied` outcome one line
+  before `onClose()`, writing a report into a component that was unmounting. It
+  now stays open and becomes its result like every other dialog in the product,
+  disables its primary so the untracked write cannot be repeated, and relabels
+  Cancel to Done — `zitadel/projects/__tests__/roleDialog.test.tsx`.
+- [x] 9.2 `autoFocus={!touch}` never suppressed the keyboard: `useMediaQuery`
+  answered from an effect, and React applies `autoFocus` at commit. Rewritten
+  on `useSyncExternalStore` so the answer is available during the first render;
+  `lib/__tests__/useViewport.test.tsx` asserts the field is not focused on a
+  touch viewport and still is on a pointer one.
+- [x] 9.3 The nav sheet pushed a history entry per render, not per open, and
+  never spent the one it pushed. `onClose` moved into a ref and dismissal now
+  goes through `history.back()`; five cases in `shell/__tests__/TouchNav.test.tsx`
+  cover the poll, both manual dismissals, the back gesture and the
+  pick-a-destination exception.
+
+- [ ] 9.4 Promote `@typescript-eslint/no-unused-vars` from warning to error, so
+  the next unrendered outcome fails the build rather than scrolling past. Needs
+  four unrelated dead bindings cleared first: `onDeleted` in `bundles/page.tsx`
+  and `policies/page.tsx`, `stopped` in `AddRolesToBundle.tsx`, `_ack` in
+  `BulkDialog.test.tsx`.

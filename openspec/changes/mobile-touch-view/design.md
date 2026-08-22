@@ -223,3 +223,84 @@ sites had only ever executed their no-preference branch; and `localStorage` was
 Node 22's experimental global with no working `setItem`, shadowing jsdom's, so
 nothing that remembers a choice — the theme, the view, the chime — could be
 tested at all.
+
+## 9. Three things the branch shipped broken, and what fixed them
+
+Found by an audit of the finished branch rather than by the work itself. All
+three had the same shape: a rule the design states, implemented everywhere it
+was thought about and missed where it was not.
+
+### The five mutations that reported nothing
+
+§4 says a result never travels and the surface that ran the action reports it.
+Five surfaces held an outcome in state and rendered no `ActionOutcome`:
+setting and unsetting the welcome bundle, dropping a role from a bundle's
+working copy, the bulk confirmation-mode verbs, creating or renaming a role
+upstream, and removing an upstream grant. Every one of them had had a
+`toast.error` before this branch, so the replacement removed the only signal
+and put nothing in its place — the exact sequencing hazard §4 closes with.
+
+`@typescript-eslint/no-unused-vars` reported all five as warnings and the
+branch shipped anyway. Warnings are not a gate here; the follow-up worth doing
+is promoting the rule to an error, which needs four unrelated dead bindings
+cleared first.
+
+Automatic rules is the sharpest of the five: §7a already records those two
+verbs as the only ones in the product that apply on tap with no plan to read
+first, which makes the report afterwards the whole of what the operator gets.
+
+The upstream role dialog needed one more change than a render. It set an
+`applied` outcome and then called `onClose()` on the next line, so the success
+report was written into a component already unmounting — code saying one thing
+and doing another, which is the same crack blocker 1 came through. Every other
+dialog in the product stays open and becomes its result, with its secondary
+button relabelled *Done*; `CreateRoleDialog` states the reason in a comment,
+and it applies harder here. The sentence this dialog has to deliver is *"Syndra
+has no record of this change beyond the audit line"* — about the least undoable
+write in the product — and a dialog that closes itself takes that sentence with
+it. It now stays open, disables its own primary so the write cannot be repeated,
+and offers Done.
+
+One more thing the audit caught, in the test rather than the code: the case
+asserting the hook answers during its first render passes against the broken
+hook too, because `renderHook` wraps in `act` and effects have flushed before
+`result.current` is readable. The frame in question is not observable from
+outside the component. It now records the value from inside the render, and
+`autoFocus` remains the case that proves the behaviour end to end.
+
+### `autoFocus` could not be switched off
+
+Two dialogs asked `useIsTouch()` and passed `autoFocus={!touch}` to keep the
+keyboard shut on a phone. The hook answered from state corrected by an effect,
+and React applies `autoFocus` while it commits the node — so the first render
+always said "not touch", the field always took focus, and flipping the prop a
+frame later changed nothing. The keyboard opened on every phone.
+
+The hook's own docstring had waved this away: *"a frame of the desktop answer
+costs nothing — unlike a layout that would visibly reflow."* For `autoFocus`
+the frame is the whole decision.
+
+`useMediaQuery` now reads through `useSyncExternalStore`, which answers during
+render from outside React and pins the server snapshot to `false` so hydration
+still matches the HTML. Every caller that mounts after hydration — which is all
+of them, since they are dialogs and sheets — gets the true answer on its first
+render.
+
+### The nav sheet leaked a history entry every 30 seconds
+
+The sheet pushes one history entry so the system back gesture closes it before
+it leaves the screen. The effect listed `onClose` in its dependencies, and
+`onClose` is a fresh closure each render; `useIndicators` refetches every 30
+seconds, so the whole bar re-rendered on a timer and the effect re-ran and
+pushed again. A sheet left open for five minutes buried the screen behind it
+under ten entries.
+
+Independently, dismissing by grabber or scrim called `onClose` directly and
+left the pushed entry unspent, so back became a no-op once per sheet opened.
+
+`onClose` now lives in a ref — the same fix `useDialogFocusTrap` already
+carries, and for the same reason — and dismissing goes through
+`history.back()` so the entry is spent rather than abandoned. Picking a
+destination is the one exception and still closes directly: the navigation
+pushes its own entry on top, and racing `history.back()` against a Next.js push
+would undo the tap.
