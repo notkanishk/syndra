@@ -240,3 +240,33 @@ Three regressions found by auditing the finished branch. See design §9.
   four unrelated dead bindings cleared first: `onDeleted` in `bundles/page.tsx`
   and `policies/page.tsx`, `stopped` in `AddRolesToBundle.tsx`, `_ack` in
   `BulkDialog.test.tsx`.
+
+## 10. The audit's remainder
+
+Deferred in §9's pass, then asked for. See design §10.
+
+- [x] 10.1 The nav sheet's grabber: 44px target, `tabIndex={-1}` so it stops
+  taking the focus the sheet gives on open, and "Dismiss" so both sheets'
+  handles answer to one word. Negative margins keep the bar where it was.
+- [x] 10.2 `--touch-nav-height` is `calc(68px + env(safe-area-inset-bottom))`.
+  It was 76px flat, which put the freshness dock 2px inside the tab bar on a
+  notched phone.
+- [x] 10.3 `AccessSourceList`'s `+N more` opens on tap instead of carrying the
+  other source names in a hover-only `title`.
+- [x] 10.4 Offline and degraded share one sticky slot; degraded gets phone
+  gutters.
+- [x] 10.5 `app/apple-icon.png`, 180×180 — iOS reads no other kind, and the
+  installed app had no icon at all.
+- [x] 10.6 `type-nav-group` 10.5 → 12.5px and `type-label` 11.5 → 12.5px, with
+  a test that reads every named type role out of `globals.css`.
+- [x] 10.8 The destructive kebab in `PersonAccess` clears the 44px floor, and a
+  brace-aware sweep now catches any raw `<button>` that states a height under
+  it. A regex stopping at the first `>` could not: `=>` in a handler ends the
+  tag early, which is why the first version of the sweep reported clean.
+- [x] 10.9 The raw NUL in `useRowSelection.ts` is `\u0000`, so the line
+  is visible to grep again.
+
+- [ ] 10.7 The 22 inline type sizes still under the floor — `text-[11px]`,
+  `text-[11.5px]`, `text-[12px]` across 17 components, `ActionOutcome` and
+  `WithheldPill` among them. A layout change on seventeen screens; belongs with
+  8.2's browser pass, not ahead of it.
