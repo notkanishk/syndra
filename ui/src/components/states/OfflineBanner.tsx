@@ -28,7 +28,7 @@ export function OfflineBanner() {
   return (
     <div
       role="status"
-      className="sticky top-0 z-40 flex items-start gap-3.5 border-b border-line-strong bg-surface-2 px-4 py-3.5 tablet:px-[26px]"
+      className="flex items-start gap-3.5 border-b border-line-strong bg-surface-2 px-4 py-3.5 tablet:px-[26px]"
     >
       <span
         aria-hidden

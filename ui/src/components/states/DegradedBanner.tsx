@@ -70,7 +70,7 @@ export function DegradedBanner() {
   return (
     <div
       role="alert"
-      className="sticky top-0 z-40 flex items-start gap-3.5 bg-warn px-[26px] py-4 text-warn-ink"
+      className="flex items-start gap-3.5 bg-warn px-4 py-4 text-warn-ink tablet:px-[26px]"
     >
       {/* The mark breathes, not the banner. This is one of the product's two
           licensed loops and it means "still happening" — a whole amber field
