@@ -258,8 +258,16 @@
 
   @media (max-width: 44.99rem) {
     :root {
-      /* 52px tab + 8px top padding + 8px bottom padding + the row's own gap. */
-      --touch-nav-height: 76px;
+      /* 8px top padding + a 52px tab + 8px bottom padding, plus whatever the
+         device reserves below it. The inset is not optional: the bar itself
+         carries `pb-[env(safe-area-inset-bottom)]`, so on a notched phone it
+         is 34px taller than its own content and anything positioned off a
+         number that ignores that sits UNDER the bar rather than above it.
+
+         The sheet-shaped bar Advanced gets is 60px + inset — shorter, because
+         a single trigger is 44px where a tab row is 52px. This takes the
+         taller of the two so the one number clears both. */
+      --touch-nav-height: calc(68px + env(safe-area-inset-bottom));
     }
   }
 
@@ -544,19 +552,26 @@
 }
 
 /* Uppercase micro-label — the one place letter-spacing is this wide, so a
-   label can never be misread as body copy. */
+   label can never be misread as body copy. At the floor rather than under it:
+   uppercase and wide-tracked is already unmistakable as a label without
+   dropping below what is readable at arm's length. */
 @utility type-label {
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--label);
 }
 
-/* Sidebar group heading: smaller and wider still, because it is structure
-   rather than content. It is a label, never a link. */
+/* Sidebar group heading: wider than a label, because it is structure rather
+   than content. It is a label, never a link.
+
+   Not smaller, though it reads as though it should be. The floor is 12.5px
+   everywhere, and this heading also carries the mobile nav sheet — at 10.5px
+   it was the smallest type in the product, inside the surface most likely to
+   be read at arm's length. Letter-spacing carries the distinction instead. */
 @utility type-nav-group {
-  font-size: 10.5px;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.13em;
   text-transform: uppercase;
