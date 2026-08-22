@@ -200,7 +200,7 @@ describe("the sheet is one level of history", () => {
     renderPolling();
     const sheet = openSheet();
 
-    fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+    fireEvent.click(within(sheet).getByRole("button", { name: "Dismiss" }));
 
     expect(back, "closing directly would leave a dead entry behind").toHaveBeenCalledTimes(1);
   });
@@ -233,5 +233,49 @@ describe("the sheet is one level of history", () => {
 
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(back).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The grabber is a redundant affordance — Esc, the scrim and the system back
+ * gesture all dismiss — and it is the panel's first child. Both facts about it
+ * are asserted here because both were wrong: it took the focus the trap gives
+ * on open, so the sheet opened with the cursor on "close it", and its target
+ * was 22px in a product whose floor is 44.
+ */
+describe("the sheet's grabber", () => {
+  beforeEach(() => {
+    view.audience = "advanced";
+  });
+
+  function openSheet() {
+    fireEvent.click(screen.getByRole("button", { name: /Go to|Home/ }));
+    return screen.getByRole("dialog", { name: "Go to" });
+  }
+
+  it("does not take the focus the sheet gives on open", () => {
+    renderNav();
+    const sheet = openSheet();
+    const grabber = within(sheet).getByRole("button", { name: "Dismiss" });
+
+    expect(grabber.tabIndex).toBe(-1);
+    expect(document.activeElement).not.toBe(grabber);
+  });
+
+  it("clears the touch floor", () => {
+    renderNav();
+    const sheet = openSheet();
+
+    expect(within(sheet).getByRole("button", { name: "Dismiss" }).className).toContain("h-11");
+  });
+
+  // Modal's grabber answers to the same word. Two sheets whose handles have
+  // different names are two sheets to anything querying by accessible name.
+  it("answers to the same word as every other sheet's handle", () => {
+    renderNav();
+    const sheet = openSheet();
+
+    expect(within(sheet).queryByRole("button", { name: "Close" })).toBeNull();
+    expect(within(sheet).getByRole("button", { name: "Dismiss" })).toBeTruthy();
   });
 });
