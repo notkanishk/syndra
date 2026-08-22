@@ -119,6 +119,8 @@ export default function AutomaticRulesPage() {
         }
       />
 
+      {outcome && <ActionOutcome outcome={outcome} />}
+
       <Card>
         <CardColumns>
           {selecting && <span className="w-11 shrink-0 desktop:w-[18px]" />}
