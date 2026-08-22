@@ -270,10 +270,17 @@ function RoleDialog({
           onAcknowledge={setAcknowledged}
         />
       </div>
+      {/* The dialog reports its own result and stays open to do it, the same
+          way the role dialog on Syndra's own side does. Here it matters more:
+          the sentence this reports is that Syndra has no record of what just
+          happened, and a dialog that closes itself takes that sentence with
+          it. */}
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1 mt-3" />}
+
       <ModalFooter>
         <Button
           variant="danger"
-          disabled={!key.trim() || !acknowledged}
+          disabled={!key.trim() || !acknowledged || outcome?.kind === "applied"}
           isPending={busy}
           onClick={async () => {
             try {
@@ -292,7 +299,6 @@ function RoleDialog({
                   detail: "Syndra has no record of this change beyond the audit line.",
                 });
               }
-              onClose();
             } catch (error) {
               setOutcome(outcomeFromError(error));
             }
@@ -300,7 +306,7 @@ function RoleDialog({
         >
           {role ? "Save upstream" : "Create upstream"}
         </Button>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose}>{outcome?.kind === "applied" ? "Done" : "Cancel"}</Button>
       </ModalFooter>
     </Modal>
   );

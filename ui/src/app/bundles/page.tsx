@@ -322,6 +322,8 @@ function BundleWorkspace({
           </Button>
         </div>
 
+        {outcome && <ActionOutcome outcome={outcome} className="mx-5 mb-4" />}
+
         {/*
           Retiring the bundle is the last row on the card, under everything it does, because it
           is the one action here that ends rather than changes. Outline red — the solid confirm
@@ -720,6 +722,8 @@ function RemovalImpact({
           </li>
         ))}
       </ul>
+
+      {outcome && <ActionOutcome outcome={outcome} className="mb-4" />}
 
       <div className="flex flex-wrap items-center gap-2.5">
         {/* Not `dangerConfirm`. That treatment is for a click that takes

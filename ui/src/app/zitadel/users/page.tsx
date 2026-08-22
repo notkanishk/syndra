@@ -217,6 +217,8 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
         ))}
       </ListStates>
 
+      {outcome && <ActionOutcome outcome={outcome} className="mx-5 mb-4" />}
+
       {assigning && <AssignDialog userId={userId} onClose={() => setAssigning(false)} />}
       {editing && (
         <EditRolesDialog userId={userId} grant={editing} onClose={() => setEditing(null)} />
