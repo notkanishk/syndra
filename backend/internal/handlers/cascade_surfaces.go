@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"syndra/internal/db"
 	"syndra/internal/models"
+	"syndra/internal/services"
 )
 
 // resolveConfirmationMode returns reqMode (normalized) when the caller supplied one, else the
@@ -87,6 +89,15 @@ func handleBulkSetConfirmationMode(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.IDs) == 0 {
 		jsonValidationErrorResponse(w, "ids must not be empty", map[string]string{"ids": "required"})
+		return
+	}
+	// The same bound every other bulk route carries, and this one had none —
+	// on the surface whose verbs apply on tap rather than opening a plan, and
+	// whose rules cascade revokes. An unbounded set here is a single statement
+	// flipping every rule in the product, with nothing computed first.
+	if len(req.IDs) > services.BulkMaxUsers {
+		jsonValidationErrorResponse(w, "too many ids in one batch",
+			map[string]string{"ids": fmt.Sprintf("max %d", services.BulkMaxUsers)})
 		return
 	}
 	if req.Mode != "auto" && req.Mode != "manual" {
