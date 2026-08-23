@@ -287,11 +287,12 @@ function NavSheet({
           // it" rather than on where the operator came to go. Esc, the scrim
           // and the back gesture all still dismiss.
           tabIndex={-1}
-          // 44px of target around a 4px bar. The negative margins are the
-          // arithmetic that keeps the bar exactly where it was: the box grew
-          // 22px, so it starts 5px above the panel's own top padding and ends
-          // 7px into the gap it used to leave.
-          className="-mb-[7px] -mt-[5px] mx-auto flex h-11 w-full max-w-[120px] items-center justify-center"
+          // 44px of target around a 4px bar. The negative margins hold the bar
+          // where it was — measured at 390, not derived: the panel's own
+          // border pushes everything a pixel that arithmetic on the padding
+          // alone does not see, and a first attempt computed that way put the
+          // bar 6px low.
+          className="-mb-[1px] -mt-[11px] mx-auto flex h-11 w-full max-w-[120px] items-center justify-center"
         >
           <span aria-hidden className="h-1 w-[38px] rounded-pill bg-ink/20" />
         </button>
