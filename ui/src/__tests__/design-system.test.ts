@@ -585,6 +585,28 @@ describe("design system", () => {
     ).toEqual([]);
   });
 
+  // jsdom computes no layout, so this cannot measure a scroll height — but
+  // the whole failure was one missing class. A flex item defaults to
+  // `min-height: auto` and refuses to shrink below its content, so `flex-1`
+  // never constrained the scroller: it grew to the height of the page inside
+  // it, `overflow-y-auto` had nothing to scroll, and the shell's own
+  // `overflow-hidden` clipped the rest. On a phone that meant any route taller
+  // than the viewport could not be scrolled at all and the tab bar sat below
+  // the fold — on /roles at y=4037 of an 844px screen.
+  it("lets the scroller shrink, or the phone cannot scroll at all", () => {
+    const shell = readFileSync(resolve(SRC_ROOT, "components/shell/AppShell.tsx"), "utf8");
+    const scroller = /<div id="app-scroll" className="([^"]+)"/.exec(shell);
+
+    expect(scroller, "AppShell must still hold the scroller by that id").not.toBeNull();
+    expect(scroller![1], "the scroller must be allowed to shrink below its content").toContain(
+      "min-h-0",
+    );
+
+    // Its parent column is a flex item too, with the same default and the same
+    // consequence.
+    expect(shell).toMatch(/<div className="flex min-h-0 min-w-0 flex-1 flex-col">/);
+  });
+
   // Two banners each sticking to `top-0` at the same z-index do not stack —
   // the later one paints over the earlier, which put the degraded banner on
   // top of the offline banner and inverted the ordering AppShell argues for.
