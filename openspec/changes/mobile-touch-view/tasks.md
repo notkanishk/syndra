@@ -286,6 +286,18 @@ Deferred in §9's pass, then asked for. See design §10.
 - [ ] 11.3 `visibleCount` / `onSelectVisibleOnly` / `wholeScope` are still
   People-only, so the other four selection surfaces cannot offer "select only
   the N shown" or distinguish a whole-scope selection from a counted one.
-- [ ] 11.4 No `global-error.tsx`. `error.tsx` catches throws in the layout's
-  children; a throw in the root layout itself still falls to Next's unstyled
-  default — the other half of "the app had no answer for its own failure".
+- [x] 11.4 `global-error.tsx` — done in 12.2.
+
+## 12. The third ceiling, and the boundary below the boundary
+
+- [x] 12.1 Expiring access gates on people rather than grants. §11 checked the
+  per-row acknowledge and missed the bar's own verb, which extends through the
+  capped grants endpoint. `SelectionBar` gained `ceilingCount` / `ceilingNoun`
+  for the one surface where the counted unit and the capped unit differ;
+  narrowing takes whole people so nobody is left half-extended.
+- [x] 12.2 `app/global-error.tsx`, for a throw in the root layout itself. It
+  imports nothing from the app — enforced by test — and states both themes
+  itself, because the shell that would have chosen one is gone.
+
+Still open: 11.3 (selection parity across the other four surfaces) and 8.2 (the
+per-route browser pass, now carrying every type change from §10 and §11).
