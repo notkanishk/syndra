@@ -301,3 +301,17 @@ Deferred in §9's pass, then asked for. See design §10.
 
 Still open: 11.3 (selection parity across the other four surfaces) and 8.2 (the
 per-route browser pass, now carrying every type change from §10 and §11).
+
+## 13. The constant guard, and the unbounded route
+
+- [x] 13.1 `bulkCeiling.test.ts` holds `BULK_MAX_USERS` against
+  `services.BulkMaxUsers` read off disk. The comment claiming this check
+  already existed is corrected in place.
+- [x] 13.2 `handleBulkSetConfirmationMode` bounded at `services.BulkMaxUsers`,
+  tested at the ceiling and one past it. It was the only bulk route with no
+  upper bound, on the surface whose verbs apply on tap and whose rules cascade
+  revokes.
+
+- [ ] 13.3 `policies/page.tsx` does not pass `ceiling` to its bar. Harmless
+  until 13.2 landed and now a real limit; the units agree there, so it is one
+  prop. Left for the browser pass rather than added blind.

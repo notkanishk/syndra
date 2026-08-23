@@ -486,3 +486,48 @@ something:
 Both themes are authored in a `<style>` element rather than inline props, since
 an inline style cannot hold a media query and the shell that would have chosen
 a theme is the thing that is gone.
+
+## 13. One number in two languages, and the route that had no bound
+
+### The constant was never checked against the constant
+
+`BULK_MAX_USERS` in `useBulkGrants.ts` is what four selection bars promise an
+operator before they tap. `services.BulkMaxUsers` in `bulk.go` is what three
+handlers refuse on afterwards. Nothing compared them: two literals, two
+languages, no guard. Drop the Go one to 250 and every bar keeps promising 500,
+stops refusing at the right point, and operators are back to meeting the 4xx
+after the tap — the exact failure three rounds of ceiling work exist to
+prevent, restored silently by an edit in another language.
+
+Worse, a comment in the expiry queue's test said this check existed. It did
+not. That is the third comment on this change found asserting a property the
+code did not hold — after the nav-height token that "stops this dock and the
+tab bar disagreeing" while they disagreed, and the first-render test that could
+not observe a first render. A comment claiming a guard is worse than silence,
+because it tells the next reader not to look.
+
+`lib/queries/__tests__/bulkCeiling.test.ts` reads the Go constant off disk and
+compares it, the same move `design-system.test.ts` already makes against
+`globals.css`. It throws rather than skipping if the backend tree is not there:
+a guard that quietly passes when it cannot find what it guards is the thing it
+was written to replace.
+
+### The least reversible bulk write had no ceiling at all
+
+`handleBulkSetConfirmationMode` checked only that `ids` was non-empty. Every
+other bulk route in the product stops at `services.BulkMaxUsers` — and this is
+the surface whose two verbs apply on tap rather than opening a plan, and whose
+rules cascade revokes. An unbounded set there is one statement flipping every
+rule in the product with nothing computed first. The ceiling is the mirror
+image of what the front end spent three rounds on: it existed everywhere except
+where the write was least reversible.
+
+Bounded now, with the same message shape the other routes use, and tested at
+both `BulkMaxUsers` and `BulkMaxUsers + 1` — the boundary included, because a
+cap that refuses at exactly the limit makes the number the bar promises a
+number the server does not honour.
+
+The front end needs no change: `policies/page.tsx` selects rules, the cap
+counts ids, and the units already agree. Wiring `ceiling` there is left for
+whoever next opens that screen with the browser pass, since it is now a real
+limit rather than a hypothetical one.
