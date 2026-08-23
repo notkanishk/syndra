@@ -49,7 +49,7 @@ export function CardHeader({
     <div className={`flex flex-wrap items-center gap-[11px] px-5 py-4 ${className}`}>
       <span className="type-card-title">{title}</span>
       {count !== undefined && (
-        <span className={`rounded-pill px-2.5 py-0.5 text-[12px] font-bold ${badgeTone}`}>
+        <span className={`rounded-pill px-2.5 py-0.5 text-[12.5px] font-bold ${badgeTone}`}>
           {count}
         </span>
       )}

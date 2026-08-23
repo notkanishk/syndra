@@ -48,7 +48,7 @@ export function ActionOutcome({
         className={`inline-flex items-center gap-2 ${className}`}
       >
         <span
-          className={`rounded-pill px-2.5 py-1 text-[11.5px] font-semibold ${OUTCOME_TONE[outcome.kind]}`}
+          className={`rounded-pill px-2.5 py-1 text-[12.5px] font-semibold ${OUTCOME_TONE[outcome.kind]}`}
         >
           {OUTCOME_LABEL[outcome.kind]}
         </span>
@@ -68,7 +68,7 @@ export function ActionOutcome({
     >
       <div className="flex flex-wrap items-center gap-2.5">
         <span
-          className={`rounded-pill px-2.5 py-1 text-[11.5px] font-semibold ${OUTCOME_TONE[outcome.kind]}`}
+          className={`rounded-pill px-2.5 py-1 text-[12.5px] font-semibold ${OUTCOME_TONE[outcome.kind]}`}
         >
           {OUTCOME_LABEL[outcome.kind]}
         </span>

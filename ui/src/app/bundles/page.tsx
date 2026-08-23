@@ -99,7 +99,7 @@ export default function BundlesPage() {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[14.5px] font-semibold">{bundle.name}</span>
                   {bundle.is_welcome && (
-                    <span className="block truncate text-[12px] text-faint">
+                    <span className="block truncate text-[12.5px] text-faint">
                       Default for new members
                     </span>
                   )}

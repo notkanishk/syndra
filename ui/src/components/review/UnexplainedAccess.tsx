@@ -11,6 +11,7 @@ import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FilterPills, Select } from "@/components/ui/Select";
+import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useProjects } from "@/lib/queries/useProjects";
 import { ProjectName, UserAvatar, UserName } from "@/components/names";
 import {
@@ -337,6 +338,12 @@ export function UnexplainedAccess() {
             count={selecting ? selection.count : 0}
             noun={["item", "items"]}
             composition={composition}
+            // `boundBulkIDs` refuses past this on both drift bulk routes. Same
+            // server constant the grant and request endpoints use.
+            ceiling={BULK_MAX_USERS}
+            onTakeCeiling={() =>
+              selection.selectOnly(items.slice(0, BULK_MAX_USERS).map((item) => item.id))
+            }
             onClear={selection.clear}
           >
             {/* Revoke is missing from this bar on purpose, and its absence is
@@ -516,21 +523,21 @@ function RiskPill({ item }: { item: DriftTriageItem }) {
   // informative about none.
   if (item.role_catalogue_applies && !item.role_in_catalogue) {
     return (
-      <span className="mt-1 inline-block rounded-pill bg-tint-2 px-2.5 py-0.5 text-[12px] font-semibold text-muted">
+      <span className="mt-1 inline-block rounded-pill bg-tint-2 px-2.5 py-0.5 text-[12.5px] font-semibold text-muted">
         Role not in catalogue
       </span>
     );
   }
   if ((item.role_group ?? "").toLowerCase().includes("safety")) {
     return (
-      <span className="mt-1 inline-block rounded-pill bg-danger-soft px-2.5 py-0.5 text-[12px] font-semibold text-danger-text">
+      <span className="mt-1 inline-block rounded-pill bg-danger-soft px-2.5 py-0.5 text-[12.5px] font-semibold text-danger-text">
         {item.role_group}
       </span>
     );
   }
   if (item.role_group) {
     return (
-      <span className="mt-1 inline-block rounded-pill bg-tint-2 px-2.5 py-0.5 text-[12px] text-muted">
+      <span className="mt-1 inline-block rounded-pill bg-tint-2 px-2.5 py-0.5 text-[12.5px] text-muted">
         {item.role_group}
       </span>
     );
