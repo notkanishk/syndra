@@ -698,3 +698,39 @@ success.
 The tool is trusted here only because the immediately preceding run on the same
 server reported the five findings a deliberately reintroduced breach produces.
 A green from a sweep that has never been seen to fail is not evidence.
+
+### 16a. The sweep's own blind spots, closed
+
+Four notes on the tool, three of which were the same failure it was written to
+prevent — a check that cannot tell absent from correct.
+
+**A missing tab bar was silence.** `if (bar && …)` means an undefined `bar`
+produces no finding, so the check that exists because the tab bar was pushed
+below the fold would have reported clean if `TouchNav` had stopped rendering
+altogether. Below the tablet breakpoint, no bar is now a finding in its own
+right.
+
+**Dynamic routes were opt-in.** They are not in `nav.ts`, which is exactly why
+every earlier sweep missed an 18px breadcrumb present on all of them — and
+leaving `DETAIL_ROUTES` defaulted to empty hands the next person the same blind
+spot with a green to go with it. Unset is now exit 3 with the shape of the
+argument printed; `DETAIL_ROUTES=none` states the skip deliberately.
+
+**The prose exemption was too generous.** It read `el.parentElement.textContent`
+and exempted anything with 40 characters around it, which in a dense card or a
+flex row is unrelated text sharing a container rather than a sentence the link
+sits in. It now requires the link itself to be `display: inline` and its parent
+not to be a flex or grid box. `replace(own, "")` also removed only the first
+occurrence, so a repeated label inflated the count past the threshold —
+`split().join()` now.
+
+**Exit codes were conflated.** A run that never started and a run that found
+five defects both exited 1, which is readable by a person and not by a gate. 1
+is findings, 2 is looking at the wrong page, 3 is could not run.
+
+And the way the sweep is proved to work no longer touches tracked source.
+`SWEEP_SELFTEST=1` shrinks the breadcrumb through an injected stylesheet — the
+previous method, breaking a component and restoring it after, is precisely how
+a fix ended up in the tree as a comment with no class when the run between
+those two steps failed. Verified: self-test reports 3 findings and exits 1, the
+same harness reports clean and exits 0 immediately afterwards.

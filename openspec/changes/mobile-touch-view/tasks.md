@@ -376,3 +376,11 @@ per-route browser pass, now carrying every type change from §10 and §11).
 
 - [ ] 16.6 The sweep needs a dev server and a reachable backend, so it gates a
   release rather than a commit. Nothing runs it automatically.
+
+- [x] 16.7 The sweep's own blind spots: a missing tab bar is now a finding
+  rather than silence; `DETAIL_ROUTES` unset refuses to run; the prose
+  exemption requires an inline link in normal text flow and counts every
+  occurrence of the label; exit codes separate findings from could-not-run.
+- [x] 16.8 `SWEEP_SELFTEST=1` proves the sweep can fail without editing a
+  tracked file. Breaking a component to test the checker is how a fix reached
+  the tree as a comment with no class.
