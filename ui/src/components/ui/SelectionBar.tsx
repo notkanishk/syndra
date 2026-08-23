@@ -30,6 +30,18 @@ interface SelectionBarProps {
   onSelectVisibleOnly?: () => void;
   /** The most this surface's bulk endpoint will accept in one run. */
   ceiling?: number;
+  /**
+   * What the ceiling counts, when that is not what the bar counts.
+   *
+   * Usually they are the same thing and this stays unset. Expiring access is
+   * the exception in this product: it selects GRANTS and the endpoint caps
+   * distinct PEOPLE, so 600 grants held by 300 people is legal and 500 grants
+   * held by 500 people is already at the limit. Gating on the selection count
+   * there would be wrong in both directions.
+   */
+  ceilingCount?: number;
+  /** Singular/plural for `ceilingCount`. Defaults to `noun`. */
+  ceilingNoun?: [string, string];
   /** Narrows the selection to the first `ceiling` rows, in the order shown. */
   onTakeCeiling?: () => void;
   onClear: () => void;
@@ -46,6 +58,8 @@ export function SelectionBar({
   visibleCount,
   onSelectVisibleOnly,
   ceiling,
+  ceilingCount,
+  ceilingNoun,
   onTakeCeiling,
   onClear,
   children,
@@ -63,7 +77,16 @@ export function SelectionBar({
   // stated reason. It says the number, says the limit, and offers the one move
   // that gets under it — explicitly, so the cohort is chosen rather than
   // truncated.
-  const overCeiling = ceiling !== undefined && count > ceiling;
+  const gated = ceilingCount ?? count;
+  const gatedNoun = ceilingNoun ?? noun;
+  const overCeiling = ceiling !== undefined && gated > ceiling;
+  // Only worth saying when the two differ: "601 grants selected · they cover
+  // 520 people" tells the operator why a number they can see is being refused
+  // by a number they cannot.
+  const coverage =
+    ceilingCount !== undefined
+      ? `they cover ${gated} ${gated === 1 ? gatedNoun[0] : gatedNoun[1]}, and `
+      : "";
 
   return (
     <div
@@ -80,7 +103,8 @@ export function SelectionBar({
         {overCeiling ? (
           <span className="text-warn-text">
             {" "}
-            · {ceiling} is the most that can run at once.
+            · {coverage}
+            {ceiling} is the most that can run at once.
           </span>
         ) : (
           <>
@@ -107,7 +131,8 @@ export function SelectionBar({
       <div className="flex flex-wrap items-center gap-2">
         {overCeiling && onTakeCeiling ? (
           <SelectionAction onClick={onTakeCeiling}>
-            Select the first {ceiling} in the order shown
+            Select the first {ceilingNoun ? `${ceiling} ${gatedNoun[1]}` : ceiling} in the order
+            shown
           </SelectionAction>
         ) : (
           children

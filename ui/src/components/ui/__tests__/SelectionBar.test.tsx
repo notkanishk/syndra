@@ -165,3 +165,66 @@ describe("the mode control", () => {
     expect(screen.getByRole("button", { name: "Done selecting" })).toBeTruthy();
   });
 });
+
+/**
+ * The one surface where the counted unit and the capped unit differ.
+ *
+ * Expiring access selects grants; `services.BulkMaxUsers` caps distinct
+ * people. Gating on the selection count there is wrong in both directions —
+ * 600 grants held by 300 people is legal, and 500 grants held by 500 people is
+ * already at the limit — so the bar has to be told what the ceiling counts.
+ */
+describe("a ceiling that counts something other than the selection", () => {
+  function bar(count: number, ceilingCount: number) {
+    render(
+      <SelectionBar
+        count={count}
+        noun={["grant", "grants"]}
+        ceiling={500}
+        ceilingCount={ceilingCount}
+        ceilingNoun={["person", "people"]}
+        onTakeCeiling={() => {}}
+        onClear={() => {}}
+      >
+        <SelectionAction onClick={() => {}}>Rehearse an extension</SelectionAction>
+      </SelectionBar>,
+    );
+    return screen.getByRole("region", { name: "Selection" });
+  }
+
+  it("lets a selection past the ceiling through when it covers few enough people", () => {
+    const region = bar(600, 300);
+    expect(within(region).queryByText(/is the most that can run at once/)).toBeNull();
+    expect(within(region).getByRole("button", { name: "Rehearse an extension" })).toBeTruthy();
+  });
+
+  it("refuses on the capped unit, and says which number it is refusing on", () => {
+    const region = bar(540, 520);
+    expect(
+      within(region).getByText(/they cover 520 people, and 500 is the most that can run at once/),
+    ).toBeTruthy();
+    // The selection count is still stated: the operator ticked grants and has
+    // to recognise what they ticked.
+    expect(within(region).getByText(/540 grants/)).toBeTruthy();
+  });
+
+  it("names the unit in the narrowing move, so the cohort is not misread as rows", () => {
+    const region = bar(540, 520);
+    expect(
+      within(region).getByRole("button", { name: "Select the first 500 people in the order shown" }),
+    ).toBeTruthy();
+  });
+
+  // Every other surface counts what the endpoint counts, and must keep the
+  // shorter sentence rather than growing a clause about itself.
+  it("says nothing about coverage when the two units are the same", () => {
+    render(
+      <SelectionBar count={640} noun={["person", "people"]} ceiling={500} onClear={() => {}}>
+        <SelectionAction onClick={() => {}}>Rehearse</SelectionAction>
+      </SelectionBar>,
+    );
+    const region = screen.getByRole("region", { name: "Selection" });
+    expect(within(region).queryByText(/they cover/)).toBeNull();
+    expect(within(region).getByText(/500 is the most that can run at once/)).toBeTruthy();
+  });
+});

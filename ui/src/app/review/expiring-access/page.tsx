@@ -15,6 +15,7 @@ import {
   SelectionAction,
   SelectionBar,
 } from "@/components/ui/SelectionBar";
+import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -198,6 +199,29 @@ export default function ExpiringAccessPage() {
             ? `${selectedUsers.length} ${selectedUsers.length === 1 ? "person" : "people"}`
             : ""
         }
+        // The bulk endpoint caps distinct PEOPLE at 500 and this screen selects
+        // GRANTS, so the number the bar counts is not the number the server
+        // refuses on. 600 grants held by 300 people is legal; 500 grants held
+        // by 500 people is already at the limit.
+        ceiling={BULK_MAX_USERS}
+        ceilingCount={selectedUsers.length}
+        ceilingNoun={["person", "people"]}
+        onTakeCeiling={() => {
+          // Whole people, in the order shown. Once the cohort is full the
+          // later grants of somebody already in it still come along — dropping
+          // them would extend part of a person's access and leave the rest to
+          // lapse, which is a worse thing to do than refuse.
+          const cohort = new Set<string>();
+          const keep: string[] = [];
+          for (const grant of undecided) {
+            if (!cohort.has(grant.user_id)) {
+              if (cohort.size === BULK_MAX_USERS) continue;
+              cohort.add(grant.user_id);
+            }
+            keep.push(grant.id);
+          }
+          selection.selectOnly(keep);
+        }}
         onClear={selection.clear}
       >
         {/* Tapping this opens a plan, it does not extend anything. */}
