@@ -334,3 +334,23 @@ per-route browser pass, now carrying every type change from §10 and §11).
   rows, the selection bars and their over-ceiling copy, the outcome pills in
   place, the expiry queue's new sub-500-people clause, the rehearsal dialogs,
   and anything that needs a row to exist. That needs the stack up.
+
+## 15. 8.2 with data
+
+- [x] 15.1 `min-h-0` on the shell column and `#app-scroll`. Without it no route
+  taller than the viewport could scroll on a phone and the tab bar sat below
+  the fold — at y=4037 on `/roles`. Guarded statically, since jsdom computes no
+  layout.
+- [x] 15.2 The Makerspace footer's two cleanup links carry a 44px target. Two
+  links and a separator are not a sentence, so 2.5.8's inline exemption never
+  covered them.
+- [x] 15.3 Swept all 20 routes plus the 404 with real rows at 390, and the same
+  set at 744 and 1280: no horizontal overflow, every route scrolls, tab bar
+  pinned at the viewport bottom, no sub-floor text, one exempt inline link.
+
+- [ ] 15.4 The bulk bar is 312px tall at 390 with five verbs stacked — 43% of
+  the scrollport. Correct behaviour, open design question.
+- [ ] 15.5 Still unseen: the over-ceiling copy on any bar (needs >500 rows, and
+  the dev host has 5 people), the rehearsal dialogs and every plan they render,
+  and the three routes whose endpoints answer 502 there — drift, holds and
+  mapping rules.

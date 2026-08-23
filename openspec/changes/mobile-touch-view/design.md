@@ -569,3 +569,68 @@ message:**
 Both were the same mistake the audit kept finding: arithmetic asserted as
 measurement. The fix is not better arithmetic, it is that these two numbers are
 now the output of a measurement and say so.
+
+## 15. The pass with data, and the bug every previous sweep was blind to
+
+Run against the dev host's backend, authorised for this pass. Real rows: 5
+people, 6 projects, 27 roles, 4 applications, 50 audit entries, 1 bundle. Drift,
+holds and mapping rules answer 502 from that stack, so those three routes were
+still measured in their error state.
+
+### Every long route on a phone could not be scrolled, and had no tab bar
+
+`AppShell` is `flex h-dvh flex-col overflow-hidden`, and inside it the column
+and `#app-scroll` were `flex-1` with no `min-h-0`. A flex item defaults to
+`min-height: auto` and refuses to shrink below its content — so `flex-1` never
+constrained the scroller. It grew to the full height of the page inside it,
+`overflow-y-auto` had nothing to scroll, and the shell's `overflow-hidden`
+clipped everything past the fold.
+
+On a 390×844 phone, with real data:
+
+| Route | scroller height | tab bar top |
+|---|---|---|
+| `/users` | 1000 | 1066 |
+| `/roles` | 3971 | 4037 |
+| `/audit` | 4173 | 4239 |
+| `/` | 2368 | 2434 |
+
+The tab bar was below the fold on every one, and the page could not be
+scrolled to reach it. The product's entire navigation, absent, on the form
+factor this change exists for.
+
+**Every sweep before this one measured horizontal overflow and nothing else** —
+including the one this branch recorded as "zero horizontal overflow on every
+route", which was true and is still true. Nobody asked whether the page could
+scroll. `min-h-0` on both flex items fixes it: the scroller becomes 717px
+(844 − 58 top bar − 69 tab bar), scrolls its full height, and the tab bar sits
+at the viewport bottom on all 21 routes. 744 and 1280 unchanged.
+
+The guard is static, because jsdom computes no layout and the whole failure was
+one missing class.
+
+### One more target under the floor, on the screen the app opens on
+
+The Makerspace card's footer reads *"17 roles nobody holds · 1 empty bundle"* —
+two links and a separator, no prose. WCAG 2.5.8's inline exemption is for a
+target inside a sentence, and there is no sentence here, so it does not apply.
+Both measured 16px tall. They carry their own 44px on touch now, which grows
+that row from 45px to 69px on a phone and leaves it unchanged above the desktop
+breakpoint.
+
+### Confirmed with data, not argued
+
+Zero horizontal overflow on all 20 routes plus the 404, at 390, 744 and 1280.
+Every route scrolls; the tab bar is pinned at the viewport bottom on all of
+them. No rendered text below 12.5px outside `aria-hidden` decoration. One
+sub-24px control left in the product — the inline `<a>` in the last clause of a
+sentence on `/roles`, which the exemption does cover. The selection bar sticks
+above the tab bar rather than under it (bar bottom 767, tab bar top 775).
+
+### Not a bug, but worth a decision
+
+With five people selected, the bulk bar is **312px tall** — five stacked
+*Rehearse …* verbs filling 43% of a 717px scrollport. It behaves correctly and
+nothing overflows. Whether five verbs should stack on a phone is a design call
+that wants the screen in front of somebody, so it is recorded rather than
+changed.
