@@ -531,3 +531,41 @@ The front end needs no change: `policies/page.tsx` selects rules, the cap
 counts ids, and the units already agree. Wiring `ceiling` there is left for
 whoever next opens that screen with the browser pass, since it is now a real
 limit rather than a hypothetical one.
+
+## 14. The browser pass, and the two numbers it corrected
+
+8.2, run at a real 390 (Chrome's window floor is ~500px, so this is device
+emulation and not `resize_page`), plus 744 and 1280. The app was served with no
+backend reachable, so every data read failed and the lists rendered their error
+and empty states. That bounds what this pass proves and what it does not, and
+the boundary is stated in 8.2 rather than left to be assumed.
+
+**Clean:** zero horizontal overflow on all 20 routes in `nav.ts` plus the 404,
+at 390 and at 744. One control under 24px on `/roles` — an inline `<a>` in the
+last clause of a sentence, which WCAG 2.5.8 exempts. No rendered text below
+12.5px on any route once `aria-hidden` decoration is excluded, which is the
+§10/§11 type work confirmed in a browser rather than in a regex. The rail's
+group headings at 12.5px measure 100px at their widest inside a 227px rail and
+do not wrap. `#app-scroll` contains exactly one `sticky top-0` element — the
+banner collision is structurally gone. The nav sheet's grabber is 44px, carries
+`tabIndex={-1}`, and the focus the sheet gives on open lands on the view toggle
+rather than on the handle.
+
+**Two numbers were wrong, both of them mine, both stated as facts in a commit
+message:**
+
+- `--touch-nav-height` was `calc(68px + env(…))`. The bar measures **69**: a
+  1px top border, 8px padding, a 52px tab, 8px below. §10 said this token was
+  now measured; it was derived, and the derivation dropped the border. The
+  freshness dock still cleared the bar — the error ate 1px of a 24px gap — but
+  the token claims to be the bar's height and was not.
+- The grabber's negative margins were computed as `-mt-[5px] -mb-[7px]` from
+  the panel's padding, and the commit said the bar "has not moved a pixel". It
+  had moved 6px down: the panel's own border is not in the padding. Measured
+  against the original — bar centre 24px from the panel top, 19px of gap below
+  it — the correct pair is `-mt-[11px] -mb-[1px]`, which reproduces both
+  exactly.
+
+Both were the same mistake the audit kept finding: arithmetic asserted as
+measurement. The fix is not better arithmetic, it is that these two numbers are
+now the output of a measurement and say so.

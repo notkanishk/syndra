@@ -315,3 +315,22 @@ per-route browser pass, now carrying every type change from §10 and §11).
 - [ ] 13.3 `policies/page.tsx` does not pass `ceiling` to its bar. Harmless
   until 13.2 landed and now a real limit; the units agree there, so it is one
   prop. Left for the browser pass rather than added blind.
+
+## 14. 8.2, partially
+
+- [x] 14.1 Every route in `nav.ts` plus the 404 swept at a real 390 and at 744,
+  and the rail at 1280. Zero horizontal overflow; one sub-24px control, an
+  inline link inside a sentence (WCAG 2.5.8 exempt); no rendered text below
+  12.5px outside `aria-hidden` decoration.
+- [x] 14.2 `--touch-nav-height` corrected 68 → 69px. It had dropped the bar's
+  1px top border, having been derived rather than measured despite §10 saying
+  otherwise.
+- [x] 14.3 The nav sheet grabber's margins corrected to `-mt-[11px] -mb-[1px]`,
+  measured against the original rather than computed from the padding. The
+  first pair put the bar 6px low while the commit claimed it had not moved.
+
+- [ ] 8.2 **still open, and this is what remains of it.** The pass ran with no
+  backend, so every list was empty or in its error state. Unverified: dense
+  rows, the selection bars and their over-ceiling copy, the outcome pills in
+  place, the expiry queue's new sub-500-people clause, the rehearsal dialogs,
+  and anything that needs a row to exist. That needs the stack up.
