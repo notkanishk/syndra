@@ -17,6 +17,7 @@ import {
   SelectionAction,
   SelectionBar,
 } from "@/components/ui/SelectionBar";
+import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { FilterPills, Select } from "@/components/ui/Select";
@@ -262,6 +263,15 @@ function OperatorQueue() {
       <SelectionBar
         count={selecting ? selection.count : 0}
         noun={["request", "requests"]}
+        // One server constant — `services.BulkMaxUsers` — caps the grant, the
+        // request and the drift bulk endpoints alike, which is why a
+        // users-shaped name is the right import here. Without it the operator
+        // select-alls, taps, and meets the 4xx afterwards: the bar exists to
+        // say the number before the tap, not to let the server say it after.
+        ceiling={BULK_MAX_USERS}
+        onTakeCeiling={() =>
+          selection.selectOnly(openRows.slice(0, BULK_MAX_USERS).map((entry) => entry.id))
+        }
         onClear={selection.clear}
       >
         {/* Both open a decision dialog rather than deciding. */}

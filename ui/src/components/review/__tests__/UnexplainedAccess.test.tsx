@@ -428,3 +428,33 @@ it("tells a removal by when the write landed, even with nothing ever observed", 
   expect(screen.getByText(/accepted it/i)).toBeTruthy();
   expect(screen.getByText(/somebody removed it/i)).toBeTruthy();
 });
+
+/**
+ * `boundBulkIDs` refuses past 500 on both drift bulk routes. The bar has said
+ * so since the selection work, but only the People page was passing it a
+ * ceiling — so on this queue an operator select-alled, tapped, and met the
+ * refusal afterwards. Which is the thing the bar exists to prevent.
+ */
+describe("the queue states its ceiling before the tap", () => {
+  it("names the limit and offers the narrowing move over 500", () => {
+    drift.data = Array.from({ length: 501 }, (_, at) =>
+      item({ id: `d${at}`, user_id: `u${at}` }),
+    );
+    renderTriage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Select these 501 items/ }));
+
+    expect(screen.getByText(/500 is the most that can run at once/)).toBeTruthy();
+  });
+
+  it("leaves a selection inside the ceiling alone", () => {
+    drift.data = Array.from({ length: 3 }, (_, at) => item({ id: `d${at}`, user_id: `u${at}` }));
+    renderTriage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Select these 3 items/ }));
+
+    expect(screen.queryByText(/is the most that can run at once/)).toBeNull();
+  });
+});
