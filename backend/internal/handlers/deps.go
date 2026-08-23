@@ -376,7 +376,11 @@ var (
 	// A member's own account state and usage. A read, not an operation: it runs
 	// on an ordinary page load, and a durable row per page view would fill the
 	// operation log with events that changed nothing.
-	addonsMyStorage       = addons.MyStorage
+	addonsMyStorage = addons.MyStorage
+	// What the TARGET's own audit log says about a subject. Also a read: an
+	// operator opening somebody's record must not append to the operation log
+	// for having looked.
+	addonsActivity        = addons.Activity
 	svcDispatchOperation  = addonop.Dispatch
 	dbRecordTargetBinding = db.RecordTargetBinding
 )

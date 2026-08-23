@@ -600,3 +600,99 @@ func MyStorage(ctx context.Context, target, subject string) StorageStatus {
 	status.Outcome = OutcomeSucceeded
 	return status
 }
+
+// ActivityReport is what a target's own audit log says about one subject, and
+// what that log could not see.
+//
+// Deliberately NOT merged into Syndra's audit feed by the surface that renders
+// it. Syndra's ledger records what Syndra did; this records what the account
+// did on the target, including everything that happened without Syndra's
+// involvement. Rendering the two as one feed would make the second look like
+// the first, which is the whole reason the target is reconciled rather than
+// trusted.
+type ActivityReport struct {
+	Events []ActivityEvent `json:"events"`
+	// UnauditedShares names the shares with auditing switched off. Without it
+	// an empty result reads as "no activity", which is a different and far more
+	// reassuring statement than "nobody was watching".
+	UnauditedShares []string `json:"unaudited_shares,omitempty"`
+
+	Outcome Outcome `json:"-"`
+	Err     error   `json:"-"`
+}
+
+// ActivityEvent is one entry from the target's audit log.
+type ActivityEvent struct {
+	At      string `json:"at"`
+	Event   string `json:"event"`
+	Share   string `json:"share,omitempty"`
+	Success bool   `json:"success"`
+}
+
+// Activity reads the target's audit log for one subject.
+//
+// A READ, dispatched like `Health` and `MyStorage` rather than as an operation:
+// it writes nothing and claims no durable row, and an operator opening a
+// person's record must not append to the operation log for having looked.
+//
+// The add-on has implemented `activity.get` since the platform landed and the
+// backend's policy table has always declared it, but nothing ever called it —
+// so the two TrueNAS roles it needs, `audit.query` and `sharing.smb.query`,
+// were configured on the deployment's API key and exercised by nothing. The
+// same shape as every other defect this branch found: two halves that agree
+// with each other and never meet.
+func Activity(ctx context.Context, target, subject, since string) ActivityReport {
+	a, err := Get(target)
+	if err != nil {
+		return ActivityReport{Outcome: OutcomeUnreached, Err: err}
+	}
+	if !a.br.allow(timeNow()) {
+		return ActivityReport{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %s", ErrCircuitOpen, target)}
+	}
+	cred, err := credentialFor(a.Registration)
+	if err != nil {
+		return ActivityReport{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: %w", target, err)}
+	}
+
+	params := map[string]any{}
+	if since != "" {
+		params["since"] = since
+	}
+	body, err := json.Marshal(map[string]any{
+		"contract_version": ContractVersion,
+		"call_id":          "read-" + target + "-" + subject,
+		"operation":        "activity.get",
+		"subject":          subject,
+		"actor":            subject,
+		"params":           params,
+	})
+	if err != nil {
+		return ActivityReport{Outcome: OutcomeUnreached, Err: err}
+	}
+
+	resp := doAuthenticated(ctx, cred, http.MethodPost,
+		a.Registration.BaseURL+"/operations/activity.get", body, callTimeout)
+	a.br.record(timeNow(), resp)
+
+	out := ActivityReport{Outcome: resp.Outcome, Err: resp.Err}
+	if resp.Outcome != OutcomeSucceeded {
+		return out
+	}
+	var envelope struct {
+		Activity *ActivityReport `json:"activity"`
+	}
+	if err := json.Unmarshal(resp.Body, &envelope); err != nil || envelope.Activity == nil {
+		out.Outcome = OutcomeIndeterminate
+		out.Err = fmt.Errorf("addon %s: decode activity report: %w", target, err)
+		return out
+	}
+	report := *envelope.Activity
+	// Never nil to a caller: a JSON `null` and an empty list render as
+	// different things, and "no events" is the answer this read most often
+	// gives.
+	if report.Events == nil {
+		report.Events = []ActivityEvent{}
+	}
+	report.Outcome = OutcomeSucceeded
+	return report
+}
