@@ -634,3 +634,67 @@ With five people selected, the bulk bar is **312px tall** — five stacked
 nothing overflows. Whether five verbs should stack on a phone is a design call
 that wants the screen in front of somebody, so it is recorded rather than
 changed.
+
+## 16. The sweep, made repeatable — and three false greens on the way
+
+§15's pass was run by hand. This turns it into `ui/scripts/touch-sweep.mjs`,
+because the three defect classes it found are invisible to every static guard
+in the suite and a check performed once is not a check.
+
+### Why a script and not a lint rule
+
+The inline-link case decides it. WCAG 2.5.8 exempts a target inside a sentence,
+and whether a link is in a sentence is not decidable from the source: the roles
+page's *"Check a project's roles upstream"* and the Makerspace footer's *"17
+roles nobody holds"* are the same JSX shape, and only the first is exempt. The
+rule is therefore applied against rendered prose — a sub-floor target is
+reported unless its own parent holds at least 40 characters of non-target text.
+No dependency: it drives an already-running Chrome over CDP.
+
+The floor is 44px at phone **and tablet**, 24px at desktop. That split is the
+product's own rule — `desktop:min-h-0` releases every control above 1080 — and
+running 44 everywhere is what made the first run report 451 findings that were
+not defects.
+
+### What it found once it was pointed at the right thing
+
+**Detail routes had never been swept.** They are not in `nav.ts`, which is what
+every previous sweep walked. `/users/[id]` alone carried an 18px breadcrumb, a
+22px *Full audit trail*, three 38px person tabs and a 21px *Manage bundles*;
+`/projects/[id]` three 23px holder-count links. The breadcrumb is on every
+detail route in the product.
+
+**The tablet rail breached the rule the rail's own tests state.** Sidebar's nav
+links measure 38–43px at 744 and its theme toggle 32px — and
+`touch-targets.test.tsx` argues in prose that 720–1080 "is a floor operator
+holding a tablet, and a tablet is still a thumb" while only ever covering
+`Button` and `ButtonLink`.
+
+**`desktop:min-h-0` on an inline link is under WCAG's own floor.** Released to
+its line box, a 13px link is 20px — below 2.5.8's 24px, with no sentence to
+exempt it. That was true of the Makerspace links this session's own earlier fix
+created, and of four more. They take `desktop:min-h-6` now.
+
+### Three false greens, all mine
+
+1. `/json/new?url=` opens `about:blank` whatever URL it is handed, so the
+   relative login fetch had no base and threw. Every route redirected to
+   `/login`, and the sweep reported that page clean 75 times — with a breach
+   deliberately reintroduced to test it.
+2. Running `bun run build` while the sweep was mid-flight wiped `.next` out
+   from under the dev server. Every route began returning 500, an error page
+   has no shell and almost no controls, and the sweep called it clean again.
+   Two runs reported in §15's follow-up were measuring error pages.
+3. A background job started in the wrong directory, so `bun run sweep:touch`
+   was never found; it exited 1 without sweeping, which is not a result either
+   way.
+
+The script now asserts what it is looking at: it hard-exits if a route lands on
+`/login`, and again if the page has no `#app-scroll`. Both are the same rule
+this branch has been relearning all week — a check that cannot tell it is
+looking at the wrong page is worse than no check, because it reports silence as
+success.
+
+The tool is trusted here only because the immediately preceding run on the same
+server reported the five findings a deliberately reintroduced breach produces.
+A green from a sweep that has never been seen to fail is not evidence.

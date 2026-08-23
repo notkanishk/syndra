@@ -354,3 +354,25 @@ per-route browser pass, now carrying every type change from §10 and §11).
   the dev host has 5 people), the rehearsal dialogs and every plan they render,
   and the three routes whose endpoints answer 502 there — drift, holds and
   mapping rules.
+
+## 16. The sweep as a script
+
+- [x] 16.1 `ui/scripts/touch-sweep.mjs`, run with `bun run sweep:touch`. No
+  dependencies; drives a Chrome already running with `--remote-debugging-port`.
+  44px floor at phone and tablet, 24px at desktop, and the inline-sentence
+  exemption applied against rendered prose rather than guessed from source.
+  This is the answer to "guard or exemption list" for inline links: neither.
+- [x] 16.2 Detail routes swept for the first time — they are not in `nav.ts`.
+  Breadcrumb (18px, every detail route), *Full audit trail* (22px), the three
+  person tabs (38px), *Manage bundles* (21px), the holder-count links (23px).
+- [x] 16.3 The tablet rail: nav links 38–43px and the theme toggle 32px at 744,
+  on the surface whose own test argues a tablet is still a thumb.
+- [x] 16.4 `desktop:min-h-0` on an inline link falls under WCAG's 24px. Five
+  links moved to `desktop:min-h-6`, including two this session created.
+- [x] 16.5 The script hard-exits on a route that bounced to `/login` or
+  rendered no shell, after three separate false greens — a broken login, a
+  `.next` wiped by a concurrent build, and a job started in the wrong
+  directory.
+
+- [ ] 16.6 The sweep needs a dev server and a reachable backend, so it gates a
+  release rather than a commit. Nothing runs it automatically.
