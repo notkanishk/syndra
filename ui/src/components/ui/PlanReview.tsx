@@ -57,7 +57,7 @@ function PlanRow({ outcome }: { outcome: BulkOutcome }) {
           ) : null}
         </span>
       </span>
-      <span className={`shrink-0 rounded-pill px-2.5 py-1 text-[12px] font-semibold ${tone}`}>
+      <span className={`shrink-0 rounded-pill px-2.5 py-1 text-[12.5px] font-semibold ${tone}`}>
         {label}
       </span>
     </div>

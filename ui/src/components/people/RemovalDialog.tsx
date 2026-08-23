@@ -267,7 +267,7 @@ function BundleDialog({
         lede={`Everything ${bundleName} carries goes with it, except what another source also gives them.`}
       />
       <div className="flex flex-col gap-2 px-6">
-        <div className="text-[11.5px] font-semibold uppercase tracking-[0.1em] text-danger-text">
+        <div className="text-[12.5px] font-semibold uppercase tracking-[0.1em] text-danger-text">
           They will lose
         </div>
         <div className="rounded-nav bg-danger-soft px-3.5 py-2.5 text-[14px]">

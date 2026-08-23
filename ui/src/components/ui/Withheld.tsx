@@ -40,7 +40,7 @@ export interface WithheldItem {
 export function WithheldPill({ className = "" }: { className?: string }) {
   return (
     <span
-      className={`inline-flex items-center rounded-pill bg-warn-soft px-2.5 py-0.5 text-[12px] font-semibold text-warn-text ${className}`}
+      className={`inline-flex items-center rounded-pill bg-warn-soft px-2.5 py-0.5 text-[12.5px] font-semibold text-warn-text ${className}`}
     >
       Withheld
     </span>

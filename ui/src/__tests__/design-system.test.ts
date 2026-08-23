@@ -141,7 +141,7 @@ function atRuleBody(css: string, prelude: string): string {
  * is why the touch-floor sweep below reported a clean repository while a 30px
  * destructive control sat in it.
  */
-function openingTags(source: string, tag: string): Array<{ at: number; text: string }> {
+function openingTags(source: string, tag = "[A-Za-z][\\w.]*"): Array<{ at: number; text: string }> {
   const found: Array<{ at: number; text: string }> = [];
   const open = new RegExp(`<${tag}\\b`, "g");
   for (const match of Array.from(source.matchAll(open))) {
@@ -522,6 +522,48 @@ describe("design system", () => {
       }
     }
     expect(under, `Controls under the 44px floor:\n  ${under.join("\n  ")}`).toEqual([]);
+  });
+
+  // The named roles above are only half the rule. A component can write
+  // `text-[11.5px]` straight into a className and never touch globals.css,
+  // which is where the other 14 breaches were living — the outcome pill among
+  // them, on every result this product reports.
+  //
+  // The exemption is decoration, and it is checkable: every sub-floor size
+  // left in the tree sits on an `aria-hidden` element — a bold "i" in a 20px
+  // note badge, initials on a gradient the name is printed beside. Nothing
+  // there is read, so a legibility floor for reading does not govern it.
+  // Anything not inside a tag at all — a size map, a variant table — states
+  // `type-floor-exempt` and says why.
+  it("keeps raw type above the floor too, decoration excepted", () => {
+    const SUB_FLOOR = /text-\[(\d+(?:\.\d+)?)px\]/g;
+    const under: string[] = [];
+
+    for (const file of Array.from(walk(SRC_ROOT))) {
+      if (!file.endsWith(".tsx") && !file.endsWith(".ts")) continue;
+      const source = readFileSync(file, "utf8");
+      const tags = openingTags(source);
+
+      for (const size of Array.from(source.matchAll(SUB_FLOOR))) {
+        if (Number(size[1]) >= 12.5) continue;
+        const at = size.index;
+
+        // The tag this size is written into, if any: the last one that opens
+        // before it and closes after it.
+        const holder = tags.find((tag) => tag.at <= at && tag.at + tag.text.length > at);
+        if (holder?.text.includes("aria-hidden")) continue;
+
+        // A marker covers the eight lines under it — enough for a size map or
+        // a variant table, short enough that it cannot silently cover a file.
+        const line = source.slice(0, at).split("\n").length;
+        const preceding = source.split("\n").slice(Math.max(0, line - 9), line).join("\n");
+        if (preceding.includes("type-floor-exempt")) continue;
+
+        under.push(`${file.replace(SRC_ROOT, "src")}:${line} ${size[0]}`);
+      }
+    }
+
+    expect(under, `Readable type below the 12.5px floor:\n  ${under.join("\n  ")}`).toEqual([]);
   });
 
   // Two banners each sticking to `top-0` at the same z-index do not stack —

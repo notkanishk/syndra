@@ -51,7 +51,7 @@ export default function Sidebar() {
         <SyndraMark />
         <span className="font-display text-[18px] font-semibold tracking-[-0.01em]">Syndra</span>
         <span className="flex-1" />
-        <span className="rounded-pill border border-line-strong px-2 py-0.5 text-[11px] text-faint">
+        <span className="rounded-pill border border-line-strong px-2 py-0.5 text-[12.5px] text-faint">
           {viewLabel}
         </span>
       </div>
@@ -143,7 +143,7 @@ function NavRow({
       {count !== undefined &&
         (count > 0 ? (
           <span
-            className={`rounded-pill px-2 py-0.5 text-[11.5px] font-semibold ${
+            className={`rounded-pill px-2 py-0.5 text-[12.5px] font-semibold ${
               changed ? "flash-value " : ""
             }${BADGE_TONE[item.tone ?? "accent"]}`}
           >
@@ -152,7 +152,7 @@ function NavRow({
         ) : (
           // Hollow zero: the row keeps its seat and says so, rather than
           // vanishing and moving everything below it.
-          <span className="rounded-pill border border-line-strong px-2 py-0.5 text-[11.5px] text-label">
+          <span className="rounded-pill border border-line-strong px-2 py-0.5 text-[12.5px] text-label">
             0
           </span>
         ))}
