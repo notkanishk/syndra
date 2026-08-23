@@ -501,7 +501,7 @@ function TriageRow({
           <button
             type="button"
             onClick={onSelectSimilar}
-            className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted underline-offset-2 motion-tint hover:text-accent-text hover:underline desktop:min-h-0"
+            className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted underline-offset-2 motion-tint hover:text-accent-text hover:underline desktop:min-h-6"
           >
             Select similar
           </button>

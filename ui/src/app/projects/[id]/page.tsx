@@ -127,7 +127,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
               <Link
                 href={`/projects/${id}/roles/${encodeURIComponent(role.role_key)}`}
-                className="w-[96px] shrink-0 text-right text-[15px] font-semibold text-accent-text"
+                className="inline-flex min-h-11 w-[96px] shrink-0 items-center justify-end text-[15px] font-semibold text-accent-text desktop:min-h-6"
               >
                 {role.assigned_user_count} →
               </Link>
