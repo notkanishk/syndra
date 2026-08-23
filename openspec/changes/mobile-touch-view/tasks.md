@@ -270,3 +270,22 @@ Deferred in §9's pass, then asked for. See design §10.
   `text-[11.5px]`, `text-[12px]` across 17 components, `ActionOutcome` and
   `WithheldPill` among them. A layout change on seventeen screens; belongs with
   8.2's browser pass, not ahead of it.
+
+## 11. Floor everywhere, ceiling where it bites
+
+- [x] 11.1 Fourteen raw `text-[Npx]` breaches raised to 12.5px, and the floor
+  guard extended past `globals.css` to className literals. Decoration is
+  exempt and provably so: every sub-floor size left in the tree is on an
+  `aria-hidden` element, except `Avatar`'s size map, which states
+  `type-floor-exempt`.
+- [x] 11.2 `ceiling` wired on Requests and Unexplained access, the two
+  select-all surfaces whose endpoints refuse past `services.BulkMaxUsers`.
+  Tested at 501 rows on both. Automatic rules and expiring-access have no
+  server cap; Converge has a cap but no row selection.
+
+- [ ] 11.3 `visibleCount` / `onSelectVisibleOnly` / `wholeScope` are still
+  People-only, so the other four selection surfaces cannot offer "select only
+  the N shown" or distinguish a whole-scope selection from a counted one.
+- [ ] 11.4 No `global-error.tsx`. `error.tsx` catches throws in the layout's
+  children; a throw in the root layout itself still falls to Next's unstyled
+  default — the other half of "the app had no answer for its own failure".
