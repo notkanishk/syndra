@@ -22,10 +22,17 @@
  *   2. bun next dev -p 3010      (no ZITADEL_DOMAIN, so demo sign-in works)
  *   3. bun run sweep:touch
  *
- * BASE, CDP and DETAIL_ROUTES override the defaults. Exits non-zero on any
- * finding, so it can gate a release even though it cannot gate a commit — it
- * needs a reachable backend, and an empty list hides most of what it looks
- * for.
+ * BASE, CDP and DETAIL_ROUTES override the defaults.
+ *
+ * Exit codes are separated so a release gate can read them without parsing
+ * stdout: 1 means it found something, 2 means it was looking at the wrong page
+ * (signed out, or no app shell), 3 means it could not run at all. A single
+ * non-zero conflated "found problems" with "never started", which is how a run
+ * that never swept anything was briefly read as a result.
+ *
+ * `SWEEP_SELFTEST=1` shrinks the breadcrumb through an injected stylesheet, so
+ * the sweep can be shown to fail without editing a tracked file to prove it.
+ * A green from a check that has never been seen to fail is not evidence.
  */
 
 const BASE = process.env.BASE ?? "http://localhost:3010";
@@ -48,8 +55,20 @@ const ROUTES = [
   "/graph", "/operations", "/operations/cascades", "/policies", "/projects",
   "/requests", "/review/expiring-access", "/review/holds", "/roles", "/storage",
   "/users", "/zitadel", "/no-such-page",
-  ...(process.env.DETAIL_ROUTES ?? "").split(",").filter(Boolean),
+  ...(process.env.DETAIL_ROUTES === "none" ? [] : (process.env.DETAIL_ROUTES ?? "").split(",").filter(Boolean)),
 ];
+
+// Dynamic routes are not in nav.ts, which is what every sweep of this branch
+// walked before finding an 18px breadcrumb on all of them. They need real ids,
+// so they cannot be hard-coded — but defaulting to none means the next person
+// runs this, sees "clean", and has swept exactly the class that hid the bug.
+if (!process.env.DETAIL_ROUTES) {
+  console.error(
+    "DETAIL_ROUTES is unset. Pass one id per dynamic route, or DETAIL_ROUTES=none to state that you meant to skip them:\n" +
+      "  DETAIL_ROUTES=/users/<id>,/projects/<id>,/projects/<id>/roles/<key>,/system/targets/<target> bun run sweep:touch",
+  );
+  process.exit(3);
+}
 
 const VIEWPORTS = [
   { name: "phone", width: 390, height: 844, scale: 3, mobile: true, floor: TOUCH_FLOOR },
@@ -77,7 +96,14 @@ const auditFor = (floor) => `(() => {
 
   const bar = Array.from(document.querySelectorAll('nav[aria-label="Primary"]'))
     .find((n) => n.getBoundingClientRect().height > 0 && String(n.className).includes("tablet:hidden"));
-  if (bar && Math.round(bar.getBoundingClientRect().bottom) !== window.innerHeight) {
+  if (window.innerWidth < 720 && !bar) {
+    // Absent is not correct. Below the tablet breakpoint the tab bar is the
+    // whole of the product's navigation, and a check that only measures it
+    // when it happens to be there reports clean on the defect it exists for —
+    // which is the shape of every false green this script has already
+    // produced.
+    issues.push("no tab bar rendered below the tablet breakpoint");
+  } else if (bar && Math.round(bar.getBoundingClientRect().bottom) !== window.innerHeight) {
     issues.push("tab bar bottom at " + Math.round(bar.getBoundingClientRect().bottom) + ", viewport " + window.innerHeight);
   }
 
@@ -90,9 +116,20 @@ const auditFor = (floor) => `(() => {
     // are icon buttons with no text content.
     const name = el.getAttribute("aria-label") || own;
     if (/Tanstack|Next\.js|devtools/i.test(name)) continue;
-    const parent = (el.parentElement ? el.parentElement.textContent : "" || "").trim();
-    const prose = parent.replace(own, "").replace(/[·/|,\\s]+/g, " ").trim();
-    if (prose.length >= PROSE) continue;
+    // 2.5.8 exempts a target "in a sentence", so the prose has to be text the
+    // link actually sits inside. Two narrowings, both learned from getting it
+    // wrong: the link must itself be inline, and its parent must be normal
+    // text flow rather than a flex or grid row — otherwise a small link in a
+    // dense card is exempted by whatever unrelated text shares its container.
+    const parentEl = el.parentElement;
+    const parentText = (parentEl ? parentEl.textContent || "" : "").trim();
+    // split/join, not replace: replace() takes the first occurrence only, so a
+    // repeated label left a copy behind and inflated the count past PROSE.
+    const prose = parentText.split(own).join("").replace(/[·/|,\\s]+/g, " ").trim();
+    const parentFlow = parentEl ? getComputedStyle(parentEl).display : "";
+    const inSentence =
+      getComputedStyle(el).display === "inline" && !/flex|grid/.test(parentFlow);
+    if (inSentence && prose.length >= PROSE) continue;
     issues.push(Math.round(rect.height) + "px target \\"" + name.slice(0, 40) + "\\"");
   }
 
@@ -109,9 +146,12 @@ const auditFor = (floor) => `(() => {
 const targets = await (await fetch(`${CDP}/json/new`, { method: "PUT" })).json();
 
 const socket = new WebSocket(targets.webSocketDebuggerUrl);
-await new Promise((resolve, reject) => {
+await new Promise((resolve) => {
   socket.onopen = resolve;
-  socket.onerror = () => reject(new Error(`No Chrome at ${CDP}. Start one with --remote-debugging-port=9222.`));
+  socket.onerror = () => {
+    console.error(`No Chrome at ${CDP}. Start one with --remote-debugging-port=9222.`);
+    process.exit(3);
+  };
 });
 
 let nextId = 0;
@@ -170,6 +210,17 @@ for (const viewport of VIEWPORTS) {
   for (const route of ROUTES) {
     await send("Page.navigate", { url: BASE + route });
     await settle(1500);
+    // Proves the sweep can fail, without editing a tracked file to do it. The
+    // previous way of checking that — breaking a component and restoring it
+    // afterwards — left a fix in the tree as a comment with no class when a
+    // run died in between.
+    if (process.env.SWEEP_SELFTEST) {
+      await evaluate(`(() => {
+        const style = document.createElement("style");
+        style.textContent = 'nav[aria-label="Breadcrumb"] a { min-height: 0 !important; display: inline !important; }';
+        document.head.appendChild(style);
+      })()`);
+    }
     const landed = await evaluate("location.pathname");
     if (landed === "/login" && route !== "/login") {
       console.error(`${viewport.name} ${route}: bounced to /login — the session was lost mid-sweep.`);
