@@ -134,7 +134,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                   <Link
                     key="trail"
                     href={`/audit?user=${encodeURIComponent(user.id)}`}
-                    className="font-semibold text-accent-text"
+                    className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6"
                   >
                     Full audit trail
                   </Link>
@@ -166,7 +166,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
             type="button"
             onClick={() => setTab(entry)}
             aria-current={tab === entry ? "page" : undefined}
-            className={`rounded-pill px-4 py-2 text-[14.5px] motion-tint ${
+            className={`min-h-11 rounded-pill px-4 py-2 text-[14.5px] motion-tint desktop:min-h-0 ${
               tab === entry ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
             }`}
           >
@@ -222,7 +222,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
               <button
                 type="button"
                 onClick={() => setBundlesOpen(true)}
-                className="text-[13.5px] font-semibold text-accent-text"
+                className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6"
               >
                 Manage bundles →
               </button>

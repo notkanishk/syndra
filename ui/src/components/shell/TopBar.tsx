@@ -38,7 +38,13 @@ export function TopBar({ session }: { session: SessionUser }) {
                 {last ? (
                   <span className="font-semibold text-ink">{entry.label}</span>
                 ) : "href" in entry && entry.href ? (
-                  <Link href={entry.href} className="text-muted hover:text-ink">
+                  // A breadcrumb trail is links and separators, not a
+                  // sentence, so 2.5.8's inline exemption does not reach it.
+                  // This measured 18px on every detail route.
+                  <Link
+                    href={entry.href}
+                    className="inline-flex min-h-11 items-center text-muted hover:text-ink desktop:min-h-6"
+                  >
                     {entry.label}
                   </Link>
                 ) : (

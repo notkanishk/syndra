@@ -121,7 +121,10 @@ function NavRow({
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
-      className={`flex items-center gap-[9px] rounded-nav text-[14.5px] motion-tint ${
+      // `min-h-11` up to desktop: the rail appears at the tablet breakpoint and
+      // a tablet is still a thumb, which is the whole argument
+      // touch-targets.test.tsx makes. Its own links were 38-43px there.
+      className={`flex min-h-11 items-center gap-[9px] rounded-nav text-[14.5px] motion-tint desktop:min-h-0 ${
         changed ? "flash " : ""
       }${
         nested ? "py-2 pl-[21px] pr-3" : "px-3 py-[9px]"

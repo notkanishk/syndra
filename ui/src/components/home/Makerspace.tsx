@@ -273,7 +273,7 @@ function AccessShape() {
             {unused > 0 && (
               <Link
                 href="/roles?unused=1"
-                className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-0"
+                className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6"
               >
                 {unused} {unused === 1 ? "role" : "roles"} nobody holds
               </Link>
@@ -282,7 +282,7 @@ function AccessShape() {
             {emptyBundles > 0 && (
               <Link
                 href="/bundles"
-                className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-0"
+                className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6"
               >
                 {emptyBundles} empty {emptyBundles === 1 ? "bundle" : "bundles"}
               </Link>
