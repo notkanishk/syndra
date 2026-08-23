@@ -428,3 +428,61 @@ func handleReconcileTarget(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonResponse(w, http.StatusOK, res)
 }
+
+// handleTargetActivity reports what the target's own audit log holds for one
+// subject.
+//
+// GET /api/v1/targets/{target}/activity?subject={id}&since={rfc3339}
+//
+// Operator-gated and subject-scoped. A member does not reach this: the
+// member-facing read is `storage.status`, which takes no subject at all, and
+// giving a member a subject parameter here would be the one shape in which
+// somebody could ask about another account.
+//
+// The add-on has implemented `activity.get` since the platform landed and the
+// policy table has always declared it, and until now no route called it — so
+// the two TrueNAS roles it needs were configured on the deployment's key and
+// exercised by nothing.
+func handleTargetActivity(w http.ResponseWriter, r *http.Request) {
+	target := r.PathValue("target")
+	subject := strings.TrimSpace(r.URL.Query().Get("subject"))
+	if subject == "" {
+		jsonValidationErrorResponse(w, "subject is required",
+			map[string]string{"subject": "required"})
+		return
+	}
+	// Bounded rather than free-form: `since` reaches the target's query
+	// builder, and a value this cannot parse is one the add-on would have to
+	// decide about.
+	since := strings.TrimSpace(r.URL.Query().Get("since"))
+	if since != "" {
+		if _, err := time.Parse(time.RFC3339, since); err != nil {
+			jsonValidationErrorResponse(w, "since must be an RFC3339 timestamp",
+				map[string]string{"since": "must_be_rfc3339"})
+			return
+		}
+	}
+
+	report := addonsActivity(r.Context(), target, subject, since)
+	if report.Outcome != addons.OutcomeSucceeded {
+		// 200 with `readable: false`, for the same reason the health surface
+		// answers 200 when the add-on is down: "the log could not be read" is
+		// the answer to the question, and it must not render as "no activity".
+		// Those two are the whole point of this surface.
+		jsonResponse(w, http.StatusOK, map[string]any{
+			"target":   target,
+			"subject":  subject,
+			"readable": false,
+			"detail":   errText(report.Err),
+		})
+		return
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"target":           target,
+		"subject":          subject,
+		"readable":         true,
+		"events":           report.Events,
+		"unaudited_shares": report.UnauditedShares,
+	})
+}

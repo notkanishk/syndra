@@ -257,6 +257,9 @@ func NewRouter() http.Handler {
 	// must never move in response to data.
 	mux.HandleFunc("GET /api/v1/targets", withCORS(withOperatorAuth(handleListTargets)))
 	mux.HandleFunc("GET /api/v1/targets/{target}/health", withCORS(withOperatorAuth(handleTargetHealth)))
+	// What the target's own audit log holds for one subject. Operator-gated:
+	// the member-facing read is storage.status, which takes no subject at all.
+	mux.HandleFunc("GET /api/v1/targets/{target}/activity", withCORS(withOperatorAuth(handleTargetActivity)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/log-anchor/resolve", withCORS(withOperatorAuth(handleResolveLogFinding)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/binding-conflicts/{id}/resolve", withCORS(withOperatorAuth(handleResolveBindingConflict)))
 
