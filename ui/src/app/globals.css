@@ -258,16 +258,19 @@
 
   @media (max-width: 44.99rem) {
     :root {
-      /* 8px top padding + a 52px tab + 8px bottom padding, plus whatever the
-         device reserves below it. The inset is not optional: the bar itself
-         carries `pb-[env(safe-area-inset-bottom)]`, so on a notched phone it
-         is 34px taller than its own content and anything positioned off a
-         number that ignores that sits UNDER the bar rather than above it.
+      /* Measured at 390, not derived: a 1px top border, 8px of top padding, a
+         52px tab and 8px below it — 69, where counting only the padding and
+         the tab gives 68 and quietly loses the border.
 
-         The sheet-shaped bar Advanced gets is 60px + inset — shorter, because
+         The inset is not optional either. The bar carries
+         `pb-[env(safe-area-inset-bottom)]`, so on a notched phone it is 34px
+         taller than its own content, and anything positioned off a number
+         that ignores that sits UNDER the bar rather than above it.
+
+         The sheet-shaped bar Advanced gets is 61px + inset — shorter, because
          a single trigger is 44px where a tab row is 52px. This takes the
          taller of the two so the one number clears both. */
-      --touch-nav-height: calc(68px + env(safe-area-inset-bottom));
+      --touch-nav-height: calc(69px + env(safe-area-inset-bottom));
     }
   }
 
