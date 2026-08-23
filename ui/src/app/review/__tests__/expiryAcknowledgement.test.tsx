@@ -13,9 +13,11 @@ const state = vi.hoisted(() => ({
 }));
 
 // A ceiling of four, so the unit logic can be exercised without rendering six
-// hundred rows into jsdom. The real 500 is asserted against the backend
-// constant elsewhere; what is under test here is which number the page gates
-// on and what its narrowing keeps.
+// hundred rows into jsdom — what is under test here is which number the page
+// gates on and what its narrowing keeps, and the magnitude is irrelevant to
+// both. The value itself is held against the backend constant by
+// `lib/queries/__tests__/bulkCeiling.test.ts`, which was written because this
+// comment used to claim that check existed before it did.
 vi.mock("@/lib/queries/useBulkGrants", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/queries/useBulkGrants")>()),
   BULK_MAX_USERS: 4,
