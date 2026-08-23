@@ -900,3 +900,51 @@ two places the branch had not looked — the Compose file, and a comment.
 
 **What §32 adds to the header's map:** *wherever two things have to agree and
 nothing makes them* includes the deployment manifest, and includes a sentence.
+
+## 33. The one operation nothing could call
+
+`activity.get` was implemented by the add-on (`operations.go:183`), declared in
+the backend's policy table (`addons/policy.go:106`) and served by the add-on's
+router (`server.go:134`) from the day the platform landed. No route ever
+dispatched it. Both halves were correct, tested against their own fixtures, and
+had never met — the defect this file's header names, on the last capability
+that had no caller at all.
+
+It is also why NEXT.md records `audit.query` and `sharing.smb.query` as
+"configured and untested": the two TrueNAS roles the operation needs were on
+the deployment's API key, and nothing in the product could exercise them.
+
+- [x] 33.1 `addons.Activity(ctx, target, subject, since)` in `read.go`, shaped
+  like `MyStorage` — a READ, so an operator opening somebody's record does not
+  append to the operation log for having looked. `Events` is normalised to an
+  empty slice rather than nil, because a JSON `null` and an empty list render
+  as different things and "no events" is the answer this gives most often.
+- [x] 33.2 `GET /api/v1/targets/{target}/activity?subject=&since=`,
+  operator-gated. `since` is parsed as RFC3339 by the backend rather than
+  forwarded raw: it reaches the target's own query builder, and a value the
+  backend cannot read is one the add-on would have to decide about.
+- [x] 33.3 An unreadable log answers 200 with `readable: false` and **no
+  events key at all**, the same way the health surface answers 200 when the
+  add-on is down. "Could not look" and "nothing happened" are the same empty
+  list otherwise, and they are opposite answers — which is the entire reason
+  the add-on already reported `unaudited_shares`.
+- [x] 33.4 A cross-module guard on the response envelope
+  (`activity_envelope_test.go`). `Activity` decodes `{"activity": …}` and the
+  add-on decides that key in its own `OperationResult`; nothing joined the two,
+  since the cross-binary test reaches `/capabilities` and stops and the
+  contract artifacts describe the REQUEST. A rename on either side would have
+  produced a report decoding to a zero value — which renders as "no events" and
+  "nothing unaudited", the two reassuring answers — with every suite green. It
+  reads the add-on's source and fails loudly if it cannot find it.
+- [x] 33.5 Rendered on the person's Activity tab as a **second card**, never
+  merged into Syndra's feed. Syndra's ledger records what Syndra did; this
+  records what the account did on the target, including everything that
+  happened with no involvement from Syndra — which is the category a merged
+  feed would hide, and the reason a target is reconciled rather than trusted.
+  Refused accesses are marked: a denied access is a different fact from one
+  that never happened.
+
+- [ ] 33.6 Untouched by a real NAS. `audit.query` and `sharing.smb.query` now
+  have a caller, and whether TrueNAS answers them the way the recorded fixture
+  says is still unproven — the same operator-gated question §13 named, now
+  narrowed to two methods and reachable from a screen.
