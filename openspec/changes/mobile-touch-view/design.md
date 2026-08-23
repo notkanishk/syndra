@@ -429,3 +429,60 @@ so it has no select-all to bound.
 The other four surfaces cannot say "select only the 12 shown" or distinguish
 "all 214" from "214 selected" — the ambiguity `SelectAllRow`'s docstring is
 built around. Recorded as 11.3 rather than swept in behind the ceiling work.
+
+## 12. The ceiling that counts something else, and the boundary below the boundary
+
+### Expiring access was gated on the wrong noun
+
+§11 said this surface needed nothing because acknowledging is one grant per
+request. That read the per-row control and not the bar. The bar's only verb is
+*Rehearse an extension*, which opens `BulkDialog op="extend"` and reaches
+`useBulkGrants` — `services/bulk.go:186`, capped at 500. So it was the third
+select-all surface with a capped endpoint and no ceiling, not the first of two
+that did not need one.
+
+It is also the only one where copying the prop from People would have been
+wrong. The screen selects **grants**; the endpoint caps **distinct people**.
+600 grants held by 300 people is legal and would have been blocked; 500 grants
+held by 500 people is already at the limit and would have sailed through. The
+bar derived `overCeiling` from its own `count`, so there was no way to say
+this.
+
+`SelectionBar` now takes `ceilingCount` and `ceilingNoun` — what the ceiling
+counts, when that is not what the bar counts. Both default to the selection, so
+the three surfaces where the units agree are untouched and cannot grow a clause
+about themselves. Where they differ the sentence says both numbers, because the
+operator can see one of them and is being refused on the other:
+
+> All 601 grants selected · they cover 520 people, and 500 is the most that can
+> run at once.
+
+Narrowing takes **whole people**. Once the cohort is full, the later grants of
+somebody already in it still come along: dropping them would extend part of a
+person's access and leave the rest to lapse, which is a worse thing to do than
+refuse.
+
+### `error.tsx` cannot catch the layout it lives in
+
+A throw in the root layout — or in a provider it mounts — unmounts the layout,
+so the boundary inside it never renders and Next falls back to its own default
+page: unstyled, unthemed, no identifier, no way back. The blank phone screen
+this branch set out to remove, arriving by a different door.
+
+`app/global-error.tsx` answers it, under two constraints that both cost
+something:
+
+- **It imports nothing from the app.** Not the copy row, not a button, not a
+  token. Whatever threw may be a provider every one of those sits inside, and a
+  boundary that re-enters the broken tree is not a boundary. So the colours are
+  literal — the one place in this product where that is correct rather than a
+  violation, because the document that loads `globals.css` is the thing being
+  replaced. The palette guard exempts this file by name, and a second test
+  holds the exemption honest by failing if the file ever imports from `@/` or a
+  relative path.
+- **No `reset()`.** Same reasoning as `error.tsx`. A render that threw on the
+  state it was given throws again on the same state.
+
+Both themes are authored in a `<style>` element rather than inline props, since
+an inline style cannot hold a media query and the shell that would have chosen
+a theme is the thing that is gone.
