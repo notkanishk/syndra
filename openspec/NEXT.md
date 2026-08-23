@@ -203,8 +203,11 @@ other, `btrim` against `TrimSpace`, the proxy allowlist against the router, a
 comment against the code beside it. Each side correct, tested, agreeing with
 itself. Look wherever two things have to agree and nothing makes them.
 
-**Still operator-gated, and it is the same gap §13 named.** None of it has
-touched a real TrueNAS. What that leaves untested is TrueNAS's own behaviour
+**Partly operator-gated still, and §2 above has moved ahead of this
+paragraph.** The full chain HAS touched the real NAS since 2026-08-13 — key
+minted, `wss://` authenticated, version read, health reads answering, real
+inventory returned — and this paragraph predates that. What remains untouched
+is narrower: What that leaves untested is TrueNAS's own behaviour
 rather than Syndra's: the filter syntax `user.query` actually accepts, what
 `user.update` does with a `groups` list, the auth rate limiter and its ten-minute
 lockout, and whether `builtin` is on every supported major. Point `TRUENAS_URL`
@@ -222,6 +225,14 @@ transport-side failure could never be diagnosed together — and it was not, so
 the first real bring-up carries a transport that has never handshaked outside a
 test. Worth knowing while reading the failure, not a reason to redo it.
 
+**`activity.get` now has a caller.** It was implemented by the add-on and
+declared by the backend from the day the platform landed, and no route ever
+dispatched it — which is why `audit.query` and `sharing.smb.query` sat
+configured and unexercised. `GET /targets/{t}/activity` reaches it and the
+person's Activity tab renders it beside Syndra's own feed, deliberately as a
+second card (`addon-platform` §33). Whether the real NAS answers those two
+methods as the fixture says is now a question somebody can ask from a screen.
+
 **One of those questions is answered, and the answer contradicts what the branch
 said.** The API key's permission set does cover `user.create`/`user.update`
 without FULL_ADMIN — `ACCOUNT_WRITE` is enough — but the same role is what
@@ -229,8 +240,9 @@ without FULL_ADMIN — `ACCOUNT_WRITE` is enough — but the same role is what
 key **can** delete an account, which `nas.go`, `.env.example` and the design all
 denied. The injected purge key is an audit and blast-radius separation, not the
 capability separation claimed. Corrected in place; recorded as
-[`addon-platform` §32](changes/addon-platform/tasks.md). The design's own
-account of the purge key is the one copy not yet reworded.
+[`addon-platform` §32](changes/addon-platform/tasks.md) — including the design's
+own account of the purge key (`design.md` line 224), which this entry used to
+list as the one copy still unreworded and which now carries the correction.
 
 **And the deployment manifest was carrying the branch's recurring defect.**
 Four variables the add-on reads were passed by no Compose service, so no
