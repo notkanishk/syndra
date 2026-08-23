@@ -236,8 +236,17 @@ describe("design system", () => {
     );
   });
 
+  // `global-error.tsx` is the one file that cannot reach a token. It replaces
+  // the document that loads globals.css, and it exists because the tree
+  // holding the providers has just thrown — so importing anything from that
+  // tree would re-enter what broke. Its exemption is paid for by the test
+  // below, which holds it to importing nothing.
+  const NO_TOKENS_AVAILABLE = "app/global-error.tsx";
+
   it("no source file hardcodes a palette colour", () => {
-    const found = offenders(HARDCODED_COLOURS);
+    const found = offenders(HARDCODED_COLOURS).filter(
+      (entry) => !entry.file.endsWith(NO_TOKENS_AVAILABLE),
+    );
     expect(
       found,
       `Hardcoded palette colours (use the token — light theme depends on it):\n${describeOffenders(found)}`,
@@ -564,6 +573,16 @@ describe("design system", () => {
     }
 
     expect(under, `Readable type below the 12.5px floor:\n  ${under.join("\n  ")}`).toEqual([]);
+  });
+
+  it("keeps the last-resort boundary out of the tree it is catching", () => {
+    const source = readFileSync(resolve(SRC_ROOT, NO_TOKENS_AVAILABLE), "utf8");
+    const imports = Array.from(source.matchAll(/from\s+"([^"]+)"/g), (match) => match[1]);
+
+    expect(
+      imports.filter((from) => from.startsWith("@/") || from.startsWith(".")),
+      "global-error.tsx may import nothing from the app: whatever threw may be a provider every one of those sits inside",
+    ).toEqual([]);
   });
 
   // Two banners each sticking to `top-0` at the same z-index do not stack —
