@@ -393,3 +393,39 @@ brace-aware extractor catches both the 30px kebab and the 22px grabber.
 `\u0000`. `file` reports the source as `data` and `grep` skips it
 silently, so that line drops out of every text search of the repository —
 including the ones looking for bugs in it. Same byte, written as an escape.
+
+## 11. The floor, enforced everywhere, and the ceiling wired where it bites
+
+### The guard covered the layer that was easy to check
+
+§10 raised the two named type roles and added a test reading sizes out of
+`globals.css`. That is the layer the design system owns, and it was half the
+rule: a component can write `text-[11.5px]` into a className and never touch
+`globals.css`. Fourteen readable breaches were living there, the outcome pill
+among them — on every result the product reports.
+
+All fourteen are at 12.5px now. The nine that remain are decoration and the
+guard can prove it: every one sits on an `aria-hidden` element — a bold "i" in
+a 20px note badge, initials on a gradient the name is printed beside. Nothing
+there is read, so a legibility floor for reading does not govern it. The one
+case outside a tag, `Avatar`'s size map, states `type-floor-exempt` and says
+why; a marker covers the eight lines under it.
+
+### Two queues could select past what the server accepts
+
+`services.BulkMaxUsers` is one constant capping three bulk endpoints — grants,
+requests and drift. Five surfaces render `SelectAllRow`, and only People passed
+the bar a `ceiling`. So on Requests and Unexplained access an operator
+select-alled, tapped, and met the 4xx afterwards — which is exactly the
+sequence `SelectionBar` says it exists to prevent. Both now state the number
+before the tap and offer the same narrowing move People does.
+
+The other two select-all surfaces need nothing: Automatic rules' bulk
+confirmation-mode route has no cap, and expiring-access acknowledges one grant
+per request. Converge is capped but takes a cohort rather than a row selection,
+so it has no select-all to bound.
+
+**Still People-only:** `visibleCount` / `onSelectVisibleOnly` / `wholeScope`.
+The other four surfaces cannot say "select only the 12 shown" or distinguish
+"all 214" from "214 selected" — the ambiguity `SelectAllRow`'s docstring is
+built around. Recorded as 11.3 rather than swept in behind the ceiling work.
