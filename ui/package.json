@@ -8,7 +8,8 @@
     "build": "bun next build",
     "start": "bun next start",
     "lint": "bun next lint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "sweep:touch": "bun scripts/touch-sweep.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.100.5",
