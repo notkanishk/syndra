@@ -12,6 +12,15 @@ const state = vi.hoisted(() => ({
   clear: vi.fn(),
 }));
 
+// A ceiling of four, so the unit logic can be exercised without rendering six
+// hundred rows into jsdom. The real 500 is asserted against the backend
+// constant elsewhere; what is under test here is which number the page gates
+// on and what its narrowing keeps.
+vi.mock("@/lib/queries/useBulkGrants", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/queries/useBulkGrants")>()),
+  BULK_MAX_USERS: 4,
+}));
+
 vi.mock("@/lib/queries/useExpiringAccess", () => ({
   useExpiringGrants: () => ({
     data: state.rows,
@@ -245,5 +254,63 @@ describe("Expiring access — acknowledgement (C4)", () => {
 
     await waitFor(() => expect(state.acknowledge).toHaveBeenCalled());
     expect(screen.getByRole("button", { name: "Record it" })).toBeTruthy();
+  });
+});
+
+/**
+ * This screen's rows are grants and its only bulk verb extends by PERSON —
+ * `services.BulkMaxUsers` caps `user_ids`, not grant ids. It was the last
+ * select-all surface with a capped endpoint and no ceiling, and the one where
+ * copying the prop from People would have been wrong: the number the bar
+ * counts is not the number the server refuses on.
+ */
+describe("the expiry queue gates on people, not on grants", () => {
+  function selectAll(rows: ExpiringGrantRow[]) {
+    state.rows = rows;
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: new RegExp(`Select these ${rows.length} grant`) }),
+    );
+  }
+
+  /** `count` grants spread two-per-person, so the two units diverge. */
+  function pairs(count: number): ExpiringGrantRow[] {
+    return Array.from({ length: count }, (_, at) =>
+      grant({ id: `g${at}`, user_id: `u${Math.floor(at / 2)}` }),
+    );
+  }
+
+  it("lets six grants through when they belong to three people", () => {
+    selectAll(pairs(6));
+
+    expect(screen.queryByText(/is the most that can run at once/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Rehearse an extension" })).toBeTruthy();
+  });
+
+  it("refuses five grants held by five people, and says which number it refuses on", () => {
+    selectAll(Array.from({ length: 5 }, (_, at) => grant({ id: `g${at}`, user_id: `u${at}` })));
+
+    expect(
+      screen.getByText(/they cover 5 people, and 4 is the most that can run at once/),
+    ).toBeTruthy();
+    // The grant count stays on screen: the operator ticked grants and has to
+    // recognise what they ticked.
+    expect(screen.getByText(/5 grants selected/)).toBeTruthy();
+  });
+
+  // Narrowing takes whole people. Dropping a person's later grants would
+  // extend part of their access and leave the rest to lapse, which is worse
+  // than refusing.
+  it("narrows to whole people, keeping every grant the cohort holds", () => {
+    selectAll(pairs(12));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select the first 4 people in the order shown" }),
+    );
+
+    // Four people at two grants each — eight, not four.
+    expect(screen.getByText(/8 grants selected/)).toBeTruthy();
+    expect(screen.queryByText(/is the most that can run at once/)).toBeNull();
   });
 });
