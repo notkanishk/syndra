@@ -52,9 +52,19 @@ export function AppShell({
       <PageCrumbProvider>
         <div className="flex h-dvh flex-col overflow-hidden bg-canvas tablet:flex-row">
           <Sidebar />
-          <div className="flex min-w-0 flex-1 flex-col">
+          {/* `min-h-0` on both, and it is load-bearing rather than tidy. A flex
+              item defaults to `min-height: auto`, which refuses to shrink below
+              its content — so `flex-1` never constrained the scroller, it grew
+              to the height of the page inside it, `overflow-y-auto` never had
+              anything to scroll, and the shell's own `overflow-hidden` clipped
+              the remainder. On a phone that meant any route taller than the
+              viewport could not be scrolled at all and the tab bar sat below
+              the fold: on /roles it was at y=4037 of an 844px screen. Every
+              sweep before this one measured horizontal overflow, which is
+              zero, and never asked whether the page could scroll. */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <TopBar session={session} />
-            <div id="app-scroll" className="flex-1 overflow-y-auto">
+            <div id="app-scroll" className="min-h-0 flex-1 overflow-y-auto">
               {/* One sticky slot holding both, rather than two banners each
                   sticking to `top-0` on their own — at the same offset and the
                   same z-index the second simply painted over the first, which
