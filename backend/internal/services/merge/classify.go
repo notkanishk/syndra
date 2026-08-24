@@ -46,6 +46,28 @@ const (
 	DeletedUpstream Outcome = "deleted_upstream"
 )
 
+// AllOutcomes is every verdict this package can reach.
+//
+// Production, not test scaffolding, and the reason is that a hand-kept list in
+// a test proves nothing: a new constant simply would not appear in it, the
+// policy check would never run against the new outcome, and it would inherit
+// whatever the switches happen to do by default — silently non-convergeable,
+// and possibly neither resolved nor surfaced. `invariants_test.go` derives the
+// declared constants from this file's own AST and fails when this list and the
+// `const` block above disagree, so the list cannot rot.
+//
+// Adding an outcome therefore costs three deliberate edits: the constant, this
+// list, and an explicit answer to "may a pass with nobody watching act on it".
+var AllOutcomes = []Outcome{
+	Unchanged,
+	FastForward,
+	AlreadyMerged,
+	TheirsOnly,
+	Conflict,
+	NoBase,
+	DeletedUpstream,
+}
+
 // SubjectFinding is one difference an unattended pass may not resolve, carrying
 // the three values that produced it.
 //
