@@ -144,3 +144,62 @@ describe("deleting an automatic rule", () => {
     expect(screen.queryByRole("button", { name: "Delete rule" })).toBeNull();
   });
 });
+
+/**
+ * What happens AFTER the delete lands.
+ *
+ * The rule-delete dialog took an `onDeleted` callback and never called it, so
+ * deleting left the operator looking at an editor for a rule that no longer
+ * exists. It cannot be called from the mutation either: `onDeleted` closes that
+ * editor, and this dialog goes with it — taking the report nobody has read yet.
+ * The sequence is the contract.
+ */
+describe("after a rule is deleted", () => {
+  async function deleteTheRule() {
+    state.remove = vi
+      .fn()
+      .mockResolvedValue({ cascade: { enqueued: 3, mode: "auto" } });
+    openTheRule();
+    fireEvent.click(screen.getByRole("button", { name: "Delete rule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete and revoke" }));
+    await waitFor(() => expect(state.remove).toHaveBeenCalled());
+  }
+
+  it("keeps the report on screen and retires the destructive action", async () => {
+    await deleteTheRule();
+
+    await waitFor(() => expect(document.body.textContent).toMatch(/deleted/i));
+    expect(screen.queryByRole("button", { name: "Delete and revoke" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Keep the rule" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
+  });
+
+  it("closes the editor on dismiss, rather than returning to it", async () => {
+    await deleteTheRule();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Done" })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    // Not back to the form: there is no rule behind it any more. `Keep the
+    // rule` would have landed here instead, which is the defect.
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Save rule" })).toBeNull(),
+    );
+    expect(screen.queryByRole("button", { name: "Delete rule" })).toBeNull();
+  });
+
+  it("returns to the editor when the delete failed", async () => {
+    state.remove = vi.fn().mockRejectedValue(new Error("the identity provider is unreachable"));
+    openTheRule();
+    fireEvent.click(screen.getByRole("button", { name: "Delete rule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete and revoke" }));
+
+    await waitFor(() => expect(document.body.textContent).toMatch(/unreachable/i));
+    expect(screen.getByRole("button", { name: "Delete and revoke" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+
+    // The rule is still there, so backing out puts the operator back on it.
+    fireEvent.click(screen.getByRole("button", { name: "Keep the rule" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save rule" })).toBeTruthy());
+  });
+});
