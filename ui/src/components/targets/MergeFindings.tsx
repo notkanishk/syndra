@@ -154,6 +154,21 @@ function describe(f: MergeFinding): string {
   }
 }
 
+/**
+ * A decision, in the words an operator used to make it.
+ *
+ * The switch is the boundary between the wire and the console. `unbound` was
+ * missing and fell through to the default, which rendered the literal string
+ * "unbound" on the page — the backend's vocabulary reaching somebody who never
+ * agreed to learn it. `agreed` is here for the same reason even though nobody
+ * chooses it: a finding can close because the two sides stopped disagreeing,
+ * and that resolution appears on the row like any other.
+ *
+ * The default no longer echoes the code. A resolution this does not know about
+ * is a deploy skew, and "recorded" is the honest thing to say about one —
+ * `merge-vocabulary.test.ts` fails when the backend grows a resolution this
+ * has not been taught.
+ */
 function decisionLabel(decision: string): string {
   switch (decision) {
     case "keep_ours":
@@ -162,8 +177,12 @@ function decisionLabel(decision: string): string {
       return "Taking the target's";
     case "reprovisioned":
       return "Provisioning it again";
+    case "unbound":
+      return "No longer managing it";
+    case "agreed":
+      return "The two sides agree now";
     default:
-      return decision;
+      return "Recorded";
   }
 }
 

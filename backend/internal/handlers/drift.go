@@ -14,9 +14,11 @@ import (
 	"io"
 	"net/http"
 
+	"strings"
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
+	"time"
 )
 
 // handleListDrift serves the triage queue: risk, holder status and the
@@ -99,6 +101,87 @@ type attributeRequest struct {
 // upstream. That is external_backfill, and it is the only honest option.
 func validAttributionSource(s string) bool {
 	return s == "external_backfill"
+}
+
+// handleDriftOrigin answers "who did this", from Zitadel's own event log.
+//
+// The reconciliation sweep compares grant SETS. It can see that a grant exists
+// with nothing to explain it and it cannot see who created it, so every
+// sweep-detected row renders "unknown actor" — honest, and the least useful
+// sentence on the triage queue.
+//
+// The add-on targets close the same gap with a recorded merge base: keep what
+// you last saw, infer who moved from the difference. Zitadel needs no
+// inference. It is event-sourced, and the event that created the grant carries
+// its editor. This is the deliberate asymmetry — a merge base HERE would be a
+// worse approximation of something the target can answer exactly.
+//
+// Read on demand, one row at a time. The sweep sees every unexplained grant in
+// the deployment; asking this from there would turn one pass into one API call
+// per finding.
+//
+// 200 with `readable: false` when Zitadel cannot be asked, for the same reason
+// every other read on this codebase does it: "we could not find out" and
+// "nobody is recorded" are opposite answers, and a 502 would render the row as
+// broken rather than as unattributed.
+func handleDriftOrigin(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	item, err := dbGetDriftItem(r.Context(), id)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+
+	// A row with no grant id names no aggregate to ask about. That is a
+	// property of the finding, not a failure to read one — `syndra_only` rows
+	// describe access Zitadel does not have.
+	if strings.TrimSpace(item.ZitadelGrantID) == "" {
+		jsonResponse(w, http.StatusOK, map[string]any{
+			"id":       id,
+			"readable": false,
+			"detail":   "This finding names no Zitadel grant, so there is no event to read.",
+		})
+		return
+	}
+
+	origin, err := zitadelGrantOrigin(r.Context(), item.ZitadelGrantID)
+	if err != nil {
+		jsonResponse(w, http.StatusOK, map[string]any{
+			"id":       id,
+			"readable": false,
+			"detail":   errText(err),
+		})
+		return
+	}
+	if origin == nil {
+		// The aggregate has no events Zitadel will show us. Readable, and
+		// genuinely empty: the grant is older than the retained history.
+		jsonResponse(w, http.StatusOK, map[string]any{
+			"id":       id,
+			"readable": true,
+			"recorded": false,
+			"detail":   "Zitadel's event log does not go back to when this grant was made.",
+		})
+		return
+	}
+
+	body := map[string]any{
+		"id":       id,
+		"readable": true,
+		"recorded": true,
+		// Attributed distinguishes "the event names somebody" from "the event
+		// exists and names nobody". Both are real answers and they are not the
+		// same one.
+		"attributed": origin.Attributed(),
+		"actor_id":   origin.ActorID,
+		"actor_name": origin.ActorName,
+		"service":    origin.Service,
+		"event_type": origin.EventType,
+	}
+	if !origin.At.IsZero() {
+		body["at"] = origin.At.Format(time.RFC3339)
+	}
+	jsonResponse(w, http.StatusOK, body)
 }
 
 func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
