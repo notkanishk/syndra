@@ -23,10 +23,31 @@ import (
 
 const (
 	callTimeoutSeconds = 30
+	// pingTimeoutSeconds bounds the liveness probe. Short on purpose: it runs
+	// in front of somebody's page load, and a probe that takes as long as the
+	// call it is protecting has cost more than it saved.
+	pingTimeoutSeconds = 5
 	// reconnectCooldown is the floor between login attempts. Well under the
 	// rate limit even if every attempt failed, which is the point: the limit
 	// must be unreachable by this code, not merely usually avoided.
 	reconnectCooldown = 15 * time.Second
+	// idleProbeAfter is how long a cached session may sit unused before it is
+	// treated as unproven rather than live.
+	//
+	// TrueNAS closes an idle websocket without telling either end, so a cached
+	// client is a fact about the past. Measured against the live target: a
+	// session idle for 60 seconds fails its next call, and the add-on reports
+	// the NAS unreachable while the NAS is answering perfectly — the one answer
+	// a health surface must never invent. The call after that one succeeds,
+	// because the failure dropped the dead session, which is why this looked
+	// like flapping rather than a bug.
+	//
+	// Probed BEFORE the call rather than retried after it. A retry would have
+	// to decide whether a mutation's frame reached the target before the socket
+	// went, and that question has no safe answer; asking first means every real
+	// call travels on a connection proven live moments earlier. The cost is one
+	// extra `core.ping` per idle gap and none at all on a busy session.
+	idleProbeAfter = 30 * time.Second
 	// probeCooldown is the floor between version probes on a LIVE session.
 	//
 	// A failed probe leaves the version empty, which is what the gate needs, and
@@ -137,7 +158,14 @@ func (n *NAS) session() (rpc, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if n.client != nil {
-		return n.client, nil
+		if n.now().Sub(n.lastRead) < idleProbeAfter || n.provenLocked(n.client) {
+			return n.client, nil
+		}
+		// Dead, and dropped here rather than reported. Falling through to a
+		// fresh dial is the whole point: the target is reachable and only this
+		// socket is not.
+		_ = n.client.Close()
+		n.client = nil
 	}
 	if n.now().Before(n.openUntil) {
 		// Open. Refusing here rather than at the call site is deliberate: the
@@ -163,7 +191,32 @@ func (n *NAS) session() (rpc, error) {
 	// A new connection probes immediately: the cooldown exists to bound retries
 	// on a live session, not to delay the first read on a fresh one.
 	n.client, n.probed, n.lastProbe = c, false, time.Time{}
+	// A login is an interaction. Without this the connection reads as idle from
+	// the moment it opens, and the probe fires in front of the very first call
+	// on a socket that was established microseconds earlier.
+	n.lastRead = n.now()
 	return c, nil
+}
+
+// provenLocked asks the target whether the cached session still exists.
+//
+// Called with n.mu held, which is the same lock a dial is made under: the probe
+// only runs when the session has been idle, so there is nothing to contend
+// with, and the alternative — probing outside the lock — would let two requests
+// race to replace the same dead client.
+//
+// Any answer at all counts, including a refusal. What is being established is
+// that the socket is still there, and a target that can refuse a call is a
+// target that received one.
+func (n *NAS) provenLocked(c rpc) bool {
+	n.callMu.Lock()
+	_, err := c.Call("core.ping", pingTimeoutSeconds, []any{})
+	n.callMu.Unlock()
+	if err != nil {
+		return false
+	}
+	n.lastRead = n.now()
+	return true
 }
 
 // ensureProbed reads the version and method list once per connection.
