@@ -627,6 +627,12 @@ type ActivityEvent struct {
 	Event   string `json:"event"`
 	Share   string `json:"share,omitempty"`
 	Success bool   `json:"success"`
+	// Address and Detail are what make a refusal actionable. Measured against
+	// the live NAS: a week of SMB events was 553 rows, every one an
+	// AUTHENTICATION failure, and without these two the whole week renders as
+	// 553 identical lines saying nothing.
+	Address string `json:"address,omitempty"`
+	Detail  string `json:"detail,omitempty"`
 }
 
 // Activity reads the target's audit log for one subject.
@@ -693,6 +699,124 @@ func Activity(ctx context.Context, target, subject, since string) ActivityReport
 	if report.Events == nil {
 		report.Events = []ActivityEvent{}
 	}
+	report.Outcome = OutcomeSucceeded
+	return report
+}
+
+// SystemReport is the NAS's own account of itself: what it is, what is wrong
+// with it, how full it is, and which of its services are running.
+//
+// Separate from `TargetHealth`, which is the ADD-ON's account of the target — is it
+// answering, is the version tested, has the mutation log been rewritten. That
+// one is cheap and polled; this one costs four calls to the target and is read
+// when somebody opens the page. Merging them would make every poll four times
+// heavier to carry something nobody is watching change.
+type SystemReport struct {
+	System   *SystemInfo    `json:"system,omitempty"`
+	Alerts   []TargetAlert  `json:"alerts,omitempty"`
+	Pools    []PoolStatus   `json:"pools,omitempty"`
+	Services []ServiceState `json:"services,omitempty"`
+	// Degraded names the sources that could not be read. A partial answer that
+	// does not say which part is missing is a whole answer that is wrong.
+	Degraded []string `json:"degraded,omitempty"`
+
+	Outcome Outcome `json:"-"`
+	Err     error   `json:"-"`
+}
+
+// SystemInfo is the target identifying itself. The add-on drops the chassis
+// serial, the license and the manufacturer before they reach here.
+type SystemInfo struct {
+	Hostname      string  `json:"hostname,omitempty"`
+	Version       string  `json:"version,omitempty"`
+	UptimeSeconds float64 `json:"uptime_seconds,omitempty"`
+}
+
+// TargetAlert is one alert the NAS raised about itself. Text arrives with the
+// target's markup already stripped by the add-on.
+type TargetAlert struct {
+	Level     string `json:"level"`
+	Class     string `json:"klass,omitempty"`
+	Text      string `json:"text"`
+	At        string `json:"at,omitempty"`
+	Dismissed bool   `json:"dismissed"`
+}
+
+// PoolStatus is one pool's health and how full it is.
+type PoolStatus struct {
+	Name           string `json:"name"`
+	Status         string `json:"status"`
+	Healthy        bool   `json:"healthy"`
+	Warning        bool   `json:"warning"`
+	FreeBytes      int64  `json:"free_bytes"`
+	AllocatedBytes int64  `json:"allocated_bytes"`
+	SizeBytes      int64  `json:"size_bytes"`
+}
+
+// ServiceState is one service and whether it is running.
+type ServiceState struct {
+	Service string `json:"service"`
+	State   string `json:"state"`
+	Enabled bool   `json:"enable"`
+}
+
+// SystemHealth reads what the target says about itself.
+//
+// A READ, dispatched like `Activity` and `MyStorage`: it writes nothing, claims
+// no durable row, and an operator opening a target page must not append to the
+// operation log for having looked.
+//
+// `health.get` was declared in the manifest, implemented by the add-on,
+// dispatched by it and given a policy entry from the day the platform landed,
+// and no line of backend code ever called it — so the surface that lists what a
+// target can do advertised a capability with nothing behind it. The four reads
+// it makes are the ones an operator wants first when a NAS misbehaves: a failing
+// disk, a degraded pool, a stopped `cifs`.
+func SystemHealth(ctx context.Context, target string) SystemReport {
+	a, err := Get(target)
+	if err != nil {
+		return SystemReport{Outcome: OutcomeUnreached, Err: err}
+	}
+	if !a.br.allow(timeNow()) {
+		return SystemReport{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %s", ErrCircuitOpen, target)}
+	}
+	cred, err := credentialFor(a.Registration)
+	if err != nil {
+		return SystemReport{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: %w", target, err)}
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"contract_version": ContractVersion,
+		"call_id":          "read-" + target + "-system-health",
+		"operation":        "health.get",
+		// No subject: this is about the target, not about a person. The field
+		// travels empty rather than being omitted so the add-on's request
+		// decoding sees the same shape every operation sends it.
+		"subject": "",
+		"actor":   "",
+		"params":  map[string]any{},
+	})
+	if err != nil {
+		return SystemReport{Outcome: OutcomeUnreached, Err: err}
+	}
+
+	resp := doAuthenticated(ctx, cred, http.MethodPost,
+		a.Registration.BaseURL+"/operations/health.get", body, callTimeout)
+	a.br.record(timeNow(), resp)
+
+	out := SystemReport{Outcome: resp.Outcome, Err: resp.Err}
+	if resp.Outcome != OutcomeSucceeded {
+		return out
+	}
+	var envelope struct {
+		Health *SystemReport `json:"health"`
+	}
+	if err := json.Unmarshal(resp.Body, &envelope); err != nil || envelope.Health == nil {
+		out.Outcome = OutcomeIndeterminate
+		out.Err = fmt.Errorf("addon %s: decode system health: %w", target, err)
+		return out
+	}
+	report := *envelope.Health
 	report.Outcome = OutcomeSucceeded
 	return report
 }

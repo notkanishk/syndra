@@ -443,6 +443,42 @@ func handleReconcileTarget(w http.ResponseWriter, r *http.Request) {
 // policy table has always declared it, and until now no route called it — so
 // the two TrueNAS roles it needs were configured on the deployment's key and
 // exercised by nothing.
+// handleTargetSystemHealth reads what the TARGET says about itself.
+//
+// Distinct from `handleTargetHealth`, which reads what the ADD-ON says about
+// the target. That one is cheap and polled by every target page; this costs
+// four calls to the NAS and is read once when somebody opens it.
+//
+// Answers 200 with `readable: false` when the read fails, for the same reason
+// the activity surface does: "the target could not be asked" is an answer, and
+// it must never render as "the target reported nothing wrong". A pool that
+// could not be read and a healthy pool are opposite facts.
+func handleTargetSystemHealth(w http.ResponseWriter, r *http.Request) {
+	target := r.PathValue("target")
+
+	report := addonsSystemHealth(r.Context(), target)
+	if report.Outcome != addons.OutcomeSucceeded {
+		jsonResponse(w, http.StatusOK, map[string]any{
+			"target":   target,
+			"readable": false,
+			"detail":   errText(report.Err),
+		})
+		return
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"target":   target,
+		"readable": true,
+		"system":   report.System,
+		"alerts":   report.Alerts,
+		"pools":    report.Pools,
+		"services": report.Services,
+		// Named sources, not a count. "alerts could not be read" and "there are
+		// no alerts" are the same empty list without it.
+		"degraded": report.Degraded,
+	})
+}
+
 func handleTargetActivity(w http.ResponseWriter, r *http.Request) {
 	target := r.PathValue("target")
 	subject := strings.TrimSpace(r.URL.Query().Get("subject"))
