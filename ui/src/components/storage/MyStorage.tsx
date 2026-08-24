@@ -1,5 +1,6 @@
 "use client";
 
+import { formatBytes } from "@/lib/format";
 import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
@@ -274,18 +275,6 @@ function StorageUsage({ view }: { view: MyTargetView }) {
 
 /** Bytes as a person reads them. Binary units, because that is what a file
  *  manager will show them beside it. */
-function formatBytes(bytes: number): string {
-  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  // One decimal place above kibibytes; a member does not need "1.0 B".
-  return unit === 0 ? `${Math.round(value)} B` : `${value.toFixed(1)} ${units[unit]}`;
-}
-
 /**
  * Setting the storage password.
  *

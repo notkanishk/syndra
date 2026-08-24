@@ -102,11 +102,20 @@ async function proxy(request: NextRequest, method: "GET" | "POST" | "PUT" | "DEL
     ? session.accessToken
     : API_KEY;
 
+  const headers: Record<string, string> = { Authorization: `Bearer ${authToken}` };
+  // Demo mode has no token to carry a subject, so the request would otherwise
+  // reach the backend anonymous and every `/me/*` route would resolve its actor
+  // to "system" — no entitlement, no binding, no account. Sent only on the demo
+  // path; an OIDC session carries its subject inside the token, where it
+  // belongs, and the backend ignores this header entirely unless it is already
+  // accepting the shared key.
+  if (session.sessionType !== "oidc" && session.id) {
+    headers["X-Syndra-Demo-Subject"] = session.id;
+  }
+
   const init: RequestInit = {
     method,
-    headers: {
-      "Authorization": `Bearer ${authToken}`,
-    },
+    headers,
     cache: "no-store",
   };
 
