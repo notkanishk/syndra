@@ -173,6 +173,17 @@ var (
 	dbGetShadowCredentialAudit = db.GetShadowCredentialAudit
 
 	// Zitadel discovery injectable vars.
+	// Who created a grant, read from Zitadel's own event log. The sweep compares
+	// grant SETS and therefore cannot name an actor; this is the only read that
+	// can, and it is the reason the Zitadel side does NOT get a merge base — a
+	// base infers an actor from a snapshot delta, and this one is recorded.
+	zitadelGrantOrigin = func(ctx context.Context, grantID string) (*zitadel.GrantOrigin, error) {
+		if zitadel.MgmtClient == nil {
+			return nil, errNoClient
+		}
+		return zitadel.MgmtClient.GrantOriginByID(ctx, grantID)
+	}
+
 	// Each closure checks MgmtClient at call time (not definition time) so the
 	// nil guard in discovery handlers and these closures are defense-in-depth.
 	errNoClient = fmt.Errorf("zitadel client not initialized")

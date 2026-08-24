@@ -176,3 +176,44 @@ export function useReconcileNow() {
 }
 
 export const driftQueryKeys = KEYS;
+
+/**
+ * Who created a grant, read from Zitadel's own event log.
+ *
+ * The sweep compares grant SETS, so a row it raised carries no `upstream_actor`
+ * and says "unknown". That is honest and it is the least useful sentence on the
+ * queue. Zitadel is event-sourced and can answer exactly — which is why the
+ * Zitadel side gets this rather than the recorded merge base the add-on targets
+ * use. A base infers who moved from a snapshot difference; this is written down.
+ *
+ * `enabled` is off until somebody asks. Drift arrives in clusters and the queue
+ * routinely holds dozens of rows; firing one API call per row on load would
+ * turn opening a page into a burst against the identity provider.
+ */
+export interface DriftOrigin {
+  id: string;
+  /** False when Zitadel could not be asked at all. Never confuse with `recorded`. */
+  readable: boolean;
+  /** False when Zitadel answered and holds no event this far back. */
+  recorded?: boolean;
+  /** False when the event exists and names nobody. A real answer, not a gap. */
+  attributed?: boolean;
+  actor_id?: string;
+  actor_name?: string;
+  /** The machine actor when there is no human one — an Action, a service account. */
+  service?: string;
+  event_type?: string;
+  at?: string;
+  detail?: string;
+}
+
+export function useDriftOrigin(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["drift", id, "origin"],
+    queryFn: () => request<DriftOrigin>(`/governance/drift/${encodeURIComponent(id)}/origin`),
+    enabled: enabled && Boolean(id),
+    // An event that already happened does not change. Re-asking costs the
+    // identity provider a round trip and can never return anything new.
+    staleTime: Infinity,
+  });
+}

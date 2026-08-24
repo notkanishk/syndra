@@ -19,6 +19,7 @@ import {
   useBulkAttributeDrift,
   useBulkMarkExternalDrift,
   useDriftItems,
+  useDriftOrigin,
   useMarkExternalDrift,
   useReconcileNow,
   useRehearseAdoptDrift,
@@ -467,9 +468,10 @@ function TriageRow({
           <RiskPill item={item} />
         </div>
 
-        <p className="w-full text-[13.5px] leading-[1.5] text-muted tablet:min-w-[220px] tablet:flex-1">
-          {explainDrift(item)}
-        </p>
+        <div className="w-full tablet:min-w-[220px] tablet:flex-1">
+          <p className="text-[13.5px] leading-[1.5] text-muted">{explainDrift(item)}</p>
+          <WhoMadeIt item={item} />
+        </div>
 
         <div className="text-[13px] text-faint tablet:w-[96px]">
           <span className="tablet:hidden">Found </span>
@@ -706,6 +708,91 @@ function ResolutionDialog({
  * genuinely cannot know who made a change — the row says so rather than
  * naming a plausible culprit.
  */
+/**
+ * Who made it, asked one row at a time.
+ *
+ * A sweep-detected row cannot name an actor: the sweep compares grant SETS, and
+ * a set difference has no author. The add-on targets solve the same problem
+ * with a recorded merge base — remember what you last saw, infer who moved.
+ * Zitadel needs no inference; it is event-sourced, and the event that created
+ * the grant carries its editor. Reading it is strictly better than deducing it,
+ * which is why this side has no merge base and this button instead.
+ *
+ * Behind a click rather than on load. The queue routinely holds dozens of rows
+ * and this is one API call each; asking for all of them to render a page would
+ * be a burst against the identity provider to answer a question nobody asked.
+ *
+ * Rendered only where it can help: a row Syndra already has an actor for says
+ * so through `explainDrift`, and a row naming no grant has no event to read.
+ */
+function WhoMadeIt({ item }: { item: DriftTriageItem }) {
+  const [asked, setAsked] = useState(false);
+  const origin = useDriftOrigin(item.id, asked);
+
+  if (item.upstream_actor || !item.zitadel_grant_id) return null;
+
+  if (!asked) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAsked(true)}
+        className="mt-1 inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted underline-offset-2 motion-tint hover:text-accent-text hover:underline desktop:min-h-6"
+      >
+        Who made it?
+      </button>
+    );
+  }
+  if (origin.isLoading) {
+    return <p className="mt-1 text-[12.5px] text-faint">Asking the identity provider…</p>;
+  }
+
+  const data = origin.data;
+  // Three different answers, and none of them may render as another: the
+  // lookup failed, the log does not go back that far, or the event names
+  // nobody. Collapsing any pair would put a claim on the row that nothing
+  // supports.
+  if (origin.isError || !data || !data.readable) {
+    return (
+      <p className="mt-1 text-[12.5px] text-warn-text">
+        Could not ask the identity provider, so this is not a finding that nobody made it.
+        {data?.detail ? ` ${data.detail}` : ""}
+      </p>
+    );
+  }
+  if (!data.recorded) {
+    return (
+      <p className="mt-1 text-[12.5px] text-faint">
+        The identity provider&rsquo;s event log does not go back to when this was made.
+      </p>
+    );
+  }
+  if (!data.attributed) {
+    return (
+      <p className="mt-1 text-[12.5px] text-faint">
+        The identity provider recorded the change and not who made it.
+      </p>
+    );
+  }
+  return (
+    <p className="mt-1 text-[12.5px] text-muted">
+      Made by{" "}
+      <span className="font-semibold text-ink">
+        {data.actor_name || (data.actor_id ? <UserName id={data.actor_id} /> : data.service)}
+      </span>
+      {data.actor_name && data.service ? (
+        <span className="text-faint"> via {data.service}</span>
+      ) : null}
+      {data.at ? (
+        <>
+          {" "}
+          <Relative iso={data.at} />
+        </>
+      ) : null}
+      .
+    </p>
+  );
+}
+
 function explainDrift(item: DriftTriageItem): string {
   if (item.drift_type === "syndra_only") {
     // The row used to say "usually a queued write that never landed" for every

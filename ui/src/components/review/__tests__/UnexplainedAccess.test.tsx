@@ -8,6 +8,14 @@ import type { DriftTriageItem } from "@/lib/queries/useDrift";
 
 const drift = vi.hoisted(() => ({ data: [] as DriftTriageItem[] }));
 
+// The per-row origin read, asked only when somebody clicks.
+const origin = vi.hoisted(() => ({
+  data: undefined as Record<string, unknown> | undefined,
+  isLoading: false,
+  isError: false,
+  asks: 0,
+}));
+
 // The plan the bulk endpoints return — the same shape every bulk surface in the
 // product returns, so the triage queue and the People page share one renderer.
 const bulk = vi.hoisted(() => ({
@@ -61,6 +69,12 @@ vi.mock("@/lib/queries/useDrift", () => ({
     isPending: false,
   }),
   useReconcileNow: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDriftOrigin: (_id: string, enabled: boolean) => {
+    if (enabled) origin.asks += 1;
+    return enabled
+      ? { data: origin.data, isLoading: origin.isLoading, isError: origin.isError }
+      : { data: undefined, isLoading: false, isError: false };
+  },
 }));
 
 vi.mock("@/lib/queries/useGrants", () => ({
@@ -456,5 +470,79 @@ describe("the queue states its ceiling before the tap", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /Select these 3 items/ }));
 
     expect(screen.queryByText(/is the most that can run at once/)).toBeNull();
+  });
+});
+
+/**
+ * "Who made it" — the question the sweep cannot answer for itself.
+ *
+ * A sweep row compares grant SETS, and a set difference has no author. Zitadel
+ * is event-sourced, so the answer is recorded rather than inferred — which is
+ * why this side reads the log instead of keeping the merge base the add-on
+ * targets need. These assert the three answers stay distinct, and that the
+ * queue does not ask until somebody does.
+ */
+describe("who made it", () => {
+  beforeEach(() => {
+    origin.data = undefined;
+    origin.isLoading = false;
+    origin.isError = false;
+    origin.asks = 0;
+    drift.data = [item({ id: "d1", zitadel_grant_id: "g-1", upstream_actor: undefined })];
+  });
+
+  it("does not ask the identity provider until somebody asks", () => {
+    renderTriage();
+    expect(screen.getByRole("button", { name: "Who made it?" })).toBeTruthy();
+    // Dozens of rows on a real queue; one call each on load would be a burst
+    // to answer a question nobody put.
+    expect(origin.asks).toBe(0);
+  });
+
+  it("names the actor once asked", async () => {
+    origin.data = {
+      id: "d1", readable: true, recorded: true, attributed: true,
+      actor_name: "Maya Chen", service: "Management-API", at: "2026-08-03T09:25:46Z",
+    };
+    renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Who made it?" }));
+
+    await waitFor(() => expect(screen.getByText(/Maya Chen/)).toBeInTheDocument());
+    expect(screen.getByText(/Management-API/)).toBeInTheDocument();
+  });
+
+  it("does not turn a failed lookup into 'nobody made it'", async () => {
+    origin.data = { id: "d1", readable: false, detail: "zitadel api 503" };
+    renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Who made it?" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/not a finding that nobody made it/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("separates a short log from an anonymous event", async () => {
+    origin.data = { id: "d1", readable: true, recorded: false };
+    const { unmount } = renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Who made it?" }));
+    await waitFor(() => expect(screen.getByText(/does not go back/i)).toBeInTheDocument());
+    unmount();
+
+    origin.data = { id: "d1", readable: true, recorded: true, attributed: false };
+    renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Who made it?" }));
+    await waitFor(() =>
+      expect(screen.getByText(/recorded the change and not who made it/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("offers nothing where there is nothing to read", () => {
+    // Already attributed by the webhook, and a row naming no grant.
+    drift.data = [
+      item({ id: "d1", zitadel_grant_id: "g-1", upstream_actor: "someone@example.org" }),
+      item({ id: "d2", zitadel_grant_id: undefined }),
+    ];
+    renderTriage();
+    expect(screen.queryByRole("button", { name: "Who made it?" })).toBeNull();
   });
 });

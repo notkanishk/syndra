@@ -17,17 +17,17 @@ const sampleUUID = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
 func claimablePlan() (Plan, PlanCitation) {
 	expires := time.Now().Add(time.Hour)
 	return Plan{
-			ID:        sampleUUID,
-			Target:    "truenas",
-			Surface:   "grants.bulk",
-			CreatedBy: "operator-1",
-			ExpiresAt: &expires,
-		}, PlanCitation{
-			PlanID:  sampleUUID,
-			Target:  "truenas",
-			Surface: "grants.bulk",
-			Actor:   "operator-1",
-		}
+		ID:        sampleUUID,
+		Target:    "truenas",
+		Surface:   "grants.bulk",
+		CreatedBy: "operator-1",
+		ExpiresAt: &expires,
+	}, PlanCitation{
+		PlanID:  sampleUUID,
+		Target:  "truenas",
+		Surface: "grants.bulk",
+		Actor:   "operator-1",
+	}
 }
 
 func claimSQL(t *testing.T) string {

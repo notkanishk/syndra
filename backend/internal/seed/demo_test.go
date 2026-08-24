@@ -111,3 +111,9 @@ func (stubClient) ListApplications(context.Context, string, zitadel.SearchParams
 func (stubClient) ListUserMetadata(context.Context, string, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserMetadata], error) {
 	return &zitadel.SearchResult[zitadel.UserMetadata]{}, nil
 }
+
+// Zitadel's event log is not what this fake is about. Present so the type still
+// satisfies the client interface; a test that cares stubs it explicitly.
+func (fake stubClient) GrantOriginByID(context.Context, string) (*zitadel.GrantOrigin, error) {
+	return nil, nil
+}

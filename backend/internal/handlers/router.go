@@ -321,6 +321,9 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/governance/allowances/review-due", withCORS(withOperatorAuth(handleAllowancesDueForReview)))
 
 	mux.HandleFunc("POST /api/v1/governance/drift/bulk-mark-external", withCORS(withOperatorAuth(handleBulkMarkDriftExternal)))
+	// Who made it, from Zitadel's event log — the question the sweep cannot
+	// answer for itself, and the reason this side needs no merge base.
+	mux.HandleFunc("GET /api/v1/governance/drift/{id}/origin", withCORS(withOperatorAuth(handleDriftOrigin)))
 	mux.HandleFunc("POST /api/v1/governance/drift/{id}/attribute", withCORS(withOperatorAuth(handleAttributeDrift)))
 	mux.HandleFunc("POST /api/v1/governance/drift/{id}/revoke", withCORS(withOperatorAuth(handleRevokeDrift)))
 	mux.HandleFunc("POST /api/v1/governance/drift/{id}/mark-external", withCORS(withOperatorAuth(handleMarkDriftExternal)))

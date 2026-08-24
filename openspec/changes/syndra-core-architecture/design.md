@@ -112,3 +112,84 @@ Google Workspace is the sole Identity Provider. Users authenticate via Google, w
 
 * **Account Lifecycle Gap**: Zitadel does not auto-detect when a Google Workspace account is suspended or deleted. A future dedicated service (Phase 6, separate Docker container) will poll Google Workspace monthly via the Admin SDK Directory API to verify all Zitadel users still have active Google accounts. Suspended or deleted accounts trigger user deactivation in Zitadel via the Management API, which cascades through Syndra's existing webhook pipeline (`user_deactivated` -> cache invalidation -> the closure diff -> a convergence queued for every mapped target).
 * **Scope Boundary**: Syndra does not manage the Google Workspace -> Zitadel federation configuration. That is a Zitadel admin console concern. Syndra's responsibility begins at the Zitadel webhook boundary.
+
+## 11. The observation base: one primitive, four names
+
+Syndra keeps being asked to tell **change** from **difference**. Those are not
+the same question, and only one of them can be answered by looking at the
+present.
+
+> A difference is two values that disagree right now.
+> A change is a difference **with a direction**, and direction needs a third
+> value: what was there last time anybody looked.
+
+Every surface that has needed this has invented it separately. Four exist:
+
+| Where | What it remembers | What that lets it say |
+|---|---|---|
+| `merge_bases` (`services/merge`) | each managed field's value after the last successful apply | which side moved: `fast_forward`, `theirs_only`, `conflict` |
+| `acknowledged_expires_at` (migration `000024`) | the expiry an operator acknowledged | the grant's date moved, so the acknowledgement is stale and the row reopens |
+| `addon_log_anchors` (migration `000033`) | an add-on's mutation-log head and record count | the log was truncated or rewritten — a chain cannot notice its own truncation |
+| bundle and mapping-rule versions | a published snapshot of what the set contained | what to roll back to, and what changed since |
+
+All four are the same move: **record what you last observed, so a later
+disagreement can be attributed instead of merely noticed.** A fifth surface
+needing it should reach for this rather than name it a fifth thing.
+
+### The rules that come with it
+
+**A base must be honestly obtained.** It is what the system *observed*, never
+what it *intended*. `services/drift/addon.go` drops the base entirely when the
+add-on reports no current state, because a base kept across an unobserved
+period would make every managed field read as "the target changed it" — one
+version skew manufacturing a finding per subject.
+
+**A base must not advance past an unresolved difference.** Recording the
+target's current state as "last agreed" while a finding about it is still open
+is the silent revert, arriving through bookkeeping rather than through a write.
+
+**Absence of a base is not evidence.** `no_base` is a first-class outcome and
+not a finding: nothing was observed, so nothing can be attributed, and the pass
+converges exactly as it did before the mechanism existed.
+
+### Where it does NOT belong: Zitadel
+
+A base is an **inference device**. You keep what you last saw so you can deduce
+who moved. Zitadel is event-sourced and needs no deduction — the event that
+created a grant carries its editor, and
+`GET /governance/drift/{id}/origin` reads it.
+
+Given a choice between inferring an actor from a snapshot delta and reading the
+actor from a log, the log wins. A base here would also lie more than it does on
+a target: Zitadel has many writers — the console, Actions, other integrations,
+org admins — so an observation recorded at read time is stale constantly, and
+every unobserved intermediate change would collapse into one `theirs_only`. On
+an add-on target the add-on is effectively the only non-human writer, which is
+what makes the base trustworthy there.
+
+**The rule: a base where there is no history; the history where there is one.**
+
+### What is borrowed from version control, and what is not
+
+The three-way merge is borrowed. The vocabulary and the defaults are not.
+
+- **Git merges content; this merges authority.** In git both sides are
+  legitimate contributions to a shared artifact. Here one side is policy and the
+  other is state, and `take_theirs` on a grant means *ratifying access somebody
+  obtained outside the system*. The classifier says what happened; it never
+  implies what should happen.
+- **Git auto-merges by default; this must not.** `fast_forward` resolves
+  unattended for one specific reason — Syndra moved and the target did not, so
+  the system is applying its own decision and no authority is added. That
+  reasoning does not extend to "auto-resolve anything unambiguous", which is how
+  a sweep starts granting privilege nobody approved.
+  `services/merge/invariants_test.go` enumerates the permitted set and fails when
+  it grows.
+- **A base is not an ancestor.** Git's power is the DAG: ancestry is recorded,
+  so "what came before" always has an answer. Syndra keeps one base per subject
+  and field, overwritten each pass. One level of before, never a chain — and no
+  vocabulary should promise otherwise.
+- **The console does not speak git.** "The target was changed by hand" is better
+  copy than "theirs-only conflict" for the person deciding.
+  `ui/src/lib/__tests__/merge-vocabulary.test.ts` keeps version-control terms and
+  the wire codes out of anything that renders.
