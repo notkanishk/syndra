@@ -182,3 +182,17 @@ export function formatBytes(bytes: number): string {
   // One decimal place above bytes; nobody needs "1.0 B".
   return unit === 0 ? `${Math.round(value)} B` : `${value.toFixed(1)} ${units[unit]}`;
 }
+
+/**
+ * Names in a sentence, with the conjunction people actually write.
+ *
+ * `join(", ")` gives "gitlab_data, main", which reads as a truncated list. The
+ * JSX side of this problem is separate — a component interleaving <Mono> can't
+ * use a string helper — but the failure is the same one, and it has already
+ * shipped once as two share names run together into one.
+ */
+export function formatList(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}

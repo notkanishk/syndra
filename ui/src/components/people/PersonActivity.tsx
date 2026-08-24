@@ -9,7 +9,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Card } from "@/components/ui/Card";
 import { TraceCell } from "@/components/audit/TraceCell";
 import { actedOn, describeAction, groupByDay, machineName } from "@/lib/audit-vocabulary";
-import { formatClock, formatShortDate } from "@/lib/format";
+import { formatClock, formatList, formatShortDate } from "@/lib/format";
 import { useAuditEntries, type AuditEntry } from "@/lib/queries/useAudit";
 import { useTargets } from "@/lib/queries/useTargets";
 import { useTargetActivity, type TargetActivityEvent } from "@/lib/queries/useTargetActivity";
@@ -187,7 +187,7 @@ function TargetActivityCard({
 
       {unaudited.length > 0 && (
         <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
-          Auditing is off on {unaudited.join(", ")}, so nothing on{" "}
+          Auditing is off on {formatList(unaudited)}, so nothing on{" "}
           {unaudited.length === 1 ? "that share" : "those shares"} appears here whether or not it
           happened.
         </div>
