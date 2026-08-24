@@ -135,8 +135,12 @@ func (s *server) shareUsage(uid int64) ([]ShareUsage, error) {
 			continue
 		}
 		var rows []struct {
-			ID         int64 `json:"id"`
-			UsedBytes  int64 `json:"used_bytes"`
+			ID        int64 `json:"id"`
+			UsedBytes int64 `json:"used_bytes"`
+			// shape-optional: TrueNAS omits `quota` entirely for a uid with no
+			// quota set, which is the common case and the one every account on
+			// the live target is in. Absent decodes to 0, and 0 is rendered as
+			// "no limit set" rather than as a full bar — see MyStorage.
 			QuotaBytes int64 `json:"quota"`
 		}
 		if err := s.nas.call("pool.dataset.get_quota", []any{dataset, "USER"}, &rows); err != nil {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // One-shot operations (design §4, §10).
@@ -486,6 +487,36 @@ type ActivityEvent struct {
 	Event   string `json:"event"`
 	Share   string `json:"share,omitempty"`
 	Success bool   `json:"success"`
+	// Where it came from. Every row in a real SMB audit log carries one, and
+	// without it a week of refusals is a week of refusals from nowhere — the
+	// difference between "somebody's saved password is stale" and "somebody is
+	// guessing".
+	Address string `json:"address,omitempty"`
+	// The target's own status token for the outcome, and ONLY a token.
+	//
+	// `NT_STATUS_NO_SUCH_USER` is what makes a refusal actionable, and it is a
+	// constant rather than prose. The add-on's standing rule is that the
+	// target's error TEXT never leaves this package, because the middleware
+	// builds that text from a call whose parameters can include a member's
+	// password. An audit status is a different thing, and it is admitted by a
+	// check on its SHAPE rather than by trusting where it came from.
+	Detail string `json:"detail,omitempty"`
+}
+
+// statusToken admits an audit status only if it is one.
+//
+// A whitelist of shape, not of values: a release that adds a new NTSTATUS keeps
+// working, and a release that starts putting a sentence in this field does not.
+func statusToken(s string) string {
+	if s == "" || len(s) > 64 {
+		return ""
+	}
+	for _, r := range s {
+		if (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '_' {
+			return ""
+		}
+	}
+	return s
 }
 
 // smbActivity reads the audit log and says what it could not see.
@@ -495,20 +526,41 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
 
+	// `message_timestamp` is an INTEGER — unix seconds — and this decoded it as
+	// a string. `audit.query` therefore failed to unmarshal on every call, and
+	// the operation answered "the audit log could not be read" every time it
+	// was asked. It had never once succeeded against a real target. Measured on
+	// TrueNAS-25.10.5, 2026-08-24.
+	//
+	// `event_data` is deliberately raw. Its shape varies by event type, and one
+	// unexpected type anywhere inside it fails the WHOLE decode — which is
+	// exactly how the timestamp took the operation down. What varies is decoded
+	// separately and defensively; what does not is decoded here.
 	var rows []struct {
-		Timestamp string `json:"message_timestamp"`
-		Event     string `json:"event"`
-		Success   bool   `json:"success"`
-		EventData struct {
-			Share string `json:"share"`
-		} `json:"event_data"`
+		Timestamp int64           `json:"message_timestamp"`
+		Event     string          `json:"event"`
+		Success   bool            `json:"success"`
+		Address   string          `json:"address"`
+		EventData json.RawMessage `json:"event_data"`
+	}
+	filters := [][]any{{"username", "=", binding.Username}}
+	// The lower bound, in the target's own units. The backend hands this over
+	// as RFC3339 because that is what an HTTP caller writes; the column is an
+	// integer, and a string compared against it is ACCEPTED and matches nothing
+	// — a silently empty answer rather than a refusal, which is the worst of
+	// the three outcomes available.
+	if since, ok := req.Params["since"].(string); ok && strings.TrimSpace(since) != "" {
+		at, err := time.Parse(time.RFC3339, strings.TrimSpace(since))
+		if err != nil {
+			return OperationResult{}, http.StatusBadRequest,
+				fmt.Errorf("since must be an RFC3339 timestamp")
+		}
+		filters = append(filters, []any{"message_timestamp", ">=", at.Unix()})
 	}
 	query := []any{
 		map[string]any{
-			"services": []string{"SMB"},
-			"query-filters": [][]any{
-				{"username", "=", binding.Username},
-			},
+			"services":      []string{"SMB"},
+			"query-filters": filters,
 			"query-options": map[string]any{"limit": 200, "order_by": []string{"-message_timestamp"}},
 		},
 	}
@@ -518,9 +570,14 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 
 	report := ActivityReport{Events: make([]ActivityEvent, 0, len(rows))}
 	for _, r := range rows {
-		report.Events = append(report.Events, ActivityEvent{
-			At: r.Timestamp, Event: r.Event, Share: r.EventData.Share, Success: r.Success,
-		})
+		event := ActivityEvent{
+			At:      time.Unix(r.Timestamp, 0).UTC().Format(time.RFC3339),
+			Event:   r.Event,
+			Success: r.Success,
+			Address: r.Address,
+		}
+		event.Share, event.Detail = eventDetail(r.EventData)
+		report.Events = append(report.Events, event)
 	}
 	// Reported whether or not there were events, because the case that matters
 	// is the empty one.
@@ -534,6 +591,28 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 		Operation: "activity.get", Subject: req.Subject, Outcome: "succeeded",
 		Activity: &report,
 	}, http.StatusOK, nil
+}
+
+// eventDetail pulls the two useful things out of a payload whose shape changes
+// with the event type.
+//
+// Decoded separately from the row so a surprise in here costs one field rather
+// than the whole read. An SMB AUTHENTICATION row carries no share and a CONNECT
+// row does; both are ordinary, and neither may make the other fail.
+func eventDetail(raw json.RawMessage) (share, detail string) {
+	if len(raw) == 0 {
+		return "", ""
+	}
+	var data struct {
+		Share  string `json:"share"`
+		Result struct {
+			Parsed string `json:"value_parsed"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return "", ""
+	}
+	return data.Share, statusToken(data.Result.Parsed)
 }
 
 // unauditedShares lists shares with auditing switched off.
@@ -564,14 +643,67 @@ func (s *server) unauditedShares() ([]string, error) {
 // Every field is optional and each carries its own error, because this composes
 // four independent reads and one of them failing tells an operator nothing about
 // the other three — which are usually the ones that would have explained it.
+//
+// SHAPED, not forwarded. These four reads answer with several kilobytes each,
+// including the chassis serial, the license blob and the full pool topology.
+// Passing them through would put TrueNAS's schema in the backend and in the
+// browser — the boundary this add-on exists to hold — and would ship hardware
+// identifiers to answer questions nobody asked. What survives is what an
+// operator looking at a target page needs and nothing else.
 type TargetHealth struct {
-	System   json.RawMessage `json:"system,omitempty"`
-	Alerts   json.RawMessage `json:"alerts,omitempty"`
-	Pools    json.RawMessage `json:"pools,omitempty"`
-	Services json.RawMessage `json:"services,omitempty"`
+	System   *SystemInfo    `json:"system,omitempty"`
+	Alerts   []TargetAlert  `json:"alerts,omitempty"`
+	Pools    []PoolStatus   `json:"pools,omitempty"`
+	Services []ServiceState `json:"services,omitempty"`
 	// Degraded names the sources that could not be read, so a partial answer
 	// says which part is missing rather than looking whole.
 	Degraded []string `json:"degraded,omitempty"`
+}
+
+// SystemInfo is the target identifying itself, minus the parts that identify
+// the hardware. Serial, license and manufacturer are deliberately dropped.
+type SystemInfo struct {
+	Hostname      string  `json:"hostname,omitempty"`
+	Version       string  `json:"version,omitempty"`
+	UptimeSeconds float64 `json:"uptime_seconds,omitempty"`
+}
+
+// TargetAlert is one of the NAS's own alerts.
+//
+// The text is the alert's `formatted` field with markup removed. It is the
+// target's own prose, which everywhere else in this package is refused — the
+// rule exists because middleware ERROR text is built from a call whose
+// parameters can include a member's password. An alert is the opposite case:
+// it is written to be read by an operator, it is the entire value of the read,
+// and it never sees a request's parameters. What it does carry is HTML, so the
+// markup is stripped here rather than trusted to whatever renders it.
+type TargetAlert struct {
+	Level     string `json:"level"`
+	Class     string `json:"klass,omitempty"`
+	Text      string `json:"text"`
+	At        string `json:"at,omitempty"`
+	Dismissed bool   `json:"dismissed"`
+}
+
+// PoolStatus is one pool's health and how full it is.
+type PoolStatus struct {
+	Name           string `json:"name"`
+	Status         string `json:"status"`
+	Healthy        bool   `json:"healthy"`
+	Warning        bool   `json:"warning"`
+	FreeBytes      int64  `json:"free_bytes"`
+	AllocatedBytes int64  `json:"allocated_bytes"`
+	SizeBytes      int64  `json:"size_bytes"`
+}
+
+// ServiceState is one service, running or not, and whether it starts on boot.
+//
+// `cifs` stopped is the single most likely explanation for "my drive vanished",
+// and it is invisible from every other read this add-on makes.
+type ServiceState struct {
+	Service string `json:"service"`
+	State   string `json:"state"`
+	Enabled bool   `json:"enable"`
 }
 
 // targetHealth composes four sources and degrades per source.
@@ -581,19 +713,86 @@ func (s *server) targetHealth(req OperationRequest) (OperationResult, int, error
 		name   string
 		method string
 		params any
-		into   *json.RawMessage
+		decode func(json.RawMessage)
 	}{
-		{"system", "system.info", []any{}, &h.System},
-		{"alerts", "alert.list", []any{}, &h.Alerts},
-		{"pools", "pool.query", []any{}, &h.Pools},
-		{"services", "service.query", []any{}, &h.Services},
+		{"system", "system.info", []any{}, func(raw json.RawMessage) {
+			var in struct {
+				Hostname      string  `json:"hostname"`
+				Version       string  `json:"version"`
+				UptimeSeconds float64 `json:"uptime_seconds"`
+			}
+			if json.Unmarshal(raw, &in) == nil {
+				h.System = &SystemInfo{Hostname: in.Hostname, Version: in.Version, UptimeSeconds: in.UptimeSeconds}
+			}
+		}},
+		{"alerts", "alert.list", []any{}, func(raw json.RawMessage) {
+			var in []struct {
+				Level     string  `json:"level"`
+				Klass     string  `json:"klass"`
+				Formatted *string `json:"formatted"`
+				Text      *string `json:"text"`
+				Dismissed bool    `json:"dismissed"`
+				Datetime  epochMs `json:"datetime"`
+			}
+			if json.Unmarshal(raw, &in) != nil {
+				return
+			}
+			h.Alerts = make([]TargetAlert, 0, len(in))
+			for _, a := range in {
+				body := ""
+				if a.Formatted != nil {
+					body = *a.Formatted
+				} else if a.Text != nil {
+					body = *a.Text
+				}
+				h.Alerts = append(h.Alerts, TargetAlert{
+					Level: a.Level, Class: a.Klass, Text: stripMarkup(body),
+					At: a.Datetime.RFC3339(), Dismissed: a.Dismissed,
+				})
+			}
+		}},
+		{"pools", "pool.query", []any{}, func(raw json.RawMessage) {
+			var in []struct {
+				Name      string `json:"name"`
+				Status    string `json:"status"`
+				Healthy   bool   `json:"healthy"`
+				Warning   bool   `json:"warning"`
+				Free      int64  `json:"free"`
+				Allocated int64  `json:"allocated"`
+				Size      int64  `json:"size"`
+			}
+			if json.Unmarshal(raw, &in) != nil {
+				return
+			}
+			h.Pools = make([]PoolStatus, 0, len(in))
+			for _, p := range in {
+				h.Pools = append(h.Pools, PoolStatus{
+					Name: p.Name, Status: p.Status, Healthy: p.Healthy, Warning: p.Warning,
+					FreeBytes: p.Free, AllocatedBytes: p.Allocated, SizeBytes: p.Size,
+				})
+			}
+		}},
+		{"services", "service.query", []any{}, func(raw json.RawMessage) {
+			var in []struct {
+				Service string `json:"service"`
+				State   string `json:"state"`
+				Enable  bool   `json:"enable"`
+			}
+			if json.Unmarshal(raw, &in) != nil {
+				return
+			}
+			h.Services = make([]ServiceState, 0, len(in))
+			for _, sv := range in {
+				h.Services = append(h.Services, ServiceState{Service: sv.Service, State: sv.State, Enabled: sv.Enable})
+			}
+		}},
 	} {
 		var raw json.RawMessage
 		if err := s.nas.call(source.method, source.params, &raw); err != nil {
 			h.Degraded = append(h.Degraded, source.name)
 			continue
 		}
-		*source.into = raw
+		source.decode(raw)
 	}
 	// All four failing is an unreachable target, not a health report with four
 	// holes in it — the distinction an operator needs is "the NAS is down"
@@ -604,6 +803,49 @@ func (s *server) targetHealth(req OperationRequest) (OperationResult, int, error
 	return OperationResult{
 		Operation: "health.get", Subject: req.Subject, Outcome: "succeeded", Health: &h,
 	}, http.StatusOK, nil
+}
+
+// epochMs decodes TrueNAS's `{"$date": 1787077600000}` timestamp wrapper.
+//
+// Its own type because the same wrapper appears on several reads and because a
+// plain int64 field would silently decode to zero against it — the shape of the
+// defect that kept `activity.get` broken for its whole life.
+type epochMs struct {
+	Date int64 `json:"$date"`
+}
+
+func (e epochMs) RFC3339() string {
+	if e.Date == 0 {
+		return ""
+	}
+	return time.UnixMilli(e.Date).UTC().Format(time.RFC3339)
+}
+
+// stripMarkup turns an alert's HTML into the sentence it was trying to be.
+//
+// TrueNAS writes alerts with `<br>` in them. Removing the markup here means no
+// consumer is ever handed something it might be tempted to render as HTML, and
+// the add-on stays the only place that knows the target emits any.
+func stripMarkup(s string) string {
+	var b strings.Builder
+	depth := 0
+	for _, r := range s {
+		switch {
+		case r == '<':
+			depth++
+			// A tag boundary is a word boundary: `a<br>b` is two words.
+			if b.Len() > 0 && !strings.HasSuffix(b.String(), " ") {
+				b.WriteByte(' ')
+			}
+		case r == '>':
+			if depth > 0 {
+				depth--
+			}
+		case depth == 0:
+			b.WriteRune(r)
+		}
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
 }
 
 // requireSecret pulls a declared secret parameter out of the request.
