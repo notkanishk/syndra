@@ -36,6 +36,20 @@ export interface TargetActivityEvent {
   event: string;
   share?: string;
   success: boolean;
+  /**
+   * Where it came from. Measured on the live NAS: a week of SMB events was 553
+   * rows, every one an authentication failure, spread across seven client
+   * addresses — which is the difference between one person's saved password
+   * being stale and somebody working through the building.
+   */
+  address?: string;
+  /**
+   * The target's own status token for the outcome, and only a token: the
+   * add-on admits it by a check on its SHAPE, so an NTSTATUS passes and a
+   * sentence does not. `NT_STATUS_NO_SUCH_USER` is what turns "Refused" into
+   * something an operator can act on.
+   */
+  detail?: string;
 }
 
 /**

@@ -243,3 +243,106 @@ func TestStatusTokenAdmitsOnlyTokens(t *testing.T) {
 		}
 	}
 }
+
+// A source that ANSWERED and could not be understood.
+//
+// The decode error used to be discarded: the field stayed absent, the source
+// stayed unnamed, and the card rendered "Nothing raised" — the most reassuring
+// sentence it can produce — for a target whose schema had moved under it. An
+// operator would have read a green health card off a read that failed.
+func TestAMalformedSourceIsDegradedRatherThanIgnored(t *testing.T) {
+	for _, method := range []string{"system.info", "alert.list", "pool.query", "service.query"} {
+		t.Run(method, func(t *testing.T) {
+			s, answering := systemHealthServer(t)
+			// Well-formed JSON of entirely the wrong shape, which is what a
+			// schema change looks like from here.
+			answering.answers[method] = `{"unexpected":"shape"}`
+			if method == "system.info" {
+				answering.answers[method] = `["not an object"]`
+			}
+
+			res, code, err := s.targetHealth(OperationRequest{})
+			if err != nil || code != http.StatusOK {
+				t.Fatalf("the other sources still answered, got %d: %v", code, err)
+			}
+			if len(res.Health.Degraded) != 1 {
+				t.Fatalf("the source that could not be decoded must be named, got %v",
+					res.Health.Degraded)
+			}
+		})
+	}
+}
+
+// `json.Unmarshal` accepts a bare `null` into any destination, reports no
+// error, and leaves it zeroed. Untreated, a source answering null is recorded
+// as read-and-empty — "no alerts", "no pools" — which is a claim about the
+// target arrived at without reading anything.
+func TestANullSourceIsNotAnEmptyOne(t *testing.T) {
+	for _, method := range []string{"system.info", "alert.list", "pool.query", "service.query"} {
+		t.Run(method, func(t *testing.T) {
+			s, answering := systemHealthServer(t)
+			answering.answers[method] = `null`
+
+			res, code, err := s.targetHealth(OperationRequest{})
+			if err != nil || code != http.StatusOK {
+				t.Fatalf("want 200, got %d: %v", code, err)
+			}
+			if len(res.Health.Degraded) != 1 {
+				t.Fatalf("a null answer must be degraded, not empty: %v", res.Health.Degraded)
+			}
+			switch method {
+			case "alert.list":
+				if res.Health.Alerts != nil {
+					t.Fatalf("an unread source must be ABSENT, not an empty list: %v", res.Health.Alerts)
+				}
+			case "pool.query":
+				if res.Health.Pools != nil {
+					t.Fatalf("an unread source must be ABSENT, not an empty list: %v", res.Health.Pools)
+				}
+			case "service.query":
+				if res.Health.Services != nil {
+					t.Fatalf("an unread source must be ABSENT, not an empty list: %v", res.Health.Services)
+				}
+			case "system.info":
+				if res.Health.System != nil {
+					t.Fatalf("an unread source must be ABSENT: %+v", res.Health.System)
+				}
+			}
+		})
+	}
+}
+
+// An empty LIST is a real answer and must survive. The guard above must not
+// have been bought by treating "nothing to report" as a failure.
+func TestAnEmptyListIsAnAnswerAndNotADegradation(t *testing.T) {
+	s, answering := systemHealthServer(t)
+	answering.answers["alert.list"] = `[]`
+
+	res, _, err := s.targetHealth(OperationRequest{})
+	if err != nil {
+		t.Fatalf("targetHealth: %v", err)
+	}
+	if len(res.Health.Degraded) != 0 {
+		t.Fatalf("a target with no alerts is not a target that failed: %v", res.Health.Degraded)
+	}
+	if res.Health.Alerts == nil || len(res.Health.Alerts) != 0 {
+		t.Fatalf("an answered empty list must be an empty list: %v", res.Health.Alerts)
+	}
+}
+
+// Every source unreadable is an unreachable target, whether they failed on the
+// wire or on the decode.
+func TestEveryMalformedSourceIsAlsoAnUnreachableTarget(t *testing.T) {
+	s, answering := systemHealthServer(t)
+	for _, m := range []string{"system.info", "alert.list", "pool.query", "service.query"} {
+		answering.answers[m] = `null`
+	}
+
+	_, code, err := s.targetHealth(OperationRequest{})
+	if err == nil {
+		t.Fatal("want a refusal")
+	}
+	if code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d", code)
+	}
+}

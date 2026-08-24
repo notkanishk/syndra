@@ -138,3 +138,46 @@ func TestTheFixtureRecorderDoesNotSkipTLSVerificationByDefault(t *testing.T) {
 			"than deciding for itself")
 	}
 }
+
+// A profile-gated service must not make its variables mandatory for everybody.
+//
+// Compose interpolates EVERY service in the file before it decides which
+// profiles are active, so `${VAR:?...}` inside a profiled block fails
+// `docker compose config`, `up`, `ps` and `down` on every deployment that does
+// not run that profile. `TRUENAS_URL` was written that way, which turned the
+// optional add-on into a required one by syntax — the deployment could not be
+// brought up at all without a NAS it was never going to talk to.
+//
+// The check that belongs here is the one that can tell "not configured" from
+// "not wanted", and only the add-on's own start-up can: `loadConfig` refuses a
+// missing URL, and it runs only when the container does.
+func TestTheAddOnProfileMakesNothingMandatoryForEveryDeployment(t *testing.T) {
+	block := composeAddOnBlock(t)
+
+	required := regexp.MustCompile(`\$\{([A-Z0-9_]+):\?[^}]*\}`).FindAllStringSubmatch(block, -1)
+	if len(required) == 0 {
+		return
+	}
+	var names []string
+	for _, m := range required {
+		names = append(names, m[1])
+	}
+	t.Fatalf("the truenas-addon service is behind a profile and requires %v at "+
+		"interpolation time. Compose expands every service before it filters by "+
+		"profile, so this breaks `docker compose config` for every deployment "+
+		"that runs no NAS. Use ${NAME:-} and let the add-on refuse to start.", names)
+}
+
+// And the half that makes the above safe: unset, the add-on still refuses.
+// Moving the check out of Compose is only correct because this one is real.
+func TestTheAddOnStillRefusesToStartWithoutATargetURL(t *testing.T) {
+	t.Setenv("TRUENAS_URL", "")
+	t.Setenv("TARGET_NAME", "truenas")
+	t.Setenv("ADDON_SECRET", "0123456789abcdef0123456789abcdef")
+
+	if _, err := loadConfig(); err == nil {
+		t.Fatal("an add-on with no target URL must not start")
+	} else if !strings.Contains(err.Error(), "TRUENAS_URL") {
+		t.Fatalf("the refusal must name the variable, got %v", err)
+	}
+}
