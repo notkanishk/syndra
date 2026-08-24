@@ -522,11 +522,14 @@ function DeleteBundleDialog({
 }) {
   const remove = useDeleteBundle();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // The bundle is gone in both of these: `queued` means its withdrawals are
+  // waiting, not that the delete is.
+  const gone = outcome?.kind === "applied" || outcome?.kind === "queued";
 
   return (
     <Modal
       open
-      onClose={onCancel}
+      onClose={gone ? onDeleted : onCancel}
       busy={remove.isPending}
       size="md"
       labelledBy="delete-bundle"
@@ -566,6 +569,7 @@ function DeleteBundleDialog({
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter note="Emptying the bundle instead leaves it assignable and grants nothing.">
+        {!gone && (
         <Button
           variant="dangerConfirm"
           isPending={remove.isPending}
@@ -605,8 +609,15 @@ function DeleteBundleDialog({
         >
           Delete and revoke
         </Button>
-        <Button disabled={remove.isPending} onClick={onCancel}>
-          Keep it
+        )}
+        {/* `onDeleted` clears the parent's selection, and the parent's own
+            comment says why it must: the deleted bundle stays selected
+            otherwise, and the list falls back to the first bundle under the old
+            id's heading. It was never called. Called from HERE rather than from
+            the mutation, because clearing the selection unmounts this dialog —
+            and the outcome the operator has not read yet goes with it. */}
+        <Button disabled={remove.isPending} onClick={gone ? onDeleted : onCancel}>
+          {gone ? "Done" : "Keep it"}
         </Button>
       </ModalFooter>
     </Modal>

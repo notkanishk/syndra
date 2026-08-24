@@ -1009,6 +1009,34 @@ and the reason a recorded read is now recorded with its TYPES.
   empty. And `formatBytes` existed twice with disagreeing units — both divided
   by 1024, one labelled the result GB
 
+- [x] 34.14 **A health source that answered and could not be understood was
+  dropped in silence.** The decode error went nowhere: the field stayed absent,
+  the source stayed unnamed, and the card rendered "Nothing raised" — the most
+  reassuring sentence it has — off a read that failed. A bare `null` was worse,
+  because `json.Unmarshal` takes one into any destination without error and
+  leaves it zeroed, so a null answer was recorded as "no alerts" and "no pools".
+  Both degrade BY NAME now; an answered empty list is still an empty list; and
+  "every source failed" counts the source table rather than a literal 4
+- [x] 34.15 **`docker-compose.yml` made the optional add-on mandatory by
+  syntax.** Compose interpolates every service before it filters by profile, so
+  `${TRUENAS_URL:?…}` inside the profiled block failed `docker compose config`,
+  `up`, `ps` and `down` on every deployment running no NAS. The one check that
+  can tell "not configured" from "not wanted" is the add-on's own start-up, and
+  it already existed. Guarded from both ends: a test fails on any `:?` inside
+  that service, and a second asserts `loadConfig` still refuses a missing URL
+- [x] 34.16 **The activity row dropped the address and the status token** the
+  add-on had just started returning, so the live NAS's 553 authentication
+  failures over one week rendered as 553 identical "Refused" pills. The token is
+  shown as the target wrote it: `NT_STATUS_NO_SUCH_USER` is what somebody
+  searches for, and friendlier wording would make it unfindable
+- [x] 34.17 **Two dialogs took an `onDeleted` callback and never called it** —
+  deleting a bundle left the parent selecting one that no longer existed (its
+  own comment said so), and deleting a rule left the editor open on it. ESLint
+  had found both and reported them as WARNINGS, which a clean run still prints.
+  The rule is an error now, unused bindings opt out with a leading underscore,
+  and `AddRolesToBundle`'s `stopped` flag — a gate left behind by an auto-close
+  that no longer exists — is gone. Lint output is empty
+
 - [ ] 34.12 **SMB auditing is off on both shares** (`gitlab_data`, `main`), so
   `activity.get` can only ever return authentication events — no file access and
   no share names. Syndra's own credential cannot turn it on: `sharing.smb.update`

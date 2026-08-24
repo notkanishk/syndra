@@ -100,7 +100,6 @@ export function AddRolesToBundle({
     setApplying(true);
     setFailure(null);
     let added = 0;
-    let stopped = false;
     // Sequential, not concurrent. Each add is its own write against the
     // working copy, and six at once would interleave into a draft nobody
     // asked for if one of them failed halfway.
@@ -118,10 +117,12 @@ export function AddRolesToBundle({
         setFailure(
           error instanceof Error ? error.message : `${roleKey} couldn't be added to ${name}.`,
         );
-        // Read from a local, not from `failure`: the state set a line above is
-        // not visible until the next render, and closing the dialog on a failed
-        // apply is exactly the bug that would hide.
-        stopped = true;
+        // `break`, and nothing else. This used to set a local flag because the
+        // dialog closed itself on success and a failed apply must not be
+        // closed over — the flag outlived the auto-close, and a variable that
+        // is assigned and never read is a gate that guards nothing. What keeps
+        // the failure visible now is that nothing closes this dialog but the
+        // operator.
         break;
       }
     }
