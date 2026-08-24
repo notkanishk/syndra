@@ -598,11 +598,14 @@ function DeleteRuleConfirm({
   const remove = useDeleteMappingRule();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const holders = rule.holder_count ?? 0;
+  // The rule is gone in both: `queued` describes the withdrawals it caused,
+  // not the delete.
+  const gone = outcome?.kind === "applied" || outcome?.kind === "queued";
 
   return (
     <Modal
       open
-      onClose={onCancel}
+      onClose={gone ? onDeleted : onCancel}
       busy={remove.isPending}
       size="md"
       labelledBy="rule-delete-title"
@@ -636,6 +639,7 @@ function DeleteRuleConfirm({
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter note="Retarget the rule instead if you only want it to produce something else.">
+        {!gone && (
         <Button
           variant="dangerConfirm"
           isPending={remove.isPending}
@@ -672,8 +676,14 @@ function DeleteRuleConfirm({
         >
           Delete and revoke
         </Button>
-        <Button disabled={remove.isPending} onClick={onCancel}>
-          Keep the rule
+        )}
+        {/* `onDeleted` closes the editor this dialog opened over, and it was
+            never called — so deleting a rule left the operator looking at an
+            editor for a rule that no longer exists. Called from the dismiss
+            button rather than from the mutation, because closing the editor
+            takes the outcome with it. */}
+        <Button disabled={remove.isPending} onClick={gone ? onDeleted : onCancel}>
+          {gone ? "Done" : "Keep the rule"}
         </Button>
       </ModalFooter>
     </Modal>
