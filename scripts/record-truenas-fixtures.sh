@@ -69,6 +69,7 @@ echo "==> recording from $TRUENAS_URL (write probes: $WRITE)"
 
 docker run --rm -i \
   -e TRUENAS_URL -e TRUENAS_API_KEY -e WRITE="$WRITE" \
+  -e PREVIOUS_RECORDING="$(cat "$OUT" 2>/dev/null || echo '{}')" \
   -e TRUENAS_VERIFY_TLS="${TRUENAS_VERIFY_TLS:-true}" \
   --entrypoint sh python:3.12-alpine -c \
   'pip -q install websockets >/dev/null 2>&1 && python - ' < scripts/lib/record-truenas.py > "$OUT.tmp"
@@ -90,6 +91,6 @@ print(f"    reads    {len(d.get('reads', {}))}")
 print(f"    refusals {len(d.get('write_rules', []))}")
 PY
 echo
-echo "Commit it. `addons/truenas/truenas_rules_test.go` asserts the add-on's"
+echo 'Commit it. addons/truenas/truenas_rules_test.go asserts the add-on'\''s'
 echo "payloads against these refusals, so a release that changes a rule fails the"
 echo "suite instead of the deployment."

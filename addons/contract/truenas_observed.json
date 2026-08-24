@@ -18,7 +18,23 @@
         "sid",
         "source",
         "two_factor_config"
-      ]
+      ],
+      "types": {
+        "account_attributes": "list",
+        "attributes": "dict",
+        "grouplist": "null",
+        "local": "bool",
+        "privilege": "dict",
+        "pw_dir": "str",
+        "pw_gecos": "str",
+        "pw_gid": "int",
+        "pw_name": "str",
+        "pw_shell": "str",
+        "pw_uid": "int",
+        "sid": "null",
+        "source": "str",
+        "two_factor_config": "dict"
+      }
     },
     "user.query": {
       "keys": [
@@ -28,19 +44,144 @@
         "smb",
         "uid",
         "username"
-      ]
+      ],
+      "types": {
+        "id": "int",
+        "locked": "bool",
+        "password_disabled": "bool",
+        "smb": "bool",
+        "uid": "int",
+        "username": "str"
+      }
     },
     "group.query": {
       "keys": [
         "gid",
         "group",
         "id"
-      ]
+      ],
+      "types": {
+        "gid": "int",
+        "group": "str",
+        "id": "int"
+      }
     },
     "sharing.smb.query": {
       "keys": [
         "audit",
-        "name"
+        "enabled",
+        "name",
+        "path"
+      ],
+      "types": {
+        "audit": "dict",
+        "enabled": "bool",
+        "name": "str",
+        "path": "str"
+      }
+    },
+    "audit.query": {
+      "keys": [
+        "address",
+        "audit_id",
+        "event",
+        "event_data",
+        "message_timestamp",
+        "service",
+        "service_data",
+        "session",
+        "success",
+        "timestamp",
+        "username"
+      ],
+      "types": {
+        "address": "str",
+        "audit_id": "str",
+        "event": "str",
+        "event_data": "dict",
+        "message_timestamp": "int",
+        "service": "str",
+        "service_data": "dict",
+        "session": "str",
+        "success": "bool",
+        "timestamp": "dict",
+        "username": "str"
+      },
+      "sampled_rows": 200,
+      "event_data_keys_by_event": {
+        "AUTHENTICATION": [
+          "authDescription",
+          "becameAccount",
+          "becameDomain",
+          "becameSid",
+          "clientAccount",
+          "clientDomain",
+          "clientPolicyAccessCheck",
+          "localAddress",
+          "logonId",
+          "logonType",
+          "mappedAccount",
+          "mappedDomain",
+          "netlogonComputer",
+          "netlogonNegotiateFlags",
+          "netlogonSecureChannelType",
+          "netlogonTrustAccount",
+          "netlogonTrustAccountSid",
+          "passwordType",
+          "remoteAddress",
+          "result",
+          "serverPolicyAccessCheck",
+          "serviceDescription",
+          "vers",
+          "workstation"
+        ]
+      },
+      "event_data_types": {
+        "authDescription": "null",
+        "becameAccount": "null",
+        "becameDomain": "null",
+        "becameSid": "null",
+        "clientAccount": "str",
+        "clientDomain": "str",
+        "clientPolicyAccessCheck": "null",
+        "localAddress": "str",
+        "logonId": "str",
+        "logonType": "int",
+        "mappedAccount": "str",
+        "mappedDomain": "str",
+        "netlogonComputer": "null",
+        "netlogonNegotiateFlags": "str",
+        "netlogonSecureChannelType": "int",
+        "netlogonTrustAccount": "null",
+        "netlogonTrustAccountSid": "null",
+        "passwordType": "str",
+        "remoteAddress": "str",
+        "result": "dict",
+        "serverPolicyAccessCheck": "null",
+        "serviceDescription": "str",
+        "vers": "dict",
+        "workstation": "str"
+      },
+      "username_filter_accepted": true
+    },
+    "pool.dataset.get_quota": {
+      "keys": [
+        "id",
+        "name",
+        "obj_used",
+        "quota_type",
+        "used_bytes"
+      ],
+      "types": {
+        "id": "int",
+        "name": "str",
+        "obj_used": "int",
+        "quota_type": "str",
+        "used_bytes": "int"
+      },
+      "sampled_rows": 7,
+      "quota_types": [
+        "USER"
       ]
     }
   },
@@ -108,6 +249,5 @@
       "accepted": true
     }
   ],
-  "product_version": "TrueNAS-25.10.5",
-  "probe_account_removed": true
+  "product_version": "TrueNAS-25.10.5"
 }

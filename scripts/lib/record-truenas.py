@@ -30,7 +30,56 @@ WRITE = os.environ.get("WRITE") == "yes"
 # security switch is the safe side, never the convenient one.
 VERIFY = os.environ.get("TRUENAS_VERIFY_TLS", "").strip().lower() not in ("0", "f", "false")
 PROBE_USER = "syndra-fixture-probe"
+# Handed in by the wrapper so a read-only run can carry the write rules forward.
+PREVIOUS = os.environ.get("PREVIOUS_RECORDING", "")
 FIELD = re.compile(r"^[A-Za-z0-9_.\[\]-]{1,120}$")
+
+
+def jtype(v):
+    """The JSON type of one value, as a decoder has to survive it."""
+    if v is None:
+        return "null"
+    if isinstance(v, bool):
+        return "bool"
+    if isinstance(v, int):
+        return "int"
+    if isinstance(v, float):
+        return "float"
+    if isinstance(v, str):
+        return "str"
+    if isinstance(v, list):
+        return "list"
+    return "dict"
+
+
+def shape(rows):
+    """Keys AND types, unioned over every row sampled.
+
+    Types are the half that was missing and the half that broke things:
+    `audit.query` answers `message_timestamp` as an INTEGER, the add-on decoded
+    it as a string, the whole read failed to unmarshal, and `activity.get`
+    returned "the audit log could not be read" for the entire life of the
+    add-on. A recording of key NAMES agreed with the code the whole time.
+
+    A key that is null in one row and typed in another records the type, not
+    the null: absent-or-a-string is a string as far as a decoder is concerned.
+    """
+    keys, types = set(), {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        keys |= set(row.keys())
+        for k, v in row.items():
+            t = jtype(v)
+            if t == "null":
+                types.setdefault(k, "null")
+            elif types.get(k) in (None, "null"):
+                types[k] = t
+            elif types[k] != t:
+                # A key that is genuinely two types is recorded as both, so a
+                # decoder written against one of them is written knowingly.
+                types[k] = "|".join(sorted(set(types[k].split("|")) | {t}))
+    return {"keys": sorted(keys), "types": dict(sorted(types.items()))}
 
 
 def fields(err):
@@ -50,6 +99,15 @@ async def main():
         "reads": {},
         "write_rules": [],
     }
+    # A read-only run keeps whatever refusals the last --write run recorded,
+    # which is what this script's own usage text promises. Rebuilding the
+    # document from scratch discarded them, so every read-only run silently
+    # deleted the half that took a throwaway account to obtain.
+    if not WRITE:
+        try:
+            doc["write_rules"] = json.loads(PREVIOUS).get("write_rules", [])
+        except ValueError:
+            pass
     if VERIFY:
         ctx = ssl.create_default_context()
     else:
@@ -87,15 +145,89 @@ async def main():
             ("auth.me", []),
             ("user.query", [[["builtin", "=", False]], {"select": ["id", "uid", "username", "locked", "smb", "password_disabled"], "limit": 1}]),
             ("group.query", [[], {"select": ["id", "gid", "group"], "limit": 1}]),
-            ("sharing.smb.query", [[], {"select": ["name", "audit"], "limit": 1}]),
+            # The union of both call sites' selects. `unauditedShares` asks for
+            # name+audit and `shareUsage` asks for name+path+enabled, so a
+            # recording of either one alone leaves the other unproven.
+            ("sharing.smb.query", [[], {"select": ["name", "audit", "path", "enabled"], "limit": 1}]),
         ):
             r = await rpc(method, params)
             if "error" in r:
                 doc["reads"][method] = {"refused_fields": fields(r["error"]), "code": r["error"].get("code")}
                 continue
             result = r["result"]
-            sample = result[0] if isinstance(result, list) and result else result
-            doc["reads"][method] = {"keys": sorted(sample.keys())} if isinstance(sample, dict) else {"type": type(sample).__name__}
+            rows = result if isinstance(result, list) else [result]
+            doc["reads"][method] = shape(rows) if any(isinstance(x, dict) for x in rows) \
+                else {"type": jtype(result)}
+
+        # The audit read behind `activity.get`. Recorded with the add-on's own
+        # parameter shape rather than a convenient one: what has to hold is that
+        # the target accepts THIS call, and a probe that asks differently proves
+        # a different thing. The username filter is exercised separately against
+        # a name that cannot exist, because an accepted filter returning nothing
+        # and a refused filter are the same empty list from the outside.
+        audit_params = [{
+            "services": ["SMB"],
+            "query-options": {"limit": 1, "order_by": ["-message_timestamp"]},
+        }]
+        audit_params[0]["query-options"]["limit"] = 200
+        r = await rpc("audit.query", audit_params)
+        if "error" in r:
+            doc["reads"]["audit.query"] = {
+                "refused_fields": fields(r["error"]), "code": r["error"].get("code")}
+        else:
+            rows = [x for x in (r["result"] or []) if isinstance(x, dict)]
+            # Grouped BY EVENT TYPE, because SMB writes several and they carry
+            # different payloads: an AUTHENTICATION row has no share and a
+            # CONNECT row does, so one sampled row proves whichever happened to
+            # be newest and nothing about the field the add-on actually reads.
+            per_event = {}
+            for row in rows:
+                ev = str(row.get("event", "?"))
+                data = row.get("event_data")
+                per_event.setdefault(ev, set())
+                if isinstance(data, dict):
+                    per_event[ev] |= set(data.keys())
+            entry = dict(shape(rows), sampled_rows=len(rows))
+            entry["event_data_keys_by_event"] = {k: sorted(v) for k, v in sorted(per_event.items())}
+            entry["event_data_types"] = shape([r.get("event_data") for r in rows])["types"]
+            filtered = await rpc("audit.query", [{
+                "services": ["SMB"],
+                "query-filters": [["username", "=", PROBE_USER]],
+                "query-options": {"limit": 1, "order_by": ["-message_timestamp"]},
+            }])
+            entry["username_filter_accepted"] = "error" not in filtered
+            if "error" in filtered:
+                entry["username_filter_refused_fields"] = fields(filtered["error"])
+            doc["reads"]["audit.query"] = entry
+
+        # The quota read behind the member's storage page. Its argument is a
+        # DATASET, derived by the add-on from a share's own path, so the probe
+        # derives it the same way — a hand-picked dataset name would prove the
+        # method answers and not that the derivation reaches it.
+        shares = (await rpc("sharing.smb.query",
+                            [[], {"select": ["name", "path", "enabled"]}])).get("result") or []
+        dataset = ""
+        for sh in shares:
+            if sh.get("enabled") and str(sh.get("path", "")).startswith("/mnt/"):
+                dataset = str(sh["path"])[len("/mnt/"):].strip("/")
+                break
+        if not dataset:
+            doc["reads"]["pool.dataset.get_quota"] = {
+                "skipped": "no enabled SMB share under /mnt to derive a dataset from"}
+        else:
+            r = await rpc("pool.dataset.get_quota", [dataset, "USER"])
+            if "error" in r:
+                doc["reads"]["pool.dataset.get_quota"] = {
+                    "refused_fields": fields(r["error"]), "code": r["error"].get("code")}
+            else:
+                rows = [x for x in (r["result"] or []) if isinstance(x, dict)]
+                # A key absent from every row is absent from the contract. The
+                # union is what a decoder may rely on; one row is what it
+                # happened to get.
+                doc["reads"]["pool.dataset.get_quota"] = dict(
+                    shape(rows), sampled_rows=len(rows),
+                    quota_types=sorted({str(r.get("quota_type")) for r in rows}),
+                )
 
         if WRITE:
             existing = (await rpc("user.query", [[["username", "=", PROBE_USER]], {"select": ["id"]}])).get("result") or []
