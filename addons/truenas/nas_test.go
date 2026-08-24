@@ -171,7 +171,11 @@ func TestAFailedProbeIsRetriedOnACooldownRatherThanEveryCall(t *testing.T) {
 	at = at.Add(probeCooldown + time.Second)
 	before := c.calls
 	_ = n.call("user.query", []any{}, nil)
-	if c.calls != before+2 {
+	// Three: the idle-liveness probe, the retried version probe, and the call.
+	// The clock moved past `idleProbeAfter` to get here, so the session is by
+	// definition one that has been sitting unused — which is exactly when it
+	// has to be proven before anything is sent on it.
+	if c.calls != before+3 {
 		t.Fatalf("want the probe retried after the cooldown, got %d new calls", c.calls-before)
 	}
 }
@@ -223,5 +227,99 @@ func TestARealVersionStringPassesTheSupportedGate(t *testing.T) {
 	ok, note := n.MajorSupported()
 	if !ok {
 		t.Fatalf("a supported release was refused: %s", note)
+	}
+}
+
+// A session the target closed while nobody was using it.
+//
+// Measured against the live NAS before this was fixed: after 60 seconds idle
+// the next call failed, `/health` reported `reachable: false` and
+// `shares_readable: false`, and the call after that succeeded — because the
+// failure had dropped the dead socket. Nothing was ever wrong with the NAS. The
+// add-on was holding a connection that had already gone, and reporting the
+// target down because of it.
+type idleDyingRPC struct {
+	now      func() time.Time
+	lastUsed time.Time
+	dead     bool
+	calls    int
+	pings    int
+}
+
+func (r *idleDyingRPC) Call(method string, _ int64, _ any) (json.RawMessage, error) {
+	// The target closes it silently. Neither end is told, so the first write
+	// after the close is where it surfaces.
+	if r.dead || r.now().Sub(r.lastUsed) >= 60*time.Second {
+		r.dead = true
+		return nil, errors.New("websocket: close 1006 (abnormal closure): unexpected EOF")
+	}
+	r.lastUsed = r.now()
+	r.calls++
+	switch method {
+	case "core.ping":
+		r.pings++
+		return json.RawMessage(`{"jsonrpc":"2.0","id":1,"result":"pong"}`), nil
+	case "system.version":
+		return json.RawMessage(`{"jsonrpc":"2.0","id":1,"result":"25.10.5"}`), nil
+	case "core.get_methods":
+		return json.RawMessage(`{"jsonrpc":"2.0","id":1,"result":{"system.version":{}}}`), nil
+	default:
+		return json.RawMessage(`{"jsonrpc":"2.0","id":1,"result":null}`), nil
+	}
+}
+func (r *idleDyingRPC) Ping() (string, error) { return "pong", nil }
+func (r *idleDyingRPC) Close() error          { return nil }
+
+func TestAnIdleSessionIsProvenBeforeItIsUsed(t *testing.T) {
+	clock := time.Unix(1_700_000_000, 0).UTC()
+	dials := 0
+	n := newNAS(func() (rpc, error) {
+		dials++
+		return &idleDyingRPC{now: func() time.Time { return clock }, lastUsed: clock}, nil
+	}, []string{"25.10"})
+	n.now = func() time.Time { return clock }
+
+	var v string
+	if err := n.call("system.version", []any{}, &v); err != nil {
+		t.Fatalf("the first call must work: %v", err)
+	}
+
+	// Long enough that the target closed it. This is the gap an operator opens
+	// a target page in, and the gap between two scheduled sweeps.
+	clock = clock.Add(5 * time.Minute)
+
+	if err := n.call("system.version", []any{}, &v); err != nil {
+		t.Fatalf("a target that is answering must not read as unreachable: %v", err)
+	}
+	if v != "25.10.5" {
+		t.Fatalf("the replaced session must return the target's answer, got %q", v)
+	}
+	if dials != 2 {
+		t.Fatalf("the dead session must be replaced, not reported: dials=%d", dials)
+	}
+}
+
+// The probe is not paid on a session that is in use. A liveness check in front
+// of every call would double the round trips on the busy path, which is the
+// path that matters.
+func TestALiveSessionIsNotProbed(t *testing.T) {
+	clock := time.Unix(1_700_000_000, 0).UTC()
+	var live *idleDyingRPC
+	n := newNAS(func() (rpc, error) {
+		live = &idleDyingRPC{now: func() time.Time { return clock }, lastUsed: clock}
+		return live, nil
+	}, []string{"25.10"})
+	n.now = func() time.Time { return clock }
+	n.probed = true
+
+	var v string
+	for i := 0; i < 3; i++ {
+		clock = clock.Add(time.Second)
+		if err := n.call("system.version", []any{}, &v); err != nil {
+			t.Fatalf("call %d: %v", i, err)
+		}
+	}
+	if live.pings != 0 {
+		t.Fatalf("a session in constant use must never be probed, got %d probes", live.pings)
 	}
 }
