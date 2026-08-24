@@ -203,7 +203,20 @@ function TargetEventRow({ event }: { event: TargetActivityEvent }) {
       <span className="min-w-[200px] flex-1 text-[14px]">
         <span className="font-semibold">{event.event}</span>
         {event.share ? <span className="text-muted"> — {event.share}</span> : null}
+        {/* The reason, in the target's own vocabulary rather than a
+            translation of it. `NT_STATUS_NO_SUCH_USER` is the string an
+            operator searches for, and inventing friendlier wording would make
+            it unfindable. */}
+        {event.detail ? (
+          <span className="ml-2 font-mono text-[12.5px] text-faint">{event.detail}</span>
+        ) : null}
       </span>
+      {/* Where from. Without it a week of refusals is a week of refusals from
+          nowhere: on the live target 553 rows shared one verb and one outcome,
+          and the only thing that distinguished them was the address. */}
+      {event.address ? (
+        <span className="shrink-0 font-mono text-[12.5px] text-faint">{event.address}</span>
+      ) : null}
       {/* Refusals are the rows worth finding. An access that was denied is a
           different fact from one that never happened. */}
       {!event.success && (

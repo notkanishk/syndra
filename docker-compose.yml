@@ -297,7 +297,14 @@ services:
       # session when the signing key was a path at one end and a value at the
       # other.
       - ADDON_SECRET=${ADDON_SECRET:-}
-      - TRUENAS_URL=${TRUENAS_URL:?TRUENAS_URL is required when the truenas profile is enabled}
+      # NOT `:?`. Compose interpolates every service in the file before it
+      # decides which profiles are active, so a required-variable form here
+      # fails `docker compose config`, `up`, `ps` and `down` on every
+      # deployment that runs no NAS — the optional add-on made mandatory by the
+      # syntax used to describe it. The add-on refuses to start without a URL
+      # (main.go, loadConfig), which is the check that can tell the difference
+      # between "not configured" and "not wanted".
+      - TRUENAS_URL=${TRUENAS_URL:-}
       # The name a MEMBER types into a file manager, which is frequently not the
       # middleware endpoint above — the API may be reached on one name while SMB
       # is published on another. Never derived from TRUENAS_URL. Unset, the

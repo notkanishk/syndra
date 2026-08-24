@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -593,6 +594,21 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 	}, http.StatusOK, nil
 }
 
+// decodeAnswer refuses an answer that is absent as well as one that is wrong.
+//
+// `json.Unmarshal` accepts a bare `null` into ANY destination, reports no
+// error, and leaves it zeroed. A source answering null would therefore have
+// been recorded as read-and-empty, which on the health surface is "no alerts"
+// and "no pools" — the two most reassuring things it can say, arrived at
+// without reading anything.
+func decodeAnswer(raw json.RawMessage, into any) error {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		return fmt.Errorf("the target answered nothing")
+	}
+	return json.Unmarshal(trimmed, into)
+}
+
 // eventDetail pulls the two useful things out of a payload whose shape changes
 // with the event type.
 //
@@ -709,23 +725,25 @@ type ServiceState struct {
 // targetHealth composes four sources and degrades per source.
 func (s *server) targetHealth(req OperationRequest) (OperationResult, int, error) {
 	h := TargetHealth{}
-	for _, source := range []struct {
+	sources := []struct {
 		name   string
 		method string
 		params any
-		decode func(json.RawMessage)
+		decode func(json.RawMessage) error
 	}{
-		{"system", "system.info", []any{}, func(raw json.RawMessage) {
+		{"system", "system.info", []any{}, func(raw json.RawMessage) error {
 			var in struct {
 				Hostname      string  `json:"hostname"`
 				Version       string  `json:"version"`
 				UptimeSeconds float64 `json:"uptime_seconds"`
 			}
-			if json.Unmarshal(raw, &in) == nil {
-				h.System = &SystemInfo{Hostname: in.Hostname, Version: in.Version, UptimeSeconds: in.UptimeSeconds}
+			if err := decodeAnswer(raw, &in); err != nil {
+				return err
 			}
+			h.System = &SystemInfo{Hostname: in.Hostname, Version: in.Version, UptimeSeconds: in.UptimeSeconds}
+			return nil
 		}},
-		{"alerts", "alert.list", []any{}, func(raw json.RawMessage) {
+		{"alerts", "alert.list", []any{}, func(raw json.RawMessage) error {
 			var in []struct {
 				Level     string  `json:"level"`
 				Klass     string  `json:"klass"`
@@ -734,8 +752,8 @@ func (s *server) targetHealth(req OperationRequest) (OperationResult, int, error
 				Dismissed bool    `json:"dismissed"`
 				Datetime  epochMs `json:"datetime"`
 			}
-			if json.Unmarshal(raw, &in) != nil {
-				return
+			if err := decodeAnswer(raw, &in); err != nil {
+				return err
 			}
 			h.Alerts = make([]TargetAlert, 0, len(in))
 			for _, a := range in {
@@ -750,8 +768,9 @@ func (s *server) targetHealth(req OperationRequest) (OperationResult, int, error
 					At: a.Datetime.RFC3339(), Dismissed: a.Dismissed,
 				})
 			}
+			return nil
 		}},
-		{"pools", "pool.query", []any{}, func(raw json.RawMessage) {
+		{"pools", "pool.query", []any{}, func(raw json.RawMessage) error {
 			var in []struct {
 				Name      string `json:"name"`
 				Status    string `json:"status"`
@@ -761,8 +780,8 @@ func (s *server) targetHealth(req OperationRequest) (OperationResult, int, error
 				Allocated int64  `json:"allocated"`
 				Size      int64  `json:"size"`
 			}
-			if json.Unmarshal(raw, &in) != nil {
-				return
+			if err := decodeAnswer(raw, &in); err != nil {
+				return err
 			}
 			h.Pools = make([]PoolStatus, 0, len(in))
 			for _, p := range in {
@@ -771,33 +790,44 @@ func (s *server) targetHealth(req OperationRequest) (OperationResult, int, error
 					FreeBytes: p.Free, AllocatedBytes: p.Allocated, SizeBytes: p.Size,
 				})
 			}
+			return nil
 		}},
-		{"services", "service.query", []any{}, func(raw json.RawMessage) {
+		{"services", "service.query", []any{}, func(raw json.RawMessage) error {
 			var in []struct {
 				Service string `json:"service"`
 				State   string `json:"state"`
 				Enable  bool   `json:"enable"`
 			}
-			if json.Unmarshal(raw, &in) != nil {
-				return
+			if err := decodeAnswer(raw, &in); err != nil {
+				return err
 			}
 			h.Services = make([]ServiceState, 0, len(in))
 			for _, sv := range in {
 				h.Services = append(h.Services, ServiceState{Service: sv.Service, State: sv.State, Enabled: sv.Enable})
 			}
+			return nil
 		}},
-	} {
+	}
+	for _, source := range sources {
 		var raw json.RawMessage
 		if err := s.nas.call(source.method, source.params, &raw); err != nil {
 			h.Degraded = append(h.Degraded, source.name)
 			continue
 		}
-		source.decode(raw)
+		// A source that ANSWERED and could not be understood is degraded too.
+		// Discarding the decode error left the field absent and the source
+		// unnamed, which the surface renders as "nothing raised" — the
+		// reassuring answer, produced by a schema change nobody had noticed.
+		if err := source.decode(raw); err != nil {
+			h.Degraded = append(h.Degraded, source.name)
+		}
 	}
-	// All four failing is an unreachable target, not a health report with four
-	// holes in it — the distinction an operator needs is "the NAS is down"
-	// rather than "four things are wrong with it".
-	if len(h.Degraded) == 4 {
+	// Every source failing is an unreachable target, not a health report with
+	// four holes in it — the distinction an operator needs is "the NAS is down"
+	// rather than "four things are wrong with it". Counted against the table
+	// rather than against a literal, so adding a fifth source cannot quietly
+	// turn this into a check that never fires.
+	if len(h.Degraded) == len(sources) {
 		return OperationResult{}, http.StatusServiceUnavailable, fmt.Errorf("the target answered none of the health reads")
 	}
 	return OperationResult{

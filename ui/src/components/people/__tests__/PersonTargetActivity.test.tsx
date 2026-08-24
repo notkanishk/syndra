@@ -102,3 +102,69 @@ describe("the target's own log, beside Syndra's", () => {
     expect(screen.getAllByText("Refused")).toHaveLength(1);
   });
 });
+
+/**
+ * The context that makes a repeated refusal actionable.
+ *
+ * The add-on returns an address and the target's own status token, and the row
+ * used to drop both. On the live NAS that meant 553 rows over a week rendering
+ * as 553 identical "Refused" pills — one verb, one outcome, and nothing to tell
+ * one from another. The two dropped fields are the only things that did.
+ */
+describe("a refusal an operator can act on", () => {
+  it("names where it came from and what the target said", async () => {
+    state.activity = {
+      target: "truenas",
+      subject: "u1",
+      readable: true,
+      events: [
+        {
+          at: "2026-08-23T10:45:31Z",
+          event: "AUTHENTICATION",
+          success: false,
+          address: "192.0.2.77",
+          detail: "NT_STATUS_NO_SUCH_USER",
+        },
+      ],
+    };
+    renderTab();
+
+    await waitFor(() => expect(screen.getByText("AUTHENTICATION")).toBeInTheDocument());
+    // The address is the only thing distinguishing one refusal from the next.
+    expect(screen.getByText("192.0.2.77")).toBeInTheDocument();
+    // The target's own token, not a translation of it: this is the string an
+    // operator searches for.
+    expect(screen.getByText("NT_STATUS_NO_SUCH_USER")).toBeInTheDocument();
+    expect(screen.getByText("Refused")).toBeInTheDocument();
+  });
+
+  it("tells two refusals apart when everything but the source differs", async () => {
+    state.activity = {
+      target: "truenas",
+      subject: "u1",
+      readable: true,
+      events: [
+        { at: "2026-08-23T10:45:31Z", event: "AUTHENTICATION", success: false, address: "192.0.2.77", detail: "NT_STATUS_NO_SUCH_USER" },
+        { at: "2026-08-23T10:45:32Z", event: "AUTHENTICATION", success: false, address: "192.0.2.72", detail: "NT_STATUS_NO_SUCH_USER" },
+      ],
+    };
+    renderTab();
+
+    await waitFor(() => expect(screen.getByText("192.0.2.77")).toBeInTheDocument());
+    expect(screen.getByText("192.0.2.72")).toBeInTheDocument();
+  });
+
+  it("renders an event that carries neither, because most targets will not", async () => {
+    state.activity = {
+      target: "truenas",
+      subject: "u1",
+      readable: true,
+      events: [{ at: "2026-08-23T10:45:31Z", event: "CONNECT", share: "main", success: true }],
+    };
+    renderTab();
+
+    await waitFor(() => expect(screen.getByText("CONNECT")).toBeInTheDocument());
+    expect(screen.getByText(/main/)).toBeInTheDocument();
+    expect(screen.queryByText("Refused")).toBeNull();
+  });
+});
