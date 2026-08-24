@@ -944,7 +944,77 @@ the deployment's API key, and nothing in the product could exercise them.
   Refused accesses are marked: a denied access is a different fact from one
   that never happened.
 
-- [ ] 33.6 Untouched by a real NAS. `audit.query` and `sharing.smb.query` now
-  have a caller, and whether TrueNAS answers them the way the recorded fixture
-  says is still unproven — the same operator-gated question §13 named, now
-  narrowed to two methods and reachable from a screen.
+- [x] 33.6 **Answered, and the answer was no.** Asked against
+  `nas.example.org` on 2026-08-24, TrueNAS-25.10.5:
+  `sharing.smb.query` was already in the recording and behaved; `audit.query`
+  answers `message_timestamp` as an **integer** and the add-on decoded it as a
+  string, so `encoding/json` failed the whole response and `activity.get` had
+  returned "the audit log could not be read" on every call it ever received.
+  The operation had never once succeeded. Fixed in §34; live afterwards, with
+  `readable: true` and both shares correctly named as unaudited.
+
+## 34. What a real NAS said, and what it cost (2026-08-24)
+
+The whole of §33 was written against a fixture that recorded key NAMES. The
+names were right. Everything below is what the first real conversation found,
+and the reason a recorded read is now recorded with its TYPES.
+
+- [x] 34.1 `audit.query`'s `message_timestamp` is an integer. Decoded as a
+  string, which fails the WHOLE response rather than the field — so
+  `activity.get` answered "could not be read" for its entire life, with two
+  green suites and a fixture that agreed with the code
+- [x] 34.2 `event_data` is decoded separately and defensively. Its shape varies
+  by event type and one surprise inside it took the whole read down, which is
+  the same failure mode again one level lower
+- [x] 34.3 `event_data.share` does not exist on an SMB `AUTHENTICATION` row,
+  and 553 of 553 rows over a week were `AUTHENTICATION`. `address` and the
+  NTSTATUS token travel instead — without them a week of refusals renders as
+  553 identical lines. The token is admitted by a check on its SHAPE, so §13.3's
+  guarantee that the target's error TEXT never leaves the client still holds
+- [x] 34.4 `since` was dead end to end: parsed by the backend, forwarded, never
+  read by the add-on. The column is an integer, and an RFC3339 string compared
+  against it is ACCEPTED and matches nothing — a silently empty answer, which is
+  the worst of the three outcomes available
+- [x] 34.5 **The recorder records types.** A key-name fixture cannot disagree
+  with a decoder about anything that matters. `shape()` unions keys AND JSON
+  types over every row sampled, and records a genuinely-polymorphic key as both
+- [x] 34.6 **`read_shape_test.go`** reads the add-on's own source for the struct
+  behind every `nas.call(...)` and asserts each json tag against the recording:
+  the key exists, and the Go type can hold what the target puts in it. A method
+  decoded here that the recorder never asks about fails too. A field the target
+  may legitimately omit is marked `shape-optional:` **with a reason** — a bare
+  marker is a silenced check. Mutation-verified
+- [x] 34.7 **A session idle for 60s fails its next call**, and the add-on
+  reported the NAS unreachable while the NAS was answering. Every path, not just
+  health. Probed before the call rather than retried after it, because a retry
+  would have to decide whether a mutation's frame arrived. Verified live at 75s
+  and 150s
+- [x] 34.8 **`health.get` had no caller** — declared, implemented, dispatched,
+  policy'd, and listed to operators under "What it can do" with nothing behind
+  it. Now `GET /targets/{target}/system-health` and a card under the add-on's
+  own health card. Shaped rather than forwarded: the four reads answer with the
+  chassis serial, the license blob and the full pool topology. Its first live
+  call found an uncorrectable SMART error on `sde`
+- [x] 34.9 **A read-only run of the recorder deleted the write rules** its own
+  usage text promises to keep, and a backtick in the wrapper executed a filename
+- [x] 34.10 **Demo mode could not name the acting subject.** The proxy sends the
+  shared key and nothing else, so every `/me/*` route resolved its actor to
+  "system" — no entitlement, no binding, no account. The member storage path was
+  therefore untestable on any deployment without a live Zitadel, which is why
+  nobody noticed middleware had been redirecting members off it.
+  `X-Syndra-Demo-Subject` is read only inside the branch that already accepts
+  the shared key, and confers no roles
+- [x] 34.11 Two unaudited shares rendered as one share that does not exist
+  (`gitlab_datamain`), in the warning that explains why activity reports are
+  empty. And `formatBytes` existed twice with disagreeing units — both divided
+  by 1024, one labelled the result GB
+
+- [ ] 34.12 **SMB auditing is off on both shares** (`gitlab_data`, `main`), so
+  `activity.get` can only ever return authentication events — no file access and
+  no share names. Syndra's own credential cannot turn it on: `sharing.smb.update`
+  answers `EACCES`, because the add-on's key holds `SHARING_SMB_READ` and not
+  write. That is the right split and it makes this an operator action at the
+  console: Shares → SMB → Edit → Advanced, per share
+- [ ] 34.13 **A file-access audit row has never been seen.** Follows 34.12: with
+  auditing off there are no `CONNECT`/file events to record, so the `share`
+  field and the non-authentication event types remain unrecorded and unguarded
