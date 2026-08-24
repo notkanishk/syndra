@@ -9,6 +9,8 @@ import (
 	"os"
 	"runtime/debug"
 	"strings"
+
+	"syndra/internal/auth"
 )
 
 // NewRouter constructs the global multiplexer for API requests
@@ -259,6 +261,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/targets/{target}/health", withCORS(withOperatorAuth(handleTargetHealth)))
 	// What the target's own audit log holds for one subject. Operator-gated:
 	// the member-facing read is storage.status, which takes no subject at all.
+	mux.HandleFunc("GET /api/v1/targets/{target}/system-health", withCORS(withOperatorAuth(handleTargetSystemHealth)))
 	mux.HandleFunc("GET /api/v1/targets/{target}/activity", withCORS(withOperatorAuth(handleTargetActivity)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/log-anchor/resolve", withCORS(withOperatorAuth(handleResolveLogFinding)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/binding-conflicts/{id}/resolve", withCORS(withOperatorAuth(handleResolveBindingConflict)))
@@ -437,8 +440,37 @@ func withAPIKeyAuth(next http.HandlerFunc) http.HandlerFunc {
 			jsonErrorResponse(w, http.StatusUnauthorized, "UNAUTHORIZED", "Missing or invalid authorization token")
 			return
 		}
-		next(w, r)
+		next(w, demoSubject(r))
 	}
+}
+
+// demoSubjectHeader lets a demo-mode caller say WHO it is acting as.
+//
+// Reachable only from `withAPIKeyAuth`, which is reachable only when
+// ZITADEL_DOMAIN is unset. That is the same gate the shared key itself lives
+// behind, and the key already grants every operator power there is — so naming
+// a subject alongside it adds no privilege, it only stops the request being
+// anonymous. In production the branch is never taken and the subject comes from
+// a validated token, as it must.
+//
+// Without this, every `/me/*` route in demo mode resolved its actor to
+// "system": a subject with no entitlement, no binding and no account. The
+// member storage page therefore could not be exercised on any deployment
+// without a live Zitadel, which is why nobody noticed that the middleware was
+// redirecting members away from it in the first place. A path that cannot be
+// tested is a path that is broken and quiet about it.
+const demoSubjectHeader = "X-Syndra-Demo-Subject"
+
+// demoSubject attaches the named subject as the request's principal.
+func demoSubject(r *http.Request) *http.Request {
+	subject := strings.TrimSpace(r.Header.Get(demoSubjectHeader))
+	if subject == "" {
+		return r
+	}
+	// No roles. Demo mode has no role source to read them from, and inventing
+	// one here would make this header grant something rather than merely
+	// identify — every route that gates on a project role keeps refusing.
+	return r.WithContext(withPrincipal(r.Context(), &auth.Principal{Subject: subject}))
 }
 
 // extractBearerToken parses the Authorization header and returns the token string,

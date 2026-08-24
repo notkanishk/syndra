@@ -381,6 +381,7 @@ var (
 	// operator opening somebody's record must not append to the operation log
 	// for having looked.
 	addonsActivity        = addons.Activity
+	addonsSystemHealth    = addons.SystemHealth
 	svcDispatchOperation  = addonop.Dispatch
 	dbRecordTargetBinding = db.RecordTargetBinding
 )
