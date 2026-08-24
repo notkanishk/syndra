@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { MappingManagement } from "@/components/targets/MappingManagement";
@@ -17,7 +17,9 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { blocksIrreversibleAction, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
+import { formatBytes } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
+import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 import {
   useAdoptAccount,
   useReconcileTarget,
@@ -65,6 +67,12 @@ export function TargetOverview({ target }: { target: string }) {
             registered?.transport_status === "error" ? registered.transport_error : undefined
           }
         />
+        {/* What the TARGET says about itself, directly under what the ADD-ON
+            says about the target. Same question, one layer further down: the
+            card above answers "is Syndra able to talk to it", this one answers
+            "and is the machine itself all right". A failing disk shows up here
+            and nowhere else in Syndra. */}
+        <SystemHealth target={target} />
         {/* What roles reach here, before whose accounts are on it: the mappings
             are the reason any of those accounts exist, and reading the
             inventory first invites the question this panel answers. */}
@@ -144,6 +152,125 @@ export function TargetOverview({ target }: { target: string }) {
  * because an operator who reads `circuit_open` as "the target is down" looks at
  * the wrong machine entirely.
  */
+/**
+ * The NAS's own account of itself: alerts, pools, services.
+ *
+ * `health.get` was declared in the manifest, implemented, dispatched and given
+ * a policy entry the day the platform landed, and nothing ever called it — so
+ * "What it can do" listed a capability with nothing behind it, and the four
+ * questions an operator actually asks first when storage misbehaves went
+ * unanswered by a system that could already answer them.
+ *
+ * Rendered as findings rather than as a dump. The reads return several
+ * kilobytes each and the add-on keeps three fields from `system.info`; what
+ * reaches here is what changes a decision.
+ */
+function SystemHealth({ target }: { target: string }) {
+  const report = useTargetSystemHealth(target);
+  const data = report.data;
+
+  // Nothing at all while it is still being asked. Four calls to the target take
+  // a moment, and a card that flashes "no alerts" before the answer arrives has
+  // said something false.
+  if (report.isLoading || report.isError || !data) return null;
+
+  const alerts = (data.alerts ?? []).filter((a) => !a.dismissed);
+  const pools = data.pools ?? [];
+  // Only the ones that matter to a target Syndra provisions accounts on. `cifs`
+  // stopped is the single most likely explanation for "my drive vanished", and
+  // it is invisible from every other read the add-on makes.
+  const services = (data.services ?? []).filter((s) => s.service === "cifs" || s.service === "nfs");
+  const degraded = data.degraded ?? [];
+
+  return (
+    <Card>
+      <CardHeader
+        title="What the target reports"
+        note={
+          data.system?.hostname
+            ? `${data.system.hostname}${data.system.version ? ` · ${data.system.version}` : ""}`
+            : "Read from the target itself, not from Syndra's record"
+        }
+      />
+      <div className="flex flex-col gap-2.5 px-5 pb-5">
+        {!data.readable && (
+          <Reading tone="warn" label="Could not be asked">
+            The target did not answer its own health reads, so this is not a report that
+            nothing is wrong.{data.detail ? ` ${data.detail}` : ""}
+          </Reading>
+        )}
+
+        {/* Named sources. "alerts could not be read" and "there are no alerts"
+            are the same empty list without this, and they are opposite facts. */}
+        {degraded.length > 0 && (
+          <Reading tone="warn" label="Partly read">
+            {degraded.join(", ")} could not be read. Whatever those would have said is
+            missing from this card rather than absent from the target.
+          </Reading>
+        )}
+
+        {alerts.map((alert, i) => (
+          <Reading
+            key={`${alert.klass}-${i}`}
+            tone={alert.level === "CRITICAL" || alert.level === "ERROR" ? "danger" : alert.level === "WARNING" ? "warn" : "accent"}
+            label={alertLabel(alert.level)}
+          >
+            {alert.text}
+          </Reading>
+        ))}
+
+        {pools.map((pool) => (
+          <Reading
+            key={pool.name}
+            tone={!pool.healthy ? "danger" : pool.warning ? "warn" : "healthy"}
+            label={pool.name}
+          >
+            {pool.status}
+            {pool.size_bytes > 0 && (
+              <>
+                {" · "}
+                {formatBytes(pool.allocated_bytes)} of {formatBytes(pool.size_bytes)} used
+              </>
+            )}
+          </Reading>
+        ))}
+
+        {services
+          .filter((s) => s.state !== "RUNNING")
+          .map((s) => (
+            <Reading key={s.service} tone="danger" label={`${s.service} is not running`}>
+              Accounts Syndra provisions here reach nothing while it is stopped
+              {s.enable ? ", and it is set to start on boot — so it stopped on its own." : ", and it is not set to start on boot."}
+            </Reading>
+          ))}
+
+        {data.readable &&
+          degraded.length === 0 &&
+          alerts.length === 0 &&
+          pools.every((p) => p.healthy && !p.warning) &&
+          services.every((s) => s.state === "RUNNING") && (
+            <Reading tone="healthy" label="Nothing raised">
+              No alerts, every pool healthy, and the sharing services are running.
+            </Reading>
+          )}
+      </div>
+    </Card>
+  );
+}
+
+function alertLabel(level: string): string {
+  switch (level) {
+    case "CRITICAL":
+      return "Critical";
+    case "ERROR":
+      return "Error";
+    case "WARNING":
+      return "Warning";
+    default:
+      return "Notice";
+  }
+}
+
 /**
  * Reconcile now, and what the pass found.
  *
@@ -416,8 +543,14 @@ function Health({
         {health?.reachable && health.shares_readable && (health.unaudited_shares?.length ?? 0) > 0 && (
           <Reading tone="warn" label="SMB auditing is off">
             {health.unaudited_shares!.length === 1 ? "Share" : "Shares"}{" "}
-            {health.unaudited_shares!.map((s) => (
-              <Mono key={s}>{s}</Mono>
+            {health.unaudited_shares!.map((s, i, all) => (
+              <Fragment key={s}>
+                {/* Separators between, never before the first and never after
+                    the last: two names run together into one that names no
+                    share at all. */}
+                {i > 0 && (i === all.length - 1 ? " and " : ", ")}
+                <Mono>{s}</Mono>
+              </Fragment>
             ))}{" "}
             {health.unaudited_shares!.length === 1 ? "has" : "have"} auditing disabled, so a
             member&rsquo;s activity report comes back empty whether or not they used it.

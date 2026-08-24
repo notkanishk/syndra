@@ -162,3 +162,23 @@ export function daysUntil(iso: string | null | undefined, now: Date = new Date()
   if (Number.isNaN(target)) return null;
   return Math.ceil((target - now.getTime()) / (1000 * 60 * 60 * 24));
 }
+
+/**
+ * Bytes, in the units the division actually produces.
+ *
+ * Divides by 1024 and says so. Two copies of this used to live in components
+ * and they disagreed: one divided by 1024 and labelled the result KB/MB/GB,
+ * which names a quantity 2.4% smaller than the one it printed by the time it
+ * reaches terabytes. Binary steps get binary names.
+ */
+export function formatBytes(bytes: number): string {
+  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  // One decimal place above bytes; nobody needs "1.0 B".
+  return unit === 0 ? `${Math.round(value)} B` : `${value.toFixed(1)} ${units[unit]}`;
+}

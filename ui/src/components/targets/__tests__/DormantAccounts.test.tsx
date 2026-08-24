@@ -154,7 +154,9 @@ describe("dormant accounts", () => {
     renderDormant();
     fireEvent.click(screen.getByLabelText("Select former-member"));
 
-    expect(screen.getByText(/38\.4 GB of their files/)).toBeInTheDocument();
+    // GiB, not GB. This divided by 1024 and printed a decimal unit name, which
+    // by the terabyte is naming a quantity 10% smaller than the one shown.
+    expect(screen.getByText(/38\.4 GiB of their files/)).toBeInTheDocument();
   });
 
   // Everything else on these screens queues. This one does not, and saying so
