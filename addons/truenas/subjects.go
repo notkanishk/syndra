@@ -300,8 +300,13 @@ func primaryGroupID(raw json.RawMessage) (apiID, bool) {
 		}
 		return record.ID, record.ID.known()
 	}
-	// A bare token. `apiID` keeps whatever arrived and never fails, so the
-	// only question left is whether it says anything.
+	// A bare token, and only a scalar one. `apiID` keeps whatever arrived and
+	// never fails to unmarshal, so without this an array or any other surprise
+	// becomes an "id" that matches no group — carried around and compared
+	// against real ones rather than reported as the nothing it is.
+	if trimmed[0] == '[' {
+		return apiID{}, false
+	}
 	var bare apiID
 	_ = json.Unmarshal(trimmed, &bare)
 	return bare, bare.known()

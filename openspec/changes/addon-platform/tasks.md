@@ -1128,5 +1128,11 @@ and the reason a recorded read is now recorded with its TYPES.
   envelope, the handler and the console. The cross-module source guard in
   `internal/addons/activity_envelope_test.go` caught the rename from the other
   side, which is what it is for
+- [x] 35.11 **A test for every form of the primary group, and it found one.**
+  The bare-id fallback was tolerance for a release this add-on has not met, and
+  tolerance nothing exercises is indistinguishable from tolerance that does not
+  work: `apiID` never fails to unmarshal, so a JSON array became an "id" that
+  matched no group and was carried around and compared against real ones rather
+  than reported as the nothing it is. Scalars only now
 - [x] 35.9 **A `.pyc` had been tracked** since the recorder landed, with no
   `__pycache__` rule in `.gitignore`. Untracked, and the rule added
