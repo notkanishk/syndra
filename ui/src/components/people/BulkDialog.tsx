@@ -91,8 +91,13 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
       noun={["person", "people"]}
       ready={ready}
       destructive={op === "remove_role" || op === "remove_bundle"}
-      onRehearse={() => rehearse.mutateAsync(input)}
-      onApply={() => apply.mutateAsync(input)}
+      onRehearse={(acknowledgeScope) =>
+        rehearse.mutateAsync({ ...input, acknowledge_scope: acknowledgeScope })
+      }
+      // The same body, plus the approval it is applying. The backend binds the
+      // two: a body that is not the one the plan was computed for is refused,
+      // so an edit made after the dialog cannot ride in under the approval.
+      onApply={(planId) => apply.mutateAsync({ ...input, plan_id: planId })}
       onClose={onClose}
       compose={
         <>

@@ -44,7 +44,7 @@ const claimProfileColumns = `zitadel_project_id, claim_name, format_type, attrib
 // the directory layer is running in live mode, and by the data plane to shape
 // tokens.
 func ListClaimProfiles(ctx context.Context) ([]ClaimProfileRow, error) {
-	rows, err := PG.Query(ctx, `SELECT `+claimProfileColumns+` FROM claim_profiles`)
+	rows, err := querier(ctx).Query(ctx, `SELECT `+claimProfileColumns+` FROM claim_profiles`)
 	if err != nil {
 		return nil, fmt.Errorf("list claim profiles: %w", err)
 	}
@@ -68,7 +68,7 @@ func ListClaimProfiles(ctx context.Context) ([]ClaimProfileRow, error) {
 // the operator has never edited it — callers fall back to the built-in
 // default rather than treating absence as an error.
 func GetClaimProfile(ctx context.Context, projectID string) (ClaimProfileRow, bool, error) {
-	row := PG.QueryRow(ctx,
+	row := querier(ctx).QueryRow(ctx,
 		`SELECT `+claimProfileColumns+` FROM claim_profiles WHERE zitadel_project_id = $1`, projectID)
 	r, err := scanClaimProfile(row)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -86,7 +86,7 @@ func UpsertClaimProfile(ctx context.Context, r ClaimProfileRow) error {
 	if err != nil {
 		return err
 	}
-	_, err = PG.Exec(ctx, `
+	_, err = querier(ctx).Exec(ctx, `
 		INSERT INTO claim_profiles (zitadel_project_id, claim_name, format_type, attribute_claims, static_claims)
 		VALUES ($1,$2,$3,$4,$5)
 		ON CONFLICT (zitadel_project_id) DO UPDATE
@@ -106,7 +106,7 @@ func UpsertClaimProfile(ctx context.Context, r ClaimProfileRow) error {
 // plane loads the whole (small) set once per token rather than issuing a
 // query per project.
 func ListAppClaimOverrides(ctx context.Context) ([]AppClaimOverrideRow, error) {
-	rows, err := PG.Query(ctx, `
+	rows, err := querier(ctx).Query(ctx, `
 		SELECT application_id, zitadel_project_id, claim_name, format_type, attribute_claims, static_claims
 		FROM app_claim_overrides`)
 	if err != nil {
@@ -138,7 +138,7 @@ func UpsertAppClaimOverride(ctx context.Context, r AppClaimOverrideRow) error {
 	if err != nil {
 		return err
 	}
-	_, err = PG.Exec(ctx, `
+	_, err = querier(ctx).Exec(ctx, `
 		INSERT INTO app_claim_overrides
 			(application_id, zitadel_project_id, claim_name, format_type, attribute_claims, static_claims)
 		VALUES ($1,$2,$3,$4,$5,$6)
@@ -159,7 +159,7 @@ func UpsertAppClaimOverride(ctx context.Context, r AppClaimOverrideRow) error {
 // DeleteAppClaimOverride drops an override so the application falls back to
 // its project's default shape.
 func DeleteAppClaimOverride(ctx context.Context, applicationID string) error {
-	if _, err := PG.Exec(ctx, `DELETE FROM app_claim_overrides WHERE application_id = $1`, applicationID); err != nil {
+	if _, err := querier(ctx).Exec(ctx, `DELETE FROM app_claim_overrides WHERE application_id = $1`, applicationID); err != nil {
 		return fmt.Errorf("delete app claim override for %s: %w", applicationID, err)
 	}
 	return nil
@@ -230,7 +230,7 @@ func GetClaimFailureMode(ctx context.Context, projectID string) (string, map[str
 
 	var mode string
 	var rawClaims []byte
-	err := PG.QueryRow(ctx, query, projectID).Scan(&mode, &rawClaims)
+	err := querier(ctx).QueryRow(ctx, query, projectID).Scan(&mode, &rawClaims)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// No claim profile configured for this project — fail_closed is the safe default

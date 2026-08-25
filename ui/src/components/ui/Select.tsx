@@ -46,7 +46,13 @@ export function Segmented<T extends string>({
   size?: "sm" | "md";
   label: string;
 }) {
-  const pad = size === "sm" ? "px-3 py-1 text-[12.5px]" : "px-4 py-1.5 text-[13px]";
+  // Segments are controls, and on touch they carry the same floor every other
+  // control does. The compact padding returns above the desktop breakpoint,
+  // where a segmented control sits in a dense toolbar.
+  const pad =
+    size === "sm"
+      ? "min-h-[44px] px-3 text-[12.5px] desktop:min-h-0 desktop:py-1"
+      : "min-h-[44px] px-4 text-[13px] desktop:min-h-0 desktop:py-1.5";
   return (
     <div role="radiogroup" aria-label={label} className="inline-flex rounded-pill bg-tint-2 p-[3px]">
       {options.map((option) => {
@@ -93,7 +99,7 @@ export function FilterPills<T extends string>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(option.value)}
-            className={`rounded-pill px-3.5 py-1.5 text-[13px] motion-tint ${
+            className={`min-h-[44px] rounded-pill px-3.5 text-[13px] motion-tint desktop:min-h-0 desktop:py-1.5 ${
               active ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
             }`}
           >

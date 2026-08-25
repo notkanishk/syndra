@@ -8,6 +8,14 @@ import type { DriftTriageItem } from "@/lib/queries/useDrift";
 
 const drift = vi.hoisted(() => ({ data: [] as DriftTriageItem[] }));
 
+// The per-row origin read, asked only when somebody clicks.
+const origin = vi.hoisted(() => ({
+  data: undefined as Record<string, unknown> | undefined,
+  isLoading: false,
+  isError: false,
+  asks: 0,
+}));
+
 // The plan the bulk endpoints return — the same shape every bulk surface in the
 // product returns, so the triage queue and the People page share one renderer.
 const bulk = vi.hoisted(() => ({
@@ -15,24 +23,11 @@ const bulk = vi.hoisted(() => ({
     op: "adopt",
     applied: false,
     outcomes: [] as Array<Record<string, unknown>>,
-    summary: { total: 0, apply: 0, no_change: 0, blocked: 0, failed: 0, succeeded: 0 },
+    plan_id: "plan_1",
+    summary: { total: 0, apply: 0, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
   },
   rehearsals: 0,
   applies: 0,
-}));
-
-const toasts = vi.hoisted(() => ({
-  success: [] as string[],
-  warning: [] as string[],
-  error: [] as string[],
-}));
-
-vi.mock("sonner", () => ({
-  toast: {
-    success: (message: string) => toasts.success.push(message),
-    warning: (message: string) => toasts.warning.push(message),
-    error: (message: string) => toasts.error.push(message),
-  },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -74,6 +69,12 @@ vi.mock("@/lib/queries/useDrift", () => ({
     isPending: false,
   }),
   useReconcileNow: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDriftOrigin: (_id: string, enabled: boolean) => {
+    if (enabled) origin.asks += 1;
+    return enabled
+      ? { data: origin.data, isLoading: origin.isLoading, isError: origin.isError }
+      : { data: undefined, isLoading: false, isError: false };
+  },
 }));
 
 vi.mock("@/lib/queries/useGrants", () => ({
@@ -86,14 +87,25 @@ function item(overrides: Partial<DriftTriageItem> = {}): DriftTriageItem {
     user_id: "u1",
     project_id: "p1",
     role_keys: ["operator"],
-    drift_type: "zitadel_only",
+    drift_type: "target_only",
     detection_source: "reconciliation_sweep",
     detected_at: "2026-07-22T06:00:00Z",
+    target: "zitadel",
     role_in_catalogue: true,
+    role_catalogue_applies: true,
     user_is_service_account: false,
     other_items_for_user: 0,
     ...overrides,
   } as DriftTriageItem;
+}
+
+/**
+ * Selection is a mode now, announced by a named control, so a test that wants
+ * a checkbox has to ask for one the way an operator does. That is the point of
+ * the change: nothing about a row at rest suggests it is selectable.
+ */
+function enterSelect() {
+  fireEvent.click(screen.getByRole("button", { name: "Select" }));
 }
 
 function renderTriage() {
@@ -111,13 +123,11 @@ beforeEach(() => {
     op: "adopt",
     applied: false,
     outcomes: [],
-    summary: { total: 0, apply: 0, no_change: 0, blocked: 0, failed: 0, succeeded: 0 },
+    plan_id: "plan_1",
+    summary: { total: 0, apply: 0, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
   };
   bulk.rehearsals = 0;
   bulk.applies = 0;
-  toasts.success = [];
-  toasts.warning = [];
-  toasts.error = [];
 });
 
 describe("Unexplained access — triage", () => {
@@ -145,12 +155,24 @@ describe("Unexplained access — triage", () => {
 
   it("offers bulk adopt and bulk mark-external once rows are selected — and never bulk revoke", () => {
     renderTriage();
+    enterSelect();
     fireEvent.click(screen.getAllByRole("checkbox")[1]);
 
+    // Both verbs name the next step — a plan — rather than the write at the end
+    // of it, because tapping either one resolves nothing on its own.
     const bar = screen.getByRole("region", { name: "Selection" });
-    expect(within(bar).getByRole("button", { name: "Adopt in Syndra" })).toBeInTheDocument();
-    expect(within(bar).getByRole("button", { name: "Mark as owned elsewhere" })).toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "Review adopting these" })).toBeInTheDocument();
+    expect(
+      within(bar).getByRole("button", { name: "Review marking these owned elsewhere" }),
+    ).toBeInTheDocument();
     expect(within(bar).queryByRole("button", { name: /Revoke/ })).not.toBeInTheDocument();
+  });
+
+  it("says nothing about selecting until the named control is tapped", () => {
+    renderTriage();
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    enterSelect();
+    expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0);
   });
 
   it("has a select-all that covers the whole queue, not the rendered page", () => {
@@ -158,9 +180,10 @@ describe("Unexplained access — triage", () => {
       item({ id: `d${index}`, user_id: `u${index}` }),
     );
     renderTriage();
+    enterSelect();
 
     // The queue pages at 12, but the queue is what you are triaging.
-    fireEvent.click(screen.getByRole("checkbox", { name: /Select all 20 unexplained items/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Select these 20 items/ }));
     expect(screen.getByText(/20 items selected/)).toBeInTheDocument();
   });
 
@@ -169,6 +192,7 @@ describe("Unexplained access — triage", () => {
       item({ id: `d${index}`, user_id: `u${index}` }),
     );
     renderTriage();
+    enterSelect();
 
     const boxes = screen.getAllByRole("checkbox").slice(1);
     fireEvent.click(boxes[0]);
@@ -182,7 +206,8 @@ describe("Unexplained access — triage", () => {
       item({ id: "d2", user_id: "u1", role_group: "Open bench" }),
     ];
     renderTriage();
-    fireEvent.click(screen.getByRole("checkbox", { name: /Select all/ }));
+    enterSelect();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Select these/ }));
 
     // Safety-gated is what the queue's own ordering keys on, so it is what an
     // operator needs before resolving several rows at once.
@@ -257,6 +282,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
   function selectTwo() {
     drift.data = [item({ id: "d1" }), item({ id: "d2", user_id: "u2" })];
     renderTriage();
+    enterSelect();
     fireEvent.click(screen.getAllByRole("checkbox")[1]);
     fireEvent.click(screen.getAllByRole("checkbox")[2]);
   }
@@ -269,10 +295,11 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
         { user_id: "d1", name: "Ada Lovelace", email: "u1", effect: "apply", detail: "Adopted into Syndra (trained)." },
         { user_id: "d2", name: "Sam Patel", email: "u2", effect: "no_change", detail: "Already resolved as adopted." },
       ],
-      summary: { total: 2, apply: 1, no_change: 1, blocked: 0, failed: 0, succeeded: 0 },
+      plan_id: "plan_1",
+      summary: { total: 2, apply: 1, no_change: 1, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
     selectTwo();
-    fireEvent.click(screen.getByRole("button", { name: "Adopt in Syndra" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review adopting these" }));
 
     // Rows are named, and the confirm button counts only what will change —
     // offering "Apply to 2" when one is already resolved would be a lie.
@@ -287,10 +314,11 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       op: "adopt",
       applied: false,
       outcomes: [{ user_id: "d1", name: "Ada", email: "u1", effect: "apply", detail: "Adopted." }],
-      summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0 },
+      plan_id: "plan_1",
+      summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
     selectTwo();
-    fireEvent.click(screen.getByRole("button", { name: "Adopt in Syndra" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review adopting these" }));
 
     await waitFor(() => expect(bulk.rehearsals).toBeGreaterThan(0));
     expect(bulk.applies).toBe(0);
@@ -306,10 +334,11 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       outcomes: [
         { user_id: "d1", name: "Ada", email: "u1", effect: "no_change", detail: "Already resolved." },
       ],
-      summary: { total: 1, apply: 0, no_change: 1, blocked: 0, failed: 0, succeeded: 0 },
+      plan_id: "plan_1",
+      summary: { total: 1, apply: 0, no_change: 1, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
     selectTwo();
-    fireEvent.click(screen.getByRole("button", { name: "Adopt in Syndra" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review adopting these" }));
 
     expect(await screen.findByRole("button", { name: "Nothing to apply" })).toBeDisabled();
   });
@@ -322,15 +351,198 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
         { user_id: "d1", name: "Ada", email: "u1", effect: "apply", detail: "Adopted." },
         { user_id: "d2", name: "Sam", email: "u2", effect: "apply", detail: "Adopted." },
       ],
-      summary: { total: 2, apply: 2, no_change: 0, blocked: 0, failed: 0, succeeded: 0 },
+      plan_id: "plan_1",
+      summary: { total: 2, apply: 2, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
     selectTwo();
-    fireEvent.click(screen.getByRole("button", { name: "Adopt in Syndra" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review adopting these" }));
     fireEvent.click(await screen.findByRole("button", { name: "Apply to 2 items" }));
 
     // The result is a diff against the plan that was approved, not a fresh
     // document with no relationship to it.
     await waitFor(() => expect(bulk.applies).toBe(1));
     expect(await screen.findByRole("button", { name: "Close" })).toBeInTheDocument();
+  });
+});
+
+// A finding on a target Syndra holds no role catalogue for is not a retired
+// role — nothing was retired, there was never a catalogue to retire it from.
+// The pill said otherwise for every add-on row, which is the loudest badge in
+// the queue applied to the one thing it cannot mean.
+it("does not call an add-on role retired", () => {
+  drift.data = [
+    item({
+      target: "truenas",
+      role_catalogue_applies: false,
+      role_in_catalogue: false,
+      role_keys: ["tank/projects:rw"],
+    }),
+  ];
+  renderTriage();
+  expect(screen.queryByText("Role not in catalogue")).not.toBeInTheDocument();
+
+});
+
+// A grant somebody removed by hand is the SAME entitlement Syndra applied,
+// and the row has to say so. Told as "a queued write that never landed" — the
+// sentence every syndra_only row used to get — it reads as a stranger, and
+// the operator's next move is wrong.
+it("tells a removal as the history of the grant Syndra applied", () => {
+  drift.data = [
+    item({
+      drift_type: "syndra_only",
+      upstream_actor: "op-marta",
+      provenance: {
+        granted_by: "op-ada",
+        granted_at: "2026-08-03T09:00:00Z",
+        reason: "inducted on the laser",
+        last_observed_at: "2026-08-19T03:00:00Z",
+      },
+    }),
+  ];
+  renderTriage();
+
+  expect(screen.getByText(/Granted by op-ada/i)).toBeTruthy();
+  expect(screen.getByText(/inducted on the laser/i)).toBeTruthy();
+  expect(screen.getByText(/does not now, so somebody removed it there/i)).toBeTruthy();
+  expect(screen.getByText(/Removed by op-marta/i)).toBeTruthy();
+});
+
+// And one nobody ever saw the target holding keeps the old reading, which is
+// the honest one for it: a write that never landed.
+it("still calls an unobserved grant a write that never landed", () => {
+  drift.data = [
+    item({
+      drift_type: "syndra_only",
+      provenance: { granted_by: "op-ada", granted_at: "2026-08-03T09:00:00Z" },
+    }),
+  ];
+  renderTriage();
+
+  expect(screen.getByText(/never been seen holding it/i)).toBeTruthy();
+});
+
+// The strongest thing Syndra can say, and the only thing it can say about a
+// grant applied and removed between two sweeps: the target ACCEPTED this write,
+// at a known time. No read ever saw that one.
+it("tells a removal by when the write landed, even with nothing ever observed", () => {
+  drift.data = [
+    item({
+      drift_type: "syndra_only",
+      provenance: {
+        granted_by: "op-ada",
+        reason: "inducted on the laser",
+        applied_at: "2026-08-19T12:04:00Z",
+      },
+    }),
+  ];
+  renderTriage();
+
+  expect(screen.getByText(/Syndra applied it on/i)).toBeTruthy();
+  expect(screen.getByText(/accepted it/i)).toBeTruthy();
+  expect(screen.getByText(/somebody removed it/i)).toBeTruthy();
+});
+
+/**
+ * `boundBulkIDs` refuses past 500 on both drift bulk routes. The bar has said
+ * so since the selection work, but only the People page was passing it a
+ * ceiling — so on this queue an operator select-alled, tapped, and met the
+ * refusal afterwards. Which is the thing the bar exists to prevent.
+ */
+describe("the queue states its ceiling before the tap", () => {
+  it("names the limit and offers the narrowing move over 500", () => {
+    drift.data = Array.from({ length: 501 }, (_, at) =>
+      item({ id: `d${at}`, user_id: `u${at}` }),
+    );
+    renderTriage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Select these 501 items/ }));
+
+    expect(screen.getByText(/500 is the most that can run at once/)).toBeTruthy();
+  });
+
+  it("leaves a selection inside the ceiling alone", () => {
+    drift.data = Array.from({ length: 3 }, (_, at) => item({ id: `d${at}`, user_id: `u${at}` }));
+    renderTriage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Select these 3 items/ }));
+
+    expect(screen.queryByText(/is the most that can run at once/)).toBeNull();
+  });
+});
+
+/**
+ * "Who made it" — the question the sweep cannot answer for itself.
+ *
+ * A sweep row compares grant SETS, and a set difference has no author. Zitadel
+ * is event-sourced, so the answer is recorded rather than inferred — which is
+ * why this side reads the log instead of keeping the merge base the add-on
+ * targets need. These assert the three answers stay distinct, and that the
+ * queue does not ask until somebody does.
+ */
+describe("who made it", () => {
+  beforeEach(() => {
+    origin.data = undefined;
+    origin.isLoading = false;
+    origin.isError = false;
+    origin.asks = 0;
+    drift.data = [item({ id: "d1", zitadel_grant_id: "g-1", upstream_actor: undefined })];
+  });
+
+  it("does not ask the identity provider until somebody asks", () => {
+    renderTriage();
+    expect(screen.getByRole("button", { name: "Who made it?" })).toBeTruthy();
+    // Dozens of rows on a real queue; one call each on load would be a burst
+    // to answer a question nobody put.
+    expect(origin.asks).toBe(0);
+  });
+
+  it("names the actor once asked", async () => {
+    origin.data = {
+      id: "d1", readable: true, recorded: true, attributed: true,
+      actor_name: "Maya Chen", service: "Management-API", at: "2026-08-03T09:25:46Z",
+    };
+    renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Who made it?" }));
+
+    await waitFor(() => expect(screen.getByText(/Maya Chen/)).toBeInTheDocument());
+    expect(screen.getByText(/Management-API/)).toBeInTheDocument();
+  });
+
+  it("does not turn a failed lookup into 'nobody made it'", async () => {
+    origin.data = { id: "d1", readable: false, detail: "zitadel api 503" };
+    renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Who made it?" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/not a finding that nobody made it/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("separates a short log from an anonymous event", async () => {
+    origin.data = { id: "d1", readable: true, recorded: false };
+    const { unmount } = renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Who made it?" }));
+    await waitFor(() => expect(screen.getByText(/does not go back/i)).toBeInTheDocument());
+    unmount();
+
+    origin.data = { id: "d1", readable: true, recorded: true, attributed: false };
+    renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Who made it?" }));
+    await waitFor(() =>
+      expect(screen.getByText(/recorded the change and not who made it/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("offers nothing where there is nothing to read", () => {
+    // Already attributed by the webhook, and a row naming no grant.
+    drift.data = [
+      item({ id: "d1", zitadel_grant_id: "g-1", upstream_actor: "someone@example.org" }),
+      item({ id: "d2", zitadel_grant_id: undefined }),
+    ];
+    renderTriage();
+    expect(screen.queryByRole("button", { name: "Who made it?" })).toBeNull();
   });
 });

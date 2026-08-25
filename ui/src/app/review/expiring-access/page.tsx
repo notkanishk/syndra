@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 
-import { toast } from "sonner";
 
 import { AccessSource } from "@/components/access/AccessSource";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
@@ -11,10 +10,12 @@ import { BulkDialog } from "@/components/people/BulkDialog";
 import { Card, CardColumns } from "@/components/ui/Card";
 import {
   RowCheckbox,
-  SelectAllCheckbox,
+  SelectAllRow,
+  SelectModeToggle,
   SelectionAction,
   SelectionBar,
 } from "@/components/ui/SelectionBar";
+import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -28,8 +29,10 @@ import {
 } from "@/lib/queries/useExpiringAccess";
 import { useCreateGrant } from "@/lib/queries/useUsers";
 import { daysUntil, formatShortDate } from "@/lib/format";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 
-/** How long an extension buys. Stated in the button's toast, never implied. */
+/** How long an extension buys. Stated in the row's own result, never implied. */
 const EXTEND_DAYS = 90;
 
 /**
@@ -66,6 +69,11 @@ export default function ExpiringAccessPage() {
   // Selection spans the undecided rows only. Extending is the one thing worth doing to a dozen at
   // once, and a row already dealt with is not part of the working set.
   const selection = useRowSelection(useMemo(() => undecided.map((grant) => grant.id), [undecided]));
+  // Selection is announced by a named control rather than by a permanent
+  // column of checkboxes. On this screen the row's own actions are the common
+  // case — most visits acknowledge one grant — and a checkbox in front of
+  // every row makes the rare bulk errand look like the point of the page.
+  const [selecting, setSelecting] = useState(false);
   const [extending, setExtending] = useState(false);
   const [lapsing, setLapsing] = useState<ExpiringGrantRow | null>(null);
 
@@ -90,20 +98,16 @@ export default function ExpiringAccessPage() {
       <PageHeader
         title="Expiring access"
         meta="Direct grants inside the next 30 days, soonest first. The sweep removes each one on its date whether or not you visit this page."
+        actions={
+          undecided.length > 0 ? (
+            <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
+          ) : undefined
+        }
       />
 
       <Card>
         <CardColumns>
-          <span className="w-[26px]">
-            <SelectAllCheckbox
-              label={
-                selection.allSelected
-                  ? "Clear the selection"
-                  : `Select all ${undecided.length} undecided expiring grants`
-              }
-              {...selection.headerCheckboxProps}
-            />
-          </span>
+          {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
           <span className="w-[210px]">Who</span>
           <span className="w-[260px]">What</span>
           <span className="w-[180px]">Granted</span>
@@ -111,6 +115,18 @@ export default function ExpiringAccessPage() {
           <span className="w-[110px] text-right">Remaining</span>
           <span className="w-[200px] text-right">Action</span>
         </CardColumns>
+
+        {/* Only the undecided rows can be selected, so the count here is the
+            undecided count and never the number of rows on screen. */}
+        {selecting && undecided.length > 0 && (
+          <SelectAllRow
+            inScope={undecided.length}
+            total={rows.length}
+            noun={["grant", "grants"]}
+            allSelected={selection.allSelected}
+            {...selection.headerCheckboxProps}
+          />
+        )}
 
         <div data-selection-scope {...selection.containerProps}>
         <ListStates
@@ -136,6 +152,7 @@ export default function ExpiringAccessPage() {
               key={grant.id}
               grant={grant}
               soonest={index === 0}
+              selecting={selecting}
               selection={selection}
               onLetLapse={() => setLapsing(grant)}
             />
@@ -163,6 +180,7 @@ export default function ExpiringAccessPage() {
                   key={grant.id}
                   grant={grant}
                   soonest={false}
+                  selecting={selecting}
                   selection={selection}
                   onLetLapse={() => setLapsing(grant)}
                 />
@@ -174,16 +192,42 @@ export default function ExpiringAccessPage() {
       </Card>
 
       <SelectionBar
-        count={selection.count}
+        count={selecting ? selection.count : 0}
         noun={["grant", "grants"]}
         composition={
           selectedUsers.length > 0
             ? `${selectedUsers.length} ${selectedUsers.length === 1 ? "person" : "people"}`
             : ""
         }
+        // The bulk endpoint caps distinct PEOPLE at 500 and this screen selects
+        // GRANTS, so the number the bar counts is not the number the server
+        // refuses on. 600 grants held by 300 people is legal; 500 grants held
+        // by 500 people is already at the limit.
+        ceiling={BULK_MAX_USERS}
+        ceilingCount={selectedUsers.length}
+        ceilingNoun={["person", "people"]}
+        onTakeCeiling={() => {
+          // Whole people, in the order shown. Once the cohort is full the
+          // later grants of somebody already in it still come along — dropping
+          // them would extend part of a person's access and leave the rest to
+          // lapse, which is a worse thing to do than refuse.
+          const cohort = new Set<string>();
+          const keep: string[] = [];
+          for (const grant of undecided) {
+            if (!cohort.has(grant.user_id)) {
+              if (cohort.size === BULK_MAX_USERS) continue;
+              cohort.add(grant.user_id);
+            }
+            keep.push(grant.id);
+          }
+          selection.selectOnly(keep);
+        }}
         onClear={selection.clear}
       >
-        <SelectionAction onClick={() => setExtending(true)}>Extend</SelectionAction>
+        {/* Tapping this opens a plan, it does not extend anything. */}
+        <SelectionAction onClick={() => setExtending(true)}>
+          Rehearse an extension
+        </SelectionAction>
       </SelectionBar>
 
       {extending && (
@@ -229,11 +273,13 @@ export default function ExpiringAccessPage() {
 function ExpiringRow({
   grant,
   soonest,
+  selecting,
   selection,
   onLetLapse,
 }: {
   grant: ExpiringGrantRow;
   soonest: boolean;
+  selecting: boolean;
   selection: RowSelection;
   onLetLapse: () => void;
 }) {
@@ -243,44 +289,59 @@ function ExpiringRow({
   // rather than creating a duplicate.
   const extend = useCreateGrant(grant.user_id);
   const clearAck = useClearExpiryAcknowledgement();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const remaining = daysUntil(grant.expires_at);
 
   return (
     <div
-      className={`row-divider flex flex-wrap items-center gap-[18px] px-5 py-3.5 ${
-        soonest ? "border-l-[3px] border-warn bg-warn-soft" : "border-l-[3px] border-transparent"
+      className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px] ${
+        soonest
+          ? "border-l-[3px] border-warn bg-warn-soft"
+          : selecting && ack
+            ? // A row selection cannot reach keeps a dashed edge while the mode
+              // is on, so an empty checkbox cell reads as "not eligible" rather
+              // than as a checkbox that failed to draw. Outside the mode there
+              // is nothing to be ineligible for, and the edge would be noise.
+              "border-l-[3px] border-dashed border-line-strong"
+            : "border-l-[3px] border-transparent"
       } ${ack ? "opacity-[.72]" : ""} ${selection.isSelected(grant.id) ? "bg-accent-soft/30" : ""}`}
       {...(ack ? {} : selection.rowProps(grant.id))}
     >
-      <span className="w-[26px]">
-        {/* No checkbox on a row somebody has dealt with — it is not part of the working set, and
-            offering it back into a bulk extend would undo a decision by accident. */}
-        {!ack && (
-          <RowCheckbox label="Select this expiring grant" {...selection.checkboxProps(grant.id)} />
-        )}
-      </span>
-      <span className="flex w-[210px] min-w-0 items-center gap-3">
+      {selecting && (
+        <span className="w-11 shrink-0 desktop:w-[26px]">
+          {/* No checkbox on a row somebody has dealt with — it is not part of the working set, and
+              offering it back into a bulk extend would undo a decision by accident. The reason is
+              already on the row: who acknowledged it, and when. */}
+          {!ack && (
+            <RowCheckbox
+              label="Select this expiring grant"
+              {...selection.checkboxProps(grant.id)}
+            />
+          )}
+        </span>
+      )}
+      <span className="flex w-full min-w-0 items-center gap-3 tablet:w-[210px]">
         <UserAvatar id={grant.user_id} />
         <span className="truncate text-[15px] font-semibold">
           <UserName id={grant.user_id} />
         </span>
       </span>
 
-      <div className="w-[260px] shrink-0 truncate text-[14.5px] text-ink/80">
+      <div className="w-full text-[14.5px] text-ink/80 tablet:w-[260px] tablet:shrink-0 tablet:truncate">
         <RoleRef projectId={grant.project_id} roleKey={grant.role_key} />
       </div>
 
-      <div className="w-[180px] shrink-0 truncate text-[13.5px] text-faint">
+      <div className="hidden w-[180px] shrink-0 truncate text-[13.5px] text-faint tablet:block">
         by <UserName id={grant.granted_by} fallback="somebody no longer listed" />,{" "}
         {formatShortDate(grant.created_at)}
       </div>
 
-      <div className="flex min-w-[220px] flex-1 items-center gap-3">
+      <div className="flex w-full flex-wrap items-center gap-3 tablet:min-w-[220px] tablet:flex-1">
         <AccessSource kind="direct" />
         {ack ? (
           // Who and when, always. The point of a shared acknowledgement is that the next person
           // can see whose judgement they would be overriding.
-          <span className="min-w-0 truncate text-[14px] text-muted">
+          <span className="min-w-0 text-[14px] text-muted tablet:truncate">
             <span className="font-semibold text-ink/80">
               <UserName id={ack.by} fallback={ack.by} />
             </span>{" "}
@@ -288,21 +349,22 @@ function ExpiringRow({
             {ack.note ? ` — ${ack.note}` : ""}
           </span>
         ) : (
-          <span className="truncate text-[14px] text-muted">
+          <span className="text-[14px] text-muted tablet:truncate">
             No action — expires {formatShortDate(grant.expires_at)}
           </span>
         )}
       </div>
 
       <div
-        className={`w-[110px] shrink-0 text-right text-[13.5px] font-semibold ${
+        className={`text-[13.5px] font-semibold tablet:w-[110px] tablet:shrink-0 tablet:text-right ${
           soonest ? "text-warn-text" : "text-muted"
         }`}
       >
-        {remaining === null ? "—" : remaining <= 0 ? "today" : `${remaining} days`}
+        {remaining === null ? "—" : remaining <= 0 ? "expires today" : `${remaining} days left`}
+        <span className="tablet:hidden" />
       </div>
 
-      <div className="flex w-[200px] shrink-0 items-center justify-end gap-2">
+      <div className="flex w-full items-center gap-3 tablet:w-[200px] tablet:shrink-0 tablet:justify-end tablet:gap-2">
         {/* Extend stays on an acknowledged row. Changing your mind toward KEEPING somebody's
             access is the reversal that must never be harder than the one that lets it go. */}
         <Button
@@ -317,11 +379,13 @@ function ExpiringRow({
                 reason: "Extended from Expiring access",
                 duration_days: EXTEND_DAYS,
               });
-              toast.success(`Extended by ${EXTEND_DAYS} days.`);
+              setOutcome({
+                kind: "applied",
+                message: `Extended by ${EXTEND_DAYS} days`,
+                detail: "It leaves this queue on the next read.",
+              });
             } catch (error) {
-              toast.error(
-                error instanceof Error ? error.message : "The extension didn't go through.",
-              );
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
@@ -336,9 +400,13 @@ function ExpiringRow({
             onClick={async () => {
               try {
                 await clearAck.mutateAsync(grant.id);
-                toast.success("Back in the queue.");
+                setOutcome({
+                  kind: "applied",
+                  message: "Back in the queue",
+                  detail: "Undecided again, and asking.",
+                });
               } catch (error) {
-                toast.error(error instanceof Error ? error.message : "That didn't go through.");
+                setOutcome(outcomeFromError(error));
               }
             }}
           >
@@ -350,6 +418,10 @@ function ExpiringRow({
           </Button>
         )}
       </div>
+
+      {/* The row reports its own extension and keeps its seat: it leaves this
+          queue on the next read, not under the thumb that extended it. */}
+      {outcome && <ActionOutcome outcome={outcome} placement="inline" className="w-full" />}
     </div>
   );
 }
@@ -367,6 +439,7 @@ function LetItLapseDialog({
   onClose: () => void;
 }) {
   const acknowledge = useAcknowledgeExpiry();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [note, setNote] = useState("");
 
   const expiresAt = grant.expires_at;
@@ -415,6 +488,11 @@ function LetItLapseDialog({
         </div>
       </div>
 
+      {/* The dialog states what it did, and this is the one screen where that
+          sentence matters most: recording a decision changes nothing about the
+          access, and the dialog exists to say so. */}
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter note="Extend instead if the access should continue.">
         <Button
           variant="accent"
@@ -427,15 +505,18 @@ function LetItLapseDialog({
                 expiresAt,
                 note: note.trim(),
               });
-              toast.success("Recorded. It still lapses on its date.");
-              onClose();
+              setOutcome({
+                kind: "applied",
+                message: "Recorded",
+                detail:
+                  "Nothing about the access changed — it still lapses on its date. What changed is that the queue stops asking your colleagues a question you have answered.",
+              });
             } catch (error) {
-              // A 409 here is the reopen rule arriving early: the grant was extended while this
-              // dialog was open, so the date on screen is not the date the grant has. The message
-              // is the server's, which says to reload.
-              toast.error(
-                error instanceof Error ? error.message : "That didn't go through.",
-              );
+              // A 409 here is the reopen rule arriving early: the grant was
+              // extended while this dialog was open, so the date on screen is
+              // not the date the grant has. The server's message says to
+              // reload, and a refusal is what it should read as.
+              setOutcome(outcomeFromError(error));
             }
           }}
         >

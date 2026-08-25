@@ -14,6 +14,17 @@ import (
 // resetCascadeDeps captures and restores every cascade injectable, mirroring
 // resetOnboardingDeps's t.Cleanup idiom.
 func resetCascadeDeps(t *testing.T) {
+	// Nothing is queued unless a test says so; the real read needs a database.
+	origQueued := svcQueuedRevocations
+	t.Cleanup(func() { svcQueuedRevocations = origQueued })
+	svcQueuedRevocations = func(context.Context, string) ([]db.RoleRef, error) { return nil, nil }
+	// The real one opens a transaction and takes the access lock, neither of
+	// which exists without a database. Tests exercise what runs inside it.
+	origLock := svcInTxLockingAccess
+	t.Cleanup(func() { svcInTxLockingAccess = origLock })
+	svcInTxLockingAccess = func(ctx context.Context, fn func(context.Context) error) error {
+		return fn(ctx)
+	}
 	t.Helper()
 	origGetBundle := svcGetBundleByID
 	origGetRoles := svcCascGetRolesForBundle
@@ -78,6 +89,30 @@ func resetCascadeDeps(t *testing.T) {
 	// the real database.
 	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) {
 		return nil, nil
+	}
+
+	// And the lifecycle trigger's read, for the same reason. Its default answer
+	// is "this role reaches no target", which is what most roles in this
+	// deployment do — a cascade test that has not said otherwise is testing the
+	// Zitadel half and must not be made to invent a target.
+	stubNoMappedTargets(t)
+}
+
+// stubNoMappedTargets makes every role reach nothing, and fails the test if a
+// convergence is queued anyway.
+//
+// The second half is the useful one: it is how a test that says "this role is
+// mapped nowhere" can prove the trigger did not fire, rather than proving only
+// that it did not crash.
+func stubNoMappedTargets(t *testing.T) {
+	t.Helper()
+	origTargets, origRecord := dbTargetsMappedToRole, dbRecordSystemConvergence
+	t.Cleanup(func() { dbTargetsMappedToRole, dbRecordSystemConvergence = origTargets, origRecord })
+
+	dbTargetsMappedToRole = func(context.Context, string, string) ([]string, error) { return nil, nil }
+	dbRecordSystemConvergence = func(context.Context, db.SystemConvergence) (string, string, error) {
+		t.Error("a role mapped to no target must queue no convergence")
+		return "", "", nil
 	}
 }
 

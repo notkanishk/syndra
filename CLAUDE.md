@@ -15,7 +15,7 @@ Identity & Access Management orchestration layer for an academic makerspace. Com
 
 - **Backend:** Go, PostgreSQL, Redis (`backend/`)
 - **Frontend:** Next.js with Bun runtime (`ui/`)
-- **Sync Service:** Go, go-ldap/v3, separate container (`sync/`)
+- **Add-ons:** target adapters in their own containers, internal network only (`addons/truenas`)
 - **Deployment:** Docker Compose in Proxmox LXC
 
 ## Build & Test
@@ -23,7 +23,7 @@ Identity & Access Management orchestration layer for an academic makerspace. Com
 ```bash
 cd backend && go test ./... && go vet ./...
 cd ui && bun run test && bun run lint && bun run build
-cd sync && go test ./... && go vet ./...
+cd addons/truenas && go test ./... && go vet ./...
 ```
 
 ## Key Conventions
@@ -46,7 +46,7 @@ cd sync && go test ./... && go vet ./...
 
 **After any code change (always, unprompted), scaled to the change:**
 1. **OpenSpec alignment** — verify or create the relevant change under `openspec/changes/`, update `proposal.md`, `tasks.md`, `design.md`, and affected `specs/*.md` so the documented intent matches the code. If the change is already scoped, tick tasks and keep deltas coherent. Flag any drift between specs and reality.
-2. **Meaningful tests** — add/extend tests that exercise the new behavior and its failure modes (not just happy-path coverage padding). Run `go test ./... && go vet ./...` in affected modules (`backend/`, `sync/`) and `bun run test && bun run lint` in `ui/`.
+2. **Meaningful tests** — add/extend tests that exercise the new behavior and its failure modes (not just happy-path coverage padding). Run `go test ./... && go vet ./...` in affected modules (`backend/`, `addons/truenas`) and `bun run test && bun run lint` in `ui/`.
 3. **Codebase memory refresh** — run `mcp__codebase-memory-mcp__detect_changes` and re-index affected scope so the graph reflects new/renamed/deleted symbols, routes, and call edges. Update any stale ADRs via `manage_adr` if architectural decisions shifted.
 
 Scale depth to the task: a one-line typo fix does not need a full spec revision, but any behavioral or contract change does. When in doubt, do more, not less.

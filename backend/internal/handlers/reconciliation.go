@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
 	"syndra/internal/zitadel"
@@ -108,7 +109,7 @@ func handleGetReconciliationDiff(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	exclusions, err := svcGetExclusions(ctx)
+	exclusions, err := svcGetExclusions(ctx, db.TargetZitadel)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -129,7 +130,7 @@ func filterExplained(in []ReconciliationGrant, holder map[services.HolderKey]boo
 		var unexplained []string
 		for _, rk := range g.RoleKeys {
 			if services.ExpectedViaRule(holder, rules, g.UserID, g.ProjectID, rk) ||
-				services.IsExcluded(exclusions, g.UserID, g.ProjectID, rk) {
+				services.IsExcluded(exclusions, db.TargetZitadel, g.UserID, g.ProjectID, rk) {
 				continue
 			}
 			unexplained = append(unexplained, rk)

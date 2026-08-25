@@ -1,0 +1,409 @@
+{
+  "_comment": "Recorded from a real target by scripts/record-truenas-fixtures.sh. Do not hand-edit: a fixture somebody can write by hand is a fixture that can agree with the code and disagree with the target.",
+  "reads": {
+    "system.version": "TrueNAS-25.10.5",
+    "auth.me": {
+      "keys": [
+        "account_attributes",
+        "attributes",
+        "grouplist",
+        "local",
+        "privilege",
+        "pw_dir",
+        "pw_gecos",
+        "pw_gid",
+        "pw_name",
+        "pw_shell",
+        "pw_uid",
+        "sid",
+        "source",
+        "two_factor_config"
+      ],
+      "types": {
+        "account_attributes": "list",
+        "attributes": "dict",
+        "grouplist": "null",
+        "local": "bool",
+        "privilege": "dict",
+        "pw_dir": "str",
+        "pw_gecos": "str",
+        "pw_gid": "int",
+        "pw_name": "str",
+        "pw_shell": "str",
+        "pw_uid": "int",
+        "sid": "null",
+        "source": "str",
+        "two_factor_config": "dict"
+      },
+      "nested": {
+        "attributes": {
+          "keys": [],
+          "types": {}
+        },
+        "privilege": {
+          "keys": [
+            "allowlist",
+            "roles",
+            "web_shell",
+            "webui_access"
+          ],
+          "types": {
+            "allowlist": "list",
+            "roles": "dict",
+            "web_shell": "bool",
+            "webui_access": "bool"
+          }
+        },
+        "two_factor_config": {
+          "keys": [
+            "interval",
+            "otp_digits",
+            "provisioning_uri",
+            "secret_configured"
+          ],
+          "types": {
+            "interval": "int",
+            "otp_digits": "int",
+            "provisioning_uri": "null",
+            "secret_configured": "bool"
+          }
+        }
+      }
+    },
+    "user.query": {
+      "keys": [
+        "builtin",
+        "group",
+        "groups",
+        "id",
+        "locked",
+        "password_disabled",
+        "smb",
+        "uid",
+        "username"
+      ],
+      "types": {
+        "builtin": "bool",
+        "group": "dict",
+        "groups": "list",
+        "id": "int",
+        "locked": "bool",
+        "password_disabled": "bool",
+        "smb": "bool",
+        "uid": "int",
+        "username": "str"
+      },
+      "nested": {
+        "group": {
+          "keys": [
+            "bsdgrp_builtin",
+            "bsdgrp_gid",
+            "bsdgrp_group",
+            "bsdgrp_smb",
+            "bsdgrp_sudo_commands",
+            "bsdgrp_sudo_commands_nopasswd",
+            "bsdgrp_userns_idmap",
+            "id"
+          ],
+          "types": {
+            "bsdgrp_builtin": "bool",
+            "bsdgrp_gid": "int",
+            "bsdgrp_group": "str",
+            "bsdgrp_smb": "bool",
+            "bsdgrp_sudo_commands": "list",
+            "bsdgrp_sudo_commands_nopasswd": "list",
+            "bsdgrp_userns_idmap": "int",
+            "id": "int"
+          }
+        }
+      }
+    },
+    "group.query": {
+      "keys": [
+        "gid",
+        "group",
+        "id"
+      ],
+      "types": {
+        "gid": "int",
+        "group": "str",
+        "id": "int"
+      }
+    },
+    "sharing.smb.query": {
+      "keys": [
+        "audit",
+        "enabled",
+        "name",
+        "path"
+      ],
+      "types": {
+        "audit": "dict",
+        "enabled": "bool",
+        "name": "str",
+        "path": "str"
+      },
+      "nested": {
+        "audit": {
+          "keys": [
+            "enable",
+            "ignore_list",
+            "watch_list"
+          ],
+          "types": {
+            "enable": "bool",
+            "ignore_list": "list",
+            "watch_list": "list"
+          }
+        }
+      }
+    },
+    "audit.query": {
+      "keys": [
+        "address",
+        "audit_id",
+        "event",
+        "event_data",
+        "message_timestamp",
+        "service",
+        "service_data",
+        "session",
+        "success",
+        "timestamp",
+        "username"
+      ],
+      "types": {
+        "address": "str",
+        "audit_id": "str",
+        "event": "str",
+        "event_data": "dict",
+        "message_timestamp": "int",
+        "service": "str",
+        "service_data": "dict",
+        "session": "str",
+        "success": "bool",
+        "timestamp": "dict",
+        "username": "str"
+      },
+      "nested": {
+        "event_data": {
+          "keys": [
+            "authDescription",
+            "becameAccount",
+            "becameDomain",
+            "becameSid",
+            "clientAccount",
+            "clientDomain",
+            "clientPolicyAccessCheck",
+            "localAddress",
+            "logonId",
+            "logonType",
+            "mappedAccount",
+            "mappedDomain",
+            "netlogonComputer",
+            "netlogonNegotiateFlags",
+            "netlogonSecureChannelType",
+            "netlogonTrustAccount",
+            "netlogonTrustAccountSid",
+            "passwordType",
+            "remoteAddress",
+            "result",
+            "serverPolicyAccessCheck",
+            "serviceDescription",
+            "vers",
+            "workstation"
+          ],
+          "types": {
+            "authDescription": "null",
+            "becameAccount": "null",
+            "becameDomain": "null",
+            "becameSid": "null",
+            "clientAccount": "str",
+            "clientDomain": "str",
+            "clientPolicyAccessCheck": "null",
+            "localAddress": "str",
+            "logonId": "str",
+            "logonType": "int",
+            "mappedAccount": "str",
+            "mappedDomain": "str",
+            "netlogonComputer": "null",
+            "netlogonNegotiateFlags": "str",
+            "netlogonSecureChannelType": "int",
+            "netlogonTrustAccount": "null",
+            "netlogonTrustAccountSid": "null",
+            "passwordType": "str",
+            "remoteAddress": "str",
+            "result": "dict",
+            "serverPolicyAccessCheck": "null",
+            "serviceDescription": "str",
+            "vers": "dict",
+            "workstation": "str"
+          }
+        },
+        "service_data": {
+          "keys": [
+            "service",
+            "session_id",
+            "tcon_id",
+            "vers"
+          ],
+          "types": {
+            "service": "null",
+            "session_id": "null",
+            "tcon_id": "null",
+            "vers": "dict"
+          }
+        },
+        "timestamp": {
+          "keys": [
+            "$date"
+          ],
+          "types": {
+            "$date": "int"
+          }
+        }
+      },
+      "sampled_rows": 200,
+      "event_data_keys_by_event": {
+        "AUTHENTICATION": [
+          "authDescription",
+          "becameAccount",
+          "becameDomain",
+          "becameSid",
+          "clientAccount",
+          "clientDomain",
+          "clientPolicyAccessCheck",
+          "localAddress",
+          "logonId",
+          "logonType",
+          "mappedAccount",
+          "mappedDomain",
+          "netlogonComputer",
+          "netlogonNegotiateFlags",
+          "netlogonSecureChannelType",
+          "netlogonTrustAccount",
+          "netlogonTrustAccountSid",
+          "passwordType",
+          "remoteAddress",
+          "result",
+          "serverPolicyAccessCheck",
+          "serviceDescription",
+          "vers",
+          "workstation"
+        ]
+      },
+      "event_data_types": {
+        "authDescription": "null",
+        "becameAccount": "null",
+        "becameDomain": "null",
+        "becameSid": "null",
+        "clientAccount": "str",
+        "clientDomain": "str",
+        "clientPolicyAccessCheck": "null",
+        "localAddress": "str",
+        "logonId": "str",
+        "logonType": "int",
+        "mappedAccount": "str",
+        "mappedDomain": "str",
+        "netlogonComputer": "null",
+        "netlogonNegotiateFlags": "str",
+        "netlogonSecureChannelType": "int",
+        "netlogonTrustAccount": "null",
+        "netlogonTrustAccountSid": "null",
+        "passwordType": "str",
+        "remoteAddress": "str",
+        "result": "dict",
+        "serverPolicyAccessCheck": "null",
+        "serviceDescription": "str",
+        "vers": "dict",
+        "workstation": "str"
+      },
+      "username_filter_accepted": true
+    },
+    "pool.dataset.get_quota": {
+      "keys": [
+        "id",
+        "name",
+        "obj_used",
+        "quota_type",
+        "used_bytes"
+      ],
+      "types": {
+        "id": "int",
+        "name": "str",
+        "obj_used": "int",
+        "quota_type": "str",
+        "used_bytes": "int"
+      },
+      "sampled_rows": 7,
+      "quota_types": [
+        "USER"
+      ]
+    }
+  },
+  "write_rules": [
+    {
+      "case": "create with no credential decision",
+      "method": "user.create",
+      "refused_fields": [
+        "user_create.password"
+      ],
+      "code": -32602
+    },
+    {
+      "case": "create with smb and disabled password",
+      "method": "user.create",
+      "refused_fields": [
+        "user_create.password_disabled"
+      ],
+      "code": -32602
+    },
+    {
+      "case": "create with password auth disabled",
+      "method": "user.create",
+      "accepted": true
+    },
+    {
+      "case": "user.create returns",
+      "returns": "record",
+      "keys": [
+        "api_keys",
+        "builtin",
+        "email",
+        "full_name",
+        "group",
+        "groups",
+        "home",
+        "id",
+        "immutable",
+        "last_password_change",
+        "local",
+        "locked"
+      ]
+    },
+    {
+      "case": "password alone leaves auth disabled",
+      "method": "user.update",
+      "accepted": true
+    },
+    {
+      "case": "password alone, resulting password_disabled",
+      "password_disabled": true
+    },
+    {
+      "case": "enable smb in a later call",
+      "method": "user.update",
+      "refused_fields": [
+        "user_update.password_disabled",
+        "user_update.smb"
+      ],
+      "code": -32602
+    },
+    {
+      "case": "password, enable auth and smb together",
+      "method": "user.update",
+      "accepted": true
+    }
+  ],
+  "product_version": "TrueNAS-25.10.5"
+}

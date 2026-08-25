@@ -61,13 +61,13 @@ describe("nameFromEmail", () => {
 
 describe("resolveDisplayName", () => {
   it("layers claim, then profile, then email", () => {
-    expect(resolveDisplayName("Claim Name", "Profile Name", "e.mail@x.com")).toBe("Claim Name");
-    expect(resolveDisplayName("", "Profile Name", "e.mail@x.com")).toBe("Profile Name");
-    expect(resolveDisplayName("", "", "e.mail@x.com")).toBe("E Mail");
+    expect(resolveDisplayName("Claim Name", "Profile Name", "e.mail@example.com")).toBe("Claim Name");
+    expect(resolveDisplayName("", "Profile Name", "e.mail@example.com")).toBe("Profile Name");
+    expect(resolveDisplayName("", "", "e.mail@example.com")).toBe("E Mail");
   });
 
   it("treats whitespace-only sources as absent", () => {
-    expect(resolveDisplayName("  ", "  ", "ada.lovelace@x.com")).toBe("Ada Lovelace");
+    expect(resolveDisplayName("  ", "  ", "ada.lovelace@example.com")).toBe("Ada Lovelace");
   });
 
   it("returns empty rather than inventing a name when nothing knows", () => {

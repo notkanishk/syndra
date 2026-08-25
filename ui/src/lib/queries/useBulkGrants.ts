@@ -7,11 +7,13 @@ import { request } from "@/lib/api-client";
 /**
  * Bulk access changes, rehearsed before they land.
  *
- * The same request body serves both passes — rehearsal is the absence of
- * `?apply=true`, not a different payload — so the plan an operator approves and
- * the write it authorises cannot describe different operations. The backend
- * re-rehearses on apply regardless; this is a UX guarantee, not the security
- * boundary.
+ * The rehearsal returns a `plan_id`: the backend persisted what it showed, and
+ * applying cites that id. It is no longer a UX guarantee resting on the client
+ * re-sending the same thing — the backend executes the rows it recorded, and a
+ * body that does not match the one the plan was computed for is refused.
+ *
+ * The body is still sent on apply, because it carries what the write needs (the
+ * project, the role, the duration). It is bound, not trusted.
  */
 
 export type BulkOp =
@@ -29,6 +31,14 @@ export interface BulkGrantInput {
   bundle_id?: string;
   reason: string;
   duration_days?: number;
+  /** Cites the rehearsal being applied. Set by the apply pass, never composed by hand. */
+  /**
+   * The operator confirming an affected-subject count above the configured
+   * limit. Sent on the rehearsal, never on the apply: it unlocks issuing the
+   * approval rather than changing what the approval does.
+   */
+  acknowledge_scope?: boolean;
+  plan_id?: string;
   /**
    * Narrows `extend` to specific grants. Omit it to extend every expiring direct grant the named
    * people hold — which is what a screen that selects PEOPLE means.
@@ -80,6 +90,12 @@ export interface BulkSummary {
 
 export interface BulkPlan {
   op: BulkOp;
+  /**
+   * The approval this rehearsal became. Present on a rehearsal, and what an
+   * apply must cite; absent on a result, which is a report rather than an
+   * approval.
+   */
+  plan_id?: string;
   applied: boolean;
   outcomes: BulkOutcome[];
   summary: BulkSummary;

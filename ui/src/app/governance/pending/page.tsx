@@ -1,15 +1,16 @@
 "use client";
 
-import { useMemo } from "react";
-import { toast } from "sonner";
+import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProjectName, UserName } from "@/components/names";
-import { toastDrain } from "@/lib/drain-toast";
+import { outcomeFromDrain } from "@/lib/drain-outcome";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
 import {
   useDrainPropagations,
@@ -37,6 +38,12 @@ export default function PendingChangesPage() {
   const rows = useMemo(() => pending.data ?? [], [pending.data]);
   const reachable = summary.data?.pending_propagation.zitadel_reachable ?? true;
 
+  // The drain reports under the button that ran it, and stays there. It used
+  // to be a toast, which meant the account of a pass that requeued eight
+  // writes was gone in four seconds — on the one screen whose entire subject
+  // is what is still outstanding.
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+
   const groups = useMemo(() => groupByCascade(rows), [rows]);
 
   return (
@@ -50,10 +57,11 @@ export default function PendingChangesPage() {
             disabled={!reachable || rows.length === 0}
             isPending={drain.isPending}
             onClick={async () => {
+              setOutcome(null);
               try {
-                toastDrain(await drain.mutateAsync());
+                setOutcome(outcomeFromDrain(await drain.mutateAsync()));
               } catch (error) {
-                toast.error(error instanceof Error ? error.message : "The drain didn't run.");
+                setOutcome(outcomeFromError(error));
               }
             }}
           >
@@ -61,6 +69,8 @@ export default function PendingChangesPage() {
           </Button>
         }
       />
+
+      {outcome && <ActionOutcome outcome={outcome} />}
 
       {/*
         The reason is a visible strip, not a tooltip on a greyed button. Hover
@@ -115,13 +125,13 @@ export default function PendingChangesPage() {
               {group.rows.map((row) => (
                 <div
                   key={row.id}
-                  className="row-divider flex flex-wrap items-center gap-[18px] px-5 py-3"
+                  className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px]"
                 >
-                  <span className="w-[150px] shrink-0 truncate text-[14.5px] font-semibold">
+                  <span className="w-full truncate text-[14.5px] font-semibold tablet:w-[150px] tablet:shrink-0">
                     <UserName id={row.user_id} />
                   </span>
 
-                  <span className="min-w-[220px] flex-1 truncate text-[14px]">
+                  <span className="w-full text-[14px] tablet:min-w-[220px] tablet:flex-1 tablet:truncate">
                     <span className="text-muted">{verb(row.op_type)}</span>{" "}
                     <ProjectName id={row.project_id} /> /{" "}
                     {(row.role_keys ?? []).map((key) => (
@@ -131,12 +141,12 @@ export default function PendingChangesPage() {
                     ))}
                   </span>
 
-                  <span className="w-[160px] shrink-0 truncate text-[13px]">
+                  <span className="truncate text-[13px] tablet:w-[160px] tablet:shrink-0">
                     <Mono className="text-accent-text">{shortId(row.source_ref, "R")}</Mono>{" "}
                     <Mono className="text-faint">{shortId(row.cascade_id, "c")}</Mono>
                   </span>
 
-                  <span className="w-[78px] shrink-0 text-right text-[13px] text-faint">
+                  <span className="text-[13px] text-faint tablet:w-[78px] tablet:shrink-0 tablet:text-right">
                     <Relative iso={row.created_at} />
                   </span>
 

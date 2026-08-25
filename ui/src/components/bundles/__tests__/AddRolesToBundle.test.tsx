@@ -20,7 +20,6 @@ vi.mock("@/lib/queries/useBundles", () => ({
   useAddBundleRole: () => ({ mutateAsync: state.addRole }),
 }));
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 function role(overrides: Partial<CatalogRole> = {}): CatalogRole {
   return {

@@ -49,9 +49,9 @@ func TryAcquireDrainLock(ctx context.Context) (func(), bool, error) {
 // no longer exists (e.g. pruned). The ?apply=true inline drain uses it to report
 // THIS request's row outcome rather than the batch drain's aggregate.
 func GetPropagationStatus(ctx context.Context, id string) (string, error) {
-	const q = `SELECT status FROM pending_zitadel_propagations WHERE id=$1`
+	const q = `SELECT status FROM propagation_outbox WHERE id=$1`
 	var st string
-	if err := PG.QueryRow(ctx, q, id).Scan(&st); err != nil {
+	if err := querier(ctx).QueryRow(ctx, q, id).Scan(&st); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
 		}
@@ -64,9 +64,9 @@ func GetPropagationStatus(ctx context.Context, id string) (string, error) {
 // ZITADEL PROPAGATION OUTBOX
 // -------------------------------------------------------------
 //
-// pending_zitadel_propagations buffers every Syndra-mediated Zitadel grant
+// propagation_outbox buffers every Syndra-mediated Zitadel grant
 // mutation so the operator drains them explicitly (services/propagation).
-// It mirrors the provisioning_intents claim-and-process pattern: rows move
+// It is a claim-and-process pattern: rows move
 // pending -> in_flight -> applied|failed. `applied` is terminal success; there
 // is NO `confirmed` state (design Decision 1).
 
@@ -94,36 +94,198 @@ func NewOutboxIdempotencyKey() (string, error) { return newOutboxIdempotencyKey(
 // canonical UUID string.
 func InsertPendingPropagation(ctx context.Context, opType, userID, projectID string,
 	roleKeys []string, zitadelGrantID, payloadJSON, idempotencyKey, initiatedBy string) (string, error) {
+	// This is the Zitadel enqueue and the statement says so. Its columns are the
+	// Zitadel shape — a project, role keys, a grant id — so the target is not a
+	// parameter; there is no other target it could name. Add-on entitlement work
+	// goes through EnqueueEntitlementApplyTx, which derives its target from the
+	// approved plan.
+	//
+	// The row is subordinate to an unresolved revocation of the same roles, and
+	// that is a condition of the write rather than a check its caller performs.
+	// The drift sweep's replay is the reason: it decides a grant is missing by
+	// comparing the intent ledger against the target, and the ledger keeps a
+	// row until the revocation is confirmed. So a revoke that has been
+	// dispatched and not yet settled looks exactly like a grant the target lost
+	// — Syndra expects it, Zitadel does not have it — and replaying it would
+	// queue an add whose intent order is newer than the revocation's. The
+	// reconciliation would then preserve the ledger row on the strength of that
+	// add, the drain would re-apply the access, and a revocation an operator
+	// asked for would be undone by a sweep that thought it was repairing drift.
+	//
+	// Deciding it in the caller would leave the read authoritative and the
+	// window open: a revocation queued between the look and the insert would
+	// still be overtaken. Under the access lock the NOT EXISTS is evaluated
+	// against a state no other access mutation can change before this commits.
 	const q = `
-		INSERT INTO pending_zitadel_propagations
-			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json, idempotency_key, initiated_by)
-		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8)
+		INSERT INTO propagation_outbox
+			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json, idempotency_key, initiated_by, target)
+		SELECT $1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,'zitadel'
+		WHERE NOT EXISTS (
+		    SELECT 1 FROM propagation_outbox o
+		    WHERE o.user_id = $2 AND o.project_id = $3
+		      AND o.status IN ('pending', 'in_flight')
+		      AND (
+		          (o.op_type = 'revoke' AND o.role_keys && $4)
+		          -- A replace removes what its new set omits, so a role absent
+		          -- from that set is on its way out just as surely.
+		          OR (o.op_type = 'replace'
+		              AND EXISTS (SELECT 1 FROM unnest($4::text[]) rk
+		                          WHERE NOT (rk = ANY(o.role_keys))))
+		      ))
 		RETURNING id`
 	var id string
-	if err := PG.QueryRow(ctx, q, opType, userID, projectID, roleKeys, zitadelGrantID,
-		payloadJSON, idempotencyKey, initiatedBy).Scan(&id); err != nil {
-		return "", fmt.Errorf("insert propagation: %w", err)
+	err := InTxLockingAccess(ctx, func(ctx context.Context) error {
+		tx, ok := ctx.Value(txKey).(pgx.Tx)
+		if !ok || tx == nil {
+			return fmt.Errorf("insert propagation: no transaction")
+		}
+		if err := tx.QueryRow(ctx, q, opType, userID, projectID, roleKeys, zitadelGrantID,
+			payloadJSON, idempotencyKey, initiatedBy).Scan(&id); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrSupersededByRevocation
+			}
+			return fmt.Errorf("insert propagation: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
 	}
 	return id, nil
 }
 
+// ErrSupersededByRevocation refuses a replay that would undo a revocation still
+// in flight. Not a failure: the grant is absent because somebody asked for it to
+// be, and the sweep that noticed has nothing to repair.
+var ErrSupersededByRevocation = errors.New("an unresolved revocation covers these roles")
+
 // PendingOutboxAddExists reports whether an undrained add is already queued for
-// the (user, project, role) triple, so the drift sweep's syndra_only replay does
-// not pile a fresh duplicate every tick for a grant that stays missing in Zitadel.
-func PendingOutboxAddExists(ctx context.Context, userID, projectID, roleKey string) (bool, error) {
+// the (target, user, project, role) tuple, so the drift sweep's syndra_only
+// replay does not pile a fresh duplicate every tick for a grant that stays
+// missing on the target.
+//
+// The target belongs in the predicate, not in the caller's head. The question
+// this answers is "is something already queued that will fix this drift", and
+// queued work on another target fixes nothing here: without the scope, a row
+// waiting on an unreachable add-on would suppress the replay of a genuinely
+// missing Zitadel grant, and the sweep would report itself satisfied.
+func PendingOutboxAddExists(ctx context.Context, target, userID, projectID, roleKey string) (bool, error) {
 	const q = `SELECT EXISTS(
-		SELECT 1 FROM pending_zitadel_propagations
-		WHERE op_type='add' AND user_id=$1 AND project_id=$2
-		  AND $3 = ANY(role_keys) AND status IN ('pending','in_flight'))`
+		SELECT 1 FROM propagation_outbox
+		WHERE op_type='add' AND target=$1 AND user_id=$2 AND project_id=$3
+		  AND $4 = ANY(role_keys) AND status IN ('pending','in_flight'))`
 	var exists bool
-	if err := PG.QueryRow(ctx, q, userID, projectID, roleKey).Scan(&exists); err != nil {
-		return false, fmt.Errorf("pending outbox add exists (%s/%s/%s): %w", userID, projectID, roleKey, err)
+	if err := querier(ctx).QueryRow(ctx, q, target, userID, projectID, roleKey).Scan(&exists); err != nil {
+		return false, fmt.Errorf("pending outbox add exists (%s %s/%s/%s): %w", target, userID, projectID, roleKey, err)
 	}
 	return exists, nil
 }
 
+// supersededByLaterVersion decides that a queued convergence has been overtaken.
+//
+// Desired state is snapshotted per (subject, target) with a monotonic version
+// (design §15), and an apply carrying a version older than the one the target
+// has already settled must not execute: applying it would walk the subject back
+// to a state a later decision replaced. The hazard is not hypothetical once
+// revocations drain on their own — a withdrawal can settle while the grant it
+// supersedes still waits for an operator to resume — and it is precisely the
+// case the deleted sync service carried `internal/worker/ordering.go` for.
+//
+// It reads the version off the row's own approval chain (outbox -> plan subject
+// -> snapshot) rather than taking it as an argument, for the reason
+// ReconcileLedgerOnApplied reads its tuple the same way: a version supplied
+// beside a row can describe a decision that never existed.
+//
+// Zitadel rows are naturally out of scope. Their plan subject carries no
+// snapshot, so the join drops them, and their ordering is held by the claim
+// below never inverting a subject's own intent order.
+const supersededByLaterVersion = `
+	EXISTS (
+	    SELECT 1
+	      FROM plan_subjects ps
+	      JOIN desired_state_snapshots s ON s.id = ps.snapshot_id
+	     WHERE ps.id = p.plan_subject_id
+	       AND EXISTS (
+	           SELECT 1
+	             FROM propagation_outbox q
+	             JOIN plan_subjects qps ON qps.id = q.plan_subject_id
+	             JOIN desired_state_snapshots qs ON qs.id = qps.snapshot_id
+	            WHERE q.status = 'applied'
+	              AND qs.subject_id = s.subject_id
+	              AND qs.target     = s.target
+	              AND qs.version    > s.version))`
+
+// supersededReason is what an operator reads on the row. It states the decision,
+// not a failure: nothing was attempted and nothing went wrong.
+const supersededReason = "a newer desired state for this subject has already been applied"
+
+// terminateSuperseded settles the overtaken rows of one target before the claim
+// runs, so a stale version is rejected WITHOUT dispatch. `onlyID` narrows it to
+// a single row for the targeted claim; empty means the whole target.
+//
+// It lives inside the claim rather than beside it. Both claim paths call it, so
+// no drain can reach an overtaken row, and there is no ordering for a future
+// caller to get wrong — the same reason the active-target join is a condition of
+// the claim rather than a check its caller performs.
+//
+// `superseded` is deliberately not `failed`. Revocation-first dispatch makes
+// this ordinary rather than exceptional, and labelling a deliberately discarded
+// row as failed shows the operator a phantom failure on the row class where real
+// failures matter most (design §15).
+//
+// ponytail: one sweep per claim over the target's unresolved rows. At makerspace
+// volume that queue is tens of rows; if it ever is not, scope the UPDATE to the
+// ids the claim is about to consider.
+func terminateSuperseded(ctx context.Context, target, onlyID string) error {
+	// One statement, so the audit row cannot come apart from the discard — the
+	// same reason deregistration abandons and records in one write. This is a
+	// change an operator approved being thrown away; the outbox row explaining
+	// it is pruned after the retention window, and the person's own timeline is
+	// where the explanation has to survive. A data-modifying CTE runs whether or
+	// not anything reads it, so "superseded" and "recorded as superseded" are
+	// the same write.
+	const q = `
+		WITH discarded AS (
+			UPDATE propagation_outbox p
+			   SET status = 'superseded', completed_at = NOW(), last_error = $2
+			 WHERE p.target = $1
+			   AND p.status IN ('pending', 'in_flight')
+			   AND p.plan_subject_id IS NOT NULL
+			   AND ($3::text = '' OR p.id::text = $3::text)
+			   AND ` + supersededByLaterVersion + `
+			RETURNING p.id, p.user_id
+		)
+		INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
+		SELECT 'system', d.user_id, $4, d.id FROM discarded d`
+	if _, err := querier(ctx).Exec(ctx, q, target, supersededReason, onlyID, "entitlement."+target+".superseded"); err != nil {
+		return fmt.Errorf("terminate superseded propagations for %s: %w", target, err)
+	}
+	return nil
+}
+
+// revocationFirst orders subjects holding an unresolved revocation ahead of
+// everyone else, while leaving each subject's own rows in intent order.
+//
+// A delayed grant is an inconvenience; a delayed revoke is retained access, so a
+// revocation must not sit behind ninety unrelated grants when the batch or the
+// retry budget runs out. What it must ALSO not do is overtake an older grant for
+// the same subject: dispatching the withdrawal first and the grant afterwards
+// restores exactly the access being withdrawn. Prioritising the subject rather
+// than the row buys the first property without ever costing the second.
+//
+// ponytail: a correlated EXISTS per candidate row, served by
+// idx_propagation_outbox_intent_seq. Fine for a queue of tens; a queue of
+// thousands wants the revocation subjects hoisted into a CTE.
+const revocationFirst = `
+	(EXISTS (SELECT 1 FROM propagation_outbox r
+	          WHERE r.target   = p.target
+	            AND r.user_id  = p.user_id
+	            AND r.op_type  = 'revoke'
+	            AND r.status IN ('pending', 'in_flight'))) DESC,
+	p.intent_seq`
+
 // ClaimPendingPropagations atomically transitions up to `limit` claimable rows
-// to in_flight and returns them in created_at order. FOR UPDATE SKIP LOCKED makes
+// to in_flight and returns them in dispatch order. FOR UPDATE SKIP LOCKED makes
 // concurrent drains safe (mirrors ClaimPendingIntents).
 //
 // It claims BOTH 'pending' AND 'in_flight' rows (design.md §Drain: "status in
@@ -134,27 +296,46 @@ func PendingOutboxAddExists(ctx context.Context, userID, projectID, roleKey stri
 // re-drive each one, where the idempotent already-exists check (409→applied)
 // resolves any operation that actually reached Zitadel. `started_at` is reset so
 // the row's clock reflects the reclaim.
-func ClaimPendingPropagations(ctx context.Context, limit int) ([]models.PendingPropagation, error) {
+func ClaimPendingPropagations(ctx context.Context, target string, limit int) ([]models.PendingPropagation, error) {
 	if limit <= 0 {
 		limit = 100
 	}
+	// Rejected on version before anything is claimed, so an overtaken row never
+	// reaches a dispatcher.
+	if err := terminateSuperseded(ctx, target, ""); err != nil {
+		return nil, err
+	}
+	// Scoped to one target, and to a target that is still registered. A drain
+	// holds exactly one dispatcher, so claiming another target's rows would
+	// push them through machinery shaped for a system they are not for — a
+	// TrueNAS row has no project and no roles for the Zitadel path to send.
+	//
+	// The active-target join is in the claim rather than in the caller for the
+	// usual reason: this is exported, and an invariant a caller enforces is one
+	// the next caller can skip.
 	const q = `
 		WITH claimed AS (
-			SELECT id FROM pending_zitadel_propagations
-			WHERE status IN ('pending','in_flight')
-			ORDER BY created_at
+			SELECT p.id FROM propagation_outbox p
+			JOIN targets t ON t.target = p.target AND t.state = 'active'
+			WHERE p.status IN ('pending','in_flight') AND p.target = $2
+			-- Revocations first, by subject; then intent order, not
+			-- transaction-start order — created_at is fixed at BEGIN and the
+			-- access lock is taken after it, so a serially-older add can carry
+			-- the earlier timestamp and be dispatched after the revoke that
+			-- overtook it.
+			ORDER BY ` + revocationFirst + `
 			LIMIT $1
-			FOR UPDATE SKIP LOCKED
+			FOR UPDATE OF p SKIP LOCKED
 		)
-		UPDATE pending_zitadel_propagations p
+		UPDATE propagation_outbox p
 		SET status = 'in_flight', started_at = NOW()
 		FROM claimed
 		WHERE p.id = claimed.id
-		RETURNING p.id, p.op_type, p.user_id, p.project_id, p.role_keys,
+		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
 		          p.source, COALESCE(p.source_ref,''), COALESCE(p.cascade_id::text,''),
 		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
 		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at`
-	rows, err := PG.Query(ctx, q, limit)
+	rows, err := querier(ctx).Query(ctx, q, limit, target)
 	if err != nil {
 		return nil, fmt.Errorf("claim propagations: %w", err)
 	}
@@ -164,20 +345,40 @@ func ClaimPendingPropagations(ctx context.Context, limit int) ([]models.PendingP
 
 // ClaimPropagationByID atomically transitions ONE row (pending or in_flight) to
 // in_flight and returns it — the targeted inline-apply claim behind DrainOne.
-// found=false when the row no longer exists or is already terminal
-// (applied/failed), which the caller treats as a no-op. It mirrors
-// ClaimPendingPropagations' claimable status set and started_at reset but is
-// scoped to a single id; no FOR UPDATE SKIP LOCKED is needed because the drain
-// advisory lock already serializes drains.
-func ClaimPropagationByID(ctx context.Context, id string) (*models.PendingPropagation, bool, error) {
+// found=false when the row no longer exists, is already terminal
+// (applied/failed), belongs to a target that is no longer registered, or
+// belongs to a target other than the one the caller can dispatch. Every one of
+// those is a no-op for the caller.
+//
+// Target-scoped for the same reason the batch claim is, and it matters more
+// here: a row claimed and then found undispatchable has to be put back, and
+// every way of putting it back costs something. A requeue spends a retry and
+// records a dispatch failure for a dispatch that never happened, so a handful
+// of targeted applies would exhaust an add-on row's budget before its
+// dispatcher exists — and its first real transient response would halt it. Not
+// claiming it costs nothing.
+//
+// It mirrors ClaimPendingPropagations' claimable status set and started_at
+// reset but is scoped to a single id; no FOR UPDATE SKIP LOCKED is needed
+// because the drain advisory lock already serializes drains.
+func ClaimPropagationByID(ctx context.Context, target, id string) (*models.PendingPropagation, bool, error) {
+	// Same rejection-before-dispatch as the batch claim, narrowed to this row.
+	// An overtaken row is settled here and then not found, which is exactly what
+	// found=false already means to the caller: nothing to do.
+	if err := terminateSuperseded(ctx, target, id); err != nil {
+		return nil, false, err
+	}
 	const q = `
-		UPDATE pending_zitadel_propagations
+		UPDATE propagation_outbox p
 		SET status='in_flight', started_at=NOW()
-		WHERE id=$1 AND status IN ('pending','in_flight')
-		RETURNING id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
-		          COALESCE(cascade_id::text,''), COALESCE(zitadel_grant_id,''),
-		          status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at`
-	rows, err := PG.Query(ctx, q, id)
+		FROM targets t
+		WHERE p.id=$1 AND p.status IN ('pending','in_flight') AND p.target = $2
+		  AND t.target = p.target AND t.state = 'active'
+		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
+		          p.source, COALESCE(p.source_ref,''),
+		          COALESCE(p.cascade_id::text,''), COALESCE(p.zitadel_grant_id,''),
+		          p.status, p.attempts, COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at`
+	rows, err := querier(ctx).Query(ctx, q, id, target)
 	if err != nil {
 		return nil, false, fmt.Errorf("claim propagation %s: %w", id, err)
 	}
@@ -192,49 +393,232 @@ func ClaimPropagationByID(ctx context.Context, id string) (*models.PendingPropag
 	return &out[0], true, nil
 }
 
+// ClaimPendingRevocations is the background revocation drain's claim: the same
+// transition as ClaimPendingPropagations, restricted to rows that only withdraw
+// access.
+//
+// Two restrictions, and both are the point of the function.
+//
+// Withdrawal rows only. `add` confers, and `replace` confers and withdraws in
+// one call — a background runner that dispatched either would hand somebody
+// access with no operator in the loop, which is the consent property the
+// operator-only drain rule exists to protect (design §7).
+//
+// Two shapes qualify. `op_type = 'revoke'` is Zitadel's, where the row itself
+// names the direction. An add-on revocation is an `apply` carrying a resolved
+// set, and the row cannot be read to find out which way it moves — so the
+// writer declares it, and `withdraws_only` is that declaration. This used to be
+// excluded outright, and the exclusion was worse than it looked: a target
+// revocation queued a lock nothing would claim, on a response that told the
+// operator it drains on its own, appearing on no surface. `apply` rows that
+// have NOT declared themselves are still excluded, which is the same rule, now
+// answered rather than assumed.
+//
+// And never ahead of older conferring intent for the same subject. A grant
+// queued BEFORE this revocation is the earlier decision and must land first; if
+// the runner dispatched the withdrawal now, the operator draining that grant
+// later would restore precisely the access being withdrawn — silently, because
+// both rows applied and neither failed. Waiting is the safe direction: the
+// revocation stays queued, visible, and ageing on the unconfirmed-revocation
+// surface, where a delay is something an operator can see rather than something
+// the system silently undid.
+func ClaimPendingRevocations(ctx context.Context, target string, limit int) ([]models.PendingPropagation, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if err := terminateSuperseded(ctx, target, ""); err != nil {
+		return nil, err
+	}
+	const q = `
+		WITH claimed AS (
+			SELECT p.id FROM propagation_outbox p
+			JOIN targets t ON t.target = p.target AND t.state = 'active'
+			WHERE p.status IN ('pending','in_flight') AND p.target = $2
+			  AND (p.op_type = 'revoke' OR p.withdraws_only)
+			  AND NOT EXISTS (
+			      SELECT 1 FROM propagation_outbox e
+			       WHERE e.target     = p.target
+			         AND e.user_id    = p.user_id
+			         AND e.project_id IS NOT DISTINCT FROM p.project_id
+			         -- Anything queued earlier that could confer. On the add-on
+			         -- side that is an apply which did not declare itself a
+			         -- withdrawal: it carries a whole resolved set, so draining
+			         -- it after this one would restore exactly what is being
+			         -- withdrawn, silently, with neither row having failed.
+			         AND (e.op_type IN ('add', 'replace')
+			              OR (e.op_type = 'apply' AND NOT e.withdraws_only))
+			         AND e.status     IN ('pending', 'in_flight')
+			         AND e.intent_seq < p.intent_seq)
+			ORDER BY p.intent_seq
+			LIMIT $1
+			FOR UPDATE OF p SKIP LOCKED
+		)
+		UPDATE propagation_outbox p
+		SET status = 'in_flight', started_at = NOW()
+		FROM claimed
+		WHERE p.id = claimed.id
+		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
+		          p.source, COALESCE(p.source_ref,''), COALESCE(p.cascade_id::text,''),
+		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
+		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at`
+	rows, err := querier(ctx).Query(ctx, q, limit, target)
+	if err != nil {
+		return nil, fmt.Errorf("claim pending revocations: %w", err)
+	}
+	defer rows.Close()
+	return scanPropagations(rows)
+}
+
+// TargetsAwaitingDispatch lists active targets holding unresolved outbox rows,
+// excluding the one just drained.
+//
+// It exists so a drain can SAY what it did not touch. A pass that silently
+// dispatches one target's work while another's waits is indistinguishable, from
+// the outside, from a system with nothing left to do.
+func TargetsAwaitingDispatch(ctx context.Context, drained string) ([]string, error) {
+	const q = `
+		SELECT DISTINCT p.target
+		  FROM propagation_outbox p
+		  JOIN targets t ON t.target = p.target AND t.state = 'active'
+		 WHERE p.status IN ('pending','in_flight') AND p.target <> $1
+		 ORDER BY p.target`
+	rows, err := querier(ctx).Query(ctx, q, drained)
+	if err != nil {
+		return nil, fmt.Errorf("list targets awaiting dispatch: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, fmt.Errorf("scan target awaiting dispatch: %w", err)
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// UndispatchableTarget reports the target of an unresolved row that a drain for
+// `dispatcher` may not dispatch, or "" when there is nothing to say.
+//
+// Used only after a claim declined a row, and only to explain it. A targeted
+// apply that quietly did nothing is worse than one that says which target it
+// could not reach — and the read is the cheapest way to say it, because the
+// alternative is claiming the row to find out and then paying to put it back.
+func UndispatchableTarget(ctx context.Context, dispatcher, id string) (string, error) {
+	const q = `
+		SELECT p.target
+		  FROM propagation_outbox p
+		  JOIN targets t ON t.target = p.target AND t.state = 'active'
+		 WHERE p.id = $1 AND p.target <> $2 AND p.status IN ('pending','in_flight')`
+	var target string
+	if err := querier(ctx).QueryRow(ctx, q, id, dispatcher).Scan(&target); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", fmt.Errorf("read undispatchable target for %s: %w", id, err)
+	}
+	return target, nil
+}
+
+// ErrPropagationNotInFlight means the row this drain was settling is no longer
+// the drain's to settle: something terminated it while the dispatch was out.
+//
+// Today that something is deregistration, which abandons a target's unresolved
+// rows. It is not an error — the row reached a terminal state legitimately —
+// but it is emphatically not success either, and a settle that quietly did
+// nothing would be counted as one.
+var ErrPropagationNotInFlight = errors.New("db: the propagation row is no longer in flight")
+
+// Every finalizer below is guarded by `status='in_flight'`, which is the status
+// the claim set and the only status a settle may act on.
+//
+// Unguarded, they overwrite whatever the row became while the dispatch was out.
+// The worst is the requeue: it would return an abandoned row to `pending` on a
+// deregistered target, recreating the undrainable row the deregistration had
+// just resolved — and invisibly, because the sweep that would have caught it
+// has already run.
+// settleOne runs a guarded finalizer and turns "matched nothing" into the
+// sentinel.
+//
+// One place, because the mapping is the whole safety property and three copies
+// of it are three chances to write `return nil` instead. A settle that affected
+// no rows did not settle: the caller is about to count an outcome it never
+// recorded.
+func settleOne(ctx context.Context, what, id, q string, args ...any) error {
+	tag, err := querier(ctx).Exec(ctx, q, append([]any{id}, args...)...)
+	if err != nil {
+		return fmt.Errorf("%s: %w", what, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("%w: %s", ErrPropagationNotInFlight, id)
+	}
+	return nil
+}
+
 // MarkPropagationApplied marks a row as terminal success and clears any prior
 // transient error message.
 func MarkPropagationApplied(ctx context.Context, id string) error {
-	return execPropagation(ctx, id,
-		`UPDATE pending_zitadel_propagations SET status='applied', completed_at=NOW(), last_error=NULL WHERE id=$1`)
+	return settleOne(ctx, "mark propagation applied", id,
+		`UPDATE propagation_outbox SET status='applied', completed_at=NOW(), last_error=NULL
+		 WHERE id=$1 AND status='in_flight'`)
 }
 
 // MarkPropagationFailed marks a row terminal-failed with the operator-facing
 // error. Failed rows survive the retention window as the attention-needed audit
 // trail.
 func MarkPropagationFailed(ctx context.Context, id, errMsg string) error {
-	const q = `UPDATE pending_zitadel_propagations
-		SET status='failed', completed_at=NOW(), last_error=$2 WHERE id=$1`
-	if _, err := PG.Exec(ctx, q, id, errMsg); err != nil {
-		return fmt.Errorf("mark propagation failed: %w", err)
-	}
-	return nil
+	return settleOne(ctx, "mark propagation failed", id,
+		`UPDATE propagation_outbox SET status='failed', completed_at=NOW(), last_error=$2
+		 WHERE id=$1 AND status='in_flight'`, errMsg)
 }
 
 // RequeuePropagation returns a row to pending after a transient error and bumps
 // attempts. Caller decides (via attempts vs OUTBOX_MAX_RETRIES) whether to halt.
 func RequeuePropagation(ctx context.Context, id, errMsg string) (int, error) {
-	const q = `UPDATE pending_zitadel_propagations
+	const q = `UPDATE propagation_outbox
 		SET status='pending', attempts=attempts+1, last_error=$2, started_at=NULL
-		WHERE id=$1 RETURNING attempts`
+		WHERE id=$1 AND status='in_flight' RETURNING attempts`
 	var attempts int
-	if err := PG.QueryRow(ctx, q, id, errMsg).Scan(&attempts); err != nil {
+	err := querier(ctx).QueryRow(ctx, q, id, errMsg).Scan(&attempts)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, fmt.Errorf("%w: %s", ErrPropagationNotInFlight, id)
+	}
+	if err != nil {
 		return 0, fmt.Errorf("requeue propagation: %w", err)
 	}
 	return attempts, nil
+}
+
+// ReleasePropagation returns a row to pending WITHOUT spending a retry.
+//
+// For the one case where nothing was attempted: the target declined before
+// doing anything, because an operator put it into a maintenance window. A
+// requeue would spend an attempt and record a dispatch failure for a dispatch
+// that never happened — and a long enough window would exhaust the budget of
+// every queued row and halt the drain on rows that were never even sent.
+//
+// Guarded by `status='in_flight'` like every other settle, so a row terminated
+// while its dispatch was out is not returned to pending on a target that no
+// longer exists.
+func ReleasePropagation(ctx context.Context, id, reason string) error {
+	return settleOne(ctx, "release propagation", id,
+		`UPDATE propagation_outbox SET status='pending', last_error=$2, started_at=NULL
+		 WHERE id=$1 AND status='in_flight'`, reason)
 }
 
 // GetPendingPropagations returns rows still in flight (pending or in_flight),
 // oldest first — the operator's "awaiting Zitadel" worklist.
 func GetPendingPropagations(ctx context.Context) ([]models.PendingPropagation, error) {
 	const q = `
-		SELECT id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
+		SELECT id, target, op_type, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'),
+		       source, COALESCE(source_ref,''),
 		       COALESCE(cascade_id::text,''), COALESCE(zitadel_grant_id,''),
 		       status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at
-		FROM pending_zitadel_propagations
+		FROM propagation_outbox
 		WHERE status IN ('pending','in_flight')
 		ORDER BY cascade_id NULLS LAST, created_at`
-	rows, err := PG.Query(ctx, q)
+	rows, err := querier(ctx).Query(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("get pending propagations: %w", err)
 	}
@@ -245,25 +629,35 @@ func GetPendingPropagations(ctx context.Context) ([]models.PendingPropagation, e
 // CountPendingPropagations counts rows still in flight (pending or in_flight) —
 // the badge/callout depth. Terminal rows (applied/failed) are excluded.
 func CountPendingPropagations(ctx context.Context) (int, error) {
-	const q = `SELECT COUNT(*) FROM pending_zitadel_propagations WHERE status IN ('pending','in_flight')`
+	const q = `SELECT COUNT(*) FROM propagation_outbox WHERE status IN ('pending','in_flight')`
 	var n int
-	if err := PG.QueryRow(ctx, q).Scan(&n); err != nil {
+	if err := querier(ctx).QueryRow(ctx, q).Scan(&n); err != nil {
 		return 0, fmt.Errorf("count pending propagations: %w", err)
 	}
 	return n, nil
 }
 
-// PruneTerminalPropagations deletes applied/failed rows older than retentionDays.
+// PruneTerminalPropagations deletes terminal rows older than retentionDays.
 // The outbox is ephemeral workflow state — canonical intent lives in
 // direct_role_grants — so terminal rows are safe to drop after the window.
 // `failed` rows are kept the full window as the audit trail of attention-needing
-// mutations. Returns the number of rows pruned.
+// mutations; `superseded` and `abandoned` rows likewise, and their durable
+// record is the audit log, which the window does not touch. Returns the number
+// of rows pruned.
 func PruneTerminalPropagations(ctx context.Context, retentionDays int) (int64, error) {
-	const q = `DELETE FROM pending_zitadel_propagations
-		WHERE status IN ('applied','failed')
+	const q = `DELETE FROM propagation_outbox
+		WHERE status IN ('applied','failed','superseded','abandoned')
 		  AND completed_at IS NOT NULL
-		  AND completed_at < NOW() - ($1 || ' days')::interval`
-	tag, err := PG.Exec(ctx, q, retentionDays)
+		  -- make_interval rather than a parameter concatenated with a unit
+		  -- word and cast to interval. The
+		  -- concatenation makes $1 a TEXT parameter, and pgx has no plan for
+		  -- encoding a Go int as text — so every call failed with "unable to
+		  -- encode 30 into text format", was logged as non-fatal, and the
+		  -- outbox has never been pruned once. The typed form takes the int the
+		  -- caller actually has. (PruneSpentPlans, six hundred lines down, does
+		  -- the string conversion by hand; either works and neither had a test.)
+		  AND completed_at < NOW() - make_interval(days => $1::int)`
+	tag, err := querier(ctx).Exec(ctx, q, retentionDays)
 	if err != nil {
 		return 0, fmt.Errorf("prune terminal propagations: %w", err)
 	}
@@ -291,37 +685,100 @@ func PruneTerminalPropagations(ctx context.Context, retentionDays int) (int64, e
 //
 // Called only AFTER the Zitadel mutation is confirmed applied, so the ledger can
 // never drop a grant Zitadel still holds.
-func ReconcileLedgerOnApplied(ctx context.Context, opType, userID, projectID string, roleKeys []string, source string) error {
-	switch opType {
-	case "revoke":
-		const q = `DELETE FROM direct_role_grants
-			WHERE user_id=$1 AND zitadel_project_id=$2 AND zitadel_role_key = ANY($3) AND source=$4`
-		if _, err := PG.Exec(ctx, q, userID, projectID, roleKeys, source); err != nil {
-			return fmt.Errorf("reconcile ledger (revoke): %w", err)
+// It takes the access-mutation lock, because deleting a ledger row changes what
+// somebody effectively holds and every delta is computed from those rows. The
+// drain is not a cascade, but its effect on the closure is the same: a cascade
+// can lock, read a direct grant that is still present, conclude the role it was
+// about to add is already covered, and commit that empty delta — while this
+// deletion lands in between and takes the cover away. Nobody adds it back,
+// because nobody thought it was missing.
+//
+// The lock is taken HERE and not around the dispatch. The Zitadel call has
+// already happened by the time this runs, so nothing holds the lock across the
+// network, and the window this closes is between the call returning and the
+// ledger catching up.
+func ReconcileLedgerOnApplied(ctx context.Context, outboxID string) error {
+	return InTxLockingAccess(ctx, func(ctx context.Context) error {
+		tx, ok := ctx.Value(txKey).(pgx.Tx)
+		if !ok || tx == nil {
+			return fmt.Errorf("reconcile ledger: no transaction")
 		}
-	case "replace":
-		const q = `DELETE FROM direct_role_grants
-			WHERE user_id=$1 AND zitadel_project_id=$2 AND source='direct'
-			  AND NOT (zitadel_role_key = ANY($3))`
-		if _, err := PG.Exec(ctx, q, userID, projectID, roleKeys); err != nil {
-			return fmt.Errorf("reconcile ledger (replace): %w", err)
+		// Everything is read from the row being reconciled rather than passed
+		// alongside it. What has to hold is that the tuple, the source and the
+		// moment all describe THE SAME decision — a caller assembling them by
+		// hand can pass a set that never existed together, and the ordering
+		// comparison below is meaningless unless the timestamp is this row's.
+		var opType, userID, projectID, source string
+		var roleKeys []string
+		var intentSeq int64
+		err := tx.QueryRow(ctx, `
+			SELECT op_type, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'),
+			       COALESCE(source,'direct'), intent_seq
+			FROM propagation_outbox WHERE id = $1`, outboxID).Scan(
+			&opType, &userID, &projectID, &roleKeys, &source, &intentSeq)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			return fmt.Errorf("reconcile ledger: read %s: %w", outboxID, err)
 		}
-	}
-	return nil
-}
+		if opType != "revoke" && opType != "replace" {
+			return nil
+		}
 
-func execPropagation(ctx context.Context, id, q string) error {
-	if _, err := PG.Exec(ctx, q, id); err != nil {
-		return fmt.Errorf("update propagation %s: %w", id, err)
-	}
-	return nil
+		// A ledger row is protected only from an add that would ESTABLISH it.
+		//
+		// Cascade adds deliberately write no direct_role_grants row — bundle and
+		// rule intent lives in their own tables — so treating any queued add as
+		// proof the ledger row is newer keeps a direct grant alive that nothing
+		// is maintaining. It then reads as coverage forever: removing the bundle
+		// later sees it, concludes the role is still held, and queues no revoke.
+		// Matching the source is what distinguishes an add that writes this row
+		// from one that writes nothing.
+		//
+		// And it must be NEWER than the decision being reconciled. An add queued
+		// before this revocation and still waiting is older intent; the
+		// revocation is the later word, and the row goes.
+		const newerAddExists = `
+			NOT EXISTS (
+			    SELECT 1 FROM propagation_outbox o
+			    WHERE o.op_type = 'add'
+			      AND o.status IN ('pending', 'in_flight')
+			      AND o.user_id = d.user_id
+			      AND o.project_id = d.zitadel_project_id
+			      AND d.zitadel_role_key = ANY(o.role_keys)
+			      AND o.source = d.source
+			      AND o.intent_seq > $5)`
+
+		switch opType {
+		case "revoke":
+			if _, err := tx.Exec(ctx, `DELETE FROM direct_role_grants d
+				WHERE d.user_id=$1 AND d.zitadel_project_id=$2
+				  AND d.zitadel_role_key = ANY($3) AND d.source=$4
+				  AND `+newerAddExists, userID, projectID, roleKeys, source, intentSeq); err != nil {
+				return fmt.Errorf("reconcile ledger (revoke): %w", err)
+			}
+		case "replace":
+			// The same protection, because the same thing can happen: a replace
+			// narrowing A→B while a later direct add re-establishes A would
+			// otherwise delete A's freshly written row, and the add would reach
+			// the target with no durable record behind it.
+			if _, err := tx.Exec(ctx, `DELETE FROM direct_role_grants d
+				WHERE d.user_id=$1 AND d.zitadel_project_id=$2 AND d.source='direct'
+				  AND NOT (d.zitadel_role_key = ANY($3))
+				  AND `+newerAddExists, userID, projectID, roleKeys, "direct", intentSeq); err != nil {
+				return fmt.Errorf("reconcile ledger (replace): %w", err)
+			}
+		}
+		return nil
+	})
 }
 
 func scanPropagations(rows pgx.Rows) ([]models.PendingPropagation, error) {
 	var out []models.PendingPropagation
 	for rows.Next() {
 		var p models.PendingPropagation
-		if err := rows.Scan(&p.ID, &p.OpType, &p.UserID, &p.ProjectID, &p.RoleKeys,
+		if err := rows.Scan(&p.ID, &p.Target, &p.OpType, &p.UserID, &p.ProjectID, &p.RoleKeys,
 			&p.Source, &p.SourceRef, &p.CascadeID,
 			&p.ZitadelGrantID, &p.Status, &p.Attempts, &p.LastError, &p.InitiatedBy,
 			&p.CreatedAt, &p.StartedAt, &p.CompletedAt); err != nil {
@@ -333,4 +790,66 @@ func scanPropagations(rows pgx.Rows) ([]models.PendingPropagation, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// RoleRef is a (project, role) pair the outbox names.
+type RoleRef struct {
+	ProjectID string
+	RoleKey   string
+}
+
+// QueuedRevocations lists the roles a subject has an unresolved revocation for.
+//
+// A queued revocation is a decision already taken. Until the drain reaches it
+// the intent ledger still carries the grant — it is deleted only after the
+// target confirms, so that a failed dispatch never leaves Syndra believing
+// access is gone while the target still has it. That makes the ledger, on its
+// own, a wrong answer to "what does this person effectively hold" for exactly
+// as long as the row waits.
+//
+// A closure computed from that wrong answer decides nothing is missing and
+// queues nothing, and the revocation then lands anyway: the subject ends up
+// holding the source and not the access, with no queued row disagreeing. So the
+// effective-access reads subtract these, which makes the transition visible to
+// every delta from the moment it is queued rather than from the moment it is
+// confirmed.
+func QueuedRevocations(ctx context.Context, userID string) ([]RoleRef, error) {
+	// `replace` names the roles that SURVIVE, not the ones being taken away, so
+	// it cannot be unioned with revoke's role_keys. Its removals are the
+	// direct-sourced ledger roles on that project which the new set omits —
+	// the same predicate ReconcileLedgerOnApplied deletes by, asked ahead of
+	// time instead of after.
+	const q = `
+		SELECT project_id, UNNEST(role_keys) AS role_key
+		FROM propagation_outbox
+		WHERE user_id = $1
+		  AND op_type = 'revoke'
+		  AND status IN ('pending', 'in_flight')
+		  AND project_id IS NOT NULL AND role_keys IS NOT NULL
+		UNION
+		SELECT g.zitadel_project_id, g.zitadel_role_key
+		FROM propagation_outbox o
+		JOIN direct_role_grants g
+		  ON g.user_id = o.user_id
+		 AND g.zitadel_project_id = o.project_id
+		 AND g.source = 'direct'
+		WHERE o.user_id = $1
+		  AND o.op_type = 'replace'
+		  AND o.status IN ('pending', 'in_flight')
+		  AND o.project_id IS NOT NULL AND o.role_keys IS NOT NULL
+		  AND NOT (g.zitadel_role_key = ANY(o.role_keys))`
+	rows, err := querier(ctx).Query(ctx, q, userID)
+	if err != nil {
+		return nil, fmt.Errorf("queued revocations for %s: %w", userID, err)
+	}
+	defer rows.Close()
+	var out []RoleRef
+	for rows.Next() {
+		var r RoleRef
+		if err := rows.Scan(&r.ProjectID, &r.RoleKey); err != nil {
+			return nil, fmt.Errorf("scan queued revocation: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }

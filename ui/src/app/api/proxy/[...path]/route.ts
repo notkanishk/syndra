@@ -16,6 +16,39 @@ function isSelfScoped(path: string[], userId: string) {
   return path[2] === "access" || path[2] === "grants" || path[2] === "shadow-credential";
 }
 
+/**
+ * The `/me/…` prefix: routes whose subject is the session rather than the path.
+ *
+ * There is no id to compare, which is the point of the prefix — the backend
+ * resolves the subject from the authenticated session, so there is nothing here
+ * for a caller to substitute. Every one is `withUserAuth` and self-scoped
+ * there; this is the outer of two locks.
+ *
+ * Still an explicit list rather than a blanket `path[0] === "me"`. A prefix rule
+ * would admit whatever gets added under it next, and the reason to enumerate
+ * the reachable surface is that nothing should widen without somebody typing it.
+ * `route.test.ts` reads the backend's router and fails when a `/me/` route is
+ * missing here, so the list cannot fall behind either — which is the failure
+ * that shipped: both sides of this boundary were correct and the middle had
+ * never heard of the prefix.
+ */
+function isOwnMemberRoute(method: "GET" | "POST" | "PUT" | "DELETE", path: string[]) {
+  if (path[0] !== "me") return false;
+  const rest = path.slice(1);
+  if (method === "GET") {
+    // Their own name and team, and their own view of every target.
+    return (
+      (rest.length === 1 && rest[0] === "profile") ||
+      (rest.length === 1 && rest[0] === "targets")
+    );
+  }
+  if (method === "POST") {
+    // POST /me/targets/{target}/credential, and nothing else under the prefix.
+    return rest.length === 3 && rest[0] === "targets" && rest[2] === "credential";
+  }
+  return false;
+}
+
 /** The member's own shadow credential, exactly — not its `/status` or `/audit` children. */
 function isOwnShadowCredential(path: string[], userId: string) {
   return path.length === 3 && isSelfScoped(path, userId) && path[2] === "shadow-credential";
@@ -26,11 +59,13 @@ function isMemberAllowed(method: "GET" | "POST" | "PUT" | "DELETE", path: string
     if (path.length === 1 && (path[0] === "catalog" || path[0] === "applications" || path[0] === "requests")) {
       return true;
     }
+    if (isOwnMemberRoute("GET", path)) return true;
     return isSelfScoped(path, userId);
   }
 
   if (method === "POST") {
     if (path.length === 1 && path[0] === "requests") return true;
+    if (isOwnMemberRoute("POST", path)) return true;
     // Taking your own ask back. The backend scopes the UPDATE by the row's requester, so this
     // gate decides which route is reachable, never whose request is affected.
     return path.length === 3 && path[0] === "requests" && path[2] === "withdraw";
@@ -67,11 +102,20 @@ async function proxy(request: NextRequest, method: "GET" | "POST" | "PUT" | "DEL
     ? session.accessToken
     : API_KEY;
 
+  const headers: Record<string, string> = { Authorization: `Bearer ${authToken}` };
+  // Demo mode has no token to carry a subject, so the request would otherwise
+  // reach the backend anonymous and every `/me/*` route would resolve its actor
+  // to "system" — no entitlement, no binding, no account. Sent only on the demo
+  // path; an OIDC session carries its subject inside the token, where it
+  // belongs, and the backend ignores this header entirely unless it is already
+  // accepting the shared key.
+  if (session.sessionType !== "oidc" && session.id) {
+    headers["X-Syndra-Demo-Subject"] = session.id;
+  }
+
   const init: RequestInit = {
     method,
-    headers: {
-      "Authorization": `Bearer ${authToken}`,
-    },
+    headers,
     cache: "no-store",
   };
 

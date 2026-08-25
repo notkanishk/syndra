@@ -50,7 +50,6 @@ func resetWebhookDeps(t *testing.T) {
 	origInsert := dbInsertWebhookEvent
 	origComplete := dbCompleteWebhookEvent
 	origFail := dbFailWebhookEvent
-	origEmitIntent := webhookEmitProvisioningIntent
 	origUpsertIdx := dbUpsertGrantIndex
 	origGetIdx := dbGetGrantIndex
 	origDeleteIdx := dbDeleteGrantIndex
@@ -68,7 +67,6 @@ func resetWebhookDeps(t *testing.T) {
 		dbInsertWebhookEvent = origInsert
 		dbCompleteWebhookEvent = origComplete
 		dbFailWebhookEvent = origFail
-		webhookEmitProvisioningIntent = origEmitIntent
 		dbUpsertGrantIndex = origUpsertIdx
 		dbGetGrantIndex = origGetIdx
 		dbDeleteGrantIndex = origDeleteIdx
@@ -81,8 +79,8 @@ func resetWebhookDeps(t *testing.T) {
 	// Defaults for existing webhook tests that don't care about drift: never
 	// flag drift unless a test explicitly opts in.
 	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return false, nil }
-	dbHasExclusion = func(context.Context, string, string, string) (bool, error) { return false, nil }
-	dbUpsertDriftItemWithEvidence = func(context.Context, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
+	dbHasExclusion = func(context.Context, string, string, string, string) (bool, error) { return false, nil }
+	dbUpsertDriftItemWithEvidence = func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
 		return "", false, nil
 	}
 }
@@ -101,7 +99,6 @@ func setupNoopWebhookDeps(t *testing.T) {
 	}
 	dbCompleteWebhookEvent = func(_ context.Context, _ string) error { return nil }
 	dbFailWebhookEvent = func(_ context.Context, _, _ string) error { return nil }
-	webhookEmitProvisioningIntent = func(_ context.Context, _, _, _, _, _ string) error { return nil }
 	dbUpsertGrantIndex = func(_ context.Context, _, _, _ string, _ []string) error { return nil }
 	dbGetGrantIndex = func(_ context.Context, _ string) (db.ZitadelGrantIndex, error) {
 		return db.ZitadelGrantIndex{}, db.ErrGrantIndexNotFound
@@ -337,87 +334,13 @@ func TestWebhook_UserDeactivatedNoRoleKeyRequired(t *testing.T) {
 	}
 }
 
-func TestWebhook_GrantAdded_EmitsAddIntent(t *testing.T) {
-	setupNoopWebhookDeps(t)
-
-	var emittedAction, emittedUID, emittedProject, emittedRole string
-	webhookEmitProvisioningIntent = func(_ context.Context, uid, action, project, role, _ string) error {
-		emittedUID = uid
-		emittedAction = action
-		emittedProject = project
-		emittedRole = role
-		return nil
-	}
-
-	body := []byte(`{"event_type":"grant_added","user_id":"u1","source_project":"p1","role_key":"editor"}`)
-	rr := postWebhook(t, body)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if emittedAction != "add" {
-		t.Errorf("expected add intent, got %q", emittedAction)
-	}
-	if emittedUID != "u1" || emittedProject != "p1" || emittedRole != "editor" {
-		t.Errorf("wrong intent args: uid=%s project=%s role=%s", emittedUID, emittedProject, emittedRole)
-	}
-}
-
-func TestWebhook_GrantRemoved_EmitsRemoveIntent(t *testing.T) {
-	setupNoopWebhookDeps(t)
-
-	var emittedAction string
-	webhookEmitProvisioningIntent = func(_ context.Context, _, action, _, _, _ string) error {
-		emittedAction = action
-		return nil
-	}
-
-	body := []byte(`{"event_type":"grant_removed","user_id":"u1","source_project":"p1","role_key":"editor"}`)
-	rr := postWebhook(t, body)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if emittedAction != "remove" {
-		t.Errorf("expected remove intent, got %q", emittedAction)
-	}
-}
-
-func TestWebhook_GrantAdded_IntentFailureNonFatal(t *testing.T) {
-	setupNoopWebhookDeps(t)
-
-	webhookEmitProvisioningIntent = func(_ context.Context, _, _, _, _, _ string) error {
-		return fmt.Errorf("intent DB unavailable")
-	}
-
-	body := []byte(`{"event_type":"grant_added","user_id":"u1","source_project":"p1","role_key":"editor"}`)
-	rr := postWebhook(t, body)
-
-	// Should still return 200 — intent failure is non-fatal.
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200 (intent failure non-fatal), got %d: %s", rr.Code, rr.Body.String())
-	}
-}
-
-func TestWebhook_UserDeactivated_NoIntentEmitted(t *testing.T) {
-	setupNoopWebhookDeps(t)
-
-	var intentCalled bool
-	webhookEmitProvisioningIntent = func(_ context.Context, _, _, _, _, _ string) error {
-		intentCalled = true
-		return nil
-	}
-
-	body := []byte(`{"event_type":"user_deactivated","user_id":"u1","source_project":"p1"}`)
-	rr := postWebhook(t, body)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if intentCalled {
-		t.Error("should NOT emit provisioning intent for user_deactivated in Change 1")
-	}
-}
+// The four tests that stood here asserted that a grant event emitted a
+// provisioning intent for the LLDAP sync service to claim. That queue is gone,
+// and what replaced it is not a second thing the webhook does: a grant change
+// runs the mapping-rule cascade, the cascade computes a closure delta, and the
+// delta fires the lifecycle trigger for whatever targets the role is mapped to.
+// The test for that lives with the trigger, in `internal/services`, because
+// that is where the behaviour is.
 
 // Verify the unused import doesn't cause issues — db is used for type reference in deps.
 var _ = db.WebhookEvent{}
@@ -846,9 +769,9 @@ func TestProcessGrantAdded_UnexplainedGrantCreatesDrift(t *testing.T) {
 	setupNoopWebhookDeps(t)
 	// Downstream orchestration no-ops so the test isolates the drift hook.
 	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return false, nil }
-	dbHasExclusion = func(context.Context, string, string, string) (bool, error) { return false, nil }
+	dbHasExclusion = func(context.Context, string, string, string, string) (bool, error) { return false, nil }
 	var driftUser, driftType string
-	dbUpsertDriftItemWithEvidence = func(_ context.Context, u, _ string, _ []string, _, source, dtype string, _ db.DriftEvidence) (string, bool, error) {
+	dbUpsertDriftItemWithEvidence = func(_ context.Context, tgt, u, _ string, _ []string, _, source, dtype string, _ db.DriftEvidence) (string, bool, error) {
 		driftUser, driftType = u, dtype
 		if source != "webhook" {
 			t.Fatalf("detection_source must be webhook, got %q", source)
@@ -860,8 +783,8 @@ func TestProcessGrantAdded_UnexplainedGrantCreatesDrift(t *testing.T) {
 	if err := processGrantAdded(context.Background(), ev, "evt-1"); err != nil {
 		t.Fatal(err)
 	}
-	if driftUser != "ext-u" || driftType != "zitadel_only" {
-		t.Fatalf("unexplained external grant must create zitadel_only drift, got user=%q type=%q", driftUser, driftType)
+	if driftUser != "ext-u" || driftType != "target_only" {
+		t.Fatalf("unexplained external grant must create target_only drift, got user=%q type=%q", driftUser, driftType)
 	}
 }
 
@@ -869,7 +792,7 @@ func TestProcessGrantAdded_ExpectedGrantNoDrift(t *testing.T) {
 	setupNoopWebhookDeps(t)
 	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return true, nil } // Syndra expects it
 	called := false
-	dbUpsertDriftItemWithEvidence = func(context.Context, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
+	dbUpsertDriftItemWithEvidence = func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
 		called = true
 		return "", false, nil
 	}
@@ -880,5 +803,90 @@ func TestProcessGrantAdded_ExpectedGrantNoDrift(t *testing.T) {
 	}
 	if called {
 		t.Fatal("a grant Syndra already expects must not be flagged as drift")
+	}
+}
+
+// --- The removal half, which had none (change `reconciliation-as-merge`) ---
+//
+// A grant Syndra intends, removed in Zitadel by hand, was found only by the
+// six-hourly sweep — which compares two sets and therefore cannot say who
+// removed it, and until the merge base existed it replayed the grant instead of
+// reporting it. The event knows both things the comparison cannot: who, and
+// when.
+
+func TestProcessGrantRemoved_ARemovalOfSomethingSyndraIntendsIsAFinding(t *testing.T) {
+	setupNoopWebhookDeps(t)
+	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return true, nil }
+
+	var kind, actor, user string
+	dbUpsertDriftItemWithEvidence = func(_ context.Context, _, u, _ string, _ []string, _, source, dtype string, ev db.DriftEvidence) (string, bool, error) {
+		user, kind, actor = u, dtype, ev.UpstreamActor
+		if source != "webhook" {
+			t.Fatalf("detection_source must be webhook, got %q", source)
+		}
+		return "d1", true, nil
+	}
+
+	ev := WebhookPayload{
+		EventType: "grant_removed", UserID: "u1", SourceProject: "p1",
+		RoleKeys: []string{"operator"}, GrantID: "g1", EditorID: "op-marta",
+	}
+	if err := processGrantRemoved(context.Background(), ev, "evt-1"); err != nil {
+		t.Fatal(err)
+	}
+	if user != "u1" || kind != db.DriftSyndraOnly {
+		t.Fatalf("want a syndra_only finding for u1, got user=%q type=%q", user, kind)
+	}
+	// The half a set comparison can never supply.
+	if actor != "op-marta" {
+		t.Fatalf("the finding must name who removed it, got %q", actor)
+	}
+}
+
+// A removal of access Syndra never intended is the two sides agreeing, reached
+// from the other direction. Not a finding.
+func TestProcessGrantRemoved_ARemovalSyndraDidNotIntendIsNotAFinding(t *testing.T) {
+	setupNoopWebhookDeps(t)
+	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return false, nil }
+	called := false
+	dbUpsertDriftItemWithEvidence = func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
+		called = true
+		return "", false, nil
+	}
+
+	ev := WebhookPayload{EventType: "grant_removed", UserID: "u1", SourceProject: "p1", RoleKeys: []string{"viewer"}}
+	if err := processGrantRemoved(context.Background(), ev, "evt-1"); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Fatal("Zitadel and Syndra agreeing is not a finding")
+	}
+}
+
+// The order that makes the check mean anything. The cascade below removes
+// derived intent, so asking after it would answer about the world the cascade
+// made rather than the one the removal happened in.
+func TestProcessGrantRemoved_DetectionRunsBeforeTheCascade(t *testing.T) {
+	setupNoopWebhookDeps(t)
+	seq := []string{}
+	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) {
+		seq = append(seq, "expects")
+		return true, nil
+	}
+	dbUpsertDriftItemWithEvidence = func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
+		seq = append(seq, "finding")
+		return "d1", true, nil
+	}
+	webhookRevokeMappingRules = func(context.Context, string, string, string) error {
+		seq = append(seq, "cascade")
+		return nil
+	}
+
+	ev := WebhookPayload{EventType: "grant_removed", UserID: "u1", SourceProject: "p1", RoleKeys: []string{"operator"}}
+	if err := processGrantRemoved(context.Background(), ev, "evt-1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(seq) < 3 || seq[len(seq)-1] != "cascade" {
+		t.Fatalf("the finding must be raised before the cascade runs: %v", seq)
 	}
 }

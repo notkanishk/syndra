@@ -10,6 +10,23 @@ interface PkceCookie {
   state: string;
   verifier: string;
   createdAt: number; // Unix seconds
+  /**
+   * Where to return the visitor once they are back, when they were somewhere
+   * before the session lapsed.
+   *
+   * It rides in this cookie rather than in the OIDC `state` parameter: state
+   * is a CSRF token whose only job is to be compared, and putting a
+   * destination inside it would mean an attacker-composable value travelling
+   * through the provider and back as part of the thing that proves the round
+   * trip was ours. Here it stays on this origin, httpOnly, with the same
+   * five-minute life as the verifier beside it — and it is validated again by
+   * `safeReturnPath` before anybody is sent to it.
+   *
+   * Optional so a cookie written before this field existed still decodes: a
+   * deployment mid-rollout should not fail a sign-in over a missing return
+   * path.
+   */
+  next?: string;
 }
 
 export function encodePkce(payload: PkceCookie): string {
@@ -27,6 +44,7 @@ export function decodePkce(value: string): PkceCookie | null {
     ) {
       return null;
     }
+    if (parsed.next !== undefined && typeof parsed.next !== "string") return null;
     return parsed as PkceCookie;
   } catch {
     return null;

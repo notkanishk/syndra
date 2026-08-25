@@ -3,10 +3,14 @@ package handlers
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"runtime/debug"
 	"strings"
+
+	"syndra/internal/auth"
 )
 
 // NewRouter constructs the global multiplexer for API requests
@@ -142,22 +146,18 @@ func NewRouter() http.Handler {
 	// carries its access sources so removal can be named after its own source.
 	mux.HandleFunc("GET /api/v1/projects/{id}/roles/{key}/members", withCORS(withOperatorAuth(handleGetRoleMembers)))
 
-	// Provisioning Intents (operator view)
-	mux.HandleFunc("GET /api/v1/intents", withCORS(withUserAuth(handleGetProvisioningIntents)))
-
-	// Provisioning Intents (sync service API — internal, API-key auth)
-	mux.HandleFunc("POST /api/v1/intents/claim", withCORS(withAPIKeyAuth(handleClaimIntents)))
-	mux.HandleFunc("POST /api/v1/intents/{id}/complete", withCORS(withAPIKeyAuth(handleCompleteIntent)))
-	mux.HandleFunc("POST /api/v1/intents/{id}/fail", withCORS(withAPIKeyAuth(handleFailIntent)))
+	// The provisioning-intent routes stood here. They were the LLDAP bridge's
+	// queue — one for the operator to watch and three for the sync service to
+	// claim, complete and fail against. Both ends are gone: a target's changes
+	// live in the propagation outbox beside Zitadel's, dispatched by the add-on
+	// that owns the target rather than by a service polling for work.
 
 	// Shadow Password Vault (user-facing, self-only)
-	mux.HandleFunc("PUT /api/v1/users/{uid}/shadow-credential", withCORS(withUserAuth(handleSetShadowCredential)))
 	mux.HandleFunc("DELETE /api/v1/users/{uid}/shadow-credential", withCORS(withUserAuth(handleClearShadowCredential)))
 	mux.HandleFunc("GET /api/v1/users/{uid}/shadow-credential/status", withCORS(withUserAuth(handleGetShadowCredentialStatus)))
 	mux.HandleFunc("GET /api/v1/users/{uid}/shadow-credential/audit", withCORS(withUserAuth(handleGetShadowCredentialAudit)))
 
 	// Shadow Password Vault (sync service — internal, API-key auth)
-	mux.HandleFunc("GET /api/v1/shadow-credentials/{uid}/hash", withCORS(withAPIKeyAuth(handleGetShadowCredentialHash)))
 
 	// User Profile (sync service — internal, API-key auth)
 	mux.HandleFunc("GET /api/v1/users/{uid}/profile", withCORS(withAPIKeyAuth(handleGetUserProfile)))
@@ -198,10 +198,14 @@ func NewRouter() http.Handler {
 	// the full grant inventory.
 	mux.HandleFunc("GET /api/v1/reconciliation/grants", withCORS(withOperatorAuth(handleGetReconciliationDiff)))
 
-	// Zitadel propagation outbox: operator drains the buffered Syndra-mediated
-	// grant mutations explicitly (B4/D3). Operator-gated — draining issues real
-	// Zitadel mutations and the pending list exposes the grant inventory.
+	// The propagation outbox: operator drains the buffered Syndra-mediated
+	// mutations explicitly (B4/D3), for every registered target. Operator-gated
+	// — draining issues real mutations and the pending list exposes the grant
+	// inventory.
 	mux.HandleFunc("POST /api/v1/propagations/drain", withCORS(withOperatorAuth(handleDrainPropagations)))
+	// And one target on its own, for the target that was unreachable while the
+	// rest drained and has come back.
+	mux.HandleFunc("POST /api/v1/targets/{target}/propagations/drain", withCORS(withOperatorAuth(handleDrainTarget)))
 	mux.HandleFunc("GET /api/v1/propagations", withCORS(withOperatorAuth(handleListPendingPropagations)))
 	// Change history: the same rows grouped by the event that produced them,
 	// including the ones still waiting. A half-applied cascade has to be
@@ -221,7 +225,105 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/v1/governance/drift/bulk-attribute", withCORS(withOperatorAuth(handleBulkAttributeDrift)))
 	// The second and last bulk resolution. Bulk revoke is deliberately absent —
 	// see handleBulkMarkDriftExternal.
+	// Role-to-target mappings (change `addon-platform` group 7). What a Zitadel
+	// role means on a target: a first-class versioned model with the same
+	// history a bundle edit gets, because a mapping edit silently changes what
+	// every holder of that role can reach.
+	mux.HandleFunc("GET /api/v1/targets/mappings", withCORS(withOperatorAuth(handleListRoleMappings)))
+	mux.HandleFunc("POST /api/v1/targets/mappings", withCORS(withOperatorAuth(handleCreateRoleMapping)))
+	mux.HandleFunc("PATCH /api/v1/targets/mappings/{id}", withCORS(withOperatorAuth(handleUpdateRoleMapping)))
+	mux.HandleFunc("DELETE /api/v1/targets/mappings/{id}", withCORS(withOperatorAuth(handleDeleteRoleMapping)))
+	// The blast radius, before anything lands.
+	mux.HandleFunc("GET /api/v1/targets/mappings/{id}/holders", withCORS(withOperatorAuth(handleMappingHolders)))
+	// And the approval for it. Two surfaces rather than one flag: an edit and a
+	// delete reach the same cohort and do opposite things to it, so a citation
+	// must not be able to cross between them.
+	mux.HandleFunc("POST /api/v1/targets/mappings/{id}/rehearse-edit", withCORS(withOperatorAuth(handleRehearseMappingEdit)))
+	mux.HandleFunc("POST /api/v1/targets/mappings/{id}/rehearse-delete", withCORS(withOperatorAuth(handleRehearseMappingDelete)))
+	mux.HandleFunc("POST /api/v1/targets/mappings/versions", withCORS(withOperatorAuth(handlePublishMappingVersion)))
+	// The history behind those versions. Read-only, and operator-gated like the
+	// rest: a version's note names who decided what a role means.
+	mux.HandleFunc("GET /api/v1/targets/{target}/mappings/versions", withCORS(withOperatorAuth(handleMappingHistory)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/mappings/versions/{version}/rollback", withCORS(withOperatorAuth(handleRollbackMappingVersion)))
+
+	// A member's own storage view and the one action on it. Self-scoped by
+	// construction: the subject is the authenticated actor and is never taken
+	// from the request, because a member-scoped operation must bind who it acts
+	// ON and not only who may call it.
+	mux.HandleFunc("GET /api/v1/me/targets", withCORS(withUserAuth(handleMyTargets)))
+	mux.HandleFunc("POST /api/v1/me/targets/{target}/credential", withCORS(withUserAuth(handleSetMyCredential)))
+
+	// The add-on roster. Deployment configuration, not data: an operator on a
+	// deployment running a TrueNAS add-on sees the TrueNAS entry whether or not
+	// it answers and whether or not anybody is bound to it, because structure
+	// must never move in response to data.
+	mux.HandleFunc("GET /api/v1/targets", withCORS(withOperatorAuth(handleListTargets)))
+	mux.HandleFunc("GET /api/v1/targets/{target}/health", withCORS(withOperatorAuth(handleTargetHealth)))
+	// What the target's own audit log holds for one subject. Operator-gated:
+	// the member-facing read is storage.status, which takes no subject at all.
+	mux.HandleFunc("GET /api/v1/targets/{target}/system-health", withCORS(withOperatorAuth(handleTargetSystemHealth)))
+	mux.HandleFunc("GET /api/v1/targets/{target}/activity", withCORS(withOperatorAuth(handleTargetActivity)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/log-anchor/resolve", withCORS(withOperatorAuth(handleResolveLogFinding)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/binding-conflicts/{id}/resolve", withCORS(withOperatorAuth(handleResolveBindingConflict)))
+
+	// The unmanaged inventory: what lives on a target that Syndra never put
+	// there. Reported, never triaged — and adoption is the one way an account
+	// moves out of it, because that decision hands somebody else's home
+	// directory to a member if it is wrong.
+	mux.HandleFunc("GET /api/v1/targets/{target}/inventory", withCORS(withOperatorAuth(handleTargetInventory)))
+	// The add-on equivalent of governance/drift/reconcile, which covers Zitadel
+	// only. Operator-gated and idempotent: it reads the target and queues what
+	// is already owed, and queueing is not applying.
+	mux.HandleFunc("POST /api/v1/targets/{target}/reconcile", withCORS(withOperatorAuth(handleReconcileTarget)))
+	// Accounts Syndra created whose reason for existing has gone. A read; the
+	// removal runs through the ordinary plan-then-apply path.
+	mux.HandleFunc("GET /api/v1/targets/{target}/accounts/dormant", withCORS(withOperatorAuth(handleDormantAccounts)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/accounts/dormant/sweep", withCORS(withOperatorAuth(handleDormantSweep)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/inventory/{username}/adopt", withCORS(withOperatorAuth(handleAdoptAccount)))
+	// Letting a binding go: the other resolution the reconciliation names, and
+	// the only one that was unreachable. Keyed on the subject rather than the
+	// account name, because the row it acts on is the binding — whose account
+	// may no longer exist to be named.
+	mux.HandleFunc("POST /api/v1/targets/{target}/bindings/{subject}/release", withCORS(withOperatorAuth(handleReleaseBinding)))
+	// The differences a reconciliation could not resolve, and the operator's
+	// answer to one. On the target rather than under a global queue: the three
+	// values in a finding mean nothing without the target they were read from.
+	mux.HandleFunc("GET /api/v1/targets/{target}/merge-findings", withCORS(withOperatorAuth(handleMergeFindings)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/merge-findings/{id}/resolve", withCORS(withOperatorAuth(handleResolveMergeFinding)))
+
+	// Access withdrawn that has not gone away. Beside drift triage, never inside
+	// it: drift is access that appeared without an explanation, and this is
+	// access somebody took away that is still there.
+	mux.HandleFunc("GET /api/v1/governance/unconfirmed-revocations", withCORS(withOperatorAuth(handleUnconfirmedRevocations)))
+
+	// Stopping an add-on writing, without a redeploy. A maintenance mode you
+	// have to restart into is a maintenance mode nobody uses.
+	mux.HandleFunc("POST /api/v1/targets/{target}/lifecycle", withCORS(withOperatorAuth(handleSetTargetLifecycle)))
+
+	// Revocation as a composition (design §10). This target cannot end a
+	// session, so "revoke" is a disabling allowance plus a credential rotation,
+	// and the response says what neither half does.
+	mux.HandleFunc("POST /api/v1/targets/{target}/users/{id}/revoke-access", withCORS(withOperatorAuth(handleRevokeTargetAccess)))
+
+	// Entitlement convergence on an add-on target (group 9). Plan-then-apply,
+	// like every other target-affecting operator action: the rehearsal computes
+	// the diff through the add-on and records it, and the apply cites the id it
+	// was given rather than resubmitting the request.
+	mux.HandleFunc("POST /api/v1/targets/{target}/entitlements/rehearse", withCORS(withOperatorAuth(handleRehearseEntitlements)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/entitlements/apply", withCORS(withOperatorAuth(handleApplyEntitlements)))
+
+	// Allowances (group 8): the per-user overlay beside role-derived access.
+	// Nothing here deletes — an allowance is lifted, and the row survives,
+	// because the reason and the actor stay attached to the person.
+	mux.HandleFunc("POST /api/v1/allowances", withCORS(withOperatorAuth(handleCreateAllowance)))
+	mux.HandleFunc("POST /api/v1/allowances/{id}/lift", withCORS(withOperatorAuth(handleLiftAllowance)))
+	mux.HandleFunc("GET /api/v1/users/{id}/allowances", withCORS(withOperatorAuth(handleSubjectAllowances)))
+	mux.HandleFunc("GET /api/v1/governance/allowances/review-due", withCORS(withOperatorAuth(handleAllowancesDueForReview)))
+
 	mux.HandleFunc("POST /api/v1/governance/drift/bulk-mark-external", withCORS(withOperatorAuth(handleBulkMarkDriftExternal)))
+	// Who made it, from Zitadel's event log — the question the sweep cannot
+	// answer for itself, and the reason this side needs no merge base.
+	mux.HandleFunc("GET /api/v1/governance/drift/{id}/origin", withCORS(withOperatorAuth(handleDriftOrigin)))
 	mux.HandleFunc("POST /api/v1/governance/drift/{id}/attribute", withCORS(withOperatorAuth(handleAttributeDrift)))
 	mux.HandleFunc("POST /api/v1/governance/drift/{id}/revoke", withCORS(withOperatorAuth(handleRevokeDrift)))
 	mux.HandleFunc("POST /api/v1/governance/drift/{id}/mark-external", withCORS(withOperatorAuth(handleMarkDriftExternal)))
@@ -232,7 +334,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/action/inject",
 		withCORS(withZitadelActionSignature("ZITADEL_ACTION_SIGNING_KEY", HandleActionInject)))
 
-	return withMaxBody(withSecurityHeaders(mux))
+	return withPanicGuard(withMaxBody(withSecurityHeaders(mux)))
 }
 
 // withUserAuth is the primary authorization middleware for all admin API routes.
@@ -341,8 +443,37 @@ func withAPIKeyAuth(next http.HandlerFunc) http.HandlerFunc {
 			jsonErrorResponse(w, http.StatusUnauthorized, "UNAUTHORIZED", "Missing or invalid authorization token")
 			return
 		}
-		next(w, r)
+		next(w, demoSubject(r))
 	}
+}
+
+// demoSubjectHeader lets a demo-mode caller say WHO it is acting as.
+//
+// Reachable only from `withAPIKeyAuth`, which is reachable only when
+// ZITADEL_DOMAIN is unset. That is the same gate the shared key itself lives
+// behind, and the key already grants every operator power there is — so naming
+// a subject alongside it adds no privilege, it only stops the request being
+// anonymous. In production the branch is never taken and the subject comes from
+// a validated token, as it must.
+//
+// Without this, every `/me/*` route in demo mode resolved its actor to
+// "system": a subject with no entitlement, no binding and no account. The
+// member storage page therefore could not be exercised on any deployment
+// without a live Zitadel, which is why nobody noticed that the middleware was
+// redirecting members away from it in the first place. A path that cannot be
+// tested is a path that is broken and quiet about it.
+const demoSubjectHeader = "X-Syndra-Demo-Subject"
+
+// demoSubject attaches the named subject as the request's principal.
+func demoSubject(r *http.Request) *http.Request {
+	subject := strings.TrimSpace(r.Header.Get(demoSubjectHeader))
+	if subject == "" {
+		return r
+	}
+	// No roles. Demo mode has no role source to read them from, and inventing
+	// one here would make this header grant something rather than merely
+	// identify — every route that gates on a project role keeps refusing.
+	return r.WithContext(withPrincipal(r.Context(), &auth.Principal{Subject: subject}))
 }
 
 // extractBearerToken parses the Authorization header and returns the token string,
@@ -374,6 +505,46 @@ func withCORS(next http.HandlerFunc) http.HandlerFunc {
 
 		next(w, r)
 	}
+}
+
+// withPanicGuard turns a panicking handler into a 500 that says nothing about
+// the request that caused it.
+//
+// Two reasons, and the second is the one this change owes. A panic in a handler
+// otherwise closes the connection with no response, which a client cannot tell
+// from a network fault. And the standard library's own recovery prints the
+// request that was being served — a panic capture is one of the paths a
+// declared secret escapes through in practice, alongside request-logging
+// middleware and error responses that echo the offending payload (design §17).
+//
+// So the log line here is deliberately narrow: method, path, the panic value
+// and the stack. Never the body, never the headers, never the parameters. The
+// body is where a member's credential is, and a diagnostic that has to be
+// redacted before it is safe is a diagnostic somebody will forget to redact.
+//
+// The client is told nothing beyond "this failed", for the same reason: an
+// error response that echoes the offending request is the second path on that
+// list.
+func withPanicGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			rec := recover()
+			if rec == nil {
+				return
+			}
+			// The documented way for a handler to abandon a response, and not
+			// a bug. Asserted rather than compared with errors.Is, which would
+			// itself panic on a non-error value — inside a recovery, that turns
+			// one handler's bug into a crash.
+			if err, ok := rec.(error); ok && errors.Is(err, http.ErrAbortHandler) {
+				panic(rec)
+			}
+			log.Printf("[PANIC] %s %s: %v\n%s", r.Method, r.URL.Path, rec, debug.Stack())
+			jsonErrorResponse(w, http.StatusInternalServerError, "INTERNAL_ERROR",
+				"Something went wrong handling that request.")
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
 
 // withSecurityHeaders adds standard security response headers to all responses.

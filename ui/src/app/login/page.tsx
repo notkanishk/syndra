@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { LoginDoor, type DemoIdentity } from "@/components/login/LoginDoor";
 import { loginFailure } from "@/lib/login-error";
+import { safeReturnPath } from "@/lib/return-path";
 import { getDemoUsers, getSession } from "@/lib/session";
 
 export const metadata = {
@@ -21,10 +22,18 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const session = await getSession();
-  if (session) redirect("/");
+  const params = await searchParams;
+  const nextParam = Array.isArray(params.next) ? params.next[0] : params.next;
+  // Validated here as well as at the two routes that consume it, because this
+  // is where it re-enters the page as a value the browser will act on.
+  const next = safeReturnPath(nextParam);
 
-  const { error } = await searchParams;
+  const session = await getSession();
+  // Already signed in and arriving with a destination — usually a link opened
+  // in a second tab. Send them to it rather than to the landing.
+  if (session) redirect(next);
+
+  const { error } = params;
   const code = Array.isArray(error) ? error[0] : error;
 
   const identities: DemoIdentity[] = getDemoUsers().map((user) => ({
@@ -38,6 +47,7 @@ export default async function LoginPage({
       mode={process.env.ZITADEL_DOMAIN ? "oidc" : "demo"}
       identities={identities}
       failure={loginFailure(code)}
+      next={next}
     />
   );
 }

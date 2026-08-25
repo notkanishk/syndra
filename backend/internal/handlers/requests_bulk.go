@@ -28,6 +28,10 @@ type bulkDecisionRequest struct {
 	IDs        []string `json:"ids"`
 	Status     string   `json:"status"`
 	ReviewNote string   `json:"review_note"`
+	// PlanID cites the rehearsal being applied. Required with ?apply=true.
+	PlanID string `json:"plan_id,omitempty"`
+	// AcknowledgeScope is the operator saying the affected-request count out loud.
+	AcknowledgeScope bool `json:"acknowledge_scope,omitempty"`
 }
 
 func handleBulkDecideRequests(w http.ResponseWriter, r *http.Request) {
@@ -60,12 +64,40 @@ func handleBulkDecideRequests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plan := rehearseDecisionBatch(r.Context(), dedupeNonEmpty(req.IDs), status)
+	ids := dedupeNonEmpty(req.IDs)
+	actor := resolveActor(r, "")
+	// The decision itself is bound, along with the cohort: approving and
+	// rejecting are opposite acts, and an apply that flipped one under the other
+	// approval would mint grants from a review that declined them. The review
+	// note is not bound — it is written at apply time and changes nothing.
+	requestFP := services.FingerprintIDCohort("decide_requests", ids, "status", status)
+
 	if r.URL.Query().Get("apply") != "true" {
+		plan := rehearseDecisionBatch(r.Context(), ids, status)
+		if err := issuePlan(r.Context(), planSurfaceBulkDecision, actor, requestFP, req.AcknowledgeScope, &plan); err != nil {
+			writePlanIssueError(w, err)
+			return
+		}
 		jsonResponse(w, http.StatusOK, plan)
 		return
 	}
 
+	if strings.TrimSpace(req.PlanID) == "" {
+		missingPlanCitation(w)
+		return
+	}
+	var live map[string]services.BulkOutcome
+	subjects, err := claimPlan(r.Context(), planSurfaceBulkDecision, actor, requestFP, req.PlanID,
+		func() map[string]services.BulkOutcome {
+			live = indexOutcomes(rehearseDecisionBatch(r.Context(), ids, status).Outcomes)
+			return live
+		})
+	if err != nil {
+		writePlanCitationError(w, err)
+		return
+	}
+
+	plan := planApprovedRows("decide_requests", subjects, live)
 	applyDecisionPlan(r, &plan, status, req.ReviewNote)
 	jsonResponse(w, http.StatusOK, plan)
 }
@@ -80,10 +112,15 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 		if err != nil {
 			out.Effect = services.EffectBlocked
 			out.Detail = "No such request — it may have been withdrawn."
+			out.Fingerprint = services.Fingerprint("request", id, "absent")
 			plan.Outcomes = append(plan.Outcomes, out)
 			continue
 		}
 
+		// The request's own status is in here for the reason a drift row's is:
+		// a shared queue means a second reviewer deciding first is ordinary, and
+		// no fingerprint over the requester's access would see it.
+		out.Fingerprint = services.FingerprintAccessRequest(request)
 		out.Name = driftSubject(ctx, request.RequesterID)
 		out.Email = request.RequesterID
 
@@ -125,7 +162,6 @@ func applyDecisionPlan(r *http.Request, plan *services.BulkPlan, status, note st
 		if out.Effect != services.EffectApply {
 			continue
 		}
-
 		if err := decideOneRequest(r, out.UserID, status, note); err != nil {
 			out.Effect = services.EffectFailed
 			out.Detail = "Didn't go through: " + err.Error()

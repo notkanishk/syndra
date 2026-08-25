@@ -139,15 +139,68 @@ export function AccessSourceList({
     <span className="flex flex-wrap items-center gap-[9px]">
       <SourcePopover reason={strongest} />
       {qualifier && <span className="text-[13.5px] text-muted">{qualifier}</span>}
-      {rest.length > 0 && (
-        <span
-          className="inline-flex h-[26px] items-center rounded-pill border border-line-strong px-2.5 text-[12.5px] font-semibold text-muted"
-          title={rest.map((r) => SOURCE_LABEL[r.kind as SourceKind]).join(", ")}
-        >
-          +{rest.length} more
-        </span>
-      )}
+      {rest.length > 0 && <MoreSources rest={rest} />}
     </span>
+  );
+}
+
+/**
+ * The sources the row did not have room for.
+ *
+ * This used to carry their names in a `title` attribute and nowhere else,
+ * which is a hover tooltip: unreachable by touch, unreachable by keyboard, and
+ * unreadable by a screen reader. On the component whose entire job is to
+ * answer "why does this person have this", the other half of the answer was
+ * available only to somebody holding a mouse.
+ *
+ * It opens instead. The collapsed state is still the default — "never a wall
+ * of chips" is the rule this component is built around — but the wall is one
+ * tap away rather than behind a pointer.
+ */
+function MoreSources({ rest }: { rest: RoleReason[] }) {
+  const [open, setOpen] = useState(false);
+
+  if (open) {
+    return (
+      <>
+        {rest.map((reason, at) => (
+          <SourcePopover key={`${reason.kind}-${at}`} reason={reason} />
+        ))}
+        <MoreSourcesButton onClick={() => setOpen(false)} expanded>
+          Fewer
+        </MoreSourcesButton>
+      </>
+    );
+  }
+
+  return (
+    <MoreSourcesButton onClick={() => setOpen(true)} expanded={false}>
+      +{rest.length} more
+    </MoreSourcesButton>
+  );
+}
+
+/** The 26px pill, inside a target a thumb can hit. */
+function MoreSourcesButton({
+  onClick,
+  expanded,
+  children,
+}: {
+  onClick: () => void;
+  expanded: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={expanded}
+      className="inline-flex h-11 items-center motion-tint desktop:h-[26px]"
+    >
+      <span className="inline-flex h-[26px] items-center rounded-pill border border-line-strong px-2.5 text-[12.5px] font-semibold text-muted">
+        {children}
+      </span>
+    </button>
   );
 }
 

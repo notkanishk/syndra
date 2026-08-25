@@ -150,7 +150,7 @@ func GetAuditLogsForUser(
 ) ([]models.AuditLog, error) {
 	query, args := buildAuditQuery(userID, limit, after)
 
-	rows, err := PG.Query(ctx, query, args...)
+	rows, err := querier(ctx).Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

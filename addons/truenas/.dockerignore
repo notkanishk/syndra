@@ -1,0 +1,8 @@
+# The build context is what `COPY . .` copies. Without this it included the
+# 9.5 MB binary a local `go build` leaves behind — shipped into the image, then
+# overwritten by the one the builder produces.
+truenas
+*.test
+*.db
+*.log
+*.log.*

@@ -26,9 +26,16 @@ export function TraceCell({ entry, className }: { entry: AuditEntry; className?:
           <Mono>{trace.label}</Mono>
         </Link>
       ) : trace.kind === "object" ? (
-        <Mono className="text-[13px] text-faint" title={trace.title}>
-          {trace.label}
-        </Mono>
+        // The identity is shown, not hovered. It lived in a `title` — which
+        // touch cannot open, screenshots do not carry, and this product
+        // forbids everywhere else — and it is the only thing that says WHAT
+        // this row traced to when there is no cascade to link.
+        <span className="flex flex-col gap-0.5">
+          <Mono className="text-[13px] text-faint">{trace.label}</Mono>
+          {trace.title && (
+            <span className="text-[12.5px] leading-[1.4] text-faint">{trace.title}</span>
+          )}
+        </span>
       ) : (
         <span className="text-[13px] text-faint">—</span>
       )}

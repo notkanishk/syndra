@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import PeoplePage from "@/app/users/page";
 import type { UserListEntry } from "@/lib/queries/useUsers";
+import { setMediaQuery } from "@/test-utils/media";
 
 const users = vi.hoisted(() => ({ data: [] as UserListEntry[] }));
 const nav = vi.hoisted(() => ({ url: "/users", replaced: [] as string[] }));
@@ -231,12 +232,30 @@ describe("People index — bulk mode", () => {
     nav.url = "/users?bulk=1";
     renderPeople();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /Select all 60 people/ }));
+    // Both numbers, in words: what ticking this selects, and how many exist
+    // beyond the filter. A bare "Select all" is the ambiguity worth removing.
+    fireEvent.click(screen.getByRole("checkbox", { name: /Select these 60 people/ }));
 
     // ...and says so, with a way back to just the visible page: selecting 60
     // when you meant 50 is dozens of people's access.
     expect(await screen.findByText(/All 60 people selected/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /select only the 50 shown/ })).toBeInTheDocument();
+  });
+
+  // The name is the largest thing in a row and the obvious place a thumb
+  // lands. With a mouse it is a precise escape hatch out of the mode; with a
+  // thumb it is a trap, so below the desktop breakpoint the whole row selects.
+  it("keeps the name a link for a mouse and not for a thumb", async () => {
+    users.data = [person()];
+    nav.url = "/users?bulk=1";
+    setMediaQuery("(max-width: 67.49rem)", false);
+    const { unmount } = renderPeople();
+    expect(await screen.findByRole("link", { name: /Tomas Beck/ })).toBeTruthy();
+    unmount();
+
+    setMediaQuery("(max-width: 67.49rem)", true);
+    renderPeople();
+    await waitFor(() => expect(screen.queryByRole("link", { name: /Tomas Beck/ })).toBeNull());
   });
 
   it("drops the selection when the filter changes underneath it", async () => {

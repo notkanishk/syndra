@@ -40,7 +40,7 @@ export function Makerspace() {
       </div>
 
       <Health />
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 desktop:grid-cols-2">
         <Gaps />
         <AccessShape />
       </div>
@@ -64,7 +64,7 @@ function Health() {
   const unexplained = drift?.count ?? 0;
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 tablet:grid-cols-2 desktop:grid-cols-4">
       <HealthCell
         label="Identity provider"
         value={reachable ? "Reachable" : "Unreachable"}
@@ -258,20 +258,32 @@ function AccessShape() {
       )}
 
       {/* Dead catalogue entries are not urgent, so they read as one quiet line
-          rather than a block of their own. */}
-      <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
+          rather than a block of their own.
+
+          The two links carry their own 44px on touch. WCAG 2.5.8 exempts an
+          inline target inside a sentence, and these are not in one: the row
+          holds two destinations and a separator and no prose, so the exemption
+          does not reach them. They measured 16px tall on the screen this
+          product opens on. */}
+      <div className="flex flex-wrap items-center gap-x-1.5 border-t border-line px-5 py-3 text-[13px] text-faint desktop:block desktop:py-3">
         {unused === 0 && emptyBundles === 0 ? (
           "Every role and bundle is in use."
         ) : (
           <>
             {unused > 0 && (
-              <Link href="/roles?unused=1" className="font-semibold text-accent-text">
+              <Link
+                href="/roles?unused=1"
+                className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6"
+              >
                 {unused} {unused === 1 ? "role" : "roles"} nobody holds
               </Link>
             )}
-            {unused > 0 && emptyBundles > 0 && " · "}
+            {unused > 0 && emptyBundles > 0 && <span aria-hidden>·</span>}
             {emptyBundles > 0 && (
-              <Link href="/bundles" className="font-semibold text-accent-text">
+              <Link
+                href="/bundles"
+                className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6"
+              >
                 {emptyBundles} empty {emptyBundles === 1 ? "bundle" : "bundles"}
               </Link>
             )}
@@ -295,7 +307,10 @@ function RecentActivity() {
       <CardHeader
         title="Lately"
         action={
-          <Link href="/audit" className="text-[13.5px] font-semibold text-accent-text">
+          <Link
+            href="/audit"
+            className="inline-flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent-text"
+          >
             Full audit log →
           </Link>
         }

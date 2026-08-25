@@ -1,19 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Badge, Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { FieldHint, FieldLabel } from "@/components/ui/Input";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Segmented, Select } from "@/components/ui/Select";
 import {
   RowCheckbox,
-  SelectAllCheckbox,
+  SelectAllRow,
+  SelectModeToggle,
   SelectionAction,
   SelectionBar,
 } from "@/components/ui/SelectionBar";
@@ -61,9 +63,16 @@ export default function AutomaticRulesPage() {
    * row's actions are on the row, and here the row's action is "open me".
    */
   const selection = useRowSelection(useMemo(() => rows.map((rule) => rule.id), [rows]));
+  // Selection is a mode, announced by a named control, rather than a column of
+  // checkboxes that is always there. Leaving the mode keeps what was chosen —
+  // the operator who taps Done to read a rule properly has not changed their
+  // mind about the other nine.
+  const [selecting, setSelecting] = useState(false);
   const bulkMode = useBulkSetConfirmationMode();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const chosen = rows.filter((rule) => selection.selected.has(rule.id));
+  const chosenThings = `${chosen.length} ${chosen.length === 1 ? "rule" : "rules"}`;
   const immediate = chosen.filter((rule) => rule.confirmation_mode === "auto").length;
   const composition =
     chosen.length === 0
@@ -80,10 +89,14 @@ export default function AutomaticRulesPage() {
     const target = mode === "auto" ? "fire immediately" : "queue for confirmation";
     try {
       await bulkMode.mutateAsync({ kind: "rule", ids, mode });
-      toast.success(`${ids.length} ${ids.length === 1 ? "rule" : "rules"} now ${target}.`);
+      setOutcome({
+        kind: "applied",
+        message: `${ids.length} ${ids.length === 1 ? "rule" : "rules"} now ${target}`,
+        detail: "This changes what the rules do next, not what they have already done.",
+      });
       selection.clear();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Nothing was changed.");
+      setOutcome(outcomeFromError(error));
     }
   }
 
@@ -93,27 +106,38 @@ export default function AutomaticRulesPage() {
         title="Automatic rules"
         meta="Holding one role produces another, without anybody clicking."
         actions={
-          <Button variant="accent" onClick={() => setEditing("new")}>
-            New rule
-          </Button>
+          <>
+            {/* No rules, nothing to select. A mode control over an empty list
+                is a button that does nothing and says otherwise. */}
+            {rows.length > 0 && (
+              <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
+            )}
+            <Button variant="accent" onClick={() => setEditing("new")}>
+              New rule
+            </Button>
+          </>
         }
       />
 
+      {outcome && <ActionOutcome outcome={outcome} />}
+
       <Card>
         <CardColumns>
-          <span className="w-[18px]">
-            <SelectAllCheckbox
-              label={
-                selection.allSelected ? "Clear the selection" : `Select all ${rows.length} rules`
-              }
-              {...selection.headerCheckboxProps}
-            />
-          </span>
+          {selecting && <span className="w-11 shrink-0 desktop:w-[18px]" />}
           <span className="w-[110px]">Rule</span>
           <span className="flex-1">If … then</span>
           <span className="w-[90px] text-right">Holders</span>
           <span className="w-[150px] text-right">On fire</span>
         </CardColumns>
+
+        {selecting && rows.length > 0 && (
+          <SelectAllRow
+            inScope={rows.length}
+            noun={["rule", "rules"]}
+            allSelected={selection.allSelected}
+            {...selection.headerCheckboxProps}
+          />
+        )}
 
         <div data-selection-scope {...selection.containerProps}>
         <ListStates
@@ -134,23 +158,25 @@ export default function AutomaticRulesPage() {
           {rows.map((rule) => (
             <div
               key={rule.id}
-              className={`row-divider flex w-full items-center gap-[18px] px-5 ${
+              className={`row-divider flex w-full min-h-[60px] items-center gap-3 px-5 tablet:gap-[18px] ${
                 selection.isSelected(rule.id) ? "bg-accent-soft/30" : ""
               }`}
             >
-              <span className="w-[18px] shrink-0">
-                <RowCheckbox label="Select this rule" {...selection.checkboxProps(rule.id)} />
-              </span>
+              {selecting && (
+                <span className="w-11 shrink-0 desktop:w-[18px]">
+                  <RowCheckbox label="Select this rule" {...selection.checkboxProps(rule.id)} />
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => setEditing(rule)}
-                className="flex min-w-0 flex-1 flex-wrap items-center gap-[18px] py-3.5 text-left motion-tint hover:bg-[var(--hover)]"
+                className="flex min-w-0 flex-1 flex-col items-start gap-1.5 py-3.5 text-left motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px]"
               >
-                <Mono className="w-[110px] shrink-0 truncate text-faint">
+                <Mono className="truncate text-faint tablet:w-[110px] tablet:shrink-0">
                   {shortRuleId(rule.id)}
                 </Mono>
 
-                <span className="min-w-[320px] flex-1 text-[14.5px]">
+                <span className="w-full text-[14.5px] tablet:min-w-[320px] tablet:flex-1">
                   <span className="text-muted">
                     <ProjectName id={rule.source_project} /> / <Mono>{rule.source_role}</Mono>
                   </span>
@@ -160,9 +186,14 @@ export default function AutomaticRulesPage() {
                   </span>
                 </span>
 
-                <span className="w-[90px] text-right text-[15px]">{rule.holder_count ?? 0}</span>
+                <span className="text-[15px] tablet:w-[90px] tablet:text-right">
+                  {rule.holder_count ?? 0}
+                  <span className="text-[13px] text-faint tablet:hidden">
+                    {(rule.holder_count ?? 0) === 1 ? " holder" : " holders"}
+                  </span>
+                </span>
 
-                <span className="flex w-[150px] justify-end">
+                <span className="flex tablet:w-[150px] tablet:justify-end">
                   {/*
                     Amber for "Immediate": it is not an error, but it is the
                     setting where a bad rule reaches every holder before anybody
@@ -180,7 +211,7 @@ export default function AutomaticRulesPage() {
       </Card>
 
       <SelectionBar
-        count={selection.count}
+        count={selecting ? selection.count : 0}
         noun={["rule", "rules"]}
         composition={composition}
         onClear={selection.clear}
@@ -189,15 +220,18 @@ export default function AutomaticRulesPage() {
           Immediate reads as the louder of the two because it is: a rule set to
           fire immediately reaches every holder before anybody can look at it.
         */}
+        {/* These two apply on tap — there is no plan to read first — so each
+            one states how many rules it is about to change rather than naming
+            the setting and leaving the count on the other side of the bar. */}
         <SelectionAction
           tone="danger"
           disabled={bulkMode.isPending}
           onClick={() => applyMode("auto")}
         >
-          Fire immediately
+          Set {chosenThings} to fire immediately
         </SelectionAction>
         <SelectionAction disabled={bulkMode.isPending} onClick={() => applyMode("manual")}>
-          Queue for confirmation
+          Set {chosenThings} to queue for confirmation
         </SelectionAction>
       </SelectionBar>
 
@@ -226,6 +260,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
   const catalog = useGlobalRoleCatalog();
   const create = useCreateMappingRule();
   const update = useUpdateMappingRule();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const setMode = useSetRuleConfirmationMode();
   const validate = useValidateMappingRule();
   /**
@@ -466,6 +501,8 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
         )}
       </div>
 
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter
         note={
           validated?.ok ? undefined : "Save is blocked until validation passes."
@@ -488,14 +525,22 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
                 if (mode !== rule.confirmation_mode) {
                   await setMode.mutateAsync({ id: rule.id, mode });
                 }
-                toast.success("Rule updated.");
+                setOutcome({
+                  kind: "applied",
+                  message: "Rule updated",
+                  detail: "It applies to what happens from now on.",
+                });
               } else {
                 await create.mutateAsync({ ...input, confirmation_mode: mode });
-                toast.success("Rule created.");
+                setOutcome({
+                  kind: "applied",
+                  message: "Rule created",
+                  detail: "It applies to what happens from now on.",
+                });
               }
               onClose();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The rule wasn't saved.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
@@ -508,7 +553,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
             try {
               await runValidation();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "Validation didn't run.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
@@ -551,12 +596,16 @@ function DeleteRuleConfirm({
   onDeleted: () => void;
 }) {
   const remove = useDeleteMappingRule();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const holders = rule.holder_count ?? 0;
+  // The rule is gone in both: `queued` describes the withdrawals it caused,
+  // not the delete.
+  const gone = outcome?.kind === "applied" || outcome?.kind === "queued";
 
   return (
     <Modal
       open
-      onClose={onCancel}
+      onClose={gone ? onDeleted : onCancel}
       busy={remove.isPending}
       size="md"
       labelledBy="rule-delete-title"
@@ -587,7 +636,10 @@ function DeleteRuleConfirm({
         </div>
       </div>
 
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter note="Retarget the rule instead if you only want it to produce something else.">
+        {!gone && (
         <Button
           variant="dangerConfirm"
           isPending={remove.isPending}
@@ -595,23 +647,43 @@ function DeleteRuleConfirm({
             try {
               const result = await remove.mutateAsync(rule.id);
               const n = result.cascade?.enqueued ?? 0;
-              toast.success(
+              const auto = result.cascade?.mode === "auto";
+              setOutcome(
                 n === 0
-                  ? `${shortRuleId(rule.id)} deleted. Nobody's access changed.`
-                  : result.cascade.mode === "auto"
-                    ? `${shortRuleId(rule.id)} deleted. ${n} ${n === 1 ? "change" : "changes"} applied.`
-                    : `${shortRuleId(rule.id)} deleted. ${n} ${n === 1 ? "change is" : "changes are"} waiting under Pending changes.`,
+                  ? {
+                      kind: "applied",
+                      message: `${shortRuleId(rule.id)} deleted`,
+                      detail: "Nobody's access changed — the rule was producing nothing.",
+                    }
+                  : {
+                      // Queued unless the rule fired unattended: the
+                      // withdrawals it caused are recorded and wait for
+                      // somebody to resume the queue, and calling them applied
+                      // would say access is gone that is still there.
+                      kind: auto ? "applied" : "queued",
+                      message: `${shortRuleId(rule.id)} deleted — ${n} ${
+                        n === 1 ? "change" : "changes"
+                      } ${auto ? "applied" : "waiting"}`,
+                      detail: auto
+                        ? "The rule fired unattended, so its withdrawals went with it."
+                        : "They sit under Pending changes until somebody resumes the queue.",
+                    },
               );
-              onDeleted();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The rule wasn't deleted.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
           Delete and revoke
         </Button>
-        <Button disabled={remove.isPending} onClick={onCancel}>
-          Keep the rule
+        )}
+        {/* `onDeleted` closes the editor this dialog opened over, and it was
+            never called — so deleting a rule left the operator looking at an
+            editor for a rule that no longer exists. Called from the dismiss
+            button rather than from the mutation, because closing the editor
+            takes the outcome with it. */}
+        <Button disabled={remove.isPending} onClick={gone ? onDeleted : onCancel}>
+          {gone ? "Done" : "Keep the rule"}
         </Button>
       </ModalFooter>
     </Modal>

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { AccessSource } from "@/components/access/AccessSource";
 import { Makerspace } from "@/components/home/Makerspace";
@@ -10,17 +9,21 @@ import { ErrorState, RowSkeleton } from "@/components/states";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
-import { useGovernanceSummary } from "@/lib/queries/useGovernance";
+import { useGovernanceSummary, type UnreconciledTarget } from "@/lib/queries/useGovernance";
 import {
   useDecideRequest,
   useRequestsAdmin,
   type AccessRequest,
 } from "@/lib/queries/useRequests";
 import { useDrainPropagations } from "@/lib/queries/usePropagation";
-import { toastDrain } from "@/lib/drain-toast";
+import { useTargets } from "@/lib/queries/useTargets";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { outcomeFromDrain } from "@/lib/drain-outcome";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useCreateGrant } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
 import { useIsAdvanced } from "@/lib/ui-view";
+import { targetLabel } from "@/lib/nav";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { formatShortDate, formatWeekday, daysUntil } from "@/lib/format";
 
@@ -69,9 +72,24 @@ export function Home({ session }: { session: SessionUser }) {
   const expiring = summary.data?.expiring_grants ?? [];
   const propagation = summary.data?.pending_propagation;
   const drift = summary.data?.drift;
+  const unvouched = summary.data?.unreconciled_targets ?? [];
+  // Differences a reconciliation refused to resolve. Counted for the same
+  // reason the unreadable targets are: each one is a person's decision that has
+  // not been made, and a page that omits them says "nothing needs you" while
+  // somebody's access sits disputed.
+  const findings = summary.data?.merge_findings ?? 0;
 
+  // Counted, and that is the whole point of it. An unreadable target produces
+  // no drift findings, so a week of silence lands here as blocks === 0 and the
+  // page says "Nothing needs you" — the one sentence that must never be said
+  // about a system nobody has been able to look at.
   const blocks = advanced
-    ? pending.length + expiring.length + (propagation?.count ?? 0) + (drift?.count ?? 0)
+    ? pending.length +
+      expiring.length +
+      (propagation?.count ?? 0) +
+      (drift?.count ?? 0) +
+      unvouched.length +
+      findings
     : pending.length + expiring.length;
 
   const who = firstName(session);
@@ -131,7 +149,12 @@ export function Home({ session }: { session: SessionUser }) {
               reachable={propagation!.zitadel_reachable}
             />
           )}
+          {/* Above unexplained access, because it qualifies it: a target Syndra
+              cannot read contributes no findings, so the count below is a
+              statement about the targets it COULD read. */}
+          {advanced && unvouched.length > 0 && <UnvouchedTargets targets={unvouched} />}
           {advanced && (drift?.count ?? 0) > 0 && <UnexplainedAccess count={drift!.count} />}
+          {advanced && findings > 0 && <MergeFindingsWaiting count={findings} />}
 
           {!advanced && (
             <p className="max-w-[820px] text-[14px] leading-[1.55] text-faint">
@@ -149,10 +172,11 @@ export function Home({ session }: { session: SessionUser }) {
   );
 }
 
-/** Approve / Deny resolve in place with a toast and remove the row. They never navigate. */
+/** Approve / Deny resolve in place, on the row. They never navigate. */
 function OpenRequests({ requests }: { requests: AccessRequest[] }) {
   const decide = useDecideRequest();
   const [resolved, setResolved] = useState<Set<string>>(new Set());
+  const [outcomes, setOutcomes] = useState<Record<string, Outcome | null>>({});
 
   const visible = requests.filter((entry) => !resolved.has(entry.id));
   if (visible.length === 0) return null;
@@ -161,7 +185,13 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
     setResolved((prev) => new Set(prev).add(id));
     try {
       await decide.mutateAsync({ id, status });
-      toast.success(status === "approved" ? `Approved for ${who}` : `Denied for ${who}`);
+      setOutcomes((prev) => ({
+        ...prev,
+        [id]: {
+          kind: "applied",
+          message: status === "approved" ? `Approved for ${who}` : `Denied for ${who}`,
+        },
+      }));
     } catch (error) {
       // Put the row back: a row that vanished on a failed write would read as
       // a decision that was recorded.
@@ -170,7 +200,7 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
         next.delete(id);
         return next;
       });
-      toast.error(error instanceof Error ? error.message : "The decision didn't go through.");
+      setOutcomes((prev) => ({ ...prev, [id]: outcomeFromError(error) }));
     }
   }
 
@@ -212,6 +242,10 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
               Deny
             </Button>
           </div>
+
+          {outcomes[entry.id] && (
+            <ActionOutcome outcome={outcomes[entry.id]!} placement="inline" className="w-full" />
+          )}
         </CardRow>
       ))}
     </Card>
@@ -251,6 +285,7 @@ function ExpiringRow({
   // (user, project, role), so this renews in place rather than duplicating.
   const extend = useCreateGrant(grant.user_id);
   const remaining = daysUntil(grant.expires_at);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   return (
     <CardRow>
@@ -281,20 +316,27 @@ function ExpiringRow({
               reason: "Extended from Home",
               duration_days: 90,
             });
-            toast.success("Extended by 90 days.");
+            setOutcome({
+              kind: "applied",
+              message: "Extended by 90 days",
+              detail: "The row leaves this block on the next read.",
+            });
           } catch (error) {
-            toast.error(error instanceof Error ? error.message : "The extension didn't go through.");
+            setOutcome(outcomeFromError(error));
           }
         }}
       >
         Extend
       </Button>
+
+      {outcome && <ActionOutcome outcome={outcome} placement="inline" className="w-full" />}
     </CardRow>
   );
 }
 
 function PendingChanges({ count, reachable }: { count: number; reachable: boolean }) {
   const drain = useDrainPropagations();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   return (
     <Card>
@@ -310,16 +352,27 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           disabled={!reachable}
           isPending={drain.isPending}
           onClick={async () => {
+            setOutcome(null);
             try {
-              toastDrain(await drain.mutateAsync());
+              setOutcome(outcomeFromDrain(await drain.mutateAsync()));
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The drain didn't start.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
           Resume now
         </Button>
       </CardRow>
+
+      {/* The result sits in the block that ran it, at row weight rather than
+          as a bordered box inside a bordered card. Today is a landing an
+          operator scans, so an outcome here has to be legible at a glance and
+          must not restyle the block around it. */}
+      {outcome && (
+        <CardRow>
+          <ActionOutcome outcome={outcome} placement="inline" />
+        </CardRow>
+      )}
       {!reachable && (
         // A disabled action states its reason in the row, not on hover: hover
         // doesn't exist on touch and doesn't survive a screenshot.
@@ -327,6 +380,82 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           Disabled — identity provider unreachable. Writes stay queued; nothing is lost.
         </div>
       )}
+    </Card>
+  );
+}
+
+/**
+ * Targets Syndra has not been able to read for itself.
+ *
+ * Danger rather than warn, and above the drift count rather than beside it. The
+ * failure mode this exists for is not that something is broken — it is that
+ * nothing looks broken: a sweep that cannot reach a target finds no drift on
+ * it, so a week of blindness and a week of good behaviour render identically
+ * everywhere else in the product.
+ *
+ * The age is the number the operator acts on ("since when", not "for how many
+ * ticks"), and the reason travels with it because "unreachable" and "answered
+ * and refused the read" send them to different machines.
+ */
+function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
+  return (
+    <Card>
+      <CardHeader title="Targets Syndra can't vouch for" count={targets.length} tone="danger" />
+      {targets.map((t, i) => (
+        <CardRow key={t.target} first={i === 0} className="flex-wrap">
+          <div className="flex-1 text-[14.5px]">
+            <strong className="font-semibold">{targetLabel(t.target)}</strong> hasn&rsquo;t been
+            read since <Relative iso={t.since} />.
+            <span className="text-faint">
+              {" "}
+              Nothing found on it means nothing was looked at — not that it is clean.
+            </span>
+            {t.reason && <div className="mt-1 text-[13px] text-faint">{t.reason}</div>}
+          </div>
+          <ButtonLink href={`/system/targets/${t.target}`} size="sm">
+            Open target
+          </ButtonLink>
+        </CardRow>
+      ))}
+    </Card>
+  );
+}
+
+/**
+ * Differences the reconciliation found and is not entitled to resolve.
+ *
+ * This count was already inside the headline's arithmetic and had no block of
+ * its own, so an operator on Advanced could read "6 things need you", scan the
+ * page, and find five. A number that names work with no way to reach it is
+ * worse than a number that is missing: it sends somebody looking for a screen
+ * that is not there, and then leaves them assuming they misread it.
+ *
+ * Findings live per target rather than in one queue, so this links to each
+ * registered target rather than inventing an index that does not exist. In
+ * this deployment that is one row.
+ */
+function MergeFindingsWaiting({ count }: { count: number }) {
+  const targets = useTargets();
+  const rows = targets.data ?? [];
+
+  return (
+    <Card>
+      <CardHeader title="Waiting on a decision" count={count} tone="warn" />
+      <CardRow className="flex-wrap">
+        <div className="flex-1 text-[14.5px]">
+          {count} {count === 1 ? "difference" : "differences"} the reconciliation found and
+          can&rsquo;t resolve on its own
+          <span className="text-faint">
+            {" "}
+            — each one is somebody&rsquo;s access sitting disputed until a person decides.
+          </span>
+        </div>
+        {rows.map((row) => (
+          <ButtonLink key={row.target} href={`/system/targets/${row.target}`} size="sm">
+            {rows.length === 1 ? "Open target" : `Open ${targetLabel(row.target)}`}
+          </ButtonLink>
+        ))}
+      </CardRow>
     </Card>
   );
 }

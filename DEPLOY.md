@@ -310,6 +310,44 @@ Then `caddy reload`. No application change is needed for the reverse proxy:
 `ui/src/lib/oidc.ts:73-74` already derives the OIDC redirect URI from
 `x-forwarded-host` / `x-forwarded-proto`, which Caddy sets by default.
 
+#### 5a. Reaching a TrueNAS target
+
+The NAS is not deployed by this runbook and Caddy is not on its path by
+default. What Syndra needs from it is one property: **`TRUENAS_URL` must be a
+`wss://` endpoint whose certificate the add-on can verify**, because TrueNAS
+revokes a user-linked API key presented over plaintext, and because the
+alternative is `TRUENAS_VERIFY_TLS=false`. Two ways to get there.
+
+**Preferred — a real certificate on the NAS, no proxy.** TrueNAS issues its own
+ACME certificate over a DNS-01 challenge (`Credentials > Certificates`, then
+`System > General Settings > GUI SSL Certificate`), which works for a name whose
+A record is LAN-only as long as the zone is publicly delegated for the
+`_acme-challenge` TXT. Point `nas.example.org` straight at the NAS in
+local DNS and everything reaches one name: the UI, the add-on, SMB, NFS.
+
+That last part is the argument. **SMB and NFS cannot traverse Caddy** — it
+proxies HTTP, and tcp/445 and tcp/2049 are not HTTP. Putting the name on the
+proxy therefore splits the NAS across two names for no gain.
+
+**Alternative — front the HTTP side with Caddy.** Reasonable if ACME on the NAS
+is not an option. The site block is a plain WebSocket-transparent proxy; the
+middleware API is JSON-RPC over one long-lived WebSocket at `/api/current` and
+`reverse_proxy` upgrades it natively, with `Host` passed through unchanged.
+`tls_insecure_skip_verify` belongs on the upstream leg only, where the NAS
+presents its self-signed certificate. **SMB and NFS then need a second name
+pointed directly at the NAS**, which is what `TRUENAS_SHARE_HOST` is for.
+
+Either way, two resolvers must agree on the name: the administrator's browser
+and the add-on container. The second is the one that gets missed — the container
+resolves through the Docker daemon's resolver, not the LXC's `/etc/hosts`:
+
+```bash
+docker compose exec truenas-addon getent hosts nas.example.org
+```
+
+Nothing back means the add-on cannot reach the NAS by name whatever else is
+configured, and the symptom is a target that registers and never answers.
+
 ### 6. Build the images
 
 ```bash
@@ -480,6 +518,46 @@ Deploying by hand on the box, when the runner is down:
 su - runner -c 'cd /opt/syndra && git fetch --prune origin && git checkout --force origin/main && docker compose up -d --build'
 ```
 
+### Hosts without a git checkout
+
+`/opt/syndra` is a working copy, and `git checkout --force` is what makes the
+production path safe: it removes files the new commit deleted. A host synced any
+other way does not get that for free.
+
+The dev LXC is such a host, and the failure is real rather than theoretical. It
+was synced by extracting a `git archive` over the existing tree, which could add
+files and change files and **never remove one** — so
+`ui/src/app/system/hardware-sync` survived the commit that deleted it, the
+rebuilt image kept serving the route, and `/system/hardware-sync` answered 200
+against a tree that no longer contained it. The stale route was the small half;
+the large half was that a green rebuild was taken as evidence for a fix it had
+never carried.
+
+```bash
+scripts/deploy-source.sh root@<HOST> [/root/syndra]
+```
+
+It mirrors rather than copies — the tracked directories are removed and
+re-extracted — and, **before** it does, reports anything on the target that this
+commit does not contain. That report is the load-bearing part: it is what would
+have named `hardware-sync`. The check after the mirror only confirms the
+script's own work, which is why both exist.
+
+It never touches `.env` or `secrets/`. Host ports live in `.env` as
+`BACKEND_HOST_PORT` / `UI_HOST_PORT` because they used to be edited into
+`docker-compose.yml`, which is tracked, and the next sync overwrote them.
+
+### Verifying on a host with no directory
+
+A box with no `ZITADEL_DOMAIN` runs `Source=demo`, and the demo directory knows
+five identities. Anything that walks the user directory — the role-holder list
+is the one to watch — answers only for those five, so a cohort read against a
+real Zitadel subject id **comes back empty and reads as "nothing to report"**
+rather than as "nobody here". A smoke test written against the wrong ids gets a
+green result from a query that examined nobody. Use `sam_student`, `maya_staff`,
+`leo_mentor`, `ava_guest` or `dev_admin`, and assert a non-zero cohort before
+asserting anything about its contents.
+
 ### Rollback
 
 ```bash
@@ -525,15 +603,282 @@ All commands run from `/opt/syndra` as the `runner` user.
   ROLE syndra WITH PASSWORD ...`) and then in `.env`. Editing only `.env` locks
   the backend out of its own data.
 
-### The sync service
+### Add-on targets
 
-`sync` sits behind a Compose profile and does **not** start by default. Without
-a reachable LLDAP it crash-loops, and a permanently restarting container hides
-real failures. Once LLDAP exists, fill the `LLDAP_*` block in `.env` and:
+Each add-on sits behind a Compose profile and does **not** start by default: it
+holds a credential for the system it provisions, and a container nobody asked
+for holding one is a container nobody is watching. Fill its block in `.env` —
+the base URL and one transport secret — and start it:
 
 ```bash
-docker compose --profile sync up -d
+docker compose --profile truenas up -d
 ```
+
+Registration and callability are separate states. The backend registers a
+configured add-on whether or not it answers, so navigation reflects the
+deployment rather than the weather; what turns registration into capability is
+the first successful manifest read.
+
+#### Bringing up the TrueNAS add-on
+
+Four things have to exist, in this order. Each one's failure looks like the next
+one's, so doing them out of order costs an afternoon.
+
+**1 — The NAS-side identity.** Roles in TrueNAS attach to *groups*, never
+directly to users, and an API key inherits whatever its linked user's groups
+carry. So the order is: a group, a privilege naming the roles, a user in that
+group, a key on that user. Four objects, and each one is useless without the
+next.
+
+**a. The group.** `Credentials > Groups > Add`
+
+| Field | Value | Why |
+|---|---|---|
+| Name | `syndra-addon` | The privilege binds to this name. |
+| GID | leave auto | Nothing outside TrueNAS references it. |
+| Samba Authentication | **off** | This account manages SMB users; it is not one. |
+| Allow sudo commands | **off** | It never runs commands. There is no shell on this account to run them from. |
+
+**b. The privilege — this is where the roles live.**
+`Credentials > Groups > Privileges > Add`
+
+| Field | Value |
+|---|---|
+| Name | `syndra-addon` |
+| Local Groups | `syndra-addon` (the group from (a)) |
+| Roles | `ACCOUNT_WRITE`, `READONLY_ADMIN`, `SYSTEM_AUDIT_READ` |
+| Web Shell Access | **off** |
+
+`ACCOUNT_WRITE` is the only *write* role, and it is the whole of what the add-on
+may change: `user.create`, `user.update`, `user.delete`. Never `FULL_ADMIN`.
+
+`READONLY_ADMIN` looks broad and is not a widening of this credential. It grants
+every `*_READ` role and no write, and the add-on needs four of them —
+`system.info` and `system.version` (system), `pool.query` (pools),
+`service.query` (services), `sharing.smb.query` (activity reports). **The
+version read is not optional:** the add-on calls `system.version` at startup and
+treats a failure as *the target is unreachable*, so a privilege without it
+produces a NAS that reports as down while answering perfectly. If you prefer to
+enumerate instead, the specific roles are `SYSTEM_GENERAL_READ`, `POOL_READ`,
+`SERVICE_READ` and `SHARING_SMB_READ` — check them against your release's
+[RBAC reference][truenas-rbac], because role names have been added and split
+between majors, and a name that is missing from the dropdown is a name that does
+not exist on your version.
+
+**c. The user.** `Credentials > Users > Add`
+
+| Field | Value | Why |
+|---|---|---|
+| Full Name | `Syndra add-on` | What an admin sees in an audit entry. |
+| Username | `syndra` | Also what appears in `audit.query` rows. |
+| Email | blank | It receives nothing. |
+| Password | see the note below | |
+| UID | leave auto | |
+| Primary Group | `syndra-addon` | **The whole point.** The privilege reaches this user only through this group. |
+| Auxiliary Groups | none | Especially not `builtin_administrators`, which would make every role above decoration. |
+| Home Directory | `/var/empty` | |
+| Home Directory Permissions | leave default | It never writes there. |
+| SSH public key | blank | |
+| Allow SSH login with password | **off** | |
+| Shell | `nologin` | |
+| Lock User | **off** | A locked account cannot authenticate at all, including by key. |
+| Samba Authentication | **off** | It manages SMB users; it is not one. |
+
+> **Password vs API key, the one field worth a second look.** The key is the
+> credential — nothing in Syndra ever sends this account's password. Try
+> **Disable Password: Yes** first. If the add-on then logs `login failed`, set a
+> long random password (a password manager entry nobody types) and leave the key
+> as the only thing that authenticates: some releases refuse API-key auth for an
+> account with no password set at all, and the two failures are indistinguishable
+> from the add-on's side.
+
+**d. The API key.** `Credentials > Users >` select `syndra` `> ⋮ > API Keys`
+(older releases: `Access > View API Keys`) `> Add`
+
+| Field | Value |
+|---|---|
+| Name | `syndra-addon` |
+| Expires | set a real date — a year is reasonable |
+| Reset | not applicable on a new key |
+
+**Copy the key now.** TrueNAS shows it exactly once, and there is no way to read
+it back — a lost key is re-minted, not recovered.
+
+Then answer the expiry question in the same edit, because the third answer is
+the one that bites. Put the date into `TRUENAS_API_KEY_EXPIRES_AT`, or the
+literal `never` if you issued the key without one. Left unset, `/health` reports
+`key_expiry: unrecorded` and the target page asks — a key can expire without
+Syndra knowing, and the day it does the target simply stops answering, which
+reads as a network fault and sends you to the NAS.
+
+**e. Wire it into Syndra.** In `.env` on the deployment host:
+
+```bash
+TRUENAS_URL=wss://nas.example.org/api/current
+TRUENAS_API_KEY=<the key you just copied>
+TRUENAS_API_KEY_EXPIRES_AT=2027-08-13T00:00:00Z
+TRUENAS_VERIFY_TLS=false        # the NAS serves a self-signed certificate; see 5a
+TRUENAS_SHARE_HOST=<the name members type into a file manager>
+ADDON_TARGETS=truenas
+COMPOSE_PROFILES=truenas
+```
+
+```bash
+docker compose up -d
+./scripts/smoke-test-addon.sh truenas
+```
+
+> **`wss://`, never `ws://`.** TrueNAS **revokes** a user-linked API key
+> presented over plaintext transport. A `ws://` typo does not fail with an auth
+> error you can retry — it destroys the credential, and the fix is minting a new
+> one and doing (d) again.
+
+> **`ACCOUNT_WRITE` includes deletion.** `user.delete` requires exactly the role
+> `user.create` and `user.update` require, and TrueNAS has no narrower one — see
+> [the RBAC reference][truenas-rbac]. The purge path's separate injected key is
+> therefore an *audit and blast-radius* separation, not a capability one: it
+> keeps deletion out of the long-lived session and makes every delete traceable
+> to a credential issued for that one call. It does **not** mean the standing key
+> cannot delete an account. Do not write it down as if it did.
+
+> **The purge key is minted later, not now.** `account.purge` takes an
+> `elevated_key` as a declared secret parameter at the moment of use; nothing
+> stores it. Mint it when you first purge an account, on the same user, with the
+> same `ACCOUNT_WRITE` role — and delete it afterwards.
+
+**2 — Reachability.** Set `TRUENAS_URL=wss://nas.example.org/api/current`
+(step 5a) and leave `TRUENAS_VERIFY_TLS=true`. Routing through the proxy is what
+earns that: the NAS's own certificate is self-signed and cannot be issued for a
+name it does not know it has, so pointing the add-on straight at the LAN address
+means turning verification off. Set `TRUENAS_SHARE_HOST` to the name a member
+types into a file manager — it feeds the manifest's connection block, and unset,
+the member's page silently omits the mount instructions.
+
+**Whether `TRUENAS_SHARE_HOST` is the same name depends on one thing**: does the
+API name resolve to the NAS itself, or to a reverse proxy?
+
+- **A direct DNS record** — an AdGuard/Unbound entry pointing at the NAS — serves
+  both. `wss://nas.example.org/api/current` and
+  `smb://nas.example.org/main` reach the same machine, and the two
+  variables carry the same value.
+- **Behind a proxy** they must differ. A proxy terminates HTTP; SMB is tcp/445
+  and does not pass through it, so a member told to mount the proxy name is
+  pointed at a host answering on 443 and nothing else.
+
+The add-on never derives one from the other in either case, because that answer
+is a fact about somebody's network rather than something readable off a URL —
+and getting it wrong produces mount instructions that fail for every member at
+once, with nothing in Syndra able to notice.
+
+**3 — The backend↔add-on channel.** Nothing to do.
+
+One secret per target, from which both ends derive both keys — the Ed25519 key
+the add-on serves and the backend pins, and the HMAC key that signs every
+request. The deployment mints it: `truenas-addon-secret` runs before either
+reader starts, writes it into a volume at `0640 root:65532`, and never touches
+it again. There is no CA, no certificate to distribute, nothing that expires,
+and no step here for a human to skip.
+
+> This used to be `sudo ./scripts/gen-addon-secret.sh truenas`, before the first
+> `up`. It needed root on the host — which the deploy user deliberately does not
+> have, so automated deploys could not run it — and a step performed before a
+> container starts is a step that gets skipped. The skip did not fail loudly:
+> Docker creates a *directory* at a missing bind-mount path, and the add-on
+> exits on a secret it cannot read.
+
+**4 — Start it.** Set two lines in `.env` and deploy as usual:
+
+```bash
+ADDON_TARGETS=truenas          # the backend registers it
+COMPOSE_PROFILES=truenas       # the add-on container starts
+```
+
+```bash
+docker compose up -d
+```
+
+That is the whole bring-up. `COMPOSE_PROFILES` in `.env` means the automated
+deploy brings the add-on up too — no `--profile` flag, no separate `up` for the
+add-on, and no `--force-recreate` for the backend: Compose recreates a container
+whose configuration changed, and both readers wait for the secret.
+
+Then check the two legs that are Syndra's own, before looking at the NAS:
+
+```bash
+./scripts/smoke-test-addon.sh truenas
+```
+
+It checks that the secret was provisioned and is readable by both containers,
+that the backend registered the target, and — the one worth having — that **the
+key the backend pins is the key the add-on serves**, by diffing the two startup
+log lines. It deliberately does not check the NAS: diagnosing that leg together
+with this one is what the bring-up order exists to avoid, and the script says
+which leg it stopped on.
+
+Expect `[ADDON] Registered target=truenas base=https://truenas-addon:8443
+auth=derived pinned_key=…`. `auth=none` means no secret reached the backend and the target
+will not be callable — that is fail-closed, not a warning. Registration alone
+proves nothing about the NAS; what does is the first manifest read, visible on
+the target's health response.
+
+| Symptom | Cause |
+|---|---|
+| Add-on exits at `TRUENAS_URL is required` | `COMPOSE_PROFILES=truenas` without the rest of the `.env` block. |
+| Add-on exits at `ADDON_SECRET is required` | No secret reached it. A component holding the NAS credential must not answer an unauthenticated caller, so it refuses to start rather than serving one. |
+| `truenas-addon-secret` says *not in ADDON_TARGETS* | The add-on's profile is on but the backend was never told to register it. Set `ADDON_TARGETS=truenas` and `docker compose up -d`. |
+| Registers, never answers | Name does not resolve *inside the container*, or the base URL names a host/port that is not `truenas-addon:8443`. |
+| `addon truenas is not the one derived from this deployment's secret` | The pin failed, and it names all three causes it cannot tell apart: the two ends hold different bytes, the add-on's `ADDON_TARGET` does not match the `ADDON_TARGETS` entry (the name is the derivation's salt), or something else is answering on that address. Check the *name* before rotating a secret that was never the problem. |
+| `no matching signature` | Same three causes, one leg further in: the handshake pinned but the request MAC did not verify. In practice this is a clock more than two minutes out, since the derivation would have failed at the handshake. |
+| NAS auth fails right after it worked once | The key was presented over plaintext and TrueNAS revoked it. Mint a new one and fix the scheme. |
+| NAS auth fails repeatedly, then stops responding | TrueNAS locks out for ten minutes after 20 failed authentications in 60 seconds. Wait it out; the add-on's own breaker is what keeps a retry loop from renewing it. |
+
+#### Rotating an add-on transport secret
+
+The two ends cannot move atomically. Calls fail to authenticate for a bounded
+window rather than proceeding unauthenticated — which is the correct trade, but
+it means an in-flight mutation must be allowed to settle first.
+
+```bash
+# 1. Drain — in the UI: Targets > TrueNAS > set lifecycle to `draining`, with a
+#    reason. Or through the backend, which is the thing that can sign the call:
+curl -sS -X POST "$SYNDRA/api/v1/targets/truenas/lifecycle" \
+  -H "Authorization: Bearer $OPERATOR_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"state":"draining","reason":"transport secret rotation"}'
+#    NOT curl to the add-on directly: /lifecycle is authenticated with a signed
+#    request over the pinned transport, so only the backend can make it — and
+#    over the very transport you are about to replace, which is why this is
+#    step 1. Wait for `drained` on the target's health.
+#
+#    Editing TRUENAS_LIFECYCLE_STATE does nothing here: it is read once at
+#    start-up, and applying the edit needs the very recreation the drain exists
+#    to precede.
+
+# 2. Replace the value. The volume holds it; deleting it makes the minting
+#    service produce a new one on the next start. Nothing persistent depends on
+#    the old value.
+docker compose stop backend truenas-addon
+docker volume rm "$(docker compose ps -q truenas-addon >/dev/null 2>&1; basename "$PWD")_truenas_addon_secret"
+
+# 3. Start again. Both readers wait for the fresh mint, so this is one command
+#    and there is no window where one end has the new value and the other the
+#    old one for longer than the restart itself.
+docker compose up -d
+
+# 4. Confirm registration and the first manifest read.
+docker compose logs backend | grep '\[ADDON\]'
+```
+
+Once the secret is replaced you can no longer reach the old container's
+lifecycle handler, and the only remaining lever is SIGTERM — which is why the
+drain is step 1 and not step 3.
+
+There is deliberately no rollback to the *previous* value: the volume is gone,
+and keeping a copy aside to restore would be a second definition of a secret
+whose whole design is that exactly one exists. Nothing persistent depends on it,
+so rolling forward — delete, start, both ends re-derive — is always available
+and always consistent.
+
+[truenas-rbac]: https://api.truenas.com/v25.10/rbac.html
 
 ---
 

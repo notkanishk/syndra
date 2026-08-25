@@ -13,7 +13,15 @@ Three rules the switch keeps:
 2. **No dead ends.** Where something can only be resolved in Advanced, Basic names the cause and offers one scoped jump that sets the view, stays on the URL, and scrolls the revealed panel into view — `UiViewProvider.revealInAdvanced`, which scrolls the `#app-scroll` container rather than calling `scrollIntoView` (that would also move the page sideways in a narrow viewport).
 3. **Basic is not Advanced-minus-features.** It is a smaller job done completely.
 
-Advanced is operator-only and is not rendered for members at all — not greyed, not present-but-403. `middleware.ts` enforces the same rule with an allowlist (`/`, `/requests`, `/login`) rather than a denylist, so a new operator route is protected the day it is added rather than the day somebody remembers it.
+Advanced is operator-only and is not rendered for members at all — not greyed, not present-but-403. `middleware.ts` enforces the same rule with an allowlist rather than a denylist, so a new operator route is protected the day it is added rather than the day somebody remembers it.
+
+The allowlist is **derived from `MEMBER_NAV` itself**: `memberMayVisit` is `leafMatches` over `navLeaves(MEMBER_NAV)`, and `MEMBER_ROUTES` is those leaves' hrefs. Middleware calls it rather than holding routes of its own.
+
+It was a copy — `/`, `/requests`, `/login` in `middleware.ts` — and it drifted the day `addon-platform` gave members a third row: the rail offered every member `Network storage` and middleware redirected them off it. A route a member may reach *is* navigation structure, and this change's own rule is that navigation structure lives in one file. Deriving rather than restating is what makes that true at compile time: a row added to `MEMBER_NAV` is reachable in the same commit, where a second list plus an equality test is only correct between test runs.
+
+Reachability is therefore exactly the rule the rail highlights with, including a leaf's `pattern` if one is ever added — otherwise a sub-path belongs to its parent, so `/storage/{target}` is reachable the day it exists, and `/` matches exactly or it would admit everything. `/login` needs no seat: a valid session is already sent away from it by an earlier guard, and an absent one never reaches the member check.
+
+`middleware.test.ts` asserts a member reaches every row `MEMBER_NAV` renders, and a source guard fails if middleware names a member route itself — a second list agreeing with the first passes every behavioural test and then drifts again. `MEMBER_ROUTES` keeps one literal assertion, not as a source of truth but as a canary: widening what a member can reach should fail a test on the way in rather than arrive as a side effect of adding a rail row.
 
 ### Structure never moves
 

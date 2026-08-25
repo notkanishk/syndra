@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { AccountSheet } from "@/components/shell/AccountSheet";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { ViewSwitch } from "@/components/shell/ViewSwitch";
 import { usePageCrumb } from "@/lib/page-crumb";
@@ -24,7 +25,7 @@ export function TopBar({ session }: { session: SessionUser }) {
   const trail = crumb ? [...crumbs, { label: crumb }] : crumbs;
 
   return (
-    <header className="flex h-[66px] flex-none items-center gap-4 border-b border-line px-[26px]">
+    <header className="flex h-[66px] flex-none items-center gap-2.5 border-b border-line px-4 tablet:gap-4 tablet:px-[26px]">
       <nav aria-label="Breadcrumb" className="min-w-0 truncate text-[14.5px]">
         {trail.length === 0 ? (
           <span className="font-semibold text-ink">Syndra</span>
@@ -37,7 +38,13 @@ export function TopBar({ session }: { session: SessionUser }) {
                 {last ? (
                   <span className="font-semibold text-ink">{entry.label}</span>
                 ) : "href" in entry && entry.href ? (
-                  <Link href={entry.href} className="text-muted hover:text-ink">
+                  // A breadcrumb trail is links and separators, not a
+                  // sentence, so 2.5.8's inline exemption does not reach it.
+                  // This measured 18px on every detail route.
+                  <Link
+                    href={entry.href}
+                    className="inline-flex min-h-11 items-center text-muted hover:text-ink desktop:min-h-6"
+                  >
                     {entry.label}
                   </Link>
                 ) : (
@@ -51,29 +58,21 @@ export function TopBar({ session }: { session: SessionUser }) {
 
       <span className="flex-1" />
 
-      <ViewSwitch />
-      <ThemeToggle />
-
-      <span className="flex items-center gap-[9px]">
-        <span
-          aria-hidden
-          className="avatar-fill flex h-[30px] w-[30px] items-center justify-center rounded-pill text-[11px] font-semibold text-ink/70"
-        >
-          {session.avatar}
-        </span>
-        {/* Email is the fallback, never the id: if every naming source came up
-            empty, an address still identifies a human. */}
-        <span className="text-[13.5px] text-muted">{session.name || session.email}</span>
+      {/* Advanced reaches the switch at the top of its nav sheet, so on a
+          phone it is not also here — the same control in two places at once is
+          two answers to "where does this live". Basic has no sheet, so the
+          header is the only home it has. */}
+      <span className={audience === "advanced" ? "hidden tablet:flex" : "flex"}>
+        <ViewSwitch />
       </span>
 
-      <form action="/auth/logout" method="post">
-        <button
-          type="submit"
-          className="rounded-pill border border-line-strong px-3 py-1.5 text-[13px] font-semibold text-muted motion-tint hover:text-ink"
-        >
-          Sign out
-        </button>
-      </form>
+      {/* Appearance is reachable from the account sheet at every width. The
+          header keeps its one-tap toggle only where there is room for one. */}
+      <span className="hidden tablet:flex">
+        <ThemeToggle />
+      </span>
+
+      <AccountSheet session={session} />
     </header>
   );
 }

@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { useEffect, useRef, useState } from "react";
 
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { selectContents, useClipboardAvailable } from "@/lib/clipboard";
 import { Select } from "@/components/ui/Select";
 import { useCatalogUsers } from "@/lib/queries/useCatalogUsers";
 import { useTokenSimulator } from "@/lib/queries/useApplications";
@@ -27,14 +27,30 @@ export function TokenPreview({
   applicationId,
   applicationName,
   projectId,
+  behindEdits = false,
 }: {
   applicationId: string;
   applicationName: string;
   projectId: string;
+  /**
+   * True while the editor beside this holds unsaved changes.
+   *
+   * This preview reads the SAVED shape from the same shaper the Actions v2
+   * path uses, which is the whole reason it can be trusted — and it is also
+   * why it cannot show a draft. So while a draft exists it says which shape it
+   * is showing instead of letting somebody read an old token as a preview of a
+   * new one. Side by side that is misleading; stacked on a phone, where the
+   * editor is a scroll away, the preview looks like the only thing on screen.
+   */
+  behindEdits?: boolean;
 }) {
   const users = useCatalogUsers();
   const [userId, setUserId] = useState("");
   const [showRaw, setShowRaw] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const payloadRef = useRef<HTMLPreElement>(null);
+  const canCopy = useClipboardAvailable();
 
   useEffect(() => {
     if (!userId && (users.data?.length ?? 0) > 0) setUserId(users.data![0].id);
@@ -48,6 +64,7 @@ export function TokenPreview({
   );
   const keys = Object.keys(claims).sort();
 
+  const previewName = users.data?.find((u) => u.id === userId)?.name ?? "";
   const payload = JSON.stringify(claims, null, 2);
   const emptyKeys = keys.filter((key) => isEmptyValue(claims[key]));
 
@@ -56,7 +73,9 @@ export function TokenPreview({
       <div className="px-[22px] pb-3.5 pt-5">
         <h2 className="type-card-title">Preview token</h2>
         <p className="mt-1 text-[14px] leading-[1.5] text-faint">
-          Exactly what {applicationName} would receive right now.
+          {behindEdits
+            ? `The shape ${applicationName} receives now — not the one being edited.`
+            : `Exactly what ${applicationName} would receive right now.`}
         </p>
       </div>
 
@@ -87,6 +106,13 @@ export function TokenPreview({
         </Button>
       </div>
 
+      {behindEdits && (
+        <div className="mx-[22px] mb-3 border-t border-dashed border-warn-line pt-3 text-[13.5px] leading-[1.5] text-warn-text">
+          Behind your edits. Save the shape to preview it — this is what the app receives until
+          then.
+        </div>
+      )}
+
       <div className="flex-1 px-[22px] pb-5">
         {simulation.isLoading ? (
           <RowSkeleton rows={3} avatar={false} label="Running the simulation" />
@@ -97,6 +123,20 @@ export function TokenPreview({
             onRetry={() => simulation.refetch()}
           />
         ) : (
+          <>
+          {/* No roles at all is the answer people come here for most often, and
+              a `//` comment inside a mono block is where it was being said —
+              in the quietest type on the screen, phrased as a fact about the
+              project rather than about the person somebody just picked. It is
+              also the reading most likely to be mistaken for a broken preview,
+              so the sentence rules that out in its own words. */}
+          {!simulation.isFetching && simulation.data && keys.length === 0 && (
+            <p className="mb-3 max-w-[60ch] text-[14px] leading-[1.5] text-muted">
+              {applicationName} would issue a token with no roles for{" "}
+              {previewName || "this person"}. That is not an error: nothing they hold is in
+              this app&rsquo;s project.
+            </p>
+          )}
           <div className="rounded-inner border border-line bg-surface-0 px-[18px] py-4 font-mono text-[13px] leading-[1.85]">
             <div className="text-ink/35">{"// effective_role_keys → claims"}</div>
             {keys.length === 0 && (
@@ -134,6 +174,7 @@ export function TokenPreview({
               </div>
             )}
           </div>
+          </>
         )}
 
         {showRaw && simulation.data && (
@@ -156,15 +197,37 @@ export function TokenPreview({
           </div>
         )}
 
+        {revealed && (
+          <pre
+            ref={payloadRef}
+            className="type-mono mt-3.5 max-h-[40vh] overflow-y-auto whitespace-pre-wrap break-all rounded-inner bg-surface-0 px-3.5 py-3 text-ink"
+          >
+            {payload}
+          </pre>
+        )}
+
         <div className="mt-3.5 flex gap-2.5">
+          {/* The button reports itself, the way every copy affordance in the
+              product now does — and says `Select` where the browser cannot
+              copy rather than failing silently on the tap. */}
           <Button
             size="sm"
             onClick={async () => {
-              await navigator.clipboard.writeText(payload);
-              toast.success("Payload copied.");
+              if (canCopy) {
+                await navigator.clipboard.writeText(payload);
+              } else {
+                // Nothing to select unless it is on screen. Revealing it is
+                // the honest fallback and it is what this value is anyway:
+                // evidence, which a token debug screen should be willing to
+                // show rather than only hand to a clipboard.
+                setRevealed(true);
+                requestAnimationFrame(() => selectContents(payloadRef.current));
+              }
+              setCopied(true);
+              setTimeout(() => setCopied(false), 900);
             }}
           >
-            Copy payload
+            {copied ? (canCopy ? "Copied" : "Selected") : canCopy ? "Copy payload" : "Select payload"}
           </Button>
           <Button size="sm" onClick={() => setShowRaw((value) => !value)}>
             {showRaw ? "Hide raw roles" : "Show raw roles"}

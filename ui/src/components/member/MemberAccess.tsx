@@ -1,7 +1,7 @@
 "use client";
 
 import { MemberCatalog } from "@/components/member/MemberCatalog";
-import { ErrorState, RowSkeleton } from "@/components/states";
+import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { orderedSources, sourceQualifier, type RoleReason } from "@/components/access/AccessSource";
@@ -71,16 +71,18 @@ export function MemberAccess({ session }: { session: SessionUser }) {
 
       {projects.length === 0 ? (
         <Card>
-          <div className="px-6 py-8">
-            <div className="type-empty-title">You don&rsquo;t have access to anything yet.</div>
-            <p className="mt-2 max-w-[60ch] text-[14px] text-muted">
-              If there&rsquo;s a machine or a space you need, ask for it and a lab manager will
-              decide.
-            </p>
-            <span className="mt-3 block text-[13.5px] text-faint">
-              Everything the makerspace offers is listed below.
-            </span>
-          </div>
+          {/* The screen that generates the support message, so it carries the
+              move that resolves it rather than describing one. Design asked for
+              the person to ask by name — "ask Kabir Rao, who looks after
+              Fabrication" — and there is nobody to name: no project records an
+              owner anywhere in the product. Naming a plausible one would be the
+              single worst place in Syndra to invent a fact, so this says what
+              it can do instead of who to find. */}
+          <EmptyState
+            title="You don't have access to anything yet."
+            guidance="Nobody has given you access. If there's a machine or a space you need, ask for it here and a lab manager decides — everything the makerspace offers is listed below."
+            action={{ label: "Ask for access", href: "/requests" }}
+          />
         </Card>
       ) : (
         <div className="flex flex-wrap gap-[18px]">

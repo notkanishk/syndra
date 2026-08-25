@@ -15,10 +15,16 @@ export function ThemeToggle() {
       type="button"
       onClick={toggle}
       aria-label={`Switch to ${next} theme`}
-      title={`Switch to ${next} theme`}
-      className="flex h-8 w-8 items-center justify-center rounded-pill border border-line-strong text-muted motion-tint hover:text-ink"
+      // A 32px ring inside a 44px box until desktop. The ring is the drawing;
+      // the box is what a thumb on a tablet has to hit.
+      className="flex h-11 w-11 items-center justify-center text-muted motion-tint hover:text-ink desktop:h-8 desktop:w-8"
     >
-      {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+      <span
+        aria-hidden
+        className="flex h-8 w-8 items-center justify-center rounded-pill border border-line-strong"
+      >
+        {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+      </span>
     </button>
   );
 }

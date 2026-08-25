@@ -1,3 +1,14 @@
+> **SUPERSEDED — 2026-08-10, by [`addon-platform`](../../../addon-platform/proposal.md).**
+>
+> Kept as history, not as intent. The LDAP sync described here is deleted: `sync/`,
+> the `provisioning_intents` queue and the Argon2id password vault went with it
+> (change `addon-platform`, group 11). Syndra reaches the systems this was for
+> through each target's own management API now, from an add-on container per
+> target — see [`specs/addon-platform/spec.md`](../../../addon-platform/specs/addon-platform/spec.md).
+>
+> Nothing below is implemented. Read it to understand a decision, never to
+> understand the system.
+
 > **Status:** Partial (reconciliation deferred P5, password compat unresolved) | [< Index](../../../../INDEX.md) | [Feature Coverage](../feature-coverage.md)
 
 # Requirement: LLDAP Sync & Group Mapping

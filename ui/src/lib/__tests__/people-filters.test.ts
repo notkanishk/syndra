@@ -16,7 +16,7 @@ function person(overrides: Partial<UserListEntry> = {}): UserListEntry {
     user: {
       id: "u1",
       name: "Ada Lovelace",
-      email: "ada@x.edu",
+      email: "ada@example.edu",
       title: "",
       team: "",
       status: "active",

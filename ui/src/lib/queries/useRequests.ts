@@ -135,6 +135,14 @@ export interface BulkDecisionInput {
   ids: string[];
   status: "approved" | "rejected";
   review_note?: string;
+  /**
+   * The operator confirming an affected-subject count above the configured
+   * limit. Sent on the rehearsal, never on the apply: it unlocks issuing the
+   * approval rather than changing what the approval does.
+   */
+  acknowledge_scope?: boolean;
+  /** Cites the rehearsal being applied. Set by the apply pass, never composed by hand. */
+  plan_id?: string;
 }
 
 function useBulkDecisionMutation(apply: boolean) {

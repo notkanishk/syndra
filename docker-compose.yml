@@ -12,6 +12,7 @@ services:
       POSTGRES_DB: syndradb
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks: [data]
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U syndra"]
@@ -24,6 +25,7 @@ services:
     container_name: syndra_redis
     volumes:
       - redisdata:/data
+    networks: [data]
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
 
@@ -79,14 +81,75 @@ services:
       # Self-mutation loop guard: drop events whose editorUserId matches the
       # backend's own M2M service-user ID. Unset disables the guard (dev only).
       - ZITADEL_M2M_USER_ID=${ZITADEL_M2M_USER_ID:-}
+      # Add-on registration. Absent from this list, every ADDON_* value in .env
+      # was read by a process that never saw it: the add-on container started,
+      # the operator's .env named it, and the backend registered nothing — with
+      # no error anywhere, because "not configured" is a legitimate state.
+      # Registration is a deployment fact, so it travels with the deployment.
+      - ADDON_TARGETS=${ADDON_TARGETS:-}
+      - ADDON_TRUENAS_BASE_URL=${ADDON_TRUENAS_BASE_URL:-}
+      # The other end of the add-on's ADDON_SECRET. One value per target, from
+      # which both the key this pins and the key it signs with are derived —
+      # and it must be the SAME BYTES the add-on has, under the same name it
+      # knows itself by (ADDON_TARGET there, the ADDON_TARGETS entry here). The
+      # file is the same file, mounted into both.
+      - ADDON_TRUENAS_SECRET_FILE=${ADDON_TRUENAS_SECRET_FILE:-/run/addon-secrets/truenas/secret.key}
+      - ADDON_TRUENAS_SECRET=${ADDON_TRUENAS_SECRET:-}
+      - ADDON_MANIFEST_REFRESH_INTERVAL=${ADDON_MANIFEST_REFRESH_INTERVAL:-}
+      - ADDON_MEMBER_OP_LIMIT=${ADDON_MEMBER_OP_LIMIT:-}
+      - PLAN_COHORT_LIMIT=${PLAN_COHORT_LIMIT:-}
+      - PLAN_LIFETIME=${PLAN_LIFETIME:-}
     volumes:
       # Bind the host-side key file to the fixed internal path. When
       # ZITADEL_MACHINE_KEY_PATH is unset, this resolves to a /dev/null no-op
       # mount and the backend skips M2M init via the env-var check above.
       - ${ZITADEL_MACHINE_KEY_PATH:-/dev/null}:/etc/syndra/zitadel-sa-key.json:ro
+      # The backend's own secrets. This used to hold its add-on client
+      # certificate and the private CA, kept apart from the add-on's directory
+      # because the add-on must never read the credential authenticating the
+      # backend to it. That reasoning does not carry to a derived transport:
+      # both ends hold the same bytes by definition, so the transport secret
+      # lives in one shared directory below and this keeps what is genuinely
+      # the backend's alone.
+      - ${BACKEND_SECRETS_DIR:-./secrets/backend}:/run/secrets:ro
+      # One volume PER TARGET, minted by that target's *-addon-secret service
+      # below and mounted read-only here. The backend holds every target's
+      # secret because it is the one component that talks to every add-on; each
+      # add-on gets only its own volume, so it cannot read a neighbour's secret
+      # and derive the neighbour's keys.
+      #
+      # A volume rather than a host directory because provisioning is the
+      # deployment's job, not the operator's: a host file needs `sudo chown
+      # root:65532` before the first start, and a step a human performs before
+      # a container starts is a step a human forgets — after which Docker
+      # creates a DIRECTORY at the mount path and the add-on exits on a secret
+      # it cannot read.
+      # NOT under /run/secrets. That path is itself a read-only bind mount here,
+      # and Docker has to CREATE the mountpoint directory for a nested mount —
+      # which fails on a read-only parent, at container start, with an OCI
+      # runtime error that names `mkdirat ... read-only file system` and nothing
+      # about add-ons. Found by starting it; no source guard can see a mount
+      # ordering constraint.
+      - truenas_addon_secret:/run/addon-secrets/truenas:ro
     ports:
-      - "8080:8080"
+      # The HOST port is configurable; the container port never is. A box
+      # running a second stack — the pre-rename one still on this dev machine —
+      # has to move this, and it moved it by editing a tracked file, which the
+      # next deploy silently overwrote. Defaults to the old literal, so nothing
+      # changes for a deployment that never set it.
+      - "${BACKEND_HOST_PORT:-8080}:8080"
+    # The only service on all three. It is the single mutation authority, so it
+    # is also the only thing that needs to reach both the datastores and the
+    # add-ons — and the segmentation below is what makes that a fact about the
+    # deployment rather than a sentence in a design document.
+    networks: [edge, data, addons_truenas]
     depends_on:
+      # Registration reads every target's secret ONCE, at start-up. Starting
+      # before the secret exists means the target does not register and the
+      # deployment needs a second, manual restart to notice — which is the
+      # hands-on step this dependency removes.
+      truenas-addon-secret:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -99,7 +162,7 @@ services:
       dockerfile: Dockerfile
     container_name: syndra_ui
     ports:
-      - "3000:3000"
+      - "${UI_HOST_PORT:-3000}:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080}
       - BACKEND_URL=${BACKEND_URL:-http://backend:8080}
@@ -112,32 +175,276 @@ services:
       - ZITADEL_DOMAIN=${ZITADEL_DOMAIN:-}
       - ZITADEL_CLIENT_ID=${ZITADEL_CLIENT_ID:-}
       - ZITADEL_ADMIN_ROLE_KEY=${ZITADEL_ADMIN_ROLE_KEY:-admin}
+    # Edge only. The UI talks to the backend and to nothing else — it has no
+    # reason to reach an add-on or a datastore, and on one flat network it
+    # could reach both.
+    networks: [edge]
     restart: unless-stopped
 
-  sync:
-    build:
-      context: ./sync
-      dockerfile: Dockerfile
-    container_name: syndra_sync
-    # Opt-in. Without a reachable LLDAP the service crash-loops, and a restarting
-    # container in `docker ps` is noise that hides a real failure. Start it with
-    # `docker compose --profile sync up -d` once LLDAP_* are filled in.
-    profiles: ["sync"]
+  # Mints this target's transport secret, once, before anything reads it.
+  #
+  # This used to be `sudo ./scripts/gen-addon-secret.sh truenas`, run by a human
+  # BEFORE the first `up`. Two things were wrong with that. It needed root on
+  # the host to set the ownership the two containers read by — while the deploy
+  # user deliberately has none — and a step performed before a container starts
+  # is a step that gets skipped, after which Docker creates a directory at the
+  # mount path and the add-on exits on a secret it cannot read. Automated
+  # deploys could not run it at all.
+  #
+  # Root INSIDE a throwaway container, not on the host: the deploy user already
+  # drives this daemon, so nothing here is privilege it did not have, and the
+  # ownership lands where it is needed without a host-side sudo.
+  #
+  # Not gated on the truenas profile, deliberately. The backend must be able to
+  # depend on it unconditionally — a dependency that disappears with a profile
+  # is a start-up order that changes with configuration — so it runs always and
+  # decides for itself whether there is anything to do.
+  truenas-addon-secret:
+    image: alpine:3.22
+    container_name: syndra_truenas_addon_secret
+    user: "0:0"
+    restart: "no"
+    volumes:
+      - truenas_addon_secret:/secret
     environment:
-      - BACKEND_URL=http://backend:8080
-      - SYNDRA_API_KEY=${SYNDRA_API_KEY:-dev_auth_token_secret}
-      - LLDAP_URL=${LLDAP_URL:-ldaps://lldap:636}
-      - LLDAP_BIND_DN=${LLDAP_BIND_DN:-cn=admin,ou=people,dc=example,dc=com}
-      - LLDAP_BIND_PASSWORD=${LLDAP_BIND_PASSWORD:-}
-      - LLDAP_BASE_DN=${LLDAP_BASE_DN:-dc=example,dc=com}
-      - LLDAP_INSECURE_SKIP_VERIFY=${LLDAP_INSECURE_SKIP_VERIFY:-false}
-      - SYNC_POLL_INTERVAL=${SYNC_POLL_INTERVAL:-10s}
-      - SYNC_WORKER_COUNT=${SYNC_WORKER_COUNT:-5}
-      - SYNC_INTENT_LIMIT=${SYNC_INTENT_LIMIT:-50}
+      - ADDON_TARGETS=${ADDON_TARGETS:-}
+    # NOTE the `$$` in the script below. A single `$` is interpolated by Compose
+    # when it parses this file, which would BAKE the value in beside the
+    # environment entry above — two definitions of one thing, the defect this
+    # branch keeps paying for. `$$` reaches the shell, so the check reads the
+    # variable the service was actually given.
+    #
+    # 0640 root:65532 — owner read for the backend, group read for the add-on's
+    # uid. 0600 is unreadable by the add-on; 0644 makes the deployment's most
+    # sensitive value readable by anything else in either container.
+    #
+    # `ln` and never `mv`: rename REPLACES its destination, so two concurrent
+    # runs would both publish and the later would destroy a secret the earlier
+    # may already have put into service — leaving the two ends on different
+    # values, which is the split state the derivation exists to make impossible.
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        f=/secret/secret.key
+        case ",$${ADDON_TARGETS:-}," in
+          *,truenas,*) ;;
+          *) echo "[SECRET] truenas is not in ADDON_TARGETS; nothing to mint"; exit 0 ;;
+        esac
+        if [ -s "$$f" ]; then
+          echo "[SECRET] truenas already provisioned; leaving it alone"
+          exit 0
+        fi
+        umask 077
+        tmp=$$(mktemp /secret/.secret.XXXXXXXX)
+        head -c 32 /dev/urandom | od -An -v -tx1 | tr -d " \n" > "$$tmp"
+        chown 0:65532 "$$tmp"
+        chmod 0640 "$$tmp"
+        if ln "$$tmp" "$$f" 2>/dev/null; then
+          rm -f "$$tmp"
+          echo "[SECRET] minted the transport secret for truenas"
+        else
+          rm -f "$$tmp"
+          echo "[SECRET] another run published first; keeping that one"
+        fi
+
+  truenas-addon:
+    build:
+      context: ./addons/truenas
+      dockerfile: Dockerfile
+    container_name: syndra_truenas_addon
+    # Opt-in, and for a sharper reason than an unreachable dependency: this
+    # container holds the
+    # NAS API key, so a deployment with no NAS must not be running it at all.
+    # Start it with `docker compose --profile truenas up -d` once TRUENAS_* and
+    # the transport material are in place, and register it with
+    # ADDON_TARGETS=truenas on the backend.
+    profiles: ["truenas"]
+    # Deliberately NOT a `depends_on` of the backend, in either direction. This
+    # service is profile-gated, and a dependency on it makes `docker compose up`
+    # fail outright on every deployment that runs no NAS. The start-up race it
+    # would narrow — backend up before the add-on serves a manifest — is closed
+    # in the backend instead, by an on-demand capability read (registry.go,
+    # refreshForManifest). Ordering could only ever narrow that window anyway:
+    # nothing `depends_on` expresses promises the add-on has SERVED a manifest
+    # by the time the backend asks for one.
+    environment:
+      - LISTEN_ADDR=:8443
+      # This add-on's name in the deployment, and the HKDF salt. It MUST equal
+      # the entry the backend carries in ADDON_TARGETS: the salt feeds both
+      # derived keys, so a disagreement here produces different keys from the
+      # same secret, and the symptom is a pin failure indistinguishable from a
+      # wrong secret. No default, because a default would make that failure
+      # possible without anyone having typed anything.
+      - ADDON_TARGET=truenas
+      # The whole transport configuration: one value, from which both the TLS
+      # key the backend pins and the HMAC key that signs its requests are
+      # derived. There is no certificate to mint, distribute, or renew, and no
+      # second mode to choose between.
+      #
+      # The file is preferred and is what truenas-addon-secret mints: an
+      # environment value is readable from `docker inspect` and /proc/1/environ,
+      # in the container the Dockerfile calls the least trusted in the
+      # deployment. ONE file, in a volume mounted into both this service and the
+      # backend — the scheme is symmetric, so there is no half of it the add-on
+      # must not see, and a second copy would only create a state where the two
+      # can disagree.
+      - ADDON_SECRET_FILE=${ADDON_SECRET_FILE:-/run/secrets/addon/secret.key}
+      # The inline form, matching TRUENAS_API_KEY below, for a deployment that
+      # cannot mount a file. Both secrets prefer the file; one supporting the
+      # inline form and the other not is the asymmetry that cost a debugging
+      # session when the signing key was a path at one end and a value at the
+      # other.
+      - ADDON_SECRET=${ADDON_SECRET:-}
+      # NOT `:?`. Compose interpolates every service in the file before it
+      # decides which profiles are active, so a required-variable form here
+      # fails `docker compose config`, `up`, `ps` and `down` on every
+      # deployment that runs no NAS — the optional add-on made mandatory by the
+      # syntax used to describe it. The add-on refuses to start without a URL
+      # (main.go, loadConfig), which is the check that can tell the difference
+      # between "not configured" and "not wanted".
+      - TRUENAS_URL=${TRUENAS_URL:-}
+      # The name a MEMBER types into a file manager, which is frequently not the
+      # middleware endpoint above — the API may be reached on one name while SMB
+      # is published on another. Never derived from TRUENAS_URL. Unset, the
+      # manifest omits the connection block and the member page omits the mount
+      # instructions rather than printing a host that does not answer.
+      - TRUENAS_SHARE_HOST=${TRUENAS_SHARE_HOST:-}
+      # Read from a mounted file where one is given. The Dockerfile calls this
+      # the least trusted container in the deployment, and an environment value
+      # is readable from `docker inspect` and /proc/1/environ — while the TLS
+      # material for the same container already arrives as files.
+      - TRUENAS_API_KEY_FILE=${ADDON_API_KEY_FILE:-}
+      - TRUENAS_API_KEY=${TRUENAS_API_KEY:-}
+      # Surfaced through /health so an operator sees it coming. The key carries
+      # an expiry and a silently expired one looks exactly like an outage.
+      - TRUENAS_API_KEY_EXPIRES_AT=${TRUENAS_API_KEY_EXPIRES_AT:-}
+      # TrueNAS ships a self-signed certificate, so a lab deployment sets this
+      # false. It defaults true and must be turned off deliberately.
+      - TRUENAS_VERIFY_TLS=${TRUENAS_VERIFY_TLS:-true}
+      - TRUENAS_SUPPORTED_MAJORS=${TRUENAS_SUPPORTED_MAJORS:-25.04,25.10,26.04}
+      # active | draining | read_only. Draining is what makes an API-key
+      # rotation or a target upgrade safe; none of the three needs a redeploy.
+      - LIFECYCLE_STATE=${TRUENAS_LIFECYCLE_STATE:-active}
+      - STATE_PATH=/var/lib/syndra-truenas/state.db
+      - MUTATION_LOG_DIR=/var/lib/syndra-truenas
+      # Rotation bounds for that log. Defaulted in the add-on, passed here so
+      # the named volume can be sized against them rather than the reverse.
+      - MUTATION_LOG_MAX_BYTES=${TRUENAS_MUTATION_LOG_MAX_BYTES:-}
+      - MUTATION_LOG_KEEP=${TRUENAS_MUTATION_LOG_KEEP:-}
+    volumes:
+      - truenas_addon_state:/var/lib/syndra-truenas
+      # The NAS API key and anything else specific to this add-on.
+      - ${ADDON_SECRETS_DIR:-./secrets/truenas-addon}:/run/secrets/truenas-addon:ro
+      # The transport secret, shared with the backend. ONE file — the same
+      # file, not a copy: both ends derive from the same bytes, so there is no
+      # half either must be kept from, and a second copy buys only a state
+      # where the two can disagree. (The certificate era needed two
+      # directories; there, the backend's client key WAS material this add-on
+      # must never read. That reasoning does not carry to a symmetric secret.)
+      #
+      # THIS TARGET'S FILE ALONE, not the directory the backend mounts. The
+      # backend holds every target's secret because it talks to every add-on;
+      # an add-on that could read its neighbours' secrets could derive their
+      # keys, and one compromised add-on would then open all of them — the
+      # exact isolation the per-target derivation exists to give.
+      #
+      # THIS TARGET'S VOLUME ALONE. Nothing to create by hand and nothing to
+      # chown: truenas-addon-secret mints it on first start and never again.
+      - truenas_addon_secret:/run/secrets/addon:ro
     depends_on:
-      - backend
+      truenas-addon-secret:
+        condition: service_completed_successfully
+    # No `ports:`, and on this add-on's own network only. Both halves are
+    # needed: the first stops anything outside the deployment reaching it, and
+    # the second stops it reaching Postgres and Redis — which is the whole
+    # reason it holds the NAS key in a container of its own.
+    networks: [addons_truenas]
+    # Longer than the add-on's own `shutdownTimeout` (20s), so the process
+    # always reaches its own deadline first.
+    #
+    # Docker's default is 10s and then SIGKILL, which for the whole life of this
+    # add-on has been terminating the shutdown drain halfway through — the drain
+    # that exists so an in-flight mutation settles rather than being abandoned
+    # half-applied with no record of how far it got. Nothing reported it: a
+    # truncated drain and a clean stop look identical from outside.
+    #
+    # This value and the constant are checked against each other by
+    # `TestTheDeploymentAllowsTheShutdownDrainToFinish`; raising the constant
+    # without raising this fails that test rather than silently restoring the
+    # truncation.
+    stop_grace_period: 30s
+    # The rest of what "least trusted component" has to mean in practice. Every
+    # line below is a capability this container has no use for, and the argument
+    # for isolating it at all is that a compromise here must stay here.
+    #
+    # read_only with a tmpfs for /tmp: the binary is static and its only durable
+    # state is the named volume below, so nothing legitimate writes to the image.
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      # No new privileges through setuid binaries — there are none in the image,
+      # and this is what makes that true rather than merely currently accurate.
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Bounded, so an add-on that misbehaves cannot starve the backend that
+    # governs every other target on the same host.
+    mem_limit: 256m
+    pids_limit: 256
+    healthcheck:
+      # A LIVENESS check, and deliberately not a health check. Every route is
+      # behind the authenticator, so a real probe would need a client
+      # certificate this container has no business holding — and the one
+      # certificate it does hold is a SERVER certificate, which the add-on now
+      # refuses as a client credential on purpose. So this proves the listener
+      # is up and nothing more.
+      #
+      # The health that matters is `/health` read by the backend, which holds
+      # the credential for it and surfaces version, key expiry, breaker state
+      # and log head. Docker restarting a container that answers its own socket
+      # would not have told anybody any of that.
+      test: ["CMD", "nc", "-z", "127.0.0.1", "8443"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # No `depends_on: backend`. The dependency runs the other way — the backend
+    # calls this — and declaring it backwards only delays the add-on behind a
+    # service it never contacts.
     restart: unless-stopped
+
+# Segmentation, not decoration. Without these every service shared the default
+# bridge, so §2's claim that the add-on is reachable only by the backend was a
+# comment rather than a constraint, and the add-on could open a socket to
+# Postgres.
+networks:
+  # Published ports live here.
+  edge:
+  # internal: no route off the host. The datastores answer the backend and
+  # nothing else, including anything that later joins the deployment.
+  data:
+    internal: true
+  # ONE SEGMENT PER ADD-ON, not one shared `addons` network. The backend joins
+  # each because it is the single mutation authority and must reach all of
+  # them; no add-on shares an L3 segment with another, so a compromised add-on
+  # cannot even open a socket to its neighbours. That is the structural half of
+  # the isolation the per-target key derivation gives cryptographically — each
+  # holds only its own secret, and now cannot reach the peer it could not
+  # authenticate to anyway.
+  #
+  # NOT internal: an add-on's whole job is to reach a target on the LAN. What
+  # the segment provides is the other direction — nothing here can see the
+  # datastores, and nothing outside can see the add-ons.
+  addons_truenas:
 
 volumes:
   pgdata:
   redisdata:
+  truenas_addon_state:
+  # One per target, and never shared. Losing it is survivable: both ends
+  # re-derive from whatever the next mint produces, and nothing persistent
+  # depends on the value.
+  truenas_addon_secret:

@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { toast } from "sonner";
 
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { Segmented, Select } from "@/components/ui/Select";
 import { RowSkeleton, ErrorState } from "@/components/states";
 import {
@@ -43,12 +44,15 @@ export function TokenFormatEditor({
   applicationName,
   shape,
   siblingCount,
+  onDirtyChange,
 }: {
   projectId: string;
   applicationId: string;
   applicationName: string;
   shape: UseQueryResult<ClaimShape>;
   siblingCount: number;
+  /** True while the form holds edits the preview beside it has not seen. */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const override = shape.data?.overrides.find((entry) => entry.application_id === applicationId);
   const [scope, setScope] = useState<"project" | "app">("project");
@@ -112,10 +116,12 @@ export function TokenFormatEditor({
               : `Changing this changes what every app reading ${shape.data.project_name} receives.`
           }
           onSave={saveProjectDefault.mutateAsync}
+          onDirtyChange={onDirtyChange}
         />
       ) : (
         <AppOverrideForm
           key="app"
+          onDirtyChange={onDirtyChange}
           projectId={projectId}
           applicationId={applicationId}
           applicationName={applicationName}
@@ -135,15 +141,18 @@ function AppOverrideForm({
   applicationName,
   override,
   fallback,
+  onDirtyChange,
 }: {
   projectId: string;
   applicationId: string;
   applicationName: string;
   override?: ClaimProfile;
   fallback: ClaimProfile;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const save = useSaveAppClaimOverride(projectId);
   const drop = useDeleteAppClaimOverride(projectId);
+  const [overrideOutcome, setOverrideOutcome] = useState<Outcome | null>(null);
 
   if (!override) {
     return (
@@ -170,14 +179,20 @@ function AppOverrideForm({
                   attribute_claims: {},
                   static_claims: {},
                 });
-                toast.success(`${applicationName} now has its own claim.`);
+                setOverrideOutcome({
+                  kind: "applied",
+                  message: `${applicationName} now has its own claim`,
+                  detail: "Its siblings keep the project default.",
+                });
               } catch (error) {
-                toast.error(error instanceof Error ? error.message : "Couldn't create the override.");
+                setOverrideOutcome(outcomeFromError(error));
               }
             }}
           >
             Give {applicationName} its own claim
           </Button>
+
+          {overrideOutcome && <ActionOutcome outcome={overrideOutcome} className="mt-3" />}
         </div>
       </div>
     );
@@ -188,9 +203,13 @@ function AppOverrideForm({
       profile={override}
       scopeNote={`Only ${applicationName} reads this key. Its siblings keep the project default.`}
       onSave={(body) => save.mutateAsync({ applicationId, ...body })}
+      onDirtyChange={onDirtyChange}
       onDelete={async () => {
         await drop.mutateAsync(applicationId);
-        toast.success(`${applicationName} is back on the project default.`);
+        setOverrideOutcome({
+          kind: "applied",
+          message: `${applicationName} is back on the project default`,
+        });
       }}
     />
   );
@@ -205,22 +224,38 @@ function ProfileForm({
   scopeNote,
   onSave,
   onDelete,
+  onDirtyChange,
 }: {
   profile: ClaimProfile;
   scopeNote: string;
   onSave: (body: ClaimProfileInput) => Promise<unknown>;
   onDelete?: () => Promise<void>;
+  /**
+   * Reported upwards so the preview beside this form can admit it is showing
+   * the saved shape rather than the one being typed. Only one ProfileForm is
+   * mounted at a time — project scope and app override are exclusive — so a
+   * single boolean is the whole story.
+   */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const vocabulary = useClaimVocabulary();
   const [claimName, setClaimName] = useState(profile.claim_name);
   const [format, setFormat] = useState<ClaimFormat>(profile.format_type);
   const [extras, setExtras] = useState<ExtraClaim[]>(() => toExtras(profile));
   const [saving, setSaving] = useState(false);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const dirty =
     claimName !== profile.claim_name ||
     format !== profile.format_type ||
     JSON.stringify(toExtras(profile)) !== JSON.stringify(extras);
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    // Unmounting mid-edit — switching scope, leaving the screen — must clear
+    // the claim, or the preview keeps apologising for edits that are gone.
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
 
   async function save() {
     setSaving(true);
@@ -232,11 +267,17 @@ function ProfileForm({
         attribute_claims: attributes,
         static_claims: statics,
       });
-      toast.success("Token format saved. The next token carries it.");
+      // Never "applied": a claim edit changes the shape of the NEXT token, and
+      // every token already issued keeps the shape it was minted with.
+      setOutcome({
+        kind: "applied",
+        message: "Token format saved",
+        detail: "The next token this app issues carries it. Tokens already out keep their shape.",
+      });
     } catch (error) {
       // The backend rejects duplicate keys and malformed names; surfacing its
       // sentence verbatim is more useful than a generic failure.
-      toast.error(error instanceof Error ? error.message : "The change wasn't saved.");
+      setOutcome(outcomeFromError(error));
     } finally {
       setSaving(false);
     }
@@ -350,7 +391,7 @@ function ProfileForm({
                   type="button"
                   aria-label={`Remove ${extra.key || "claim"}`}
                   onClick={() => setExtras((prev) => prev.filter((_, i) => i !== index))}
-                  className="rounded-pill border border-line-strong px-3 py-1.5 text-[13px] text-muted hover:text-ink"
+                  className="min-h-[44px] rounded-pill border border-line-strong px-3 text-[13px] text-muted hover:text-ink desktop:min-h-0 desktop:py-1.5"
                 >
                   Remove
                 </button>
@@ -359,6 +400,11 @@ function ProfileForm({
           </div>
         )}
       </div>
+
+      {/* Under the control that saved it, and above nothing: an editor that
+          reports elsewhere leaves the operator unsure whether the shape on
+          screen is the shape that was written. */}
+      {outcome && <ActionOutcome outcome={outcome} />}
 
       <div className="flex flex-wrap items-center gap-2.5">
         <Button variant="accent" disabled={!dirty || !claimName.trim()} isPending={saving} onClick={save}>

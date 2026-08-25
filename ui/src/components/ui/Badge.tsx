@@ -27,7 +27,7 @@ export function Badge({
 }: React.HTMLAttributes<HTMLSpanElement> & { tone?: Tone; hollow?: boolean }) {
   return (
     <span
-      className={`inline-flex items-center rounded-pill px-2.5 py-0.5 text-[12px] font-semibold ${
+      className={`inline-flex items-center rounded-pill px-2.5 py-0.5 text-[12.5px] font-semibold ${
         hollow ? "border border-line-strong text-label" : TONES[tone]
       } ${className}`}
       {...props}

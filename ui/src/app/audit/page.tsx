@@ -164,18 +164,18 @@ export default function AuditPage() {
           {rows.map((entry) => (
             <div
               key={entry.id}
-              className="row-divider flex flex-wrap items-baseline gap-4 px-5 py-3"
+              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-baseline tablet:gap-4"
             >
-              <Mono className="w-[110px] shrink-0 text-faint">
+              <Mono className="text-faint tablet:w-[110px] tablet:shrink-0">
                 {formatShortDate(entry.created_at)}
               </Mono>
-              <span className="w-[150px] shrink-0 truncate text-[14.5px] font-semibold">
+              <span className="w-full truncate text-[14.5px] font-semibold tablet:w-[150px] tablet:shrink-0">
                 <UserName id={entry.actor_id} fallback={machineName(entry.actor_id)} />
               </span>
-              <span className="min-w-[240px] flex-1 text-[14px] text-muted">
+              <span className="w-full text-[14px] text-muted tablet:min-w-[240px] tablet:flex-1">
                 <Sentence entry={entry} />
               </span>
-              <TraceCell entry={entry} className="w-[80px] shrink-0 text-right" />
+              <TraceCell entry={entry} className="tablet:w-[80px] tablet:shrink-0 tablet:text-right" />
             </div>
           ))}
 

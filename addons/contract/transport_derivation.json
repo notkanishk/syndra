@@ -1,0 +1,37 @@
+{
+  "$comment": "Derivation and signing vector. Asserted from BOTH the backend and every add-on. A change here is a wire-contract change and must fail both suites until both ends move.",
+  "derivations": [
+    {
+      "hmac_key_hex": "5416a42a673c585c7ae01ec78f1cf054817722405b9265ce7547833f09678eac",
+      "target": "truenas",
+      "tls_public_key_hex": "d4ba6b9523afa9e24221a33ab7146397e573acf467c955b174ce05899f97669d",
+      "tls_seed_hex": "993b3026732eefc12f3980d64e1f02b98c4e66b2db9b0d257da1906ada7c03eb"
+    },
+    {
+      "hmac_key_hex": "cc84807be2abf7bf1232dc6bb66f97ac90f9968165a3b1843dcb6674bcb4dd4a",
+      "target": "unifi",
+      "tls_public_key_hex": "b5d54c0b9a2493c7d3e32029fc381c1e3bb6f1164256e78c2a18e31de0ddeb31",
+      "tls_seed_hex": "b944dfeb9a0e87119a0b439b98b170ef99993487d839c1793716dd05697d2aec"
+    }
+  ],
+  "hash": "SHA-256",
+  "hmac_info": "syndra/addon-hmac/v1",
+  "kdf": "HKDF (RFC 5869), salt = target name, info as below",
+  "secret_bytes_hex": "39663261316337653462386430333536613165396334663730623264386536313335613763393066653262346431363834376361303365356239643766323831",
+  "secret_encoding": "The configured value's UTF-8 bytes AFTER trimming surrounding whitespace. NOT hex-decoded, even when the value looks like hex.",
+  "secret_utf8": "9f2a1c7e4b8d0356a1e9c4f70b2d8e6135a7c90fe2b4d16847ca03e5b9d7f281",
+  "signature": {
+    "$comment": "Pins the existing signed-mode MAC construction against the derived HMAC key.",
+    "body_utf8": "{\"contract_version\":1,\"plan_id\":\"p-1\"}",
+    "header": "t=\u003cunix\u003e,v1=\u003chex\u003e",
+    "hmac_key_hex": "5416a42a673c585c7ae01ec78f1cf054817722405b9265ce7547833f09678eac",
+    "mac_hex": "b9b8305bfbb5996fb90d7275f7b9cfc9b772349c4c62fb6f56efadd1bca224e3",
+    "mac_input": "\u003cunix\u003e '.' \u003cmethod\u003e '.' \u003cpath\u003e '.' \u003cbody\u003e",
+    "method": "POST",
+    "path": "/apply",
+    "target": "truenas",
+    "unix": "1786500000"
+  },
+  "tls_info": "syndra/addon-tls/v1",
+  "tls_key_algorithm": "Ed25519, seed per RFC 8032 (crypto/ed25519.NewKeyFromSeed)"
+}

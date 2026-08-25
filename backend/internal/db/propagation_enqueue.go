@@ -59,19 +59,23 @@ func EnqueueDirectGrantPropagation(ctx context.Context, p EnqueueParams) (Enqueu
 // rollback path) can pin a fixed key. All writes share one transaction: a
 // failure on any insert rolls back the ledger, audit, and outbox together.
 func enqueueTx(ctx context.Context, p EnqueueParams, key string) (EnqueueResult, error) {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return EnqueueResult{}, fmt.Errorf("begin enqueue tx: %w", err)
 	}
-	defer tx.Rollback(ctx) // no-op after a successful Commit
+	if owned {
+		defer tx.Rollback(ctx) // no-op after a successful Commit
+	}
 
 	outboxID, err := enqueueWrites(ctx, tx, p, key)
 	if err != nil {
 		return EnqueueResult{}, err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return EnqueueResult{}, fmt.Errorf("commit enqueue tx: %w", err)
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return EnqueueResult{}, fmt.Errorf("commit enqueue tx: %w", err)
+		}
 	}
 	return EnqueueResult{OutboxID: outboxID, IdempotencyKey: key, Status: "pending"}, nil
 }
@@ -82,6 +86,13 @@ func enqueueTx(ctx context.Context, p EnqueueParams, key string) (EnqueueResult,
 // ApproveRequestAndEnqueue, which also resolves the access request — can share
 // one transaction with the enqueue rather than splitting it across two.
 func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) (string, error) {
+	// The second of the two enqueue chokepoints. See enqueueCascadeRows: a
+	// writer that computed its delta under this lock is only protected while
+	// every other writer has to wait for it.
+	if err := LockAccessMutationTx(ctx, tx); err != nil {
+		return "", err
+	}
+
 	source := p.Source
 	if source == "" {
 		source = "direct"
@@ -128,9 +139,9 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) 
 	}
 
 	const insertOutbox = `
-		INSERT INTO pending_zitadel_propagations
-			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json, idempotency_key, initiated_by, source, source_ref)
-		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,NULLIF($10,''))
+		INSERT INTO propagation_outbox
+			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json, idempotency_key, initiated_by, source, source_ref, target)
+		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,NULLIF($10,''),'zitadel')
 		RETURNING id`
 	var outboxID string
 	if err := tx.QueryRow(ctx, insertOutbox, p.OpType, p.UserID, p.ProjectID, p.RoleKeys,

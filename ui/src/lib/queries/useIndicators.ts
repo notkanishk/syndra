@@ -18,6 +18,27 @@ export interface Indicators {
   expiring_grants: number;
   pending_propagation: number;
   drift: number;
+  /**
+   * Access somebody decided to withdraw that has not been withdrawn. A subset
+   * of pending_propagation, counted apart from it because the two mean opposite
+   * things about urgency: a queued grant is somebody waiting, and a queued
+   * revocation is somebody still holding what was taken away.
+   */
+  unconfirmed_revocations: number;
+  /**
+   * True when at least one of them is a finding rather than a queue depth —
+   * spent, or old enough that it is stuck rather than draining. The badge
+   * changes on this and not on the count, because a count cannot carry the
+   * difference and an operator reading "3" cannot tell.
+   */
+  revocations_escalated: boolean;
+  /**
+   * Holds past their review date and still in force. Counted apart from
+   * expiring_grants, never summed with it: an expiring grant lapses if nobody
+   * acts and a hold stays, so one number covering both would be counting
+   * "access about to end" together with "access still being withheld".
+   */
+  holds_due: number;
   zitadel_reachable: boolean;
 }
 
@@ -26,6 +47,9 @@ const EMPTY: Indicators = {
   expiring_grants: 0,
   pending_propagation: 0,
   drift: 0,
+  unconfirmed_revocations: 0,
+  holds_due: 0,
+  revocations_escalated: false,
   zitadel_reachable: true,
 };
 

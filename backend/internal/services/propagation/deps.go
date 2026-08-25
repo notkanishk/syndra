@@ -1,5 +1,5 @@
 // Package propagation contains the operator-triggered drain that flushes the
-// pending_zitadel_propagations outbox to Zitadel. It mirrors services/expiry:
+// propagation_outbox outbox to Zitadel. It mirrors services/expiry:
 // a small package whose external effects are injectable function vars so the
 // drain logic is testable without a live Zitadel or DB.
 //
@@ -16,17 +16,30 @@ import (
 	"os"
 	"strconv"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/directory"
 	"syndra/internal/zitadel"
 )
 
 // Injectable dependencies — save/swap/restore in tests (see expiry/deps.go).
 var (
 	claimPending = db.ClaimPendingPropagations
-	claimOne     = db.ClaimPropagationByID
-	markApplied  = db.MarkPropagationApplied
-	markFailed   = db.MarkPropagationFailed
-	requeue      = db.RequeuePropagation
+	// claimRevocations is the background runner's claim. A separate seam, not a
+	// parameter on claimPending: the two differ in what they are ALLOWED to
+	// return, and a boolean would let a caller ask the operator claim for
+	// revocations or — the direction that matters — the runner's claim for
+	// everything.
+	claimRevocations = db.ClaimPendingRevocations
+	claimOne         = db.ClaimPropagationByID
+	undispatchable   = db.UndispatchableTarget
+	awaitingDispatch = db.TargetsAwaitingDispatch
+	markApplied      = db.MarkPropagationApplied
+	markFailed       = db.MarkPropagationFailed
+	requeue          = db.RequeuePropagation
+	// release returns a row to pending without spending a retry, for the one
+	// case where nothing was attempted at all.
+	release = db.ReleasePropagation
 
 	// reconcileLedger prunes direct_role_grants to match the desired state an
 	// applied revoke/replace established in Zitadel (revoke removes the named
@@ -82,6 +95,42 @@ var (
 	}
 
 	pruneTerminal = db.PruneTerminalPropagations
+	prunePlans    = db.PruneSpentPlans
+
+	// The add-on dispatcher's two seams. Separate from the Zitadel ones because
+	// they are a different leg of the contract, and a test has to be able to
+	// fail either: a row dispatched without its approved snapshot, and an
+	// outcome recorded as something the target did not say.
+	readIntent       = db.ReadEntitlementIntent
+	applyEntitlement = addons.Apply
+
+	// addonReachable is the add-on pass's pre-flight, matching the one the
+	// Zitadel passes take. Without it an outage spends a whole batch's retry
+	// budgets learning the same thing once per row — and a spent budget is now
+	// terminal, so an unreachable target would fail approved work rather than
+	// leaving it queued.
+	//
+	// It probes the TARGET, not the add-on, and the distinction is what this
+	// pre-flight is for. A manifest read proves only that the add-on's own
+	// process is answering — which it is, throughout a NAS outage, because the
+	// add-on is a separate container that stays up. Probing that way let a
+	// whole batch through to a target that was switched off: twenty-one rows
+	// each spent a round trip, each came back as "we cannot say what happened",
+	// and twenty-one unresolved operations landed on the surface an operator
+	// watches, for an outage a single call establishes.
+	//
+	// `/health` is that single call, and it is a live read on the add-on's side
+	// rather than a cached opinion.
+	addonReachable = func(ctx context.Context, target string) bool {
+		h := addons.Health(ctx, target)
+		return h.Outcome == addons.OutcomeSucceeded && h.Reachable
+	}
+
+	// Which targets the drain has a dispatcher for, beyond the built-in one.
+	// A seam because the alternative is a drain test that can only ever see
+	// Zitadel — which is exactly the gap that let the add-on dispatcher ship
+	// with no caller.
+	registeredAddons = addons.Registered
 
 	maxRetries    = outboxMaxRetries()    // OUTBOX_MAX_RETRIES (default 5)
 	retentionDays = outboxRetentionDays() // OUTBOX_RETENTION_DAYS (default 30)
@@ -139,3 +188,53 @@ func envInt(name string, def int) int {
 	}
 	return n
 }
+
+// The two reads the add-on dispatcher makes beside the apply itself.
+//
+// `planOne` is the re-fingerprint a system-initiated row needs, and `subjectEmail`
+// is the identity a first account creation is named from. Both are seams because
+// both are network calls a test must be able to answer without one — and because
+// a test has to be able to assert that an OPERATOR-approved row makes neither.
+var (
+	planOne = addons.Plan
+
+	// saveBinding mirrors what the add-on reported. A seam so a test can assert
+	// the drain records it at all — the failure it prevents is invisible from
+	// the drain's own result, since the row settles either way.
+	saveBinding = db.RecordTargetBinding
+
+	// The conflict half. Separate seams from saveBinding, because a test that
+	// stubs the write must be able to assert what the finding recorded — the
+	// two used to be one log line.
+	bindingHolder = db.BindingHolder
+	saveConflict  = db.RecordBindingConflict
+
+	// The merge base, written from what the add-on OBSERVED after the write.
+	// Its own seam because the assertion that matters is negative: an apply the
+	// add-on could not read back must record nothing here, and a test proving
+	// that needs to see the call not happen.
+	saveMergeBase = db.RecordMergeBase
+
+	// The memory that a write landed. A seam because the assertion that matters
+	// is which rows produce one: an `add` that the target accepted, and never a
+	// revoke — remembering a removal as "applied" would make the next pass argue
+	// the target should still hold it.
+	savePropagation = db.RecordPropagation
+	// The other half, and the one whose absence is a defect rather than a gap:
+	// a removal Syndra made must forget what it removed, or a later failed
+	// re-grant is read as somebody's hand removal and never replayed.
+	forgetPropagatedFields       = db.ForgetPropagatedFields
+	forgetPropagatedFieldsExcept = db.ForgetPropagatedFieldsExcept
+
+	subjectEmail = func(ctx context.Context, subjectID string) string {
+		profile, found, err := directory.Default.FindUser(ctx, subjectID)
+		if err != nil || !found {
+			// Not fatal. The email matters only for a first creation, and the
+			// add-on refuses to create under a name it had to invent — so a
+			// failed lookup becomes a visible blocked row rather than an account
+			// named after a hash.
+			return ""
+		}
+		return profile.Email
+	}
+)

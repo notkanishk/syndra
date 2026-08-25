@@ -99,9 +99,9 @@ export default function AppsPage() {
             <Link
               key={entry.application.id}
               href={`/applications/${entry.application.id}`}
-              className="row-divider flex items-center gap-[18px] px-5 py-3.5 motion-tint hover:bg-[var(--hover)]"
+              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]"
             >
-              <span className="w-[170px] min-w-0">
+              <span className="w-full min-w-0 tablet:w-[170px]">
                 <span className="block truncate text-[15.5px] font-semibold">
                   {entry.application.name}
                 </span>
@@ -110,20 +110,23 @@ export default function AppsPage() {
                 </span>
               </span>
 
-              <span className="w-[80px] shrink-0 text-[13px] font-semibold uppercase tracking-[0.06em] text-muted">
+              <span className="text-[13px] font-semibold uppercase tracking-[0.06em] text-muted tablet:w-[80px] tablet:shrink-0">
                 {kindOf(entry)}
               </span>
 
-              <span className="min-w-0 flex-1 truncate text-[14px] text-muted">
+              <span className="w-full text-[14px] text-muted tablet:min-w-0 tablet:flex-1 tablet:truncate">
                 <ProjectName id={entry.application.project_id} />
               </span>
 
-              <span className="w-[110px] text-right text-[15px]">
+              <span className="text-[15px] tablet:w-[110px] tablet:text-right">
                 {entry.assigned_user_count}
+                <span className="text-[13px] text-faint tablet:hidden">
+                  {entry.assigned_user_count === 1 ? " person" : " people"}
+                </span>
               </span>
 
               <span
-                className={`w-[96px] text-right text-[13px] ${
+                className={`text-[13px] tablet:w-[96px] tablet:text-right ${
                   mixedProjects.has(entry.application.project_id)
                     ? "font-semibold text-warn-text"
                     : "text-muted"

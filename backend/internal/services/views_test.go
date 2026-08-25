@@ -3,11 +3,13 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
 )
@@ -15,6 +17,35 @@ import (
 // resetGovernanceDeps captures and restores all governance/lineage injectable vars.
 func resetGovernanceDeps(t *testing.T) {
 	t.Helper()
+	// The access view carries a third band now, so it makes a third read. Left
+	// unstubbed it reaches a nil pool, which would make every test in this file
+	// fail for a reason none of them is about.
+	defer func() {
+		svcAllowancesForSubject = func(context.Context, string) ([]db.Allowance, error) { return nil, nil }
+	}()
+	// And the revocation count, for the same reason: the indicators now carry
+	// it, and left unstubbed it reaches a nil pool.
+	origRevocations := svcCountUnconfirmedRevocations
+	t.Cleanup(func() { svcCountUnconfirmedRevocations = origRevocations })
+	svcCountUnconfirmedRevocations = func(context.Context) (db.UnconfirmedRevocationSummary, error) {
+		return db.UnconfirmedRevocationSummary{}, nil
+	}
+	// And the holds-due count, for the same reason again: the indicators grew a
+	// sixth read and an unstubbed one reaches a nil pool, failing every test in
+	// this file for a reason none of them is about.
+	origHoldsDue := svcAllowancesDueForReview
+	t.Cleanup(func() { svcAllowancesDueForReview = origHoldsDue })
+	svcAllowancesDueForReview = func(context.Context) ([]db.Allowance, error) { return nil, nil }
+	// And the merge-finding count, same reason again: the summary counts the
+	// differences a reconciliation was not entitled to resolve, and an unstubbed
+	// count reaches a nil pool.
+	origFindings := svcCountMergeFindings
+	t.Cleanup(func() { svcCountMergeFindings = origFindings })
+	svcCountMergeFindings = func(context.Context) int { return 0 }
+	// And the unreconciled-target read the summary grew, same reason again.
+	origUnreconciled := svcGetUnreconciledTargets
+	t.Cleanup(func() { svcGetUnreconciledTargets = origUnreconciled })
+	svcGetUnreconciledTargets = func(context.Context) ([]models.UnreconciledTarget, error) { return nil, nil }
 	origGetRequests := svcGetAccessRequests
 	origGetExpiring := svcGetExpiringDirectGrants
 	origGetAllBundles := svcGetAllBundles
@@ -27,7 +58,9 @@ func resetGovernanceDeps(t *testing.T) {
 	origReachable := svcZitadelReachable
 	origCountDrift := svcCountPendingDrift
 	origTopDrift := svcGetTopDrift
+	origAllowances := svcAllowancesForSubject
 	t.Cleanup(func() {
+		svcAllowancesForSubject = origAllowances
 		svcGetAccessRequests = origGetRequests
 		svcGetExpiringDirectGrants = origGetExpiring
 		svcGetAllBundles = origGetAllBundles
@@ -587,5 +620,143 @@ func TestListProjects_CollectsUserRolesExactlyOncePerUser(t *testing.T) {
 	}
 	if calls != 3 {
 		t.Fatalf("expected 3 calls (once per user); got %d", calls)
+	}
+}
+
+// 8.12 — an unread band must not look like "no carve-outs". Empty and unread
+// are identical to a surface, and one of them means this person is suspended
+// from something the view cannot show.
+func TestAnUnreadableAllowanceBandIsSaidOutLoudInTheView(t *testing.T) {
+	resetGovernanceDeps(t)
+
+	svcGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) { return nil, nil }
+	svcGetBundlesForUser = func(context.Context, string) ([]models.Bundle, error) { return nil, nil }
+	svcGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) { return nil, nil }
+	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) { return nil, nil }
+	svcAllowancesForSubject = func(context.Context, string) ([]db.Allowance, error) {
+		return nil, fmt.Errorf("db down")
+	}
+
+	svcGetRolesForBundle = func(context.Context, string) ([]models.BundleRole, error) { return nil, nil }
+
+	view, err := ExplainUserAccess(context.Background(), "dev_admin")
+	if err != nil {
+		// The view still renders: one unreadable band must not deny an operator
+		// the rest of somebody's access.
+		t.Fatalf("the view must still be produced: %v", err)
+	}
+	var said bool
+	for _, hint := range view.CleanupHints {
+		if strings.Contains(hint, "Carve-outs could not be read") {
+			said = true
+		}
+	}
+	if !said {
+		t.Fatalf("the view must say the band is incomplete: %v", view.CleanupHints)
+	}
+	if view.Allowances == nil {
+		t.Error("and the band must be a list rather than nil, so a surface renders empty rather than crashing")
+	}
+}
+
+// A target Syndra has not been able to read reaches the governance summary.
+//
+// The whole point is that its absence is indistinguishable from good news. A
+// nightly sweep that has not reached a target for a week produces no drift
+// findings for it, and a drift count of zero beside a silent target reads as "a
+// quiet week" on every surface an operator opens. The record existed and was
+// written correctly; nothing read it back.
+func TestGovernanceReportsTargetsItCannotVouchFor(t *testing.T) {
+	resetGovernanceDeps(t)
+	stubGovernanceReads(t)
+
+	since := time.Now().Add(-7 * 24 * time.Hour)
+	seen := since.Add(-time.Hour)
+	svcGetUnreconciledTargets = func(context.Context) ([]models.UnreconciledTarget, error) {
+		return []models.UnreconciledTarget{{
+			Target: "truenas", Since: since, LastSeen: &seen,
+			Reason: "addon truenas: dial tcp: connect: connection refused",
+		}}, nil
+	}
+
+	summary, err := Governance(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summary.UnreconciledTargets) != 1 {
+		t.Fatalf("expected the unreadable target to be reported, got %+v", summary.UnreconciledTargets)
+	}
+	got := summary.UnreconciledTargets[0]
+	if got.Target != "truenas" || !got.Since.Equal(since) {
+		t.Errorf("row does not carry the target and the age it is owed: %+v", got)
+	}
+	// The reason travels, because "unreachable" and "answered but refused the
+	// read" send an operator to different machines.
+	if got.Reason == "" {
+		t.Error("the reason for the outage was dropped")
+	}
+}
+
+// A failed read of that record degrades to empty rather than failing the
+// summary — but it must not be silent, because empty here MEANS "nothing is
+// unreadable", which is the exact false quiet this field exists to break.
+func TestGovernanceSurvivesAFailedUnreconciledRead(t *testing.T) {
+	resetGovernanceDeps(t)
+	stubGovernanceReads(t)
+
+	svcGetUnreconciledTargets = func(context.Context) ([]models.UnreconciledTarget, error) {
+		return nil, errors.New("the reconciliation table is unavailable")
+	}
+
+	summary, err := Governance(context.Background())
+	if err != nil {
+		t.Fatalf("a failed read must not take the summary down: %v", err)
+	}
+	if summary.UnreconciledTargets == nil {
+		t.Fatal("the field must serialise as [] rather than null")
+	}
+}
+
+// stubGovernanceReads fills in the reads Governance makes that these two tests
+// are not about.
+func stubGovernanceReads(t *testing.T) {
+	t.Helper()
+	svcGetAccessRequests = func(context.Context, string) ([]models.AccessRequest, error) { return nil, nil }
+	svcGetExpiringDirectGrants = func(context.Context, time.Duration) ([]models.DirectGrant, error) {
+		return nil, nil
+	}
+	svcGetAllBundles = func(context.Context) ([]models.Bundle, error) { return []models.Bundle{}, nil }
+	svcGetBundlesForUser = func(context.Context, string) ([]models.Bundle, error) { return nil, nil }
+	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) {
+		return nil, nil
+	}
+	svcGetRolesForBundle = func(context.Context, string) ([]models.BundleRole, error) { return nil, nil }
+}
+
+// The count that keeps a finding from sitting behind a page saying nothing
+// needs a person.
+//
+// Beside the drift count and not inside it: drift is access nobody can explain,
+// and a merge finding is a disagreement everybody can explain and nobody has
+// decided. Summing them would make one number that answers neither question.
+func TestGovernance_CountsStandingMergeFindings(t *testing.T) {
+	resetGovernanceDeps(t)
+	svcCountMergeFindings = func(context.Context) int { return 3 }
+	svcGetAccessRequests = func(context.Context, string) ([]models.AccessRequest, error) { return nil, nil }
+	svcGetExpiringDirectGrants = func(context.Context, time.Duration) ([]models.DirectGrant, error) { return nil, nil }
+	svcGetAllBundles = func(context.Context) ([]models.Bundle, error) { return []models.Bundle{}, nil }
+	svcGetBundlesForUser = func(context.Context, string) ([]models.Bundle, error) { return nil, nil }
+	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) { return nil, nil }
+	svcGetRolesForBundle = func(context.Context, string) ([]models.BundleRole, error) { return nil, nil }
+
+	summary, err := Governance(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.MergeFindings != 3 {
+		t.Fatalf("want 3 standing findings, got %d", summary.MergeFindings)
+	}
+	if summary.Drift.Count == 3 {
+		t.Error("findings must not be folded into the drift count")
 	}
 }

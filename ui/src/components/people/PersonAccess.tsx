@@ -15,6 +15,7 @@ import { Chip, Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
+import { Withheld } from "@/components/ui/Withheld";
 import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
@@ -103,6 +104,9 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
   const grantsByRole = new Map(
     (grants.data ?? []).map((grant) => [`${grant.project_id}::${grant.role_key}`, grant]),
   );
+  // Only the ones applying now. A lifted or lapsed hold belongs to the history
+  // the Review queue keeps, not to what this person can reach.
+  const inForce = (access.data.allowances ?? []).filter((a) => a.in_force);
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -120,7 +124,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                 // The id stays reachable — this is the one page where an
                 // operator genuinely needs it — but it sits last, after every
                 // human-readable fact, and never stands in for a name.
-                <Mono key="id" title="Zitadel user id">
+                <Mono key="id">
                   {user.id}
                 </Mono>,
                 // Operator-only for the same reason the Activity tab is: /audit
@@ -130,7 +134,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                   <Link
                     key="trail"
                     href={`/audit?user=${encodeURIComponent(user.id)}`}
-                    className="font-semibold text-accent-text"
+                    className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6"
                   >
                     Full audit trail
                   </Link>
@@ -162,7 +166,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
             type="button"
             onClick={() => setTab(entry)}
             aria-current={tab === entry ? "page" : undefined}
-            className={`rounded-pill px-4 py-2 text-[14.5px] motion-tint ${
+            className={`min-h-11 rounded-pill px-4 py-2 text-[14.5px] motion-tint desktop:min-h-0 ${
               tab === entry ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
             }`}
           >
@@ -218,7 +222,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
               <button
                 type="button"
                 onClick={() => setBundlesOpen(true)}
-                className="text-[13.5px] font-semibold text-accent-text"
+                className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6"
               >
                 Manage bundles →
               </button>
@@ -240,6 +244,36 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                 — {multiSource.explanation}. Removing one would not remove this role.
               </p>
             </div>
+          )}
+
+          {/*
+            The holds band, above the roles rather than below them. A
+            role-holder list reads as full access, and a hold is precisely the
+            case where it is not: the person holds the role and the entitlement
+            it maps to is being withheld, by somebody, for a reason, until a
+            date. §6's whole promise is that "why does this person have access
+            to X" has one answer — this is the half that says they do not.
+
+            The same component the member reads on their own page, in its
+            operator voice. One object, and the two of them talking about it on
+            the phone need it to be one object on screen too.
+          */}
+          {inForce.length > 0 && (
+            <Card>
+              <div className="px-5 py-4">
+                <Withheld
+                  audience="operator"
+                  items={inForce.map((a) => ({
+                    field: a.field,
+                    value: a.value,
+                    reason: a.reason,
+                    target: a.target,
+                    actorId: a.actor_id,
+                    reviewDue: a.review_due,
+                  }))}
+                />
+              </div>
+            </Card>
           )}
 
           {access.data.projects.map((project) => (
@@ -344,8 +378,12 @@ function ZitadelGrantId({
   if (loading) return null;
   if (unreachable) {
     return (
-      <span className="text-[13px] text-faint" title="Zitadel could not be read just now">
-        Zitadel grant · unavailable
+      // The reason is the sentence, not a tooltip. This was the only
+      // explanation anywhere for why the id is missing, and it was reachable
+      // by hover alone — so on a phone the row said "unavailable" and nothing
+      // else, which reads as a defect in Syndra rather than a read that failed.
+      <span className="text-[13px] text-faint">
+        Zitadel grant · unavailable — it could not be read just now
       </span>
     );
   }
@@ -358,7 +396,7 @@ function ZitadelGrantId({
   }
   return (
     <span className="text-[13px] text-faint">
-      Zitadel grant · <Mono title="Zitadel user-grant id">{id}</Mono>
+      Zitadel grant · <Mono>{id}</Mono>
     </span>
   );
 }
@@ -441,9 +479,18 @@ function RoleGroup({
                     grantId: grant?.id,
                   })
                 }
-                className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-pill border border-line-strong text-[15px] leading-none text-muted motion-tint hover:text-ink"
+                // 44px of target around a 30px ring: this is the only way into the
+                // removal flow for a role, so it is a destructive control and a
+                // mis-tap costs most here. The ring stays 30px; the box around it
+                // does not.
+                className="flex h-11 w-11 shrink-0 items-center justify-center text-[15px] leading-none text-muted motion-tint hover:text-ink desktop:h-[30px] desktop:w-[30px]"
               >
-                ⋯
+                <span
+                  aria-hidden
+                  className="flex h-[30px] w-[30px] items-center justify-center rounded-pill border border-line-strong"
+                >
+                  ⋯
+                </span>
               </button>
             )}
 

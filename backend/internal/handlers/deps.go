@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"time"
 
+	"syndra/internal/addons"
 	"syndra/internal/auth"
 	"syndra/internal/cache"
 	"syndra/internal/db"
 	"syndra/internal/services"
+	"syndra/internal/services/addonop"
 	"syndra/internal/services/drift"
+	"syndra/internal/services/planapply"
 	"syndra/internal/services/propagation"
 	"syndra/internal/zitadel"
 )
@@ -33,6 +36,7 @@ var (
 	dbGetPropagationStatus          = db.GetPropagationStatus
 	svcDrainPropagations            = propagation.Drain
 	svcDrainPropagationRow          = propagation.DrainOne
+	svcDrainAddon                   = propagation.DrainAddon
 
 	dbCreateAccessRequest  = db.CreateAccessRequest
 	dbGetAccessRequestByID = db.GetAccessRequestByID
@@ -90,13 +94,24 @@ var (
 
 	// Bundle versioning: the draft diff, the version list, and the two rehearsed
 	// applies (publish, move holders).
-	svcBundleDraft          = services.BundleDraft
-	svcListBundleVersions   = db.ListBundleVersions
-	svcGetRolesForVersion   = db.GetRolesForVersion
-	svcBundleHolders        = db.GetBundleHoldersByVersion
-	svcRehearsePublish      = services.RehearseBundlePublish
+	svcBundleDraft        = services.BundleDraft
+	svcListBundleVersions = db.ListBundleVersions
+	svcGetRolesForVersion = db.GetRolesForVersion
+	svcBundleHolders      = db.GetBundleHoldersByVersion
+	// Decoration happens here rather than inside the rehearsal: the apply path
+	// runs the same rehearsal under the access lock, and looking a name up in
+	// the directory there would hold that lock across a call to Zitadel.
+	svcRehearsePublish = func(ctx context.Context, req services.PublishRequest) (services.BulkPlan, services.DraftDiff, error) {
+		plan, draft, err := services.RehearseBundlePublish(ctx, req)
+		services.DecoratePlan(ctx, &plan)
+		return plan, draft, err
+	}
 	svcPublishBundleVersion = services.PublishBundleVersion
-	svcRehearseMoveHolders  = services.RehearseMoveHolders
+	svcRehearseMoveHolders  = func(ctx context.Context, req services.MoveHoldersRequest) (services.BulkPlan, error) {
+		plan, err := services.RehearseMoveHolders(ctx, req)
+		services.DecoratePlan(ctx, &plan)
+		return plan, err
+	}
 	svcMoveHolders          = services.MoveHolders
 	dbGetStaleHolderCounts  = db.GetStaleHolderCounts
 	dbGetUserBundleVersions = db.GetUserBundleVersions
@@ -124,12 +139,12 @@ var (
 	// (already past the self-mutation guard) that Syndra neither expects nor
 	// has excluded is out-of-band drift. See detectWebhookDrift in webhook.go.
 	dbUpsertDriftItemWithEvidence = db.UpsertDriftItemWithEvidence
-	dbHasExclusion                = func(ctx context.Context, u, p, r string) (bool, error) {
-		ex, err := db.GetExclusions(ctx)
+	dbHasExclusion                = func(ctx context.Context, target, u, p, r string) (bool, error) {
+		ex, err := db.GetExclusions(ctx, target)
 		if err != nil {
 			return false, err
 		}
-		return services.IsExcluded(ex, u, p, r), nil
+		return services.IsExcluded(ex, target, u, p, r), nil
 	}
 	// svcUserExpectsRole reports whether Syndra already expects (project,role)
 	// for the user — via direct grant, bundle, or mapping rule. Reuses the
@@ -151,21 +166,24 @@ var (
 	svcGetActiveMappingRulesRecon = db.GetActiveMappingRules
 	svcGetExclusions              = db.GetExclusions
 
-	// Provisioning intent injectable vars.
-	webhookEmitProvisioningIntent = services.EmitProvisioningIntent
-	dbGetProvisioningIntents      = db.GetProvisioningIntents
-	dbClaimPendingIntents         = db.ClaimPendingIntents
-	dbCompleteIntent              = db.CompleteIntent
-	dbFailIntent                  = db.FailIntent
-
 	// Shadow Password Vault injectable vars.
-	svcSetShadowPassword       = services.SetShadowPassword
+	svcRecordCredentialSet     = services.RecordCredentialSet
 	svcClearShadowPassword     = services.ClearShadowPassword
 	dbHasShadowCredential      = db.HasShadowCredential
-	dbGetShadowCredential      = db.GetShadowCredential
 	dbGetShadowCredentialAudit = db.GetShadowCredentialAudit
 
 	// Zitadel discovery injectable vars.
+	// Who created a grant, read from Zitadel's own event log. The sweep compares
+	// grant SETS and therefore cannot name an actor; this is the only read that
+	// can, and it is the reason the Zitadel side does NOT get a merge base — a
+	// base infers an actor from a snapshot delta, and this one is recorded.
+	zitadelGrantOrigin = func(ctx context.Context, grantID string) (*zitadel.GrantOrigin, error) {
+		if zitadel.MgmtClient == nil {
+			return nil, errNoClient
+		}
+		return zitadel.MgmtClient.GrantOriginByID(ctx, grantID)
+	}
+
 	// Each closure checks MgmtClient at call time (not definition time) so the
 	// nil guard in discovery handlers and these closures are defense-in-depth.
 	errNoClient = fmt.Errorf("zitadel client not initialized")
@@ -275,6 +293,7 @@ var (
 	svcDriftSweep           = drift.Sweep
 	svcDrainOne             = propagation.DrainOne
 	svcDriftTriageQueue     = services.DriftTriageQueue
+	svcDriftTriageRows      = services.DriftTriageRows
 
 	// Confirmation-mode surfaces (Task 22): global default read/write, bulk toggle, and
 	// Change history.
@@ -285,10 +304,47 @@ var (
 	dbGetCascadeGroups          = db.GetCascadeGroups
 
 	// Bulk access changes. Rehearsal is its own injectable so the handler's
-	// central contract — apply NEVER trusts a client-supplied plan, it
-	// re-rehearses server-side first — is assertable without a database.
+	// central contract — apply never acts on a diff nobody approved — is
+	// assertable without a database.
 	svcRehearseBulk     = services.RehearseBulk
 	svcUserDirectGrants = services.UserDirectGrants
+
+	// Plan-then-apply. The rehearsal persists what it showed; the apply cites
+	// it. Two seams rather than one because they are two halves of the
+	// guarantee and a test has to be able to fail either: a rehearsal that
+	// records nothing, and an apply that claims without verifying.
+	dbCreatePlan        = db.CreatePlan
+	dbClaimPlanVerified = db.ClaimPlanVerified
+
+	// Role-to-target mappings (group 7). Validation is split — Syndra checks
+	// structure, the add-on checks reference — so the two halves are two seams
+	// and a test can fail either.
+	dbListRoleMappings       = db.ListRoleMappings
+	dbGetRoleMapping         = db.GetRoleMapping
+	dbCreateRoleMapping      = db.CreateRoleMapping
+	dbUpdateRoleMappingValue = db.UpdateRoleMappingValue
+	dbDeleteRoleMapping      = db.DeleteRoleMapping
+	dbMappingHolders         = db.MappingHolders
+	dbPublishMappingVersion  = db.PublishMappingVersion
+	dbRollbackMappingVersion = db.RollbackMappingVersion
+	addonsEntitlementSchema  = addons.EntitlementSchema
+
+	// addonsResolvesValue is the add-on's half of mapping validation: whether
+	// `lab_makers` names anything on its target. Syndra cannot answer it — it
+	// does not know what the value means — so the add-on is asked, through the
+	// `/values/{field}` read it now serves.
+	//
+	// It fails open on everything except a definite "no". A target that could
+	// not be read is the absence of an answer, and refusing a mapping edit
+	// because a NAS was rebooting would make an outage look like a validation
+	// failure. Structure is Syndra's own and is enforced regardless.
+	addonsResolvesValue = addons.ResolvesValue
+
+	// Allowances (group 8).
+	dbCreateAllowance        = db.CreateAllowance
+	dbLiftAllowance          = db.LiftAllowance
+	dbAllowancesForSubject   = db.AllowancesForSubject
+	dbAllowancesDueForReview = db.AllowancesDueForReview
 
 	// Review › Expiring access reads its own window rather than a slice of the
 	// governance summary, so a 30-day review and Today's 14-day queue can
@@ -300,4 +356,114 @@ var (
 	dbGetExpiringWithAcks             = db.GetExpiringDirectGrantsWithAcknowledgements
 	dbAcknowledgeGrantExpiry          = db.AcknowledgeGrantExpiry
 	dbClearGrantExpiryAcknowledgement = db.ClearGrantExpiryAcknowledgement
+)
+
+// The entitlement convergence surface (change `addon-platform` groups 7 and 9).
+//
+// Two seams, not one, because they answer different questions and a test has to
+// be able to fail either: what the rehearsal computed, and what the gate did
+// with the approval it was cited under.
+var (
+	svcRehearseEntitlements = services.RehearseEntitlements
+	svcApplyEntitlements    = planapply.Apply
+)
+
+// The mapping-edit plan path (7.11). `svcInTxLockingAccess` is here rather than
+// called directly so a test can assert the edit and its convergences share one
+// transaction — the property, not the call.
+var (
+	svcInTxLockingAccess      = db.InTxLockingAccess
+	dbRecordSystemConvergence = db.RecordSystemConvergence
+)
+
+// The unmanaged inventory and its one action (1.18/1.19, 6.8).
+var (
+	svcTargetInventory = drift.Inventory
+	// On-demand add-on reconciliation. The scheduler has driven this since it
+	// was written; an operator had no way to ask. [Reconcile now] existed for
+	// Zitadel and for nothing else, so the answer to "is this target in step?"
+	// was "wait up to six hours and read a log line".
+	svcReconcileAddon = drift.ReconcileAddon
+	// A member's own account state and usage. A read, not an operation: it runs
+	// on an ordinary page load, and a durable row per page view would fill the
+	// operation log with events that changed nothing.
+	addonsMyStorage = addons.MyStorage
+	// What the TARGET's own audit log says about a subject. Also a read: an
+	// operator opening somebody's record must not append to the operation log
+	// for having looked.
+	addonsActivity        = addons.Activity
+	addonsSystemHealth    = addons.SystemHealth
+	svcDispatchOperation  = addonop.Dispatch
+	dbRecordTargetBinding = db.RecordTargetBinding
+)
+
+// The unconfirmed-revocation surface (2.51, 9.9).
+var (
+	dbListUnconfirmedRevocations  = db.ListUnconfirmedRevocations
+	dbCountUnconfirmedRevocations = db.CountUnconfirmedRevocations
+)
+
+// The add-on's runtime lifecycle setter (§18, 15.6).
+var addonsSetLifecycle = addons.SetLifecycle
+
+// The target roster (9.13). Seams because the roster is deployment
+// configuration and a test of the surface must be able to state a deployment.
+var (
+	addonsRegistered = addons.Registered
+	// Whether each registered target's transport secret still loads, read at
+	// request time rather than trusted from start-up.
+	addonsTransportCredentials = addons.TransportCredentials
+	addonsGet                  = addons.Get
+	addonsHealth               = addons.Health
+	// How a member reaches a target, for the instructions on their own page.
+	addonsConnection = addons.ConnectionFor
+	// The backend's memory of an add-on's mutation log, read beside that add-on's
+	// own account of itself. Two authorities on purpose.
+	svcDormantAccounts    = services.DormantAccounts
+	dbListMappingHistory  = db.ListMappingHistory
+	dbForgetTargetBinding = db.ForgetTargetBinding
+	// The merge base goes with the binding, always. One left behind is a claim
+	// about an account nobody manages any more — and if that subject is later
+	// bound to a DIFFERENT account, it would be compared against a person it
+	// was never about.
+	dbForgetMergeBase    = db.ForgetMergeBase
+	dbForgetPropagations = db.ForgetPropagations
+
+	// The findings a reconciliation could not resolve, and the operator's answer
+	// to one. Separate seams because the assertion that matters spans them: the
+	// resolution must be WRITTEN before the finding is closed, and a test proving
+	// that has to be able to fail the first and watch the second not happen.
+	dbStandingMergeFindings   = db.StandingMergeFindings
+	dbGetStandingMergeFinding = db.GetStandingMergeFinding
+	dbResolveMergeFinding     = db.ResolveMergeFinding
+	dbRecordMergeDecision     = db.RecordMergeDecision
+	dbReleaseMergeDecision    = db.ReleaseMergeDecision
+	// The roles a subject actually holds, for scoping a policy hint to the
+	// mappings that produce THEIR value rather than every mapping on the field.
+	svcHeldRoles               = services.HeldRoles
+	dbCountMergeFindings       = db.CountStandingMergeFindings
+	dbGetLogAnchor             = db.GetLogAnchor
+	dbStandingBindingConflicts = db.StandingBindingConflicts
+	dbResolveBindingConflict   = db.ResolveBindingConflict
+	dbResolveLogViolation      = db.ResolveLogViolation
+	// When a member's access to a target was written down, for the one sentence
+	// on their own page that would otherwise be a promise about a person.
+	dbEntitlementRecordedAt = db.EntitlementRecordedAt
+)
+
+// A member's own view of a target (group 10).
+var (
+	svcResolveEntitlementSet = services.ResolveEntitlements
+	dbGetTargetBinding       = db.GetTargetBinding
+
+	// addonsCallable is "has this add-on published a manifest we understand" —
+	// registration is a deployment fact and callability is a runtime one, and a
+	// member's credential form must be gated on the second.
+	addonsCallable = func(target string) bool {
+		a, err := addons.Get(target)
+		if err != nil {
+			return false
+		}
+		return !a.FetchedAt().IsZero() && !a.CircuitOpen()
+	}
 )

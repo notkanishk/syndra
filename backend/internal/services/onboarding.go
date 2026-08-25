@@ -44,8 +44,20 @@ func TriggerOnboarding(ctx context.Context, userID, source, idempotencyKey strin
 		return fmt.Errorf("welcome bundle: %w", err)
 	}
 
-	// 3. Assign the welcome bundle (idempotent — uses ON CONFLICT DO NOTHING)
-	if err := svcAssignBundleToUser(ctx, userID, bundleID); err != nil {
+	// 3. Assign the welcome bundle, through the same cascade an operator's
+	// assignment uses.
+	//
+	// It used to be a bare INSERT into user_bundle_assignments. That was wrong
+	// twice over: the welcome bundle's roles were never projected anywhere, so
+	// a new member held a bundle that granted them nothing upstream until some
+	// later cascade happened to recompute them; and the insert changed what the
+	// person effectively held without taking the access lock, so it could land
+	// in the middle of another delta's read and leave that delta describing a
+	// world neither of them ended up in.
+	//
+	// Idempotence is preserved by the cascade, which reports an existing
+	// assignment as a no-op rather than re-pinning it.
+	if _, err := svcCascadeWelcomeBundle(ctx, "system:onboarding", userID, bundleID); err != nil {
 		log.Printf("[ONBOARDING] Bundle assignment failed: user=%s bundle=%s: %v", userID, bundleID, err)
 		if failErr := svcFailOnboardingTrigger(ctx, triggerID, err.Error()); failErr != nil {
 			log.Printf("[ONBOARDING] Failed to record failure for trigger=%s: %v", triggerID, failErr)

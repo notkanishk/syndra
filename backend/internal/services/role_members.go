@@ -2,10 +2,13 @@ package services
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
 
+	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
 )
@@ -30,6 +33,26 @@ type RoleMember struct {
 	// GrantID is the direct_role_grants row id, present only for a direct
 	// source — it is what the removal endpoint takes.
 	GrantID string `json:"grant_id,omitempty"`
+	// Withheld is what this role confers on a target and this person does not
+	// have, with the decision that took it away attached.
+	//
+	// On the holder list because §6 says the carve-out has to be visible
+	// EVERYWHERE the role appears, and this is the screen where an operator
+	// decides who to act on. Without it the list says "these forty people have
+	// this role" and means "thirty-nine of them do" — which is the trap the
+	// resolver's Suppressed exists to close, closed on the member's own page
+	// and left open on the operator's.
+	Withheld []WithheldOnRole `json:"withheld,omitempty"`
+}
+
+// WithheldOnRole is one thing this role would give somebody and does not.
+type WithheldOnRole struct {
+	Target      string `json:"target"`
+	Field       string `json:"field"`
+	Value       string `json:"value"`
+	Reason      string `json:"reason"`
+	ActorID     string `json:"actor_id"`
+	AllowanceID string `json:"allowance_id"`
 }
 
 // RoleMembersView is the response for GET /projects/{id}/roles/{key}/members.
@@ -42,6 +65,20 @@ type RoleMembersView struct {
 	Group       string       `json:"group,omitempty"`
 	ClonedFrom  string       `json:"cloned_from,omitempty"`
 	Members     []RoleMember `json:"members"`
+	// WithheldCount is how many of them are holding the role with something
+	// taken away. Its own number rather than a length the client computes: the
+	// filter pills below count people per SOURCE, and a carve-out is orthogonal
+	// to how somebody came to hold the role.
+	WithheldCount int `json:"withheld_count"`
+	// WithheldUnavailable says the carve-out read failed and this list does not
+	// know whether anybody is holding the role with something taken away.
+	//
+	// It exists because the degradation is otherwise INVISIBLE: a zero count
+	// and no rows is byte-identical to a cohort that genuinely has none, and a
+	// server log is not loud to the person reading the page. Rendering "no
+	// carve-outs" from a read that never happened reproduces, on this exact
+	// screen, the failure the field was added to close.
+	WithheldUnavailable bool `json:"withheld_unavailable,omitempty"`
 	// Counts per source, for the filter pills. A person held two ways is
 	// counted under both — the pills filter rows, they do not partition people.
 	DirectCount    int `json:"direct_count"`
@@ -103,6 +140,21 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 		}
 	}
 
+	// What this role confers, and what is currently taken away from it. Read
+	// once for the whole cohort rather than per member: the per-subject read is
+	// the only one that existed, and a screen listing forty holders would have
+	// needed forty calls — which is why this list carried no carve-out at all.
+	// The shape of the available read decided what the screen said.
+	withheldBySubject, werr := withheldOnRole(ctx, projectID, key)
+	if werr != nil {
+		// Non-fatal — the holder list is still the answer to the question asked
+		// — but SAID, not merely logged. The count stays zero and the flag is
+		// what stops that zero from reading as "nobody has anything withheld",
+		// which is the one thing this page must not say when it does not know.
+		log.Printf("[ROLE-MEMBERS] could not read carve-outs for %s/%s: %v (rendered without them)", projectID, key, werr)
+		view.WithheldUnavailable = true
+	}
+
 	for _, user := range snap.Users() {
 		roleMap, _, ferr := snap.For(user.ID)
 		if ferr != nil {
@@ -129,6 +181,10 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 				view.AutomaticCount++
 			}
 		}
+		if held := withheldBySubject[user.ID]; len(held) > 0 {
+			member.Withheld = held
+			view.WithheldCount++
+		}
 		if grant, ok := grantsByUser[user.ID]; ok {
 			member.GrantID = grant.ID
 			member.Since = grant.CreatedAt.UTC().Format("2006-01-02")
@@ -143,6 +199,86 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 		return strings.ToLower(view.Members[i].User.Name) < strings.ToLower(view.Members[j].User.Name)
 	})
 	return view, nil
+}
+
+// withheldOnRole is, per subject, what this role confers that they do not have.
+//
+// Two reads and an intersection, and the intersection is the whole point: an
+// allowance is a denial on a (target, field, value), and it belongs on THIS
+// role's row only when this role is what would otherwise confer that value. A
+// person suspended from a share their OTHER role grants is not holding this one
+// with something taken away, and saying so here would move the carve-out onto
+// the wrong role — which is worse than omitting it, because an operator would
+// act on this row.
+//
+// Lifecycle denials are the exception and they belong on every role that
+// reaches the target: they are bound to no mapping, so the intersection cannot
+// find them, and they are matched on the target alone.
+//
+// The justification differs between the two, and the difference will matter.
+// `enabled = true` denied means the ACCOUNT is off — nothing the role confers
+// there is reachable, unconditionally, whatever fields exist now or later.
+// `smb_enabled` is narrower: it withholds only what SMB carries. Today `group`
+// is the sole entitlement field and it is SMB-mediated, so the two coincide and
+// showing an SMB denial against any role is exactly true. It stops being true
+// the moment a non-SMB field lands — quotas and path grants are in phase 2 —
+// at which point an SMB denial on a role that only binds a quota would claim to
+// withhold something it does not touch.
+//
+// `TestTheLifecycleExceptionRestsOnEverySchemaFieldBeingSMBMediated` fails when
+// a field is added, so the next person has to decide rather than inherit.
+func withheldOnRole(ctx context.Context, projectID, key string) (map[string][]WithheldOnRole, error) {
+	targets, err := dbTargetsMappedToRole(ctx, projectID, key)
+	if err != nil {
+		return nil, fmt.Errorf("read targets mapped to %s/%s: %w", projectID, key, err)
+	}
+	if len(targets) == 0 {
+		// A role mapped to nothing confers nothing on any target, so nothing can
+		// be withheld from it. The common case, and it costs one indexed read.
+		return nil, nil
+	}
+
+	// What this role binds, per target: the set an allowance has to match.
+	conferred := map[string]map[string]bool{} // target -> "field\x00value"
+	for _, target := range targets {
+		mappings, err := dbMappingsForRoles(ctx, target, []db.RoleRef{{ProjectID: projectID, RoleKey: key}})
+		if err != nil {
+			return nil, fmt.Errorf("read mappings for %s/%s on %s: %w", projectID, key, target, err)
+		}
+		bound := map[string]bool{}
+		for _, m := range mappings {
+			bound[m.Field+"\x00"+m.Value] = true
+		}
+		conferred[target] = bound
+	}
+
+	allowances, err := dbAllowancesOnTargets(ctx, targets)
+	if err != nil {
+		return nil, fmt.Errorf("read allowances on the targets %s/%s reaches: %w", projectID, key, err)
+	}
+
+	out := map[string][]WithheldOnRole{}
+	for _, a := range allowances {
+		if a.Direction != db.AllowanceDeny {
+			// The additive arm is refused at the write, so reaching here means
+			// the write path grew one. Skipped rather than rendered as a
+			// carve-out: an allowance that GIVES something is not access taken
+			// away, and drawing it as one would say the opposite of the truth.
+			continue
+		}
+		bound, ok := conferred[a.Target]
+		if !ok {
+			continue
+		}
+		if !IsLifecycleField(a.Field) && !bound[a.Field+"\x00"+a.Value] {
+			continue
+		}
+		out[a.SubjectID] = append(out[a.SubjectID], WithheldOnRole{
+			Target: a.Target, Field: a.Field, Value: a.Value,
+			Reason: a.Reason, ActorID: a.ActorID, AllowanceID: a.ID,
+		})
+	}
+	return out, nil
 }
 
 // expiryHorizon is how far ahead "expiring soon" looks. Shared by the Today
@@ -163,7 +299,32 @@ type Indicators struct {
 	PendingPropagation int  `json:"pending_propagation"`
 	Drift              int  `json:"drift"`
 	ZitadelReachable   bool `json:"zitadel_reachable"`
+	// UnconfirmedRevocations is access somebody decided to withdraw that has
+	// not been withdrawn. Counted apart from PendingPropagation, which it is a
+	// subset of, because the two mean opposite things about urgency: a queued
+	// grant is somebody waiting, and a queued revocation is somebody still
+	// holding what was taken away.
+	UnconfirmedRevocations int `json:"unconfirmed_revocations"`
+	// RevocationsEscalated says at least one of them is a finding rather than a
+	// queue depth — spent, or old enough that it is not draining but stuck. The
+	// badge changes on this rather than on the count, because a count cannot
+	// carry the difference and an operator reading "3" cannot tell.
+	RevocationsEscalated bool `json:"revocations_escalated"`
+	// HoldsDue is holds whose review date has passed and which are still in
+	// force. Its own count beside ExpiringGrants, never folded into it, because
+	// inaction means the opposite thing in each: an expiring grant lapses if
+	// nobody acts, and a hold stays. A badge that summed them would be counting
+	// "access about to end" together with "access still being withheld".
+	HoldsDue int `json:"holds_due"`
 }
+
+// revocationEscalation is how long a queued revocation may age before it stops
+// being a queue and starts being a finding.
+//
+// A day: long enough that an operator who has not resumed the drain over a
+// weekend afternoon is not paged, short enough that access somebody withdrew is
+// never quietly retained for a week.
+const revocationEscalation = 24 * time.Hour
 
 // GovernanceIndicators counts the four badge signals directly, without
 // building the full GovernanceSummary payload.
@@ -193,6 +354,19 @@ func GovernanceIndicators(ctx context.Context) (Indicators, error) {
 		return Indicators{}, err
 	}
 	out.Drift = drift
+
+	revocations, err := svcCountUnconfirmedRevocations(ctx)
+	if err != nil {
+		return Indicators{}, err
+	}
+	out.UnconfirmedRevocations = revocations.Queued + revocations.Spent
+	out.RevocationsEscalated = revocations.Escalated(revocationEscalation)
+
+	holds, err := svcAllowancesDueForReview(ctx)
+	if err != nil {
+		return Indicators{}, err
+	}
+	out.HoldsDue = len(holds)
 
 	// Only worth probing when there is something queued: the flag exists to
 	// explain why "Resume now" is disabled, and with an empty outbox there is
@@ -239,35 +413,46 @@ type DirectGrantRemoval struct {
 // puts the access straight back. Deleting the ledger row is what actually ends
 // the access; the outbox rows are what carry it upstream.
 func DeleteDirectGrant(ctx context.Context, userID, grantID, actor string) (DirectGrantRemoval, error) {
-	rules, err := svcGetActiveMappingRules(ctx)
-	if err != nil {
-		return DirectGrantRemoval{}, err
-	}
+	var ids, retained []string
+	var revokes []roleKey
 
-	before, err := userBaseHoldings(ctx, userID)
-	if err != nil {
-		return DirectGrantRemoval{}, err
-	}
-	after, err := userBaseHoldingsExcludingGrant(ctx, userID, grantID)
-	if err != nil {
-		return DirectGrantRemoval{}, err
-	}
+	// Read and write under one lock, for the same reason expiry does: a delta
+	// computed while another cascade is mid-flight is a statement about a world
+	// neither of them ends up in.
+	if err := withLockedAccess(ctx, func(ctx context.Context) error {
+		rules, err := svcGetActiveMappingRules(ctx)
+		if err != nil {
+			return err
+		}
 
-	afterClosure := effectiveClosure(after, rules)
-	_, revokes := closureDelta(effectiveClosure(before, rules), afterClosure)
+		before, err := userBaseHoldings(ctx, userID)
+		if err != nil {
+			return err
+		}
+		after, err := userBaseHoldingsExcludingGrant(ctx, userID, grantID)
+		if err != nil {
+			return err
+		}
 
-	// Retained is the dialog's exact claim: the role this grant carried, still
-	// effective afterwards because a bundle or a rule also covers it. Reported,
-	// never enqueued — it is precisely the role that must NOT be revoked.
-	retained := make([]string, 0, 1)
-	if target, found := directGrantRoleKey(ctx, userID, grantID); found && afterClosure[target] {
-		retained = append(retained, target.projectID+"/"+target.roleKey)
-	}
+		afterClosure := effectiveClosure(after, rules)
+		_, revokes = closureDelta(effectiveClosure(before, rules), afterClosure)
 
-	params := deltaParams(userID, nil, revokes, actor, "Direct access removal", "direct", grantID)
+		// Retained is the dialog's exact claim: the role this grant carried, still
+		// effective afterwards because a bundle or a rule also covers it. Reported,
+		// never enqueued — it is precisely the role that must NOT be revoked.
+		retained = make([]string, 0, 1)
+		if target, found := directGrantRoleKey(ctx, userID, grantID); found && afterClosure[target] {
+			retained = append(retained, target.projectID+"/"+target.roleKey)
+		}
 
-	ids, err := svcDeleteDirectGrantAndEnqueue(ctx, actor, userID, grantID, params)
-	if err != nil {
+		params, err := deltaParams(ctx, userID, nil, revokes, actor, "Direct access removal", "direct", grantID)
+		if err != nil {
+			return err
+		}
+
+		ids, err = svcDeleteDirectGrantAndEnqueue(ctx, actor, userID, grantID, params)
+		return err
+	}); err != nil {
 		return DirectGrantRemoval{}, err
 	}
 
@@ -283,3 +468,115 @@ func DeleteDirectGrant(ctx context.Context, userID, grantID, actor string) (Dire
 		Status:    "pending",
 	}, nil
 }
+
+// ExpiredGrantRevocation is what one expired grant produced.
+//
+// ProjectID and RoleKey come from the row the delete actually removed, not from
+// the sweep's snapshot, so every downstream side effect names what went away.
+type ExpiredGrantRevocation struct {
+	ProjectID string
+	RoleKey   string
+	OutboxIDs []string
+	// Revoked lists "project/role" pairs the subject genuinely lost.
+	Revoked []string
+	// Retained lists pairs a bundle or a mapping rule still covers. Nothing is
+	// queued for these — the grant lapsed, the access did not.
+	Retained []string
+}
+
+// ExpireDirectGrant ends one expired grant the way an operator's removal ends a
+// live one: same closure delta, same single transaction, same outbox.
+//
+// Expiry used to delete the ledger row and then call Zitadel directly to revoke
+// whatever mapping rules derived from it. Two things were wrong with that. The
+// grant itself was never revoked upstream at all, so an expiring grant left the
+// access live in Zitadel with no Syndra record explaining it — and the next
+// drift sweep, correctly, raised it as unexplained access for a human to
+// triage. Expiry manufactured drift out of its own inaction. And the derived
+// revocations it did issue were unconditional: a rule-derived role the subject
+// still holds through a bundle, or through another grant of the same source
+// role, was taken away anyway, with nothing durable recording that it had been.
+//
+// Both follow from the same omission — expiry was computing no delta. It has
+// one now, and it is the delta every other removal computes.
+//
+// `before` is built from `after` plus the expiring grant's own role rather than
+// read separately, because the "before" read would not contain it: base
+// holdings exclude expired grants by definition, so reading both sides would
+// compare a world without this grant against a world without this grant and
+// find nothing to revoke. The one fact that distinguishes the two states is the
+// grant being expired, and that fact is the input, not something to rediscover.
+func ExpireDirectGrant(ctx context.Context, userID, grantID, projectID, role, actor string) (ExpiredGrantRevocation, error) {
+	var out ExpiredGrantRevocation
+
+	// The lock is taken before the reads, not around the write. A delta is a
+	// statement about a world, and the window that matters runs from the read
+	// that observed that world to the commit that acts on it — a bundle
+	// assignment landing in the middle makes the revoke a statement about a
+	// world that no longer exists, and the add it queued lands first, so the
+	// subject ends up without access they are currently owed.
+	//
+	// The reads deliberately stay on the pool rather than on this transaction.
+	// What they need is not to see this transaction's own writes — there are
+	// none yet — but for nothing that could invalidate them to be able to
+	// commit while they run, and every enqueue must take this same lock.
+	err := withLockedAccess(ctx, func(ctx context.Context) error {
+		rules, err := svcGetActiveMappingRules(ctx)
+		if err != nil {
+			return err
+		}
+		after, err := userBaseHoldingsExcludingGrant(ctx, userID, grantID)
+		if err != nil {
+			return err
+		}
+		lapsed := roleKey{projectID: projectID, roleKey: role}
+		before := make(map[roleKey]bool, len(after)+1)
+		for k := range after {
+			before[k] = true
+		}
+		before[lapsed] = true
+
+		afterClosure := effectiveClosure(after, rules)
+		_, revokes := closureDelta(effectiveClosure(before, rules), afterClosure)
+
+		retained := make([]string, 0, 1)
+		if afterClosure[lapsed] {
+			retained = append(retained, lapsed.projectID+"/"+lapsed.roleKey)
+		}
+
+		params, err := deltaParams(ctx, userID, nil, revokes, actor, "Grant expired", "direct", grantID)
+		if err != nil {
+			return err
+		}
+
+		deletedProject, deletedRole, ids, err := svcDeleteExpiredDirectGrantAndEnqueue(ctx, actor, userID, grantID, params)
+		if err != nil {
+			return err
+		}
+
+		revoked := make([]string, 0, len(revokes))
+		for _, key := range revokes {
+			revoked = append(revoked, key.projectID+"/"+key.roleKey)
+		}
+		out = ExpiredGrantRevocation{
+			ProjectID: deletedProject,
+			RoleKey:   deletedRole,
+			OutboxIDs: ids,
+			Revoked:   revoked,
+			Retained:  retained,
+		}
+		return nil
+	})
+	if err != nil {
+		return ExpiredGrantRevocation{}, err
+	}
+	return out, nil
+}
+
+// RevocationEscalationThreshold exposes the one rule so a surface renders the
+// same escalation the indicator counted.
+//
+// Exported rather than duplicated: two components deciding independently when a
+// queued revocation becomes a finding is two components that will disagree, on
+// the badge whose whole job is to agree with the page it links to.
+func RevocationEscalationThreshold() time.Duration { return revocationEscalation }

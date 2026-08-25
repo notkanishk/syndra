@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
-
-	"syndra/internal/services"
 )
 
 // enforceSelfOnly verifies that the acting user matches the target {uid}.
@@ -50,37 +48,11 @@ func enforceSelfOnly(w http.ResponseWriter, r *http.Request, requireActor bool) 
 	return uid, actorID, true
 }
 
-// handleSetShadowCredential sets or rotates a user's shadow password.
-// PUT /api/v1/users/{uid}/shadow-credential
-func handleSetShadowCredential(w http.ResponseWriter, r *http.Request) {
-	uid, actorID, ok := enforceSelfOnly(w, r, true)
-	if !ok {
-		return
-	}
-
-	var body struct {
-		Password string `json:"password"`
-	}
-	if err := decodeJSONStrict(r.Body, &body); err != nil {
-		jsonValidationErrorResponse(w, "Invalid request body", map[string]string{"body": err.Error()})
-		return
-	}
-	if !trimmedNonEmpty(body.Password) {
-		jsonValidationErrorResponse(w, "password is required", map[string]string{"password": "required"})
-		return
-	}
-
-	if err := svcSetShadowPassword(r.Context(), uid, actorID, body.Password, r.RemoteAddr); err != nil {
-		if errors.Is(err, services.ErrComplexity) {
-			jsonValidationErrorResponse(w, err.Error(), map[string]string{"password": "complexity"})
-			return
-		}
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-	jsonResponse(w, http.StatusOK, map[string]string{"message": "Shadow credential set"})
-}
-
+// The set endpoint stood here. It hashed a password with Argon2id and stored
+// the hash for the sync service to read. Both are gone: a member sets their
+// credential per target now, through `POST /me/targets/{target}/credential`,
+// which forwards the value and keeps nothing.
+//
 // handleClearShadowCredential removes a user's shadow password.
 // DELETE /api/v1/users/{uid}/shadow-credential
 func handleClearShadowCredential(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +80,7 @@ func handleGetShadowCredentialStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status, err := dbHasShadowCredential(r.Context(), uid)
+	status, err := dbHasShadowCredential(r.Context(), uid, "")
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -136,27 +108,6 @@ func handleGetShadowCredentialAudit(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, entries)
 }
 
-// handleGetShadowCredentialHash returns the full credential hash for the sync service.
-// GET /api/v1/shadow-credentials/{uid}/hash
-// Auth: API key only (sync service internal).
-func handleGetShadowCredentialHash(w http.ResponseWriter, r *http.Request) {
-	uid := r.PathValue("uid")
-	if uid == "" {
-		jsonValidationErrorResponse(w, "Missing user ID", map[string]string{"uid": "required"})
-		return
-	}
-
-	cred, err := dbGetShadowCredential(r.Context(), uid)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "No shadow credential for this user")
-		} else {
-			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		}
-		return
-	}
-	jsonResponse(w, http.StatusOK, map[string]string{
-		"credential_hash": cred.CredentialHash,
-		"algorithm":       cred.Algorithm,
-	})
-}
+// The hash endpoint stood here. It served the sync service the Argon2id hash it
+// pushed into LLDAP, and both ends are gone — the table holds no hash, so there
+// is nothing for it to return and nothing that would read one.

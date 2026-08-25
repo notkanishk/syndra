@@ -43,7 +43,31 @@ export function CommandBlock({
   label?: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const [selected, setSelected] = useState(false);
+  // Known before the tap, not discovered by it. See CopyableValue: this
+  // deployment is reached over http, where `navigator.clipboard` does not
+  // exist, and this particular block is the command an operator needs at the
+  // moment something is already wrong.
+  const [canCopy, setCanCopy] = useState(true);
+  const commandRef = useRef<HTMLElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    setCanCopy(typeof navigator !== "undefined" && Boolean(navigator.clipboard));
+  }, []);
+
+  const select = useCallback(() => {
+    const node = commandRef.current;
+    const selection = window.getSelection?.();
+    if (!node || !selection) return;
+    selection.removeAllRanges();
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    selection.addRange(range);
+    setSelected(true);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setSelected(false), 900);
+  }, []);
 
   // Without this, copying and then navigating away sets state on an unmounted
   // component — and in a page that polls, remounts are routine.
@@ -56,11 +80,13 @@ export function CommandBlock({
       clearTimeout(timer.current);
       timer.current = setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Clipboard access is denied on non-secure origins, which is exactly
-      // where this app runs on a LAN IP. The command stays selectable text,
-      // so the fallback is the operator highlighting it — no error to show.
+      // Denied at the moment of the tap. Fall through to the same selection
+      // the insecure-origin path uses rather than leaving the operator with a
+      // control that appeared to do nothing.
+      setCanCopy(false);
+      select();
     }
-  }, [command]);
+  }, [command, select]);
 
   const onWarn = tone === "onWarn";
 
@@ -85,8 +111,12 @@ export function CommandBlock({
       )}
 
       <div className="flex flex-wrap items-center gap-2">
+        {/* Wraps rather than scrolling sideways: a command an operator has to
+            retype is one they need all of, and a horizontally scrolling code
+            line hides its own end. */}
         <code
-          className={`type-mono min-w-0 flex-1 overflow-x-auto rounded-inner px-3 py-2 ${
+          ref={commandRef}
+          className={`type-mono min-w-0 flex-1 break-all rounded-inner px-3 py-2 ${
             onWarn ? "bg-warn-ink/10 text-warn-ink" : "bg-tint-2 text-ink"
           }`}
         >
@@ -94,15 +124,17 @@ export function CommandBlock({
         </code>
         <button
           type="button"
-          onClick={copy}
-          aria-label={label ?? `Copy command: ${command}`}
-          className={`shrink-0 rounded-pill px-3.5 py-1.5 text-[13px] font-semibold motion-tint ${
+          onClick={canCopy ? copy : select}
+          aria-label={
+            label ?? `${canCopy ? "Copy" : "Select"} command: ${command}`
+          }
+          className={`min-h-[44px] shrink-0 rounded-pill px-3.5 text-[13px] font-semibold motion-tint ${
             onWarn
               ? "border border-warn-ink/30 text-warn-ink hover:bg-warn-ink/10"
               : "border border-line-strong text-ink hover:bg-[var(--hover)]"
           }`}
         >
-          {copied ? "Copied" : "Copy"}
+          {canCopy ? (copied ? "Copied" : "Copy") : selected ? "Selected" : "Select"}
         </button>
       </div>
 

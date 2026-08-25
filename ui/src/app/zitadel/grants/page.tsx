@@ -84,7 +84,7 @@ export default function UpstreamGrantsPage() {
           error={grants.error}
           isEmpty={rows.length === 0}
           onRetry={() => grants.refetch()}
-          errorTitle="Couldn't read grants from the identity provider."
+          errorTitle="Couldn't read grants from the identity provider. Syndra itself is fine."
           skeleton={<RowSkeleton rows={8} avatar={false} label="Reading grants" />}
           empty={
             <EmptyState

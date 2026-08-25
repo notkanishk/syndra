@@ -199,11 +199,45 @@ type ProjectAccessView struct {
 	EffectiveRoleKeys []string        `json:"effective_role_keys"`
 }
 
+// AllowanceBand is the third band beside Source and Derived (design §6).
+//
+// Rendered distinctly on purpose. A subject can hold a role whose access they
+// do not have, and that is a trap unless it is visible — a role-holder list
+// that shows somebody as holding access they are suspended from is worse than
+// not showing the list at all. So "why does this person have access to X"
+// answers with exactly one of: the role gives it, a rule derived it, or
+// somebody explicitly decided — and this band carries the third, with actor and
+// time attached to the person rather than erased into an absence.
+type AllowanceBand struct {
+	ID        string `json:"id"`
+	Target    string `json:"target"`
+	Field     string `json:"field"`
+	Value     string `json:"value"`
+	Direction string `json:"direction"`
+	ActorID   string `json:"actor_id"`
+	Reason    string `json:"reason"`
+	// InForce and ReviewDue are derived at read time rather than stored, so
+	// neither can go stale in a column while the date it depends on passes.
+	InForce   bool   `json:"in_force"`
+	ReviewDue bool   `json:"review_due"`
+	CreatedAt string `json:"created_at"`
+	// Ended says when and how it stopped applying: a date that arrived, or a
+	// person who lifted it. Empty while it still applies. Lapsed, lifted and in
+	// force are three states an operator asks about differently.
+	Ended   string `json:"ended,omitempty"`
+	EndedBy string `json:"ended_by,omitempty"`
+}
+
 type UserAccessView struct {
-	User         UserProfile         `json:"user"`
-	Bundles      []Bundle            `json:"bundles"`
-	Projects     []ProjectAccessView `json:"projects"`
-	CleanupHints []string            `json:"cleanup_hints"`
+	User     UserProfile         `json:"user"`
+	Bundles  []Bundle            `json:"bundles"`
+	Projects []ProjectAccessView `json:"projects"`
+	// Allowances is the third band. Present whether or not any is in force,
+	// because a suspension that ended is part of the answer to "what has been
+	// decided about this person" and erasing it would leave the band looking
+	// like it had never been used.
+	Allowances   []AllowanceBand `json:"allowances"`
+	CleanupHints []string        `json:"cleanup_hints"`
 }
 
 // UserListItem is one row of the People index. Beyond the counts, it carries
@@ -339,8 +373,12 @@ type ExpiringGrant struct {
 // (design Decision 1: the self-mutation guard drops Syndra's own grant events,
 // so no webhook round-trip can confirm a propagation).
 type PendingPropagation struct {
-	ID             string     `json:"id"`
-	OpType         string     `json:"op_type"` // add | revoke | replace
+	ID string `json:"id"`
+	// Target is which system this row converges. Carried on the row itself
+	// because the drain that dispatches it must know: a TrueNAS row pushed
+	// through the Zitadel path has no project and no roles to send.
+	Target         string     `json:"target"`
+	OpType         string     `json:"op_type"` // add | revoke | replace | apply
 	UserID         string     `json:"user_id"`
 	ProjectID      string     `json:"project_id"`
 	RoleKeys       []string   `json:"role_keys"`
@@ -348,7 +386,7 @@ type PendingPropagation struct {
 	SourceRef      string     `json:"source_ref,omitempty"` // bundle/rule id for cascade rows; drives worklist attribution
 	CascadeID      string     `json:"cascade_id,omitempty"` // shared by every write one triggering event produced
 	ZitadelGrantID string     `json:"zitadel_grant_id,omitempty"`
-	Status         string     `json:"status"` // pending | in_flight | applied | failed
+	Status         string     `json:"status"` // pending | in_flight | applied | failed | superseded | abandoned
 	Attempts       int        `json:"attempts"`
 	LastError      string     `json:"last_error,omitempty"`
 	InitiatedBy    string     `json:"initiated_by"`
@@ -396,17 +434,27 @@ type CascadeGroup struct {
 }
 
 // DriftItem is one out-of-band grant discrepancy awaiting operator triage.
-// zitadel_only: exists in Zitadel, no Syndra intent. syndra_only: Syndra
-// expects it (direct grant), Zitadel lacks it. No item resolves automatically.
+// target_only: exists on the target, no Syndra intent. syndra_only: Syndra
+// expects it (direct grant), the target lacks it. No item resolves
+// automatically. Which target drifted is the row's `target` column, not part of
+// the drift type — `zitadel_only` was the pre-add-on name and would be a false
+// statement on any target that is not Zitadel.
 type DriftItem struct {
-	ID                string     `json:"id"`
+	ID string `json:"id"`
+
+	// Target names what drifted. Every other field on this row is a statement
+	// about that target — a role key means nothing without knowing whose role
+	// catalogue it belongs to, and "unexplained access" is unexplained
+	// somewhere in particular.
+	Target string `json:"target"`
+
 	UserID            string     `json:"user_id"`
 	ProjectID         string     `json:"project_id"`
 	RoleKeys          []string   `json:"role_keys"`
 	ZitadelGrantID    string     `json:"zitadel_grant_id,omitempty"`
 	DetectedAt        time.Time  `json:"detected_at"`
 	DetectionSource   string     `json:"detection_source"` // webhook | reconciliation_sweep
-	DriftType         string     `json:"drift_type"`       // zitadel_only | syndra_only
+	DriftType         string     `json:"drift_type"`       // target_only | syndra_only
 	Status            string     `json:"status"`           // pending_triage | attributed | revoked | marked_external
 	ResolvedAt        *time.Time `json:"resolved_at,omitempty"`
 	ResolvedBy        string     `json:"resolved_by,omitempty"`
@@ -419,6 +467,43 @@ type DriftItem struct {
 	UpstreamActor     string     `json:"upstream_actor,omitempty"`
 	UpstreamCreatedAt *time.Time `json:"upstream_created_at,omitempty"`
 	LastSeenAt        *time.Time `json:"last_seen_at,omitempty"`
+}
+
+// GrantProvenance is where an entitlement came from, and when the target was
+// last seen holding it.
+//
+// It answers one question: is this the same thing Syndra applied? A drift row
+// that cannot answer it makes every removal look like a stranger.
+type GrantProvenance struct {
+	// GrantedBy, GrantedAt and Reason are the decision Syndra recorded when the
+	// access was given. Empty when the ledger no longer holds it — which is
+	// itself an answer, and a different one.
+	GrantedBy string     `json:"granted_by,omitempty"`
+	GrantedAt *time.Time `json:"granted_at,omitempty"`
+	Reason    string     `json:"reason,omitempty"`
+	// Source says whether a person granted this directly or a bundle or rule
+	// derived it, with SourceRef naming which. "The rule that gives every
+	// member the workshop role" and "somebody granted this by hand" are
+	// different findings wearing the same row.
+	Source    string `json:"source,omitempty"`
+	SourceRef string `json:"source_ref,omitempty"`
+	// AppliedAt is when the TARGET ACCEPTED Syndra's write, with AppliedBy the
+	// actor the propagation was attributed to.
+	//
+	// The strongest thing Syndra can say about a removed entitlement, and the
+	// only one available when no read ever saw it: a grant applied at noon and
+	// removed at one is invisible to every observation and plain here. "Syndra
+	// applied this at 12:04 on Marta's approval, and it is not there now" is a
+	// different row from "expected, missing".
+	AppliedAt *time.Time `json:"applied_at,omitempty"`
+	AppliedBy string     `json:"applied_by,omitempty"`
+	// LastObservedAt is when a complete read last saw the TARGET holding it.
+	// The pair (granted, last observed) is what makes a removal legible: it
+	// existed, it was live this morning, it is gone now.
+	LastObservedAt *time.Time `json:"last_observed_at,omitempty"`
+	// ExpiresAt is when the grant was due to lapse anyway. A removal three days
+	// before an expiry is a different conversation from one with none.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 // DriftTriageItem is a DriftItem enriched for the triage queue: enough context
@@ -434,13 +519,35 @@ type DriftTriageItem struct {
 
 	// RoleInCatalogue is false when the role no longer exists in Syndra.
 	// Adopting such a row would recreate a retired role, so the UI says so.
+	// Read it only together with RoleCatalogueApplies.
 	RoleInCatalogue bool `json:"role_in_catalogue"`
+
+	// RoleCatalogueApplies is false on a target that has no role catalogue at
+	// all. RoleInCatalogue is then meaningless rather than false: nothing was
+	// retired, because there was never a catalogue to retire it from. Without
+	// this the UI would report every add-on drift row as a retired role.
+	RoleCatalogueApplies bool `json:"role_catalogue_applies"`
 
 	// UserStatus mirrors the directory ("active", "departed", …) and
 	// UserIsServiceAccount marks machine accounts, for which "adopt" is the
 	// wrong verb and "owned elsewhere" is almost always the right one.
 	UserStatus           string `json:"user_status,omitempty"`
 	UserIsServiceAccount bool   `json:"user_is_service_account"`
+
+	// Provenance is the history of the grant this row is about, for a
+	// `syndra_only` row: the same entitlement Syndra applied, not an
+	// independent finding that appeared from nowhere.
+	//
+	// A removal detected by comparing two sets reads, on the row, exactly like
+	// an unexplained absence — and an operator triaging it has no way to know
+	// that Syndra granted this deliberately, who did, why, and that the target
+	// was holding it as recently as this morning. Every one of those changes
+	// what they should do about it.
+	//
+	// Computed on read from the ledger and the last observation, never stored:
+	// a copy would be a second account of the same history, free to disagree
+	// with the row it came from.
+	Provenance *GrantProvenance `json:"provenance,omitempty"`
 
 	// OtherItemsForUser is how many OTHER pending items this same person has.
 	// "Marta has 2 more items" is the context that changes a revoke decision.
@@ -457,6 +564,11 @@ type DriftSummary struct {
 // ExternalGrantExclusion is an operator "this is legitimately external" marker
 // keyed by (user, project, role) — future detections for the triple are filtered.
 type ExternalGrantExclusion struct {
+	// Target scopes the exclusion. "This grant is legitimately external" is
+	// true of one target at a time: the same triple on another target is a
+	// different grant, made by different hands, and silencing it here would
+	// silence a finding nobody looked at.
+	Target    string    `json:"target"`
 	UserID    string    `json:"user_id"`
 	ProjectID string    `json:"project_id"`
 	RoleKey   string    `json:"role_key"`
@@ -485,6 +597,45 @@ type GovernanceSummary struct {
 	CleanupHints       []string                  `json:"cleanup_hints"`
 	PendingPropagation PendingPropagationSummary `json:"pending_propagation"`
 	Drift              DriftSummary              `json:"drift"`
+	// UnreconciledTargets are the targets Syndra currently cannot vouch for.
+	//
+	// It belongs beside the drift count and not inside it, because it is the
+	// reason a drift count may be wrong: a nightly sweep that has been unable to
+	// reach a target for a week looks, on every surface an operator opens, like
+	// a week with no drift. The absence of findings and the absence of readings
+	// are the same silence, and only one of them is good news.
+	UnreconciledTargets []UnreconciledTarget `json:"unreconciled_targets"`
+	// MergeFindings is how many differences a reconciliation found and was not
+	// entitled to resolve — a value the target moved and Syndra did not, a value
+	// both moved differently, or an account that is gone.
+	//
+	// Counted here beside the drift count and not inside it, because they are
+	// different questions: drift is access nobody can explain, and this is a
+	// disagreement about access everybody can explain and nobody has decided.
+	// A finding that cannot be counted on this page sits behind a landing screen
+	// saying nothing needs a person — which is the one thing it must never say
+	// while one does.
+	MergeFindings int `json:"merge_findings"`
+}
+
+// UnreconciledTarget is one target Syndra has not read for itself, and since
+// when.
+//
+// Restated here rather than reusing `db.TargetReconciliation` because `models`
+// must not import `db`; the mapping happens at the service seam. Only the
+// unreconciled rows reach this type, so `Since` is never nil — the "reconciled
+// fine" case is an absence from the list rather than a row saying so.
+type UnreconciledTarget struct {
+	Target string `json:"target"`
+	// Since is when Syndra stopped being able to vouch for it. Preserved across
+	// repeated failed sweeps, so the age grows rather than resetting every tick.
+	Since time.Time `json:"since"`
+	// LastSeen is the last time Syndra read the target for itself, which may be
+	// long before Since or absent entirely for a target never read.
+	LastSeen *time.Time `json:"last_seen,omitempty"`
+	// Reason is the first failure of the outage, not the latest — the one that
+	// started it is the one that explains it.
+	Reason string `json:"reason,omitempty"`
 }
 
 // PendingPropagationSummary surfaces the outbox depth + reachability so the UI
@@ -533,35 +684,16 @@ type Role struct {
 	UpdatedAt         time.Time `json:"updated_at"`
 }
 
-// ProvisioningIntent represents a pending infrastructure mutation
-// to be consumed by the Sync Service for LLDAP group management.
-type ProvisioningIntent struct {
-	ID             string     `json:"id"`
-	TargetUID      string     `json:"target_uid"`
-	Action         string     `json:"action"`
-	LLDAPGroup     string     `json:"lldap_group"`
-	SourceProject  string     `json:"source_project"`
-	SourceRole     string     `json:"source_role"`
-	WebhookEventID string     `json:"webhook_event_id,omitempty"`
-	IdempotencyKey string     `json:"idempotency_key"`
-	Status         string     `json:"status"`
-	ErrorMessage   string     `json:"error_message,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	AcknowledgedAt *time.Time `json:"acknowledged_at,omitempty"`
-	CompletedAt    *time.Time `json:"completed_at,omitempty"`
-}
-
-// ShadowCredential stores a secondary Argon2id-hashed password for LLDAP/Samba access.
+// ShadowCredential is the record that a member has set a credential on a
+// target, and when. It holds no credential: the value is forwarded to the
+// target and kept nowhere (change `addon-platform` group 11).
 type ShadowCredential struct {
-	ID             string     `json:"id"`
-	UserID         string     `json:"user_id"`
-	CredentialHash string     `json:"credential_hash,omitempty"`
-	Algorithm      string     `json:"algorithm"`
-	SaltParams     string     `json:"salt_params,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
-	RotatedAt      *time.Time `json:"rotated_at,omitempty"`
-	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+	ID        string     `json:"id"`
+	UserID    string     `json:"user_id"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	RotatedAt *time.Time `json:"rotated_at,omitempty"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 // ShadowCredentialAudit records credential lifecycle events.
@@ -576,12 +708,16 @@ type ShadowCredentialAudit struct {
 
 // ShadowCredentialStatus is the user-facing view (no hash exposed).
 type ShadowCredentialStatus struct {
-	HasCredential bool       `json:"has_credential"`
-	Algorithm     string     `json:"algorithm,omitempty"`
-	CreatedAt     *time.Time `json:"created_at,omitempty"`
-	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
-	RotatedAt     *time.Time `json:"rotated_at,omitempty"`
-	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
+	HasCredential bool `json:"has_credential"`
+	// NeedsReEnrolment is a member who enrolled before the bridge was retired.
+	// Their hash is gone and the system it was for does not exist, so they have
+	// to set a new one — and "you enrolled before the change" is a different
+	// sentence from "you have never set one" to somebody who remembers doing it.
+	NeedsReEnrolment bool       `json:"needs_re_enrolment,omitempty"`
+	CreatedAt        *time.Time `json:"created_at,omitempty"`
+	UpdatedAt        *time.Time `json:"updated_at,omitempty"`
+	RotatedAt        *time.Time `json:"rotated_at,omitempty"`
+	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
 }
 
 // CatalogRole is the computed view for the global role inventory.

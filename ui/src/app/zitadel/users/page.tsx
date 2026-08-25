@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { DirectWriteWarning, UpstreamShell } from "@/components/upstream/UpstreamShell";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -56,8 +57,8 @@ export default function UpstreamUsersPage() {
       syndraHref="/users"
       syndraLabel="See the same people as Syndra understands them"
     >
-      <div className="flex flex-wrap items-start gap-5">
-        <Card className="w-[320px] min-w-[260px] flex-none">
+      <div className="flex flex-col items-stretch gap-5 tablet:flex-row tablet:flex-wrap tablet:items-start">
+        <Card className="w-full tablet:w-[320px] tablet:min-w-[260px] tablet:flex-none">
           <CardHeader title="Accounts" count={rows.length} />
           <div className="row-divider px-4 py-3">
             <Input
@@ -72,7 +73,7 @@ export default function UpstreamUsersPage() {
             error={users.error}
             isEmpty={rows.length === 0}
             onRetry={() => users.refetch()}
-            errorTitle="Couldn't read users from the identity provider."
+            errorTitle="Couldn't read users from the identity provider. Syndra itself is fine."
             skeleton={<RowSkeleton rows={6} label="Reading users" />}
             empty={
               <EmptyState
@@ -109,7 +110,7 @@ export default function UpstreamUsersPage() {
           </ListStates>
         </Card>
 
-        <div className="min-w-[420px] flex-1">
+        <div className="w-full tablet:min-w-[420px] tablet:flex-1">
           {active ? (
             <UserGrants
               userId={active.id}
@@ -126,6 +127,7 @@ export default function UpstreamUsersPage() {
 function UserGrants({ userId, name, state }: { userId: string; name: string; state: string }) {
   const grants = useUpstreamUserGrants(userId);
   const remove = useUpstreamRemoveGrant();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [assigning, setAssigning] = useState(false);
   const [editing, setEditing] = useState<{ grantId: string; roleKeys: string[]; projectId: string } | null>(
     null,
@@ -158,7 +160,7 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
         error={grants.error}
         isEmpty={rows.length === 0}
         onRetry={() => grants.refetch()}
-        errorTitle="Couldn't read this person's grants."
+        errorTitle="Couldn't read this person's grants from the identity provider. Syndra itself is fine."
         skeleton={<RowSkeleton rows={3} avatar={false} label="Reading grants" />}
         empty={
           <EmptyState
@@ -168,7 +170,7 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
         }
       >
         {rows.map((grant) => (
-          <div key={grant.id} className="row-divider flex flex-wrap items-center gap-4 px-5 py-3">
+          <div key={grant.id} className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-4">
             <span className="min-w-[200px] flex-1 truncate text-[14.5px]">
               <ProjectName id={grant.projectId} fallback={grant.projectId} />{" "}
               {grant.roleKeys.map((key) => (
@@ -198,9 +200,13 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
                 onClick={async () => {
                   try {
                     await remove.mutateAsync({ userId, grantId: grant.id });
-                    toast.success("Grant removed upstream.");
+                    setOutcome({
+                      kind: "applied",
+                      message: "Grant removed in Zitadel",
+                      detail: "Syndra has no record of this change beyond the audit line.",
+                    });
                   } catch (error) {
-                    toast.error(error instanceof Error ? error.message : "That didn't go through.");
+                    setOutcome(outcomeFromError(error));
                   }
                 }}
               >
@@ -210,6 +216,8 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
           </div>
         ))}
       </ListStates>
+
+      {outcome && <ActionOutcome outcome={outcome} className="mx-5 mb-4" />}
 
       {assigning && <AssignDialog userId={userId} onClose={() => setAssigning(false)} />}
       {editing && (
@@ -225,6 +233,8 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
   const roles = useUpstreamProjectRoles(projectId || null);
   const [keys, setKeys] = useState("");
   const assign = useUpstreamAssignGrant();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
 
   const parsed = keys
     .split(",")
@@ -267,20 +277,30 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
             </p>
           )}
         </div>
-        <DirectWriteWarning what="Syndra will see this as access it did not cause." />
+        <DirectWriteWarning
+          what="Syndra will see this as access it did not cause."
+          acknowledged={acknowledged}
+          onAcknowledge={setAcknowledged}
+        />
       </div>
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter>
         <Button
           variant="danger"
-          disabled={!projectId || parsed.length === 0}
+          disabled={!projectId || parsed.length === 0 || !acknowledged}
           isPending={assign.isPending}
           onClick={async () => {
             try {
               await assign.mutateAsync({ userId, projectId, roleKeys: parsed });
-              toast.success("Grant assigned upstream.");
+              setOutcome({
+                kind: "applied",
+                message: "Grant assigned in Zitadel",
+                detail: "Syndra has no record of this change beyond the audit line.",
+              });
               onClose();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "That didn't go through.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
@@ -302,7 +322,9 @@ function EditRolesDialog({
   onClose: () => void;
 }) {
   const update = useUpstreamUpdateGrant();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [keys, setKeys] = useState(grant.roleKeys.join(", "));
+  const [acknowledged, setAcknowledged] = useState(false);
 
   const parsed = keys
     .split(",")
@@ -324,20 +346,30 @@ function EditRolesDialog({
             onChange={(event) => setKeys(event.target.value)}
           />
         </div>
-        <DirectWriteWarning what="Replacing a role set upstream can silently remove access Syndra thinks it granted." />
+        <DirectWriteWarning
+          what="Replacing a role set upstream can silently remove access Syndra thinks it granted."
+          acknowledged={acknowledged}
+          onAcknowledge={setAcknowledged}
+        />
       </div>
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter>
         <Button
           variant="danger"
-          disabled={parsed.length === 0}
+          disabled={parsed.length === 0 || !acknowledged}
           isPending={update.isPending}
           onClick={async () => {
             try {
               await update.mutateAsync({ userId, grantId: grant.grantId, roleKeys: parsed });
-              toast.success("Grant updated upstream.");
+              setOutcome({
+                kind: "applied",
+                message: "Grant updated in Zitadel",
+                detail: "Syndra has no record of this change beyond the audit line.",
+              });
               onClose();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "That didn't go through.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >

@@ -55,6 +55,33 @@ type RequestInitJSON = Omit<RequestInit, "body"> & {
 export async function request<T = unknown>(path: string, init?: RequestInitJSON): Promise<T> {
   const url = path.startsWith("/") ? `${API_BASE}${path}` : `${API_BASE}/${path}`;
 
+  // A mutation attempted with no network is refused here rather than sent.
+  //
+  // Refused, not failed, and the difference is what an operator does next: a
+  // refusal means nothing was attempted and the state they are looking at is
+  // the state that holds, where a failure leaves them wondering whether the
+  // write half-landed. `fetch` on a dead network rejects with a TypeError
+  // carrying no status, which reads as the second.
+  //
+  // Reads are left alone. A read that fails while offline fails harmlessly and
+  // its list already has an error state; blocking it here would only replace
+  // one honest failure with another.
+  //
+  // This is the whole of the offline write story. There is deliberately no
+  // client-side queue: a queue in the browser is a second ledger nobody can
+  // inspect, in a product whose argument is that Syndra decides and records.
+  const method = (init?.method ?? "GET").toUpperCase();
+  if (
+    method !== "GET" &&
+    typeof navigator !== "undefined" &&
+    navigator.onLine === false
+  ) {
+    throw new ApiError(0, {
+      error: "OFFLINE",
+      message: "You're offline, so this wasn't sent",
+    });
+  }
+
   const headers = new Headers(init?.headers);
   let body: BodyInit | undefined;
   if (init?.body !== undefined) {
@@ -87,11 +114,31 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
   if (!res.ok) {
     if (init?.preserveErrorBody) return parsed as T;
     // Session expired mid-SPA-session: /api/proxy is outside the middleware
-    // matcher, so without this the user is stuck on error toasts until their
-    // next full navigation (SC9). Redirect to re-auth; still throw so the
-    // caller's error path settles while the navigation happens.
+    // matcher, so without this the user is stuck on a failing screen until
+    // their next full navigation (SC9).
+    //
+    // A READ redirects to re-auth, carrying where they were so they come back
+    // to it — a member who tapped a link to their storage wants storage, not
+    // the landing.
+    //
+    // A MUTATION deliberately does not. Sessions here last weeks and are met
+    // on personal phones, so the way this is actually encountered is: an
+    // operator returns to a backgrounded tab, reads a plan, presses Apply, and
+    // the session is gone. Navigating away at that moment destroys the dialog,
+    // the plan they approved and any reason they had typed — and tells them
+    // nothing about whether the write landed. The refusal is reported in place
+    // instead, by the surface that ran it, which is the one thing this action
+    // needs to say: nothing was changed, and the plan is still here.
     if (res.status === 401 && typeof window !== "undefined" && window.location.pathname !== "/login") {
-      window.location.assign("/login");
+      if (method === "GET") {
+        const next = `${window.location.pathname}${window.location.search}`;
+        window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+      } else {
+        throw new ApiError(401, {
+          error: "SESSION_ENDED",
+          message: "Your session ended before this ran",
+        });
+      }
     }
     throw new ApiError(res.status, parsed as ApiErrorBody | string);
   }

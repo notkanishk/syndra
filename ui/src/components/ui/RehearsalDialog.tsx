@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 
+import { ApiError } from "@/lib/api-client";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import {
+  outcomeFromError,
+  type ActionOutcome as Outcome,
+  type OutcomeKind,
+} from "@/lib/outcome";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PlanReview, applyLabel, planNote } from "@/components/ui/PlanReview";
@@ -14,15 +20,23 @@ import type { BulkPlan } from "@/lib/queries/useBulkGrants";
  * Callers supply what varies (the title, the compose step if there is one, the
  * two mutations) and this owns what must not: that the plan is always computed
  * before anything is written, that the plan on screen is the server's verbatim,
- * that applying re-sends the same request, and that the result is presented as
- * a diff against the plan the operator approved rather than a fresh document.
+ * that applying cites the approval that plan became, and that the result is
+ * presented as a diff against the plan the operator approved rather than a
+ * fresh document.
  *
  * A surface that wrote its own version of this would eventually diverge on the
  * one step that matters, which is the step that happens before the write.
+ *
+ * The plan id lives here for the same reason. Every surface must hold the id
+ * the rehearsal returned and send exactly that — never one it composed, never
+ * one left over from a previous rehearsal — and every surface must recover the
+ * same way when the backend says the world moved. Three copies of that would
+ * be three chances for one of them to re-plan silently and apply the new diff
+ * as though the operator had read it.
  */
 
 /**
- * The toast after an apply. It reports three populations, and the one that must
+ * What an apply reports. It states three populations, and the one that must
  * never be folded into the others is `queued`: those rows are recorded here and
  * have not reached Zitadel, so the access is still whatever it was. Announcing
  * "12 people updated" after a bulk removal that never left the outbox tells an
@@ -39,11 +53,43 @@ export function resultMessage(plan: BulkPlan, noun: [string, string]): string {
   return `${parts.join(", ")}.`;
 }
 
+/**
+ * What happens to the queued rows, without making the operator know the rule.
+ *
+ * Two rules drain this queue and they are not symmetric: a withdrawal leaves on
+ * a background runner because a delayed revocation IS retained access, and
+ * everything that confers access waits for a human to resume it. §7 states the
+ * operator consequence plainly — somebody who has just approved something must
+ * never have to know which rule applied — so the copy says what will happen
+ * rather than naming the rule that decided it.
+ */
+export function queuedNote(plan: BulkPlan): string | undefined {
+  if (plan.summary.queued === 0) return undefined;
+  const withdrawal = plan.op === "remove_role" || plan.op === "remove_bundle";
+  return withdrawal
+    ? "Recorded here and not yet in Zitadel. Withdrawals send themselves — this one leaves within a few minutes, and the access holds until it does."
+    : "Recorded here and not yet in Zitadel. Anything that gives access waits for someone to resume the queue on Pending changes.";
+}
+
 /** An error only when something actually failed; queued rows are a warning. */
 export function resultTone(plan: BulkPlan): "success" | "warning" | "error" {
   if (plan.summary.failed > 0) return "error";
   if (plan.summary.queued > 0) return "warning";
   return "success";
+}
+
+/**
+ * The same judgement, in the vocabulary every surface reports in.
+ *
+ * `queued` outranks a clean apply on purpose: a plan where anything is
+ * recorded-and-not-dispatched has not finished, and calling the whole thing
+ * applied because most of it was is how "12 people updated" gets said about a
+ * door that is still open.
+ */
+export function resultKind(plan: BulkPlan): OutcomeKind {
+  if (plan.summary.failed > 0) return "failed";
+  if (plan.summary.queued > 0) return "queued";
+  return "applied";
 }
 
 interface RehearsalDialogProps {
@@ -58,9 +104,77 @@ interface RehearsalDialogProps {
   ready?: boolean;
   /** Solid destructive confirm rather than accent. */
   destructive?: boolean;
-  onRehearse: () => Promise<BulkPlan>;
-  onApply: () => Promise<BulkPlan>;
+  /**
+   * Computes the plan. Takes the scope acknowledgement rather than reading it
+   * from the caller, so a surface cannot acknowledge on the operator's behalf.
+   */
+  onRehearse: (acknowledgeScope: boolean) => Promise<BulkPlan>;
+  /**
+   * Applies the approval the rehearsal issued. The id is passed in rather than
+   * captured by the caller so there is exactly one place it can come from: the
+   * plan currently on screen.
+   */
+  onApply: (planId: string) => Promise<BulkPlan>;
   onClose: () => void;
+}
+
+/**
+ * Refusals that mean "the approval on screen can no longer be used". Each has a
+ * different cause and they share one recovery: show the current plan and make
+ * the operator approve it again.
+ *
+ * Read from the code rather than the message, because a message is prose and
+ * this is a branch.
+ */
+const STALE_PLAN_CODES = new Map<string, string>([
+  ["PLAN_STALE", "The state this was rehearsed against has changed."],
+  ["PLAN_EXPIRED", "This approval sat long enough to expire, so it was not used."],
+  ["PLAN_NOT_FOUND", "This approval is no longer on file, so it was not used."],
+  [
+    "PLAN_ALREADY_APPLIED",
+    "This approval was already applied once. Nothing was applied a second time — the plan below is current state, so it may well show nothing left to do.",
+  ],
+  ["PLAN_REQUEST_MISMATCH", "The request no longer matches the one this was approved for."],
+  // The sixth. Its absence meant a plan cited on the wrong surface fell through
+  // to a bare error with no recovery, which is the one path §8 exists to close.
+  ["PLAN_NOT_CITABLE_HERE", "This approval belongs to a different surface and cannot be applied here."],
+  // A re-plan is issued to the CURRENT operator, so it resolves this refusal
+  // rather than merely reporting it — the same recovery as every code above.
+  ["PLAN_NOT_YOURS", "That approval was somebody else's, so it was not used."],
+]);
+
+/**
+ * The headline above the per-code sentence.
+ *
+ * `PLAN_ALREADY_APPLIED` is the one code where "nothing was applied" is false:
+ * the earlier apply landed, and only the second attempt did nothing. The bold
+ * line is read first, so a headline that contradicts the sentence under it is
+ * worse than no headline.
+ */
+function staleHeadline(code: string): string {
+  return code === "PLAN_ALREADY_APPLIED"
+    ? "Nothing was applied twice. This is a new plan."
+    : "Nothing was applied. This is a new plan.";
+}
+
+function stalePlanError(error: unknown): ApiError | null {
+  return error instanceof ApiError && STALE_PLAN_CODES.has(error.code) ? error : null;
+}
+
+/** What moved, in the names an operator recognises. */
+function movedLabels(subjectIDs: string[], plan: BulkPlan | null): string[] {
+  const byID = new Map((plan?.outcomes ?? []).map((o) => [o.user_id, o.name || o.email]));
+  return subjectIDs.map((id) => byID.get(id) ?? id);
+}
+
+/**
+ * The backend declining to approve a change of this size without being asked
+ * twice. It carries the count it computed, which is the whole point: "too
+ * large" leaves an operator guessing at what they are being warned about.
+ */
+function cohortRefusal(error: unknown): { affected: string; limit: string } | null {
+  if (!(error instanceof ApiError) || error.code !== "COHORT_ACKNOWLEDGEMENT_REQUIRED") return null;
+  return { affected: error.details?.affected ?? "?", limit: error.details?.limit ?? "?" };
 }
 
 export function RehearsalDialog({
@@ -77,22 +191,108 @@ export function RehearsalDialog({
   // With no compose step there is nothing to fill in, so the dialog opens
   // straight into the rehearsal rather than making the operator press a button
   // whose only effect is to reveal the thing they came to see.
-  const [step, setStep] = useState<"compose" | "review" | "result">(compose ? "compose" : "review");
+  const [step, setStep] = useState<"compose" | "scope" | "review" | "result">(
+    compose ? "compose" : "review",
+  );
   const [plan, setPlan] = useState<BulkPlan | null>(null);
   const [busy, setBusy] = useState(false);
   const [autoRan, setAutoRan] = useState(false);
+  /**
+   * The refusal that sent us back to a fresh plan: which one it was, and which
+   * subjects the backend named as moved.
+   *
+   * Only PLAN_STALE carries subjects. Keying the banner on that list alone left
+   * the other five refusals swapping the approved plan for a freshly computed
+   * one with nothing on screen to say so — so the operator could
+   * press Apply believing they had already read this diff, which is exactly the
+   * gap the rehearsal exists to close, reintroduced in the recovery path.
+   */
+  const [stalePlan, setStalePlan] = useState<{ code: string; subjects: string[] } | null>(null);
+  /** Set when the backend refuses to approve a change of this size unasked. */
+  const [scope, setScope] = useState<{ affected: string; limit: string } | null>(null);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
-  async function run(fn: () => Promise<BulkPlan>, next: "review" | "result") {
+  /**
+   * Rehearse. A blast-radius refusal is not a failure — it is the backend
+   * asking the operator to say the number out loud — so it stops on its own
+   * step rather than closing the dialog.
+   */
+  async function rehearse(acknowledgeScope: boolean) {
     setBusy(true);
     try {
-      const result = await fn();
+      const result = await onRehearse(acknowledgeScope);
       setPlan(result);
-      setStep(next);
-      if (next === "result") toast[resultTone(result)](resultMessage(result, noun));
+      setStalePlan(null);
+      setScope(null);
+      setStep("review");
       return result;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "That didn't go through.");
+      const oversized = cohortRefusal(error);
+      if (oversized) {
+        setScope(oversized);
+        setStep("scope");
+        return null;
+      }
+      setOutcome(outcomeFromError(error));
       throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Apply, and re-plan rather than fail when the approval no longer holds.
+   *
+   * The operator stays on the review step looking at a CURRENT plan, with the
+   * subjects that moved named. What must not happen is the re-plan being
+   * applied on their behalf: they approved a diff, that diff is gone, and the
+   * new one is a new decision. So this refreshes and stops.
+   */
+  async function applyPlan() {
+    if (!plan?.plan_id) return;
+    setBusy(true);
+    try {
+      const result = await onApply(plan.plan_id);
+      setPlan(result);
+      setStalePlan(null);
+      setStep("result");
+      // On the result step, which already existed — the notification was a
+      // second surface reporting what this step is for, and the one that
+      // removed itself after four seconds.
+      setOutcome({
+        kind: resultKind(result),
+        message: resultMessage(result, noun),
+        detail: queuedNote(result),
+      });
+    } catch (error) {
+      const stale = stalePlanError(error);
+      if (!stale) {
+        setOutcome(outcomeFromError(error));
+        return;
+      }
+      // Deliberately NOT an outcome block. The stale-plan banner below is
+      // this refusal's report and a better one — it names the subjects that
+      // moved — and two `role="alert"` regions saying the same thing is two
+      // things a screen reader has to hear before reaching the plan.
+      setOutcome(null);
+      try {
+        // Already acknowledged once if it needed to be: the cohort has not
+        // grown, and making the operator confirm the size again to see what
+        // moved buries the thing they actually need to read.
+        const replanned = await onRehearse(true);
+        setPlan(replanned);
+        // Recorded for EVERY refusal in the set, not only the one that happens
+        // to carry details. The banner is what tells the operator the plan
+        // under their cursor is not the one they approved.
+        setStalePlan({ code: stale.code, subjects: Object.keys(stale.details ?? {}) });
+        setStep("review");
+      } catch {
+        setOutcome({
+          kind: "failed",
+          message: "Couldn't re-plan against current state",
+          detail: "Close and try again — nothing was applied.",
+        });
+      }
     } finally {
       setBusy(false);
     }
@@ -105,7 +305,7 @@ export function RehearsalDialog({
   useEffect(() => {
     if (compose || autoRan) return;
     setAutoRan(true);
-    void run(onRehearse, "review").catch(() => onClose());
+    void rehearse(false).catch(() => onClose());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compose, autoRan]);
 
@@ -117,17 +317,65 @@ export function RehearsalDialog({
         lede={
           step === "compose"
             ? lede
-            : step === "review"
-              ? "Rehearsed against live state. Nothing has changed yet."
-              : "Done. This is what happened."
+            : step === "scope"
+              ? "This is bigger than the usual change. Nothing has been computed yet."
+              : step === "review"
+                ? "Rehearsed against live state. Nothing has changed yet."
+                : "Done. This is what happened."
         }
       />
 
       {step === "compose" ? (
         <div className="flex flex-col gap-4 px-6">{compose}</div>
+      ) : step === "scope" ? (
+        <div className="px-6">
+          <div
+            role="status"
+            className="rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-[13.5px] text-warn-text"
+          >
+            <p className="font-medium">
+              This would change access for {scope?.affected} {noun[1]}.
+            </p>
+            <p className="mt-1">
+              Anything above {scope?.limit} is confirmed separately, because a number is the one
+              part of a bulk change that is easy to get wrong and hard to see. Confirming computes
+              the plan — it still writes nothing.
+            </p>
+          </div>
+        </div>
       ) : (
-        <PlanReview plan={plan} />
+        <>
+          {stalePlan && (
+            <div
+              // alert, not status: this has to be read BEFORE the next click,
+              // and a polite live region is announced whenever the screen
+              // reader gets round to it.
+              role="alert"
+              className="mx-6 mb-3 rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-[13.5px] text-warn-text"
+            >
+              <p className="font-medium">{staleHeadline(stalePlan.code)}</p>
+              <p className="mt-1">
+                {STALE_PLAN_CODES.get(stalePlan.code)} Below is the plan against current state —
+                review it again before applying.
+              </p>
+              {stalePlan.subjects.length > 0 && (
+                <p className="mt-1">
+                  {stalePlan.subjects.length === 1
+                    ? "This row moved"
+                    : `${stalePlan.subjects.length} rows moved`}{" "}
+                  since you approved: {movedLabels(stalePlan.subjects, plan).join(", ")}.
+                </p>
+              )}
+            </div>
+          )}
+          <PlanReview plan={plan} />
+        </>
       )}
+
+      {/* The plan's own result, on the step that exists for it. A refusal
+          appears on whichever step the operator is standing on, because that
+          is where they will look for the reason the button did nothing. */}
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter
         note={
@@ -144,11 +392,28 @@ export function RehearsalDialog({
               variant="accent"
               isPending={busy}
               disabled={!ready}
-              onClick={() => void run(onRehearse, "review").catch(() => {})}
+              onClick={() => void rehearse(false).catch(() => {})}
             >
               Rehearse
             </Button>
-            <Button onClick={onClose}>Cancel</Button>
+            <Button disabled={busy} onClick={onClose}>
+              Cancel
+            </Button>
+          </>
+        )}
+
+        {step === "scope" && (
+          <>
+            <Button
+              variant="dangerConfirm"
+              isPending={busy}
+              onClick={() => void rehearse(true).catch(() => {})}
+            >
+              Yes, plan for {scope?.affected} {noun[1]}
+            </Button>
+            <Button disabled={busy} onClick={compose ? () => setStep("compose") : onClose}>
+              {compose ? "Back" : "Cancel"}
+            </Button>
           </>
         )}
 
@@ -157,15 +422,24 @@ export function RehearsalDialog({
             <Button
               variant={destructive ? "dangerConfirm" : "accent"}
               isPending={busy}
-              disabled={!plan || plan.summary.apply === 0}
-              onClick={() => void run(onApply, "result").catch(() => {})}
+              disabled={!plan?.plan_id || plan.summary.apply === 0}
+              onClick={() => void applyPlan()}
             >
               {plan ? applyLabel(plan, noun) : "Rehearsing…"}
             </Button>
+            {/*
+              Disabled while a write is out. Abandoning the dialog mid-apply
+              does not abandon the write — it only takes away the report of
+              what it did, which is the one thing the operator still needs.
+            */}
             {compose ? (
-              <Button onClick={() => setStep("compose")}>Back</Button>
+              <Button disabled={busy} onClick={() => setStep("compose")}>
+                Back
+              </Button>
             ) : (
-              <Button onClick={onClose}>Cancel</Button>
+              <Button disabled={busy} onClick={onClose}>
+                Cancel
+              </Button>
             )}
           </>
         )}
