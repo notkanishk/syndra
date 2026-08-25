@@ -235,11 +235,13 @@ Three regressions found by auditing the finished branch. See design §9.
   cover the poll, both manual dismissals, the back gesture and the
   pick-a-destination exception.
 
-- [ ] 9.4 Promote `@typescript-eslint/no-unused-vars` from warning to error, so
-  the next unrendered outcome fails the build rather than scrolling past. Needs
-  four unrelated dead bindings cleared first: `onDeleted` in `bundles/page.tsx`
-  and `policies/page.tsx`, `stopped` in `AddRolesToBundle.tsx`, `_ack` in
-  `BulkDialog.test.tsx`.
+- [x] 9.4 **Done** on `addon-platform`, recorded there as 34.17. The rule is an
+  error with a leading-underscore opt-out, and the four dead bindings it named
+  went with it — two of which were not dead at all: `onDeleted` in
+  `bundles/page.tsx` and `policies/page.tsx` was an unrendered outcome exactly
+  as this row predicted, so deleting a bundle left the parent selecting one that
+  no longer existed. ESLint had been reporting both as warnings, which a clean
+  run still prints.
 
 ## 10. The audit's remainder
 

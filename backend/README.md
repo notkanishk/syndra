@@ -18,7 +18,10 @@ Configuration comes from the environment; every variable is documented in
 | `cmd/api/` | Entry point. Wires dependencies, enforces the production signing-key guard |
 | `cmd/syndra-token/` | Mints an M2M access token from the Zitadel machine key. Used by the Actions registration scripts, not at runtime |
 | `internal/handlers/` | HTTP layer. Strict JSON decoding on every mutation endpoint |
-| `internal/services/` | Policy engine — rule evaluation, bundle publishing, cascades, drift triage, provisioning intents |
+| `internal/services/` | Policy engine — rule evaluation, bundle publishing, cascades, drift triage, entitlement rehearsal |
+| `internal/services/merge/` | The three-way merge classifier. A pure function over ours/theirs/base, guarded against ever learning a target's name |
+| `internal/addons/` | The target plane's half of the backend: registry, capability manifests, signed transport, operation policy, dispatch |
+| `internal/repoguard/` | Tests, not code. Reads the tracked working tree and fails on anything specific to one deployment |
 | `internal/claims/` | Token shaping. **The only shaper**, applied on read by both the Actions v2 handler and the simulator |
 | `internal/zitadel/` | Management API client. `StatusError` carries the upstream HTTP status |
 | `internal/directory/` | Reads users, projects, and roles. Flips between the demo catalog and live Zitadel based on configuration |
