@@ -192,7 +192,7 @@ and the allowance surfaces. Listed as they were scoped:
 3. **Dormant-account housekeeping** (9.11–9.12) — the only one that also needs a listing endpoint.
 4. **Allowance authoring and review-date surfacing** (9.22, 9.25).
 5. **Connection instructions** (10.8) — the account name is already on the member page; the mount instructions are not.
-6. **A button for the revocation composition** (6.17) — `POST /targets/{t}/users/{id}/revoke-access` exists and nothing calls it. Its copy is fixed by the backend and must be shown verbatim: this target cannot end a session.
+6. **A button for the revocation composition** (6.17) — **built.** `TakeAwayDialog`, reached from `PeopleOnTarget`, calls `POST /targets/{t}/users/{id}/revoke-access` through `useRevokeTargetAccess`. Its copy is fixed by the backend and shown verbatim: this target cannot end a session. The line above described it as having no caller, which stopped being true and was not corrected here.
 
 **It has now run end to end — against a stand-in, not a NAS.** The dev LXC ran
 the whole platform: migrations 25→34 against a clone of the live database, both

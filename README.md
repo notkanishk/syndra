@@ -184,8 +184,20 @@ Running in production for a single makerspace. Honest maturity by capability:
 | Service catalog, access requests | Integrated |
 | Topology graph, audit log | Integrated |
 | Lifecycle event propagation, drift triage | Integrated |
-| LDAP sync | **Partial** — reconciliation deferred; password compatibility unresolved |
-| Provisioning | **Partial** — reconciliation and compensating revocations deferred |
+| Target add-ons, provisioning, revocation | Integrated — one target written (TrueNAS SMB) |
+| Reconciliation as a three-way merge | Integrated |
+| Touch and small-screen console | **Partial** — a per-route manual a11y pass and a handful of undersized inline type sizes are still open |
+
+**The target plane has not reached production.** The two target rows run on the
+development deployment against the real NAS; the production host predates them
+and carries no add-on, and putting one there is a
+separate decision with its own migrations.
+
+The LDAP bridge that used to be listed here is **gone** — `sync/`, the
+provisioning-intent queue and the password vault were removed when targets moved
+behind add-ons. One consequence outlives it: a member who enrolled before that
+cutover must set a new storage credential, because TrueNAS takes plaintext and
+nothing else, so no stored hash could have been carried across.
 
 Current gaps are tracked in [`openspec/NEXT.md`](openspec/NEXT.md) rather than
 smoothed over here.
