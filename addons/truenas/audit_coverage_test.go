@@ -159,3 +159,40 @@ func TestHealthStillAsksWhetherAuditingIsOnAtAll(t *testing.T) {
 		t.Fatalf("only the switched-off share belongs on the target-level answer: %v", h.UnauditedShares)
 	}
 }
+
+// The primary group's own shape. Observed as a record carrying an id; the bare
+// form is tolerance for a release this add-on has not met, and tolerance
+// nothing exercises is indistinguishable from tolerance that does not work.
+func TestThePrimaryGroupIsReadFromWhicheverFormArrives(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{"the record this release answers with", `{"id":41,"bsdgrp_gid":545}`, "41"},
+		{"a bare id", `41`, "41"},
+		{"a quoted id", `"41"`, "41"},
+		{"absent", ``, ""},
+		{"null", `null`, ""},
+		{"a record with no id", `{"bsdgrp_gid":545}`, ""},
+		// Costs the primary group, never the read: the caller reports what it
+		// could not determine, and failing here would lose the other groups too.
+		{"something else entirely", `["surprise"]`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			id, ok := primaryGroupID([]byte(tc.raw))
+			if !ok {
+				if tc.want != "" {
+					t.Fatalf("want %q, got nothing", tc.want)
+				}
+				return
+			}
+			if tc.want == "" {
+				t.Fatalf("want nothing, got %q", id.String())
+			}
+			if id.String() != tc.want {
+				t.Errorf("id = %q, want %q", id.String(), tc.want)
+			}
+		})
+	}
+}
