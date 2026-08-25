@@ -83,9 +83,9 @@ func TestAMutationInFlightSettlesRatherThanBeingAbandoned(t *testing.T) {
 	// while the blocking write is held would queue behind it — the test would
 	// deadlock waiting to construct the request it needs in order to proceed.
 	body := withContractVersion(t, withFingerprint(t, s, `{"call_id":"c1","subject":"sub-1",
-		"email":"ada@x.edu","desired":{"group":["lab_makers"],"enabled":true}}`))
+		"email":"ada@example.edu","desired":{"group":["lab_makers"],"enabled":true}}`))
 	second := withContractVersion(t, withFingerprint(t, s,
-		`{"call_id":"c2","subject":"sub-1","email":"ada@x.edu","desired":{"enabled":false}}`))
+		`{"call_id":"c2","subject":"sub-1","email":"ada@example.edu","desired":{"enabled":false}}`))
 
 	applied := make(chan int, 1)
 	go func() {

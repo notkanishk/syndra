@@ -307,7 +307,7 @@ func TestConvergenceIsLevelTriggeredInBothDirections(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	off := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu",
+	off := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu",
 		"desired":{"group":[],"enabled":false,"smb_enabled":false}}`)
 	if decodeOutcome(t, off).Effect != EffectApplied {
 		t.Fatalf("want applied: %s", off.Body.String())
@@ -330,7 +330,7 @@ func TestConvergenceIsLevelTriggeredInBothDirections(t *testing.T) {
 	if err := s2.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
-	on := postApply(t, s2, `{"call_id":"c2","subject":"sub-1","email":"ada@x.edu",
+	on := postApply(t, s2, `{"call_id":"c2","subject":"sub-1","email":"ada@example.edu",
 		"desired":{"group":["lab_makers"],"enabled":true,"smb_enabled":true}}`)
 	if decodeOutcome(t, on).Effect != EffectApplied {
 		t.Fatalf("restoration must go through the same apply: %s", on.Body.String())
@@ -408,7 +408,7 @@ func TestAnOutOfBandRenameIsRecognisedRatherThanRecreated(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu",
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu",
 		"desired":{"group":["lab_makers"],"enabled":true,"smb_enabled":true}}`)
 	out := decodeOutcome(t, rr)
 	if len(m.creates) != 0 {
@@ -431,7 +431,7 @@ func TestAMovedSubjectRefusesTheApplyAndMutatesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu","fingerprint":"stale",
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu","fingerprint":"stale",
 		"desired":{"group":[],"enabled":false}}`)
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("want 409, got %d (%s)", rr.Code, rr.Body.String())
@@ -453,7 +453,7 @@ func TestAMatchingFingerprintProceeds(t *testing.T) {
 	}
 	current := Subject{Username: "ada", UID: 3001, Groups: []string{"lab_makers"}, Enabled: true, SMBEnabled: true}
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu","fingerprint":"`+
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu","fingerprint":"`+
 		fingerprintSubject(&current)+`","desired":{"group":[],"enabled":false}}`)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("a matching fingerprint must proceed: %d (%s)", rr.Code, rr.Body.String())
@@ -464,7 +464,7 @@ func TestAMatchingFingerprintProceeds(t *testing.T) {
 // second mutating call.
 func TestAReplayedCallIdDoesNotMutateTwice(t *testing.T) {
 	s, m := applyServer(t, `[]`)
-	const body = `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu","desired":{"group":["lab_makers"]}}`
+	const body = `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu","desired":{"group":["lab_makers"]}}`
 
 	first := postApply(t, s, body)
 	if first.Code != http.StatusOK {
@@ -488,7 +488,7 @@ func TestAnApplyDuringAMaintenanceWindowIsRefusedAsRetryable(t *testing.T) {
 	s, m := applyServer(t, `[]`)
 	_ = s.life.Set(LifecycleReadOnly, "maintenance")
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu","desired":{"group":[]}}`)
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu","desired":{"group":[]}}`)
 	if rr.Code != http.StatusServiceUnavailable || rr.Header().Get("Retry-After") == "" {
 		t.Fatalf("want a retryable refusal, got %d %v", rr.Code, rr.Header())
 	}
@@ -503,7 +503,7 @@ func TestAnApplyDuringAMaintenanceWindowIsRefusedAsRetryable(t *testing.T) {
 func TestAnUnknownDesiredFieldIsRefused(t *testing.T) {
 	s, m := applyServer(t, `[]`)
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu","desired":{"quota_bytes":5}}`)
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu","desired":{"quota_bytes":5}}`)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d (%s)", rr.Code, rr.Body.String())
 	}
@@ -519,7 +519,7 @@ func TestPlanningMutatesNothingAndFingerprintsWhatItRead(t *testing.T) {
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
-	const body = `{"subjects":[{"subject":"sub-1","email":"ada@x.edu","desired":{"group":["builtin_users"]}}]}`
+	const body = `{"subjects":[{"subject":"sub-1","email":"ada@example.edu","desired":{"group":["builtin_users"]}}]}`
 
 	rr := httptest.NewRecorder()
 	planInto(t, s, rr, body)
@@ -572,7 +572,7 @@ func TestAnOversizedRequestIsRefusedWithTheCountItComputed(t *testing.T) {
 		}
 		b.WriteString(`{"subject":"s`)
 		b.WriteString(strconvI(int64(i)))
-		b.WriteString(`","email":"a@x.edu","desired":{}}`)
+		b.WriteString(`","email":"a@example.edu","desired":{}}`)
 	}
 	b.WriteString(`]}`)
 
@@ -626,7 +626,7 @@ func TestAnUnnamedFieldIsLeftAloneRatherThanZeroed(t *testing.T) {
 	}
 
 	// Only the lifecycle half is named; `group` is absent.
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu","desired":{"smb_enabled":false}}`)
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu","desired":{"smb_enabled":false}}`)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
 	}
@@ -649,7 +649,7 @@ func TestAnUntestedMajorRefusesTheApplyWithoutWriting(t *testing.T) {
 	// version set only here would be read back over on the first call.
 	m.fakeRPC.version, s.nas.version = "27.10.0", "27.10.0"
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu","desired":{"group":["lab_makers"]}}`)
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu","desired":{"group":["lab_makers"]}}`)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("want 422, got %d (%s)", rr.Code, rr.Body.String())
 	}
@@ -738,7 +738,7 @@ func TestAnApplyWithoutAFingerprintIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const body = `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu","desired":{"enabled":false}}`
+	const body = `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu","desired":{"enabled":false}}`
 	rr := httptest.NewRecorder()
 	applyInto(t, s, rr, body)
 
@@ -759,7 +759,7 @@ func TestGroupsAreWrittenAsTheIdsTheReadResolves(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu","desired":{"group":["lab_makers"]}}`)
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu","desired":{"group":["lab_makers"]}}`)
 	if decodeOutcome(t, rr).Effect != EffectApplied {
 		t.Fatalf("want applied: %s", rr.Body.String())
 	}
@@ -791,7 +791,7 @@ func TestAnUnknownGroupIsRefusedRatherThanDropped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu","desired":{"group":["no_such_group"]}}`)
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu","desired":{"group":["no_such_group"]}}`)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("want a refusal, got %d (%s)", rr.Code, rr.Body.String())
 	}
@@ -909,7 +909,7 @@ func TestTheFingerprintComesFromTheReadAndNotFromTheRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu",
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu",
 		"desired":{"group":["lab_makers"],"enabled":true}}`)
 	out := decodeOutcome(t, rr)
 	if out.Effect != EffectApplied {
@@ -941,7 +941,7 @@ func TestObservedCarriesOnlyTheFieldsTheApplyManages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu",
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu",
 		"desired":{"enabled":false}}`)
 	out := decodeOutcome(t, rr)
 	if _, present := out.Observed[FieldEnabled]; !present {
@@ -967,7 +967,7 @@ func TestAWriteThatCannotBeReadBackIsReportedAsUnverified(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@x.edu",
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu",
 		"desired":{"group":["lab_makers"],"enabled":true}}`)
 	out := decodeOutcome(t, rr)
 	if out.Effect != EffectApplied || !out.Unverified {

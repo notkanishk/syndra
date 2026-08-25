@@ -77,7 +77,7 @@ func TestTheDatasetIsDerivedFromTheSharePath(t *testing.T) {
 	for path, want := range map[string]string{
 		"/mnt/pool0/main":                         "pool0/main",
 		"/mnt/pool0/application_data/gitlab_data": "pool0/application_data/gitlab_data",
-		"/mnt/tank/": "tank",
+		"/mnt/tank/":                              "tank",
 		// Not a dataset path: skipped rather than guessed at.
 		"/some/other/place": "",
 		"":                  "",

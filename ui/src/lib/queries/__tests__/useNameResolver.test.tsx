@@ -26,7 +26,7 @@ let lookupUsers: Record<string, { display_name: string; email: string }>;
 
 beforeEach(() => {
   catalog = {
-    users: [{ id: USER_ID, name: "Jane Doe", email: "jane@x.edu" }],
+    users: [{ id: USER_ID, name: "Jane Doe", email: "jane@example.edu" }],
     projects: [{ id: PROJECT_ID, name: "Lab Ops", roles: [{ key: ROLE_KEY, label: "Mentor" }] }],
     applications: [],
   };
@@ -126,7 +126,7 @@ describe("useNameResolver (full-catalog)", () => {
   it("resolves a catalog miss from the backend lookup", async () => {
     // The case that motivated the fallback: an id the user list doesn't carry
     // but the directory can still name. Without this it renders as a raw id.
-    lookupUsers = { nope: { display_name: "Deleted Person", email: "gone@x.edu" } };
+    lookupUsers = { nope: { display_name: "Deleted Person", email: "gone@example.edu" } };
     renderProbe();
     await waitFor(() => expect(screen.getByTestId("user-unknown").textContent).toBe("Deleted Person"));
   });
@@ -205,7 +205,7 @@ describe("useNameResolver (full-catalog)", () => {
     await waitFor(() => expect(screen.getByTestId("user-unknown").textContent).toBe("MISS"));
 
     // Simulate a user-create: the catalog now includes the previously-unknown id.
-    catalog.users.push({ id: "nope", name: "New Person", email: "new@x.edu" });
+    catalog.users.push({ id: "nope", name: "New Person", email: "new@example.edu" });
     await client.invalidateQueries({ queryKey: ["name-catalog"] });
 
     await waitFor(() => expect(screen.getByTestId("user-unknown").textContent).toBe("New Person"));
