@@ -199,12 +199,26 @@ The target limits authentication attempts and imposes an extended lockout when e
 - **THEN** the add-on MUST stop issuing further calls for the cooldown period
 - **AND** MUST report the open circuit through health rather than failing each queued row individually
 
-### Requirement: Activity reporting MUST disclose where auditing is disabled
+### Requirement: Activity reporting MUST disclose where the member was not being watched
 
-SMB auditing is configured per share. When auditing is off for a share, activity queries return nothing for it. The add-on MUST report which shares have auditing disabled alongside any activity result.
+SMB auditing is configured per share AND per group: a share carries `enable`, a `watch_list` that narrows recording to named groups, and an `ignore_list` that excludes them. A share can therefore be audited and still record nothing about a given account. The add-on MUST report, alongside any activity result, the shares that were not recording the account the result is about — whether because auditing is off or because its scope excludes them.
 
-#### Scenario: Empty activity distinguishes quiet from unaudited
+The target-level question — is auditing switched on at all — is a different one, is what target health reports, and MUST NOT be substituted for this: telling an operator that auditing is disabled on a share where it is enabled but scoped sends them to a setting they will find already correct.
 
-- **WHEN** an operator requests activity and one or more shares have auditing disabled
+#### Scenario: Empty activity distinguishes quiet from unwatched
+
+- **WHEN** an operator requests activity and one or more shares were not recording that account
 - **THEN** the response MUST name those shares
 - **AND** MUST NOT present an empty result as evidence of no activity
+
+#### Scenario: An enabled share scoped past the member counts as not watching
+
+- **WHEN** a share has auditing enabled and a watch list that names no group the account belongs to, or an ignore list that names one
+- **THEN** the response MUST name that share
+- **AND** the account's primary group MUST count towards both lists, since it is carried in its own field and not repeated in the account's group list
+
+#### Scenario: Coverage that could not be determined is not reported as complete
+
+- **WHEN** the share list or the account's groups cannot be read
+- **THEN** the response MUST say so
+- **AND** MUST NOT return an empty list, which asserts that every share was watching

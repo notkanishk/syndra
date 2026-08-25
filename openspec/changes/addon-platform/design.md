@@ -229,7 +229,7 @@ The idempotency store covers every mutating call, not a chosen few. §15 decline
 - **Session revocation does not exist.** There is no `smb.status`, `smb.sessions`, or close/disconnect method. Revocation ships as an entitlement change resolving `enabled` and `smb_enabled` to disabled — `user.update({locked: true, smb: false})` — plus `password.rotate`, and the UI MUST state that established sessions end on reconnect rather than immediately.
 - **Quotas are storage, not bandwidth.** `pool.dataset.set_quota` / `get_quota`; Syndra owns the thresholds and alerting.
 - **Hashes never leave the add-on.** `user.query` returns `unixhash` and `smbhash` — the NT hash is a pass-the-hash credential. The add-on passes `select` to fetch only what it needs and strips those fields on every path.
-- **Activity needs enabling.** SMB auditing is per-share; `activity.get` reports which shares have it off rather than silently returning nothing.
+- **Activity needs enabling, and enabling is not one switch.** SMB auditing is per share and per group — `enable`, plus a `watch_list` that narrows it and an `ignore_list` that excludes. `activity.get` reports the shares that were not recording the account it is answering about, rather than silently returning nothing; target health answers the separate target-level question of whether auditing is on at all.
 
 ### 11. Usernames derive from the email localpart, once, and are then recorded
 
