@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { Badge } from "@/components/ui/Badge";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -185,12 +186,9 @@ export function TokenPreview({
                 <span className="text-[13.5px] text-faint">None in this project.</span>
               ) : (
                 simulation.data.raw_roles.map((role) => (
-                  <span
-                    key={role}
-                    className="rounded-pill bg-tint-2 px-2.5 py-1 font-mono text-[12.5px]"
-                  >
+                  <Badge key={role} className="type-mono">
                     {role}
-                  </span>
+                  </Badge>
                 ))
               )}
             </div>

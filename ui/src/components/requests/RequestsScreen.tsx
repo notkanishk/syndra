@@ -7,7 +7,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { Button } from "@/components/ui/Button";
+import { Button, PILL } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import {
@@ -532,7 +532,7 @@ function RequestDialog({
                 type="button"
                 aria-pressed={howLong === value}
                 onClick={() => setHowLong(value)}
-                className={`min-h-[44px] rounded-pill px-3.5 py-[7px] text-[13px] font-semibold motion-tint desktop:min-h-0 ${
+                className={`rounded-pill font-semibold motion-tint ${PILL.md} ${
                   howLong === value ? "bg-accent-dense text-accent-ink" : "bg-tint-2 text-ink"
                 }`}
               >

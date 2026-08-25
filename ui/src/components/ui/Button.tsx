@@ -27,6 +27,27 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   reason?: string;
 }
 
+/**
+ * The pill metric, exported because several controls are this box and are not
+ * this component: the view switch, the sound switch, the "how long" choice on a
+ * request, `FilterPills`, `Tabs`. Each carries its own semantics — a radiogroup,
+ * a switch, a pressed state — and forcing them through `Button` would mean props
+ * only they use. What they must not each carry is their own idea of the numbers.
+ *
+ * They did. Across the product the same pill was px-3.5 or px-4, 13px or 13.5px
+ * or 14.5px, and py-1.5 or py-[7px], so a row containing a filter, a tab and a
+ * button showed three heights. Importing this is what stops that recurring;
+ * `one-control-surface.test.ts` is what stops somebody typing it out again.
+ *
+ * The 44px floor holds through the tablet range on purpose — 720–1080 is a
+ * tablet, which is still a thumb — and lifts above the desktop breakpoint,
+ * where the control returns to its dense size.
+ */
+export const PILL: Record<Size, string> = {
+  sm: "min-h-[44px] px-3.5 text-[13px] desktop:min-h-0 desktop:py-1.5",
+  md: "min-h-[44px] px-4 text-[13.5px] desktop:min-h-0 desktop:py-[7px]",
+};
+
 /** Every label on this control is 13–13.5px, which is small text by WCAG at
  *  any weight — so a filled variant takes the dense accent, not the bright
  *  one. `--accent` under `--accent-ink` is 4.18:1 and fails; `--accent-dense`
@@ -140,10 +161,7 @@ function buttonClasses({
   //
   // The floor stays up through the tablet range deliberately. 720–1080 is a
   // floor operator holding a tablet, which is still a thumb.
-  const sizeClass =
-    size === "sm"
-      ? "min-h-[44px] px-3.5 text-[13px] desktop:min-h-0 desktop:py-1.5"
-      : "min-h-[44px] px-4 text-[13.5px] desktop:min-h-0 desktop:py-[7px]";
+  const sizeClass = PILL[size];
   // `press`, and a 3% scale-down rather than a translate, so the button stays
   // under the finger. Destructive buttons behave identically — muscle memory
   // must never depend on what a button does.

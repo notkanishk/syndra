@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { ListStates, EmptyState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
@@ -303,13 +305,9 @@ export default function PeoplePage() {
           {rows.length > visible.length && (
             <div className="row-divider flex items-center gap-4 px-5 py-3.5">
               <span className="text-[13.5px] text-faint">{rows.length - visible.length} more</span>
-              <button
-                type="button"
-                onClick={() => setLimit((current) => current + PAGE)}
-                className="min-h-[44px] rounded-pill border border-line-strong px-4 text-[13.5px] font-semibold motion-tint hover:bg-[var(--hover)] desktop:min-h-0 desktop:py-1.5"
-              >
+              <Button onClick={() => setLimit((current) => current + PAGE)}>
                 Load next {Math.min(PAGE, rows.length - visible.length)}
-              </button>
+              </Button>
             </div>
           )}
         </ListStates>
@@ -451,10 +449,10 @@ function PersonRow({
             // difference between two people in the same bundle is visible.
             const version = entry.bundle_versions?.[name];
             return (
-              <span key={name} className="rounded-pill bg-tint-2 px-2.5 py-1 text-[12.5px]">
+              <Badge key={name}>
                 {name}
                 {version ? <span className="text-faint"> v{version}</span> : null}
-              </span>
+              </Badge>
             );
           })
         ) : (

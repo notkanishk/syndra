@@ -85,9 +85,7 @@ export function TakeAwayDialog({
           </div>
         )}
         <ModalFooter>
-          <Button variant="accent" onClick={onClose}>
-            Close
-          </Button>
+          <Button onClick={onClose}>Close</Button>
         </ModalFooter>
       </Modal>
     );

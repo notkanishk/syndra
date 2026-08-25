@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { PILL } from "@/components/ui/Button";
+
 import { CHIME_FIRST_PLAY_EVENT, isChimeEnabled, setChimeEnabled } from "@/lib/driftChime";
 import { useReducedMotion } from "@/lib/useViewport";
 
@@ -43,7 +45,7 @@ export function ChimeToggle() {
           setChimeEnabled(!enabled);
           setEnabled(!enabled);
         }}
-        className={`min-h-[44px] rounded-pill px-4 text-[13.5px] font-semibold motion-tint desktop:min-h-0 desktop:py-[7px] ${
+        className={`rounded-pill font-semibold motion-tint ${PILL.md} ${
           enabled ? "bg-accent-dense text-accent-ink" : "border border-line-strong text-muted"
         }`}
       >

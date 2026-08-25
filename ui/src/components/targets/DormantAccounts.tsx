@@ -3,6 +3,7 @@
 import { formatBytes } from "@/lib/format";
 import { useState } from "react";
 
+import { Mono } from "@/components/ui/Badge";
 import { EmptyState, ListStates } from "@/components/states";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { RowCheckbox } from "@/components/ui/SelectionBar";
@@ -295,7 +296,7 @@ function SweepOutcomes({ result, onDismiss }: { result: SweepResult; onDismiss: 
       </p>
       {unresolved.map((outcome) => (
         <p key={outcome.account} className="text-warn-text">
-          <span className="font-mono text-[13px]">{outcome.account}</span> —{" "}
+          <Mono>{outcome.account}</Mono> —{" "}
           {outcome.detail ?? outcome.outcome}
         </p>
       ))}

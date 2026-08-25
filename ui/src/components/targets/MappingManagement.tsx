@@ -151,7 +151,7 @@ function MappingRow({
         disabled={cohort.length === 0}
         disabledReason="Nobody holds this role"
       />
-      <Button variant="ghost" size="sm" onClick={onEdit}>
+      <Button variant="outline" size="sm" onClick={onEdit}>
         Change
       </Button>
       <Button variant="danger" size="sm" onClick={onDelete}>
@@ -291,14 +291,19 @@ function VersionHistory({ target }: { target: string }) {
           rolled back to it. The note is the only record of why this set was the right
           one — it is what somebody reads when they are deciding whether to come back.
         </p>
+        {/* Stacked, not side by side. An `Input` is 15px on py-3 and a `sm`
+            button is 13px on py-1.5 above the desktop breakpoint — roughly 48px
+            beside roughly 32px, which reads as a control that failed to line up
+            rather than as a pair. The Maintenance panel below asks the same
+            shape of question (a reason, then an action) and already stacks
+            them; these two sit on one page and now look like one idea. */}
+        <Input
+          aria-label="Why this set"
+          placeholder="Why this set is the one to keep"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
         <div className="flex flex-wrap gap-2">
-          <Input
-            aria-label="Why this set"
-            placeholder="Why this set is the one to keep"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            className="min-w-[16rem] flex-1"
-          />
           <Button
             variant="outline"
             size="sm"
@@ -385,7 +390,7 @@ function VersionRow({
           </span>
         ) : null}
         {(!current || unpublished) && (
-          <Button variant="ghost" size="sm" onClick={() => setConfirming(true)}>
+          <Button variant="outline" size="sm" onClick={() => setConfirming(true)}>
             Roll back to this
           </Button>
         )}

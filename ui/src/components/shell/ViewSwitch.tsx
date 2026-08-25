@@ -2,6 +2,8 @@
 
 import { useUiView } from "@/lib/ui-view";
 
+import { PILL } from "@/components/ui/Button";
+
 /**
  * The Basic / Advanced switch.
  *
@@ -34,7 +36,7 @@ export function ViewSwitch() {
             // what the whole application shows. The board draws it at 34,
             // which is ten under the floor and the one place a drawn value
             // could not be followed.
-            className={`min-h-[44px] rounded-pill px-4 text-[13.5px] motion-tint desktop:min-h-0 desktop:py-1.5 ${
+            className={`rounded-pill motion-tint ${PILL.md} ${
               active
                 ? "bg-accent-dense font-semibold text-accent-ink"
                 : "text-muted hover:text-ink"

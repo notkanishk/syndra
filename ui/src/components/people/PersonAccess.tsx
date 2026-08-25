@@ -15,6 +15,7 @@ import { Chip, Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
+import { Tabs } from "@/components/ui/Tabs";
 import { Withheld } from "@/components/ui/Withheld";
 import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
@@ -159,21 +160,15 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
           serves a member looking at their own record, and the audit endpoint
           behind that tab is operator-gated, so offering it to a member would
           be offering a control that can only fail. */}
-      <div className="flex gap-2">
-        {tabsFor(isOperator).map((entry) => (
-          <button
-            key={entry}
-            type="button"
-            onClick={() => setTab(entry)}
-            aria-current={tab === entry ? "page" : undefined}
-            className={`min-h-11 rounded-pill px-4 py-2 text-[14.5px] motion-tint desktop:min-h-0 ${
-              tab === entry ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
-            }`}
-          >
-            {TAB_LABELS[entry]}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="Views of this person's access"
+        value={tab}
+        onSelect={setTab}
+        options={tabsFor(isOperator).map((entry) => ({
+          value: entry,
+          label: TAB_LABELS[entry],
+        }))}
+      />
 
       {tab === "requests" ? (
         <PersonRequests userId={userId} name={user.name} isOperator={isOperator} />

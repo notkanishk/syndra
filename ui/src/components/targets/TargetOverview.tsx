@@ -8,7 +8,7 @@ import { DormantAccounts } from "@/components/targets/DormantAccounts";
 import { MergeFindings } from "@/components/targets/MergeFindings";
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
-import { Mono } from "@/components/ui/Badge";
+import { Mono, STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -364,7 +364,7 @@ function ReconcileControl({ target }: { target: string }) {
                       reading it as "delete" is the one misreading this row can
                       afford least, given the account it names is already gone. */}
                   <span className="text-[13px] text-muted">
-                    Syndra stops managing <span className="font-mono">{b.username}</span>.
+                    Syndra stops managing <Mono>{b.username}</Mono>.
                     Nothing is deleted, and the binding can be made again by adopting the
                     account if it comes back.
                   </span>
@@ -412,7 +412,7 @@ function ReconcileControl({ target }: { target: string }) {
                     is yours to decide.
                   </span>
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
                     onClick={() => setConfirming(b.subject_id)}
                   >
@@ -628,7 +628,7 @@ function LogFinding({ anchor }: { anchor: LogAnchor }) {
       </p>
       <p className="mt-1 text-[13.5px] text-muted">
         {what} Syndra last saw {anchor.records} record{anchor.records === 1 ? "" : "s"} ending{" "}
-        <span className="font-mono text-[12.5px]">{anchor.head.slice(0, 12)}</span>, anchored{" "}
+        <Mono>{anchor.head.slice(0, 12)}</Mono>, anchored{" "}
         <Relative iso={anchor.anchored_at} />; the target reported {anchor.violation_records ?? 0}{" "}
         <Relative iso={anchor.violation_at} />.
       </p>
@@ -638,7 +638,7 @@ function LogFinding({ anchor }: { anchor: LogAnchor }) {
         only thing that can.
       </p>
       <div className="mt-3">
-        <Button variant="ghost" size="sm" onClick={() => setResolving(true)}>
+        <Button variant="outline" size="sm" onClick={() => setResolving(true)}>
           Resolve this finding
         </Button>
       </div>
@@ -673,7 +673,7 @@ function BindingConflictFinding({
     <div className="rounded-inner border border-danger-line bg-danger-soft px-4 py-3">
       <p className="text-[13.5px] font-semibold text-danger-text">
         Two records disagree about who owns{" "}
-        <span className="font-mono text-[13px]">{conflict.username}</span>
+        <Mono>{conflict.username}</Mono>
       </p>
       <p className="mt-1 text-[13.5px] text-muted">
         A change for{" "}
@@ -687,7 +687,7 @@ function BindingConflictFinding({
         convergence for either person acts on whichever record it reads.
       </p>
       <div className="mt-3">
-        <Button variant="ghost" size="sm" onClick={() => setDeciding(true)}>
+        <Button variant="outline" size="sm" onClick={() => setDeciding(true)}>
           Decide who owns it
         </Button>
       </div>
@@ -906,29 +906,21 @@ function ResolveFindingDialog({
   );
 }
 
-const READING_TONE = {
-  healthy: { dot: "bg-healthy", label: "text-ink" },
-  accent: { dot: "bg-accent", label: "text-accent-text" },
-  warn: { dot: "bg-warn", label: "text-warn-text" },
-  danger: { dot: "bg-danger", label: "text-danger-text" },
-} as const;
-
 /** One health reading: a dot that carries the tone, a label, and the sentence. */
 function Reading({
   tone,
   label,
   children,
 }: {
-  tone: keyof typeof READING_TONE;
+  tone: StatusTone;
   label: string;
   children: React.ReactNode;
 }) {
-  const style = READING_TONE[tone];
   return (
     <div className="flex items-baseline gap-2.5 text-[14px]">
-      <span aria-hidden className={`mt-1.5 size-1.5 shrink-0 rounded-pill ${style.dot}`} />
+      <StatusDot tone={tone} className="mt-1.5" />
       <span>
-        <span className={`font-semibold ${style.label}`}>{label}.</span>{" "}
+        <span className={`font-semibold ${STATUS_TONE[tone].label}`}>{label}.</span>{" "}
         <span className="text-muted">{children}</span>
       </span>
     </div>
@@ -1024,7 +1016,7 @@ function Inventory({ target }: { target: string }) {
                   Adoption needs a current read of this list
                 </span>
               ) : (
-                <Button variant="ghost" size="sm" onClick={() => setAdopting(account.username)}>
+                <Button variant="outline" size="sm" onClick={() => setAdopting(account.username)}>
                   Adopt
                 </Button>
               )}
@@ -1091,7 +1083,7 @@ function AdoptPanel({
       }}
     >
       <p className="text-muted">
-        Adopting <span className="font-mono text-ink">{username}</span> hands its home
+        Adopting <Mono className="text-ink">{username}</Mono> hands its home
         directory, its shares and its group memberships to that person.{" "}
         <strong className="font-semibold text-ink">There is no undo.</strong>
       </p>
@@ -1212,7 +1204,11 @@ function LifecycleControl({ target, health }: { target: string; health: TargetHe
           {STATES.map((state) => (
             <Button
               key={state.id}
-              variant={state.id === current ? "ghost" : "outline"}
+              // All three outline, including the one already in force. A
+              // borderless control between two bordered ones reads as a
+              // rendering fault, not as emphasis — and the label ("Already
+              // active") plus the disabled state already say which is current.
+              variant="outline"
               size="sm"
               disabled={!reason || set.isPending || state.id === current}
               onClick={() =>

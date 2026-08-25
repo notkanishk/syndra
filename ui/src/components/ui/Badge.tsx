@@ -9,13 +9,23 @@ import React from "react";
  * occupies its seat rather than disappearing.
  */
 
-type Tone = "neutral" | "accent" | "warn" | "danger";
+type Tone = "neutral" | "accent" | "warn" | "danger" | "dangerSoft" | "warnSoft";
 
 const TONES: Record<Tone, string> = {
   neutral: "bg-tint-2 text-ink/[.82]",
   accent: "bg-accent-dense text-accent-ink",
   warn: "bg-warn text-warn-ink",
   danger: "bg-danger text-danger-ink",
+  // A label, not an alarm. `danger` is the solid fill a count wears when the
+  // count itself is the bad news; this is for a pill that NAMES something
+  // dangerous — a safety role group — beside prose that is already saying so.
+  // The drift queue was rendering it inline with these exact values and no
+  // name, which is how the same pill ended up bold in one branch and not in
+  // the next.
+  dangerSoft: "bg-danger-soft text-danger-text",
+  // The same argument one tone up: a refused event in an activity list is
+  // worth finding, and it is not an alarm going off.
+  warnSoft: "bg-warn-soft text-warn-text",
 };
 
 export function Badge({
@@ -63,5 +73,34 @@ export function Mono({
     <span className={`type-mono ${className}`} {...props}>
       {children}
     </span>
+  );
+}
+
+/**
+ * The tone dot that precedes a status word.
+ *
+ * Colour never carries a reading on its own here — a word in green and a word
+ * in amber are the same word to an operator who cannot tell them apart, and
+ * they are the same word in a screenshot printed in grey. The dot gives the
+ * reading a second channel: position and presence, which survive both.
+ *
+ * Shared so the target page's health readings and the add-on index's
+ * reachability column are one idiom. They were two.
+ */
+export const STATUS_TONE = {
+  healthy: { dot: "bg-healthy", label: "text-ink" },
+  accent: { dot: "bg-accent", label: "text-accent-text" },
+  warn: { dot: "bg-warn", label: "text-warn-text" },
+  danger: { dot: "bg-danger", label: "text-danger-text" },
+} as const;
+
+export type StatusTone = keyof typeof STATUS_TONE;
+
+export function StatusDot({ tone, className = "" }: { tone: StatusTone; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={`size-1.5 shrink-0 rounded-pill ${STATUS_TONE[tone].dot} ${className}`}
+    />
   );
 }
