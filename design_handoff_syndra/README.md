@@ -1061,6 +1061,7 @@ exports of `design/Syndra Banner.dc.html`.
 | `banner/syndra-banner-1280x400.png` | README header image (2× export). |
 | `banner/syndra-social-1280x640.png` | GitHub social preview (2× export). |
 | `banner/BANNER.md` | Markup snippet and re-export instructions. |
+| `ia-2026-08-04/` | **The predecessor bundle, kept whole.** The information-architecture handoff of 2026-08-04, which this one grew out of two days later. Its README carries ~600 lines of reasoning about the Basic/Advanced split that never moved into this file, and its boards are the narrower IA-only cut. Superseded for building from; not superseded for understanding why. |
 
 ### Suggested reading order
 

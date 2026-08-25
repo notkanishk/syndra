@@ -6,7 +6,7 @@
 > claim editor rather than a preview.
 >
 > What actually shipped: [`openspec/changes/basic-advanced-ia/`](../openspec/changes/basic-advanced-ia/design.md).
-> The handoff that superseded the naming: [`design_handoff_syndra_ia/README.md`](../design_handoff_syndra_ia/README.md).
+> The handoff that superseded the naming: [`design_handoff_syndra/ia-2026-08-04/README.md`](../design_handoff_syndra/ia-2026-08-04/README.md).
 
 **For:** Claude Design
 **Product:** Syndra — access management for an academic makerspace
