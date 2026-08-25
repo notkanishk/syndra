@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -407,6 +409,73 @@ func TestHandleBulkSetConfirmationMode_UpdatesSelectedRuleIDs(t *testing.T) {
 	}
 	if len(gotIDs) != 2 || gotIDs[0] != "r1" || gotIDs[1] != "r2" || gotMode != "manual" {
 		t.Fatalf("expected ids=[r1 r2] mode=manual, got ids=%v mode=%s", gotIDs, gotMode)
+	}
+}
+
+// Every other bulk route in the product stops at services.BulkMaxUsers. This
+// one did not, on the surface whose verbs apply on tap rather than opening a
+// plan and whose rules cascade revokes — so an unbounded set here was a single
+// statement flipping every rule in the product with nothing computed first.
+func TestHandleBulkSetConfirmationMode_RefusesPastTheBulkCeiling(t *testing.T) {
+	resetConfirmationModeDeps(t)
+
+	dbSetRuleConfirmationMode = func(ctx context.Context, ids []string, mode string) error {
+		t.Fatal("no write may happen past the ceiling")
+		return nil
+	}
+
+	ids := make([]string, services.BulkMaxUsers+1)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("r%d", i)
+	}
+	body, err := json.Marshal(map[string]any{"kind": "rule", "ids": ids, "mode": "manual"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/policies/confirmation-mode",
+		bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	handleBulkSetConfirmationMode(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), fmt.Sprintf("max %d", services.BulkMaxUsers)) {
+		t.Fatalf("the refusal must state the ceiling, got %s", rr.Body.String())
+	}
+}
+
+// The boundary itself is allowed: a cap that refuses at exactly the limit
+// would make the number the bar promises a number the server does not honour.
+func TestHandleBulkSetConfirmationMode_AcceptsExactlyTheCeiling(t *testing.T) {
+	resetConfirmationModeDeps(t)
+
+	var wrote int
+	dbSetRuleConfirmationMode = func(ctx context.Context, ids []string, mode string) error {
+		wrote = len(ids)
+		return nil
+	}
+
+	ids := make([]string, services.BulkMaxUsers)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("r%d", i)
+	}
+	body, err := json.Marshal(map[string]any{"kind": "rule", "ids": ids, "mode": "manual"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/policies/confirmation-mode",
+		bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	handleBulkSetConfirmationMode(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 at exactly the ceiling, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if wrote != services.BulkMaxUsers {
+		t.Fatalf("expected %d ids written, got %d", services.BulkMaxUsers, wrote)
 	}
 }
 

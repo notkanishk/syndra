@@ -13,7 +13,7 @@ import (
 // GetMappingRuleByID fetches a single mapping rule by id, used by the cascade orchestrator.
 func GetMappingRuleByID(ctx context.Context, id string) (models.MappingRule, error) {
 	var r models.MappingRule
-	err := PG.QueryRow(ctx,
+	err := querier(ctx).QueryRow(ctx,
 		`SELECT id, source_zitadel_project_id, source_zitadel_role_key,
 		        target_zitadel_project_id, target_zitadel_role_key, confirmation_mode, created_at
 		 FROM mapping_rules WHERE id = $1`, id).
@@ -26,7 +26,7 @@ func GetActiveMappingRules(ctx context.Context) ([]models.MappingRule, error) {
 		SELECT id, source_zitadel_project_id, source_zitadel_role_key, target_zitadel_project_id, target_zitadel_role_key, confirmation_mode, created_at
 		FROM mapping_rules;`
 
-	rows, err := PG.Query(ctx, query)
+	rows, err := querier(ctx).Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}

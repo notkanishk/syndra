@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -152,9 +153,6 @@ func RehearseBundlePublish(ctx context.Context, req PublishRequest) (BulkPlan, D
 
 	for _, h := range holders {
 		out := BulkOutcome{UserID: h.UserID}
-		if u, ok, err := directory.Default.FindUser(ctx, h.UserID); err == nil && ok {
-			out.Name, out.Email = u.Name, u.Email
-		}
 
 		if !req.Migrate {
 			out.Effect = EffectNoChange
@@ -236,49 +234,69 @@ func keyList(keys []roleKey) string {
 // posted back from a browser is a claim about the world as it was when the
 // dialog opened; the writes have to be built from the world as it is.
 func PublishBundleVersion(ctx context.Context, actor string, req PublishRequest) (BulkPlan, models.BundleVersion, error) {
-	plan, draft, err := RehearseBundlePublish(ctx, req)
-	if err != nil {
-		return plan, models.BundleVersion{}, err
-	}
-	if draft.Empty() {
-		return plan, models.BundleVersion{}, fmt.Errorf("nothing to publish: the bundle matches v%d", draft.LatestVersion)
-	}
-
-	// One read, from the rehearsal. Reading the working copy a second time here
-	// would let an edit land in between: the deltas would describe one set of
-	// roles and the snapshot would contain another.
-	next := draft.Working
-	rules, err := svcGetActiveMappingRules(ctx)
-	if err != nil {
-		return plan, models.BundleVersion{}, err
-	}
-
-	var moved []string
-	var params []db.EnqueueParams
-	if req.Migrate {
-		holders, err := svcGetBundleHoldersByVersion(ctx, req.BundleID)
+	var plan BulkPlan
+	var version models.BundleVersion
+	var ids []string
+	// Rehearsal and apply under one lock: the plan an operator approved is a
+	// statement about a world, and another cascade committing between the two
+	// makes it a statement about neither.
+	if err := withLockedAccess(ctx, func(ctx context.Context) error {
+		var draft DraftDiff
+		var err error
+		plan, draft, err = RehearseBundlePublish(ctx, req)
 		if err != nil {
-			return plan, models.BundleVersion{}, err
+			return err
 		}
-		for _, h := range holders {
-			moved = append(moved, h.UserID)
-			adds, revokes, err := holderDelta(ctx, h.UserID, req.BundleID, next, rules)
-			if err != nil {
-				return plan, models.BundleVersion{}, err
-			}
-			params = append(params, deltaParams(h.UserID, adds, revokes, actor,
-				fmt.Sprintf("Bundle published at v%d", draft.NextVersion), "bundle", req.BundleID)...)
+		if draft.Empty() {
+			return fmt.Errorf("nothing to publish: the bundle matches v%d", draft.LatestVersion)
 		}
-	}
 
-	// `next` goes into the transaction rather than being re-selected there, so
-	// the version contains exactly what the plan was computed from. An edit that
-	// lands mid-publish is simply not in this version — it stays a draft for the
-	// next one, which is the honest outcome.
-	version, ids, err := svcPublishVersionAndEnqueue(ctx, actor, req.BundleID, req.Note, next, moved, params)
-	if err != nil {
-		return plan, models.BundleVersion{}, err
+		// One read, from the rehearsal. Reading the working copy a second time here
+		// would let an edit land in between: the deltas would describe one set of
+		// roles and the snapshot would contain another.
+		next := draft.Working
+		rules, err := svcGetActiveMappingRules(ctx)
+		if err != nil {
+			return err
+		}
+
+		var moved []string
+		var params []db.EnqueueParams
+		if req.Migrate {
+			holders, err := svcGetBundleHoldersByVersion(ctx, req.BundleID)
+			if err != nil {
+				return err
+			}
+			for _, h := range holders {
+				moved = append(moved, h.UserID)
+				adds, revokes, err := holderDelta(ctx, h.UserID, req.BundleID, next, rules)
+				if err != nil {
+					return err
+				}
+				rows, err := deltaParams(ctx, h.UserID, adds, revokes, actor,
+					fmt.Sprintf("Bundle published at v%d", draft.NextVersion), "bundle", req.BundleID)
+				if err != nil {
+					return err
+				}
+				params = append(params, rows...)
+			}
+		}
+
+		// `next` goes into the transaction rather than being re-selected there, so
+		// the version contains exactly what the plan was computed from. An edit that
+		// lands mid-publish is simply not in this version — it stays a draft for the
+		// next one, which is the honest outcome.
+		version, ids, err = svcPublishVersionAndEnqueue(ctx, actor, req.BundleID, req.Note, next, moved, params)
+		if err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		DecoratePlan(ctx, &plan)
+		return plan, version, err
 	}
+	// Outside the lock: the plan is being rendered, not decided.
+	DecoratePlan(ctx, &plan)
 
 	bundle, err := svcGetBundleByID(ctx, req.BundleID)
 	if err != nil {
@@ -354,9 +372,6 @@ func RehearseMoveHolders(ctx context.Context, req MoveHoldersRequest) (BulkPlan,
 
 	for _, id := range req.UserIDs {
 		out := BulkOutcome{UserID: id}
-		if u, ok, err := directory.Default.FindUser(ctx, id); err == nil && ok {
-			out.Name, out.Email = u.Name, u.Email
-		}
 		h, holds := wanted[id]
 		if !holds {
 			out.Effect = EffectBlocked
@@ -386,43 +401,67 @@ func RehearseMoveHolders(ctx context.Context, req MoveHoldersRequest) (BulkPlan,
 }
 
 // MoveHolders applies what RehearseMoveHolders described.
+// errNothingToMove ends the locked region without an error: there is nothing
+// to move, which is a result rather than a failure.
+var errNothingToMove = errors.New("nothing to move")
+
 func MoveHolders(ctx context.Context, actor string, req MoveHoldersRequest) (BulkPlan, error) {
-	plan, err := RehearseMoveHolders(ctx, req)
-	if err != nil {
-		return plan, err
-	}
-
-	target, err := svcGetRolesForVersion(ctx, req.VersionID)
-	if err != nil {
-		return plan, err
-	}
-	rules, err := svcGetActiveMappingRules(ctx)
-	if err != nil {
-		return plan, err
-	}
-
-	var actionable []string
-	var params []db.EnqueueParams
-	for _, out := range plan.Outcomes {
-		if out.Effect == EffectBlocked {
-			continue
-		}
-		actionable = append(actionable, out.UserID)
-		adds, revokes, err := holderDelta(ctx, out.UserID, req.BundleID, target, rules)
+	var plan BulkPlan
+	var ids []string
+	// Same reason as PublishBundleVersion: the rehearsal and the apply are one
+	// decision, and a cascade landing between them makes the plan describe a
+	// world nobody approved.
+	if err := withLockedAccess(ctx, func(ctx context.Context) error {
+		var err error
+		plan, err := RehearseMoveHolders(ctx, req)
 		if err != nil {
-			return plan, err
+			return err
 		}
-		params = append(params, deltaParams(out.UserID, adds, revokes, actor,
-			"Bundle holder moved between versions", "bundle", req.BundleID)...)
-	}
-	if len(actionable) == 0 {
-		return plan, nil
-	}
 
-	ids, err := svcMoveHoldersAndEnqueue(ctx, actor, req.BundleID, req.VersionID, actionable, params)
-	if err != nil {
+		target, err := svcGetRolesForVersion(ctx, req.VersionID)
+		if err != nil {
+			return err
+		}
+		rules, err := svcGetActiveMappingRules(ctx)
+		if err != nil {
+			return err
+		}
+
+		var actionable []string
+		var params []db.EnqueueParams
+		for _, out := range plan.Outcomes {
+			if out.Effect == EffectBlocked {
+				continue
+			}
+			actionable = append(actionable, out.UserID)
+			adds, revokes, err := holderDelta(ctx, out.UserID, req.BundleID, target, rules)
+			if err != nil {
+				return err
+			}
+			rows, err := deltaParams(ctx, out.UserID, adds, revokes, actor,
+				"Bundle holder moved between versions", "bundle", req.BundleID)
+			if err != nil {
+				return err
+			}
+			params = append(params, rows...)
+		}
+		if len(actionable) == 0 {
+			return errNothingToMove
+		}
+
+		ids, err = svcMoveHoldersAndEnqueue(ctx, actor, req.BundleID, req.VersionID, actionable, params)
+		if err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		DecoratePlan(ctx, &plan)
+		if errors.Is(err, errNothingToMove) {
+			return plan, nil
+		}
 		return plan, err
 	}
+	DecoratePlan(ctx, &plan)
 	bundle, err := svcGetBundleByID(ctx, req.BundleID)
 	if err != nil {
 		return plan, err
@@ -444,6 +483,29 @@ func markApplied(outcomes []BulkOutcome) {
 	for i := range outcomes {
 		if outcomes[i].Effect == EffectApply {
 			outcomes[i].Effect = EffectApplied
+		}
+	}
+}
+
+// DecoratePlan fills in the display names a rehearsal renders.
+//
+// Kept out of the rehearsal itself because the rehearsal runs inside the
+// access-mutation lock when an apply is what asked for it, and this reaches the
+// directory — which in live mode is Zitadel, through a cache that can miss. A
+// name nobody has looked up yet would then hold the one lock every expiry,
+// grant and cascade in the deployment waits on, for as long as an unreachable
+// identity provider takes to time out. Names are presentation; the lock exists
+// for state.
+//
+// A lookup that fails leaves the row identified by its subject id, which is
+// what it was identified by before anyone asked for a name.
+func DecoratePlan(ctx context.Context, plan *BulkPlan) {
+	if plan == nil {
+		return
+	}
+	for i := range plan.Outcomes {
+		if u, ok, err := directory.Default.FindUser(ctx, plan.Outcomes[i].UserID); err == nil && ok {
+			plan.Outcomes[i].Name, plan.Outcomes[i].Email = u.Name, u.Email
 		}
 	}
 }

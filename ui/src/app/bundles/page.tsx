@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AddRolesToBundle } from "@/components/bundles/AddRolesToBundle";
 import { BundleVersions } from "@/components/bundles/BundleVersions";
@@ -98,7 +99,7 @@ export default function BundlesPage() {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[14.5px] font-semibold">{bundle.name}</span>
                   {bundle.is_welcome && (
-                    <span className="block truncate text-[12px] text-faint">
+                    <span className="block truncate text-[12.5px] text-faint">
                       Default for new members
                     </span>
                   )}
@@ -164,6 +165,7 @@ function BundleWorkspace({
   const roles = useBundleRoles(bundleId);
   const impact = useBundleImpact(bundleId);
   const setWelcome = useSetWelcomeBundle();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<BundleRoleRow | null>(null);
   const [adding, setAdding] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -306,15 +308,21 @@ function BundleWorkspace({
             onClick={async () => {
               try {
                 await setWelcome.mutateAsync(bundleId);
-                toast.success(`${name} is now the default for new members.`);
+                setOutcome({
+                  kind: "applied",
+                  message: `${name} is now the default for new members`,
+                  detail: "Members who joined before this keep what they already hold.",
+                });
               } catch (error) {
-                toast.error(error instanceof Error ? error.message : "That didn't save.");
+                setOutcome(outcomeFromError(error));
               }
             }}
           >
             {isWelcome ? "On" : `Set to ${name}`}
           </Button>
         </div>
+
+        {outcome && <ActionOutcome outcome={outcome} className="mx-5 mb-4" />}
 
         {/*
           Retiring the bundle is the last row on the card, under everything it does, because it
@@ -417,6 +425,7 @@ function RenameBundleDialog({
   onClose: () => void;
 }) {
   const update = useUpdateBundle();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [nextName, setNextName] = useState(name);
   const [nextDescription, setNextDescription] = useState(description);
 
@@ -448,6 +457,8 @@ function RenameBundleDialog({
           />
         </div>
       </div>
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter>
         <Button
           variant="accent"
@@ -461,10 +472,13 @@ function RenameBundleDialog({
                 name: trimmed,
                 description: nextDescription,
               });
-              toast.success(trimmed === name ? "Description saved." : `Now called ${trimmed}.`);
+              setOutcome({
+                kind: "applied",
+                message: trimmed === name ? "Description saved" : `Now called ${trimmed}`,
+              });
               onClose();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "That didn't save.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
@@ -507,11 +521,15 @@ function DeleteBundleDialog({
   onDeleted: () => void;
 }) {
   const remove = useDeleteBundle();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // The bundle is gone in both of these: `queued` means its withdrawals are
+  // waiting, not that the delete is.
+  const gone = outcome?.kind === "applied" || outcome?.kind === "queued";
 
   return (
     <Modal
       open
-      onClose={onCancel}
+      onClose={gone ? onDeleted : onCancel}
       busy={remove.isPending}
       size="md"
       labelledBy="delete-bundle"
@@ -548,7 +566,10 @@ function DeleteBundleDialog({
         </div>
       </div>
 
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter note="Emptying the bundle instead leaves it assignable and grants nothing.">
+        {!gone && (
         <Button
           variant="dangerConfirm"
           isPending={remove.isPending}
@@ -556,26 +577,47 @@ function DeleteBundleDialog({
             try {
               const result = await remove.mutateAsync(bundleId);
               const n = result.cascade?.enqueued ?? 0;
-              toast.success(
+              const auto = result.cascade?.mode === "auto";
+              // The welcome-bundle consequence is folded into the same report
+              // rather than fired as a second notification. It is the same
+              // event, and it is the half an operator most needs: from now on
+              // a new member receives nothing.
+              const orphaned = result.was_welcome
+                ? " New members no longer receive a bundle — set another as the default."
+                : "";
+              setOutcome(
                 n === 0
-                  ? `${name} deleted. Nobody's access changed.`
-                  : result.cascade.mode === "auto"
-                    ? `${name} deleted. ${n} ${n === 1 ? "change" : "changes"} applied.`
-                    : `${name} deleted. ${n} ${n === 1 ? "change is" : "changes are"} waiting under Pending changes.`,
+                  ? {
+                      kind: "applied",
+                      message: `${name} deleted`,
+                      detail: `Nobody's access changed — it carried nothing anybody held.${orphaned}`,
+                    }
+                  : {
+                      kind: auto ? "applied" : "queued",
+                      message: `${name} deleted — ${n} ${n === 1 ? "change" : "changes"} ${
+                        auto ? "applied" : "waiting"
+                      }`,
+                      detail: auto
+                        ? `Its withdrawals went with it.${orphaned}`
+                        : `They sit under Pending changes until somebody resumes the queue.${orphaned}`,
+                    },
               );
-              if (result.was_welcome) {
-                toast.warning("New members no longer receive a bundle. Set another as the default.");
-              }
-              onDeleted();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The bundle wasn't deleted.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
           Delete and revoke
         </Button>
-        <Button disabled={remove.isPending} onClick={onCancel}>
-          Keep it
+        )}
+        {/* `onDeleted` clears the parent's selection, and the parent's own
+            comment says why it must: the deleted bundle stays selected
+            otherwise, and the list falls back to the first bundle under the old
+            id's heading. It was never called. Called from HERE rather than from
+            the mutation, because clearing the selection unmounts this dialog —
+            and the outcome the operator has not read yet goes with it. */}
+        <Button disabled={remove.isPending} onClick={gone ? onDeleted : onCancel}>
+          {gone ? "Done" : "Keep it"}
         </Button>
       </ModalFooter>
     </Modal>
@@ -614,6 +656,7 @@ function RemovalImpact({
   const impact = useBundleImpact(bundleId);
   const rules = useMappingRules();
   const remove = useRemoveBundleRole(bundleId);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const holders = impact.data?.users ?? [];
 
@@ -691,6 +734,8 @@ function RemovalImpact({
         ))}
       </ul>
 
+      {outcome && <ActionOutcome outcome={outcome} className="mb-4" />}
+
       <div className="flex flex-wrap items-center gap-2.5">
         {/* Not `dangerConfirm`. That treatment is for a click that takes
             access away, and this one edits a draft — dressing it as the
@@ -705,12 +750,15 @@ function RemovalImpact({
                 projectId: role.zitadel_project_id,
                 roleKey: role.zitadel_role_key,
               });
-              toast.success(`Dropped from ${bundleName}'s working copy.`, {
-                description: "Nobody loses it until you publish a version and move them onto it.",
+              setOutcome({
+                // Nobody's access moved: the working copy did. Same distinction
+                // the add-roles panel makes, in the other direction.
+                kind: "no_change",
+                message: `Dropped from ${bundleName}'s working copy`,
+                detail: "Nobody loses it until you publish a version and move them onto it.",
               });
-              onCancel();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The edit didn't save.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
@@ -758,6 +806,7 @@ function HoldersPanel({
 
 function CreateBundleDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const create = useCreateBundle();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
@@ -790,6 +839,8 @@ function CreateBundleDialog({ open, onClose }: { open: boolean; onClose: () => v
           />
         </div>
       </div>
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter>
         <Button
           variant="accent"
@@ -798,12 +849,16 @@ function CreateBundleDialog({ open, onClose }: { open: boolean; onClose: () => v
           onClick={async () => {
             try {
               await create.mutateAsync({ name: name.trim(), description });
-              toast.success(`${name} created. It carries no roles yet.`);
+              setOutcome({
+                kind: "applied",
+                message: `${name} created`,
+                detail: "It carries no roles yet, so holding it grants nothing.",
+              });
               setName("");
               setDescription("");
               onClose();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "That didn't save.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >

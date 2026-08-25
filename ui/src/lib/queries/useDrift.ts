@@ -25,9 +25,36 @@ export interface DriftTriageItem extends DriftItem {
   last_seen_at?: string | null;
   role_group?: string;
   role_in_catalogue: boolean;
+  /**
+   * False on a target with no role catalogue at all. `role_in_catalogue` is
+   * then meaningless rather than false — nothing was retired, because there was
+   * never a catalogue to retire it from. Always read the two together.
+   */
+  role_catalogue_applies: boolean;
   user_status?: string;
   user_is_service_account: boolean;
   other_items_for_user: number;
+  /** Where the access came from, for a row about access Syndra intends. It is
+   * what makes a removal legible: the same entitlement Syndra applied, not a
+   * finding that appeared from nowhere. */
+  provenance?: GrantProvenance;
+}
+
+/** The decision behind an entitlement, and when the target was last seen
+ * holding it. */
+export interface GrantProvenance {
+  granted_by?: string;
+  granted_at?: string;
+  reason?: string;
+  source?: string;
+  source_ref?: string;
+  last_observed_at?: string;
+  expires_at?: string;
+  /** When the target ACCEPTED Syndra's write, and who it was attributed to.
+   * The only evidence that exists for a grant applied and removed between two
+   * sweeps — no read ever saw that one. */
+  applied_at?: string;
+  applied_by?: string;
 }
 
 /**
@@ -82,8 +109,23 @@ function useBulkDriftMutation<B>(path: string, apply: boolean) {
   });
 }
 
-type AdoptBody = { ids: string[]; source: AttributionSource };
-type ExternalBody = { ids: string[]; reason: string };
+/**
+ * `plan_id` cites the rehearsal being applied. Optional on the type because one
+ * body serves both passes; the apply pass always sets it, and the backend
+ * refuses an apply without one.
+ */
+type AdoptBody = {
+  ids: string[];
+  source: AttributionSource;
+  plan_id?: string;
+  acknowledge_scope?: boolean;
+};
+type ExternalBody = {
+  ids: string[];
+  reason: string;
+  plan_id?: string;
+  acknowledge_scope?: boolean;
+};
 
 export const useRehearseAdoptDrift = () =>
   useBulkDriftMutation<AdoptBody>("/governance/drift/bulk-attribute", false);
@@ -134,3 +176,44 @@ export function useReconcileNow() {
 }
 
 export const driftQueryKeys = KEYS;
+
+/**
+ * Who created a grant, read from Zitadel's own event log.
+ *
+ * The sweep compares grant SETS, so a row it raised carries no `upstream_actor`
+ * and says "unknown". That is honest and it is the least useful sentence on the
+ * queue. Zitadel is event-sourced and can answer exactly — which is why the
+ * Zitadel side gets this rather than the recorded merge base the add-on targets
+ * use. A base infers who moved from a snapshot difference; this is written down.
+ *
+ * `enabled` is off until somebody asks. Drift arrives in clusters and the queue
+ * routinely holds dozens of rows; firing one API call per row on load would
+ * turn opening a page into a burst against the identity provider.
+ */
+export interface DriftOrigin {
+  id: string;
+  /** False when Zitadel could not be asked at all. Never confuse with `recorded`. */
+  readable: boolean;
+  /** False when Zitadel answered and holds no event this far back. */
+  recorded?: boolean;
+  /** False when the event exists and names nobody. A real answer, not a gap. */
+  attributed?: boolean;
+  actor_id?: string;
+  actor_name?: string;
+  /** The machine actor when there is no human one — an Action, a service account. */
+  service?: string;
+  event_type?: string;
+  at?: string;
+  detail?: string;
+}
+
+export function useDriftOrigin(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["drift", id, "origin"],
+    queryFn: () => request<DriftOrigin>(`/governance/drift/${encodeURIComponent(id)}/origin`),
+    enabled: enabled && Boolean(id),
+    // An event that already happened does not change. Re-asking costs the
+    // identity provider a round trip and can never return anything new.
+    staleTime: Infinity,
+  });
+}

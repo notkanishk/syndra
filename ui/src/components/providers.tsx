@@ -2,7 +2,6 @@
 
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { Toaster } from "sonner";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NameResolverProvider } from "@/lib/queries/useNameResolver";
@@ -15,7 +14,6 @@ import { ThemeProvider } from "@/lib/theme";
  * - NameResolverProvider — tick-batched UID→name resolver backed by /lookup.
  * - ThemeProvider — data-theme attribute toggling, localStorage persistence.
  * - ErrorBoundary — render-error recovery card so chrome stays alive.
- * - Sonner Toaster — bottom-right toast surface for every mutation outcome.
  *
  * Mounted once in the root layout. Devtools render only in development.
  */
@@ -42,7 +40,6 @@ export function Providers({
       <NameResolverProvider enabled={hasSession}>
         <ThemeProvider>
           <ErrorBoundary>{children}</ErrorBoundary>
-          <Toaster position="bottom-right" closeButton richColors />
         </ThemeProvider>
       </NameResolverProvider>
       {process.env.NODE_ENV === "development" ? (

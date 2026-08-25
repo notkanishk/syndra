@@ -18,7 +18,7 @@ const (
 // (absence is not an error — callers fall back to a compile-time default).
 func GetConfigSetting(ctx context.Context, key string) (string, error) {
 	var v string
-	err := PG.QueryRow(ctx, `SELECT value FROM config_settings WHERE key = $1`, key).Scan(&v)
+	err := querier(ctx).QueryRow(ctx, `SELECT value FROM config_settings WHERE key = $1`, key).Scan(&v)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nil
 	}
@@ -30,7 +30,7 @@ func GetConfigSetting(ctx context.Context, key string) (string, error) {
 
 // SetConfigSetting upserts a config value.
 func SetConfigSetting(ctx context.Context, key, value, updatedBy string) error {
-	_, err := PG.Exec(ctx, `
+	_, err := querier(ctx).Exec(ctx, `
 		INSERT INTO config_settings (key, value, updated_by, updated_at)
 		VALUES ($1, $2, $3, NOW())
 		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value,

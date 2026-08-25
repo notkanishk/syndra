@@ -18,6 +18,8 @@ import (
 
 func resetDriftDeps(t *testing.T) {
 	t.Helper()
+	// An apply cites an approval now, so every drift test needs a plan store.
+	stubPlanStore(t)
 	origGetItems := dbGetDriftItems
 	origGetItem := dbGetDriftItem
 	origAttribute := dbAttributeDriftTx
@@ -59,7 +61,7 @@ func resetDriftDeps(t *testing.T) {
 func pendingDrift() models.DriftItem {
 	return models.DriftItem{
 		ID: "d1", UserID: "u1", ProjectID: "p_laser",
-		RoleKeys: []string{"trained"}, DriftType: "zitadel_only", Status: "pending_triage",
+		RoleKeys: []string{"trained"}, DriftType: "target_only", Status: "pending_triage",
 	}
 }
 
@@ -162,7 +164,7 @@ func TestAttributeDrift_ExternalBackfillRecordsADirectGrantWithNoRef(t *testing.
 func TestHandleMarkExternal_ResolvesAtomically(t *testing.T) {
 	resetDriftDeps(t)
 	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
-		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, DriftType: "zitadel_only", Status: "pending_triage"}, nil
+		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, DriftType: "target_only", Status: "pending_triage"}, nil
 	}
 	var gotUser, gotRole string
 	dbMarkDriftExternalTx = func(_ context.Context, _, user, _ string, roles []string, _, _, _ string) error {
@@ -189,7 +191,7 @@ func TestHandleMarkExternal_ResolvesAtomically(t *testing.T) {
 func TestHandleRevokeDrift_EnqueuesRevokeAtomicallyThenDrains(t *testing.T) {
 	resetDriftDeps(t)
 	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
-		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, ZitadelGrantID: "g1", DriftType: "zitadel_only", Status: "pending_triage"}, nil
+		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, ZitadelGrantID: "g1", DriftType: "target_only", Status: "pending_triage"}, nil
 	}
 	var gotOp string
 	dbRevokeDriftAndEnqueue = func(_ context.Context, _ string, p db.EnqueueParams) (string, error) {
@@ -277,8 +279,7 @@ func TestHandleBulkAttributeDrift_WritesNoPropagation(t *testing.T) {
 		return propagation.DrainResult{}, nil
 	}
 
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
-		strings.NewReader(`{"ids":["d1","d2","d3"],"source":"external_backfill"}`))
+	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-attribute", `{"ids":["d1","d2","d3"],"source":"external_backfill"}`)
 	w := httptest.NewRecorder()
 	handleBulkAttributeDrift(w, req)
 
@@ -401,7 +402,7 @@ func TestHandleBulkAttributeDrift_ValidSourceAttributes(t *testing.T) {
 		return nil
 	}
 
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true", strings.NewReader(`{"ids":["d1"],"source":"external_backfill"}`))
+	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-attribute", `{"ids":["d1"],"source":"external_backfill"}`)
 	w := httptest.NewRecorder()
 	handleBulkAttributeDrift(w, req)
 
@@ -474,8 +475,7 @@ func TestBulkDrift_ReportsRowsSomebodyElseAlreadyResolved(t *testing.T) {
 		return nil
 	}
 
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
-		strings.NewReader(`{"ids":["d1","d2"],"source":"external_backfill"}`))
+	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-attribute", `{"ids":["d1","d2"],"source":"external_backfill"}`)
 	w := httptest.NewRecorder()
 	handleBulkAttributeDrift(w, req)
 
@@ -517,8 +517,7 @@ func TestBulkAttributeDrift_NamesTheIdsThatFailed(t *testing.T) {
 	}
 	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) error { return nil }
 
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
-		strings.NewReader(`{"ids":["d1","d2","d3"],"source":"external_backfill"}`))
+	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-attribute", `{"ids":["d1","d2","d3"],"source":"external_backfill"}`)
 	w := httptest.NewRecorder()
 	handleBulkAttributeDrift(w, req)
 
@@ -568,8 +567,7 @@ func TestBulkMarkExternalDrift_NamesTheIdsThatFailed(t *testing.T) {
 		return nil
 	}
 
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-mark-external?apply=true",
-		strings.NewReader(`{"ids":["d1","d3"],"reason":""}`))
+	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-mark-external", `{"ids":["d1","d3"],"reason":""}`)
 	w := httptest.NewRecorder()
 	handleBulkMarkDriftExternal(w, req)
 
@@ -599,8 +597,7 @@ func TestBulkResolutions_AlwaysReturnARowPerRequestedID(t *testing.T) {
 	}
 	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) error { return nil }
 
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute?apply=true",
-		strings.NewReader(`{"ids":["d1","d1",""],"source":"external_backfill"}`))
+	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-attribute", `{"ids":["d1","d1",""],"source":"external_backfill"}`)
 	w := httptest.NewRecorder()
 	handleBulkAttributeDrift(w, req)
 
@@ -616,4 +613,159 @@ func TestBulkResolutions_AlwaysReturnARowPerRequestedID(t *testing.T) {
 	if plan.Summary.Total != 1 {
 		t.Fatalf("the summary must match the rows, got %+v", plan.Summary)
 	}
+}
+
+// 1.13 — the listing branch is chosen by "does this filter narrow anything".
+// A target filter that reached the query but not that question would return the
+// whole enriched queue to a caller who asked about one target, and the answer
+// would look right: it is a drift queue, just not theirs.
+func TestListDrift_ATargetFilterNarrowsTheListing(t *testing.T) {
+	resetDriftDeps(t)
+	origQueue := svcDriftTriageQueue
+	t.Cleanup(func() { svcDriftTriageQueue = origQueue })
+
+	queueUsed := false
+	svcDriftTriageQueue = func(context.Context) ([]models.DriftTriageItem, error) {
+		queueUsed = true
+		return nil, nil
+	}
+	var got db.DriftFilter
+	dbGetDriftItems = func(_ context.Context, f db.DriftFilter) ([]models.DriftItem, error) {
+		got = f
+		return nil, nil
+	}
+	origRows := svcDriftTriageRows
+	t.Cleanup(func() { svcDriftTriageRows = origRows })
+	svcDriftTriageRows = func(_ context.Context, in []models.DriftItem) ([]models.DriftTriageItem, error) {
+		return nil, nil
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/governance/drift?target=truenas", nil)
+	w := httptest.NewRecorder()
+	handleListDrift(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	if queueUsed {
+		t.Fatal("a scoped request must not be answered with the whole enriched queue")
+	}
+	if got.Target != "truenas" {
+		t.Fatalf("the target filter must reach the listing, got %+v", got)
+	}
+}
+
+// And an unfiltered request still gets the enriched queue: the branch narrowed,
+// it did not move.
+func TestListDrift_UnfilteredStillGetsTheEnrichedQueue(t *testing.T) {
+	resetDriftDeps(t)
+	origQueue := svcDriftTriageQueue
+	t.Cleanup(func() { svcDriftTriageQueue = origQueue })
+
+	queueUsed := false
+	svcDriftTriageQueue = func(context.Context) ([]models.DriftTriageItem, error) {
+		queueUsed = true
+		return nil, nil
+	}
+	dbGetDriftItems = func(context.Context, db.DriftFilter) ([]models.DriftItem, error) {
+		t.Fatal("an unfiltered request must not fall through to the raw listing")
+		return nil, nil
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/governance/drift", nil)
+	handleListDrift(httptest.NewRecorder(), req)
+	if !queueUsed {
+		t.Fatal("the unfiltered branch must still serve the enriched queue")
+	}
+}
+
+// A filtered response is the same shape as an unfiltered one. It used to be raw
+// drift rows, which the client types as DriftTriageItem: the enrichment fields
+// arrived absent, absent reads as false, and narrowing the queue silently
+// withdrew the "role not in catalogue" warning from rows that had earned it.
+func TestListDrift_FilteredRowsComeBackEnriched(t *testing.T) {
+	resetDriftDeps(t)
+	origRows := svcDriftTriageRows
+	t.Cleanup(func() { svcDriftTriageRows = origRows })
+
+	raw := []models.DriftItem{{ID: "d1", Target: "zitadel", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"legacy"}}}
+	dbGetDriftItems = func(context.Context, db.DriftFilter) ([]models.DriftItem, error) { return raw, nil }
+	var enrichedFrom []models.DriftItem
+	svcDriftTriageRows = func(_ context.Context, in []models.DriftItem) ([]models.DriftTriageItem, error) {
+		enrichedFrom = in
+		return []models.DriftTriageItem{{DriftItem: in[0], RoleCatalogueApplies: true, RoleInCatalogue: false}}, nil
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/governance/drift?source=webhook", nil)
+	w := httptest.NewRecorder()
+	handleListDrift(w, req)
+
+	if len(enrichedFrom) != 1 || enrichedFrom[0].ID != "d1" {
+		t.Fatalf("the filtered rows must be handed to the enrichment, got %+v", enrichedFrom)
+	}
+	var body struct {
+		Drift []map[string]any `json:"drift"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Drift) != 1 {
+		t.Fatalf("want one row, got %d", len(body.Drift))
+	}
+	for _, field := range []string{"role_catalogue_applies", "role_in_catalogue", "target"} {
+		if _, ok := body.Drift[0][field]; !ok {
+			t.Errorf("a filtered row must carry %q — absent is indistinguishable from false on the surface", field)
+		}
+	}
+}
+
+// A resolution whose side effects are Zitadel-shaped cannot resolve a finding on
+// another target. That is not a lost race, and reporting it as one would tell
+// the operator to retry something that can never work.
+func TestDriftAction_UnsupportedTargetIsNotAConflict(t *testing.T) {
+	resetDriftDeps(t)
+	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) { return pendingDrift(), nil }
+	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) error {
+		return db.ErrDriftTargetUnsupported
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/attribute",
+		strings.NewReader(`{"source":"external_backfill"}`))
+	req.SetPathValue("id", "d1")
+	w := httptest.NewRecorder()
+	handleAttributeDrift(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("an unsupported target must be 422, not %d — 409 invites a retry that can never succeed", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "DRIFT_TARGET_UNSUPPORTED") {
+		t.Errorf("the code must name the reason, got %s", w.Body.String())
+	}
+}
+
+// driftApplyRequest is the second of the two requests an operator's drift
+// confirmation flow makes: it rehearses, takes the plan id the backend issued,
+// and cites it. Applying without one is refused, which is asserted in
+// plan_gate_test.go rather than repeated in every case here.
+func driftApplyRequest(t *testing.T, path, body string) *http.Request {
+	t.Helper()
+	handler := handleBulkAttributeDrift
+	if strings.Contains(path, "mark-external") {
+		handler = handleBulkMarkDriftExternal
+	}
+
+	rehearse := httptest.NewRecorder()
+	handler(rehearse, httptest.NewRequest("POST", path, strings.NewReader(body)))
+	var issued services.BulkPlan
+	if err := json.Unmarshal(rehearse.Body.Bytes(), &issued); err != nil || issued.PlanID == "" {
+		return httptest.NewRequest("POST", path+"?apply=true", strings.NewReader(body))
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(body), &payload); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	payload["plan_id"] = issued.PlanID
+	cited, _ := json.Marshal(payload)
+	return httptest.NewRequest("POST", path+"?apply=true", strings.NewReader(string(cited)))
 }

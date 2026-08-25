@@ -9,10 +9,14 @@ import type { Indicators } from "@/lib/queries/useIndicators";
 const pathname = vi.hoisted(() => ({ value: "/" }));
 const view = vi.hoisted(() => ({ audience: "basic" as string, isOperator: true }));
 const indicators = vi.hoisted(() => ({ data: undefined as Indicators | undefined }));
+const targets = vi.hoisted(() => ({ data: [] as Array<{ target: string }> }));
 
 vi.mock("next/navigation", () => ({ usePathname: () => pathname.value }));
 vi.mock("@/lib/ui-view", () => ({
   useUiView: () => ({ ...view, view: "basic", setView: () => {}, revealInAdvanced: () => {} }),
+}));
+vi.mock("@/lib/queries/useTargets", () => ({
+  useTargets: () => targets,
 }));
 vi.mock("@/lib/queries/useIndicators", () => ({
   useIndicators: () => indicators,
@@ -38,6 +42,7 @@ beforeEach(() => {
   view.audience = "basic";
   view.isOperator = true;
   indicators.data = undefined;
+  targets.data = [];
 });
 
 describe("the rail's stable structure", () => {
@@ -50,7 +55,9 @@ describe("the rail's stable structure", () => {
       expiring_grants: 0,
       pending_propagation: 0,
       drift: 0,
-      zitadel_reachable: true,
+      unconfirmed_revocations: 0,
+    revocations_escalated: false,
+    zitadel_reachable: true,
     };
     view.audience = "advanced";
     const { unmount } = renderRail();
@@ -62,7 +69,9 @@ describe("the rail's stable structure", () => {
       expiring_grants: 1,
       pending_propagation: 2,
       drift: 12,
-      zitadel_reachable: false,
+      unconfirmed_revocations: 0,
+    revocations_escalated: false,
+    zitadel_reachable: false,
     };
     renderRail();
     expect(railOrder()).toEqual(quiet);
@@ -74,7 +83,9 @@ describe("the rail's stable structure", () => {
       expiring_grants: 0,
       pending_propagation: 0,
       drift: 0,
-      zitadel_reachable: true,
+      unconfirmed_revocations: 0,
+    revocations_escalated: false,
+    zitadel_reachable: true,
     };
     view.audience = "advanced";
     renderRail();
@@ -97,14 +108,40 @@ describe("the rail's stable structure", () => {
     expect(advanced).toContain("Unexplained access");
   });
 
-  it("shows a member two destinations and never the operator rows", () => {
+  it("shows a member three destinations and never the operator rows", () => {
     view.audience = "member";
     view.isOperator = false;
     renderRail();
 
-    expect(railOrder()).toEqual(["My access", "Requests"]);
+    expect(railOrder()).toEqual(["My access", "Requests", "Network storage"]);
     expect(screen.queryByText("Bundles")).toBeNull();
     expect(screen.getByText("Member")).toBeInTheDocument();
+  });
+});
+
+// 9.14 — the rail carries a row for every registered add-on regardless of what
+// this operator's data looks like, and the retired bridge's row is gone.
+describe("the rail's target rows", () => {
+  it("renders a row per registered add-on and none for the retired bridge", () => {
+    view.audience = "advanced";
+    view.isOperator = true;
+    targets.data = [{ target: "truenas" }, { target: "unifi" }];
+    renderRail();
+
+    expect(screen.getByText("TrueNAS")).toBeInTheDocument();
+    expect(screen.getByText("UniFi Access")).toBeInTheDocument();
+    expect(screen.queryByText("Hardware sync")).toBeNull();
+  });
+
+  it("renders those rows with no data of any kind behind them", () => {
+    view.audience = "advanced";
+    view.isOperator = true;
+    targets.data = [{ target: "truenas" }];
+    // No indicators, no inventory, nobody bound. The row is a deployment fact.
+    indicators.data = undefined;
+    renderRail();
+
+    expect(screen.getByText("TrueNAS")).toBeInTheDocument();
   });
 });
 

@@ -8,6 +8,7 @@ bun run dev            # :3000
 bun run test           # vitest — NOT `bun test`, see below
 bun run lint
 bun run build
+bun run sweep:touch    # every interactive element against the touch floor
 ```
 
 > **`bun run test`, never `bun test`.** The latter is Bun's own test runner. It
@@ -22,7 +23,8 @@ bun run build
 | `src/app/auth/` | OIDC route handlers: `zitadel` (initiate), `callback`, `login`, `logout` |
 | `src/app/api/proxy/` | The only route the UI owns under `/api`. Forwards to the backend with the session's bearer token |
 | `src/components/` | Shared components |
-| `src/lib/` | Client, session, OIDC, formatting, query hooks |
+| `src/lib/` | Client, session, OIDC, formatting |
+| `src/lib/queries/` | One module per surface. Every read and mutation the console makes goes through a hook here, never `fetch` in a component |
 | `src/middleware.ts` | Session gate on every request |
 
 ## Conventions that are not negotiable
@@ -35,6 +37,13 @@ in a component. Both light and dark are authored in full — a theme that is
 response to data: a nav item does not disappear because a list came back empty.
 An operator learning where things are should not have to relearn it when the
 system state changes. See the `basic-advanced-ia` design note.
+
+**Every interactive element clears the touch floor.** `bun run sweep:touch`
+walks the rendered routes and fails on anything a finger cannot reliably hit;
+it is a sweep rather than a lint rule because the size that matters is the one
+after layout, not the one in the class list. Its own blind spots are recorded
+in the `mobile-touch-view` change — a sweep that cannot see an element reports
+it as passing, which is the failure mode to distrust first.
 
 **Absolute URLs come from `src/lib/request-url.ts`.** Every one of them —
 redirects, the OIDC `redirect_uri`, and the cookie `secure` decision.

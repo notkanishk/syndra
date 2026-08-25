@@ -61,7 +61,7 @@ func TestReconcileLedgerOnApplied_RevokeIsSourceScoped(t *testing.T) {
 	if revokeCase == "" {
 		t.Fatal(`could not isolate the "revoke" case body in ReconcileLedgerOnApplied`)
 	}
-	if !regexp.MustCompile(`AND\s+source\s*=\s*\$4`).MatchString(revokeCase) {
+	if !regexp.MustCompile(`d\.source\s*=\s*\$4`).MatchString(revokeCase) {
 		t.Errorf("revoke branch must scope its DELETE by source (AND source=$4) so a cascade revoke never strips an operator's direct grant; body:\n%s", revokeCase)
 	}
 }
@@ -85,16 +85,16 @@ func TestEnqueueWrites_WritesSourceAndSourceRef(t *testing.T) {
 			t.Errorf("enqueueWrites must write outbox column %q; body:\n%s", want, fb)
 		}
 	}
-	// Pin it to the actual INSERT INTO pending_zitadel_propagations statement, not just any
+	// Pin it to the actual INSERT INTO propagation_outbox statement, not just any
 	// mention of "source" in the function (e.g. the ledger upsert or the `source :=` default
 	// above it also contain that substring).
-	insert := regexp.MustCompile(`(?s)INSERT INTO pending_zitadel_propagations.*?RETURNING id`).FindString(fb)
+	insert := regexp.MustCompile(`(?s)INSERT INTO propagation_outbox.*?RETURNING id`).FindString(fb)
 	if insert == "" {
-		t.Fatal("could not isolate the pending_zitadel_propagations INSERT in enqueueWrites")
+		t.Fatal("could not isolate the propagation_outbox INSERT in enqueueWrites")
 	}
 	for _, want := range []string{"source", "source_ref"} {
 		if !strings.Contains(insert, want) {
-			t.Errorf("pending_zitadel_propagations INSERT in enqueueWrites must list column %q; insert:\n%s", want, insert)
+			t.Errorf("propagation_outbox INSERT in enqueueWrites must list column %q; insert:\n%s", want, insert)
 		}
 	}
 }
@@ -138,6 +138,9 @@ func TestPropagationOutbox_MigrationCoverage(t *testing.T) {
 	downSQL := string(down)
 
 	// 1. The table exists and there is NO `confirmed` status (design Decision 1).
+	// The historical name: 000015 created the table before the add-on platform
+	// renamed it to propagation_outbox in 000026. This assertion is about what
+	// that migration did, so it keeps the name that migration used.
 	if !strings.Contains(upSQL, "CREATE TABLE IF NOT EXISTS pending_zitadel_propagations") {
 		t.Fatal("up migration must create pending_zitadel_propagations")
 	}

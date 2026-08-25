@@ -1,0 +1,14 @@
+{
+  "contract_version": 1,
+  "call_id": "0f8b7a1c-6d2e-4c53-9a10-2b7c9d4e5f60",
+  "subject": "289471021834760193",
+  "email": "maya.chen@example.edu",
+  "fingerprint": "sha256:9d1c4f0b7e2a",
+  "plan_id": "3c9e2f81-44ab-4d0e-8f21-77aa10bb33cd",
+  "actor": "operator-289471021834760199",
+  "desired": {
+    "group": ["lab_makers", "fabrication"],
+    "enabled": true,
+    "smb_enabled": true
+  }
+}

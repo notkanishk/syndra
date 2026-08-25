@@ -12,7 +12,7 @@ import (
 func resetOnboardingDeps(t *testing.T) (
 	origInsert func(context.Context, string, string, string) (string, bool, error),
 	origBundle func(context.Context) (string, error),
-	origAssign func(context.Context, string, string) error,
+	origAssign func(context.Context, string, string, string) (CascadeResult, error),
 	origAudit func(context.Context, string, string, string, string) error,
 	origComplete func(context.Context, string, string) error,
 	origFail func(context.Context, string, string) error,
@@ -20,7 +20,7 @@ func resetOnboardingDeps(t *testing.T) (
 	t.Helper()
 	origInsert = svcInsertOnboardingTrigger
 	origBundle = svcGetWelcomeBundle
-	origAssign = svcAssignBundleToUser
+	origAssign = svcCascadeWelcomeBundle
 	origAudit = svcInsertAuditLog
 	origComplete = svcCompleteOnboardingTrigger
 	origFail = svcFailOnboardingTrigger
@@ -28,7 +28,7 @@ func resetOnboardingDeps(t *testing.T) (
 	t.Cleanup(func() {
 		svcInsertOnboardingTrigger = origInsert
 		svcGetWelcomeBundle = origBundle
-		svcAssignBundleToUser = origAssign
+		svcCascadeWelcomeBundle = origAssign
 		svcInsertAuditLog = origAudit
 		svcCompleteOnboardingTrigger = origComplete
 		svcFailOnboardingTrigger = origFail
@@ -43,7 +43,7 @@ func happyPathDeps() {
 	svcGetWelcomeBundle = func(_ context.Context) (string, error) {
 		return "bundle-id-1", nil
 	}
-	svcAssignBundleToUser = func(_ context.Context, _, _ string) error { return nil }
+	svcCascadeWelcomeBundle = func(context.Context, string, string, string) (CascadeResult, error) { return CascadeResult{}, nil }
 	svcInsertAuditLog = func(_ context.Context, _, _, _, _ string) error { return nil }
 	svcCompleteOnboardingTrigger = func(_ context.Context, _, _ string) error { return nil }
 	svcFailOnboardingTrigger = func(_ context.Context, _, _ string) error { return nil }
@@ -72,9 +72,9 @@ func TestTriggerOnboarding_IdempotentDuplicate(t *testing.T) {
 		bundleCalled = true
 		return "bundle-id-1", nil
 	}
-	svcAssignBundleToUser = func(_ context.Context, _, _ string) error {
+	svcCascadeWelcomeBundle = func(context.Context, string, string, string) (CascadeResult, error) {
 		t.Error("AssignBundleToUser called on duplicate trigger — should not happen")
-		return nil
+		return CascadeResult{}, nil
 	}
 
 	if err := TriggerOnboarding(context.Background(), "u1", "webhook", "key-dup"); err != nil {
@@ -121,9 +121,9 @@ func TestTriggerOnboarding_NoBundleAvailable_MarksFailedAndReturnsError(t *testi
 		failedID = triggerID
 		return nil
 	}
-	svcAssignBundleToUser = func(_ context.Context, _, _ string) error {
+	svcCascadeWelcomeBundle = func(context.Context, string, string, string) (CascadeResult, error) {
 		t.Error("AssignBundleToUser called when no bundle available")
-		return nil
+		return CascadeResult{}, nil
 	}
 
 	err := TriggerOnboarding(context.Background(), "u1", "webhook", "key-nobundle")
@@ -148,8 +148,8 @@ func TestTriggerOnboarding_AssignmentFails_MarksFailedAndReturnsError(t *testing
 	svcGetWelcomeBundle = func(_ context.Context) (string, error) {
 		return "bundle-id-1", nil
 	}
-	svcAssignBundleToUser = func(_ context.Context, _, _ string) error {
-		return errors.New("FK constraint violation")
+	svcCascadeWelcomeBundle = func(context.Context, string, string, string) (CascadeResult, error) {
+		return CascadeResult{}, errors.New("FK constraint violation")
 	}
 	failedID := ""
 	svcFailOnboardingTrigger = func(_ context.Context, triggerID, _ string) error {

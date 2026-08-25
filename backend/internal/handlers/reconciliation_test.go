@@ -39,7 +39,7 @@ func withReconciliationDeps(
 	svcGetActiveMappingRulesRecon = func(_ context.Context) ([]models.MappingRule, error) {
 		return nil, nil
 	}
-	svcGetExclusions = func(_ context.Context) ([]models.ExternalGrantExclusion, error) {
+	svcGetExclusions = func(_ context.Context, _ string) ([]models.ExternalGrantExclusion, error) {
 		return nil, nil
 	}
 	// Pagination-aware stub: slices the master list by the requested offset

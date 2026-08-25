@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
 
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { roleLabel } from "@/lib/format";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateRole, useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
 
@@ -37,6 +38,7 @@ export function CreateRoleDialog({
   const projects = useProjects();
   const catalog = useGlobalRoleCatalog();
   const create = useCreateRole();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const [projectId, setProjectId] = useState(pinnedProjectId ?? "");
   const [roleKey, setRoleKey] = useState("");
@@ -159,6 +161,11 @@ export function CreateRoleDialog({
         </div>
       </div>
 
+      {/* The sheet reports its own result and stays open to do it: a role that
+          nobody holds yet is a fact the operator has to act on next, and a
+          dialog that closes itself takes that sentence with it. */}
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter>
         <Button
           variant="accent"
@@ -181,18 +188,19 @@ export function CreateRoleDialog({
                   ? { project_id: cloneProject, role_key: cloneRole }
                   : undefined,
               });
-              toast.success(
-                `${roleLabel(project, roleKey, displayName)} created. Nobody holds it yet.`,
-              );
-              onClose();
+              setOutcome({
+                kind: "applied",
+                message: `${roleLabel(project, roleKey, displayName)} created`,
+                detail: "Nobody holds it yet, and nothing is checking it until somebody does.",
+              });
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The role wasn't created.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
           Create role
         </Button>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose}>{outcome?.kind === "applied" ? "Done" : "Cancel"}</Button>
       </ModalFooter>
     </Modal>
   );

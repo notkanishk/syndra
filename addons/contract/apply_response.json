@@ -1,0 +1,14 @@
+{
+  "subject": "289471021834760193",
+  "effect": "applied",
+  "detail": "Added fabrication. Unlocked the account.",
+  "consequence": "In lab_makers, fabrication. Enabled, SMB on.",
+  "username": "maya.chen",
+  "uid": 3042,
+  "fingerprint": "sha256:9d1c4f0b7e2a",
+  "observed": {
+    "group": ["fabrication", "lab_makers"],
+    "enabled": true,
+    "smb_enabled": true
+  }
+}

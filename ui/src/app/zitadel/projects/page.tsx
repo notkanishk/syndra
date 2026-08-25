@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { DirectWriteWarning, UpstreamShell } from "@/components/upstream/UpstreamShell";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import {
@@ -42,7 +43,7 @@ export default function UpstreamProjectsPage() {
       syndraHref="/projects"
       syndraLabel="See the same projects as Syndra understands them"
     >
-      <div className="flex flex-wrap items-start gap-5">
+      <div className="flex flex-col items-stretch gap-5 tablet:flex-row tablet:flex-wrap tablet:items-start">
         <Card className="w-[280px] min-w-[240px] flex-none">
           <CardHeader title="Projects" count={rows.length} />
           <ListStates
@@ -50,7 +51,7 @@ export default function UpstreamProjectsPage() {
             error={projects.error}
             isEmpty={rows.length === 0}
             onRetry={() => projects.refetch()}
-            errorTitle="Couldn't read projects from the identity provider."
+            errorTitle="Couldn't read projects from the identity provider. Syndra itself is fine."
             skeleton={<RowSkeleton rows={5} avatar={false} label="Reading projects" />}
             empty={
               <EmptyState
@@ -76,7 +77,7 @@ export default function UpstreamProjectsPage() {
           </ListStates>
         </Card>
 
-        <Card className="min-w-[420px] flex-1">
+        <Card className="w-full tablet:min-w-[420px] tablet:flex-1">
           <CardHeader
             title="Roles in this project"
             count={roles.data?.items.length}
@@ -100,7 +101,7 @@ export default function UpstreamProjectsPage() {
             error={roles.error}
             isEmpty={(roles.data?.items ?? []).length === 0}
             onRetry={() => roles.refetch()}
-            errorTitle="Couldn't read this project's roles."
+            errorTitle="Couldn't read this project's roles from the identity provider. Syndra itself is fine."
             skeleton={<RowSkeleton rows={4} avatar={false} label="Reading roles" />}
             empty={
               <EmptyState
@@ -142,11 +143,13 @@ function RoleRow({
   onEdit: () => void;
 }) {
   const remove = useUpstreamDeleteRole();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [acknowledged, setAcknowledged] = useState(false);
 
   return (
     <>
-      <div className="row-divider flex flex-wrap items-center gap-4 px-5 py-3">
+      <div className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-4">
         <span className="min-w-[200px] flex-1 truncate text-[14.5px]">
           {role.displayName || role.key} <Mono className="text-faint">{role.key}</Mono>
         </span>
@@ -168,19 +171,32 @@ function RoleRow({
             lede="The role disappears from the identity provider, and everybody currently holding it loses it."
           />
           <div className="px-6">
-            <DirectWriteWarning what="Deleting a role removes it for every holder at once." />
+            <DirectWriteWarning
+              what="Deleting a role removes it for every holder at once."
+              acknowledged={acknowledged}
+              onAcknowledge={setAcknowledged}
+            />
           </div>
-          <ModalFooter>
+          {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
+      <ModalFooter>
             <Button
               variant="dangerConfirm"
+              disabled={!acknowledged}
               isPending={remove.isPending}
               onClick={async () => {
                 try {
                   await remove.mutateAsync({ projectId, key: role.key });
-                  toast.success(`${role.key} deleted upstream.`);
-                  setConfirming(false);
+                  // "Applied", and it means it here in a way it does not
+                  // anywhere else in the product: this write went straight to
+                  // Zitadel with no plan, no queue and no ledger row behind it.
+                  setOutcome({
+                    kind: "applied",
+                    message: `${role.key} deleted in Zitadel`,
+                    detail: "Syndra has no record of this change beyond the audit line.",
+                  });
                 } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "That didn't go through.");
+                  setOutcome(outcomeFromError(error));
                 }
               }}
             >
@@ -204,10 +220,12 @@ function RoleDialog({
   onClose: () => void;
 }) {
   const create = useUpstreamCreateRole();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const update = useUpstreamUpdateRole();
   const [key, setKey] = useState(role?.key ?? "");
   const [displayName, setDisplayName] = useState(role?.displayName ?? "");
   const [group, setGroup] = useState(role?.group ?? "");
+  const [acknowledged, setAcknowledged] = useState(false);
 
   const busy = create.isPending || update.isPending;
 
@@ -246,31 +264,49 @@ function RoleDialog({
             placeholder="Safety-gated"
           />
         </div>
-        <DirectWriteWarning what="Creating or renaming a role here happens outside Syndra's record." />
+        <DirectWriteWarning
+          what="Creating or renaming a role here happens outside Syndra's record."
+          acknowledged={acknowledged}
+          onAcknowledge={setAcknowledged}
+        />
       </div>
+      {/* The dialog reports its own result and stays open to do it, the same
+          way the role dialog on Syndra's own side does. Here it matters more:
+          the sentence this reports is that Syndra has no record of what just
+          happened, and a dialog that closes itself takes that sentence with
+          it. */}
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1 mt-3" />}
+
       <ModalFooter>
         <Button
           variant="danger"
-          disabled={!key.trim()}
+          disabled={!key.trim() || !acknowledged || outcome?.kind === "applied"}
           isPending={busy}
           onClick={async () => {
             try {
               if (role) {
                 await update.mutateAsync({ projectId, key: role.key, displayName, group });
-                toast.success(`${role.key} updated upstream.`);
+                setOutcome({
+                  kind: "applied",
+                  message: `${role.key} updated in Zitadel`,
+                  detail: "Syndra has no record of this change beyond the audit line.",
+                });
               } else {
                 await create.mutateAsync({ projectId, key: key.trim(), displayName, group });
-                toast.success(`${key.trim()} created upstream.`);
+                setOutcome({
+                  kind: "applied",
+                  message: `${key.trim()} created in Zitadel`,
+                  detail: "Syndra has no record of this change beyond the audit line.",
+                });
               }
-              onClose();
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "That didn't go through.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
           {role ? "Save upstream" : "Create upstream"}
         </Button>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose}>{outcome?.kind === "applied" ? "Done" : "Cancel"}</Button>
       </ModalFooter>
     </Modal>
   );

@@ -3,6 +3,8 @@ package propagation
 import (
 	"context"
 	"fmt"
+
+	"syndra/internal/db"
 )
 
 // DrainBatch applies ONLY the outbox rows whose ids are given, under one advisory lock and one
@@ -26,10 +28,25 @@ func DrainBatch(ctx context.Context, ids []string) (DrainResult, error) {
 	if !zitadelReachable(ctx) {
 		return DrainResult{Halted: true, Reason: "zitadel_offline"}, nil
 	}
+	// Same target scope as DrainOne, and for the same reason: this loop hands
+	// whatever it claims to the Zitadel dispatcher, which would mark an add-on
+	// entitlement (`op_type='apply'`) terminally failed as an unknown operation
+	// — before its own dispatcher exists, and with no way back from `failed`.
+	// The claim refuses those rows instead, so the loop cannot reach them.
+	seen := map[string]bool{}
 	for _, id := range ids {
-		row, found, err := claimOne(ctx, id)
-		if err != nil || !found {
-			continue // already terminal, gone, or unclaimable — skip
+		row, found, err := claimOne(ctx, db.TargetZitadel, id)
+		if err != nil {
+			continue
+		}
+		if !found {
+			for _, t := range undispatchableTargets(ctx, id) {
+				if !seen[t] {
+					seen[t] = true
+					res.Awaiting = append(res.Awaiting, t)
+				}
+			}
+			continue // already terminal, gone, or not this dispatcher's
 		}
 		if halt := res.processRow(ctx, *row); halt {
 			break // retry budget exceeded (same halt semantics as Drain)

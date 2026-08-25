@@ -345,3 +345,9 @@ func TestRevokeMappingRules_ErrorContinues(t *testing.T) {
 		t.Errorf("expected 2 removals, got %d", len(mock.removeGrantCalls))
 	}
 }
+
+// Zitadel's event log is not what this fake is about. Present so the type still
+// satisfies the client interface; a test that cares stubs it explicitly.
+func (fake *mockClient) GrantOriginByID(context.Context, string) (*GrantOrigin, error) {
+	return nil, nil
+}

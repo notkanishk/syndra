@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
 
 import {
   SourceChip,
@@ -9,12 +8,14 @@ import {
   type RoleReason,
   type SourceKind,
 } from "@/components/access/AccessSource";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { useRemoveDirectGrant } from "@/lib/queries/useRoleMembers";
 import { useRemoveBundle } from "@/lib/queries/useBundles";
 import { humanizeKey } from "@/lib/format";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 
 /**
  * Source-specific removal.
@@ -150,6 +151,7 @@ function DirectDialog({
   onClose: () => void;
 }) {
   const remove = useRemoveDirectGrant();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const retained = others.length > 0;
   const roleLabel = `${removal.projectName} / ${removal.roleKey}`;
 
@@ -188,6 +190,8 @@ function DirectDialog({
           )}
         </div>
       </div>
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter
         note={
           blocked
@@ -201,11 +205,25 @@ function DirectDialog({
           isPending={remove.isPending}
           onClick={async () => {
             try {
-              await remove.mutateAsync({ userId: userId!, grantId: removal.grantId! });
-              toast.success(`Direct access to ${roleLabel} removed.`);
-              onClose();
+              const result = await remove.mutateAsync({
+                userId: userId!,
+                grantId: removal.grantId!,
+              });
+              // The residual outcome, from the backend that computed it. A
+              // role this person also holds through a bundle or a rule
+              // survives the removal, and which ones those are is a closure
+              // diff the server does — the UI must not hold a second opinion
+              // about somebody's access.
+              const retained = result?.retained_roles ?? [];
+              setOutcome({
+                kind: "applied",
+                message: `Direct access to ${roleLabel} removed`,
+                detail: retained.length
+                  ? `They still hold ${retained.join(", ")}, from a bundle or a rule.`
+                  : "Nothing else was supplying it, so the access is gone.",
+              });
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The removal didn't go through.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
@@ -238,6 +256,7 @@ function BundleDialog({
 }) {
   const bundleName = source.bundle_name ?? "this bundle";
   const removeBundle = useRemoveBundle(userId ?? "");
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   return (
     <Modal open onClose={onClose} busy={removeBundle.isPending} size="sm" labelledBy="removal-title">
@@ -248,7 +267,7 @@ function BundleDialog({
         lede={`Everything ${bundleName} carries goes with it, except what another source also gives them.`}
       />
       <div className="flex flex-col gap-2 px-6">
-        <div className="text-[11.5px] font-semibold uppercase tracking-[0.1em] text-danger-text">
+        <div className="text-[12.5px] font-semibold uppercase tracking-[0.1em] text-danger-text">
           They will lose
         </div>
         <div className="rounded-nav bg-danger-soft px-3.5 py-2.5 text-[14px]">
@@ -268,6 +287,8 @@ function BundleDialog({
           </>
         )}
       </div>
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter note="Every other role this bundle carries is removed too. Manage bundles shows the full list before you commit.">
         <Button
           variant="dangerConfirm"
@@ -276,10 +297,14 @@ function BundleDialog({
           onClick={async () => {
             try {
               await removeBundle.mutateAsync(source.bundle_id!);
-              toast.success(`${bundleName} removed from ${subject}.`);
-              onClose();
+              setOutcome({
+                kind: "queued",
+                message: `${bundleName} removed from ${subject}`,
+                detail:
+                  "Roles it supplied are withdrawn on the next drain, except any another source still grants.",
+              });
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The removal didn't go through.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >

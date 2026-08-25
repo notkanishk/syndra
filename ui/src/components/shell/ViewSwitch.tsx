@@ -29,7 +29,12 @@ export function ViewSwitch() {
             role="radio"
             aria-checked={active}
             onClick={() => setView(option)}
-            className={`rounded-pill px-4 py-1.5 text-[13.5px] motion-tint ${
+            // 44px up to the desktop breakpoint, because everything below it
+            // is a touch device and this is a primary control — it changes
+            // what the whole application shows. The board draws it at 34,
+            // which is ten under the floor and the one place a drawn value
+            // could not be followed.
+            className={`min-h-[44px] rounded-pill px-4 text-[13.5px] motion-tint desktop:min-h-0 desktop:py-1.5 ${
               active
                 ? "bg-accent-dense font-semibold text-accent-ink"
                 : "text-muted hover:text-ink"

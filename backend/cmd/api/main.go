@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/handlers"
@@ -20,6 +21,7 @@ import (
 	"syndra/internal/services/drift"
 	"syndra/internal/services/expiry"
 	"syndra/internal/services/periodic"
+	"syndra/internal/services/propagation"
 	"syndra/internal/zitadel"
 )
 
@@ -78,6 +80,27 @@ func main() {
 	// demo fallback otherwise). Emits the [DIRECTORY] Source=... log line.
 	directory.Init()
 
+	// Read the add-on registry from deployment configuration and reconcile the
+	// database's targets registry to match. No add-on is contacted here: one
+	// that is switched off must not delay startup, and one that is unreachable
+	// must still be registered, because operator navigation derives from the
+	// deployment rather than from what happens to be answering. A failure here
+	// is a database failure, not an add-on failure, so it is fatal — every
+	// target-carrying table resolves its foreign key against that registry.
+	if err := addons.Init(context.Background()); err != nil {
+		log.Fatalf("[STARTUP] Add-on registry initialisation failed: %v", err)
+	}
+
+	// First manifest read, synchronously, before the server accepts anything. A
+	// contract-version mismatch is a registration refusal and belongs in the
+	// startup log where an operator looks after a deploy, not discovered
+	// minutes later on a tick. It is deliberately NOT fatal: refusing to boot
+	// the backend that governs every other target because one NAS add-on
+	// shipped ahead of it would be the fail-open rule inverted. RefreshAll
+	// bounds each add-on individually and runs them concurrently, so a
+	// switched-off one costs one timeout rather than the whole pass.
+	_ = addons.RefreshAll(context.Background())
+
 	if err := seed.EnsureDemoData(context.Background()); err != nil {
 		log.Fatalf("Demo seed failed: %v", err)
 	}
@@ -106,6 +129,10 @@ func main() {
 		batch := schedulerBatchSize()
 		sched = periodic.New("SCHEDULER", schedulerInterval(), 5*time.Minute, func(ctx context.Context) error {
 			expiry.Sweep(ctx, batch)
+			// A separate pass on the same tick, not a second stage of the
+			// first: grant expiry removes access and this restores it, so a
+			// batch that aborted halfway through one must not skip the other.
+			expiry.SweepAllowances(ctx, batch)
 			return nil
 		})
 		go sched.Start(ctx)
@@ -123,6 +150,73 @@ func main() {
 		go driftSched.Start(ctx)
 	} else {
 		log.Println("[DRIFT] Disabled via DRIFT_SCHEDULER_ENABLED=false")
+	}
+
+	// Revocation drain: the one background drain in the system. Grants stay
+	// operator-gated — the drain rule protects a consent property, and nobody
+	// gains access without a human — but a queued revoke is retained access, so
+	// it must not wait on somebody opening the right page. Shares the operator
+	// drain's advisory lock, so the two never dispatch concurrently; a pass that
+	// cannot take it simply returns and the next tick tries again.
+	var revokeSched *periodic.Runner
+	if revocationDrainEnabled() {
+		revokeSched = periodic.New("REVOKE", revocationDrainInterval(), 5*time.Minute, func(ctx context.Context) error {
+			res, err := propagation.DrainRevocations(ctx)
+			if err != nil {
+				return err
+			}
+			if res.Applied+res.Failed+res.Requeued+res.Abandoned+res.Errored > 0 || res.Halted {
+				log.Printf("[REVOKE] applied=%d failed=%d requeued=%d abandoned=%d errored=%d halted=%v %s",
+					res.Applied, res.Failed, res.Requeued, res.Abandoned, res.Errored, res.Halted, res.Reason)
+			}
+			return nil
+		})
+		go revokeSched.Start(ctx)
+	} else {
+		log.Println("[REVOKE] Disabled via REVOCATION_DRAIN_ENABLED=false")
+	}
+
+	// Add-on reconciliation: one pass per registered add-on target, resolving
+	// current state and converging what has drifted (design §15). Deliberately
+	// not a drift SWEEP — an operator-initiated change applies the snapshot that
+	// was approved, and this resolves what policy says now, because a reconcile
+	// that replayed snapshots would fight every legitimate edit.
+	//
+	// It converges nothing by itself: it queues, and the rows wait for the drain
+	// like every other add-on row. What it does immediately is notice — an
+	// account somebody changed on the NAS by hand, and every account on the
+	// target that Syndra never provisioned.
+	var reconcileSched *periodic.Runner
+	if targets := addons.Registered(); len(targets) > 0 && driftSchedulerEnabled() {
+		reconcileSched = periodic.New("ADDON-RECONCILE", driftInterval(), 6*time.Hour, func(ctx context.Context) error {
+			for _, reg := range addons.Registered() {
+				res, err := drift.ReconcileAddon(ctx, reg.Target)
+				if err != nil {
+					// One target's failure must not stop the others: they are
+					// separate deployments with separate outages.
+					log.Printf("[ADDON-RECONCILE] %s: %v", reg.Target, err)
+					continue
+				}
+				if res.Queued > 0 || len(res.Unmanaged) > 0 || res.Halted {
+					log.Printf("[ADDON-RECONCILE] %s bound=%d queued=%d unmanaged=%d halted=%v %s",
+						reg.Target, res.Bound, res.Queued, len(res.Unmanaged), res.Halted, res.Reason)
+				}
+			}
+			return nil
+		})
+		go reconcileSched.Start(ctx)
+	}
+
+	// Add-on manifest refresh: reads each registered add-on's /capabilities,
+	// checks the contract version, and resolves the effective operation set
+	// against backend policy. Registration alone makes nothing callable — this
+	// loop is what turns a configured add-on into a capable one, and what
+	// notices when an operation stops being available on its target. Runs once
+	// immediately, then on each tick.
+	var addonSched *periodic.Runner
+	if len(addons.Registered()) > 0 {
+		addonSched = periodic.New("ADDON", addonRefreshInterval(), 15*time.Minute, addons.RefreshAll)
+		go addonSched.Start(ctx)
 	}
 
 	// Start server in background
@@ -161,6 +255,30 @@ func main() {
 		case <-driftSched.Done():
 		case <-shutdownCtx.Done():
 			log.Println("[DRIFT] Shutdown deadline exceeded waiting for scheduler; closing anyway")
+		}
+	}
+
+	if revokeSched != nil {
+		select {
+		case <-revokeSched.Done():
+		case <-shutdownCtx.Done():
+			log.Println("[REVOKE] Shutdown deadline exceeded waiting for drain; closing anyway")
+		}
+	}
+
+	if reconcileSched != nil {
+		select {
+		case <-reconcileSched.Done():
+		case <-shutdownCtx.Done():
+			log.Println("[ADDON-RECONCILE] Shutdown deadline exceeded waiting for the pass; closing anyway")
+		}
+	}
+
+	if addonSched != nil {
+		select {
+		case <-addonSched.Done():
+		case <-shutdownCtx.Done():
+			log.Println("[ADDON] Shutdown deadline exceeded waiting for refresh; closing anyway")
 		}
 	}
 
@@ -222,6 +340,48 @@ func driftSchedulerEnabled() bool {
 		return true
 	}
 	return b
+}
+
+// Enabled by default, because a revocation nobody drains is retained access and
+// the safe default for that is to drain it. Disabling is for a deployment that
+// deliberately wants every dispatch operator-observed.
+func revocationDrainEnabled() bool {
+	v := os.Getenv("REVOCATION_DRAIN_ENABLED")
+	if v == "" {
+		return true
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		log.Printf("[REVOKE] Invalid REVOCATION_DRAIN_ENABLED=%q, defaulting to enabled", v)
+		return true
+	}
+	return b
+}
+
+func revocationDrainInterval() time.Duration {
+	v := os.Getenv("REVOCATION_DRAIN_INTERVAL")
+	if v == "" {
+		return 5 * time.Minute
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		log.Printf("[REVOKE] Invalid REVOCATION_DRAIN_INTERVAL=%q, defaulting to 5m", v)
+		return 5 * time.Minute
+	}
+	return d
+}
+
+func addonRefreshInterval() time.Duration {
+	v := os.Getenv("ADDON_MANIFEST_REFRESH_INTERVAL")
+	if v == "" {
+		return 15 * time.Minute
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		log.Printf("[ADDON] Invalid ADDON_MANIFEST_REFRESH_INTERVAL=%q, defaulting to 15m", v)
+		return 15 * time.Minute
+	}
+	return d
 }
 
 func driftInterval() time.Duration {

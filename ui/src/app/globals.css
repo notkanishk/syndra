@@ -100,6 +100,31 @@
   --radius-nav: 12px;
   --radius-pill: 999px;
 
+  /* ── Breakpoints ─────────────────────────────────────────────────────────
+   * Three states, not four. Three is enough to specify and few enough to
+   * test, and each one is a different device in somebody's hands rather than
+   * an arbitrary step on a scale.
+   *
+   *   below 720px   phone   — single column, tab bar, dialogs become sheets
+   *   720–1080px    tablet  — rail returns collapsed to 64px, up to three
+   *                           table columns, sheets become dialogs again.
+   *                           Still touch: targets stay 44px.
+   *   above 1080px  desktop — the product as it already is, unchanged
+   *
+   * These override Tailwind's stock scale deliberately. The defaults are
+   * 40/48/64/80rem and none of them fall where this shell actually breaks:
+   * the rail is 252px and the widest fixed table row sums to roughly 950px,
+   * so a `lg:` at 64rem would collapse columns a whole device too early.
+   * Naming them after the device also means a component reads
+   * `tablet:` rather than `md:`, and a reviewer can tell whether the author
+   * meant a device or a number.
+   *
+   * `phone` has no token: it is the unprefixed base. Mobile-first is not a
+   * preference here, it is what stops a phone paying for a desktop layout it
+   * then has to override. */
+  --breakpoint-tablet: 45rem; /* 720px */
+  --breakpoint-desktop: 67.5rem; /* 1080px */
+
   /* ── Motion ──────────────────────────────────────────────────────────────
    * Six durations for the whole product, and nothing on the critical path is
    * slower than 260ms: an operator clearing a queue of twelve should never
@@ -212,6 +237,43 @@
 }
 
 @layer base {
+  /* ── The space navigation occupies ───────────────────────────────────────
+   * Zero at every width where navigation is a rail, and the tab bar's real
+   * height below the tablet breakpoint.
+   *
+   * Anything anchored to the bottom of the viewport offsets by this rather
+   * than by a number of its own. There is exactly one such thing today — the
+   * convergence dock — and one is already enough for the number to have
+   * drifted: a second author reading "bottom-6" has no way to know a tab bar
+   * appeared underneath it.
+   *
+   * `sticky` chrome inside the scroll container needs none of this. The tab
+   * bar is a flex sibling rather than an overlay, so the scroll container
+   * already ends where the tab bar begins — which is why the selection bar
+   * required no change at all.
+   * ─────────────────────────────────────────────────────────────────────── */
+  :root {
+    --touch-nav-height: 0px;
+  }
+
+  @media (max-width: 44.99rem) {
+    :root {
+      /* Measured at 390, not derived: a 1px top border, 8px of top padding, a
+         52px tab and 8px below it — 69, where counting only the padding and
+         the tab gives 68 and quietly loses the border.
+
+         The inset is not optional either. The bar carries
+         `pb-[env(safe-area-inset-bottom)]`, so on a notched phone it is 34px
+         taller than its own content, and anything positioned off a number
+         that ignores that sits UNDER the bar rather than above it.
+
+         The sheet-shaped bar Advanced gets is 61px + inset — shorter, because
+         a single trigger is 44px where a tab row is 52px. This takes the
+         taller of the two so the one number clears both. */
+      --touch-nav-height: calc(69px + env(safe-area-inset-bottom));
+    }
+  }
+
   /* ── Brand violet ────────────────────────────────────────────────────────
    * The accent the brand locks. Declared once and theme-independent, because
    * a ramp is a ramp — the themes decide what they spend it on. Both rooms
@@ -433,9 +495,24 @@
  * might paste into a terminal or a config file is JetBrains Mono.
  * ───────────────────────────────────────────────────────────────────────── */
 
+/* ── The display roles scale with the room ───────────────────────────────
+ * A 40px page title is right at 1280 and absurd at 390: it takes three lines
+ * and the first thing a phone shows an operator is the word they already knew
+ * they had tapped. The mobile spec sets the page title at 26px.
+ *
+ * `clamp` rather than a breakpoint step, for two reasons. It has no cliff — a
+ * 700px tablet gets a size between the two rather than one of them — and the
+ * fixed part is in `rem`, so a reader who has raised their platform's text
+ * size gets the increase rather than having it overridden by a px constant.
+ *
+ * Only the display roles move. Body, table cell and mono stay put: they are
+ * already at their legibility floor, and scaling them down is the one thing
+ * the type floor exists to forbid.
+ * ──────────────────────────────────────────────────────────────────────── */
+
 @utility type-greeting {
   font-family: var(--font-bricolage), sans-serif;
-  font-size: 42px;
+  font-size: clamp(28px, calc(1.26rem + 2.03vw), 42px);
   font-weight: 500;
   line-height: 1.05;
   letter-spacing: -0.02em;
@@ -443,7 +520,7 @@
 
 @utility type-page-title {
   font-family: var(--font-bricolage), sans-serif;
-  font-size: 40px;
+  font-size: clamp(26px, calc(1.13rem + 2.03vw), 40px);
   font-weight: 500;
   line-height: 1.04;
   letter-spacing: -0.02em;
@@ -451,21 +528,21 @@
 
 @utility type-section-title {
   font-family: var(--font-bricolage), sans-serif;
-  font-size: 32px;
+  font-size: clamp(22px, calc(1.02rem + 1.45vw), 32px);
   font-weight: 500;
   letter-spacing: -0.02em;
 }
 
 @utility type-card-title {
   font-family: var(--font-bricolage), sans-serif;
-  font-size: 22px;
+  font-size: clamp(19px, calc(1.08rem + 0.43vw), 22px);
   font-weight: 600;
   line-height: 1.2;
 }
 
 @utility type-dialog-title {
   font-family: var(--font-bricolage), sans-serif;
-  font-size: 26px;
+  font-size: clamp(22px, calc(1.23rem + 0.58vw), 26px);
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.15;
@@ -473,24 +550,31 @@
 
 @utility type-empty-title {
   font-family: var(--font-bricolage), sans-serif;
-  font-size: 22px;
+  font-size: clamp(19px, calc(1.08rem + 0.43vw), 22px);
   font-weight: 600;
 }
 
 /* Uppercase micro-label — the one place letter-spacing is this wide, so a
-   label can never be misread as body copy. */
+   label can never be misread as body copy. At the floor rather than under it:
+   uppercase and wide-tracked is already unmistakable as a label without
+   dropping below what is readable at arm's length. */
 @utility type-label {
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--label);
 }
 
-/* Sidebar group heading: smaller and wider still, because it is structure
-   rather than content. It is a label, never a link. */
+/* Sidebar group heading: wider than a label, because it is structure rather
+   than content. It is a label, never a link.
+
+   Not smaller, though it reads as though it should be. The floor is 12.5px
+   everywhere, and this heading also carries the mobile nav sheet — at 10.5px
+   it was the smallest type in the product, inside the surface most likely to
+   be read at arm's length. Letter-spacing carries the distinction instead. */
 @utility type-nav-group {
-  font-size: 10.5px;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.13em;
   text-transform: uppercase;

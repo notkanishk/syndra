@@ -35,7 +35,7 @@ func InsertWebhookEvent(ctx context.Context, eventType, userID, sourceProject, r
 		RETURNING id`
 
 	var id string
-	err := PG.QueryRow(ctx, query, eventType, userID, sourceProject, roleKey, idempotencyKey).Scan(&id)
+	err := querier(ctx).QueryRow(ctx, query, eventType, userID, sourceProject, roleKey, idempotencyKey).Scan(&id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", false, nil
@@ -51,7 +51,7 @@ func CompleteWebhookEvent(ctx context.Context, eventID string) error {
 		UPDATE webhook_events
 		SET status = 'processed', processed_at = NOW()
 		WHERE id = $1`
-	_, err := PG.Exec(ctx, query, eventID)
+	_, err := querier(ctx).Exec(ctx, query, eventID)
 	if err != nil {
 		return fmt.Errorf("complete webhook event: %w", err)
 	}
@@ -64,7 +64,7 @@ func FailWebhookEvent(ctx context.Context, eventID, errMsg string) error {
 		UPDATE webhook_events
 		SET status = 'failed', error_message = $2, processed_at = NOW()
 		WHERE id = $1`
-	_, err := PG.Exec(ctx, query, eventID, errMsg)
+	_, err := querier(ctx).Exec(ctx, query, eventID, errMsg)
 	if err != nil {
 		return fmt.Errorf("fail webhook event: %w", err)
 	}
@@ -91,7 +91,7 @@ const WebhookStatusDroppedEnrichmentIncomplete = "dropped_enrichment_incomplete"
 // relaxes the original non-empty check for this status only — the constraint
 // still rejects empty source_project on every other status.
 func DropWebhookEventEnrichmentIncomplete(ctx context.Context, eventType, userID, grantID, idempotencyKey string) error {
-	_, err := PG.Exec(ctx, `
+	_, err := querier(ctx).Exec(ctx, `
 		INSERT INTO webhook_events (event_type, user_id, source_project, role_key, idempotency_key, status, processed_at)
 		VALUES ($1, $2, '', $3, $4, $5, NOW())
 		ON CONFLICT (idempotency_key) DO NOTHING
@@ -126,7 +126,7 @@ func GetWebhookEvents(ctx context.Context, statusFilter string) ([]WebhookEvent,
 			ORDER BY created_at DESC`
 	}
 
-	rows, err := PG.Query(ctx, query, args...)
+	rows, err := querier(ctx).Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query webhook events: %w", err)
 	}
@@ -186,7 +186,7 @@ func UpsertGrantIndex(ctx context.Context, grantID, userID, projectID string, ro
 			project_id = EXCLUDED.project_id,
 			role_keys  = EXCLUDED.role_keys,
 			updated_at = NOW()`
-	if _, err := PG.Exec(ctx, query, grantID, userID, projectID, roleKeys); err != nil {
+	if _, err := querier(ctx).Exec(ctx, query, grantID, userID, projectID, roleKeys); err != nil {
 		return fmt.Errorf("upsert grant index (%s): %w", grantID, err)
 	}
 	return nil
@@ -200,7 +200,7 @@ func GetGrantIndex(ctx context.Context, grantID string) (ZitadelGrantIndex, erro
 		FROM zitadel_grants_index
 		WHERE grant_id = $1`
 	var row ZitadelGrantIndex
-	err := PG.QueryRow(ctx, query, grantID).Scan(
+	err := querier(ctx).QueryRow(ctx, query, grantID).Scan(
 		&row.GrantID, &row.UserID, &row.ProjectID, &row.RoleKeys, &row.CreatedAt, &row.UpdatedAt,
 	)
 	if err != nil {
@@ -228,7 +228,7 @@ func GetGrantIndexByUserProject(ctx context.Context, userID, projectID string) (
 		WHERE user_id = $1 AND project_id = $2
 		LIMIT 1`
 	var row ZitadelGrantIndex
-	err := PG.QueryRow(ctx, query, userID, projectID).Scan(
+	err := querier(ctx).QueryRow(ctx, query, userID, projectID).Scan(
 		&row.GrantID, &row.UserID, &row.ProjectID, &row.RoleKeys, &row.CreatedAt, &row.UpdatedAt,
 	)
 	if err != nil {
@@ -251,7 +251,7 @@ func GrantIndexHasRole(ctx context.Context, userID, projectID, role string) (boo
 			WHERE user_id = $1 AND project_id = $2 AND $3 = ANY(role_keys)
 		)`
 	var exists bool
-	if err := PG.QueryRow(ctx, query, userID, projectID, role).Scan(&exists); err != nil {
+	if err := querier(ctx).QueryRow(ctx, query, userID, projectID, role).Scan(&exists); err != nil {
 		return false, fmt.Errorf("grant index has role (%s/%s/%s): %w", userID, projectID, role, err)
 	}
 	return exists, nil
@@ -262,7 +262,7 @@ func GrantIndexHasRole(ctx context.Context, userID, projectID, role string) (boo
 // run; failure is non-fatal — the next reconciliation will clean it up.
 func DeleteGrantIndex(ctx context.Context, grantID string) error {
 	const query = `DELETE FROM zitadel_grants_index WHERE grant_id = $1`
-	if _, err := PG.Exec(ctx, query, grantID); err != nil {
+	if _, err := querier(ctx).Exec(ctx, query, grantID); err != nil {
 		return fmt.Errorf("delete grant index (%s): %w", grantID, err)
 	}
 	return nil

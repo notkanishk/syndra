@@ -9,7 +9,8 @@ import (
 )
 
 // handleGetUserProfile returns a user's display name and email.
-// Used by the sync service to provision LLDAP user attributes.
+// Read by an add-on's convergence to derive an account name; the email
+// localpart is what a username comes from (design §11).
 // GET /api/v1/users/{uid}/profile
 func handleGetUserProfile(w http.ResponseWriter, r *http.Request) {
 	uid := r.PathValue("uid")

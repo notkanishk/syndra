@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { TokenFormatEditor } from "@/components/apps/TokenFormatEditor";
 import { TokenPreview } from "@/components/apps/TokenPreview";
@@ -26,6 +26,10 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
   const apps = useApplications();
   const app = (apps.data ?? []).find((entry) => entry.application.id === applicationId);
   const shape = useClaimShape(app?.application.project_id);
+  // The editor holds edits the preview has not seen. Lifted here because they
+  // are siblings, and the preview's whole claim is that it shows what this app
+  // would receive right now.
+  const [editing, setEditing] = useState(false);
 
   useCrumb(app?.application.name);
 
@@ -76,21 +80,28 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
         }
       />
 
-      <div className="flex flex-wrap items-stretch gap-5">
-        <div className="min-w-[420px] flex-1">
+      <div className="flex flex-col items-stretch gap-5 tablet:flex-row tablet:flex-wrap">
+        <div className="w-full tablet:min-w-[420px] tablet:flex-1">
           <TokenFormatEditor
             projectId={app.application.project_id}
             applicationId={applicationId}
             applicationName={app.application.name}
             shape={shape}
             siblingCount={siblings.length}
+            onDirtyChange={setEditing}
           />
         </div>
-        <div className="min-w-[420px] flex-1">
+        <div className="w-full tablet:min-w-[420px] tablet:flex-1">
+          {/* The preview reads the SAVED shape. While the editor holds
+              unsaved edits it is a preview of a shape nobody is looking at,
+              and side by side on a desktop that is misleading; stacked on a
+              phone, where the editor is a scroll away, it is worse. It says so
+              rather than being quietly wrong. */}
           <TokenPreview
             applicationId={applicationId}
             applicationName={app.application.name}
             projectId={app.application.project_id}
+            behindEdits={editing}
           />
         </div>
       </div>

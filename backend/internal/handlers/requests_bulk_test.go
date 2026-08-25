@@ -16,16 +16,39 @@ import (
 	"syndra/internal/services/propagation"
 )
 
+// bulkDecisionReq builds the request a test makes. An apply is the SECOND of
+// two — it cites the approval the rehearsal issued — so the helper performs the
+// rehearsal and splices its plan id in, exactly as a client must. The tests
+// below stay about what the decision does; how it is authorised is asserted in
+// plan_gate_test.go.
 func bulkDecisionReq(t *testing.T, body string, apply bool) *http.Request {
 	t.Helper()
-	path := "/api/v1/requests/bulk-decision"
-	if apply {
-		path += "?apply=true"
+	const path = "/api/v1/requests/bulk-decision"
+
+	reviewed := func(r *http.Request) *http.Request {
+		// An approval needs an attributable reviewer; without one the endpoint
+		// refuses, which is asserted separately below.
+		return r.WithContext(withPrincipal(r.Context(), &auth.Principal{Subject: "op_1"}))
 	}
-	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
-	// An approval needs an attributable reviewer; without one the endpoint
-	// refuses, which is asserted separately below.
-	return req.WithContext(withPrincipal(req.Context(), &auth.Principal{Subject: "op_1"}))
+	if !apply {
+		return reviewed(httptest.NewRequest(http.MethodPost, path, strings.NewReader(body)))
+	}
+
+	rehearse := httptest.NewRecorder()
+	handleBulkDecideRequests(rehearse, reviewed(httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))))
+	var issued services.BulkPlan
+	if err := json.Unmarshal(rehearse.Body.Bytes(), &issued); err != nil || issued.PlanID == "" {
+		// A body the rehearsal refuses has no plan to cite, and refusing it on
+		// the apply path is what the validation cases assert.
+		return reviewed(httptest.NewRequest(http.MethodPost, path+"?apply=true", strings.NewReader(body)))
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(body), &payload); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	payload["plan_id"] = issued.PlanID
+	cited, _ := json.Marshal(payload)
+	return reviewed(httptest.NewRequest(http.MethodPost, path+"?apply=true", strings.NewReader(string(cited))))
 }
 
 func decodeBulkPlan(t *testing.T, rr *httptest.ResponseRecorder) services.BulkPlan {
@@ -39,6 +62,8 @@ func decodeBulkPlan(t *testing.T, rr *httptest.ResponseRecorder) services.BulkPl
 
 func stubRequestLookup(t *testing.T, byID map[string]models.AccessRequest) *int {
 	t.Helper()
+	// An apply cites an approval now, so every rehearsal needs somewhere to land.
+	stubPlanStore(t)
 	origGet := dbGetAccessRequestByID
 	origApprove := dbApproveRequestAndEnqueue
 	origResolve := dbResolveAccessRequest

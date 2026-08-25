@@ -59,3 +59,52 @@ describe("describeDrain", () => {
     expect(describeDrain(undefined).tone).toBe("info");
   });
 });
+
+/**
+ * A drain runs one pass per registered target and the passes fail
+ * independently. The summary has to survive that: "halted" beside "9 applied"
+ * is now an ordinary result, and an operator told "nothing was sent" when nine
+ * writes landed has been told the wrong half.
+ */
+describe("a drain with more than one target", () => {
+  it("names which target did not run rather than calling the whole pass a failure", () => {
+    const out = describeDrain(
+      result({
+        applied: 9,
+        halted: true,
+        reason: "zitadel_offline",
+        halted_target: "zitadel",
+        passes: [
+          { target: "zitadel", applied: 0, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: true, reason: "zitadel_offline" },
+          { target: "truenas", applied: 9, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: false },
+        ],
+      }),
+    );
+
+    expect(out.message).toContain("9 applied");
+    expect(out.message).toContain("zitadel did not run");
+    // Not an error: most of the work went through, and the part that did not is
+    // named and still queued.
+    expect(out.tone).toBe("warning");
+    expect(out.detail).toMatch(/stay queued/i);
+  });
+
+  it("says nothing was sent when the only pass that could run did not", () => {
+    const out = describeDrain(
+      result({
+        halted: true,
+        reason: "target_unreachable",
+        halted_target: "truenas",
+        passes: [
+          { target: "truenas", applied: 0, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: true, reason: "target_unreachable" },
+        ],
+      }),
+    );
+
+    expect(out.tone).toBe("error");
+    expect(out.message).toMatch(/truenas is unreachable/i);
+    // The pre-flight is the point: an outage costs one probe, not a retry
+    // budget per row.
+    expect(out.detail).toMatch(/no write spent a retry/i);
+  });
+});

@@ -1,6 +1,6 @@
 # Syndra — Next Steps
 
-> Single pickup point. Everything open, in one place, as of **2026-07-31**.
+> Single pickup point. Everything open, in one place, as of **2026-08-10**.
 > Sources consolidated here: `ROADMAP.md` phases 4–6, `docs/AUDIT.md` deferrals, open `changes/*/tasks.md`, and tooling debt.
 > [< Index](INDEX.md) · [Architecture](changes/syndra-core-architecture/design.md) · [Roadmap](changes/syndra-core-architecture/ROADMAP.md)
 
@@ -17,16 +17,21 @@ Four buckets, in the order they actually unblock each other:
 
 ## 1. Code
 
-### LDAP / sync (the known parked track)
+### LDAP / sync — **gone**
 
-Paused pending research on real LLDAP password-propagation and credential semantics. Listed for completeness — you already know this one.
+Deleted on 2026-08-10 by [`changes/addon-platform`](changes/addon-platform/proposal.md),
+group 11. `sync/`, the `provisioning_intents` queue, the four intent routes and
+the Argon2id password vault are removed; migration `000034` drops the tables and
+the credential columns. The items that used to be listed here — SC2's error
+classification, SC6's per-UID routing, SC7's bounded context, LLDAP integration,
+LLDAP reconciliation, OE7/OE13/OE14 — are not open work any more. There is
+nothing to resume.
 
-- **SC2 — top priority when sync resumes.** `IsConnectionError` doesn't classify `ErrorNetwork`, so a network-class LDAP failure isn't treated as a reconnect trigger. [`sync/internal/ldap/client.go`]
-- **SC6** — per-UID worker routing (same-UID ordering guarantee).
-- **SC7** — fresh bounded context for drain-time backend calls.
-- **LLDAP Integration** — end-to-end wiring against the real external LLDAP (separate Proxmox LXC), production connectivity validation.
-- **LLDAP Reconciliation** — periodic full sync comparing Syndra provisioning state to LLDAP group membership, overwriting drift per the one-way authority rule.
-- **OE7 / OE13 / OE14** — cosmetic sync cleanups; do them while you're in there, not as their own errand.
+**One consequence outlives it:** every member who enrolled before the cutover
+must set a new storage credential. Their hash went with the vault, and it could
+not have been converted anyway — TrueNAS takes plaintext and nothing else. The
+member view renders the re-enrolment state; the operator communication is the
+thing to do before this deploys.
 
 ### Basic / Advanced IA — what the redesign left open
 
@@ -43,7 +48,7 @@ Paused pending research on real LLDAP password-propagation and credential semant
 - ~~**ISC-45**~~ — **decided: one app lives in one project**, matching Zitadel and the UNIQUE constraint the schema already carries. The design diagram showing one app reading four projects was the thing that was wrong. Reopens on a real integration needing roles from two projects in one token — that is a product event, not a refactor. See `ui-capability-gap-closure` design Decision 14.
 - **Hardware sync state on the person page (C9b)** — blocked on the same contract E1 needs: per user and device, the desired version, last attempt, result, error and timestamp. Raw grant ids (C9a) shipped; this half cannot until the bridge defines that shape.
 - ~~**Expiring-access acknowledgement (C4)**~~ — **built** (migration `000024`), with the **reopens-when-the-grant-changes** rule. Implemented as a stored `acknowledged_expires_at` plus one join condition comparing it to the grant's current date: no trigger, no sweep, nothing a future write path can forget, and verifiable without a live database. Per-row only, grouped rather than hidden. See `ui-capability-gap-closure` design Decisions 18–19.
-- **Drift evidence for sweep-detected rows (C8)** — the reconciliation sweep cannot name an actor because it compares grant sets. "Unknown actor" is the honest rendering — the sweep is an automated observation, not an action somebody took. Reading Zitadel's event stream for the grant's creation event would close it, at the cost of a second API path. Only worth it if operators routinely hit rows the webhook missed, and nothing counts that today.
+- ~~**Drift evidence for sweep-detected rows (C8)**~~ — **built.** `GET /governance/drift/{id}/origin` reads the creating event from Zitadel's own log (`POST /admin/v1/events/_search`) and the triage row grows a *Who made it?* affordance. On demand, one row at a time: the queue holds dozens and firing a call per row on load would be a burst against the identity provider to answer a question nobody put. Three answers kept distinct — the lookup failed, the log does not reach back that far, or the event names nobody — because collapsing any pair puts a claim on the row that nothing supports. **Deliberately NOT a merge base:** a base infers an actor from a snapshot delta and Zitadel has the actor written down, so the base would be the worse oracle. See `design.md` §11. **Unobserved:** written against Zitadel's published schema, never against a live instance — first contact is expected to correct something, and the decoder is tolerant on purpose (`type` is an object, every field optional).
 
 ### Operator runbook surfaces — what the reset work left open
 
@@ -79,6 +84,20 @@ Paused pending research on real LLDAP password-propagation and credential semant
 
 None of these are code. All need a live instance and a human.
 
+- **~~Deploy `reconciliation-as-merge`~~ Done, 2026-08-19.** Four migrations (`000041`–`000044`) applied to the dev deployment at `2085e91`; `schema_migrations` reads `44 | not dirty`, database dumped to `/root/syndra/backups/pre-000044-*.sql.gz` first. Backend, UI and the TrueNAS add-on rebuilt — the add-on had to be, because `/subjects` now serves each account's state in entitlement vocabulary and without it every subject classifies as baseless. Target `callable`, eight operations, a live reconcile read the real NAS and concluded `bound 0 · queued 0 · current`, and the NAS is untouched.
+
+  **~~What the deployment has NOT exercised: the classifier's own comparison.~~ Done, 2026-08-24.** An account was provisioned through the whole path against the real NAS (rehearse → apply → drain → `user.create`), then changed behind Syndra's back by removing it from its managed group. The sweep classified it `theirs_only` with `base`/`ours`/`theirs` correct, `adoptable: false`, the reason given, and the owning mapping named with its holder count. `keep_ours` recorded the decision and honestly reported `resolved: false` — the finding stays open until a reconciliation sees the target agree — and the next apply restored the group and cleared it. A plan approved before the restore was refused as `PLAN_STALE`, which is the fingerprint gate working. Everything created was removed afterwards and the NAS is byte-for-byte as it was.
+
+- **Add-on shutdown drain** (`addon-shutdown-grace-period` 3.3) — stop the add-on with a mutation in flight and confirm the settle completes and the terminal status is written. The fix and its guard are in: `stop_grace_period: 30s` now exceeds the add-on's `shutdownTimeout`, and a test fails if that inverts. But everything asserted so far is *numbers*. Only this proves the drain actually survives a real stop, which it had not done for the whole life of the add-on — Docker's 10s default was cutting a 20s drain in half, invisibly, because a truncated drain and a clean stop look identical from outside.
+- **~~One TrueNAS API key~~ Done, 2026-08-13.** The full chain is live against the real NAS: key minted on a dedicated user, `wss://` authenticated, version read (`TrueNAS-25.10.5`), all four health reads answering, and the real account inventory returned. The one thing it immediately broke is recorded as 7.4b — `system.version` returns a `TrueNAS-` prefix the recorded fixture never had, and the version gate silently refused every mutation on a supported release. What remains unproven is `audit.query` / `sharing.smb.query`: they belong to `activity.get`, which has no backend route yet, so those two roles are configured and untested. Previous entry:
+- **A drain with a mutation actually in flight** (`addon-shutdown-grace-period` 3.3) — the stop itself is observed live: the drain runs, the process exits itself in ~1s against a 30s grace, exit 0, no SIGKILL. **The behaviour is now covered in process** (3.3a): the real server, routes, authenticator and lifecycle, with a target call that has not answered yet — `Shutdown` does not return while the handler is inside it, a second mutation mid-drain is refused, and the released one completes and writes its terminal record. Mutation-verified with `Close`, which abandons it. What is left is narrow and needs hardware: the same thing against a real NAS whose call is genuinely slow. The stub answers in milliseconds, so the window has to be manufactured — which is fine for asserting this side of the call and proves nothing about the NAS side.
+- **~~Enable SMB auditing on the shares~~ Done, 2026-08-24** (`addon-platform` 34.12). Both shares now read `audit.enable: true`, `watch_list: []`, `ignore_list: ["builtin_guests"]` — unscoped, so every managed account is recorded. Syndra could not have done it and should not be able to: `sharing.smb.update` answers `EACCES` because the add-on's credential holds `SHARING_SMB_READ` and not write.
+
+  **What it immediately broke is fixed** (`addon-platform` §35). The add-on read `audit.enable` alone, so a share scoped by a watch list to groups a member is not in would have been reported as watching them, and their empty activity report would have read as *did nothing* instead of *nobody was watching* — the one distinction that field exists to draw. It never actually misled anybody, and only because the operator left the watch list empty. The recorder was recording `audit` as `dict` and nothing inside it, which is why no guard could have caught it; it records one level down now.
+
+- **A successful SMB connection** (`addon-platform` 34.13) — 691 audit rows over the retained week, every one `AUTHENTICATION`, with auditing on and scoped to nobody. So either nothing has connected since it was switched on — consistent with the 553 `NT_STATUS_NO_SUCH_USER` failures already recorded — or the release emits nothing else for these shares. One mount as a managed account settles it, and until it does the `share` field and every non-authentication event type stay unrecorded and unguarded.
+- **A failing disk on the NAS** — one uncorrectable error on `sde`, standing since 2026-07-06. Surfaced on the target page now that `health.get` has a caller (34.8), which is how it was found. Not a Syndra problem; it is the first thing that surface was built to show.
+- **The live deployment has no add-on at all.** `syndra.example.org` reaches a reverse proxy that forwards to a separate application host, and `/opt/syndra` there carries zero `TRUENAS_*`/`ADDON_*` variables, no add-on container, and a `sync/` directory — it predates `addon-platform` entirely. Everything in this change is dev-only until that is deployed, and the deploy is a separate decision with its own migrations.
 - **Actions v2 key lifecycle** — `make zitadel-actions-register`, then `make zitadel-actions-rotate-key`, verify the new key lands in both the response and `.action-signing-key` with the old one in `.action-signing-key.previous`; swap env var, restart, confirm `make zitadel-actions-verify` passes.
 - **Actions v2 smoke** — `go run ./backend/cmd/api` + `scripts/smoke-test-action-v2.sh`, expect 200 with an `append_claims` array.
 - **Live directory smoke** — confirm `[DIRECTORY] Source=zitadel` at startup; `/users`, `/projects`, `/bundles`, `/applications` show real Zitadel entities, not Alice/Sam/Laser-Lab. Then the demo-mode regression: unset `ZITADEL_MACHINE_KEY_PATH`, restart, expect `[DIRECTORY] Source=demo`.
@@ -102,8 +121,8 @@ None of these are code. All need a live instance and a human.
 | `advanced-role-crud` | no `specs/` |
 | `codebase-audit-and-hardening` | no `specs/` |
 | `live-webhook-listener` | no `specs/` |
-| `provisioning-intents` | no `specs/` |
-| `shadow-password-vault` | no `specs/` |
+| `provisioning-intents` | no `specs/` — **and now superseded**: the pipeline it describes is deleted. Archive it with a supersession note rather than authoring a spec for a subsystem that no longer exists. |
+| `shadow-password-vault` | no `specs/` — **and now partly superseded**: the hash, the algorithm and the salt parameters are gone (migration 000034); existence and rotation metadata survive. |
 | `zitadel-management-client` | no `specs/` |
 
 Archiving them with `--skip-specs` would clear `changes/` but permanently lose the requirements — don't. Each needs spec deltas authored from the shipped code first (`## ADDED Requirements` + `### Requirement:` + `#### Scenario:`). `backend-owned-onboarding-and-security-boundary` had this exact problem and was fixed by reformatting its existing spec to delta headers; the other six need the content written, not just reformatted.
@@ -136,6 +155,142 @@ Everything else is healthy: index tracks HEAD, embeddings are local-semantic (`X
 > Runner note: the toolchain is `bunx`, not `npx` (`.mcp.json`, `.claude/settings.json`). Version is pinned because unpinned `bunx openlore` resolved to a stale 2.1.6 while `npx` fetched 2.1.7 — pin both or they drift apart.
 
 ---
+
+## 4a. Add-on platform — complete but for one observation
+
+`changes/addon-platform` is done bar **34.13**, which is not code: it needs a
+successful SMB connection nothing in this repo can make happen. Every other row
+is ticked, including the four handover screens this section used to list as
+owed. (It said "three rows unticked" and "each has a backend endpoint and no
+screen"; both were true when written and neither is now. The entry below is what the section looked like
+before, kept because the reasoning about §13/§17 is still the thing to read
+first.) The backend's IAM half, the TrueNAS add-on,
+the dispatcher joining them, the lifecycle trigger that fires it, the unmanaged
+inventory, provisional plans, the mutation-log anchor, and the retirement of the
+LLDAP bridge are all in and green. What remains is a **visual pass on three
+screens**, handed to the design agent with
+[`HANDOVER-UI.md`](changes/addon-platform/HANDOVER-UI.md).
+
+**Start at the header of [`tasks.md`](changes/addon-platform/tasks.md), then §13
+and §17.** The header names the pattern behind nearly every defect on the branch
+— two internally-consistent definitions of one thing — and says which rows are
+still open and why. §13 and §17 record the same
+class of defect, found twice: the add-on had never spoken to a real NAS (§13),
+and the backend and the add-on had never spoken to each other (§17) — the
+backend's envelopes carried fields the add-on's strict decoders never declared,
+so every real `/apply` and `/operations/*` call would have been answered 400.
+Neither suite could see it, because each was written against its own fake and
+the two fakes agreed with each other. The contract is an artifact now
+(`addons/contract/*.json`), asserted from both ends.
+
+**~~What the handover covers, and nothing else does yet.~~ All four are built**
+— `ConvergeEntitlements.tsx`, `MappingManagement.tsx`, `DormantAccounts.tsx`
+and the allowance surfaces. Listed as they were scoped:
+
+1. **Entitlement plan-then-apply UI** (9.3–9.6) — `POST /targets/{t}/entitlements/rehearse` and `.../apply`. The apply carries the plan id, never the original submission.
+2. **Mapping management with version history** (9.7–9.8) — `rehearse-edit`, `rehearse-delete`, and `PATCH`/`DELETE` citing a plan id. The blast-radius acknowledgement is enforced by the backend; the UI has to show the number.
+3. **Dormant-account housekeeping** (9.11–9.12) — the only one that also needs a listing endpoint.
+4. **Allowance authoring and review-date surfacing** (9.22, 9.25).
+5. **Connection instructions** (10.8) — the account name is already on the member page; the mount instructions are not.
+6. **A button for the revocation composition** (6.17) — **built.** `TakeAwayDialog`, reached from `PeopleOnTarget`, calls `POST /targets/{t}/users/{id}/revoke-access` through `useRevokeTargetAccess`. Its copy is fixed by the backend and shown verbatim: this target cannot end a session. The line above described it as having no caller, which stopped being true and was not corrected here.
+
+**It has now run end to end — against a stand-in, not a NAS.** The dev LXC ran
+the whole platform: migrations 25→34 against a clone of the live database, both
+binaries in their own containers over mutual TLS, and a stand-in middleware
+speaking TrueNAS's JSON-RPC on the far end. Rehearse → apply → drain creates the
+account under the name the plan promised; a replayed plan is refused; a
+provisional plan issued against the add-on's mirror is refused at dispatch as
+`PLAN_STALE` when the subject has moved; the mutation log deleted is detected.
+**Start at the header of `changes/addon-platform/tasks.md`, then §13 and §17.**
+§19 records the fourteen defects the first deployment found, seven of which
+every test in both suites passed straight through.
+§23–§31 record a full audit of the branch afterwards, and the header of that
+file is the part to read first: **the recurring defect is two
+internally-consistent definitions of one thing** — two fakes agreeing with each
+other, `btrim` against `TrimSpace`, the proxy allowlist against the router, a
+comment against the code beside it. Each side correct, tested, agreeing with
+itself. Look wherever two things have to agree and nothing makes them.
+
+**Partly operator-gated still, and §2 above has moved ahead of this
+paragraph.** The full chain HAS touched the real NAS since 2026-08-13 — key
+minted, `wss://` authenticated, version read, health reads answering, real
+inventory returned — and this paragraph predates that. What remains untouched
+is narrower: What that leaves untested is TrueNAS's own behaviour
+rather than Syndra's: the filter syntax `user.query` actually accepts, what
+`user.update` does with a `groups` list, the auth rate limiter and its ten-minute
+lockout, and whether `builtin` is on every supported major. Point `TRUENAS_URL`
+at the real one, run the same sequence, and read the mutation log afterwards.
+The bring-up is now written down — DEPLOY.md step 5a for the proxy and
+"Bringing up the TrueNAS add-on" for the NAS identity, the transport secret
+(minted by the deployment itself — `truenas-addon-secret` in the compose file)
+and the start order, which is now two `.env` lines and `docker compose up -d`.
+
+**The transport under that bring-up changed after it was written.** The
+certificate ceremony is gone: one secret per target, both keys derived from it
+at both ends (`addon-transport-derived-keys`). Sequencing was meant to be the
+other way round — the live bring-up first, so a NAS-side failure and a
+transport-side failure could never be diagnosed together — and it was not, so
+the first real bring-up carries a transport that has never handshaked outside a
+test. Worth knowing while reading the failure, not a reason to redo it.
+
+**`activity.get` now has a caller.** It was implemented by the add-on and
+declared by the backend from the day the platform landed, and no route ever
+dispatched it — which is why `audit.query` and `sharing.smb.query` sat
+configured and unexercised. `GET /targets/{t}/activity` reaches it and the
+person's Activity tab renders it beside Syndra's own feed, deliberately as a
+second card (`addon-platform` §33). Whether the real NAS answers those two
+methods as the fixture says is now a question somebody can ask from a screen.
+
+**One of those questions is answered, and the answer contradicts what the branch
+said.** The API key's permission set does cover `user.create`/`user.update`
+without FULL_ADMIN — `ACCOUNT_WRITE` is enough — but the same role is what
+`user.delete` requires, and TrueNAS publishes no narrower one. So the standing
+key **can** delete an account, which `nas.go`, `.env.example` and the design all
+denied. The injected purge key is an audit and blast-radius separation, not the
+capability separation claimed. Corrected in place; recorded as
+[`addon-platform` §32](changes/addon-platform/tasks.md) — including the design's
+own account of the purge key (`design.md` line 224), which this entry used to
+list as the one copy still unreworded and which now carries the correction.
+
+**And the deployment manifest was carrying the branch's recurring defect.**
+Four variables the add-on reads were passed by no Compose service, so no
+deployment could set them — `TRUENAS_SHARE_HOST` worst of the four, because
+unset it makes the manifest omit its connection block exactly as designed, so
+the member page dropped its mount instructions and nothing reported a fault.
+Wired, and guarded by a test that reads the add-on's own source against the
+Compose service block (§32.3).
+
+## 4b. Test infrastructure debt
+
+- **`internal/db` has no live-database harness.** Every assertion in that package is a migration-coherence or SQL-text guard, so anything that only manifests as an interleaving of two transactions is asserted structurally rather than executed. Three review findings in a row bottomed out here: apply-vs-deregistration, enqueue-vs-deregistration, and disable-during-dispatch. The fixes are in and guarded by source-level checks; what is missing is a test that actually runs them.
+
+  `golang-migrate` is already a dependency, so the harness is small: connect to a `SYNDRA_TEST_DATABASE_URL`, migrate up once, skip every live test when the variable is unset so `go test ./...` stays green without a database. What it needs is a throwaway Postgres — there is none on the development machine (no Docker, no `psql`), which is why this is debt rather than done.
+
+  Also blocked on it: the live-row half of 2.18 (a plan persists and expires), 2.20 (a fingerprint mismatch mutates nothing), 2.22 (scan plan rows for a submitted secret), 1.11's real interleavings, and 1.21/2.46's — a concurrent apply for one subject genuinely serializing, the settled state equalling the higher version, and a grant overtaken by a later revoke actually terminating `superseded` rather than being asserted to.
+
+## 4c. Owed operator surfaces
+
+- **~~The unreconciled-target record has no dashboard.~~ Built.** It is in the governance summary and on the home queue, and it counts toward the "nothing needs you" decision — which was the point, since an unread target produces no findings and a blind week otherwise renders exactly like a quiet one (`addon-platform` 1.14a). The note below is the state before that.
+
+  <details><summary>Previous entry</summary> `target_reconciliation` (migration 000026, change `addon-platform` 1.14) records when Syndra last saw each target for itself and since when it has not. The on-demand sweep returns it on `DriftResult`, so [Reconcile now] shows it; the scheduled sweep writes it and nothing reads it back. `db.GetUnreconciledTargets` exists for that consumer and currently has none.
+
+  This mattered most in exactly the case it was built for: a nightly sweep that has been unable to reach a target for a week looks, on every surface an operator actually opens, like a week with no drift. The natural home is the governance summary beside the drift count — which needs `TargetReconciliation` moved to `internal/models` first, since `models` must not import `db`. Deliberately not done inline with 1.14: a backend field with no rendering is not "saying so" to anybody, and inventing the callout unprompted is a design decision the IA change owns (`basic-advanced-ia`).
+  </details>
+
+- **~~The log-integrity finding reaches one surface, and should reach the summary.~~ Closed by deletion, deliberately.** `db.ListCompromisedLogs` no longer exists: it extended `anchorSelect`, whose `WHERE ($1 = '' OR target = $1)` needs an argument, and passed none — so pgx refused every call it was ever given. Having no caller is what hid that. The finding still reaches the operator on the target's own health card, which is where they act on it, and the listing comes back when a surface wants it, with a test. The note below is the state before that.
+
+  <details><summary>Previous entry</summary> `addon_log_anchors` (migration 000033) records where each add-on's mutation-log head was and refuses to move past a truncation or a rewrite. `GET /api/v1/targets/{target}/health` now carries the finding (§19.6), so an operator who opens that target sees it — but `db.ListCompromisedLogs` still has no consumer, so nothing tells them to open it. The governance summary is the home, beside the drift count and the unreconciled-target record above; all three are the same missing callout.
+
+  </details>
+
+- **~~A target whose first manifest read fails stays uncallable for a quarter of an hour.~~ Closed.** `ResolveOperation` makes one on-demand capability read when the manifest is missing — single-flighted per target, rate-limited by its own cooldown, and reached only from the missing-manifest path (`addon-transport-derived-keys` 11.7). Compose ordering was considered and rejected: the add-on is profile-gated, so a `depends_on` fails `docker compose up` on every deployment that runs no NAS. The note below is the state before that.
+
+  <details><summary>Previous entry</summary> `cmd/api/main.go` calls `addons.RefreshAll` once at start-up and then on a `periodic.Runner` tick; a target whose add-on was still starting during that first pass has no accepted manifest, and every operation on it is refused with `ErrNoManifest` (`internal/addons/registry.go:90`) until the next tick. Met on the dev deployment: `docker compose up -d` raced the add-on's start, and `POST /targets/truenas/bindings/{subject}/release` answered `502 addon: no accepted manifest for this target: truenas` while the add-on was up, healthy and answering `/capabilities`. A `docker compose restart backend` cleared it.
+
+  Availability rather than correctness — nothing is written, and the refusal is honest about what the backend knows. What makes it worth fixing is that the failure is invisible from the target's own side: the add-on is running, its health is green, and the operator surface says `callable: false` with a `last_error` from a read minutes old, so the machine an operator inspects is the one that is fine.
+
+  The fix is a bounded refresh-and-retry on `ErrNoManifest` in the dispatch path, single-flighted per target so a burst of refused calls produces ONE capability read rather than one each — the retry must not become the thing that keeps a starting add-on down. Retried once, never in a loop: a target that genuinely has no manifest must still refuse quickly. Complemented by Compose ordering, which narrows the window rather than closing it — `depends_on` cannot promise the add-on has served a manifest by the time the backend asks, and a fix that relies on ordering alone reappears the first time a restart takes longer than expected.
+  </details>
 
 ## 5. Declined / deliberately kept
 

@@ -48,6 +48,14 @@ type ResolveAccessRequestRequest struct {
 // (set by withUserAuth from a Zitadel-issued JWT). Falls back to a
 // caller-supplied body value when the context principal is empty (demo/API-key
 // mode). Returns "system" only when both are empty.
+// resolveActor names who is acting: the authenticated principal, else what the
+// body said, else "system".
+//
+// The second argument is the BODY's value, not a default. Several surfaces
+// passed the literal "operator" into it, which made an unauthenticated call on
+// those surfaces record `operator` while every other surface recorded `system`
+// — two synthetic ids for one caller, on a column an audit trail is read from.
+// There is one fallback and it is here.
 func resolveActor(r *http.Request, bodyValue string) string {
 	if id := getAdminUserID(r.Context()); id != "" {
 		return id

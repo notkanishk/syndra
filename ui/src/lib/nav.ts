@@ -20,12 +20,18 @@ export type IndicatorKey =
   | "pending_requests"
   | "expiring_grants"
   | "pending_propagation"
-  | "drift";
+  | "drift"
+  | "unconfirmed_revocations"
+  | "holds_due";
 
 /**
  * Badge tone follows the semantic palette and nothing else: Requests and
  * Pending changes are work (accent), Expiring access is a deadline (warn),
  * Unexplained access is something that already went wrong (danger).
+ *
+ * Withdrawn access is danger too, and for a sharper reason than drift: drift is
+ * access that appeared without an explanation, and this is access somebody
+ * decided to take away that is still there.
  */
 export type BadgeTone = "accent" | "warn" | "danger";
 
@@ -92,27 +98,94 @@ export const ADVANCED_NAV: NavEntry[] = [
   ]),
   group("Review", [
     leaf("Unexplained access", "/governance/drift", { indicator: "drift", tone: "danger" }),
+    leaf("Withdrawn access", "/governance/unconfirmed-revocations", {
+      indicator: "unconfirmed_revocations",
+      tone: "danger",
+    }),
     leaf("Expiring access", "/review/expiring-access", {
       indicator: "expiring_grants",
       tone: "warn",
     }),
+    // Beside Expiring access, never inside it. Inaction means the opposite
+    // thing in each — an expiring grant lapses if ignored, a hold stays in
+    // force — and one list would sit "do nothing and access ends" next to "do
+    // nothing and access stays blocked".
+    leaf("Holds due", "/review/holds", { indicator: "holds_due", tone: "warn" }),
     leaf("Audit", "/audit"),
   ]),
   group("System", [
     leaf("Identity provider", "/zitadel"),
-    leaf("Hardware sync", "/system/hardware-sync"),
+    // The LLDAP bridge's row. Gone with the bridge: it named a service that no
+    // longer exists, and a nav entry for a deleted subsystem is worse than a
+    // missing one — an operator clicks it before they read anything.
     leaf("Event activity", "/operations"),
   ]),
 ];
 
 /**
- * Member — two destinations, and that is deliberate. No Home: a member's
- * landing IS their access, so a separate landing would be an empty room in
- * front of the only room. The view switch is not rendered for members at all.
+ * The per-target System rows, derived from DEPLOYMENT CONFIGURATION.
+ *
+ * Not from data, and the difference is the whole IA rule. An operator on a
+ * deployment running a TrueNAS add-on sees the TrueNAS row whether or not it
+ * currently answers, whether or not anybody is bound to it, and whether or not
+ * this operator can read a single account on it. A row that appeared when the
+ * first person was provisioned would be structure moving in response to data,
+ * which is exactly what this file exists to prevent.
+ *
+ * `GET /api/v1/targets` is the source, and it lists what was registered — never
+ * what is reachable. Reachability belongs on the page, where it can be
+ * explained.
+ */
+export function targetNav(targets: string[]): NavEntry[] {
+  if (targets.length === 0) return ADVANCED_NAV;
+  return ADVANCED_NAV.map((entry) => {
+    if (entry.kind !== "group" || entry.label !== "System") return entry;
+    return group("System", [
+      ...entry.children.slice(0, 1),
+      ...targets.map((target) =>
+        leaf(targetLabel(target), `/system/targets/${target}`, {
+          pattern: new RegExp(`^/system/targets/${target}(/|$)`),
+        }),
+      ),
+      ...entry.children.slice(1),
+    ]);
+  });
+}
+
+/**
+ * A target's display name. Title-cased from its id, because the id is
+ * deployment configuration an operator wrote and a mapping table here would be
+ * a second place to add a target — which is how the day a UniFi add-on ships,
+ * its row is called `unifi` on one screen and `UniFi Access` on another.
+ */
+export function targetLabel(target: string): string {
+  const known: Record<string, string> = { truenas: "TrueNAS", unifi: "UniFi Access" };
+  if (known[target]) return known[target];
+  return target.charAt(0).toUpperCase() + target.slice(1);
+}
+
+/**
+ * Member — three destinations. No Home: a member's landing IS their access, so
+ * a separate landing would be an empty room in front of the only room. The view
+ * switch is not rendered for members at all.
+ *
+ * This comment said "two" until the storage row shipped, which is the same
+ * drift that put the row in the rail and not in the middleware — a developer
+ * reads the sentence before they trust the array, and the count is quoted
+ * elsewhere as a fact about the product.
  */
 export const MEMBER_NAV: NavEntry[] = [
   leaf("My access", "/"),
   leaf("Requests", "/requests"),
+  /**
+   * Present for every member, always, whatever they can reach.
+   *
+   * Gating this on entitlement would make the rail move as somebody's roles
+   * change — the one thing this file forbids — and it would also be the wrong
+   * answer to the question a member without access is asking, which is "can I
+   * get storage?". The page answers that; a missing row does not.
+   */
+  leaf("Network storage", "/storage"),
 ];
 
 export function navFor(audience: Audience): NavEntry[] {
@@ -133,14 +206,34 @@ export function navLeaves(entries: NavEntry[]): NavLeaf[] {
 }
 
 /**
- * Every route a member may reach. Anything else is not rendered and not
- * reachable for them — the backend 403s the underlying reads regardless, and
- * an affordance that will fail is worse than no affordance.
+ * Every route a member may reach — **derived from the rail they are shown**,
+ * never restated. Anything else is not rendered and not reachable for them:
+ * the backend 403s the underlying reads regardless, and an affordance that
+ * will fail is worse than no affordance.
+ *
+ * The derivation is the point. A hand-written copy of `MEMBER_NAV` is what
+ * this already was in `middleware.ts`, and the storage row shipped into one
+ * and not the other — every member who tapped it was redirected off their own
+ * page. A second copy here would be the same bug waiting on the next row, and
+ * an equality test only catches it when somebody runs the tests. A row added
+ * to `MEMBER_NAV` is reachable in the same commit.
+ *
+ * An allowlist rather than a denylist on purpose — a new operator route is
+ * protected the moment it exists, instead of being exposed until somebody
+ * remembers to add it here.
  */
-export const MEMBER_ROUTES = ["/", "/requests"];
+export const MEMBER_ROUTES = navLeaves(MEMBER_NAV).map((leaf) => leaf.href);
 
+/**
+ * Reachability is `leafMatches` over the member's own leaves, so the rule the
+ * middleware enforces is exactly the rule the rail highlights. It follows a
+ * leaf's `pattern` if it ever gains one — `/projects/{id}/roles/{key}` is why
+ * that field exists, and a member leaf with a detail route would need it.
+ * Otherwise a sub-path belongs to its parent, so `/storage/{target}` is
+ * reachable the day it exists; `/` matches exactly, or it admits everything.
+ */
 export function memberMayVisit(pathname: string): boolean {
-  return MEMBER_ROUTES.includes(pathname);
+  return navLeaves(MEMBER_NAV).some((leaf) => leafMatches(leaf, pathname));
 }
 
 export interface Crumb {

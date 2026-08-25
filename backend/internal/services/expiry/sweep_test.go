@@ -3,12 +3,13 @@ package expiry
 import (
 	"context"
 	"errors"
-	"sort"
 	"sync"
 	"testing"
 	"time"
 
+	"syndra/internal/db"
 	"syndra/internal/models"
+	"syndra/internal/services"
 )
 
 // resetSweepDeps saves and restores all injectable function vars so tests
@@ -16,64 +17,49 @@ import (
 func resetSweepDeps(t *testing.T) {
 	t.Helper()
 	origGet := svcGetExpiredDirectGrants
-	origDel := svcDeleteExpiredDirectGrantsByIDs
-	origEmit := svcEmitIntentFromScheduler
-	origAudit := svcInsertAuditLog
+	origExpire := svcExpireDirectGrant
 	origCache := cacheInvalidateUser
-	origZit := zitadelRevokeMappingRules
 	t.Cleanup(func() {
 		svcGetExpiredDirectGrants = origGet
-		svcDeleteExpiredDirectGrantsByIDs = origDel
-		svcEmitIntentFromScheduler = origEmit
-		svcInsertAuditLog = origAudit
+		svcExpireDirectGrant = origExpire
 		cacheInvalidateUser = origCache
-		zitadelRevokeMappingRules = origZit
 	})
 }
 
-// recorder captures what sweep invoked, for assertions.
+// recorder captures what the sweep invoked, for assertions.
 type recorder struct {
-	mu             sync.Mutex
-	emitted        []string // grantIDs in order of emit call
-	emitActions    map[string]string
-	deletedUser    string
-	deletedIDs     []string
-	audited        []string // grantIDs
+	mu sync.Mutex
+	// expiredCalls records "user|grant|project|role" in call order — the whole
+	// argument list, because a sweep that expires the right grant against the
+	// wrong user's holdings is the bug this ordering exists to prevent.
+	expiredCalls []string
+	// succeeded records the grant ids whose expiry committed, in order. It used
+	// to record the LLDAP intent emitted after one; the bridge is gone, and what
+	// it was ever standing in for was "this grant got all the way through".
+	succeeded      []string
 	invalidatedFor []string // userIDs in order
-	zitadelCalls   []string // "userID|project|role"
+	// outcome decides, per grant id, what expiring it does.
+	outcome map[string]error
 }
 
 func newRecorder() *recorder {
-	return &recorder{emitActions: map[string]string{}}
+	return &recorder{outcome: map[string]error{}}
 }
 
-// installDefaultDelete makes the guarded delete return every input ID as
-// successfully deleted. Tests that need a different renewal model override
-// svcDeleteExpiredDirectGrantsByIDs after calling install().
 func (r *recorder) install() {
-	svcEmitIntentFromScheduler = func(_ context.Context, uid, action, proj, role, grantID string) error {
+	svcExpireDirectGrant = func(_ context.Context, userID, grantID, projectID, role, actor string) (services.ExpiredGrantRevocation, error) {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		r.emitted = append(r.emitted, grantID)
-		r.emitActions[grantID] = action
-		return nil
-	}
-	svcDeleteExpiredDirectGrantsByIDs = func(_ context.Context, uid string, ids []string) ([]models.DirectGrant, error) {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		r.deletedUser = uid
-		r.deletedIDs = append(r.deletedIDs, ids...)
-		out := make([]models.DirectGrant, len(ids))
-		for i, id := range ids {
-			out[i] = mkGrant(id, uid, "proj-a", "role-x")
+		r.expiredCalls = append(r.expiredCalls, userID+"|"+grantID+"|"+projectID+"|"+role)
+		if err := r.outcome[grantID]; err != nil {
+			return services.ExpiredGrantRevocation{}, err
 		}
-		return out, nil
-	}
-	svcInsertAuditLog = func(_ context.Context, _, _, _, resourceID string) error {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		r.audited = append(r.audited, resourceID)
-		return nil
+		r.succeeded = append(r.succeeded, grantID)
+		return services.ExpiredGrantRevocation{
+			ProjectID: projectID, RoleKey: role,
+			OutboxIDs: []string{"ob-" + grantID},
+			Revoked:   []string{projectID + "/" + role},
+		}, nil
 	}
 	cacheInvalidateUser = func(_ context.Context, uid string) error {
 		r.mu.Lock()
@@ -81,20 +67,20 @@ func (r *recorder) install() {
 		r.invalidatedFor = append(r.invalidatedFor, uid)
 		return nil
 	}
-	zitadelRevokeMappingRules = func(_ context.Context, uid, proj, role string) error {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		r.zitadelCalls = append(r.zitadelCalls, uid+"|"+proj+"|"+role)
-		return nil
-	}
 }
 
 func mkGrant(id, user, project, role string) models.DirectGrant {
 	now := time.Now()
-	expired := now.Add(-1 * time.Hour)
+	expiredAt := now.Add(-1 * time.Hour)
 	return models.DirectGrant{
 		ID: id, UserID: user, ProjectID: project, RoleKey: role,
-		GrantedBy: "admin", ExpiresAt: &expired, CreatedAt: now, UpdatedAt: now,
+		GrantedBy: "admin", ExpiresAt: &expiredAt, CreatedAt: now, UpdatedAt: now,
+	}
+}
+
+func fetchReturns(grants ...models.DirectGrant) {
+	svcGetExpiredDirectGrants = func(context.Context, int) ([]models.DirectGrant, error) {
+		return grants, nil
 	}
 }
 
@@ -102,15 +88,12 @@ func TestSweep_NoExpired_NoOp(t *testing.T) {
 	resetSweepDeps(t)
 	r := newRecorder()
 	r.install()
-	svcGetExpiredDirectGrants = func(_ context.Context, _ int) ([]models.DirectGrant, error) {
-		return nil, nil
-	}
+	fetchReturns()
 
-	Sweep(context.Background(), 10)
+	Sweep(context.Background(), 100)
 
-	if len(r.emitted)+len(r.deletedIDs)+len(r.audited)+len(r.invalidatedFor)+len(r.zitadelCalls) != 0 {
-		t.Fatalf("expected no side effects, got emitted=%d deleted=%d audited=%d inv=%d zit=%d",
-			len(r.emitted), len(r.deletedIDs), len(r.audited), len(r.invalidatedFor), len(r.zitadelCalls))
+	if len(r.expiredCalls) != 0 || len(r.succeeded) != 0 || len(r.invalidatedFor) != 0 {
+		t.Fatalf("nothing expired; nothing may happen: %+v", r)
 	}
 }
 
@@ -118,95 +101,116 @@ func TestSweep_SingleExpired_FullFlow(t *testing.T) {
 	resetSweepDeps(t)
 	r := newRecorder()
 	r.install()
-	g := mkGrant("g1", "user-1", "proj-a", "role-x")
-	svcGetExpiredDirectGrants = func(_ context.Context, _ int) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{g}, nil
-	}
-	svcDeleteExpiredDirectGrantsByIDs = func(_ context.Context, uid string, ids []string) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{g}, nil
-	}
+	fetchReturns(mkGrant("g1", "u1", "proj-a", "role-x"))
 
-	Sweep(context.Background(), 10)
+	Sweep(context.Background(), 100)
 
-	if len(r.audited) != 1 || r.audited[0] != "g1" {
-		t.Fatalf("expected audit for g1, got %v", r.audited)
+	if len(r.expiredCalls) != 1 || r.expiredCalls[0] != "u1|g1|proj-a|role-x" {
+		t.Fatalf("the grant must be expired with its own identifiers, got %v", r.expiredCalls)
 	}
-	if len(r.emitted) != 1 || r.emitted[0] != "g1" {
-		t.Fatalf("expected one emit for g1, got %v", r.emitted)
+	if len(r.succeeded) != 1 || r.succeeded[0] != "g1" {
+		t.Fatalf("the expiry must name the grant, got %v", r.succeeded)
 	}
-	if r.emitActions["g1"] != "remove" {
-		t.Fatalf("expected action=remove, got %q", r.emitActions["g1"])
-	}
-	if len(r.invalidatedFor) != 1 || r.invalidatedFor[0] != "user-1" {
-		t.Fatalf("expected one cache invalidate for user-1, got %v", r.invalidatedFor)
-	}
-	if len(r.zitadelCalls) != 1 || r.zitadelCalls[0] != "user-1|proj-a|role-x" {
-		t.Fatalf("expected one zitadel call, got %v", r.zitadelCalls)
+	if len(r.invalidatedFor) != 1 || r.invalidatedFor[0] != "u1" {
+		t.Fatalf("the user's cache must be invalidated once, got %v", r.invalidatedFor)
 	}
 }
 
-// P1 regression: the critical race is a renewal landing between fetch and
-// delete. UpsertDirectGrant reuses the row ID via ON CONFLICT DO UPDATE, so
-// the pre-fetch snapshot cannot be trusted. DeleteExpiredDirectGrantsByIDs
-// re-validates expires_at <= NOW() atomically; the sweep must drive every
-// downstream side-effect off the RETURNING set only.
-func TestSweep_GrantRenewedMidSweep_NotRevoked(t *testing.T) {
+// The critical race: a renewal landing between the fetch and the write.
+// UpsertDirectGrant reuses the row id via ON CONFLICT DO UPDATE, so the
+// snapshot cannot be trusted; the delete's own predicate is what decides, and
+// it reports a renewed grant as such. Nothing downstream may run for it.
+func TestSweep_GrantRenewedMidSweep_NoDownstreamWork(t *testing.T) {
 	resetSweepDeps(t)
 	r := newRecorder()
 	r.install()
-	g := mkGrant("g1", "user-1", "proj-a", "role-x")
-	svcGetExpiredDirectGrants = func(_ context.Context, _ int) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{g}, nil
-	}
-	// Simulate: the row was concurrently renewed after fetch; the guarded
-	// DELETE matches zero rows and returns an empty slice.
-	svcDeleteExpiredDirectGrantsByIDs = func(_ context.Context, _ string, _ []string) ([]models.DirectGrant, error) {
-		return nil, nil
-	}
+	r.outcome["g1"] = db.ErrGrantRenewed
+	fetchReturns(mkGrant("g1", "u1", "proj-a", "role-x"))
 
-	Sweep(context.Background(), 10)
+	Sweep(context.Background(), 100)
 
-	if len(r.audited) != 0 {
-		t.Fatalf("audit MUST NOT be written for a renewed grant, got %v", r.audited)
+	if len(r.succeeded) != 0 {
+		t.Fatalf("a renewed grant must not be expired, got %v", r.succeeded)
 	}
-	if len(r.emitted) != 0 {
-		t.Fatalf("intent MUST NOT be emitted for a renewed grant, got %v", r.emitted)
-	}
-	if len(r.invalidatedFor) != 0 {
-		t.Fatalf("cache MUST NOT be invalidated for a no-op sweep, got %v", r.invalidatedFor)
-	}
-	if len(r.zitadelCalls) != 0 {
-		t.Fatalf("Zitadel cascade MUST NOT fire for a renewed grant, got %v", r.zitadelCalls)
+	// The cache is still invalidated: it is per-user and cheap, and a rebuild
+	// that finds nothing changed costs nothing. What must not happen is a
+	// removal.
+	if len(r.expiredCalls) != 1 {
+		t.Fatalf("the write is what decides, so it must still be attempted: %v", r.expiredCalls)
 	}
 }
 
-// Partial renewal: of N candidates for one user, a subset was renewed and
-// only the still-expired subset is returned from the guarded delete. Only
-// those must flow through the post-delete pipeline.
-func TestSweep_PartialRenewal_OnlyActuallyDeletedProgressDownstream(t *testing.T) {
+// Of several candidates for one user, a subset was renewed. Only the rest
+// progress, and one renewal does not stop the others.
+func TestSweep_PartialRenewal_OnlyTheLapsedProgress(t *testing.T) {
 	resetSweepDeps(t)
 	r := newRecorder()
 	r.install()
-	g1 := mkGrant("g1", "user-1", "proj-a", "role-x")
-	g2Renewed := mkGrant("g2", "user-1", "proj-a", "role-y")
-	svcGetExpiredDirectGrants = func(_ context.Context, _ int) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{g1, g2Renewed}, nil
-	}
-	// DB says only g1 was still expired at delete time.
-	svcDeleteExpiredDirectGrantsByIDs = func(_ context.Context, _ string, _ []string) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{g1}, nil
-	}
+	r.outcome["g2"] = db.ErrGrantRenewed
+	fetchReturns(
+		mkGrant("g1", "u1", "proj-a", "role-x"),
+		mkGrant("g2", "u1", "proj-a", "role-y"),
+		mkGrant("g3", "u1", "proj-a", "role-z"),
+	)
 
-	Sweep(context.Background(), 10)
+	Sweep(context.Background(), 100)
 
-	if len(r.audited) != 1 || r.audited[0] != "g1" {
-		t.Fatalf("expected audit for g1 only, got %v", r.audited)
+	if len(r.expiredCalls) != 3 {
+		t.Fatalf("every candidate must be attempted, got %v", r.expiredCalls)
 	}
-	if len(r.emitted) != 1 || r.emitted[0] != "g1" {
-		t.Fatalf("expected intent for g1 only, got %v", r.emitted)
+	if len(r.succeeded) != 2 || contains(r.succeeded, "g2") {
+		t.Fatalf("only the still-lapsed grants progress, got %v", r.succeeded)
 	}
-	if len(r.zitadelCalls) != 1 || r.zitadelCalls[0] != "user-1|proj-a|role-x" {
-		t.Fatalf("expected one zitadel call for g1's (project, role), got %v", r.zitadelCalls)
+}
+
+// One grant's failure must not cost the next one its expiry.
+func TestSweep_OneFailure_DoesNotStopTheRest(t *testing.T) {
+	resetSweepDeps(t)
+	r := newRecorder()
+	r.install()
+	r.outcome["g1"] = errors.New("database unreachable")
+	fetchReturns(
+		mkGrant("g1", "u1", "proj-a", "role-x"),
+		mkGrant("g2", "u1", "proj-a", "role-y"),
+	)
+
+	Sweep(context.Background(), 100)
+
+	if len(r.succeeded) != 1 || r.succeeded[0] != "g2" {
+		t.Fatalf("the healthy grant must still expire, got %v", r.succeeded)
+	}
+}
+
+// A failed expiry queues nothing and removes nothing — the grant stands.
+func TestSweep_ExpiryFails_NoSideEffects(t *testing.T) {
+	resetSweepDeps(t)
+	r := newRecorder()
+	r.install()
+	r.outcome["g1"] = errors.New("boom")
+	fetchReturns(mkGrant("g1", "u1", "proj-a", "role-x"))
+
+	Sweep(context.Background(), 100)
+
+	if len(r.succeeded) != 0 {
+		t.Fatalf("a failed expiry must not report the grant as gone, got %v", r.succeeded)
+	}
+}
+
+// The ledger delete, the audit row, the revocations and any target convergence
+// the lapsed role reached now commit together — there is no second queue left
+// outside that transaction, which is what the LLDAP intent used to be and what
+// this test used to be about. What survives is the property that outlived it:
+// a committed expiry invalidates the cache.
+func TestSweep_ACommittedExpiryInvalidatesTheCache(t *testing.T) {
+	resetSweepDeps(t)
+	r := newRecorder()
+	r.install()
+	fetchReturns(mkGrant("g1", "u1", "proj-a", "role-x"))
+
+	Sweep(context.Background(), 100)
+
+	if len(r.invalidatedFor) != 1 {
+		t.Fatalf("the expiry committed; the cache must still be invalidated, got %v", r.invalidatedFor)
 	}
 }
 
@@ -214,117 +218,76 @@ func TestSweep_MultiUser_OneInvalidateEach(t *testing.T) {
 	resetSweepDeps(t)
 	r := newRecorder()
 	r.install()
-	grants := []models.DirectGrant{
-		mkGrant("g1", "user-1", "proj-a", "role-x"),
-		mkGrant("g2", "user-1", "proj-a", "role-y"),
-		mkGrant("g3", "user-2", "proj-b", "role-z"),
+	fetchReturns(
+		mkGrant("g1", "u1", "proj-a", "role-x"),
+		mkGrant("g2", "u1", "proj-a", "role-y"),
+		mkGrant("g3", "u2", "proj-b", "role-z"),
+	)
+
+	Sweep(context.Background(), 100)
+
+	counts := map[string]int{}
+	for _, u := range r.invalidatedFor {
+		counts[u]++
 	}
-	svcGetExpiredDirectGrants = func(_ context.Context, _ int) ([]models.DirectGrant, error) {
-		return grants, nil
+	if counts["u1"] != 1 || counts["u2"] != 1 {
+		t.Fatalf("exactly one invalidation per user, got %v", counts)
 	}
-	// Delete returns the full set per user (no renewals).
-	svcDeleteExpiredDirectGrantsByIDs = func(_ context.Context, uid string, ids []string) ([]models.DirectGrant, error) {
-		out := make([]models.DirectGrant, 0, len(ids))
-		for _, id := range ids {
-			for _, g := range grants {
-				if g.ID == id {
-					out = append(out, g)
-				}
-			}
+}
+
+// Each grant is expired against its own user's holdings. A cross-user bleed
+// here would revoke access from somebody whose grant never expired.
+func TestSweep_NoCrossUserBleed(t *testing.T) {
+	resetSweepDeps(t)
+	r := newRecorder()
+	r.install()
+	fetchReturns(
+		mkGrant("g1", "u1", "proj-a", "role-x"),
+		mkGrant("g2", "u2", "proj-b", "role-y"),
+	)
+
+	Sweep(context.Background(), 100)
+
+	for _, call := range r.expiredCalls {
+		switch call {
+		case "u1|g1|proj-a|role-x", "u2|g2|proj-b|role-y":
+		default:
+			t.Errorf("a grant was expired against the wrong user or role: %q", call)
 		}
-		return out, nil
-	}
-
-	Sweep(context.Background(), 10)
-
-	if len(r.invalidatedFor) != 2 {
-		t.Fatalf("expected 2 invalidates (one per user), got %d: %v", len(r.invalidatedFor), r.invalidatedFor)
-	}
-	if len(r.audited) != 3 {
-		t.Fatalf("expected 3 audit rows, got %d", len(r.audited))
-	}
-	if len(r.emitted) != 3 {
-		t.Fatalf("expected 3 emits, got %d", len(r.emitted))
-	}
-	if len(r.zitadelCalls) != 3 {
-		t.Fatalf("expected 3 zitadel calls, got %d: %v", len(r.zitadelCalls), r.zitadelCalls)
 	}
 }
 
-func TestSweep_DeleteFails_NoSideEffects(t *testing.T) {
+// Each grant is expired sequentially so its delta is computed against the state
+// the previous one left. Two grants deriving the same role would otherwise each
+// see the other still covering it, and neither would revoke.
+func TestSweep_ExpiresOneGrantAtATime(t *testing.T) {
 	resetSweepDeps(t)
 	r := newRecorder()
 	r.install()
-	g := mkGrant("g1", "user-1", "proj-a", "role-x")
-	svcGetExpiredDirectGrants = func(_ context.Context, _ int) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{g}, nil
-	}
-	svcDeleteExpiredDirectGrantsByIDs = func(_ context.Context, _ string, _ []string) ([]models.DirectGrant, error) {
-		return nil, errors.New("db down")
-	}
 
-	Sweep(context.Background(), 10)
+	inFlight := 0
+	svcExpireDirectGrant = func(_ context.Context, userID, grantID, projectID, role, _ string) (services.ExpiredGrantRevocation, error) {
+		r.mu.Lock()
+		inFlight++
+		if inFlight > 1 {
+			r.mu.Unlock()
+			t.Error("two expiries overlapped; each delta must see the previous one's result")
+			return services.ExpiredGrantRevocation{}, nil
+		}
+		r.expiredCalls = append(r.expiredCalls, userID+"|"+grantID+"|"+projectID+"|"+role)
+		inFlight--
+		r.mu.Unlock()
+		return services.ExpiredGrantRevocation{ProjectID: projectID, RoleKey: role}, nil
+	}
+	fetchReturns(
+		mkGrant("g1", "u1", "proj-a", "role-x"),
+		mkGrant("g2", "u1", "proj-a", "role-y"),
+	)
 
-	if len(r.audited) != 0 || len(r.emitted) != 0 || len(r.invalidatedFor) != 0 || len(r.zitadelCalls) != 0 {
-		t.Fatalf("no side effects must happen when delete fails; got audited=%d emitted=%d inv=%d zit=%d",
-			len(r.audited), len(r.emitted), len(r.invalidatedFor), len(r.zitadelCalls))
-	}
-}
+	Sweep(context.Background(), 100)
 
-// After the delete commits, an intent-emission failure must not roll back
-// the authoritative deletion, the audit row, or the cache invalidation.
-// This is the log-and-continue compromise the Phase-5 deferred "Partial
-// Failure Rollback" item acknowledges: LLDAP orphans are preferable to a
-// rollback we cannot execute atomically anyway, and the future reconciler
-// will reap them.
-func TestSweep_IntentFailsAfterDelete_AuditAndCacheStillLand(t *testing.T) {
-	resetSweepDeps(t)
-	r := newRecorder()
-	r.install()
-	g := mkGrant("g1", "user-1", "proj-a", "role-x")
-	svcGetExpiredDirectGrants = func(_ context.Context, _ int) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{g}, nil
-	}
-	svcDeleteExpiredDirectGrantsByIDs = func(_ context.Context, _ string, _ []string) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{g}, nil
-	}
-	svcEmitIntentFromScheduler = func(_ context.Context, _, _, _, _, _ string) error {
-		return errors.New("lldap down")
-	}
-
-	Sweep(context.Background(), 10)
-
-	if len(r.audited) != 1 {
-		t.Fatalf("audit MUST land after successful delete even if intent emit later fails, got %d", len(r.audited))
-	}
-	if len(r.invalidatedFor) != 1 {
-		t.Fatalf("cache invalidate MUST still run, got %d", len(r.invalidatedFor))
-	}
-	if len(r.zitadelCalls) != 1 {
-		t.Fatalf("zitadel cascade MUST still run, got %d", len(r.zitadelCalls))
-	}
-}
-
-func TestSweep_ZitadelFails_OtherStepsSucceed(t *testing.T) {
-	resetSweepDeps(t)
-	r := newRecorder()
-	r.install()
-	g := mkGrant("g1", "user-1", "proj-a", "role-x")
-	svcGetExpiredDirectGrants = func(_ context.Context, _ int) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{g}, nil
-	}
-	svcDeleteExpiredDirectGrantsByIDs = func(_ context.Context, _ string, _ []string) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{g}, nil
-	}
-	zitadelRevokeMappingRules = func(_ context.Context, _, _, _ string) error {
-		return errors.New("zitadel unreachable")
-	}
-
-	Sweep(context.Background(), 10)
-
-	if len(r.audited) != 1 || len(r.emitted) != 1 || len(r.invalidatedFor) != 1 {
-		t.Fatalf("zitadel failure must not roll back earlier steps; got audited=%d emitted=%d inv=%d",
-			len(r.audited), len(r.emitted), len(r.invalidatedFor))
+	if len(r.expiredCalls) != 2 {
+		t.Fatalf("both grants must be expired, got %v", r.expiredCalls)
 	}
 }
 
@@ -332,162 +295,105 @@ func TestSweep_BatchSizeRespected(t *testing.T) {
 	resetSweepDeps(t)
 	r := newRecorder()
 	r.install()
-
-	var capturedLimit int
-	grants := make([]models.DirectGrant, 500)
-	for i := range grants {
-		grants[i] = mkGrant("g", "user-x", "proj", "role")
-	}
+	var got int
 	svcGetExpiredDirectGrants = func(_ context.Context, limit int) ([]models.DirectGrant, error) {
-		capturedLimit = limit
-		return grants[:limit], nil
-	}
-	svcDeleteExpiredDirectGrantsByIDs = func(_ context.Context, _ string, ids []string) ([]models.DirectGrant, error) {
-		out := make([]models.DirectGrant, len(ids))
-		for i := range out {
-			out[i] = mkGrant(ids[i], "user-x", "proj", "role")
-		}
-		return out, nil
+		got = limit
+		return nil, nil
 	}
 
-	Sweep(context.Background(), 500)
+	Sweep(context.Background(), 42)
 
-	if capturedLimit != 500 {
-		t.Fatalf("expected limit=500 forwarded to DB, got %d", capturedLimit)
-	}
-	if len(r.emitted) != 500 {
-		t.Fatalf("expected 500 emits, got %d", len(r.emitted))
+	if got != 42 {
+		t.Fatalf("batch size = %d, want 42", got)
 	}
 }
 
-// Protects Bug Fix #3 (idempotency-key discriminator). With the P1 fix,
-// each successful sweep produces a fresh grant ID; re-grants get new IDs
-// so their scheduler-origin idempotency keys differ.
+// A misconfigured batch is clamped before it reaches the fetch: zero would
+// sweep nothing forever, unbounded defeats the batching.
+func TestSweep_ClampsBatchSize(t *testing.T) {
+	resetSweepDeps(t)
+	r := newRecorder()
+	r.install()
+	var got int
+	svcGetExpiredDirectGrants = func(_ context.Context, limit int) ([]models.DirectGrant, error) {
+		got = limit
+		return nil, nil
+	}
+
+	for _, tc := range []struct{ in, want int }{{0, 1}, {-5, 1}, {99999, 10000}} {
+		Sweep(context.Background(), tc.in)
+		if got != tc.want {
+			t.Errorf("batch %d clamped to %d, want %d", tc.in, got, tc.want)
+		}
+	}
+}
+
+// Re-granting after an expiry produces a fresh grant id, so the scheduler's
+// grantID-discriminated idempotency key cannot collide with the earlier one.
 func TestSweep_IntentIdempotencyAcrossReGrants(t *testing.T) {
 	resetSweepDeps(t)
 	r := newRecorder()
 	r.install()
 
-	var seenGrantIDs []string
-	svcEmitIntentFromScheduler = func(_ context.Context, _, _, _, _, grantID string) error {
-		seenGrantIDs = append(seenGrantIDs, grantID)
-		return nil
-	}
+	fetchReturns(mkGrant("g1", "u1", "proj-a", "role-x"))
+	Sweep(context.Background(), 100)
+	fetchReturns(mkGrant("g2", "u1", "proj-a", "role-x")) // re-granted, new row
+	Sweep(context.Background(), 100)
 
-	g1 := mkGrant("grant-v1", "user-1", "proj-a", "role-x")
-	svcGetExpiredDirectGrants = func(_ context.Context, _ int) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{g1}, nil
-	}
-	svcDeleteExpiredDirectGrantsByIDs = func(_ context.Context, _ string, _ []string) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{g1}, nil
-	}
-	Sweep(context.Background(), 10)
-
-	g2 := mkGrant("grant-v2", "user-1", "proj-a", "role-x")
-	svcGetExpiredDirectGrants = func(_ context.Context, _ int) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{g2}, nil
-	}
-	svcDeleteExpiredDirectGrantsByIDs = func(_ context.Context, _ string, _ []string) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{g2}, nil
-	}
-	Sweep(context.Background(), 10)
-
-	if len(seenGrantIDs) != 2 {
-		t.Fatalf("expected 2 emit calls, got %d", len(seenGrantIDs))
-	}
-	if seenGrantIDs[0] == seenGrantIDs[1] {
-		t.Fatalf("grant IDs must differ so idempotency keys differ; both were %q", seenGrantIDs[0])
+	if len(r.succeeded) != 2 || r.succeeded[0] == r.succeeded[1] {
+		t.Fatalf("each sweep must act on its own grant id, got %v", r.succeeded)
 	}
 }
 
-func TestSweep_UserScopedDelete_NoCrossUserBleed(t *testing.T) {
+// Cancellation midway through ONE user's grants stops there too. The outer
+// loop's check only guards the boundary between users, so a user with a long
+// list would keep expiring grants through a shutdown that had already been
+// asked for — and each one commits.
+func TestSweep_ContextCancelledMidUser_StopsThere(t *testing.T) {
 	resetSweepDeps(t)
 	r := newRecorder()
 	r.install()
+	ctx, cancel := context.WithCancel(context.Background())
 
-	type deleteCall struct {
-		user string
-		ids  []string
+	inner := svcExpireDirectGrant
+	svcExpireDirectGrant = func(c context.Context, userID, grantID, projectID, role, actor string) (services.ExpiredGrantRevocation, error) {
+		cancel() // the shutdown lands while this user still has grants queued
+		return inner(c, userID, grantID, projectID, role, actor)
 	}
-	var deletes []deleteCall
-	svcDeleteExpiredDirectGrantsByIDs = func(_ context.Context, uid string, ids []string) ([]models.DirectGrant, error) {
-		deletes = append(deletes, deleteCall{user: uid, ids: append([]string{}, ids...)})
-		out := make([]models.DirectGrant, len(ids))
-		for i, id := range ids {
-			out[i] = mkGrant(id, uid, "proj", "role")
-		}
-		return out, nil
-	}
-	svcGetExpiredDirectGrants = func(_ context.Context, _ int) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{
-			mkGrant("g1", "user-1", "proj-a", "role-x"),
-			mkGrant("g2", "user-2", "proj-b", "role-y"),
-		}, nil
-	}
+	fetchReturns(
+		mkGrant("g1", "u1", "proj-a", "role-x"),
+		mkGrant("g2", "u1", "proj-a", "role-y"),
+		mkGrant("g3", "u1", "proj-a", "role-z"),
+	)
 
-	Sweep(context.Background(), 10)
+	Sweep(ctx, 100)
 
-	if len(deletes) != 2 {
-		t.Fatalf("expected 2 user-scoped delete calls, got %d", len(deletes))
-	}
-	for _, d := range deletes {
-		for _, id := range d.ids {
-			if d.user == "user-1" && id != "g1" {
-				t.Fatalf("user-1 delete contained %q; cross-user bleed", id)
-			}
-			if d.user == "user-2" && id != "g2" {
-				t.Fatalf("user-2 delete contained %q; cross-user bleed", id)
-			}
-		}
+	if len(r.expiredCalls) != 1 {
+		t.Fatalf("the sweep must stop within the user, not finish their list: %v", r.expiredCalls)
 	}
 }
 
-func TestSweep_ZitadelDedupPerProjectRole(t *testing.T) {
+// A cancelled context stops the sweep rather than working through the rest.
+func TestSweep_ContextCancelled_StopsEarly(t *testing.T) {
 	resetSweepDeps(t)
 	r := newRecorder()
 	r.install()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	fetchReturns(mkGrant("g1", "u1", "proj-a", "role-x"))
 
-	// Two grants for the same user with the same (project, role) — defense
-	// in depth against a future relaxation of the unique constraint.
-	grants := []models.DirectGrant{
-		mkGrant("g1", "user-1", "proj-a", "role-x"),
-		mkGrant("g2", "user-1", "proj-a", "role-x"),
-		mkGrant("g3", "user-1", "proj-a", "role-y"),
-	}
-	svcGetExpiredDirectGrants = func(_ context.Context, _ int) ([]models.DirectGrant, error) {
-		return grants, nil
-	}
-	svcDeleteExpiredDirectGrantsByIDs = func(_ context.Context, _ string, _ []string) ([]models.DirectGrant, error) {
-		return grants, nil
-	}
+	Sweep(ctx, 100)
 
-	Sweep(context.Background(), 10)
-
-	if len(r.zitadelCalls) != 2 {
-		t.Fatalf("expected 2 zitadel calls (dedup'd by project|role), got %d: %v",
-			len(r.zitadelCalls), r.zitadelCalls)
-	}
-	sort.Strings(r.zitadelCalls)
-	wantPrefix := []string{"user-1|proj-a|role-x", "user-1|proj-a|role-y"}
-	for i, w := range wantPrefix {
-		if r.zitadelCalls[i] != w {
-			t.Fatalf("call %d = %q, want %q", i, r.zitadelCalls[i], w)
-		}
+	if len(r.expiredCalls) != 0 {
+		t.Fatalf("a cancelled sweep must expire nothing, got %v", r.expiredCalls)
 	}
 }
 
-// Sweep clamps a misconfigured batch size before it reaches the fetch query
-// (the clamp moved here from the deleted per-package scheduler).
-func TestSweep_ClampsBatchSize(t *testing.T) {
-	resetSweepDeps(t)
-	var got []int
-	svcGetExpiredDirectGrants = func(_ context.Context, limit int) ([]models.DirectGrant, error) {
-		got = append(got, limit)
-		return nil, nil
+func contains(hay []string, needle string) bool {
+	for _, h := range hay {
+		if h == needle {
+			return true
+		}
 	}
-	Sweep(context.Background(), 0)
-	Sweep(context.Background(), 100000)
-	if len(got) != 2 || got[0] != 1 || got[1] != 10000 {
-		t.Fatalf("expected clamped batch sizes [1 10000]; got %v", got)
-	}
+	return false
 }

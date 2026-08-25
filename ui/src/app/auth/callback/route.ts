@@ -12,6 +12,7 @@ import {
   PKCE_COOKIE_NAME,
 } from "@/lib/oidc";
 import { buildRedirectUrl, isSecureRequest } from "@/lib/request-url";
+import { safeReturnPath } from "@/lib/return-path";
 import { createOidcSessionValue, SESSION_COOKIE_NAME, type OidcSessionCookie } from "@/lib/session";
 
 function redirectToLogin(request: Request, error: string): Response {
@@ -145,5 +146,11 @@ export async function GET(request: Request): Promise<Response> {
     maxAge,
   });
 
-  return NextResponse.redirect(buildRedirectUrl(request, "/"), { status: 307 });
+  // Back to where they were, if they were anywhere. Validated a third time,
+  // here at the point of use: the value has been through a cookie and a
+  // round trip since it was written, and this is the one place it becomes a
+  // Location header.
+  return NextResponse.redirect(buildRedirectUrl(request, safeReturnPath(pkce.next)), {
+    status: 307,
+  });
 }

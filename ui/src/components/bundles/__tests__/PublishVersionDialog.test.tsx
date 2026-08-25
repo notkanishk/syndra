@@ -20,7 +20,6 @@ vi.mock("@/components/names", () => ({
   RoleRef: ({ roleKey }: { roleKey: string }) => <span>{roleKey}</span>,
 }));
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 
 const emptyPlan = {
   op: "publish_bundle_version",

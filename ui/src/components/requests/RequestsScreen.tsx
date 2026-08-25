@@ -2,20 +2,22 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import {
   RowCheckbox,
-  SelectAllCheckbox,
+  SelectAllRow,
+  SelectModeToggle,
   SelectionAction,
   SelectionBar,
 } from "@/components/ui/SelectionBar";
+import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { FilterPills, Select } from "@/components/ui/Select";
@@ -35,6 +37,7 @@ import {
 } from "@/lib/queries/useRequests";
 import { Relative } from "@/components/ui/Time";
 import { describeDuration, formatLongDate } from "@/lib/format";
+import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
 import { daysUntilTermEnd } from "@/lib/term";
 
 type StatusFilter = "pending" | "approved" | "rejected" | "withdrawn" | "all";
@@ -79,6 +82,7 @@ function OperatorQueue() {
   const requests = useRequestsAdmin(status);
   const decide = useDecideRequest();
   const [resolved, setResolved] = useState<Set<string>>(new Set());
+  const [outcomes, setOutcomes] = useState<Record<string, ActionResult | null>>({});
   const [bulkStatus, setBulkStatus] = useState<"approved" | "rejected" | null>(null);
 
   const rows = useMemo(
@@ -90,19 +94,29 @@ function OperatorQueue() {
   // a checkbox on a settled row would be offering an action that cannot happen.
   const openRows = useMemo(() => rows.filter((entry) => entry.status === "pending"), [rows]);
   const selection = useRowSelection(useMemo(() => openRows.map((entry) => entry.id), [openRows]));
+  // Deciding one request at a time is what this queue is for; the bulk verbs
+  // are the exception, so they arrive behind a named control rather than a
+  // column of checkboxes that is always in front of every row.
+  const [selecting, setSelecting] = useState(false);
 
   async function act(entry: AccessRequest, next: "approved" | "rejected") {
     setResolved((prev) => new Set(prev).add(entry.id));
     try {
       await decide.mutateAsync({ id: entry.id, status: next });
-      toast.success(next === "approved" ? "Approved." : "Denied.");
+      setOutcomes((prev) => ({
+        ...prev,
+        [entry.id]: {
+          kind: "applied",
+          message: next === "approved" ? "Approved" : "Denied",
+        },
+      }));
     } catch (error) {
       setResolved((prev) => {
         const copy = new Set(prev);
         copy.delete(entry.id);
         return copy;
       });
-      toast.error(error instanceof Error ? error.message : "The decision didn't go through.");
+      setOutcomes((prev) => ({ ...prev, [entry.id]: outcomeFromError(error) }));
     }
   }
 
@@ -111,6 +125,10 @@ function OperatorQueue() {
       <PageHeader
         title="Requests"
         actions={
+          <>
+          {openRows.length > 0 && (
+            <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
+          )}
           <FilterPills<StatusFilter>
             label="Filter by status"
             value={status}
@@ -123,22 +141,14 @@ function OperatorQueue() {
               { value: "all", label: "All" },
             ]}
           />
+          </>
         }
       />
 
       <Card>
         {openRows.length > 0 && (
           <CardColumns>
-            <span className="w-[26px]">
-              <SelectAllCheckbox
-                label={
-                  selection.allSelected
-                    ? "Clear the selection"
-                    : `Select all ${openRows.length} open requests`
-                }
-                {...selection.headerCheckboxProps}
-              />
-            </span>
+            {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
             <span className="w-[170px]">Who</span>
             <span className="w-[250px]">What they asked for</span>
             <span className="flex-1">Why</span>
@@ -146,6 +156,19 @@ function OperatorQueue() {
             <span className="w-[150px] text-right">Decision</span>
           </CardColumns>
         )}
+        {/* Only open requests can be selected; a decided one is not part of the
+            working set, so the first number here is the open count and the
+            second is everything the current filter shows. */}
+        {selecting && openRows.length > 0 && (
+          <SelectAllRow
+            inScope={openRows.length}
+            total={rows.length}
+            noun={["request", "requests"]}
+            allSelected={selection.allSelected}
+            {...selection.headerCheckboxProps}
+          />
+        )}
+
         <div data-selection-scope {...selection.containerProps}>
         <ListStates
           isLoading={requests.isLoading}
@@ -171,13 +194,13 @@ function OperatorQueue() {
           {rows.map((entry) => (
             <div
               key={entry.id}
-              className={`row-divider flex items-center gap-[18px] px-5 py-3.5 ${
+              className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px] ${
                 selection.isSelected(entry.id) ? "bg-accent-soft/30" : ""
               }`}
               {...selection.rowProps(entry.id)}
             >
-              {openRows.length > 0 && (
-                <span className="w-[26px]">
+              {selecting && openRows.length > 0 && (
+                <span className="w-11 shrink-0 desktop:w-[26px]">
                   {entry.status === "pending" ? (
                     <RowCheckbox
                       label="Select this request"
@@ -187,10 +210,10 @@ function OperatorQueue() {
                 </span>
               )}
               <Avatar name={undefined} />
-              <div className="w-[170px] shrink-0 truncate text-[15px] font-semibold">
+              <div className="w-full truncate text-[15px] font-semibold tablet:w-[170px] tablet:shrink-0">
                 <UserName id={entry.requester_id} />
               </div>
-              <div className="w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
+              <div className="w-full text-[14.5px] text-ink/80 tablet:w-[250px] tablet:shrink-0 tablet:truncate">
                 <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
                 {/* Half of the ask. A decision made without it is a decision
                     about a different request. */}
@@ -198,15 +221,20 @@ function OperatorQueue() {
                   {describeDuration(entry.duration_days)}
                 </span>
               </div>
-              <div className="min-w-0 flex-1 truncate text-[14px] text-muted">
+              <div className="w-full min-w-0 text-[14px] text-muted tablet:flex-1 tablet:truncate">
                 {entry.justification ? `“${entry.justification}”` : "No reason given"}
               </div>
-              <div className="w-[66px] shrink-0 text-[13px] text-faint">
+              <div className="text-[13px] text-faint tablet:w-[66px] tablet:shrink-0">
                 <Relative iso={entry.created_at} />
               </div>
               {entry.status === "pending" ? (
-                <div className="flex shrink-0 gap-2">
-                  <Button variant="accent" size="sm" onClick={() => act(entry, "approved")}>
+                <div className="flex w-full flex-row-reverse gap-3 tablet:w-auto tablet:shrink-0 tablet:flex-row tablet:gap-2">
+                  <Button
+                    variant="accent"
+                    size="sm"
+                    className="flex-1 tablet:flex-none"
+                    onClick={() => act(entry, "approved")}
+                  >
                     Approve
                   </Button>
                   <Button size="sm" onClick={() => act(entry, "rejected")}>
@@ -218,6 +246,14 @@ function OperatorQueue() {
                   {requestOutcome(entry.status).operator}
                 </Badge>
               )}
+
+              {/* The row reports its own decision and keeps its seat. It
+                  leaves on the next read, not under the thumb that decided
+                  it — a row that vanishes on the tap takes the evidence of
+                  what just happened with it. */}
+              {outcomes[entry.id] && (
+                <ActionOutcome outcome={outcomes[entry.id]!} placement="inline" className="w-full" />
+              )}
             </div>
           ))}
         </ListStates>
@@ -225,13 +261,25 @@ function OperatorQueue() {
       </Card>
 
       <SelectionBar
-        count={selection.count}
+        count={selecting ? selection.count : 0}
         noun={["request", "requests"]}
+        // One server constant — `services.BulkMaxUsers` — caps the grant, the
+        // request and the drift bulk endpoints alike, which is why a
+        // users-shaped name is the right import here. Without it the operator
+        // select-alls, taps, and meets the 4xx afterwards: the bar exists to
+        // say the number before the tap, not to let the server say it after.
+        ceiling={BULK_MAX_USERS}
+        onTakeCeiling={() =>
+          selection.selectOnly(openRows.slice(0, BULK_MAX_USERS).map((entry) => entry.id))
+        }
         onClear={selection.clear}
       >
-        <SelectionAction onClick={() => setBulkStatus("approved")}>Approve</SelectionAction>
+        {/* Both open a decision dialog rather than deciding. */}
+        <SelectionAction onClick={() => setBulkStatus("approved")}>
+          Review approving these
+        </SelectionAction>
         <SelectionAction tone="danger" onClick={() => setBulkStatus("rejected")}>
-          Deny
+          Review denying these
         </SelectionAction>
       </SelectionBar>
 
@@ -263,6 +311,8 @@ function MemberRequests({ userId }: { userId: string }) {
   const linkedProject = params.get("project") ?? "";
   const linkedRole = params.get("role") ?? "";
   const [open, setOpen] = useState(Boolean(linkedProject));
+  // A member's own rows report their own withdrawals, in the row.
+  const [outcomes, setOutcomes] = useState<Record<string, ActionResult | null>>({});
 
   function closeDialog() {
     setOpen(false);
@@ -301,7 +351,10 @@ function MemberRequests({ userId }: { userId: string }) {
           }
         >
           {mine.map((entry) => (
-            <div key={entry.id} className="row-divider flex items-center gap-[18px] px-5 py-3.5">
+            <div
+              key={entry.id}
+              className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px]"
+            >
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[15px] font-semibold">
                   <ProjectName id={entry.project_id} />
@@ -327,11 +380,16 @@ function MemberRequests({ userId }: { userId: string }) {
                   onClick={async () => {
                     try {
                       await withdraw.mutateAsync(entry.id);
-                      toast.success("Withdrawn. Nobody will be asked to decide it.");
+                      setOutcomes((prev) => ({
+                        ...prev,
+                        [entry.id]: {
+                          kind: "applied",
+                          message: "You withdrew this",
+                          detail: "Nobody will be asked to decide it.",
+                        },
+                      }));
                     } catch (error) {
-                      toast.error(
-                        error instanceof Error ? error.message : "It couldn't be withdrawn.",
-                      );
+                      setOutcomes((prev) => ({ ...prev, [entry.id]: outcomeFromError(error) }));
                     }
                   }}
                 >
@@ -341,6 +399,10 @@ function MemberRequests({ userId }: { userId: string }) {
               <Badge tone={requestOutcome(entry.status).tone}>
                 {requestOutcome(entry.status).member}
               </Badge>
+
+              {outcomes[entry.id] && (
+                <ActionOutcome outcome={outcomes[entry.id]!} placement="inline" className="w-full" />
+              )}
             </div>
           ))}
         </ListStates>
@@ -371,6 +433,7 @@ function RequestDialog({
   const projects = useProjects();
   const roles = useGlobalRoleCatalog();
   const create = useCreateRequest();
+  const [askOutcome, setAskOutcome] = useState<ActionResult | null>(null);
 
   const [projectId, setProjectId] = useState(initial?.projectId ?? "");
   const [roleKey, setRoleKey] = useState(initial?.roleKey ?? "");
@@ -424,6 +487,25 @@ function RequestDialog({
               </option>
             ))}
           </Select>
+          {/* Design asked for a free-text escape here — "Can't find it?
+              Describe what you need and we'll route it." A request without a
+              project and a role is not something this API can carry, and a
+              form that accepts one would be dropping members' words on the
+              floor. What is true is that Why reaches the person deciding
+              verbatim, so the escape points at the field that already works.
+              A place with nothing defined in it is its own dead end and gets
+              its own sentence rather than an empty menu. */}
+          {projectId && projectRoles.length === 0 ? (
+            <FieldHint>
+              Nothing is defined here yet, so there is nothing to ask for. Pick another place, or
+              ask a lab manager to set this one up.
+            </FieldHint>
+          ) : (
+            <FieldHint>
+              Can&rsquo;t find it? Pick the closest one and describe what you actually need in
+              Why — a lab manager reads that before deciding.
+            </FieldHint>
+          )}
         </div>
         <div>
           {/*
@@ -450,7 +532,7 @@ function RequestDialog({
                 type="button"
                 aria-pressed={howLong === value}
                 onClick={() => setHowLong(value)}
-                className={`rounded-pill px-3.5 py-[7px] text-[13px] font-semibold motion-tint ${
+                className={`min-h-[44px] rounded-pill px-3.5 py-[7px] text-[13px] font-semibold motion-tint desktop:min-h-0 ${
                   howLong === value ? "bg-accent-dense text-accent-ink" : "bg-tint-2 text-ink"
                 }`}
               >
@@ -473,6 +555,11 @@ function RequestDialog({
           />
         </div>
       </div>
+      {/* The sheet becomes its own result. A member is being told who decides
+          and that nothing else is needed from them, and a dialog that closes
+          itself takes both sentences with it. */}
+      {askOutcome && <ActionOutcome outcome={askOutcome} className="mx-6 mb-1" />}
+
       <ModalFooter>
         <Button
           variant="accent"
@@ -486,10 +573,13 @@ function RequestDialog({
                 justification: why,
                 duration_days: days,
               });
-              toast.success("Asked. You'll see the answer here.");
-              onClose();
+              setAskOutcome({
+                kind: "applied",
+                message: "Asked",
+                detail: "You'll see the answer on this page — nothing else is needed from you.",
+              });
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "That didn't send.");
+              setAskOutcome(outcomeFromError(error));
             }
           }}
         >
@@ -529,9 +619,11 @@ function BulkDecisionDialog({
       lede=""
       noun={["request", "requests"]}
       destructive={false}
-      onRehearse={() => rehearse.mutateAsync(body)}
-      onApply={async () => {
-        const plan = await apply.mutateAsync(body);
+      onRehearse={(acknowledgeScope) =>
+        rehearse.mutateAsync({ ...body, acknowledge_scope: acknowledgeScope })
+      }
+      onApply={async (planId) => {
+        const plan = await apply.mutateAsync({ ...body, plan_id: planId });
         onApplied();
         return plan;
       }}

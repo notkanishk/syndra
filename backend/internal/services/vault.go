@@ -2,15 +2,11 @@ package services
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
 	"strings"
 	"unicode"
-
-	"golang.org/x/crypto/argon2"
 )
 
 // Argon2id parameters — tuned for a low-concurrency makerspace workload.
@@ -70,43 +66,14 @@ func ValidatePasswordComplexity(password string) error {
 	return nil
 }
 
-// hashPassword hashes a plaintext password with Argon2id and returns the PHC-format
-// hash string and the salt parameters. The plaintext byte slice is zeroed after use.
-func hashPassword(plaintext string) (hash, saltParams string, err error) {
-	pw := []byte(plaintext)
-	defer func() {
-		for i := range pw {
-			pw[i] = 0
-		}
-	}()
-
-	salt := make([]byte, argon2SaltLen)
-	if _, err := rand.Read(salt); err != nil {
-		return "", "", fmt.Errorf("generate salt: %w", err)
-	}
-
-	key := argon2.IDKey(pw, salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
-
-	saltB64 := base64.RawStdEncoding.EncodeToString(salt)
-	keyB64 := base64.RawStdEncoding.EncodeToString(key)
-
-	saltParams = fmt.Sprintf("t=%d,m=%d,p=%d", argon2Time, argon2Memory, argon2Threads)
-	hash = fmt.Sprintf("$argon2id$v=19$m=%d,t=%d,p=%d$%s$%s",
-		argon2Memory, argon2Time, argon2Threads, saltB64, keyB64)
-
-	return hash, saltParams, nil
-}
-
-// SetShadowPassword validates complexity, hashes with Argon2id, stores the credential,
-// and records an audit entry. Audit action is "set" for first-time or "rotated" for updates.
-func SetShadowPassword(ctx context.Context, userID, actorID, plaintext, ipAddress string) error {
-	if err := ValidatePasswordComplexity(plaintext); err != nil {
-		_ = svcInsertShadowCredentialAudit(ctx, userID, "failed_validation", actorID, ipAddress)
-		return err
-	}
-
-	// Determine if this is a new set or a rotation.
-	status, err := svcHasShadowCredential(ctx, userID)
+// RecordCredentialSet notes that a member set a credential on a target, and
+// audits it.
+//
+// It hashes nothing and stores nothing. The value went to the target through
+// the operation that received it and is kept nowhere — no API here accepts a
+// hash, so a stored one could only ever leak (change `addon-platform` group 11).
+func RecordCredentialSet(ctx context.Context, userID, target, actorID, ipAddress string) error {
+	status, err := svcHasShadowCredential(ctx, userID, target)
 	if err != nil {
 		return fmt.Errorf("check existing credential: %w", err)
 	}
@@ -115,20 +82,12 @@ func SetShadowPassword(ctx context.Context, userID, actorID, plaintext, ipAddres
 		action = "rotated"
 	}
 
-	hash, saltParams, err := hashPassword(plaintext)
+	credID, err := svcRecordCredentialSet(ctx, userID, target)
 	if err != nil {
-		return fmt.Errorf("hash password: %w", err)
+		return fmt.Errorf("record credential: %w", err)
 	}
-
-	credID, err := svcUpsertShadowCredential(ctx, userID, hash, "argon2id", saltParams)
-	if err != nil {
-		return fmt.Errorf("persist shadow credential: %w", err)
-	}
-
-	log.Printf("[VAULT] Shadow credential %s: user=%s cred=%s", action, userID, credID)
-
+	log.Printf("[VAULT] Credential %s: user=%s target=%s record=%s", action, userID, target, credID)
 	_ = svcInsertShadowCredentialAudit(ctx, userID, action, actorID, ipAddress)
-
 	return nil
 }
 

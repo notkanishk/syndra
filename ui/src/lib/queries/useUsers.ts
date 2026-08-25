@@ -67,7 +67,35 @@ export interface UserAccessView {
     latest_version?: number;
   }>;
   projects: UserAccessProject[];
+  /**
+   * The second layer of the access model: what has been decided about this
+   * person on top of what their roles give them. Present whether or not any is
+   * in force — a suspension that ended is part of the answer to "what has been
+   * decided about this person".
+   *
+   * Rendered, not merely carried. Without it a role-holder list reads as full
+   * access while a subtractive allowance is withholding the entitlement that
+   * role maps to, which is precisely the trap §6 exists to close.
+   */
+  allowances: AllowanceBand[];
   cleanup_hints: string[];
+}
+
+export interface AllowanceBand {
+  id: string;
+  target: string;
+  field: string;
+  value: string;
+  direction: string;
+  actor_id: string;
+  reason: string;
+  /** Derived at read time, so neither can go stale while the date passes. */
+  in_force: boolean;
+  review_due: boolean;
+  created_at: string;
+  /** When and how it stopped applying. Empty while it still applies. */
+  ended?: string;
+  ended_by?: string;
 }
 
 export interface DirectGrantRow {

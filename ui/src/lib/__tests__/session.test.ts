@@ -204,7 +204,7 @@ describe("getSession", () => {
       userId: "u-1",
       role: "user",
       name: "",
-      email: "jane.doe@x.edu",
+      email: "jane.doe@example.edu",
       title: "",
       team: "",
       status: "active",

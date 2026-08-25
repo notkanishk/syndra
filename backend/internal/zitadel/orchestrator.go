@@ -79,6 +79,11 @@ type ZitadelClient interface {
 	RemoveUserGrant(ctx context.Context, userID, grantID string) error
 	ListUserGrants(ctx context.Context, userID string, p SearchParams) (*SearchResult[UserGrant], error)
 	ListAllGrants(ctx context.Context, p SearchParams) (*SearchResult[UserGrant], error)
+
+	// Events — Zitadel's own record of who did something, which no other read
+	// here can answer. The sweep compares grant SETS and therefore cannot name
+	// an actor; this can, because Zitadel is event-sourced.
+	GrantOriginByID(ctx context.Context, grantID string) (*GrantOrigin, error)
 }
 
 // EnforceMappingRules is triggered when a user is modified.

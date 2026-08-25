@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -10,6 +10,7 @@ import { Select } from "@/components/ui/Select";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant } from "@/lib/queries/useUsers";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { daysUntil, formatLongDate, humanizeKey, roleLabel } from "@/lib/format";
 import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
 
@@ -42,6 +43,7 @@ export function GrantDirectAccess({
   const projects = useProjects();
   const roles = useGlobalRoleCatalog();
   const grant = useCreateGrant(userId);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const [projectId, setProjectId] = useState("");
   const [roleKey, setRoleKey] = useState("");
@@ -54,8 +56,9 @@ export function GrantDirectAccess({
     [roles.data, projectId],
   );
   const selectedRole = projectRoles.find((role) => role.role_key === roleKey);
-  // Named as a pair, because that is what was written. The dialog holds the
-  // project in a select the operator is about to close; the toast outlives it.
+  // Named as a pair, because that is what was written: the project lives in a
+  // select the operator is about to stop looking at, and the sentence
+  // reporting what happened has to stand on its own.
   const selectedLabel = selectedRole
     ? roleLabel(selectedRole.project_name, selectedRole.role_key, selectedRole.display_name)
     : roleKey;
@@ -193,29 +196,46 @@ export function GrantDirectAccess({
         )}
       </div>
 
+      {/* The sheet becomes its own result rather than handing it to a corner.
+          It stays open on success too: what an operator wants next is to read
+          what happened to the person they just acted on, and a dialog that
+          closes itself takes that with it. */}
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter>
-        <Button
-          variant="accent"
-          disabled={!ready}
-          isPending={grant.isPending}
-          onClick={async () => {
-            try {
-              await grant.mutateAsync({
-                project_id: projectId,
-                role_key: roleKey,
-                reason,
-                duration_days: resolved.days,
-              });
-              toast.success(`${userName} now holds ${selectedLabel}.`);
-              onClose();
-            } catch (error) {
-              toast.error(error instanceof Error ? error.message : "The grant didn't go through.");
-            }
-          }}
-        >
-          Grant access
-        </Button>
-        <Button onClick={onClose}>Cancel</Button>
+        {outcome?.kind === "applied" || outcome?.kind === "queued" ? (
+          <Button variant="accent" onClick={onClose}>
+            Done
+          </Button>
+        ) : (
+          <>
+            <Button
+              variant="accent"
+              disabled={!ready}
+              isPending={grant.isPending}
+              onClick={async () => {
+                setOutcome(null);
+                try {
+                  await grant.mutateAsync({
+                    project_id: projectId,
+                    role_key: roleKey,
+                    reason,
+                    duration_days: resolved.days,
+                  });
+                  setOutcome({
+                    kind: "applied",
+                    message: `${userName} now holds ${selectedLabel}`,
+                  });
+                } catch (error) {
+                  setOutcome(outcomeFromError(error));
+                }
+              }}
+            >
+              Grant access
+            </Button>
+            <Button onClick={onClose}>Cancel</Button>
+          </>
+        )}
       </ModalFooter>
     </Modal>
   );

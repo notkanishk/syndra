@@ -2,15 +2,16 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FilterPills, Select } from "@/components/ui/Select";
+import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useProjects } from "@/lib/queries/useProjects";
 import { ProjectName, UserAvatar, UserName } from "@/components/names";
 import {
@@ -18,6 +19,7 @@ import {
   useBulkAttributeDrift,
   useBulkMarkExternalDrift,
   useDriftItems,
+  useDriftOrigin,
   useMarkExternalDrift,
   useReconcileNow,
   useRehearseAdoptDrift,
@@ -28,7 +30,8 @@ import {
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import {
   RowCheckbox,
-  SelectAllCheckbox,
+  SelectAllRow,
+  SelectModeToggle,
   SelectionAction,
   SelectionBar,
 } from "@/components/ui/SelectionBar";
@@ -36,6 +39,7 @@ import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
 import { useReconciliationDiff } from "@/lib/queries/useGrants";
 import { Relative } from "@/components/ui/Time";
 import { formatLongDate, formatRelative } from "@/lib/format";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 
 type Tab = "triage" | "reconciliation";
 type Resolution = "attribute" | "revoke" | "external";
@@ -81,6 +85,7 @@ export function UnexplainedAccess() {
   const projects = useProjects();
   const filtered = Boolean(source || projectId);
   const reconcile = useReconcileNow();
+  const [scanOutcome, setScanOutcome] = useState<Outcome | null>(null);
 
   const [pending, setPending] = useState<{ item: DriftTriageItem; resolution: Resolution } | null>(
     null,
@@ -95,6 +100,10 @@ export function UnexplainedAccess() {
   // exactly the case where paging four times before you can act is the tedium
   // worth removing.
   const selection = useRowSelection(useMemo(() => items.map((item) => item.id), [items]));
+  // A triage row is read before it is resolved — the whole column headed "Why
+  // Syndra can't explain it" is there to be read — so the checkboxes arrive
+  // behind a named control rather than in front of every row by default.
+  const [selecting, setSelecting] = useState(false);
   const oldest = items.reduce<string | null>(
     (acc, item) => (!acc || item.detected_at < acc ? item.detected_at : acc),
     null,
@@ -178,11 +187,19 @@ export function UnexplainedAccess() {
             <Button
               isPending={reconcile.isPending}
               onClick={async () => {
+                setScanOutcome(null);
                 try {
                   await reconcile.mutateAsync();
-                  toast.success("Scan finished.");
+                  // A scan is a read, so it applies nothing — saying "applied"
+                  // about a comparison would be the queue claiming it had
+                  // acted on what it found.
+                  setScanOutcome({
+                    kind: "no_change",
+                    message: "Compared again",
+                    detail: "The queue below is what the comparison found just now.",
+                  });
                 } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "The scan didn't run.");
+                  setScanOutcome(outcomeFromError(error));
                 }
               }}
             >
@@ -192,14 +209,17 @@ export function UnexplainedAccess() {
         }
       />
 
-      <div className="flex gap-2">
+      {/* Under the control that ran it, above the queue it describes. */}
+      {scanOutcome && <ActionOutcome outcome={scanOutcome} />}
+
+      <div className="flex flex-wrap items-center gap-2">
         {(["triage", "reconciliation"] as const).map((entry) => (
           <button
             key={entry}
             type="button"
             onClick={() => router.replace(entry === "triage" ? "?" : "?tab=reconciliation")}
             aria-current={tab === entry ? "page" : undefined}
-            className={`rounded-pill px-4 py-2 text-[14.5px] motion-tint ${
+            className={`min-h-[44px] rounded-pill px-4 text-[14.5px] motion-tint desktop:min-h-0 desktop:py-2 ${
               tab === entry ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
             }`}
           >
@@ -213,28 +233,34 @@ export function UnexplainedAccess() {
             )}
           </button>
         ))}
+        {tab === "triage" && items.length > 0 && (
+          <>
+            <span className="flex-1" />
+            <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
+          </>
+        )}
       </div>
 
       {tab === "triage" ? (
         <>
           <Card>
             <CardColumns>
-              <span className="w-[18px]">
-                <SelectAllCheckbox
-                  label={
-                    selection.allSelected
-                      ? "Clear the selection"
-                      : `Select all ${items.length} unexplained items`
-                  }
-                  {...selection.headerCheckboxProps}
-                />
-              </span>
+              {selecting && <span className="w-11 shrink-0 desktop:w-[18px]" />}
               <span className="w-[186px]">Who</span>
               <span className="w-[250px]">What they can get into</span>
               <span className="flex-1">Why Syndra can&rsquo;t explain it</span>
               <span className="w-[96px]">Found</span>
               <span className="w-[300px] text-right">Resolve</span>
             </CardColumns>
+
+            {selecting && items.length > 0 && (
+              <SelectAllRow
+                inScope={items.length}
+                noun={["item", "items"]}
+                allSelected={selection.allSelected}
+                {...selection.headerCheckboxProps}
+              />
+            )}
 
             <div data-selection-scope {...selection.containerProps}>
             <ListStates
@@ -271,6 +297,7 @@ export function UnexplainedAccess() {
             >
               {visible.map((item, index) => (
                 <TriageRow
+                  selecting={selecting}
                   key={item.id}
                   item={item}
                   // Only the leading row carries the ranking border. If every
@@ -278,7 +305,12 @@ export function UnexplainedAccess() {
                   // meaning "start here".
                   leading={index === 0 && (item.role_group ?? "").toLowerCase().includes("safety")}
                   selection={selection}
-                  onSelectSimilar={() => selectSimilar(item)}
+                  // Selecting is what this does, so it turns the mode on rather
+                  // than filling a selection nothing on screen is showing.
+                  onSelectSimilar={() => {
+                    setSelecting(true);
+                    selectSimilar(item);
+                  }}
                   expanded={expanded === item.id}
                   onExpand={() => setExpanded((cur) => (cur === item.id ? null : item.id))}
                   onResolve={(resolution) => setPending({ item, resolution })}
@@ -293,7 +325,7 @@ export function UnexplainedAccess() {
                   <button
                     type="button"
                     onClick={() => setLimit(items.length)}
-                    className="rounded-pill border border-line-strong px-4 py-1.5 text-[13.5px] font-semibold motion-tint hover:bg-[var(--hover)]"
+                    className="min-h-[44px] rounded-pill border border-line-strong px-4 text-[13.5px] font-semibold motion-tint hover:bg-[var(--hover)] desktop:min-h-0 desktop:py-1.5"
                   >
                     Show all {items.length}
                   </button>
@@ -304,14 +336,29 @@ export function UnexplainedAccess() {
           </Card>
 
           <SelectionBar
-            count={selection.count}
+            count={selecting ? selection.count : 0}
             noun={["item", "items"]}
             composition={composition}
+            // `boundBulkIDs` refuses past this on both drift bulk routes. Same
+            // server constant the grant and request endpoints use.
+            ceiling={BULK_MAX_USERS}
+            onTakeCeiling={() =>
+              selection.selectOnly(items.slice(0, BULK_MAX_USERS).map((item) => item.id))
+            }
             onClear={selection.clear}
           >
-            <SelectionAction onClick={() => setBulkOp("adopt")}>Adopt in Syndra</SelectionAction>
+            {/* Revoke is missing from this bar on purpose, and its absence is
+                stated where somebody would go looking for it. An operator who
+                selects nine rows to revoke and finds two buttons that are not
+                Revoke concludes the bar is broken, or hunts. Neither is a
+                thing to leave anybody doing on this queue. */}
+            <span className="text-[13px] text-faint">Revoking is one row at a time.</span>
+            {/* Both open a plan; neither resolves anything on tap. */}
+            <SelectionAction onClick={() => setBulkOp("adopt")}>
+              Review adopting these
+            </SelectionAction>
             <SelectionAction onClick={() => setBulkOp("external")}>
-              Mark as owned elsewhere
+              Review marking these owned elsewhere
             </SelectionAction>
           </SelectionBar>
 
@@ -360,6 +407,7 @@ export function UnexplainedAccess() {
 function TriageRow({
   item,
   leading,
+  selecting,
   selection,
   onSelectSimilar,
   expanded,
@@ -368,6 +416,7 @@ function TriageRow({
 }: {
   item: DriftTriageItem;
   leading: boolean;
+  selecting: boolean;
   selection: RowSelection;
   onSelectSimilar: () => void;
   expanded: boolean;
@@ -383,21 +432,23 @@ function TriageRow({
   return (
     <div className={leading ? "border-l-[3px] border-danger" : "border-l-[3px] border-transparent"}>
       <div
-        className={`row-divider flex flex-wrap items-center gap-[18px] px-5 py-3.5 ${
+        className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px] ${
           selection.isSelected(item.id) ? "bg-accent-soft/30" : ""
         }`}
         {...selection.rowProps(item.id)}
       >
-        <RowCheckbox
-          label={`Select this unexplained grant`}
-          {...selection.checkboxProps(item.id)}
-        />
+        {selecting && (
+          <RowCheckbox
+            label="Select this unexplained grant"
+            {...selection.checkboxProps(item.id)}
+          />
+        )}
 
         <button
           type="button"
           onClick={onExpand}
           aria-expanded={expanded}
-          className="flex w-[186px] min-w-0 items-center gap-2.5 text-left"
+          className="flex min-h-[44px] w-full min-w-0 items-center gap-2.5 text-left tablet:w-[186px] desktop:min-h-0"
         >
           <UserAvatar id={item.user_id} size="row" />
           <span className="min-w-0">
@@ -410,18 +461,20 @@ function TriageRow({
           </span>
         </button>
 
-        <div className="w-[250px] min-w-0">
+        <div className="w-full min-w-0 tablet:w-[250px]">
           <div className="truncate text-[14px]">
             <ProjectName id={item.project_id} /> / <Mono>{role}</Mono>
           </div>
           <RiskPill item={item} />
         </div>
 
-        <p className="min-w-[220px] flex-1 text-[13.5px] leading-[1.5] text-muted">
-          {explainDrift(item)}
-        </p>
+        <div className="w-full tablet:min-w-[220px] tablet:flex-1">
+          <p className="text-[13.5px] leading-[1.5] text-muted">{explainDrift(item)}</p>
+          <WhoMadeIt item={item} />
+        </div>
 
-        <div className="w-[96px] text-[13px] text-faint">
+        <div className="text-[13px] text-faint tablet:w-[96px]">
+          <span className="tablet:hidden">Found </span>
           <Relative iso={item.detected_at} />
         </div>
 
@@ -430,7 +483,7 @@ function TriageRow({
           red OUTLINE here — the solid fill exists only on the confirming
           button inside its dialog.
         */}
-        <div className="flex w-[300px] shrink-0 flex-wrap justify-end gap-2">
+        <div className="flex w-full flex-wrap gap-3 tablet:w-[300px] tablet:shrink-0 tablet:justify-end tablet:gap-2">
           <Button
             variant={adoptPointless ? "ghost" : "accent"}
             size="sm"
@@ -450,7 +503,7 @@ function TriageRow({
           <button
             type="button"
             onClick={onSelectSimilar}
-            className="text-[12.5px] font-semibold text-muted underline-offset-2 motion-tint hover:text-accent-text hover:underline"
+            className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted underline-offset-2 motion-tint hover:text-accent-text hover:underline desktop:min-h-6"
           >
             Select similar
           </button>
@@ -467,23 +520,26 @@ function TriageRow({
  * are load-bearing here, and colour is never allowed to be the only signal.
  */
 function RiskPill({ item }: { item: DriftTriageItem }) {
-  if (!item.role_in_catalogue) {
+  // Only a target whose access Syndra catalogues can have a role missing from
+  // it. On one that has none, "not in catalogue" would be true of every row and
+  // informative about none.
+  if (item.role_catalogue_applies && !item.role_in_catalogue) {
     return (
-      <span className="mt-1 inline-block rounded-pill bg-tint-2 px-2.5 py-0.5 text-[12px] font-semibold text-muted">
+      <span className="mt-1 inline-block rounded-pill bg-tint-2 px-2.5 py-0.5 text-[12.5px] font-semibold text-muted">
         Role not in catalogue
       </span>
     );
   }
   if ((item.role_group ?? "").toLowerCase().includes("safety")) {
     return (
-      <span className="mt-1 inline-block rounded-pill bg-danger-soft px-2.5 py-0.5 text-[12px] font-semibold text-danger-text">
+      <span className="mt-1 inline-block rounded-pill bg-danger-soft px-2.5 py-0.5 text-[12.5px] font-semibold text-danger-text">
         {item.role_group}
       </span>
     );
   }
   if (item.role_group) {
     return (
-      <span className="mt-1 inline-block rounded-pill bg-tint-2 px-2.5 py-0.5 text-[12px] text-muted">
+      <span className="mt-1 inline-block rounded-pill bg-tint-2 px-2.5 py-0.5 text-[12.5px] text-muted">
         {item.role_group}
       </span>
     );
@@ -494,7 +550,7 @@ function RiskPill({ item }: { item: DriftTriageItem }) {
 /** Three columns: what a revoke costs, what an adopt records, and the evidence. */
 function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
   return (
-    <div className="row-divider grid gap-5 bg-surface-0 px-5 py-4 md:grid-cols-3">
+    <div className="row-divider grid gap-5 bg-surface-0 px-5 py-4 tablet:grid-cols-3">
       <div>
         <div className="type-label mb-1.5">If you revoke</div>
         <p className="text-[13.5px] leading-[1.55] text-muted">
@@ -538,6 +594,7 @@ function ResolutionDialog({
   onClose: () => void;
 }) {
   const attribute = useAttributeDrift();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const revoke = useRevokeDrift();
   const external = useMarkExternalDrift();
 
@@ -604,6 +661,11 @@ function ResolutionDialog({
           </>
         )}
       </div>
+      {/* The dialog states what it did, and for a revocation that is that
+          nothing has reached the target yet — the access is still there until
+          the drain runs. */}
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter>
         <Button
           variant={copy.variant}
@@ -617,10 +679,18 @@ function ResolutionDialog({
               } else {
                 await external.mutateAsync({ id: item.id, body: {} });
               }
-              toast.success("Resolved.");
-              onClose();
+              setOutcome(
+                resolution === "revoke"
+                  ? {
+                      kind: "queued",
+                      message: "Revocation recorded",
+                      detail:
+                        "It reaches the target on the next drain. Until then the access is still there.",
+                    }
+                  : { kind: "applied", message: "Resolved" },
+              );
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "That didn't go through.");
+              setOutcome(outcomeFromError(error));
             }
           }}
         >
@@ -638,9 +708,128 @@ function ResolutionDialog({
  * genuinely cannot know who made a change — the row says so rather than
  * naming a plausible culprit.
  */
+/**
+ * Who made it, asked one row at a time.
+ *
+ * A sweep-detected row cannot name an actor: the sweep compares grant SETS, and
+ * a set difference has no author. The add-on targets solve the same problem
+ * with a recorded merge base — remember what you last saw, infer who moved.
+ * Zitadel needs no inference; it is event-sourced, and the event that created
+ * the grant carries its editor. Reading it is strictly better than deducing it,
+ * which is why this side has no merge base and this button instead.
+ *
+ * Behind a click rather than on load. The queue routinely holds dozens of rows
+ * and this is one API call each; asking for all of them to render a page would
+ * be a burst against the identity provider to answer a question nobody asked.
+ *
+ * Rendered only where it can help: a row Syndra already has an actor for says
+ * so through `explainDrift`, and a row naming no grant has no event to read.
+ */
+function WhoMadeIt({ item }: { item: DriftTriageItem }) {
+  const [asked, setAsked] = useState(false);
+  const origin = useDriftOrigin(item.id, asked);
+
+  if (item.upstream_actor || !item.zitadel_grant_id) return null;
+
+  if (!asked) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAsked(true)}
+        className="mt-1 inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted underline-offset-2 motion-tint hover:text-accent-text hover:underline desktop:min-h-6"
+      >
+        Who made it?
+      </button>
+    );
+  }
+  if (origin.isLoading) {
+    return <p className="mt-1 text-[12.5px] text-faint">Asking the identity provider…</p>;
+  }
+
+  const data = origin.data;
+  // Three different answers, and none of them may render as another: the
+  // lookup failed, the log does not go back that far, or the event names
+  // nobody. Collapsing any pair would put a claim on the row that nothing
+  // supports.
+  if (origin.isError || !data || !data.readable) {
+    return (
+      <p className="mt-1 text-[12.5px] text-warn-text">
+        Could not ask the identity provider, so this is not a finding that nobody made it.
+        {data?.detail ? ` ${data.detail}` : ""}
+      </p>
+    );
+  }
+  if (!data.recorded) {
+    return (
+      <p className="mt-1 text-[12.5px] text-faint">
+        The identity provider&rsquo;s event log does not go back to when this was made.
+      </p>
+    );
+  }
+  if (!data.attributed) {
+    return (
+      <p className="mt-1 text-[12.5px] text-faint">
+        The identity provider recorded the change and not who made it.
+      </p>
+    );
+  }
+  return (
+    <p className="mt-1 text-[12.5px] text-muted">
+      Made by{" "}
+      <span className="font-semibold text-ink">
+        {data.actor_name || (data.actor_id ? <UserName id={data.actor_id} /> : data.service)}
+      </span>
+      {data.actor_name && data.service ? (
+        <span className="text-faint"> via {data.service}</span>
+      ) : null}
+      {data.at ? (
+        <>
+          {" "}
+          <Relative iso={data.at} />
+        </>
+      ) : null}
+      .
+    </p>
+  );
+}
+
 function explainDrift(item: DriftTriageItem): string {
   if (item.drift_type === "syndra_only") {
-    return "Syndra expects this grant but the identity provider doesn't have it — usually a queued write that never landed.";
+    // The row used to say "usually a queued write that never landed" for every
+    // one of these, which is the wrong half of the story whenever the target was
+    // seen HOLDING it: that is not a write that never happened, it is one
+    // somebody undid. Told with its history, the row is recognisably the same
+    // entitlement Syndra applied rather than a stranger.
+    const p = item.provenance;
+    // The write landing is the stronger evidence and, for a grant applied and
+    // removed between two sweeps, the only evidence: nothing ever read it, so
+    // the observation below does not exist. Told first for that reason.
+    if (p?.applied_at) {
+      const who = p.granted_by ? ` by ${p.granted_by}` : "";
+      const why = p.reason ? ` — ${p.reason}` : "";
+      const held = p.last_observed_at
+        ? ` The identity provider was still holding it on ${formatLongDate(p.last_observed_at)}.`
+        : "";
+      const removedBy = item.upstream_actor ? ` Removed by ${item.upstream_actor}.` : "";
+      return `Granted${who}${why}. Syndra applied it on ${formatLongDate(
+        p.applied_at,
+      )} and the identity provider accepted it.${held} It is not there now, so somebody removed it.${removedBy}`;
+    }
+    if (p?.last_observed_at) {
+      const who = p.granted_by ? ` by ${p.granted_by}` : "";
+      const when = p.granted_at ? ` on ${formatLongDate(p.granted_at)}` : "";
+      const why = p.reason ? ` — ${p.reason}` : "";
+      const removedBy = item.upstream_actor ? ` Removed by ${item.upstream_actor}.` : "";
+      return `Granted${who}${when}${why}. The identity provider was still holding it on ${formatLongDate(
+        p.last_observed_at,
+      )} and does not now, so somebody removed it there.${removedBy}`;
+    }
+    if (p?.granted_at) {
+      return `Granted${p.granted_by ? ` by ${p.granted_by}` : ""} on ${formatLongDate(
+        p.granted_at,
+      )}. The identity provider has never been seen holding it, so this is most likely a write that never landed.`;
+    }
+    return "Syndra expects this grant but the identity provider doesn't have it, and there is no record of it ever being held there.";
   }
   const when = item.upstream_created_at ? ` on ${formatLongDate(item.upstream_created_at)}` : "";
   const who = item.upstream_actor ? ` by ${item.upstream_actor}` : "";
@@ -848,16 +1037,16 @@ function BulkResolutionDialog({
       title={op === "adopt" ? "Adopt in Syndra" : "Mark as owned elsewhere"}
       lede={composition}
       noun={["item", "items"]}
-      onRehearse={() =>
+      onRehearse={(acknowledgeScope) =>
         op === "adopt"
-          ? rehearseAdopt.mutateAsync(adoptBody)
-          : rehearseExternal.mutateAsync(externalBody)
+          ? rehearseAdopt.mutateAsync({ ...adoptBody, acknowledge_scope: acknowledgeScope })
+          : rehearseExternal.mutateAsync({ ...externalBody, acknowledge_scope: acknowledgeScope })
       }
-      onApply={async () => {
+      onApply={async (planId) => {
         const plan =
           op === "adopt"
-            ? await applyAdopt.mutateAsync(adoptBody)
-            : await applyExternal.mutateAsync(externalBody);
+            ? await applyAdopt.mutateAsync({ ...adoptBody, plan_id: planId })
+            : await applyExternal.mutateAsync({ ...externalBody, plan_id: planId });
         onApplied();
         return plan;
       }}

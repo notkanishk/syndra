@@ -9,8 +9,10 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Card } from "@/components/ui/Card";
 import { TraceCell } from "@/components/audit/TraceCell";
 import { actedOn, describeAction, groupByDay, machineName } from "@/lib/audit-vocabulary";
-import { formatClock, formatShortDate } from "@/lib/format";
+import { formatClock, formatList, formatShortDate } from "@/lib/format";
 import { useAuditEntries, type AuditEntry } from "@/lib/queries/useAudit";
+import { useTargets } from "@/lib/queries/useTargets";
+import { useTargetActivity, type TargetActivityEvent } from "@/lib/queries/useTargetActivity";
 
 const PAGE = 50;
 
@@ -39,6 +41,7 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
   const atCap = rows.length >= 200;
 
   return (
+    <div className="flex flex-col gap-[18px]">
     <Card>
       <ListStates
         isLoading={entries.isLoading}
@@ -70,7 +73,7 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
             <button
               type="button"
               onClick={() => setLimit((current) => Math.min(current + PAGE, 200))}
-              className="rounded-pill border border-line-strong px-4 py-1.5 text-[13.5px] font-semibold motion-tint hover:bg-[var(--hover)]"
+              className="min-h-[44px] rounded-pill border border-line-strong px-4 text-[13.5px] font-semibold motion-tint hover:bg-[var(--hover)] desktop:min-h-0 desktop:py-1.5"
             >
               Load more
             </button>
@@ -88,6 +91,145 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
         )}
       </ListStates>
     </Card>
+
+    <OnTheTargets userId={userId} name={name} />
+    </div>
+  );
+}
+
+/**
+ * What the TARGETS say, kept apart from what Syndra says.
+ *
+ * Two sources, two cards, deliberately. Syndra's feed above records what Syndra
+ * did; this records what the account did on the target — including everything
+ * that happened with no involvement from Syndra at all, which is exactly the
+ * category a merged feed would hide. The reason a target is reconciled rather
+ * than trusted is that it moves on its own, and a surface that interleaves the
+ * two implies it does not.
+ *
+ * `activity.get` was implemented by the add-on and declared by the backend from
+ * the day the platform landed, and nothing ever called it.
+ */
+function OnTheTargets({ userId, name }: { userId: string; name: string }) {
+  const targets = useTargets();
+  const rows = targets.data ?? [];
+  if (rows.length === 0) return null;
+
+  return (
+    <>
+      {rows.map((entry) => (
+        <TargetActivityCard key={entry.target} target={entry.target} userId={userId} name={name} />
+      ))}
+    </>
+  );
+}
+
+function TargetActivityCard({
+  target,
+  userId,
+  name,
+}: {
+  target: string;
+  userId: string;
+  name: string;
+}) {
+  const activity = useTargetActivity(target, userId);
+  const data = activity.data;
+
+  // Nothing at all rather than an empty card: a person with no account on a
+  // target has no activity to be missing, and a card saying so on every target
+  // in the deployment is noise on the common case.
+  if (activity.isError) return null;
+
+  const events = data?.readable ? (data.events ?? []) : [];
+  const uncovered = data?.uncovered_shares ?? [];
+
+  return (
+    <Card>
+      <div className="row-divider flex flex-wrap items-baseline gap-2 px-5 py-3">
+        <span className="text-[14.5px] font-semibold">On {target}</span>
+        <span className="text-[13px] text-muted">
+          Read from the target&rsquo;s own audit log, not from Syndra&rsquo;s record.
+        </span>
+      </div>
+
+      <ListStates
+        isLoading={activity.isLoading}
+        error={null}
+        errorTitle={`Couldn't read ${target}'s audit log.`}
+        isEmpty={data?.readable === true && events.length === 0}
+        skeleton={<RowSkeleton rows={3} avatar={false} label={`Reading ${target}`} />}
+        empty={
+          <EmptyState
+            title={`No recorded activity for ${name} on ${target}.`}
+            guidance={
+              uncovered.length > 0
+                ? "Some shares were not auditing this account, so this is not the same as nothing having happened — see below."
+                : "The target's audit log has nothing for this account."
+            }
+          />
+        }
+      >
+        {events.map((event, at) => (
+          <TargetEventRow key={`${event.at}-${at}`} event={event} />
+        ))}
+      </ListStates>
+
+      {/* The distinction the whole card exists for. "Could not look" and
+          "nothing happened" are the same empty list otherwise, and they are
+          opposite answers. */}
+      {data && !data.readable && (
+        <div className="border-t border-line px-5 py-3 text-[13px] text-warn-text">
+          The target&rsquo;s audit log could not be read, so this is not a claim that nothing
+          happened.{data.detail ? ` ${data.detail}` : ""}
+        </div>
+      )}
+
+      {uncovered.length > 0 && (
+        <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
+          {/* Not "auditing is off". A share can have auditing switched on and
+              still record nothing for this person, because TrueNAS scopes it by
+              group — so the honest claim is about coverage of THIS account, and
+              an operator sent to switch on a setting that is already on would
+              find nothing wrong and conclude the gap was imaginary. */}
+          Auditing on {formatList(uncovered)} does not cover {name}, so nothing on{" "}
+          {uncovered.length === 1 ? "that share" : "those shares"} appears here whether or not it
+          happened.
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function TargetEventRow({ event }: { event: TargetActivityEvent }) {
+  return (
+    <div className="row-divider flex flex-wrap items-baseline gap-4 px-5 py-3">
+      <span className="w-[64px] shrink-0 text-[12.5px] text-faint">{formatClock(event.at)}</span>
+      <span className="min-w-[200px] flex-1 text-[14px]">
+        <span className="font-semibold">{event.event}</span>
+        {event.share ? <span className="text-muted"> — {event.share}</span> : null}
+        {/* The reason, in the target's own vocabulary rather than a
+            translation of it. `NT_STATUS_NO_SUCH_USER` is the string an
+            operator searches for, and inventing friendlier wording would make
+            it unfindable. */}
+        {event.detail ? (
+          <span className="ml-2 font-mono text-[12.5px] text-faint">{event.detail}</span>
+        ) : null}
+      </span>
+      {/* Where from. Without it a week of refusals is a week of refusals from
+          nowhere: on the live target 553 rows shared one verb and one outcome,
+          and the only thing that distinguished them was the address. */}
+      {event.address ? (
+        <span className="shrink-0 font-mono text-[12.5px] text-faint">{event.address}</span>
+      ) : null}
+      {/* Refusals are the rows worth finding. An access that was denied is a
+          different fact from one that never happened. */}
+      {!event.success && (
+        <span className="rounded-pill bg-warn-soft px-2.5 py-0.5 text-[12.5px] font-semibold text-warn-text">
+          Refused
+        </span>
+      )}
+    </div>
   );
 }
 

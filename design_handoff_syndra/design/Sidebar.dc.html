@@ -90,12 +90,12 @@ class Component extends DCLogic {
       leaf("Requests", 3)
     ];
     let items;
-    if (view === "member") items = [leaf("My access"), leaf("Requests", 1)];
+    if (view === "member") items = [leaf("My access"), leaf("Requests", 1), leaf("TrueNAS")];
     else if (view === "advanced" || view === "system") items = core.concat([
       leaf("Bundles"),
       grp("Automation", [leaf("Automatic rules"), leaf("Pending changes", 2), leaf("Change history"), leaf("Access map"), leaf("Settings")]),
-      grp("Review", [leaf("Unexplained access", 12, "danger"), leaf("Expiring access", 1, "warn"), leaf("Audit")]),
-      grp("System", [leaf("Identity provider"), leaf("Hardware sync"), leaf("Event activity")])
+      grp("Review", [leaf("Unexplained access", 12, "danger"), leaf("Withdrawn access", 3, "danger"), leaf("Holds"), leaf("Review due", 2, "warn"), leaf("Expiring access", 1, "warn"), leaf("Audit")]),
+      grp("System", [leaf("Identity provider"), leaf("TrueNAS"), leaf("Unifi Access"), leaf("Event activity")])
     ]);
     else items = core;
 

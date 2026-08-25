@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { Mock } from "vitest";
 import { NextRequest } from "next/server";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { makeProxyFetch } from "@/test-utils/proxyFetch";
 
@@ -189,5 +191,47 @@ describe("proxy route admin/member boundary", () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("down")) as unknown as typeof fetch;
     const res = await call(GET, "GET", ["catalog"]);
     expect(res.status).toBe(502);
+  });
+});
+
+/**
+ * §17 — the allowlist is bound to the backend's router, not to memory.
+ *
+ * The member surface shipped correct on both sides and unreachable in the
+ * middle: `withUserAuth` on every `/me/` route, self-scoped handlers, and an
+ * allowlist that had never heard of the prefix. Both suites passed, because
+ * each was written against its own idea of what the routes were.
+ *
+ * This reads the router itself. `/api/v1/me/` is the member prefix by
+ * definition — the subject comes from the session and there is no id in the
+ * path to substitute — so a route there that a member cannot reach is always a
+ * bug, and a new one (§26's doors) fails here the day it is added rather than
+ * the day somebody signs in as a member.
+ */
+describe("the proxy allowlist against the backend's own router", () => {
+  const router = readFileSync(
+    resolve(__dirname, "../../../../../../backend/internal/handlers/router.go"),
+    "utf8",
+  );
+  const memberRoutes = Array.from(
+    router.matchAll(/"(GET|POST|PUT|DELETE) \/api\/v1\/(me\/[^"]*)"/g),
+    (m) => ({ method: m[1], path: m[2] }),
+  );
+
+  it("finds the member routes it is supposed to be checking", () => {
+    // A regex that silently matched nothing would make every assertion below
+    // vacuous, which is the failure mode of every source-reading guard.
+    expect(memberRoutes.length).toBeGreaterThan(0);
+  });
+
+  it.each(memberRoutes)("lets a member reach $method /$path", async ({ method, path }) => {
+    (getSession as Mock).mockResolvedValue(MEMBER);
+    // Path parameters are named by the router; any concrete value stands in,
+    // because the allowlist matches on shape and the backend resolves the
+    // subject from the session rather than from the path.
+    const segments = path.split("/").map((s) => (s.startsWith("{") ? "truenas" : s));
+    const handler = { GET, POST, PUT, DELETE }[method as "GET"];
+    const res = await call(handler, method, segments, method === "GET" ? undefined : { body: {} });
+    expect(res.status).not.toBe(403);
   });
 });

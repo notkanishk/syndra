@@ -16,12 +16,12 @@ import (
 
 func resetVaultDeps(t *testing.T) {
 	t.Helper()
-	origUpsert := svcUpsertShadowCredential
+	origRecord := svcRecordCredentialSet
 	origDelete := svcDeleteShadowCredential
 	origHas := svcHasShadowCredential
 	origAudit := svcInsertShadowCredentialAudit
 	t.Cleanup(func() {
-		svcUpsertShadowCredential = origUpsert
+		svcRecordCredentialSet = origRecord
 		svcDeleteShadowCredential = origDelete
 		svcHasShadowCredential = origHas
 		svcInsertShadowCredentialAudit = origAudit
@@ -29,13 +29,13 @@ func resetVaultDeps(t *testing.T) {
 }
 
 func noopVaultDeps() {
-	svcUpsertShadowCredential = func(_ context.Context, _, _, _, _ string) (string, error) {
+	svcRecordCredentialSet = func(_ context.Context, _, _ string) (string, error) {
 		return "cred-1", nil
 	}
 	svcDeleteShadowCredential = func(_ context.Context, _ string) error {
 		return nil
 	}
-	svcHasShadowCredential = func(_ context.Context, _ string) (models.ShadowCredentialStatus, error) {
+	svcHasShadowCredential = func(_ context.Context, _, _ string) (models.ShadowCredentialStatus, error) {
 		return models.ShadowCredentialStatus{HasCredential: false}, nil
 	}
 	svcInsertShadowCredentialAudit = func(_ context.Context, _, _, _, _ string) error {
@@ -130,96 +130,6 @@ func TestValidatePasswordComplexity_MultipleFailures(t *testing.T) {
 	}
 	if !strings.Contains(msg, "symbol") {
 		t.Error("expected symbol error in message")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// SetShadowPassword tests
-// ---------------------------------------------------------------------------
-
-func TestSetShadowPassword_Success(t *testing.T) {
-	resetVaultDeps(t)
-	noopVaultDeps()
-
-	var capturedAction, capturedAlgorithm string
-	svcUpsertShadowCredential = func(_ context.Context, _, hash, algorithm, _ string) (string, error) {
-		capturedAlgorithm = algorithm
-		if !strings.HasPrefix(hash, "$argon2id$") {
-			t.Errorf("expected argon2id hash prefix, got: %s", hash[:20])
-		}
-		return "cred-new", nil
-	}
-	svcInsertShadowCredentialAudit = func(_ context.Context, _, action, _, _ string) error {
-		capturedAction = action
-		return nil
-	}
-
-	err := SetShadowPassword(context.Background(), "u1", "admin1", "Str0ng!Pass99", "127.0.0.1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if capturedAlgorithm != "argon2id" {
-		t.Errorf("expected algorithm=argon2id, got %s", capturedAlgorithm)
-	}
-	if capturedAction != "set" {
-		t.Errorf("expected action=set, got %s", capturedAction)
-	}
-}
-
-func TestSetShadowPassword_ComplexityFailure_AuditsFailedValidation(t *testing.T) {
-	resetVaultDeps(t)
-	noopVaultDeps()
-
-	var capturedAction string
-	svcInsertShadowCredentialAudit = func(_ context.Context, _, action, _, _ string) error {
-		capturedAction = action
-		return nil
-	}
-
-	err := SetShadowPassword(context.Background(), "u1", "admin1", "weak", "127.0.0.1")
-	if err == nil {
-		t.Fatal("expected complexity error")
-	}
-	if capturedAction != "failed_validation" {
-		t.Errorf("expected audit action=failed_validation, got %s", capturedAction)
-	}
-}
-
-func TestSetShadowPassword_RotationAuditsRotated(t *testing.T) {
-	resetVaultDeps(t)
-	noopVaultDeps()
-
-	// Simulate existing credential.
-	svcHasShadowCredential = func(_ context.Context, _ string) (models.ShadowCredentialStatus, error) {
-		return models.ShadowCredentialStatus{HasCredential: true}, nil
-	}
-
-	var capturedAction string
-	svcInsertShadowCredentialAudit = func(_ context.Context, _, action, _, _ string) error {
-		capturedAction = action
-		return nil
-	}
-
-	err := SetShadowPassword(context.Background(), "u1", "admin1", "Str0ng!Pass99", "127.0.0.1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if capturedAction != "rotated" {
-		t.Errorf("expected action=rotated, got %s", capturedAction)
-	}
-}
-
-func TestSetShadowPassword_DBFailure(t *testing.T) {
-	resetVaultDeps(t)
-	noopVaultDeps()
-
-	svcUpsertShadowCredential = func(_ context.Context, _, _, _, _ string) (string, error) {
-		return "", fmt.Errorf("db connection failed")
-	}
-
-	err := SetShadowPassword(context.Background(), "u1", "admin1", "Str0ng!Pass99", "127.0.0.1")
-	if err == nil {
-		t.Fatal("expected DB error")
 	}
 }
 

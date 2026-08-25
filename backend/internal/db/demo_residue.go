@@ -39,7 +39,7 @@ func CountDemoResidue(ctx context.Context, projectIDs, userIDs []string) (int, e
 	`
 
 	var total int
-	if err := PG.QueryRow(ctx, q, projectIDs, userIDs).Scan(&total); err != nil {
+	if err := querier(ctx).QueryRow(ctx, q, projectIDs, userIDs).Scan(&total); err != nil {
 		return 0, err
 	}
 	return total, nil

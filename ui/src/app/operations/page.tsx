@@ -150,7 +150,7 @@ export default function EventActivityPage() {
                 // Only the error row is tinted, and only because it is the row
                 // somebody is scrolling to find. A log where half the lines are
                 // coloured is a log nobody reads.
-                className={`row-divider flex flex-wrap items-start gap-4 px-5 py-3 ${
+                className={`row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:gap-4 ${
                   row.failed ? "bg-danger-soft" : ""
                 }`}
               >

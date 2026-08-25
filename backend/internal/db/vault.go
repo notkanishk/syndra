@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -15,46 +16,59 @@ import (
 // Shadow Password Vault
 // ---------------------------------------------------------------------------
 
-// UpsertShadowCredential inserts or replaces a user's shadow credential.
-// On conflict (same user_id), the credential is updated and rotated_at is set.
-func UpsertShadowCredential(ctx context.Context, userID, hash, algorithm, saltParams string) (string, error) {
+// RetiredBridgeTarget is what a pre-cutover enrolment names.
+//
+// Those rows describe a credential set against the LLDAP bridge, which had no
+// target because it was not one — it was the single directory every member
+// shared. Naming it explicitly is what lets "they enrolled before the change"
+// stay a different sentence from "they have never enrolled" now that enrolment
+// is per target (§23).
+const RetiredBridgeTarget = "retired_bridge"
+
+// RecordCredentialSet notes that a member has set a credential on a target,
+// and when (change `addon-platform` group 11).
+//
+// It takes no credential and there is nowhere to put one. The member's password
+// is forwarded to the target by the operation that received it and is kept
+// nowhere: no API in this system accepts a hash, so the only thing a stored one
+// could ever do is leak. What survives is the metadata the member's own view
+// renders and the answer to "have they enrolled".
+//
+// Per target, because the view that renders it is. Keyed on the person alone,
+// enrolling on the NAS reported "set, last changed…" for every other target and
+// cleared the re-enrolment notice on all of them at once.
+func RecordCredentialSet(ctx context.Context, userID, target string) (string, error) {
+	if strings.TrimSpace(target) == "" {
+		// Refused rather than defaulted. A row with no target is the state this
+		// column exists to remove, and the only rows entitled to a stand-in are
+		// the pre-cutover ones the migration named.
+		return "", fmt.Errorf("record credential for %s: an enrolment must name the target it is on", userID)
+	}
 	var id string
-	err := PG.QueryRow(ctx, `
-		INSERT INTO shadow_credentials (user_id, credential_hash, algorithm, salt_params)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (user_id) DO UPDATE SET
-			credential_hash = EXCLUDED.credential_hash,
-			algorithm       = EXCLUDED.algorithm,
-			salt_params     = EXCLUDED.salt_params,
-			updated_at      = NOW(),
-			rotated_at      = NOW()
-		RETURNING id`,
-		userID, hash, algorithm, saltParams).Scan(&id)
+	err := querier(ctx).QueryRow(ctx, `
+		INSERT INTO shadow_credentials (user_id, target)
+		VALUES ($1, $2)
+		ON CONFLICT (user_id, target) DO UPDATE SET
+			updated_at              = NOW(),
+			rotated_at              = NOW(),
+			-- Setting one through the new path is what clears the mark: the
+			-- member has now enrolled against the system that exists.
+			enrolled_before_cutover = FALSE
+		RETURNING id`, userID, target).Scan(&id)
 	if err != nil {
-		return "", fmt.Errorf("upsert shadow credential (user=%s): %w", userID, err)
+		return "", fmt.Errorf("record credential for %s on %s: %w", userID, target, err)
 	}
 	return id, nil
 }
 
-// GetShadowCredential returns the full credential row including the hash.
-// Intended for the sync service only — never expose the hash to user-facing APIs.
-func GetShadowCredential(ctx context.Context, userID string) (models.ShadowCredential, error) {
-	var c models.ShadowCredential
-	err := PG.QueryRow(ctx, `
-		SELECT id, user_id, credential_hash, algorithm, salt_params,
-		       created_at, updated_at, rotated_at, expires_at
-		FROM shadow_credentials WHERE user_id = $1`, userID).
-		Scan(&c.ID, &c.UserID, &c.CredentialHash, &c.Algorithm, &c.SaltParams,
-			&c.CreatedAt, &c.UpdatedAt, &c.RotatedAt, &c.ExpiresAt)
-	if err != nil {
-		return c, fmt.Errorf("get shadow credential (user=%s): %w", userID, err)
-	}
-	return c, nil
-}
-
-// DeleteShadowCredential removes a user's shadow credential.
+// DeleteShadowCredential removes a user's enrolment records, on every target.
+//
+// Every one, deliberately. This is the operator action "clear this person's
+// credential record", reached from a surface that names a person and no target,
+// and clearing one target while leaving another would leave the operator
+// believing they had done the thing the button says.
 func DeleteShadowCredential(ctx context.Context, userID string) error {
-	tag, err := PG.Exec(ctx, `DELETE FROM shadow_credentials WHERE user_id = $1`, userID)
+	tag, err := querier(ctx).Exec(ctx, `DELETE FROM shadow_credentials WHERE user_id = $1`, userID)
 	if err != nil {
 		return fmt.Errorf("delete shadow credential (user=%s): %w", userID, err)
 	}
@@ -64,17 +78,33 @@ func DeleteShadowCredential(ctx context.Context, userID string) error {
 	return nil
 }
 
-// HasShadowCredential checks whether a user has a shadow credential.
-// The hash is deliberately excluded from the SELECT.
-func HasShadowCredential(ctx context.Context, userID string) (models.ShadowCredentialStatus, error) {
+// HasShadowCredential answers whether a member has enrolled on a target, and
+// when.
+//
+// There is nothing else it could answer: the table holds no credential, and
+// this SELECT names every column that survives.
+//
+// The pre-cutover row is the second candidate and never the first. A member who
+// enrolled against the retired bridge and has since set a password on THIS
+// target has both rows, and the one that describes a working credential has to
+// win — otherwise the page tells somebody to re-enrol after they already have.
+//
+// An empty target asks the older question, "have they enrolled anywhere", which
+// is what the per-person vault route has always asked and is still the right
+// question there: it names a person and no system.
+func HasShadowCredential(ctx context.Context, userID, target string) (models.ShadowCredentialStatus, error) {
 	var s models.ShadowCredentialStatus
-	var algorithm string
 	var createdAt, updatedAt time.Time
 	var rotatedAt, expiresAt *time.Time
-	err := PG.QueryRow(ctx, `
-		SELECT algorithm, created_at, updated_at, rotated_at, expires_at
-		FROM shadow_credentials WHERE user_id = $1`, userID).
-		Scan(&algorithm, &createdAt, &updatedAt, &rotatedAt, &expiresAt)
+	var beforeCutover bool
+	err := querier(ctx).QueryRow(ctx, `
+		SELECT created_at, updated_at, rotated_at, expires_at, enrolled_before_cutover
+		FROM shadow_credentials
+		 WHERE user_id = $1
+		   AND ($2 = '' OR target IN ($2, '`+RetiredBridgeTarget+`'))
+		 ORDER BY (target = $2) DESC, updated_at DESC
+		 LIMIT 1`, userID, target).
+		Scan(&createdAt, &updatedAt, &rotatedAt, &expiresAt, &beforeCutover)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return models.ShadowCredentialStatus{HasCredential: false}, nil
@@ -82,18 +112,22 @@ func HasShadowCredential(ctx context.Context, userID string) (models.ShadowCrede
 		return s, fmt.Errorf("check shadow credential (user=%s): %w", userID, err)
 	}
 	return models.ShadowCredentialStatus{
-		HasCredential: true,
-		Algorithm:     algorithm,
-		CreatedAt:     &createdAt,
-		UpdatedAt:     &updatedAt,
-		RotatedAt:     rotatedAt,
-		ExpiresAt:     expiresAt,
+		// A pre-cutover row is NOT a credential the member can use. The hash it
+		// described is gone and the system it was for does not exist, so
+		// reporting it as set would tell somebody they had enrolled when the
+		// next connection attempt will fail (task 11.9).
+		HasCredential:    !beforeCutover,
+		NeedsReEnrolment: beforeCutover,
+		CreatedAt:        &createdAt,
+		UpdatedAt:        &updatedAt,
+		RotatedAt:        rotatedAt,
+		ExpiresAt:        expiresAt,
 	}, nil
 }
 
 // InsertShadowCredentialAudit records a credential lifecycle event.
 func InsertShadowCredentialAudit(ctx context.Context, userID, action, actorID, ipAddress string) error {
-	_, err := PG.Exec(ctx, `
+	_, err := querier(ctx).Exec(ctx, `
 		INSERT INTO shadow_credential_audit (user_id, action, actor_id, ip_address)
 		VALUES ($1, $2, $3, $4)`,
 		userID, action, actorID, ipAddress)
@@ -105,7 +139,7 @@ func InsertShadowCredentialAudit(ctx context.Context, userID, action, actorID, i
 
 // GetShadowCredentialAudit returns the audit trail for a user's shadow credential.
 func GetShadowCredentialAudit(ctx context.Context, userID string) ([]models.ShadowCredentialAudit, error) {
-	rows, err := PG.Query(ctx, `
+	rows, err := querier(ctx).Query(ctx, `
 		SELECT id, user_id, action, actor_id, ip_address, created_at
 		FROM shadow_credential_audit
 		WHERE user_id = $1

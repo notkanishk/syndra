@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { type ActionOutcome as Outcome } from "@/lib/outcome";
 import { humanizeKey } from "@/lib/format";
 import { useAddBundleRole, useBundleRoles } from "@/lib/queries/useBundles";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
@@ -52,6 +53,7 @@ export function AddRolesToBundle({
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [failure, setFailure] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const held = useMemo(
     () =>
@@ -98,7 +100,6 @@ export function AddRolesToBundle({
     setApplying(true);
     setFailure(null);
     let added = 0;
-    let stopped = false;
     // Sequential, not concurrent. Each add is its own write against the
     // working copy, and six at once would interleave into a draft nobody
     // asked for if one of them failed halfway.
@@ -116,32 +117,32 @@ export function AddRolesToBundle({
         setFailure(
           error instanceof Error ? error.message : `${roleKey} couldn't be added to ${name}.`,
         );
-        // Read from a local, not from `failure`: the state set a line above is
-        // not visible until the next render, and closing the dialog on a failed
-        // apply is exactly the bug that would hide.
-        stopped = true;
+        // `break`, and nothing else. This used to set a local flag because the
+        // dialog closed itself on success and a failed apply must not be
+        // closed over — the flag outlived the auto-close, and a variable that
+        // is assigned and never read is a gate that guards nothing. What keeps
+        // the failure visible now is that nothing closes this dialog but the
+        // operator.
         break;
       }
     }
     setApplying(false);
 
     if (added > 0) {
-      // Nobody gets anything yet. Saying "14 holders get them" here is the
-      // same misreading the removal panel used to invite, in the opposite
-      // direction: it would report an edit as access already granted.
-      toast.success(
-        `${added} ${added === 1 ? "role" : "roles"} added to ${name}'s working copy.`,
-        {
-          description:
-            holders > 0
-              ? `Nobody has them yet. Publish a version to decide whether the ${holders} ${
-                  holders === 1 ? "person" : "people"
-                } holding ${name} get them.`
-              : "Publish a version to make them real.",
-        },
-      );
+      setOutcome({
+        // `no_change` about access, deliberately: the working copy moved and
+        // nobody's access did. Reporting this as `applied` is the misreading
+        // the removal panel used to invite, in the opposite direction.
+        kind: "no_change",
+        message: `${added} ${added === 1 ? "role" : "roles"} added to ${name}'s working copy`,
+        detail:
+          holders > 0
+            ? `Nobody has them yet. Publish a version to decide whether the ${holders} ${
+                holders === 1 ? "person" : "people"
+              } holding ${name} get them.`
+            : "Publish a version to make them real.",
+      });
     }
-    if (!stopped) onClose();
   }
 
   return (
@@ -183,7 +184,11 @@ export function AddRolesToBundle({
                 return (
                   <label
                     key={id}
-                    className={`row-divider flex items-center gap-3 py-2.5 text-[14.5px] ${
+                    // The label is the target, so it carries the floor rather
+                    // than the 16px glyph inside it. py-2.5 around 14.5px text
+                    // lands a pixel or two under 44 — close enough to look
+                    // right in a screenshot and not close enough to hit.
+                    className={`row-divider flex min-h-[44px] items-center gap-3 py-2.5 text-[14.5px] ${
                       already ? "text-faint" : "cursor-pointer"
                     }`}
                   >
@@ -215,6 +220,8 @@ export function AddRolesToBundle({
           {failure} The roles still ticked were not added — press Add again to resume.
         </div>
       )}
+
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter>
         <Button

@@ -158,7 +158,7 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 			event.RoleKeys = []string{event.RoleKey}
 		}
 		// Filter blank/whitespace-only entries — invalid roles must never reach
-		// downstream orchestration or provisioning (could emit malformed LLDAP groups).
+		// downstream orchestration (could converge a subject against a malformed role).
 		filtered := make([]string, 0, len(event.RoleKeys))
 		for _, rk := range event.RoleKeys {
 			if trimmedNonEmpty(rk) {
@@ -245,7 +245,7 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 
 // processGrantAdded handles grant_added and grant_changed events:
 // rebuild cache, enforce mapping rules per role, trigger onboarding for new_user,
-// and emit a provisioning intent for LLDAP sync per role.
+// per role, which is what carries the change to any mapped target.
 func processGrantAdded(ctx context.Context, event WebhookPayload, eventID string) error {
 	if len(event.ProjectIDs) > 0 {
 		cacheRebuildUser(ctx, event.UserID, event.ProjectIDs)
@@ -264,10 +264,6 @@ func processGrantAdded(ctx context.Context, event WebhookPayload, eventID string
 			if err := webhookTriggerOnboarding(ctx, event.UserID, "webhook", idempotencyKey); err != nil {
 				log.Printf("[WEBHOOK] Onboarding trigger failed for user=%s: %v", event.UserID, err)
 			}
-		}
-
-		if err := webhookEmitProvisioningIntent(ctx, event.UserID, "add", event.SourceProject, role, eventID); err != nil {
-			log.Printf("[WEBHOOK] Provisioning intent emission failed: %v", err)
 		}
 	}
 
@@ -290,7 +286,7 @@ func detectWebhookDrift(ctx context.Context, event WebhookPayload) {
 		if expected {
 			continue
 		}
-		excluded, err := dbHasExclusion(ctx, event.UserID, event.SourceProject, role)
+		excluded, err := dbHasExclusion(ctx, db.TargetZitadel, event.UserID, event.SourceProject, role)
 		if err != nil {
 			log.Printf("[DRIFT] webhook exclusion-check failed user=%s role=%s: %v (skipping — not flagging on uncertainty)", event.UserID, role, err)
 			continue
@@ -298,25 +294,89 @@ func detectWebhookDrift(ctx context.Context, event WebhookPayload) {
 		if excluded {
 			continue
 		}
-		if _, _, err := dbUpsertDriftItemWithEvidence(ctx, event.UserID, event.SourceProject,
-			[]string{role}, event.GrantID, "webhook", "zitadel_only",
+		// The webhook is a Zitadel event, so the finding is about Zitadel and
+		// says so. It is the same statement the sweep makes about the same
+		// grant, and the pending-dedupe index only recognises them as the same
+		// finding if both name the target.
+		if _, _, err := dbUpsertDriftItemWithEvidence(ctx, db.TargetZitadel, event.UserID, event.SourceProject,
+			[]string{role}, event.GrantID, "webhook", db.DriftTargetOnly,
 			db.DriftEvidence{UpstreamActor: event.EditorID, UpstreamCreatedAt: event.EventCreatedAt}); err != nil {
 			log.Printf("[DRIFT] webhook upsert failed user=%s role=%s: %v (non-fatal)", event.UserID, role, err)
 		}
 	}
 }
 
+// detectWebhookRemoval flags a role Syndra INTENDS that somebody removed in
+// Zitadel — the mirror of `detectWebhookDrift`, and the half that was missing.
+//
+// The sweep finds these too, by comparing what the ledger intends against what
+// Zitadel holds. Two things this adds that the comparison cannot:
+//
+// It knows WHO. A set comparison can say a grant is gone and never who removed
+// it; the event carries the editor, and "Marta removed this at 14:02" is a
+// different triage row from "it is missing". That is the same evidence
+// `detectWebhookDrift` already records for access appearing, and the removal
+// side had none.
+//
+// And it is immediate. The sweep runs every six hours, so an access change
+// somebody made by hand could sit unreported for most of a day — during which
+// the drain would have replayed it, before the merge base taught the sweep not
+// to. Detection at the moment it happens is what makes the finding about an
+// event rather than about a state.
+//
+// Best-effort and non-fatal throughout, like its mirror: a detection failure
+// must never bounce a 4xx back to Zitadel and start a redelivery storm. The
+// sweep remains the backstop.
+//
+// Self-mutation events never reach here — they are dropped at the door — so
+// anything this sees is a change Syndra did not make.
+func detectWebhookRemoval(ctx context.Context, event WebhookPayload) {
+	for _, role := range event.RoleKeys {
+		expected, err := svcUserExpectsRole(ctx, event.UserID, event.SourceProject, role)
+		if err != nil {
+			log.Printf("[DRIFT] webhook removal expected-check failed user=%s role=%s: %v (skipping)",
+				event.UserID, role, err)
+			continue
+		}
+		if !expected {
+			// Syndra did not intend this access, so its removal is not a
+			// finding — it is Zitadel and Syndra agreeing, arrived at from the
+			// other side.
+			continue
+		}
+		excluded, err := dbHasExclusion(ctx, db.TargetZitadel, event.UserID, event.SourceProject, role)
+		if err != nil {
+			log.Printf("[DRIFT] webhook removal exclusion-check failed user=%s role=%s: %v (skipping — not flagging on uncertainty)",
+				event.UserID, role, err)
+			continue
+		}
+		if excluded {
+			continue
+		}
+		if _, _, err := dbUpsertDriftItemWithEvidence(ctx, db.TargetZitadel, event.UserID, event.SourceProject,
+			[]string{role}, event.GrantID, "webhook", db.DriftSyndraOnly,
+			db.DriftEvidence{UpstreamActor: event.EditorID, UpstreamCreatedAt: event.EventCreatedAt}); err != nil {
+			log.Printf("[DRIFT] webhook removal upsert failed user=%s role=%s: %v (non-fatal)",
+				event.UserID, role, err)
+		}
+	}
+}
+
 // processGrantRemoved handles grant_removed events:
 // invalidate cache, revoke derived grants per role through mapping rules,
-// and emit a provisioning intent per role for LLDAP sync.
+// The target side follows from the role change itself: the closure diff every
+// cascade computes fires the lifecycle trigger, which converges whatever
+// targets that role is mapped to. There is no second queue to write to.
 func processGrantRemoved(ctx context.Context, event WebhookPayload, eventID string) error {
 	_ = cacheInvalidateUser(ctx, event.UserID)
+	// BEFORE the cascade, deliberately. The revocations below remove derived
+	// intent, so asking afterwards whether Syndra expects this role would be
+	// asking about the world the cascade has just made rather than the one the
+	// removal happened in.
+	detectWebhookRemoval(ctx, event)
 	for _, role := range event.RoleKeys {
 		if err := webhookRevokeMappingRules(ctx, event.UserID, event.SourceProject, role); err != nil {
 			return fmt.Errorf("revocation failure for role=%s: %w", role, err)
-		}
-		if err := webhookEmitProvisioningIntent(ctx, event.UserID, "remove", event.SourceProject, role, eventID); err != nil {
-			log.Printf("[WEBHOOK] Provisioning intent emission failed: %v", err)
 		}
 	}
 	return nil

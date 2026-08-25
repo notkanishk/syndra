@@ -13,7 +13,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
 import {
   RowCheckbox,
-  SelectAllCheckbox,
+  SelectAllRow,
+  SelectModeToggle,
   SelectionAction,
   SelectionBar,
 } from "@/components/ui/SelectionBar";
@@ -29,11 +30,12 @@ import {
   serializeFilters,
   type PeopleFilters,
 } from "@/lib/people-filters";
-import type { BulkOp } from "@/lib/queries/useBulkGrants";
+import { BULK_MAX_USERS, type BulkOp } from "@/lib/queries/useBulkGrants";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useRoleMembers } from "@/lib/queries/useRoleMembers";
 import { useUsers, type UserListEntry } from "@/lib/queries/useUsers";
 import { useDebounce } from "@/lib/useDebounce";
+import { useIsTouch } from "@/lib/useViewport";
 import { daysUntil } from "@/lib/format";
 
 /** Explicit pagination, never infinite scroll: a queue you can reach the end of. */
@@ -104,8 +106,10 @@ export default function PeoplePage() {
     setWholeFilter(false);
   }, [filterKey]);
 
-  // Leaving bulk mode clears the selection, so re-entering never resumes a
-  // selection the operator has forgotten making.
+  // Leaving the mode keeps the selection — an operator who taps Done to read
+  // one person's row properly has not changed their mind about the other
+  // nine — but it drops `wholeFilter`, which is a claim about how the
+  // selection was made and stops being true the moment the mode is left.
   useEffect(() => {
     if (!bulkMode) setWholeFilter(false);
   }, [bulkMode]);
@@ -202,18 +206,10 @@ export default function PeoplePage() {
                 </option>
               ))}
             </Select>
-            <button
-              type="button"
-              onClick={() => (bulkMode ? exitBulk() : setParams({}, { bulk: "1" }))}
-              aria-pressed={bulkMode}
-              className={`rounded-pill border px-4 py-[7px] text-[13.5px] font-semibold motion-tint ${
-                bulkMode
-                  ? "border-accent-line bg-accent-soft text-accent-text"
-                  : "border-line-strong hover:bg-[var(--hover)]"
-              }`}
-            >
-              {bulkMode ? "Done selecting" : "Select"}
-            </button>
+            <SelectModeToggle
+              active={bulkMode}
+              onToggle={() => (bulkMode ? exitBulk() : setParams({}, { bulk: "1" }))}
+            />
           </>
         }
       />
@@ -246,25 +242,24 @@ export default function PeoplePage() {
 
       <Card>
         <CardColumns>
-          {bulkMode && (
-            <span className="w-[26px]">
-              <SelectAllCheckbox
-                {...selection.headerCheckboxProps}
-                onChange={toggleAll}
-                label={
-                  selection.allSelected
-                    ? "Clear the selection"
-                    : `Select all ${rows.length} people matching this filter`
-                }
-              />
-            </span>
-          )}
+          {bulkMode && <span className="w-11 shrink-0 desktop:w-[26px]" />}
           <span className="w-[250px]">Person</span>
           <span className="w-[150px]">Team</span>
           <span className="w-[220px]">Bundles</span>
           <span className="flex-1">Access</span>
           <span className="w-[150px] text-right">Needs attention</span>
         </CardColumns>
+
+        {bulkMode && rows.length > 0 && (
+          <SelectAllRow
+            inScope={rows.length}
+            total={all.length}
+            noun={["person", "people"]}
+            allSelected={selection.allSelected}
+            {...selection.headerCheckboxProps}
+            onChange={toggleAll}
+          />
+        )}
 
         <div data-selection-scope {...selection.containerProps}>
         <ListStates
@@ -311,7 +306,7 @@ export default function PeoplePage() {
               <button
                 type="button"
                 onClick={() => setLimit((current) => current + PAGE)}
-                className="rounded-pill border border-line-strong px-4 py-1.5 text-[13.5px] font-semibold motion-tint hover:bg-[var(--hover)]"
+                className="min-h-[44px] rounded-pill border border-line-strong px-4 text-[13.5px] font-semibold motion-tint hover:bg-[var(--hover)] desktop:min-h-0 desktop:py-1.5"
               >
                 Load next {Math.min(PAGE, rows.length - visible.length)}
               </button>
@@ -332,19 +327,41 @@ export default function PeoplePage() {
             selection.selectOnly(visible.map((entry) => entry.user.id));
             setWholeFilter(false);
           }}
+          // The bulk endpoint takes 500 at a time. A selection over that is not
+          // silently trimmed to fit and the bar is not disabled either — both
+          // hand the operator a number they did not choose. It offers the one
+          // narrowing move, in the order already on screen, so the 500 is a
+          // cohort somebody picked rather than wherever the list happened to
+          // stop.
+          ceiling={BULK_MAX_USERS}
+          onTakeCeiling={() => {
+            selection.selectOnly(rows.slice(0, BULK_MAX_USERS).map((entry) => entry.user.id));
+            setWholeFilter(false);
+          }}
           onClear={() => {
             selection.clear();
             setWholeFilter(false);
           }}
         >
-          <SelectionAction onClick={() => setBulkOp("assign_role")}>Grant role</SelectionAction>
-          <SelectionAction onClick={() => setBulkOp("assign_bundle")}>Add to bundle</SelectionAction>
-          <SelectionAction onClick={() => setBulkOp("extend")}>Extend expiring</SelectionAction>
+          {/* Every one of these opens a rehearsal, so every one of them says
+              so. "Remove role" on a bar above nine selected people names an
+              outcome that tapping it does not produce — the plan comes first,
+              and the label that hides that is the label an operator taps
+              expecting to be asked. */}
+          <SelectionAction onClick={() => setBulkOp("assign_role")}>
+            Rehearse a role grant
+          </SelectionAction>
+          <SelectionAction onClick={() => setBulkOp("assign_bundle")}>
+            Rehearse adding a bundle
+          </SelectionAction>
+          <SelectionAction onClick={() => setBulkOp("extend")}>
+            Rehearse extending what expires
+          </SelectionAction>
           <SelectionAction tone="danger" onClick={() => setBulkOp("remove_bundle")}>
-            Remove bundle
+            Rehearse removing a bundle
           </SelectionAction>
           <SelectionAction tone="danger" onClick={() => setBulkOp("remove_role")}>
-            Remove role
+            Rehearse removing a role
           </SelectionAction>
         </SelectionBar>
       )}
@@ -389,6 +406,7 @@ function PersonRow({
   selection: RowSelection;
 }) {
   const selected = selection.isSelected(entry.user.id);
+  const touch = useIsTouch();
   // A departed account still belongs in the list — it is often exactly who you
   // came looking for — but it reads at reduced contrast so a live person is
   // never mistaken for one who left.
@@ -396,12 +414,17 @@ function PersonRow({
 
   const body = (
     <>
-      <span className="flex w-[250px] min-w-0 items-center gap-3">
+      <span className="flex w-full min-w-0 items-center gap-3 tablet:w-[250px]">
         <Avatar name={entry.user.name} />
         <span className="min-w-0">
           {/* In bulk mode the row is a control, so the name becomes the only
-              link out — clicking anywhere else selects rather than navigates. */}
-          {bulkMode ? (
+              link out — clicking anywhere else selects rather than navigates.
+              With a mouse that is a precise escape hatch. With a thumb it is a
+              trap: the name is the largest thing in the row and the obvious
+              place to press, and pressing it leaves the mode and drops the
+              operator on somebody else's page mid-selection. Below the desktop
+              breakpoint the whole row selects, which is what A4 asked for. */}
+          {bulkMode && !touch ? (
             <Link
               href={`/users/${entry.user.id}`}
               onClick={(event) => event.stopPropagation()}
@@ -418,9 +441,9 @@ function PersonRow({
         </span>
       </span>
 
-      <span className="w-[150px] truncate text-[14px] text-muted">{entry.user.team || "—"}</span>
+      <span className="hidden w-[150px] truncate text-[14px] text-muted tablet:block">{entry.user.team || "—"}</span>
 
-      <span className="flex w-[220px] flex-wrap gap-1.5">
+      <span className="hidden w-[220px] flex-wrap gap-1.5 tablet:flex">
         {entry.bundle_names?.length ? (
           entry.bundle_names.map((name) => {
             // The version rides on the chip. "Lab Tech" and "Lab Tech v2" are
@@ -439,15 +462,20 @@ function PersonRow({
         )}
       </span>
 
-      <span className="min-w-0 flex-1 truncate text-[14px] text-muted">{describeAccess(entry)}</span>
+      <span className="min-w-0 text-[13px] text-muted tablet:flex-1 tablet:truncate tablet:text-[14px]">{describeAccess(entry)}</span>
 
-      <span className="w-[150px] text-right">
+      <span className="tablet:w-[150px] tablet:text-right">
         <NeedsAttention entry={entry} />
       </span>
     </>
   );
 
-  const shared = `row-divider flex items-center gap-[18px] px-5 py-3.5 motion-tint hover:bg-[var(--hover)] ${
+  // Stacked on a phone, columns above the tablet breakpoint. The cells that
+  // survive are the two an operator scans for — who this is, and whether
+  // anything about them needs doing — plus the sentence explaining why they
+  // are in the list. Team and bundles fold away: both are one tap deeper, on
+  // the person's own page, and neither is what this screen is scanned for.
+  const shared = `row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px] ${
     departed ? "opacity-60" : ""
   }`;
 
@@ -466,7 +494,7 @@ function PersonRow({
       className={`${shared} cursor-pointer select-none ${selected ? "bg-accent-soft/40" : ""}`}
       {...selection.rowProps(entry.user.id)}
     >
-      <span className="w-[26px]">
+      <span className="w-11 desktop:w-[26px]">
         <RowCheckbox
           label={`Select ${entry.user.name}`}
           {...selection.checkboxProps(entry.user.id)}

@@ -10,28 +10,43 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
+	"strings"
 	"syndra/internal/db"
 	"syndra/internal/models"
+	"syndra/internal/services"
+	"time"
 )
 
-// handleListDrift serves the triage queue. Unfiltered, it returns the enriched
-// view — risk, holder status and the other-items count each row needs to be
-// decided on without a click, ordered by risk then age. A filtered request
-// (user/project/source) stays on the raw listing: those callers are looking up
-// specific rows, not triaging a queue, and the enrichment cost isn't theirs to
-// pay.
+// handleListDrift serves the triage queue: risk, holder status and the
+// other-items count each row needs to be decided on without a click, ordered by
+// risk then age.
+//
+// One shape whether or not a filter was applied. The filtered branch used to
+// return raw drift rows to save the enrichment, which cost more than it saved:
+// the surface reads `role_in_catalogue` and `role_catalogue_applies` off every
+// row, and an absent field is indistinguishable from a false one, so narrowing
+// the queue silently withdrew the "role not in catalogue" warning from rows
+// that had earned it. A response that is a different type depending on a query
+// parameter is a contract the client cannot hold.
 func handleListDrift(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	filter := db.DriftFilter{
+		Target:          q.Get("target"),
 		UserID:          q.Get("user_id"),
 		ProjectID:       q.Get("project_id"),
 		DetectionSource: q.Get("source"),
 	}
 
-	if filter.UserID == "" && filter.ProjectID == "" && filter.DetectionSource == "" {
+	// The unfiltered branch is chosen by the filter being empty, so every field
+	// of it has to be consulted here. A field added to DriftFilter and not to
+	// this condition does not narrow anything — it is silently ignored, and the
+	// caller gets the whole queue back believing it was scoped. `filter.Empty()`
+	// keeps the two from drifting apart.
+	if filter.Empty() {
 		items, err := svcDriftTriageQueue(r.Context())
 		if err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
@@ -44,13 +59,18 @@ func handleListDrift(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items, err := dbGetDriftItems(r.Context(), filter)
+	rows, err := dbGetDriftItems(r.Context(), filter)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	items, err := svcDriftTriageRows(r.Context(), rows)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 	if items == nil {
-		items = []models.DriftItem{}
+		items = []models.DriftTriageItem{}
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{"drift": items})
 }
@@ -83,6 +103,87 @@ func validAttributionSource(s string) bool {
 	return s == "external_backfill"
 }
 
+// handleDriftOrigin answers "who did this", from Zitadel's own event log.
+//
+// The reconciliation sweep compares grant SETS. It can see that a grant exists
+// with nothing to explain it and it cannot see who created it, so every
+// sweep-detected row renders "unknown actor" — honest, and the least useful
+// sentence on the triage queue.
+//
+// The add-on targets close the same gap with a recorded merge base: keep what
+// you last saw, infer who moved from the difference. Zitadel needs no
+// inference. It is event-sourced, and the event that created the grant carries
+// its editor. This is the deliberate asymmetry — a merge base HERE would be a
+// worse approximation of something the target can answer exactly.
+//
+// Read on demand, one row at a time. The sweep sees every unexplained grant in
+// the deployment; asking this from there would turn one pass into one API call
+// per finding.
+//
+// 200 with `readable: false` when Zitadel cannot be asked, for the same reason
+// every other read on this codebase does it: "we could not find out" and
+// "nobody is recorded" are opposite answers, and a 502 would render the row as
+// broken rather than as unattributed.
+func handleDriftOrigin(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	item, err := dbGetDriftItem(r.Context(), id)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+
+	// A row with no grant id names no aggregate to ask about. That is a
+	// property of the finding, not a failure to read one — `syndra_only` rows
+	// describe access Zitadel does not have.
+	if strings.TrimSpace(item.ZitadelGrantID) == "" {
+		jsonResponse(w, http.StatusOK, map[string]any{
+			"id":       id,
+			"readable": false,
+			"detail":   "This finding names no Zitadel grant, so there is no event to read.",
+		})
+		return
+	}
+
+	origin, err := zitadelGrantOrigin(r.Context(), item.ZitadelGrantID)
+	if err != nil {
+		jsonResponse(w, http.StatusOK, map[string]any{
+			"id":       id,
+			"readable": false,
+			"detail":   errText(err),
+		})
+		return
+	}
+	if origin == nil {
+		// The aggregate has no events Zitadel will show us. Readable, and
+		// genuinely empty: the grant is older than the retained history.
+		jsonResponse(w, http.StatusOK, map[string]any{
+			"id":       id,
+			"readable": true,
+			"recorded": false,
+			"detail":   "Zitadel's event log does not go back to when this grant was made.",
+		})
+		return
+	}
+
+	body := map[string]any{
+		"id":       id,
+		"readable": true,
+		"recorded": true,
+		// Attributed distinguishes "the event names somebody" from "the event
+		// exists and names nobody". Both are real answers and they are not the
+		// same one.
+		"attributed": origin.Attributed(),
+		"actor_id":   origin.ActorID,
+		"actor_name": origin.ActorName,
+		"service":    origin.Service,
+		"event_type": origin.EventType,
+	}
+	if !origin.At.IsZero() {
+		body["at"] = origin.At.Format(time.RFC3339)
+	}
+	jsonResponse(w, http.StatusOK, body)
+}
+
 func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req attributeRequest
@@ -99,14 +200,14 @@ func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
 	}
-	if err := attributeOneDrift(r.Context(), item, req, resolveActor(r, "operator")); err != nil {
+	if err := attributeOneDrift(r.Context(), item, req, resolveActor(r, "")); err != nil {
 		writeDriftActionError(w, err)
 		return
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{"status": "attributed"})
 }
 
-// attributeOneDrift writes the ledger intent for a zitadel_only drift and marks
+// attributeOneDrift writes the ledger intent for a target_only drift and marks
 // it attributed. It enqueues nothing, and that is the whole point: adoption is
 // the operator saying "Zitadel is right, Syndra was wrong", so there is no
 // mutation owed upstream and no outbox row to carry one.
@@ -148,7 +249,7 @@ func handleRevokeDrift(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
 	}
-	actor := resolveActor(r, "operator")
+	actor := resolveActor(r, "")
 	// ONE tx: guard-transition to 'revoked' AND enqueue the revoke outbox row
 	// together. A lost race 409s with nothing written; a write failure rolls the
 	// resolution back too. Drain is best-effort AFTER commit — the durable revoke
@@ -190,7 +291,7 @@ func handleMarkDriftExternal(w http.ResponseWriter, r *http.Request) {
 	// together. A lost race 409s with no exclusion written; a write failure rolls
 	// the resolution back too.
 	if err := dbMarkDriftExternalTx(r.Context(), id, item.UserID, item.ProjectID,
-		item.RoleKeys, resolveActor(r, "operator"), req.Reason, string(payload)); err != nil {
+		item.RoleKeys, resolveActor(r, ""), req.Reason, string(payload)); err != nil {
 		writeDriftActionError(w, err) // ErrDriftNotPending → 409, else 500
 		return
 	}
@@ -200,12 +301,20 @@ func handleMarkDriftExternal(w http.ResponseWriter, r *http.Request) {
 type bulkAttributeRequest struct {
 	IDs    []string `json:"ids"`
 	Source string   `json:"source"`
+	// PlanID cites the rehearsal being applied. Required with ?apply=true.
+	PlanID string `json:"plan_id,omitempty"`
+	// AcknowledgeScope is the operator saying the affected-row count out loud.
+	AcknowledgeScope bool `json:"acknowledge_scope,omitempty"`
 }
 
 func handleBulkAttributeDrift(w http.ResponseWriter, r *http.Request) {
 	var req bulkAttributeRequest
 	if err := decodeJSONStrict(r.Body, &req); err != nil {
 		jsonErrorResponse(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	if err := boundBulkIDs(req.IDs); err != nil {
+		jsonValidationErrorResponse(w, err.Error(), map[string]string{"ids": fmt.Sprintf("max %d", services.BulkMaxUsers)})
 		return
 	}
 	// Same source gate as the single-item endpoint: an empty/invalid source must
@@ -215,19 +324,38 @@ func handleBulkAttributeDrift(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plan := rehearseDriftBatch(r.Context(), req.IDs, driftOpAdopt)
+	// The attribution source changes what adopting DOES, so it is bound to the
+	// plan. The cohort is bound with it: an apply that widened the id list under
+	// one approval would resolve rows nobody looked at.
+	actor := resolveActor(r, "")
+	requestFP := services.FingerprintIDCohort(driftOpAdopt, req.IDs, "source", req.Source)
+
 	if r.URL.Query().Get("apply") != "true" {
+		plan := rehearseDriftBatch(r.Context(), req.IDs, driftOpAdopt)
+		if err := issuePlan(r.Context(), planSurfaceDriftAdopt, actor, requestFP, req.AcknowledgeScope, &plan); err != nil {
+			writePlanIssueError(w, err)
+			return
+		}
 		jsonResponse(w, http.StatusOK, plan)
 		return
 	}
 
-	applyDriftPlan(r, &plan, driftOpAdopt, resolveActor(r, "operator"), "")
+	plan, err := claimDriftPlan(r, planSurfaceDriftAdopt, driftOpAdopt, actor, requestFP, req.PlanID, req.IDs)
+	if err != nil {
+		writePlanCitationError(w, err)
+		return
+	}
+	applyDriftPlan(r, &plan, driftOpAdopt, actor, "")
 	jsonResponse(w, http.StatusOK, plan)
 }
 
 type bulkMarkExternalRequest struct {
 	IDs    []string `json:"ids"`
 	Reason string   `json:"reason"`
+	// PlanID cites the rehearsal being applied. Required with ?apply=true.
+	PlanID string `json:"plan_id,omitempty"`
+	// AcknowledgeScope is the operator saying the affected-row count out loud.
+	AcknowledgeScope bool `json:"acknowledge_scope,omitempty"`
 }
 
 // handleBulkMarkDriftExternal is the second of exactly two bulk resolutions.
@@ -245,13 +373,34 @@ func handleBulkMarkDriftExternal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plan := rehearseDriftBatch(r.Context(), req.IDs, driftOpExternal)
+	if err := boundBulkIDs(req.IDs); err != nil {
+		jsonValidationErrorResponse(w, err.Error(), map[string]string{"ids": fmt.Sprintf("max %d", services.BulkMaxUsers)})
+		return
+	}
+
+	// `Reason` is deliberately absent from the binding: it is recorded beside
+	// the exclusion and changes nothing about which rows are excluded, so making
+	// a typo cost a re-plan would only teach operators to click through the
+	// stale-plan dialog.
+	actor := resolveActor(r, "")
+	requestFP := services.FingerprintIDCohort(driftOpExternal, req.IDs)
+
 	if r.URL.Query().Get("apply") != "true" {
+		plan := rehearseDriftBatch(r.Context(), req.IDs, driftOpExternal)
+		if err := issuePlan(r.Context(), planSurfaceDriftExternal, actor, requestFP, req.AcknowledgeScope, &plan); err != nil {
+			writePlanIssueError(w, err)
+			return
+		}
 		jsonResponse(w, http.StatusOK, plan)
 		return
 	}
 
-	applyDriftPlan(r, &plan, driftOpExternal, resolveActor(r, "operator"), req.Reason)
+	plan, err := claimDriftPlan(r, planSurfaceDriftExternal, driftOpExternal, actor, requestFP, req.PlanID, req.IDs)
+	if err != nil {
+		writePlanCitationError(w, err)
+		return
+	}
+	applyDriftPlan(r, &plan, driftOpExternal, actor, req.Reason)
 	jsonResponse(w, http.StatusOK, plan)
 }
 
@@ -277,7 +426,27 @@ func writeDriftActionError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, db.ErrDriftNotPending):
 		jsonErrorResponse(w, http.StatusConflict, "DRIFT_NOT_PENDING", err.Error())
+	// Not a 409: nothing raced, and retrying will never work. The finding is on
+	// a system this action has no reach into, which is a statement about the
+	// request, not about a moment in time.
+	case errors.Is(err, db.ErrDriftTargetUnsupported):
+		jsonErrorResponse(w, http.StatusUnprocessableEntity, "DRIFT_TARGET_UNSUPPORTED", err.Error())
 	default:
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 	}
+}
+
+// boundBulkIDs caps one bulk resolution at the same ceiling every other bulk
+// surface uses.
+//
+// Its siblings cap and these two did not, so one request could rehearse and
+// resolve an unbounded cohort — a plan nobody can read, a fingerprint over a
+// list nobody can check, and one transaction holding as many rows as the
+// caller felt like sending.
+func boundBulkIDs(ids []string) error {
+	if len(ids) > services.BulkMaxUsers {
+		return fmt.Errorf("a bulk resolution is capped at %d rows; this one names %d",
+			services.BulkMaxUsers, len(ids))
+	}
+	return nil
 }

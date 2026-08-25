@@ -41,9 +41,13 @@ func TestDriftMigrationEnumsMatchCode(t *testing.T) {
 			t.Errorf("detection_source %s written by code but missing from 000016 CHECK", v)
 		}
 	}
-	for _, v := range []string{"'zitadel_only'", "'syndra_only'"} {
+	// `target_only` is the post-add-on name for what 000016 called zitadel_only:
+	// the value stopped naming its target once the target became a column beside
+	// it (000026). Reading every up migration is what lets this assertion follow
+	// the value across the rename instead of asserting the schema of 2026-06.
+	for _, v := range []string{"'target_only'", "'syndra_only'"} {
 		if !strings.Contains(sql, v) {
-			t.Errorf("drift_type %s written by code but missing from 000016 CHECK", v)
+			t.Errorf("drift_type %s is written by code but permitted by no migration's CHECK", v)
 		}
 	}
 	for _, v := range []string{"'pending_triage'", "'attributed'", "'revoked'", "'marked_external'"} {

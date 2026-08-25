@@ -56,8 +56,9 @@ and where physical door access and digital SSO have to agree with each other.
 - **Drift detection** — every Syndra-mediated change leaves a trace before the
   Management API call. A Zitadel-side change with no matching trace is surfaced
   for triage rather than silently absorbed.
-- **A legacy bridge** — an optional worker reflecting identity into LLDAP, for
-  the equipment that still speaks LDAP and nothing else.
+- **Target add-ons** — a separate container per system Syndra provisions into,
+  reaching it through its own management API. Syndra decides who and what; the
+  add-on decides how.
 
 ## Architecture
 
@@ -82,9 +83,10 @@ Three planes, split by how much thinking each is allowed to do:
    └──────────────────────────────────────────────────────────────┘
 
    ┌──────────────────────────────────────────────────────────────┐
-   │  BRIDGE PLANE — provisioning                                 │
-   │  Go sync worker  →  LLDAP  (Samba, UniFi, door controllers)  │
-   │  No exposed ports; acts only on verified backend intents      │
+   │  TARGET PLANE — add-ons, one container per system            │
+   │  TrueNAS SCALE (SMB storage)  ·  more as they are written     │
+   │  No exposed ports; mutually authenticated; applies approved   │
+   │  desired state and reports what it did                        │
    └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -137,7 +139,7 @@ reference; this table is only the orientation.
 | Zitadel M2M | Management API access for live orchestration |
 | Actions v2 | Signing keys for claim injection and the event listener |
 | Schedulers | Grant expiry, drift reconciliation, outbox drain |
-| Sync / LLDAP | The optional bridge worker |
+| Add-on targets | One block per target: base URL and one transport secret, from which both ends derive their keys |
 
 Do not hand-adapt `.env.example` for production. Run
 [`scripts/gen-prod-env.sh`](scripts/gen-prod-env.sh) on the production host — it
@@ -150,7 +152,7 @@ refuses to overwrite an existing `.env`.
 |---|---|
 | [`backend/`](backend/) | Go API, policy engine, Zitadel client, migrations |
 | [`ui/`](ui/) | Next.js console (App Router, Bun) |
-| [`sync/`](sync/) | Standalone LLDAP provisioning worker |
+| [`addons/`](addons/README.md) | One container per target system, plus the wire contract both ends are held to |
 | [`zitadel/`](zitadel/) | Actions v2 target manifests and registration scripts |
 | [`scripts/`](scripts/) | Env generation, smoke tests, data reset |
 | [`openspec/`](openspec/) | Specifications — the authoritative record of intent |
@@ -163,6 +165,7 @@ refuses to overwrite an existing `.env`.
 | [`openspec/INDEX.md`](openspec/INDEX.md) | The spec hub — every capability, its status, its spec |
 | [`openspec/NEXT.md`](openspec/NEXT.md) | Every open gap and known piece of debt, in one place |
 | [`DEPLOY.md`](DEPLOY.md) | Production bring-up and the steady-state deploy loop |
+| [`addons/README.md`](addons/README.md) | The add-on model — the trust boundary, the contract, and how to write the second one |
 | [`docs/AUDIT.md`](docs/AUDIT.md) | Honest self-assessment: bloat, drift, correctness |
 | [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) | Orientation for AI assistants working in this repo |
 
@@ -182,8 +185,20 @@ Running in production for a single makerspace. Honest maturity by capability:
 | Service catalog, access requests | Integrated |
 | Topology graph, audit log | Integrated |
 | Lifecycle event propagation, drift triage | Integrated |
-| LDAP sync | **Partial** — reconciliation deferred; password compatibility unresolved |
-| Provisioning | **Partial** — reconciliation and compensating revocations deferred |
+| Target add-ons, provisioning, revocation | Integrated — one target written (TrueNAS SMB) |
+| Reconciliation as a three-way merge | Integrated |
+| Touch and small-screen console | **Partial** — a per-route manual a11y pass and a handful of undersized inline type sizes are still open |
+
+**The target plane has not reached production.** The two target rows run on the
+development deployment against the real NAS; the production host predates them
+and carries no add-on, and putting one there is a
+separate decision with its own migrations.
+
+The LDAP bridge that used to be listed here is **gone** — `sync/`, the
+provisioning-intent queue and the password vault were removed when targets moved
+behind add-ons. One consequence outlives it: a member who enrolled before that
+cutover must set a new storage credential, because TrueNAS takes plaintext and
+nothing else, so no stored hash could have been carried across.
 
 Current gaps are tracked in [`openspec/NEXT.md`](openspec/NEXT.md) rather than
 smoothed over here.

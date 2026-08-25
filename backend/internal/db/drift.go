@@ -10,23 +10,50 @@ import (
 	"syndra/internal/models"
 )
 
+// The two kinds of difference this system records, named rather than spelled
+// out at each use.
+//
+// `target_only` is access on the target that Syndra cannot explain. `syndra_only`
+// is the mirror: access Syndra intends that the target does not have — which,
+// once a merge base can say the target was HOLDING it, means somebody removed it
+// out of band rather than that it was never applied.
+const (
+	DriftTargetOnly = "target_only"
+	DriftSyndraOnly = "syndra_only"
+)
+
 // DriftFilter narrows a drift listing. Empty fields are ignored.
 type DriftFilter struct {
+	Target          string
 	UserID          string
 	ProjectID       string
 	DetectionSource string // webhook | reconciliation_sweep
 	Status          string // defaults to pending_triage when empty (see GetDriftItems)
 }
 
+// Empty reports whether the filter narrows nothing.
+//
+// Written as a whole-struct comparison rather than a chain of field tests, so a
+// field added to DriftFilter is accounted for the moment it exists. The chain
+// this replaced named three of the four fields it had; the fourth narrowed the
+// query and not the branch that chose it, which is how a scoped request quietly
+// gets an unscoped answer. A field that cannot be compared this way breaks the
+// build, which is the right place to be told.
+func (f DriftFilter) Empty() bool { return f == DriftFilter{} }
+
 // UpsertDriftItem inserts a pending drift row, deduped by the partial-unique
-// index (user_id, project_id, drift_type, role_keys) WHERE status='pending_triage'.
-// Callers pass ONE role per call (single-element role_keys); the role is part of
-// the dedup key so a second drifting role on the same pair is NOT swallowed.
+// index (target, user_id, project_id, drift_type, role_keys) WHERE
+// status='pending_triage'. Callers pass ONE role per call (single-element
+// role_keys); the role is part of the dedup key so a second drifting role on
+// the same pair is NOT swallowed. `target` is part of it for the same reason at
+// one level up: without it, two targets drifting on one user would silently
+// suppress each other.
+//
 // Returns (id, inserted). On an existing identical pending row it returns
 // ("", false) — a re-detection of the same drift is a no-op, not a second entry.
-func UpsertDriftItem(ctx context.Context, userID, projectID string, roleKeys []string,
+func UpsertDriftItem(ctx context.Context, target, userID, projectID string, roleKeys []string,
 	zitadelGrantID, detectionSource, driftType string) (string, bool, error) {
-	return UpsertDriftItemWithEvidence(ctx, userID, projectID, roleKeys,
+	return UpsertDriftItemWithEvidence(ctx, target, userID, projectID, roleKeys,
 		zitadelGrantID, detectionSource, driftType, DriftEvidence{})
 }
 
@@ -43,13 +70,22 @@ type DriftEvidence struct {
 // triage row needs to explain itself. `last_seen_at` is stamped on every call —
 // including the deduped no-op — so "still there as of this morning's sweep" is
 // answerable for a row first found nine days ago.
-func UpsertDriftItemWithEvidence(ctx context.Context, userID, projectID string, roleKeys []string,
+//
+// The statement names `target` rather than leaning on the column default, and
+// the column carries no default any more (migration 000026). A default is an
+// answer the schema gives on the writer's behalf, and it is the right answer
+// for exactly one target — the detector that forgot to say what it was looking
+// at would have filed its finding against Zitadel and been believed.
+func UpsertDriftItemWithEvidence(ctx context.Context, target, userID, projectID string, roleKeys []string,
 	zitadelGrantID, detectionSource, driftType string, ev DriftEvidence) (string, bool, error) {
+	if target == "" {
+		return "", false, ErrDriftTargetRequired
+	}
 	const q = `
-		INSERT INTO drift_items (user_id, project_id, role_keys, zitadel_grant_id, detection_source, drift_type,
+		INSERT INTO drift_items (target, user_id, project_id, role_keys, zitadel_grant_id, detection_source, drift_type,
 		                         upstream_actor, upstream_created_at, last_seen_at)
-		VALUES ($1,$2,$3,NULLIF($4,''),$5,$6,NULLIF($7,''),$8,NOW())
-		ON CONFLICT (user_id, project_id, drift_type, role_keys) WHERE (status = 'pending_triage')
+		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,NULLIF($8,''),$9,NOW())
+		ON CONFLICT (target, user_id, project_id, drift_type, role_keys) WHERE (status = 'pending_triage')
 		DO UPDATE SET
 			last_seen_at        = NOW(),
 			-- Never overwrite known evidence with an unknown: a sweep re-detecting
@@ -59,7 +95,7 @@ func UpsertDriftItemWithEvidence(ctx context.Context, userID, projectID string, 
 		RETURNING id, (xmax = 0) AS inserted`
 	var id string
 	var inserted bool
-	err := PG.QueryRow(ctx, q, userID, projectID, roleKeys, zitadelGrantID, detectionSource, driftType,
+	err := querier(ctx).QueryRow(ctx, q, target, userID, projectID, roleKeys, zitadelGrantID, detectionSource, driftType,
 		ev.UpstreamActor, ev.UpstreamCreatedAt).Scan(&id, &inserted)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, nil
@@ -78,17 +114,18 @@ func GetDriftItems(ctx context.Context, f DriftFilter) ([]models.DriftItem, erro
 		status = "pending_triage"
 	}
 	const q = `
-		SELECT id, user_id, project_id, role_keys, COALESCE(zitadel_grant_id,''),
+		SELECT id, target, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'), COALESCE(zitadel_grant_id,''),
 		       detected_at, detection_source, drift_type, status,
 		       resolved_at, COALESCE(resolved_by,''), COALESCE(resolution_payload_json::text,''),
 		       COALESCE(upstream_actor,''), upstream_created_at, last_seen_at
 		FROM drift_items
 		WHERE status = $1
-		  AND ($2 = '' OR user_id = $2)
-		  AND ($3 = '' OR project_id = $3)
-		  AND ($4 = '' OR detection_source = $4)
+		  AND ($2 = '' OR target = $2)
+		  AND ($3 = '' OR user_id = $3)
+		  AND ($4 = '' OR project_id = $4)
+		  AND ($5 = '' OR detection_source = $5)
 		ORDER BY detected_at DESC`
-	rows, err := PG.Query(ctx, q, status, f.UserID, f.ProjectID, f.DetectionSource)
+	rows, err := querier(ctx).Query(ctx, q, status, f.Target, f.UserID, f.ProjectID, f.DetectionSource)
 	if err != nil {
 		return nil, fmt.Errorf("get drift items: %w", err)
 	}
@@ -99,12 +136,12 @@ func GetDriftItems(ctx context.Context, f DriftFilter) ([]models.DriftItem, erro
 // GetDriftItem fetches one row by id (any status). ErrDriftNotFound on miss.
 func GetDriftItem(ctx context.Context, id string) (models.DriftItem, error) {
 	const q = `
-		SELECT id, user_id, project_id, role_keys, COALESCE(zitadel_grant_id,''),
+		SELECT id, target, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'), COALESCE(zitadel_grant_id,''),
 		       detected_at, detection_source, drift_type, status,
 		       resolved_at, COALESCE(resolved_by,''), COALESCE(resolution_payload_json::text,''),
 		       COALESCE(upstream_actor,''), upstream_created_at, last_seen_at
 		FROM drift_items WHERE id = $1`
-	rows, err := PG.Query(ctx, q, id)
+	rows, err := querier(ctx).Query(ctx, q, id)
 	if err != nil {
 		return models.DriftItem{}, fmt.Errorf("get drift item: %w", err)
 	}
@@ -122,7 +159,7 @@ func GetDriftItem(ctx context.Context, id string) (models.DriftItem, error) {
 // CountPendingDrift is the number badge for the sidebar dot + dashboard callout.
 func CountPendingDrift(ctx context.Context) (int, error) {
 	var n int
-	if err := PG.QueryRow(ctx, `SELECT COUNT(*) FROM drift_items WHERE status='pending_triage'`).Scan(&n); err != nil {
+	if err := querier(ctx).QueryRow(ctx, `SELECT COUNT(*) FROM drift_items WHERE status='pending_triage'`).Scan(&n); err != nil {
 		return 0, fmt.Errorf("count pending drift: %w", err)
 	}
 	return n, nil
@@ -132,7 +169,7 @@ func scanDriftItems(rows pgx.Rows) ([]models.DriftItem, error) {
 	var out []models.DriftItem
 	for rows.Next() {
 		var d models.DriftItem
-		if err := rows.Scan(&d.ID, &d.UserID, &d.ProjectID, &d.RoleKeys, &d.ZitadelGrantID,
+		if err := rows.Scan(&d.ID, &d.Target, &d.UserID, &d.ProjectID, &d.RoleKeys, &d.ZitadelGrantID,
 			&d.DetectedAt, &d.DetectionSource, &d.DriftType, &d.Status,
 			&d.ResolvedAt, &d.ResolvedBy, &d.ResolutionPayload,
 			&d.UpstreamActor, &d.UpstreamCreatedAt, &d.LastSeenAt); err != nil {
@@ -149,6 +186,18 @@ func scanDriftItems(rows pgx.Rows) ([]models.DriftItem, error) {
 var (
 	ErrDriftNotFound   = errors.New("drift item not found")
 	ErrDriftNotPending = errors.New("drift item not pending")
+
+	// ErrDriftTargetRequired refuses a finding that does not say what it looked
+	// at. Reaching the FK with an empty string would refuse it too, but by then
+	// the refusal is a constraint violation quoting a value, not a statement
+	// about what the detector failed to supply.
+	ErrDriftTargetRequired = errors.New("drift item requires a target")
+
+	// ErrDriftTargetUnsupported refuses a resolution that cannot act on the
+	// target that drifted. Distinct from ErrDriftNotPending because they tell
+	// the operator opposite things: a lost race means try again, this means the
+	// action has no reach into the system holding the access.
+	ErrDriftTargetUnsupported = errors.New("drift item is on a target this resolution cannot act on")
 )
 
 // AttributeDriftTx claims a pending drift (→attributed) and writes the
@@ -170,12 +219,14 @@ var (
 // disagrees with Zitadel, the next reconcile raises it as syndra_only drift, and
 // a human triages it. Surfacing that beats silently re-granting it.
 func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) error {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin attribute tx: %w", err)
 	}
-	defer tx.Rollback(ctx) // no-op after Commit
-	if err := claimDriftTx(ctx, tx, driftID, "attributed", p.GrantedBy, p.PayloadJSON); err != nil {
+	if owned {
+		defer tx.Rollback(ctx) // no-op after Commit
+	}
+	if _, err := claimDriftTx(ctx, tx, driftID, TargetZitadel, "attributed", p.GrantedBy, p.PayloadJSON); err != nil {
 		return err
 	}
 	p.NoPropagation = true
@@ -186,6 +237,9 @@ func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) erro
 	if _, err := enqueueWrites(ctx, tx, p, key); err != nil {
 		return fmt.Errorf("attribute ledger writes: %w", err)
 	}
+	if !owned {
+		return nil
+	}
 	return tx.Commit(ctx)
 }
 
@@ -194,12 +248,14 @@ func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) erro
 // upsert for revoke). Returns the outbox id so the handler can drain it
 // best-effort AFTER commit. ErrDriftNotPending on a lost race.
 func RevokeDriftAndEnqueue(ctx context.Context, driftID string, p EnqueueParams) (string, error) {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("begin revoke tx: %w", err)
 	}
-	defer tx.Rollback(ctx)
-	if err := claimDriftTx(ctx, tx, driftID, "revoked", p.GrantedBy, "{}"); err != nil {
+	if owned {
+		defer tx.Rollback(ctx)
+	}
+	if _, err := claimDriftTx(ctx, tx, driftID, TargetZitadel, "revoked", p.GrantedBy, "{}"); err != nil {
 		return "", err
 	}
 	key, err := newOutboxIdempotencyKey()
@@ -210,8 +266,10 @@ func RevokeDriftAndEnqueue(ctx context.Context, driftID string, p EnqueueParams)
 	if err != nil {
 		return "", fmt.Errorf("revoke enqueue writes: %w", err)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return "", fmt.Errorf("commit revoke tx: %w", err)
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return "", fmt.Errorf("commit revoke tx: %w", err)
+		}
 	}
 	return outboxID, nil
 }
@@ -220,20 +278,32 @@ func RevokeDriftAndEnqueue(ctx context.Context, driftID string, p EnqueueParams)
 // exclusion rows in ONE tx. ErrDriftNotPending on a lost race (no exclusion written).
 func MarkDriftExternalTx(ctx context.Context, driftID, userID, projectID string,
 	roleKeys []string, markedBy, reason, payloadJSON string) error {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin mark-external tx: %w", err)
 	}
-	defer tx.Rollback(ctx)
-	if err := claimDriftTx(ctx, tx, driftID, "marked_external", markedBy, payloadJSON); err != nil {
+	if owned {
+		defer tx.Rollback(ctx)
+	}
+	// Target-generic on purpose: an exclusion is written against the target of
+	// the row it resolves, so it says something true whichever target that is.
+	target, err := claimDriftTx(ctx, tx, driftID, "", "marked_external", markedBy, payloadJSON)
+	if err != nil {
 		return err
 	}
-	const ins = `INSERT INTO external_grant_exclusions (user_id, project_id, role_key, marked_by, reason)
-		VALUES ($1,$2,$3,$4,NULLIF($5,'')) ON CONFLICT (user_id, project_id, role_key) DO NOTHING`
+	// The conflict target must name every column of the primary key, which gained
+	// `target` in 000026. An exclusion is a statement about one target, so the
+	// row carries the target of the drift it resolves — marking a TrueNAS grant
+	// external must not silence the same triple on Zitadel.
+	const ins = `INSERT INTO external_grant_exclusions (target, user_id, project_id, role_key, marked_by, reason)
+		VALUES ($1,$2,$3,$4,$5,NULLIF($6,'')) ON CONFLICT (target, user_id, project_id, role_key) DO NOTHING`
 	for _, rk := range roleKeys {
-		if _, err := tx.Exec(ctx, ins, userID, projectID, rk, markedBy, reason); err != nil {
+		if _, err := tx.Exec(ctx, ins, target, userID, projectID, rk, markedBy, reason); err != nil {
 			return fmt.Errorf("insert exclusion in tx: %w", err)
 		}
+	}
+	if !owned {
+		return nil
 	}
 	return tx.Commit(ctx)
 }
@@ -242,15 +312,48 @@ func MarkDriftExternalTx(ctx context.Context, driftID, userID, projectID string,
 // terminal status inside the caller's tx, or returns ErrDriftNotPending (which
 // makes the caller's deferred Rollback discard everything) when it is no longer
 // pending. This is what makes the whole action atomic AND race-safe.
-func claimDriftTx(ctx context.Context, tx pgx.Tx, driftID, status, resolvedBy, payloadJSON string) error {
-	tag, err := tx.Exec(ctx, `UPDATE drift_items
+//
+// It returns the claimed row's target, and `requireTarget` is how a resolution
+// that can only speak to one system says so. A resolution whose side effects
+// are Zitadel-shaped — a `direct_role_grants` row keyed by
+// `zitadel_project_id`, a `revoke` outbox row bound to the Zitadel dispatcher —
+// must not be reachable from a drift row on another target: it would mutate one
+// system while marking the other's finding resolved, and the finding would be
+// gone. The requirement lives here rather than at the two call sites because
+// both are exported, and an invariant a caller enforces is one the next caller
+// can skip. An empty requireTarget means the resolution is genuinely
+// target-generic, as marking a grant external is.
+//
+// The check runs after the claim rather than inside its predicate on purpose. A
+// predicate would make the wrong target indistinguishable from a lost race, and
+// those are opposite instructions to the operator: one says try again, the other
+// says this action cannot resolve this finding at all. The claim is discarded
+// either way — the caller's deferred Rollback sees to it.
+func claimDriftTx(ctx context.Context, tx pgx.Tx, driftID, requireTarget, status, resolvedBy, payloadJSON string) (string, error) {
+	var target string
+	err := tx.QueryRow(ctx, `UPDATE drift_items
 		SET status=$2, resolved_at=NOW(), resolved_by=$3, resolution_payload_json=NULLIF($4,'')::jsonb
-		WHERE id=$1 AND status='pending_triage'`, driftID, status, resolvedBy, payloadJSON)
+		WHERE id=$1 AND status='pending_triage'
+		RETURNING target`, driftID, status, resolvedBy, payloadJSON).Scan(&target)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrDriftNotPending
+	}
 	if err != nil {
-		return fmt.Errorf("claim drift %s: %w", driftID, err)
+		return "", fmt.Errorf("claim drift %s: %w", driftID, err)
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrDriftNotPending
+	if err := unsupportedTarget(requireTarget, target); err != nil {
+		return "", err
 	}
-	return nil
+	return target, nil
+}
+
+// unsupportedTarget judges the claimed row's target against what the resolution
+// can act on. Pure, so the rule can be exercised without a database — the
+// statement above decides nothing here beyond handing it the row's own target.
+func unsupportedTarget(requireTarget, target string) error {
+	if requireTarget == "" || target == requireTarget {
+		return nil
+	}
+	return fmt.Errorf("%w: this resolution acts on %s and the finding is on %s",
+		ErrDriftTargetUnsupported, requireTarget, target)
 }

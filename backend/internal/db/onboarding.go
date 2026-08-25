@@ -23,7 +23,7 @@ func InsertOnboardingTrigger(ctx context.Context, userID, source, idempotencyKey
 		RETURNING id`
 
 	var id string
-	err := PG.QueryRow(ctx, query, userID, source, idempotencyKey).Scan(&id)
+	err := querier(ctx).QueryRow(ctx, query, userID, source, idempotencyKey).Scan(&id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// ON CONFLICT DO NOTHING — idempotency key already exists, safe to skip
@@ -41,7 +41,7 @@ func CompleteOnboardingTrigger(ctx context.Context, triggerID, bundleID string) 
 		UPDATE onboarding_triggers
 		SET status = 'completed', bundle_id = $2, completed_at = NOW()
 		WHERE id = $1`
-	_, err := PG.Exec(ctx, query, triggerID, bundleID)
+	_, err := querier(ctx).Exec(ctx, query, triggerID, bundleID)
 	if err != nil {
 		return fmt.Errorf("failed to complete onboarding trigger: %w", err)
 	}
@@ -54,7 +54,7 @@ func FailOnboardingTrigger(ctx context.Context, triggerID, errMsg string) error 
 		UPDATE onboarding_triggers
 		SET status = 'failed', error_message = $2, completed_at = NOW()
 		WHERE id = $1`
-	_, err := PG.Exec(ctx, query, triggerID, errMsg)
+	_, err := querier(ctx).Exec(ctx, query, triggerID, errMsg)
 	if err != nil {
 		return fmt.Errorf("failed to record onboarding failure: %w", err)
 	}
@@ -70,7 +70,7 @@ func GetOnboardingTriggers(ctx context.Context) ([]OnboardingTrigger, error) {
 		FROM onboarding_triggers
 		ORDER BY created_at DESC`
 
-	rows, err := PG.Query(ctx, query)
+	rows, err := querier(ctx).Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query onboarding triggers: %w", err)
 	}
@@ -101,7 +101,7 @@ var ErrNoWelcomeBundleConfigured = errors.New("no welcome bundle configured")
 // (idx_bundles_welcome_unique).
 func GetWelcomeBundle(ctx context.Context) (string, error) {
 	var id string
-	err := PG.QueryRow(ctx, `SELECT id FROM bundles WHERE is_welcome = TRUE`).Scan(&id)
+	err := querier(ctx).QueryRow(ctx, `SELECT id FROM bundles WHERE is_welcome = TRUE`).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNoWelcomeBundleConfigured
 	}
@@ -116,11 +116,13 @@ func GetWelcomeBundle(ctx context.Context) (string, error) {
 // is set, so the partial unique index never trips. Returns pgx.ErrNoRows if
 // bundleID does not exist.
 func SetWelcomeBundle(ctx context.Context, bundleID string) error {
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin set-welcome-bundle: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	if owned {
+		defer func() { _ = tx.Rollback(ctx) }()
+	}
 
 	if _, err := tx.Exec(ctx, `UPDATE bundles SET is_welcome = FALSE WHERE is_welcome = TRUE`); err != nil {
 		return fmt.Errorf("clear previous welcome bundle: %w", err)
@@ -132,8 +134,10 @@ func SetWelcomeBundle(ctx context.Context, bundleID string) error {
 	if tag.RowsAffected() == 0 {
 		return pgx.ErrNoRows
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit set-welcome-bundle: %w", err)
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit set-welcome-bundle: %w", err)
+		}
 	}
 	return nil
 }

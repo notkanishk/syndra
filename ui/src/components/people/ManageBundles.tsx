@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { RoleRef } from "@/components/names";
 import { Button } from "@/components/ui/Button";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { useBundleRolesByBundle, useBundles, useRemoveBundle } from "@/lib/queries/useBundles";
 import { useMappingRules } from "@/lib/queries/useMappingRules";
@@ -41,6 +42,7 @@ export function ManageBundles({
 
   const assignedIds = useMemo(() => new Set(assigned.map((b) => b.id)), [assigned]);
   const [staged, setStaged] = useState<Set<string>>(new Set());
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const allIds = (bundles.data ?? []).map((bundle) => bundle.id);
   const { byId: bundleRoles } = useBundleRolesByBundle(allIds);
@@ -74,11 +76,20 @@ export function ManageBundles({
         if (assignedIds.has(id)) await remove.mutateAsync(id);
         else await assign.mutateAsync(id);
       }
-      toast.success(changes.length === 1 ? "Bundle updated." : `${changes.length} changes queued.`);
+      // Queued, not applied: a bundle assignment reaches a target through the
+      // drain, and `summary.succeeded` is always zero precisely so a client
+      // cannot report otherwise.
+      setOutcome({
+        kind: "queued",
+        message:
+          changes.length === 1
+            ? "One bundle change recorded"
+            : `${changes.length} bundle changes recorded`,
+        detail: "Nothing has reached a target yet — the writes dispatch on the next drain.",
+      });
       setStaged(new Set());
-      onClose();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "The change didn't go through.");
+      setOutcome(outcomeFromError(error));
     }
   }
 
@@ -184,6 +195,8 @@ export function ManageBundles({
         </div>
       )}
 
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+
       <ModalFooter
         note={
           changes.length > 1
@@ -196,7 +209,7 @@ export function ManageBundles({
             ? "No changes"
             : `Apply ${changes.length} ${changes.length === 1 ? "change" : "changes"}`}
         </Button>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose}>{outcome?.kind === "queued" ? "Done" : "Cancel"}</Button>
         <span className="flex-1" />
         <span className="text-[13px] text-faint">Queues for confirmation</span>
       </ModalFooter>
