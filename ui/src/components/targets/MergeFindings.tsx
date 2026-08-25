@@ -281,7 +281,7 @@ function DecisionForm({
           <span>{finding.why_not}</span>
           {(finding.policy ?? []).map((p) => (
             <span key={p.mapping_id} className="text-faint">
-              <span className="font-mono">{p.role_key}</span> → {p.value} ·{" "}
+              <Mono>{p.role_key}</Mono> → {p.value} ·{" "}
               {p.holders} {p.holders === 1 ? "person holds" : "people hold"} that role
             </span>
           ))}

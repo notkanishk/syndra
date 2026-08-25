@@ -2,6 +2,8 @@
 
 import React from "react";
 
+import { PILL } from "@/components/ui/Button";
+
 /**
  * Native select, styled to match Input. Native rather than a custom listbox:
  * it is keyboard-accessible for free, it works on touch, and nothing here
@@ -99,7 +101,14 @@ export function FilterPills<T extends string>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(option.value)}
-            className={`min-h-[44px] rounded-pill px-3.5 text-[13px] motion-tint desktop:min-h-0 desktop:py-1.5 ${
+            // The same box as `Button` size="md" minus its border: 44px floor
+            // through the tablet range, then px-4 / 13.5px / py-[7px]. The
+            // three pill controls — an action, a filter and a tab — were
+            // 13.5px, 13px and 14.5px, and the drift queue stacks all three
+            // within 120px of each other, where three sizes read as three
+            // accidents. Shape and fill carry the difference between them now,
+            // which is what was meant to carry it.
+            className={`rounded-pill motion-tint ${PILL.md} ${
               active ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
             }`}
           >

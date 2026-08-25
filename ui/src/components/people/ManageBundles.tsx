@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { Badge } from "@/components/ui/Badge";
 import { RoleRef } from "@/components/names";
 import { Button } from "@/components/ui/Button";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -136,9 +137,7 @@ export function ManageBundles({
                 {assignedIds.has(bundle.id) ? " · assigned" : ""}
               </span>
               {bundle.is_welcome && (
-                <span className="rounded-pill bg-tint-3 px-2.5 py-0.5 text-[12.5px] text-muted">
-                  Default for new members
-                </span>
+                <Badge>Default for new members</Badge>
               )}
             </button>
           );

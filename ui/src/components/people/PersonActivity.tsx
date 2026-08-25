@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { UserName } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 
@@ -70,13 +72,9 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
 
         {rows.length >= limit && !atCap && (
           <div className="row-divider flex items-center gap-4 px-5 py-3.5">
-            <button
-              type="button"
-              onClick={() => setLimit((current) => Math.min(current + PAGE, 200))}
-              className="min-h-[44px] rounded-pill border border-line-strong px-4 text-[13.5px] font-semibold motion-tint hover:bg-[var(--hover)] desktop:min-h-0 desktop:py-1.5"
-            >
+            <Button onClick={() => setLimit((current) => Math.min(current + PAGE, 200))}>
               Load more
-            </button>
+            </Button>
           </div>
         )}
         {atCap && (
@@ -225,9 +223,7 @@ function TargetEventRow({ event }: { event: TargetActivityEvent }) {
       {/* Refusals are the rows worth finding. An access that was denied is a
           different fact from one that never happened. */}
       {!event.success && (
-        <span className="rounded-pill bg-warn-soft px-2.5 py-0.5 text-[12.5px] font-semibold text-warn-text">
-          Refused
-        </span>
+        <Badge tone="warnSoft">Refused</Badge>
       )}
     </div>
   );

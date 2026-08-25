@@ -5,12 +5,13 @@ import { useCallback, useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { Mono } from "@/components/ui/Badge";
+import { Badge, Mono } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FilterPills, Select } from "@/components/ui/Select";
+import { Tabs } from "@/components/ui/Tabs";
 import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useProjects } from "@/lib/queries/useProjects";
 import { ProjectName, UserAvatar, UserName } from "@/components/names";
@@ -213,26 +214,23 @@ export function UnexplainedAccess() {
       {scanOutcome && <ActionOutcome outcome={scanOutcome} />}
 
       <div className="flex flex-wrap items-center gap-2">
-        {(["triage", "reconciliation"] as const).map((entry) => (
-          <button
-            key={entry}
-            type="button"
-            onClick={() => router.replace(entry === "triage" ? "?" : "?tab=reconciliation")}
-            aria-current={tab === entry ? "page" : undefined}
-            className={`min-h-[44px] rounded-pill px-4 text-[14.5px] motion-tint desktop:min-h-0 desktop:py-2 ${
-              tab === entry ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
-            }`}
-          >
-            {entry === "triage" ? (
-              <>
-                Triage queue{" "}
-                <span className="font-semibold text-danger-text">{items.length}</span>
-              </>
-            ) : (
-              "Reconciliation"
-            )}
-          </button>
-        ))}
+        <Tabs
+          label="Views of unexplained access"
+          value={tab}
+          onSelect={(next) => router.replace(next === "triage" ? "?" : "?tab=reconciliation")}
+          options={[
+            {
+              value: "triage" as const,
+              label: (
+                <>
+                  Triage queue{" "}
+                  <span className="font-semibold text-danger-text">{items.length}</span>
+                </>
+              ),
+            },
+            { value: "reconciliation" as const, label: "Reconciliation" },
+          ]}
+        />
         {tab === "triage" && items.length > 0 && (
           <>
             <span className="flex-1" />
@@ -322,13 +320,14 @@ export function UnexplainedAccess() {
                   <span className="text-[13.5px] text-faint">
                     {items.length - visible.length} more
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setLimit(items.length)}
-                    className="min-h-[44px] rounded-pill border border-line-strong px-4 text-[13.5px] font-semibold motion-tint hover:bg-[var(--hover)] desktop:min-h-0 desktop:py-1.5"
-                  >
+                  {/* `Button`, not a hand-rolled pill. This was a `<button>`
+                      carrying a copy of the outline variant's classes, and the
+                      copy had already drifted: it pressed with `motion-tint`
+                      instead of `motion-press press-scale`, and sat a pixel
+                      short of every other control on the page. */}
+                  <Button onClick={() => setLimit(items.length)}>
                     Show all {items.length}
-                  </button>
+                  </Button>
                 </div>
               )}
             </ListStates>
@@ -524,25 +523,21 @@ function RiskPill({ item }: { item: DriftTriageItem }) {
   // it. On one that has none, "not in catalogue" would be true of every row and
   // informative about none.
   if (item.role_catalogue_applies && !item.role_in_catalogue) {
-    return (
-      <span className="mt-1 inline-block rounded-pill bg-tint-2 px-2.5 py-0.5 text-[12.5px] font-semibold text-muted">
-        Role not in catalogue
-      </span>
-    );
+    return <Badge className="mt-1">Role not in catalogue</Badge>;
   }
   if ((item.role_group ?? "").toLowerCase().includes("safety")) {
     return (
-      <span className="mt-1 inline-block rounded-pill bg-danger-soft px-2.5 py-0.5 text-[12.5px] font-semibold text-danger-text">
+      <Badge tone="dangerSoft" className="mt-1">
         {item.role_group}
-      </span>
+      </Badge>
     );
   }
   if (item.role_group) {
-    return (
-      <span className="mt-1 inline-block rounded-pill bg-tint-2 px-2.5 py-0.5 text-[12.5px] text-muted">
-        {item.role_group}
-      </span>
-    );
+    // The same pill as the safety one in every respect but its tone. It used to
+    // be a separate inline copy that had lost its `font-semibold`, so a role
+    // group rendered bold or not depending on whether it was a safety group —
+    // a weight difference that read as meaning and carried none.
+    return <Badge className="mt-1">{item.role_group}</Badge>;
   }
   return null;
 }

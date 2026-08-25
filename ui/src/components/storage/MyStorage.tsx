@@ -3,6 +3,7 @@
 import { formatBytes } from "@/lib/format";
 import { useState } from "react";
 
+import { Mono } from "@/components/ui/Badge";
 import { EmptyState, ListStates } from "@/components/states";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -411,7 +412,7 @@ function ConnectionInstructions({ view }: { view: MyTargetView }) {
       ))}
 
       <p className="text-[13px] text-faint">
-        Sign in as <span className="font-mono text-muted">{view.account.username}</span> with
+        Sign in as <Mono className="text-muted">{view.account.username}</Mono> with
         the password you set above.
       </p>
 

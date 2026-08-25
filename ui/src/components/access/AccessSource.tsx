@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { Badge } from "@/components/ui/Badge";
+
 /**
  * Access source — the signature component.
  *
@@ -197,9 +199,7 @@ function MoreSourcesButton({
       aria-expanded={expanded}
       className="inline-flex h-11 items-center motion-tint desktop:h-[26px]"
     >
-      <span className="inline-flex h-[26px] items-center rounded-pill border border-line-strong px-2.5 text-[12.5px] font-semibold text-muted">
-        {children}
-      </span>
+      <Badge hollow>{children}</Badge>
     </button>
   );
 }

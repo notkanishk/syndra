@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { Mono, STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Card, CardColumns, CardRow } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { targetLabel } from "@/lib/nav";
@@ -83,7 +84,7 @@ export default function ConnectedSystemsPage() {
  * two send an operator to different machines.
  */
 function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
-  const transportBroken = row.transport_status === "error";
+  const reading = readingFor(row);
 
   return (
     <CardRow first={first} className="flex-wrap">
@@ -94,19 +95,15 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
         >
           {targetLabel(row.target)}
         </Link>
-        <span className="block truncate text-[13px] text-faint">{row.target}</span>
+        <Mono className="block truncate text-faint">{row.target}</Mono>
       </span>
 
-      <span className="w-[150px] shrink-0 text-[13.5px]">
-        {transportBroken ? (
-          <span className="text-danger-text">transport failed</span>
-        ) : row.circuit_open ? (
-          <span className="text-warn-text">calls suspended</span>
-        ) : row.callable ? (
-          <span className="text-healthy">answering</span>
-        ) : (
-          <span className="text-warn-text">no manifest yet</span>
-        )}
+      {/* A dot and a word, the same idiom the target's own health card uses —
+          never colour alone. Green and amber are one word to an operator who
+          cannot tell them apart, and one word in a greyscale screenshot. */}
+      <span className="flex w-[150px] shrink-0 items-center gap-2 text-[13.5px]">
+        <StatusDot tone={reading.tone} />
+        <span className={STATUS_TONE[reading.tone].label}>{reading.label}</span>
       </span>
 
       {/* A count, and only when there is a manifest to count. Rendering 0 for a
@@ -118,4 +115,18 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
       </span>
     </CardRow>
   );
+}
+
+/**
+ * Registration is deployment configuration, a manifest having been read is a
+ * runtime fact, and a transport secret that will not load is a fault on
+ * Syndra's side. Three failures, in the order an operator has to rule them out:
+ * a broken transport explains everything below it, and a suspended breaker
+ * explains a target that would otherwise answer.
+ */
+function readingFor(row: TargetSummary): { tone: StatusTone; label: string } {
+  if (row.transport_status === "error") return { tone: "danger", label: "transport failed" };
+  if (row.circuit_open) return { tone: "warn", label: "calls suspended" };
+  if (row.callable) return { tone: "healthy", label: "answering" };
+  return { tone: "warn", label: "no manifest yet" };
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { Badge } from "@/components/ui/Badge";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useApplications } from "@/lib/queries/useApplications";
@@ -105,12 +106,7 @@ export default function ProjectsPage() {
               </span>
               <span className="flex w-full flex-wrap gap-1.5 tablet:w-[240px]">
                 {(appsByProject.get(entry.project.id) ?? []).map((name) => (
-                  <span
-                    key={name}
-                    className="rounded-pill bg-tint-2 px-2.5 py-1 text-[12.5px]"
-                  >
-                    {name}
-                  </span>
+                  <Badge key={name}>{name}</Badge>
                 ))}
                 {!appsByProject.has(entry.project.id) && (
                   <span className="text-[13px] text-faint">No app reads this yet</span>

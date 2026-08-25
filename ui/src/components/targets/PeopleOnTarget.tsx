@@ -93,7 +93,7 @@ function PersonRow({
         <span className="flex-1" />
         {/* Pause it, or end it. The two answers to one question, in that order:
             the reversible one first. */}
-        <Button variant="ghost" size="sm" onClick={() => setDialog("hold")}>
+        <Button variant="outline" size="sm" onClick={() => setDialog("hold")}>
           Hold
         </Button>
         <Button variant="danger" size="sm" onClick={() => setDialog("takeaway")}>
