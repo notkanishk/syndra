@@ -79,7 +79,7 @@ func DeriveUsername(email, subjectID string, collides func(string) bool) string 
 func normalizeLocalpart(email string) string {
 	local, _, _ := strings.Cut(email, "@")
 	local = strings.ToLower(strings.TrimSpace(local))
-	// Sub-addressing: `ada+lab@x.edu` and `ada@x.edu` are one mailbox and must
+	// Sub-addressing: `ada+lab@example.edu` and `ada@example.edu` are one mailbox and must
 	// be one account, or a member gets a second one by using a tagged address.
 	local, _, _ = strings.Cut(local, "+")
 

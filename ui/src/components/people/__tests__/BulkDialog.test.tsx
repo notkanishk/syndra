@@ -53,18 +53,18 @@ function plan(overrides: Partial<BulkPlan> = {}): BulkPlan {
     op: "assign_role",
     applied: false,
     outcomes: [
-      { user_id: "u1", name: "Ada Lovelace", email: "ada@x.edu", effect: "apply", detail: "Gains this role." },
+      { user_id: "u1", name: "Ada Lovelace", email: "ada@example.edu", effect: "apply", detail: "Gains this role." },
       {
         user_id: "u2",
         name: "Leo Brooks",
-        email: "leo@x.edu",
+        email: "leo@example.edu",
         effect: "blocked",
         detail: "Account is departed — remove it from the selection to continue.",
       },
       {
         user_id: "u3",
         name: "Sam Patel",
-        email: "sam@x.edu",
+        email: "sam@example.edu",
         effect: "no_change",
         detail: "Holds no direct grant here.",
         consequence: "Keeps the role via the Safety bundle — remove that source instead.",

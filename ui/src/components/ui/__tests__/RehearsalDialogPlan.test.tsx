@@ -21,7 +21,7 @@ function plan(overrides: Partial<BulkPlan> = {}): BulkPlan {
     plan_id: "plan_1",
     applied: false,
     outcomes: [
-      { user_id: "u1", name: "Ada", email: "ada@x.edu", effect: "apply", detail: "Gains trained." },
+      { user_id: "u1", name: "Ada", email: "ada@example.edu", effect: "apply", detail: "Gains trained." },
     ],
     summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     ...overrides,
@@ -32,7 +32,7 @@ const applied = (): BulkPlan =>
   plan({
     plan_id: undefined,
     applied: true,
-    outcomes: [{ user_id: "u1", name: "Ada", email: "ada@x.edu", effect: "applied", detail: "Done." }],
+    outcomes: [{ user_id: "u1", name: "Ada", email: "ada@example.edu", effect: "applied", detail: "Done." }],
     summary: { total: 1, apply: 0, no_change: 0, blocked: 0, failed: 0, succeeded: 1, queued: 0 },
   });
 

@@ -119,7 +119,7 @@ func TestHandleLookup_EmptyBody_ReturnsAllEmptyMaps(t *testing.T) {
 func TestHandleLookup_MixedEntities_AllResolve(t *testing.T) {
 	src := lookupStubSource{
 		users: map[string]models.UserProfile{
-			"u-1": {ID: "u-1", Name: "Anita Sharma", Email: "anita@ex.org"},
+			"u-1": {ID: "u-1", Name: "Anita Sharma", Email: "anita@example.org"},
 		},
 		projects: map[string]models.ProjectCatalog{
 			"p-1": {ID: "p-1", Name: "3D Lab"},
@@ -144,7 +144,7 @@ func TestHandleLookup_MixedEntities_AllResolve(t *testing.T) {
 	var got LookupResponse
 	_ = json.Unmarshal(rr.Body.Bytes(), &got)
 
-	if u, ok := got.Users["u-1"]; !ok || u.DisplayName != "Anita Sharma" || u.Email != "anita@ex.org" {
+	if u, ok := got.Users["u-1"]; !ok || u.DisplayName != "Anita Sharma" || u.Email != "anita@example.org" {
 		t.Fatalf("user mismatch: %+v", got.Users)
 	}
 	if p, ok := got.Projects["p-1"]; !ok || p.Name != "3D Lab" {

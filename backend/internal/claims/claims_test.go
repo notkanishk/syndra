@@ -41,12 +41,12 @@ func TestEmit_RolesAttributesAndStatics(t *testing.T) {
 		AttributeClaims: map[string]string{"syndra.laser.email": AttrEmail, "syndra.laser.count": AttrRoleCount},
 		StaticClaims:    map[string]any{"syndra.tenant": "makerspace"},
 	}
-	got := p.Emit(Facts{Roles: []string{"trained"}, Email: "t@x.edu", UserID: "u1"})
+	got := p.Emit(Facts{Roles: []string{"trained"}, Email: "t@example.edu", UserID: "u1"})
 
 	if !reflect.DeepEqual(got["syndra.laser.roles"], []string{"trained"}) {
 		t.Errorf("roles claim: got %#v", got["syndra.laser.roles"])
 	}
-	if got["syndra.laser.email"] != "t@x.edu" {
+	if got["syndra.laser.email"] != "t@example.edu" {
 		t.Errorf("attribute claim: got %v", got["syndra.laser.email"])
 	}
 	if got["syndra.laser.count"] != 1 {

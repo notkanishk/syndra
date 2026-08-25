@@ -56,16 +56,16 @@ func TestSubAddressingCannotBuyASecondAccount(t *testing.T) {
 // Two localparts differing only in an invalid character are two people.
 // Dropping the character rather than replacing it would merge them.
 func TestInvalidCharactersAreReplacedRatherThanDropped(t *testing.T) {
-	a := DeriveUsername("a b@x.edu", "sub-1", never)
-	b := DeriveUsername("ab@x.edu", "sub-2", never)
+	a := DeriveUsername("a b@example.edu", "sub-1", never)
+	b := DeriveUsername("ab@example.edu", "sub-2", never)
 	if a == b {
 		t.Fatalf("dropping the invalid character merged two people onto %q", a)
 	}
 
 	// The same hazard at the END of a name, where a trailing-separator trim
 	// would undo the replacement: `adá` and `ad` are two people.
-	accented := DeriveUsername("adá@x.edu", "sub-1", never)
-	plain := DeriveUsername("ad@x.edu", "sub-2", never)
+	accented := DeriveUsername("adá@example.edu", "sub-1", never)
+	plain := DeriveUsername("ad@example.edu", "sub-2", never)
 	if accented == plain {
 		t.Fatalf("trimming the replacement merged two people onto %q", plain)
 	}
@@ -75,7 +75,7 @@ func TestInvalidCharactersAreReplacedRatherThanDropped(t *testing.T) {
 // name derived from the subject id — never a random or sequential one, because
 // re-deriving after losing the local store has to produce the same answer.
 func TestAnUnusableLocalpartFallsBackDeterministically(t *testing.T) {
-	for _, email := range []string{"@example.edu", "...@example.edu", "+@example.edu", "---@x.edu"} {
+	for _, email := range []string{"@example.edu", "...@example.edu", "+@example.edu", "---@example.edu"} {
 		first := DeriveUsername(email, "sub-42", never)
 		second := DeriveUsername(email, "sub-42", never)
 		if first == "" || !ValidUsername(first) {
@@ -145,7 +145,7 @@ func TestAForcedCollisionResolvesReproduciblyAndNeverReusesAnotherSubjectsName(t
 func TestATruncatedNameDoesNotEndInASeparator(t *testing.T) {
 	// Engineered so the cut lands exactly on a separator: 8 * "abc." is 32
 	// characters ending in a dot, which is the limit precisely.
-	email := strings.Repeat("abc.", 8) + "@x.edu"
+	email := strings.Repeat("abc.", 8) + "@example.edu"
 	if len(strings.Repeat("abc.", 8)) != usernameMaxLen {
 		t.Fatalf("the fixture must be exactly the limit long, or it tests nothing")
 	}
