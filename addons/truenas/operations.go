@@ -477,9 +477,17 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 // ActivityReport is SMB activity, and what it could not see.
 type ActivityReport struct {
 	Events []ActivityEvent `json:"events"`
-	// UnauditedShares names the shares with auditing switched off. Without it
-	// an empty result reads as "no activity", which is a different and much
-	// more reassuring statement than "we were not watching".
+	// UnauditedShares names the shares that were not watching THIS member —
+	// auditing switched off, or switched on and scoped past them by a watch or
+	// ignore list. Without it an empty result reads as "no activity", which is
+	// a different and much more reassuring statement than "we were not
+	// watching".
+	//
+	// Deliberately a narrower question than the identically named field on
+	// TargetHealth, which asks the target-level one: a share can be audited and
+	// still be on this list. The activity report is about one person, and the
+	// coverage caveat on it has to be about the same person or it is not a
+	// caveat about anything.
 	UnauditedShares []string `json:"unaudited_shares,omitempty"`
 }
 
@@ -582,10 +590,10 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 	}
 	// Reported whether or not there were events, because the case that matters
 	// is the empty one.
-	if unaudited, err := s.unauditedShares(); err != nil {
-		report.UnauditedShares = []string{"(the share list could not be read, so coverage is unknown)"}
+	if blind, err := s.sharesNotWatching(binding.Username); err != nil {
+		report.UnauditedShares = []string{"(the audit coverage of the shares could not be read, so coverage is unknown)"}
 	} else {
-		report.UnauditedShares = unaudited
+		report.UnauditedShares = blind
 	}
 
 	return OperationResult{
@@ -631,27 +639,115 @@ func eventDetail(raw json.RawMessage) (share, detail string) {
 	return data.Share, statusToken(data.Result.Parsed)
 }
 
-// unauditedShares lists shares with auditing switched off.
+// shareAudit is one share's audit settings.
 //
-// SMB auditing is per share, so a quiet result means either nothing happened or
-// nobody was watching, and only this tells them apart.
-func (s *server) unauditedShares() ([]string, error) {
+// SMB auditing is per share AND per group. `enable` only says the feature is
+// switched on; `watch_list` narrows it to named groups and `ignore_list`
+// excludes them. Both hold group NAMES — `sharing.smb.update` refuses an entry
+// that is not an SMB group by name, which is how their contents were learned.
+type shareAudit struct {
+	Name       string
+	Enabled    bool
+	WatchList  []string
+	IgnoreList []string
+}
+
+// watches answers whether this share's auditing would record ONE account.
+//
+// A non-empty watch list is an allowlist: nobody outside it is recorded. The
+// ignore list excludes, and excluding wins — a group named on both lists is a
+// misconfiguration, and the safe reading of one is "not recorded", because the
+// failure this whole surface exists to prevent is claiming coverage that is
+// not there.
+func (sh shareAudit) watches(memberOf map[string]bool) bool {
+	if !sh.Enabled {
+		return false
+	}
+	for _, group := range sh.IgnoreList {
+		if memberOf[group] {
+			return false
+		}
+	}
+	if len(sh.WatchList) == 0 {
+		return true
+	}
+	for _, group := range sh.WatchList {
+		if memberOf[group] {
+			return true
+		}
+	}
+	return false
+}
+
+// readShareAudit reads every SMB share's audit settings.
+func (s *server) readShareAudit() ([]shareAudit, error) {
 	var shares []struct {
 		Name  string `json:"name"`
 		Audit struct {
-			Enable bool `json:"enable"`
+			Enable     bool     `json:"enable"`
+			WatchList  []string `json:"watch_list"`
+			IgnoreList []string `json:"ignore_list"`
 		} `json:"audit"`
 	}
 	if err := s.nas.call("sharing.smb.query", []any{[]any{}, map[string]any{"select": []string{"name", "audit"}}}, &shares); err != nil {
 		return nil, err
 	}
+	out := make([]shareAudit, 0, len(shares))
+	for _, sh := range shares {
+		out = append(out, shareAudit{
+			Name: sh.Name, Enabled: sh.Audit.Enable,
+			WatchList: sh.Audit.WatchList, IgnoreList: sh.Audit.IgnoreList,
+		})
+	}
+	return out, nil
+}
+
+// unauditedShares lists shares with auditing switched off.
+//
+// The TARGET-level question, with no member in it: the health card asks it
+// about the deployment, not about anybody. `sharesNotWatching` is the
+// member-level one and answers differently — a share can be switched on and
+// still record nothing for a given person.
+func (s *server) unauditedShares() ([]string, error) {
+	shares, err := s.readShareAudit()
+	if err != nil {
+		return nil, err
+	}
 	var off []string
 	for _, sh := range shares {
-		if !sh.Audit.Enable {
+		if !sh.Enabled {
 			off = append(off, sh.Name)
 		}
 	}
 	return off, nil
+}
+
+// sharesNotWatching lists the shares whose auditing would record nothing for
+// one account.
+//
+// This used to read `enable` alone, which was right until auditing was
+// switched on. A share scoped by `watch_list` to groups the member is not in
+// is enabled, records nothing about them, and was reported as covered — so an
+// empty activity report read as "this member did nothing" when it meant
+// "nobody was watching this member". That is the one distinction the field
+// exists to make, and it was inverted the moment the setting it depends on
+// stopped being uniformly off.
+func (s *server) sharesNotWatching(username string) ([]string, error) {
+	shares, err := s.readShareAudit()
+	if err != nil {
+		return nil, err
+	}
+	memberOf, err := s.groupsOf(username)
+	if err != nil {
+		return nil, err
+	}
+	var blind []string
+	for _, sh := range shares {
+		if !sh.watches(memberOf) {
+			blind = append(blind, sh.Name)
+		}
+	}
+	return blind, nil
 }
 
 // TargetHealth is the operator's view of the NAS itself.

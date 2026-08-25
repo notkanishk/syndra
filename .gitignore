@@ -76,3 +76,8 @@ DEPLOY.local.md
 
 # Built add-on binaries.
 addons/*/truenas
+
+# Python bytecode. A compiled artifact of a script in this repo, checked in
+# once by accident; it can only ever disagree with the source beside it.
+__pycache__/
+*.pyc

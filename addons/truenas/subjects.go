@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -223,6 +224,87 @@ func (s *server) groupIndex() (byID map[string]string, byName map[string]apiID, 
 		byName[g.Name] = g.ID
 	}
 	return byID, byName, nil
+}
+
+// groupsOf names the groups one account belongs to.
+//
+// Names, not ids, because the only caller compares them against an SMB audit
+// watch list and TrueNAS writes group NAMES there. A number compared against a
+// name is a member who belongs to nothing, which on that surface reads as a
+// member nobody is auditing — the reassuring direction of a wrong answer is
+// not available here, but the alarming one is still wrong.
+//
+// ponytail: two reads per activity call. `activity.get` is operator-initiated
+// and one-at-a-time; cache the group index beside the method list if a caller
+// ever makes this a loop.
+func (s *server) groupsOf(username string) (map[string]bool, error) {
+	var accounts []struct {
+		// The primary group is its OWN field and is not repeated in `groups`.
+		// Membership through it counts for both audit lists, so leaving it out
+		// would miss an ignore_list naming somebody's primary group and report
+		// them as watched.
+		//
+		// Raw for the same reason `event_data` is: the inner shape of this one
+		// is not in the recorded contract, some releases answer the record and
+		// some the bare id, and a surprise in it must cost this field rather
+		// than the whole read.
+		Group  json.RawMessage `json:"group"`
+		Groups []apiID         `json:"groups"`
+	}
+	if err := s.nas.call("user.query",
+		[]any{[]any{[]any{"username", "=", username}},
+			map[string]any{"select": []string{"group", "groups"}}},
+		&accounts); err != nil {
+		return nil, err
+	}
+	if len(accounts) == 0 {
+		return nil, fmt.Errorf("the account this binding names is not on the target")
+	}
+
+	names, _, err := s.groupIndex()
+	if err != nil {
+		return nil, err
+	}
+	memberOf := make(map[string]bool, len(accounts[0].Groups)+1)
+	ids := accounts[0].Groups
+	if primary, ok := primaryGroupID(accounts[0].Group); ok {
+		ids = append(ids, primary)
+	}
+	for _, id := range ids {
+		if name, ok := names[id.String()]; ok {
+			memberOf[name] = true
+		}
+		// An id with no name is skipped rather than rendered as a number, for
+		// the same reason readSubjects skips one: it is a group no list this is
+		// compared against could ever have named.
+	}
+	return memberOf, nil
+}
+
+// primaryGroupID reads the id out of whichever form the release answers with.
+//
+// Not "ok" is not an error. It costs one group's worth of membership on a
+// surface that already says what it could not see, where failing the whole
+// read would cost all of it.
+func primaryGroupID(raw json.RawMessage) (apiID, bool) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		return apiID{}, false
+	}
+	if trimmed[0] == '{' {
+		var record struct {
+			ID apiID `json:"id"`
+		}
+		if err := json.Unmarshal(trimmed, &record); err != nil {
+			return apiID{}, false
+		}
+		return record.ID, record.ID.known()
+	}
+	// A bare token. `apiID` keeps whatever arrived and never fails, so the
+	// only question left is whether it says anything.
+	var bare apiID
+	_ = json.Unmarshal(trimmed, &bare)
+	return bare, bare.known()
 }
 
 // groupIDsFor resolves the names a mapping speaks into the ids a write takes.
