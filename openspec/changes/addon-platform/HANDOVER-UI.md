@@ -1,7 +1,7 @@
 # Add-on platform — UI handover
 
 > **Superseded in part.** The design bundle has since landed at
-> `design_handoff_syndra 2/`, and its `BUILD-NOTES.md` overrides this file
+> `design_handoff_syndra/`, and its `BUILD-NOTES.md` overrides this file
 > wherever the two disagree. What remains useful here is the list of contracts a
 > redesign must not quietly change; §20 of `tasks.md` records what has been
 > built against the bundle since, including the three shared patterns (§31)
