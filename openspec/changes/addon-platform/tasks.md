@@ -598,7 +598,7 @@ permission set. `NEXT.md` §4a carries it.
 
 ## 20. Cohesion against the design system
 
-The design bundle landed (`design_handoff_syndra 2/`), and reading the three
+The design bundle landed (`design_handoff_syndra/`), and reading the three
 built screens against it found the same class of thing twice more: **a screen
 answering a question the rest of the product had already answered, differently.**
 
