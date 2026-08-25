@@ -152,7 +152,7 @@ refuses to overwrite an existing `.env`.
 |---|---|
 | [`backend/`](backend/) | Go API, policy engine, Zitadel client, migrations |
 | [`ui/`](ui/) | Next.js console (App Router, Bun) |
-| [`addons/`](addons/) | One container per target system, plus the wire contract both ends are held to |
+| [`addons/`](addons/README.md) | One container per target system, plus the wire contract both ends are held to |
 | [`zitadel/`](zitadel/) | Actions v2 target manifests and registration scripts |
 | [`scripts/`](scripts/) | Env generation, smoke tests, data reset |
 | [`openspec/`](openspec/) | Specifications — the authoritative record of intent |
@@ -165,6 +165,7 @@ refuses to overwrite an existing `.env`.
 | [`openspec/INDEX.md`](openspec/INDEX.md) | The spec hub — every capability, its status, its spec |
 | [`openspec/NEXT.md`](openspec/NEXT.md) | Every open gap and known piece of debt, in one place |
 | [`DEPLOY.md`](DEPLOY.md) | Production bring-up and the steady-state deploy loop |
+| [`addons/README.md`](addons/README.md) | The add-on model — the trust boundary, the contract, and how to write the second one |
 | [`docs/AUDIT.md`](docs/AUDIT.md) | Honest self-assessment: bloat, drift, correctness |
 | [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) | Orientation for AI assistants working in this repo |
 
