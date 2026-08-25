@@ -93,6 +93,10 @@ def shape(rows, _depth=0):
     out = {"keys": sorted(keys), "types": dict(sorted(types.items()))}
     # One level. Two would record the whole tree of a response this deliberately
     # only samples the surface of, and nothing in the add-on decodes deeper.
+    # `read_shape_test.go` walks as deep as the Go struct nests, so a decoder
+    # that ever grows a second level will fail against a recording that stops
+    # here — loudly, naming the key it could not find, which is the right way
+    # round for the two to disagree.
     if inner and _depth == 0:
         out["nested"] = {k: shape(v, _depth + 1) for k, v in sorted(inner.items())}
     return out
