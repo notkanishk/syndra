@@ -83,7 +83,13 @@ describe("the target's own log, beside Syndra's", () => {
     };
     renderTab();
 
-    await waitFor(() => expect(screen.getByText(/Auditing is off on scratch/)).toBeTruthy());
+    // Coverage of THIS person, not the share's switch. TrueNAS scopes SMB
+    // auditing by group, so a share can be audited and still record nothing
+    // for them — and "auditing is off" would send an operator to a setting
+    // that is already on.
+    await waitFor(() =>
+      expect(screen.getByText(/Auditing on scratch does not cover/)).toBeTruthy(),
+    );
   });
 
   it("marks a refused access apart from one that succeeded", async () => {

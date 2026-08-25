@@ -32,6 +32,42 @@ import (
 type recordedRead struct {
 	Keys  []string          `json:"keys"`
 	Types map[string]string `json:"types"`
+	// Nested is the same shape one level down, for every key the target
+	// answered with an object. `dict` on its own is not a shape — it says a
+	// decoder needs a struct there and nothing about what belongs in it, which
+	// left every inner field exactly as unchecked as the types were before they
+	// were recorded at all. `sharing.smb.query` answers `audit` as a dict; the
+	// add-on read `enable` out of it and ignored `watch_list`, and the share
+	// was reported as watching a member it was scoped away from.
+	Nested map[string]recordedRead `json:"nested"`
+}
+
+// typeOf resolves a possibly dotted field against the recording.
+func (r recordedRead) typeOf(field string) (string, bool) {
+	parent, child, nested := strings.Cut(field, ".")
+	if !nested {
+		t, ok := r.Types[field]
+		return t, ok
+	}
+	inner, ok := r.Nested[parent]
+	if !ok {
+		return "", false
+	}
+	return inner.typeOf(child)
+}
+
+// keysAt names what the target answered at the level a field lives on, so the
+// failure says what was there instead.
+func (r recordedRead) keysAt(field string) []string {
+	parent, child, nested := strings.Cut(field, ".")
+	if !nested {
+		return r.Keys
+	}
+	inner, ok := r.Nested[parent]
+	if !ok {
+		return r.Keys
+	}
+	return inner.keysAt(child)
 }
 
 func loadRecording(t *testing.T) map[string]recordedRead {
@@ -172,6 +208,18 @@ func jsonFields(st *ast.StructType) (fields map[string]string, optional map[stri
 			continue
 		}
 		fields[name] = typeName(f.Type)
+		// An inline struct is a nesting the target answered as an object, and
+		// its fields are checked against the recording's own nesting. Recorded
+		// under a dotted name so one flat map still carries both levels.
+		if inner := structBehind(f.Type); inner != nil {
+			innerFields, innerOptional := jsonFields(inner)
+			for k, v := range innerFields {
+				fields[name+"."+k] = v
+			}
+			for k := range innerOptional {
+				optional[name+"."+k] = true
+			}
+		}
 		for _, group := range []*ast.CommentGroup{f.Doc, f.Comment} {
 			if group == nil {
 				continue
@@ -289,7 +337,7 @@ func TestEveryDecodedFieldMatchesWhatTheTargetAnswered(t *testing.T) {
 			continue // recorded as a bare value; no field shape to check
 		}
 		for field, goType := range site.Fields {
-			jsonType, present := read.Types[field]
+			jsonType, present := read.typeOf(field)
 			if !present {
 				if site.Optional[field] {
 					// Marked as one the target may omit, with a reason. Nothing
@@ -299,7 +347,7 @@ func TestEveryDecodedFieldMatchesWhatTheTargetAnswered(t *testing.T) {
 				t.Errorf("%s decodes %s.%s and the target does not answer with that key "+
 					"(it answers %v). If the target only sometimes sends it, mark the "+
 					"field `shape-optional: <why>` and say which case omits it.",
-					site.Pos, site.Method, field, read.Keys)
+					site.Pos, site.Method, field, read.keysAt(field))
 				continue
 			}
 			if !canHold(goType, jsonType) {

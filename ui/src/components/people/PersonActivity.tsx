@@ -164,7 +164,7 @@ function TargetActivityCard({
             title={`No recorded activity for ${name} on ${target}.`}
             guidance={
               unaudited.length > 0
-                ? "Some shares have auditing switched off, so this is not the same as nothing having happened — see below."
+                ? "Some shares were not auditing this account, so this is not the same as nothing having happened — see below."
                 : "The target's audit log has nothing for this account."
             }
           />
@@ -187,7 +187,12 @@ function TargetActivityCard({
 
       {unaudited.length > 0 && (
         <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
-          Auditing is off on {formatList(unaudited)}, so nothing on{" "}
+          {/* Not "auditing is off". A share can have auditing switched on and
+              still record nothing for this person, because TrueNAS scopes it by
+              group — so the honest claim is about coverage of THIS account, and
+              an operator sent to switch on a setting that is already on would
+              find nothing wrong and conclude the gap was imaginary. */}
+          Auditing on {formatList(unaudited)} does not cover {name}, so nothing on{" "}
           {unaudited.length === 1 ? "that share" : "those shares"} appears here whether or not it
           happened.
         </div>

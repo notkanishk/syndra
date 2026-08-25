@@ -52,7 +52,7 @@ def jtype(v):
     return "dict"
 
 
-def shape(rows):
+def shape(rows, _depth=0):
     """Keys AND types, unioned over every row sampled.
 
     Types are the half that was missing and the half that broke things:
@@ -63,14 +63,25 @@ def shape(rows):
 
     A key that is null in one row and typed in another records the type, not
     the null: absent-or-a-string is a string as far as a decoder is concerned.
+
+    Recorded one level DOWN as well, under `nested`. `dict` is not a shape: it
+    says a decoder needs a struct there and nothing about what goes in it, so
+    an inner field was exactly as unguarded as `message_timestamp` was before
+    types were recorded at all. It cost the same way — `sharing.smb.query`
+    answers `audit` as a dict, the add-on read `audit.enable` out of it and
+    called the share audited, and `watch_list` had been narrowing that auditing
+    to groups the member was not in. Keys and types only, at every level: a
+    value here would be a group name or a member's own.
     """
-    keys, types = set(), {}
+    keys, types, inner = set(), {}, {}
     for row in rows:
         if not isinstance(row, dict):
             continue
         keys |= set(row.keys())
         for k, v in row.items():
             t = jtype(v)
+            if t == "dict":
+                inner.setdefault(k, []).append(v)
             if t == "null":
                 types.setdefault(k, "null")
             elif types.get(k) in (None, "null"):
@@ -79,7 +90,12 @@ def shape(rows):
                 # A key that is genuinely two types is recorded as both, so a
                 # decoder written against one of them is written knowingly.
                 types[k] = "|".join(sorted(set(types[k].split("|")) | {t}))
-    return {"keys": sorted(keys), "types": dict(sorted(types.items()))}
+    out = {"keys": sorted(keys), "types": dict(sorted(types.items()))}
+    # One level. Two would record the whole tree of a response this deliberately
+    # only samples the surface of, and nothing in the add-on decodes deeper.
+    if inner and _depth == 0:
+        out["nested"] = {k: shape(v, _depth + 1) for k, v in sorted(inner.items())}
+    return out
 
 
 def fields(err):
@@ -143,7 +159,12 @@ async def main():
         # real people are not recorded — one row, keys only.
         for method, params in (
             ("auth.me", []),
-            ("user.query", [[["builtin", "=", False]], {"select": ["id", "uid", "username", "locked", "smb", "password_disabled"], "limit": 1}]),
+            # The union of every select the add-on issues against this method.
+            # `readSubjects` asks for groups and builtin and `groupsOf` asks
+            # for group; a recording that omits them is a recording those
+            # decodes cannot be checked against, which is how `groups` sat
+            # unrecorded while being read on every inventory pass.
+            ("user.query", [[["builtin", "=", False]], {"select": ["id", "uid", "username", "locked", "smb", "password_disabled", "groups", "group", "builtin"], "limit": 1}]),
             ("group.query", [[], {"select": ["id", "gid", "group"], "limit": 1}]),
             # The union of both call sites' selects. `unauditedShares` asks for
             # name+audit and `shareUsage` asks for name+path+enabled, so a

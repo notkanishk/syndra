@@ -34,10 +34,47 @@
         "sid": "null",
         "source": "str",
         "two_factor_config": "dict"
+      },
+      "nested": {
+        "attributes": {
+          "keys": [],
+          "types": {}
+        },
+        "privilege": {
+          "keys": [
+            "allowlist",
+            "roles",
+            "web_shell",
+            "webui_access"
+          ],
+          "types": {
+            "allowlist": "list",
+            "roles": "dict",
+            "web_shell": "bool",
+            "webui_access": "bool"
+          }
+        },
+        "two_factor_config": {
+          "keys": [
+            "interval",
+            "otp_digits",
+            "provisioning_uri",
+            "secret_configured"
+          ],
+          "types": {
+            "interval": "int",
+            "otp_digits": "int",
+            "provisioning_uri": "null",
+            "secret_configured": "bool"
+          }
+        }
       }
     },
     "user.query": {
       "keys": [
+        "builtin",
+        "group",
+        "groups",
         "id",
         "locked",
         "password_disabled",
@@ -46,12 +83,39 @@
         "username"
       ],
       "types": {
+        "builtin": "bool",
+        "group": "dict",
+        "groups": "list",
         "id": "int",
         "locked": "bool",
         "password_disabled": "bool",
         "smb": "bool",
         "uid": "int",
         "username": "str"
+      },
+      "nested": {
+        "group": {
+          "keys": [
+            "bsdgrp_builtin",
+            "bsdgrp_gid",
+            "bsdgrp_group",
+            "bsdgrp_smb",
+            "bsdgrp_sudo_commands",
+            "bsdgrp_sudo_commands_nopasswd",
+            "bsdgrp_userns_idmap",
+            "id"
+          ],
+          "types": {
+            "bsdgrp_builtin": "bool",
+            "bsdgrp_gid": "int",
+            "bsdgrp_group": "str",
+            "bsdgrp_smb": "bool",
+            "bsdgrp_sudo_commands": "list",
+            "bsdgrp_sudo_commands_nopasswd": "list",
+            "bsdgrp_userns_idmap": "int",
+            "id": "int"
+          }
+        }
       }
     },
     "group.query": {
@@ -78,6 +142,20 @@
         "enabled": "bool",
         "name": "str",
         "path": "str"
+      },
+      "nested": {
+        "audit": {
+          "keys": [
+            "enable",
+            "ignore_list",
+            "watch_list"
+          ],
+          "types": {
+            "enable": "bool",
+            "ignore_list": "list",
+            "watch_list": "list"
+          }
+        }
       }
     },
     "audit.query": {
@@ -106,6 +184,84 @@
         "success": "bool",
         "timestamp": "dict",
         "username": "str"
+      },
+      "nested": {
+        "event_data": {
+          "keys": [
+            "authDescription",
+            "becameAccount",
+            "becameDomain",
+            "becameSid",
+            "clientAccount",
+            "clientDomain",
+            "clientPolicyAccessCheck",
+            "localAddress",
+            "logonId",
+            "logonType",
+            "mappedAccount",
+            "mappedDomain",
+            "netlogonComputer",
+            "netlogonNegotiateFlags",
+            "netlogonSecureChannelType",
+            "netlogonTrustAccount",
+            "netlogonTrustAccountSid",
+            "passwordType",
+            "remoteAddress",
+            "result",
+            "serverPolicyAccessCheck",
+            "serviceDescription",
+            "vers",
+            "workstation"
+          ],
+          "types": {
+            "authDescription": "null",
+            "becameAccount": "null",
+            "becameDomain": "null",
+            "becameSid": "null",
+            "clientAccount": "str",
+            "clientDomain": "str",
+            "clientPolicyAccessCheck": "null",
+            "localAddress": "str",
+            "logonId": "str",
+            "logonType": "int",
+            "mappedAccount": "str",
+            "mappedDomain": "str",
+            "netlogonComputer": "null",
+            "netlogonNegotiateFlags": "str",
+            "netlogonSecureChannelType": "int",
+            "netlogonTrustAccount": "null",
+            "netlogonTrustAccountSid": "null",
+            "passwordType": "str",
+            "remoteAddress": "str",
+            "result": "dict",
+            "serverPolicyAccessCheck": "null",
+            "serviceDescription": "str",
+            "vers": "dict",
+            "workstation": "str"
+          }
+        },
+        "service_data": {
+          "keys": [
+            "service",
+            "session_id",
+            "tcon_id",
+            "vers"
+          ],
+          "types": {
+            "service": "null",
+            "session_id": "null",
+            "tcon_id": "null",
+            "vers": "dict"
+          }
+        },
+        "timestamp": {
+          "keys": [
+            "$date"
+          ],
+          "types": {
+            "$date": "int"
+          }
+        }
       },
       "sampled_rows": 200,
       "event_data_keys_by_event": {
