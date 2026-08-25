@@ -115,6 +115,21 @@ export const ADVANCED_NAV: NavEntry[] = [
   ]),
   group("System", [
     leaf("Identity provider", "/zitadel"),
+    // The target plane's own row, present on every deployment INCLUDING one
+    // that has registered no add-on at all.
+    //
+    // It used to appear only alongside a target, so a deployment with none had
+    // no add-on anywhere in the product — not a row, not a page, not a
+    // sentence. An operator who had just shipped the add-on platform went
+    // looking for it and found the rail unchanged, which reads as "it did not
+    // ship" rather than "it is not configured here". Those are different facts
+    // and only one of them was true.
+    //
+    // Static, so `crumbsFor` can find it and so the seat is held whether or not
+    // this deployment ever registers a target — the same rule as every other
+    // row in this file. The per-target rows are appended after it by
+    // `targetNav`, which is deployment configuration and may legitimately vary.
+    leaf("Connected systems", "/system/targets", { pattern: /^\/system\/targets$/ }),
     // The LLDAP bridge's row. Gone with the bridge: it named a service that no
     // longer exists, and a nav entry for a deleted subsystem is worse than a
     // missing one — an operator clicks it before they read anything.
@@ -141,13 +156,15 @@ export function targetNav(targets: string[]): NavEntry[] {
   return ADVANCED_NAV.map((entry) => {
     if (entry.kind !== "group" || entry.label !== "System") return entry;
     return group("System", [
-      ...entry.children.slice(0, 1),
+      // Identity provider, then Connected systems — the two static rows — and
+      // each registered target under the index it belongs to.
+      ...entry.children.slice(0, 2),
       ...targets.map((target) =>
         leaf(targetLabel(target), `/system/targets/${target}`, {
           pattern: new RegExp(`^/system/targets/${target}(/|$)`),
         }),
       ),
-      ...entry.children.slice(1),
+      ...entry.children.slice(2),
     ]);
   });
 }

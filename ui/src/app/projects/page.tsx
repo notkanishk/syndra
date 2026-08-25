@@ -45,9 +45,9 @@ export default function ProjectsPage() {
 
       <Card>
         <CardColumns>
-          <span className="flex-1">Project</span>
-          <span className="w-[70px] text-right">People</span>
-          <span className="w-[60px] text-right">Roles</span>
+          <span className="min-w-0 flex-1">Project</span>
+          <span className="w-[70px] shrink-0 text-right">People</span>
+          <span className="w-[60px] shrink-0 text-right">Roles</span>
           <span className="w-[240px]">Apps served</span>
         </CardColumns>
 
@@ -71,32 +71,37 @@ export default function ProjectsPage() {
               href={`/projects/${entry.project.id}`}
               className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]"
             >
-              <span className="w-full truncate text-[15.5px] font-semibold tablet:min-w-0 tablet:flex-1">
-                {entry.project.name}
+              {/* The project's name, and — when there are no roles — the fact
+                  that nothing in it can be granted. The sentence lives HERE and
+                  not in the Roles column, which is 60px wide and right-aligned:
+                  a 43-character sentence in it wrapped to six lines and made
+                  the row four times the height of its neighbours. This column
+                  is the one with room. */}
+              <span className="flex w-full min-w-0 flex-col gap-0.5 tablet:flex-1">
+                <span className="truncate text-[15.5px] font-semibold">
+                  {entry.project.name}
+                </span>
+                {entry.active_role_keys.length === 0 && (
+                  <span className="truncate text-[13px] text-faint">
+                    No roles yet — nothing here can be granted
+                  </span>
+                )}
               </span>
-              <span className="text-[15px] tablet:w-[70px] tablet:text-right">
+              <span className="shrink-0 text-[15px] tablet:w-[70px] tablet:text-right">
                 {entry.member_count}
                 <span className="text-[13px] text-faint tablet:hidden">
                   {entry.member_count === 1 ? " person" : " people"}
                 </span>
               </span>
               {/* A project with no roles is not a small number, it is a
-                  different fact: nothing in it can be granted to anybody, and
-                  a bare "0" beside a member count reads as a project that is
-                  merely quiet. */}
-              <span className="text-[15px] tablet:w-[60px] tablet:text-right">
-                {entry.active_role_keys.length === 0 ? (
-                  <span className="text-[13px] text-faint">
-                    No roles yet — nothing here can be granted
-                  </span>
-                ) : (
-                  <>
-                    {entry.active_role_keys.length}
-                    <span className="text-[13px] text-faint tablet:hidden">
-                      {entry.active_role_keys.length === 1 ? " role" : " roles"}
-                    </span>
-                  </>
-                )}
+                  different fact: nothing in it can be granted to anybody. The
+                  count stays a count so the column reads as one, and the fact
+                  is said beside the name, where there is width to say it. */}
+              <span className="shrink-0 text-[15px] tablet:w-[60px] tablet:text-right">
+                {entry.active_role_keys.length}
+                <span className="text-[13px] text-faint tablet:hidden">
+                  {entry.active_role_keys.length === 1 ? " role" : " roles"}
+                </span>
               </span>
               <span className="flex w-full flex-wrap gap-1.5 tablet:w-[240px]">
                 {(appsByProject.get(entry.project.id) ?? []).map((name) => (
