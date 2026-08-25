@@ -1,5 +1,8 @@
 # The add-on wire contract, as artifacts
 
+> The model these artifacts serve is in [`../README.md`](../README.md);
+> the add-on held to them is [`../truenas/`](../truenas/README.md).
+
 These files are the request bodies the backend sends and the add-on decodes.
 They exist because the two are separately compiled modules with no shared type,
 and the failure that follows from that is not theoretical: the backend's

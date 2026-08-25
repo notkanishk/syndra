@@ -34,6 +34,7 @@ understand *why* something ended up the way it did.
 | How do I run it locally? | [`README.md`](../README.md) |
 | How do I contribute? | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
 | How do the Zitadel Actions work? | [`zitadel/actions/README.md`](../zitadel/actions/README.md) |
+| How do add-ons work, and how do I write one? | [`addons/README.md`](../addons/README.md) |
 
 ## A caveat on the historical documents
 
