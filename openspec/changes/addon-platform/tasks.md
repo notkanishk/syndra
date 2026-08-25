@@ -1118,5 +1118,15 @@ and the reason a recorded read is now recorded with its TYPES.
   unreadable-coverage path return an empty list instead of saying so fails one.
   Committed before the mutation pass, after the last one on this branch
   restored a file and took its uncommitted tests with it
+- [x] 35.10 **The activity report's coverage field is named apart from
+  health's.** Both were `unaudited_shares`, on two structs, answering two
+  different questions — health's is target-level and this one is about one
+  person, and after 35.2 a share can be audited and still be on the second
+  list. One name over two meanings is the defect the whole branch keeps
+  finding, and a wire field is the worst place to leave an instance of it, so
+  the activity one is `uncovered_shares` across the add-on, the backend
+  envelope, the handler and the console. The cross-module source guard in
+  `internal/addons/activity_envelope_test.go` caught the rename from the other
+  side, which is what it is for
 - [x] 35.9 **A `.pyc` had been tracked** since the recorder landed, with no
   `__pycache__` rule in `.gitignore`. Untracked, and the rule added

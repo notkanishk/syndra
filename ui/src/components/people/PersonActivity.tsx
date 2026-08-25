@@ -142,7 +142,7 @@ function TargetActivityCard({
   if (activity.isError) return null;
 
   const events = data?.readable ? (data.events ?? []) : [];
-  const unaudited = data?.unaudited_shares ?? [];
+  const uncovered = data?.uncovered_shares ?? [];
 
   return (
     <Card>
@@ -163,7 +163,7 @@ function TargetActivityCard({
           <EmptyState
             title={`No recorded activity for ${name} on ${target}.`}
             guidance={
-              unaudited.length > 0
+              uncovered.length > 0
                 ? "Some shares were not auditing this account, so this is not the same as nothing having happened — see below."
                 : "The target's audit log has nothing for this account."
             }
@@ -185,15 +185,15 @@ function TargetActivityCard({
         </div>
       )}
 
-      {unaudited.length > 0 && (
+      {uncovered.length > 0 && (
         <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
           {/* Not "auditing is off". A share can have auditing switched on and
               still record nothing for this person, because TrueNAS scopes it by
               group — so the honest claim is about coverage of THIS account, and
               an operator sent to switch on a setting that is already on would
               find nothing wrong and conclude the gap was imaginary. */}
-          Auditing on {formatList(unaudited)} does not cover {name}, so nothing on{" "}
-          {unaudited.length === 1 ? "that share" : "those shares"} appears here whether or not it
+          Auditing on {formatList(uncovered)} does not cover {name}, so nothing on{" "}
+          {uncovered.length === 1 ? "that share" : "those shares"} appears here whether or not it
           happened.
         </div>
       )}

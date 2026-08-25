@@ -519,6 +519,6 @@ func handleTargetActivity(w http.ResponseWriter, r *http.Request) {
 		"subject":          subject,
 		"readable":         true,
 		"events":           report.Events,
-		"unaudited_shares": report.UnauditedShares,
+		"uncovered_shares": report.UncoveredShares,
 	})
 }

@@ -299,8 +299,8 @@ func TestAnEmptyActivityResultNamesWhatWasNotWatched(t *testing.T) {
 	if len(out.Activity.Events) != 0 {
 		t.Fatalf("the fixture has no events: %+v", out.Activity.Events)
 	}
-	if len(out.Activity.UnauditedShares) != 1 || out.Activity.UnauditedShares[0] != "lab" {
-		t.Fatalf("an empty result must name the shares that were not being watched: %v", out.Activity.UnauditedShares)
+	if len(out.Activity.UncoveredShares) != 1 || out.Activity.UncoveredShares[0] != "lab" {
+		t.Fatalf("an empty result must name the shares that were not being watched: %v", out.Activity.UncoveredShares)
 	}
 }
 
