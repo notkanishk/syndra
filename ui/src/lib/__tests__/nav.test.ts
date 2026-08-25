@@ -197,8 +197,41 @@ describe("the target rows", () => {
     }
   });
 
-  it("leaves the rail alone when the deployment registered nothing", () => {
+  // The row exists so that "no add-on is configured here" is a thing the
+  // product says, rather than a silence an operator has to interpret. A
+  // deployment that registers nothing used to show nothing at all about
+  // add-ons, which reads as the feature not having shipped.
+  it("keeps a seat for the target plane when the deployment registered nothing", () => {
+    const system = targetNav([]).find((e) => e.kind === "group" && e.label === "System");
+    const labels = system?.kind === "group" ? system.children.map((c) => c.label) : [];
+
+    expect(labels).toEqual(["Identity provider", "Connected systems", "Event activity"]);
+    // Static, so it is the same array — nothing is derived to produce it.
     expect(targetNav([])).toBe(ADVANCED_NAV);
+  });
+
+  // Static also means the breadcrumb can find it. A row the rail highlights and
+  // the crumb cannot name is a page that reads as being nowhere.
+  it("gives the index a breadcrumb, which a derived row could not have", () => {
+    expect(crumbsFor("/system/targets", "advanced")).toEqual([
+      { label: "System" },
+      { label: "Connected systems", href: "/system/targets" },
+    ]);
+  });
+
+  // The index and a target are different destinations, and the index must not
+  // claim a target's detail route — the rail would highlight two rows at once.
+  it("does not let the index swallow a target's own route", () => {
+    const system = targetNav(["truenas"]).find(
+      (e) => e.kind === "group" && e.label === "System",
+    );
+    const children = system?.kind === "group" ? system.children : [];
+    const index = children.find((c) => c.href === "/system/targets");
+    const truenas = children.find((c) => c.href === "/system/targets/truenas");
+
+    expect(index && leafMatches(index, "/system/targets")).toBe(true);
+    expect(index && leafMatches(index, "/system/targets/truenas")).toBe(false);
+    expect(truenas && leafMatches(truenas, "/system/targets/truenas")).toBe(true);
   });
 
   it("names a target once, from one place", () => {
