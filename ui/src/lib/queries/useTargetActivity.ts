@@ -27,7 +27,7 @@ export interface TargetActivity {
    * Shares with auditing switched off. Without it a short list reads as a quiet
    * week when half the shares were never being watched.
    */
-  unaudited_shares?: string[];
+  uncovered_shares?: string[];
   detail?: string;
 }
 

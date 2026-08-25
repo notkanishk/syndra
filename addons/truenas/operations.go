@@ -477,18 +477,18 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 // ActivityReport is SMB activity, and what it could not see.
 type ActivityReport struct {
 	Events []ActivityEvent `json:"events"`
-	// UnauditedShares names the shares that were not watching THIS member —
+	// UncoveredShares names the shares that were not watching THIS member —
 	// auditing switched off, or switched on and scoped past them by a watch or
 	// ignore list. Without it an empty result reads as "no activity", which is
 	// a different and much more reassuring statement than "we were not
 	// watching".
 	//
-	// Deliberately a narrower question than the identically named field on
-	// TargetHealth, which asks the target-level one: a share can be audited and
-	// still be on this list. The activity report is about one person, and the
-	// coverage caveat on it has to be about the same person or it is not a
-	// caveat about anything.
-	UnauditedShares []string `json:"unaudited_shares,omitempty"`
+	// Named apart from health's `unaudited_shares` on purpose. That one asks
+	// the target-level question — is auditing on at all — and this one asks
+	// about one person, and a share can be audited and still be on this list.
+	// One name over two questions is the defect this whole branch keeps
+	// finding, and a wire field is the worst place to leave an instance of it.
+	UncoveredShares []string `json:"uncovered_shares,omitempty"`
 }
 
 type ActivityEvent struct {
@@ -591,9 +591,9 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 	// Reported whether or not there were events, because the case that matters
 	// is the empty one.
 	if blind, err := s.sharesNotWatching(binding.Username); err != nil {
-		report.UnauditedShares = []string{"(the audit coverage of the shares could not be read, so coverage is unknown)"}
+		report.UncoveredShares = []string{"(the audit coverage of the shares could not be read, so coverage is unknown)"}
 	} else {
-		report.UnauditedShares = blind
+		report.UncoveredShares = blind
 	}
 
 	return OperationResult{

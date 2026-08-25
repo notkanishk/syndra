@@ -103,11 +103,11 @@ func TestTargetActivity_UnreadableIsNotEmpty(t *testing.T) {
 	}
 }
 
-func TestTargetActivity_CarriesTheUnauditedShares(t *testing.T) {
+func TestTargetActivity_CarriesTheUncoveredShares(t *testing.T) {
 	withActivity(t, func(context.Context, string, string, string) addons.ActivityReport {
 		return addons.ActivityReport{
 			Events:          []addons.ActivityEvent{{At: "2026-08-20T10:00:00Z", Event: "CONNECT", Share: "lab", Success: true}},
-			UnauditedShares: []string{"scratch"},
+			UncoveredShares: []string{"scratch"},
 			Outcome:         addons.OutcomeSucceeded,
 		}
 	})
@@ -115,7 +115,7 @@ func TestTargetActivity_CarriesTheUnauditedShares(t *testing.T) {
 	rr := activityRequest("?subject=u1")
 	var body struct {
 		Readable        bool     `json:"readable"`
-		UnauditedShares []string `json:"unaudited_shares"`
+		UncoveredShares []string `json:"uncovered_shares"`
 		Events          []struct {
 			Event string `json:"event"`
 		} `json:"events"`
@@ -128,7 +128,7 @@ func TestTargetActivity_CarriesTheUnauditedShares(t *testing.T) {
 	}
 	// Without this an operator reads a short list as "quiet" when half the
 	// shares were never being watched.
-	if len(body.UnauditedShares) != 1 || body.UnauditedShares[0] != "scratch" {
-		t.Fatalf("the unaudited shares must travel: %s", rr.Body.String())
+	if len(body.UncoveredShares) != 1 || body.UncoveredShares[0] != "scratch" {
+		t.Fatalf("the uncovered shares must travel: %s", rr.Body.String())
 	}
 }

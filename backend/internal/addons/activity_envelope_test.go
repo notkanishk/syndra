@@ -40,9 +40,9 @@ func TestActivityEnvelopeKeyMatchesTheAddOn(t *testing.T) {
 
 	// The fields the surface actually renders. A rename here does not fail to
 	// decode — it decodes to a zero value, which renders as "no events" and
-	// "nothing unaudited", the two answers this read exists to distinguish
-	// from their opposites.
-	for _, tag := range []string{`json:"events"`, `json:"unaudited_shares,omitempty"`} {
+	// "every share was watching them", the two answers this read exists to
+	// distinguish from their opposites.
+	for _, tag := range []string{`json:"events"`, `json:"uncovered_shares,omitempty"`} {
 		if !strings.Contains(string(source), tag) {
 			t.Fatalf("the add-on no longer carries %s; the report would decode to a reassuring zero", tag)
 		}

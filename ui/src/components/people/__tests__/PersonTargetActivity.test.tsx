@@ -71,7 +71,7 @@ describe("the target's own log, beside Syndra's", () => {
     expect(screen.queryByText(/No recorded activity/i)).toBeNull();
   });
 
-  // A short list on a target whose shares are half unaudited is not a quiet
+  // A short list on a target that was watching only half the shares is not a quiet
   // week, and the operator cannot tell without being told.
   it("names the shares nothing was watching", async () => {
     state.activity = {
@@ -79,7 +79,7 @@ describe("the target's own log, beside Syndra's", () => {
       subject: "u1",
       readable: true,
       events: [],
-      unaudited_shares: ["scratch"],
+      uncovered_shares: ["scratch"],
     };
     renderTab();
 

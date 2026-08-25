@@ -612,10 +612,11 @@ func MyStorage(ctx context.Context, target, subject string) StorageStatus {
 // trusted.
 type ActivityReport struct {
 	Events []ActivityEvent `json:"events"`
-	// UnauditedShares names the shares with auditing switched off. Without it
+	// UncoveredShares names the shares that were not watching this member —
+	// switched off, or scoped past them by a watch or ignore list. Without it
 	// an empty result reads as "no activity", which is a different and far more
 	// reassuring statement than "nobody was watching".
-	UnauditedShares []string `json:"unaudited_shares,omitempty"`
+	UncoveredShares []string `json:"uncovered_shares,omitempty"`
 
 	Outcome Outcome `json:"-"`
 	Err     error   `json:"-"`
