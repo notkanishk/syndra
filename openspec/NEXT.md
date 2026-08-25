@@ -91,7 +91,11 @@ None of these are code. All need a live instance and a human.
 - **Add-on shutdown drain** (`addon-shutdown-grace-period` 3.3) — stop the add-on with a mutation in flight and confirm the settle completes and the terminal status is written. The fix and its guard are in: `stop_grace_period: 30s` now exceeds the add-on's `shutdownTimeout`, and a test fails if that inverts. But everything asserted so far is *numbers*. Only this proves the drain actually survives a real stop, which it had not done for the whole life of the add-on — Docker's 10s default was cutting a 20s drain in half, invisibly, because a truncated drain and a clean stop look identical from outside.
 - **~~One TrueNAS API key~~ Done, 2026-08-13.** The full chain is live against the real NAS: key minted on a dedicated user, `wss://` authenticated, version read (`TrueNAS-25.10.5`), all four health reads answering, and the real account inventory returned. The one thing it immediately broke is recorded as 7.4b — `system.version` returns a `TrueNAS-` prefix the recorded fixture never had, and the version gate silently refused every mutation on a supported release. What remains unproven is `audit.query` / `sharing.smb.query`: they belong to `activity.get`, which has no backend route yet, so those two roles are configured and untested. Previous entry:
 - **A drain with a mutation actually in flight** (`addon-shutdown-grace-period` 3.3) — the stop itself is observed live: the drain runs, the process exits itself in ~1s against a 30s grace, exit 0, no SIGKILL. **The behaviour is now covered in process** (3.3a): the real server, routes, authenticator and lifecycle, with a target call that has not answered yet — `Shutdown` does not return while the handler is inside it, a second mutation mid-drain is refused, and the released one completes and writes its terminal record. Mutation-verified with `Close`, which abandons it. What is left is narrow and needs hardware: the same thing against a real NAS whose call is genuinely slow. The stub answers in milliseconds, so the window has to be manufactured — which is fine for asserting this side of the call and proves nothing about the NAS side.
-- **Enable SMB auditing on the shares** (`addon-platform` 34.12) — it is off on both `gitlab_data` and `main`, so a member's activity report can only ever contain authentication events, never file access and never a share name. Syndra cannot do this itself and should not be able to: `sharing.smb.update` answers `EACCES` because the add-on's credential holds `SHARING_SMB_READ` and not write. Shares → SMB → Edit → Advanced, per share. Until then `activity.get` is correct and nearly empty, and says so.
+- **~~Enable SMB auditing on the shares~~ Done, 2026-08-24** (`addon-platform` 34.12). Both shares now read `audit.enable: true`, `watch_list: []`, `ignore_list: ["builtin_guests"]` — unscoped, so every managed account is recorded. Syndra could not have done it and should not be able to: `sharing.smb.update` answers `EACCES` because the add-on's credential holds `SHARING_SMB_READ` and not write.
+
+  **What it immediately broke is fixed** (`addon-platform` §35). The add-on read `audit.enable` alone, so a share scoped by a watch list to groups a member is not in would have been reported as watching them, and their empty activity report would have read as *did nothing* instead of *nobody was watching* — the one distinction that field exists to draw. It never actually misled anybody, and only because the operator left the watch list empty. The recorder was recording `audit` as `dict` and nothing inside it, which is why no guard could have caught it; it records one level down now.
+
+- **A successful SMB connection** (`addon-platform` 34.13) — 691 audit rows over the retained week, every one `AUTHENTICATION`, with auditing on and scoped to nobody. So either nothing has connected since it was switched on — consistent with the 553 `NT_STATUS_NO_SUCH_USER` failures already recorded — or the release emits nothing else for these shares. One mount as a managed account settles it, and until it does the `share` field and every non-authentication event type stay unrecorded and unguarded.
 - **A failing disk on the NAS** — one uncorrectable error on `sde`, standing since 2026-07-06. Surfaced on the target page now that `health.get` has a caller (34.8), which is how it was found. Not a Syndra problem; it is the first thing that surface was built to show.
 - **The live deployment has no add-on at all.** `syndra.example.org` reaches a reverse proxy that forwards to a separate application host, and `/opt/syndra` there carries zero `TRUENAS_*`/`ADDON_*` variables, no add-on container, and a `sync/` directory — it predates `addon-platform` entirely. Everything in this change is dev-only until that is deployed, and the deploy is a separate decision with its own migrations.
 - **Actions v2 key lifecycle** — `make zitadel-actions-register`, then `make zitadel-actions-rotate-key`, verify the new key lands in both the response and `.action-signing-key` with the old one in `.action-signing-key.previous`; swap env var, restart, confirm `make zitadel-actions-verify` passes.
@@ -152,12 +156,13 @@ Everything else is healthy: index tracks HEAD, embeddings are local-semantic (`X
 
 ---
 
-## 4a. Add-on platform — complete
+## 4a. Add-on platform — complete but for one observation
 
-`changes/addon-platform` is done — **every row is ticked**, including the four
-handover screens this section used to list as owed. (It said "three rows
-unticked" and "each has a backend endpoint and no screen"; both were true when
-written and neither is now. The entry below is what the section looked like
+`changes/addon-platform` is done bar **34.13**, which is not code: it needs a
+successful SMB connection nothing in this repo can make happen. Every other row
+is ticked, including the four handover screens this section used to list as
+owed. (It said "three rows unticked" and "each has a backend endpoint and no
+screen"; both were true when written and neither is now. The entry below is what the section looked like
 before, kept because the reasoning about §13/§17 is still the thing to read
 first.) The backend's IAM half, the TrueNAS add-on,
 the dispatcher joining them, the lifecycle trigger that fires it, the unmanaged

@@ -91,6 +91,21 @@ target:
   answered that payload with a success, so account creation had never worked
   against any release and both suites were green.
 
+Reads are recorded as **keys and types, at every level a decoder touches** —
+values never, at any level, because a value here is a member's name or a group's.
+Types were added after `audit.query` answered `message_timestamp` as an integer
+into a string field, which failed the whole response and left `activity.get`
+broken for its entire life while a recording of key names agreed with the code.
+Nesting was added after the same thing happened one level down: `audit` was
+recorded as `dict`, which tells a decoder it needs a struct there and nothing
+about what belongs in it, and the add-on read `enable` out of it while
+`watch_list` narrowed the auditing to groups the member was not in.
+
+The `select` a probe sends must be the **union of every select the add-on
+issues** against that method. A subset is a recording those decodes cannot be
+checked against — `user.query` was missing `groups` for as long as the file
+existed, and `groups` is read on every inventory pass.
+
 `addons/truenas/truenas_rules_test.go` derives its assertions from this file
 rather than from anybody's memory: each one fires only because the target
 refused something, and stops firing if a later release stops refusing it.

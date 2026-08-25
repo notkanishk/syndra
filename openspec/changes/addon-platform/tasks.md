@@ -21,7 +21,16 @@
 >
 > ## What is still unticked, and why
 >
-> Three rows, and none of them is an unfound defect. **6.19/6.20** — the purge's
+> Four rows, and none of them is an unfound defect. Three are `[~]`, one is
+> open, and the open one is not code.
+>
+> **34.13** — no non-authentication SMB audit row has ever been observed. It
+> used to be explained by auditing being off (34.12), and since that was
+> switched on it is not: 691 rows over the retained week, all `AUTHENTICATION`,
+> on shares scoped to nobody. One successful SMB connection settles whether the
+> release emits anything else, and nothing in this repo can make one happen.
+>
+> **6.19/6.20** — the purge's
 > injected key is declared and sent; the per-account usage read that would let
 > the acknowledgement name the data size (`pool.dataset.query`) is not built.
 > **9.11** — the dormant view exists without a plan step, deliberately: a purge
@@ -1037,12 +1046,77 @@ and the reason a recorded read is now recorded with its TYPES.
   and `AddRolesToBundle`'s `stopped` flag — a gate left behind by an auto-close
   that no longer exists — is gone. Lint output is empty
 
-- [ ] 34.12 **SMB auditing is off on both shares** (`gitlab_data`, `main`), so
-  `activity.get` can only ever return authentication events — no file access and
-  no share names. Syndra's own credential cannot turn it on: `sharing.smb.update`
-  answers `EACCES`, because the add-on's key holds `SHARING_SMB_READ` and not
-  write. That is the right split and it makes this an operator action at the
-  console: Shares → SMB → Edit → Advanced, per share
-- [ ] 34.13 **A file-access audit row has never been seen.** Follows 34.12: with
-  auditing off there are no `CONNECT`/file events to record, so the `share`
-  field and the non-authentication event types remain unrecorded and unguarded
+- [x] 34.12 **~~SMB auditing is off on both shares~~ Switched on by the operator
+  at the console, 2026-08-24.** Both `gitlab_data` and `main` now read
+  `audit.enable: true` with an empty `watch_list` and `ignore_list:
+  ["builtin_guests"]` — unscoped, so every managed account is recorded. Syndra
+  could not have done this and should not be able to: `sharing.smb.update`
+  answers `EACCES` because the add-on's key holds `SHARING_SMB_READ` and not
+  write, which is the right split. The console refuses a `watch_list` entry that
+  is not an SMB group by name, which is how the contents of these two lists were
+  learned. Verified read-only against the target, 2026-08-25
+- [ ] 34.13 **A file-access audit row still has never been seen, and 34.12 no
+  longer explains it.** 691 SMB audit rows over the retained week, every one of
+  them `AUTHENTICATION`, with auditing on and scoped to nobody. So either no
+  account has completed an SMB connection since it was switched on — consistent
+  with the 553 `NT_STATUS_NO_SUCH_USER` failures already recorded — or this
+  release emits nothing else for these shares. The `share` field and every
+  non-authentication event type remain unrecorded and unguarded until one
+  successful connection settles which. Read-only check, 2026-08-25
+
+## 35. Audit coverage is per group, and the add-on read it per share
+
+- [x] 35.1 **`unauditedShares` read `audit.enable` and nothing else.** SMB
+  auditing on TrueNAS is scoped: `sharing.smb.query` answers `audit` as
+  `{enable, watch_list, ignore_list}`, where a non-empty watch list is an
+  allowlist of groups and the ignore list excludes. While auditing was off
+  everywhere — the state 34.12 describes — reading `enable` alone was
+  indistinguishable from correct. The moment it was switched on, every share
+  became "audited" and a member outside the watched groups would have got an
+  empty activity report reading as *did nothing* rather than *nobody was
+  watching them*, which is the one distinction the field exists to draw.
+
+  **It did not actually mislead anybody**, and the reason is luck rather than
+  design: the operator left `watch_list` empty. A scoped list is what the
+  console pushes towards, and the first one would have inverted the answer
+  silently
+- [x] 35.2 **The two questions are separated rather than merged.**
+  `unauditedShares` keeps the target-level one for the health card — is auditing
+  on at all — and `sharesNotWatching` answers the member-level one. A share can
+  be audited and still be on the second list, and collapsing them would tell an
+  operator to switch on a setting they would find already on
+- [x] 35.3 **The member-level answer needs the account's PRIMARY group.** It is
+  carried in its own `group` field on `user.query`, is not repeated in `groups`,
+  and counts towards both lists — so an ignore list naming somebody's primary
+  group would have reported them as watched. Its shape is decoded defensively:
+  observed as a record with an `id`, tolerated as a bare id, and a surprise in
+  it costs one group rather than the whole read
+- [x] 35.4 **The guard could not have caught this, and that is the other half.**
+  The recorder wrote keys and types for the TOP LEVEL only, so `audit` was
+  recorded as `dict` — which tells a decoder it needs a struct there and nothing
+  about what belongs inside it, leaving every inner field exactly as unchecked
+  as the types were before types were recorded at all. It now records one level
+  down under `nested`, and `read_shape_test` resolves dotted field names against
+  it
+- [x] 35.5 **`user.query`'s recorded select was a hand-kept subset** of what the
+  add-on actually asks for, missing `groups` and `builtin` — both read on every
+  inventory pass, neither checkable against anything. It is the union of the
+  call sites now, the same way `sharing.smb.query`'s already was. The branch's
+  recurring defect once more: two definitions of one thing, each consistent with
+  itself
+- [x] 35.6 **Re-recorded from the live target** (TrueNAS-25.10.5, read-only run,
+  2026-08-25). The nested shapes above are observed rather than taken from
+  documentation, and the recording confirms `group` answers as a record carrying
+  an `id`. Write rules carried forward unchanged: 8 refusals, as before
+- [x] 35.7 **The console copy said the wrong thing about the right shares.** The
+  member activity card read "Auditing is off on X", which is false for a share
+  that is audited and scoped past them, and would send an operator to a setting
+  that is already correct. It says the auditing does not cover that person now
+- [x] 35.8 **Every new guard mutation-verified.** Reverting `watches` to
+  `enable` alone fails three tests; dropping the primary group fails one;
+  removing `nested` from the recording fails the shape guard; making the
+  unreadable-coverage path return an empty list instead of saying so fails one.
+  Committed before the mutation pass, after the last one on this branch
+  restored a file and took its uncommitted tests with it
+- [x] 35.9 **A `.pyc` had been tracked** since the recorder landed, with no
+  `__pycache__` rule in `.gitignore`. Untracked, and the rule added
