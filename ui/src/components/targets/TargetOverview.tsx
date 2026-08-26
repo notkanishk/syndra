@@ -5,9 +5,10 @@ import { Fragment, useState } from "react";
 import { EmptyState, ListStates } from "@/components/states";
 import { DormantAccounts } from "@/components/targets/DormantAccounts";
 import { MergeFindings } from "@/components/targets/MergeFindings";
+import { Region } from "@/components/targets/Region";
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
-import { Mono, STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { CountChip, Mono, STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -22,6 +23,7 @@ import { useMappings } from "@/lib/queries/useMappings";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 import {
   useAdoptAccount,
+  useMergeFindings,
   useReconcileTarget,
   useReleaseBinding,
   useSetLifecycle,
@@ -34,6 +36,7 @@ import {
   type BindingConflict,
   type LogAnchor,
   type TargetHealth,
+  type TargetSummary,
 } from "@/lib/queries/useTargets";
 
 /**
@@ -46,111 +49,123 @@ import {
 export function TargetOverview({ target }: { target: string }) {
   const roster = useTargets();
   const health = useTargetHealth(target);
+  const findings = useMergeFindings(target);
   const registered = (roster.data ?? []).find((t) => t.target === target);
 
+  const anchorFinding = health.data?.log_anchor?.violation_reason ? 1 : 0;
+  const conflicts = health.data?.binding_conflicts ?? [];
+  // Everything in region 1: differences reconciliation refused to resolve, a
+  // change record edited after it was queued, and two records disagreeing about
+  // an account. None of them is a status; each is a piece of work waiting on a
+  // human, which is why they are one region and not three places.
+  const waiting =
+    (findings.data?.length ?? 0) + anchorFinding + conflicts.length;
+  const waitingKnown = !findings.isLoading && !health.isLoading;
+
   return (
-    <>
+    <div className="grid gap-5">
       <PageHeader
         title={targetLabel(target)}
         meta={registered ? authLabel(registered.auth_mode) : undefined}
       />
 
-      <div className="grid gap-4">
-        <Health
-          target={target}
-          health={health.data}
-          isLoading={health.isLoading}
-          // A deployment-side fault, carried into the health card because that
-          // is where an operator looks when a target stops working — and this
-          // one explains the reading below it rather than sitting beside it.
-          transportError={
-            registered?.transport_status === "error" ? registered.transport_error : undefined
-          }
-        />
-        {/* What the TARGET says about itself, directly under what the ADD-ON
-            says about the target. Same question, one layer further down: the
-            card above answers "is Syndra able to talk to it", this one answers
-            "and is the machine itself all right". A failing disk shows up here
-            and nowhere else in Syndra. */}
-        <SystemHealth target={target} />
-        {/* Two sentences and one control, where two panels used to be.
-            Editing a mapping moves access for everybody holding that role, and
-            a fact with that reach has no room to breathe in a table row — so
-            the mappings and their published versions live on their own screen
-            (design M6). What stays here is the answer to "why is she bound
-            here", and a way through to the screen that can change it. */}
-        <MappingCensus target={target} />
-        {/* Whose accounts are on it — the managed half first, because it is the
-            half an operator acts on, and the unmanaged inventory below reads as
-            "and what else is here". */}
-        <PeopleOnTarget target={target} />
-        {/* Accounts Syndra created and no longer has a reason for, between the
-            people it manages and the accounts it never made: it is the third
-            answer to "whose accounts are on it", and the only one with an
-            action that removes data. */}
-        <DormantAccounts target={target} />
-        <Inventory target={target} />
+      <TargetLede target={target} health={health.data} waiting={waiting} known={waitingKnown} />
 
-        {registered && (
-          <Card>
-            <CardHeader
-              title="What it can do"
-              note="Read from the add-on's manifest, never from a list here"
+      {/* The touch form of the four regions: a way to skip one rather than a
+          way to hide three. Everything below it is present and scrollable, so a
+          finding cannot end up behind a tab nobody selected. */}
+      <RegionIndex waiting={waitingKnown ? waiting : null} />
+
+      <div className="grid gap-8">
+        {/* Region 0 · the band.
+        
+            Health and maintenance are one question, and they used to sit six
+            panels apart. A reachability reading has no meaning on its own: NOT
+            ANSWERING while somebody is draining it for a credential rotation is
+            a different fact from NOT ANSWERING at 04:00, and an operator who
+            reads the second when the first is true walks to the wrong machine.
+        
+            Two cards side by side and never merged into one word: the left is
+            Syndra's ability to reach the target, the right is the target's own
+            account of itself. Keeping them apart is what makes "look at Syndra"
+            and "look at the NAS" possible to say at all. */}
+        <Region
+          id="answering"
+          title="Is it answering"
+          lede="Two machines, side by side, never merged into one word — and the state somebody put this one in, which changes what the readings above it mean."
+        >
+          <div className="grid gap-4 desktop:grid-cols-2">
+            <Health
+              target={target}
+              health={health.data}
+              isLoading={health.isLoading}
+              // A deployment-side fault, carried into this card because that is
+              // where an operator looks when a target stops working — and it
+              // explains the reading below it rather than sitting beside it.
+              transportError={
+                registered?.transport_status === "error" ? registered.transport_error : undefined
+              }
+              needsAPerson={waitingKnown ? anchorFinding + conflicts.length : 0}
             />
-            {!registered.callable ? (
-              <div className="px-5 pb-5">
-                <p className="text-[14px] text-muted">
-                  Registered, and it has not published a capability manifest yet.
-                  Registration is a deployment fact; what it can do is a runtime
-                  one, and nothing is offered until it answers.
-                </p>
-              </div>
-            ) : (
-              registered.operations.map((op, i) => (
-                <CardRow key={op.id} first={i === 0} className="flex-wrap">
-                  <span className="font-mono text-[13.5px]">{op.id}</span>
-                  <span className="text-[13px] text-faint">{op.scope}</span>
-                  {/* Board §21 draws this beside `account.adopt` and
-                      `account.purge`, and the page had been dropping it — the
-                      manifest says which operations stop and ask, and this list
-                      is the only place an operator can learn that before
-                      pressing one. The same argument the section makes for
-                      showing an unavailable operation rather than omitting it:
-                      what is missing from the list is read as not existing. */}
-                  {op.confirm && (
-                    <span className="text-[13px] text-faint">confirmation required</span>
-                  )}
-                  {op.secret_params && op.secret_params.length > 0 && (
-                    // Named, never valued. There is nowhere in this payload for
-                    // a secret and nowhere on this page to render one.
-                    <span className="text-[12.5px] text-faint">
-                      never logged: {op.secret_params.join(", ")}
-                    </span>
-                  )}
-                  <span className="flex-1" />
-                  {!op.available && (
-                    // Shown disabled with its reason rather than omitted:
-                    // omitted, an operator wonders whether the feature exists.
-                    <span className="text-[13px] text-warn-text">
-                      unavailable — {op.unavailable_reason}
-                    </span>
-                  )}
-                </CardRow>
-              ))
-            )}
-          </Card>
-        )}
+            <SystemHealth target={target} />
+          </div>
+          <LifecycleControl target={target} health={health.data} />
+        </Region>
 
-        {/* Above the reconcile control on purpose: pressing [Reconcile now]
-            with disputed values outstanding does not resolve them, and an
-            operator who reads the button first will assume it did. */}
-        <MergeFindings target={target} />
+        {/* Region 1 · second on the page, and not first.
+        
+            Three findings on a target that has not answered for forty minutes
+            are three findings nobody can act on, and the band is what says so.
+            But it comes before people and before capabilities, because it is
+            the only content here that is costing somebody access today. */}
+        <Region
+          id="waiting"
+          title="Waiting on a person"
+          count={waitingKnown ? waiting : null}
+          lede="Differences reconciliation will not resolve on its own, a change record edited after it was queued, and two of Syndra's own records disagreeing about who owns an account. None of these is a status. Each is a piece of work waiting on a human, and this region keeps its seat at zero."
+        >
+          {health.data?.log_anchor?.violation_reason && (
+            <LogFinding anchor={health.data.log_anchor} />
+          )}
+          {conflicts.map((conflict) => (
+            <BindingConflictFinding key={conflict.id} target={target} conflict={conflict} />
+          ))}
+          <MergeFindings target={target} />
+        </Region>
 
-        <ReconcileControl target={target} />
+        {/* Region 2 · the second subject.
+        
+            Six panels on this page are about the target and five are about
+            people and their access. They stay on one page under a seam rather
+            than becoming a second screen: NOTHING BOUND means one thing on a
+            target that answered a second ago and something else entirely on one
+            that has not answered for forty minutes, and splitting them would
+            take the roster away from the only sentence that explains it. */}
+        <Region
+          id="people"
+          eyebrow="The second subject on this page"
+          title="People and their access here"
+          lede="Three populations, and never one count: the accounts Syndra manages, the accounts it did not create, and the accounts it created and no longer has a reason for. Each one means something different and each takes a different action."
+        >
+          <MappingCensus target={target} />
+          <PeopleOnTarget target={target} />
+          <Inventory target={target} />
+          <DormantAccounts target={target} />
+        </Region>
 
-        <LifecycleControl target={target} health={health.data} />
+        {/* Region 3 · what an add-on can do and what actually runs against it
+            are the same question asked twice. The manifest lists the operations
+            and reconciliation is the thing that calls them on a schedule. */}
+        <Region
+          id="runs"
+          title="What runs here"
+          lede="What the add-on can perform, and the thing that calls it."
+        >
+          {registered && <Capabilities registered={registered} />}
+          <ReconcileControl target={target} />
+        </Region>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -470,26 +485,38 @@ function Health({
   health,
   isLoading,
   transportError,
+  needsAPerson,
 }: {
   target: string;
   health: TargetHealth | undefined;
   isLoading: boolean;
   transportError?: string;
+  /** How many Syndra-side findings are waiting in the region below. */
+  needsAPerson: number;
 }) {
   return (
     <Card>
-      <CardHeader title="Health" />
+      <CardHeader title="Syndra&rsquo;s reach" />
       <div className="grid gap-3 px-5 pb-5">
         {isLoading && !health && <p className="text-[14px] text-faint">Reading…</p>}
 
-        {health?.log_anchor?.violation_reason && <LogFinding anchor={health.log_anchor} />}
-
-        {/* Above the reachability reading, deliberately. A target being down is
-            temporary and this is not: it is two of Syndra's own records
-            disagreeing, and it stands whether or not the add-on is answering. */}
-        {(health?.binding_conflicts ?? []).map((conflict) => (
-          <BindingConflictFinding key={conflict.id} target={target} conflict={conflict} />
-        ))}
+        {/* The two Syndra-side findings used to render HERE, above the
+            reachability reading. The priority was right and the placement was
+            not: neither is a fact about whether Syndra can reach the machine,
+            both stand whether or not it answers, and both wait on a person —
+            which is the definition of the region below. A reader who met them
+            in a list of readings skimmed them in the same rhythm as
+            `in flight: 0`.
+            
+            What stays is one red line saying something below needs a person
+            before this card can be trusted. */}
+        {needsAPerson > 0 && (
+          <p className="text-[13.5px] font-semibold text-danger-text">
+            {needsAPerson === 1
+              ? "One thing below needs a person before this card can be trusted."
+              : `${needsAPerson} things below need a person before this card can be trusted.`}
+          </p>
+        )}
 
         {/* Above reachability, because it EXPLAINS it. A target whose transport
             secret cannot be read will also not answer, and an operator who
@@ -616,6 +643,138 @@ function Health({
           />
         )}
       </div>
+    </Card>
+  );
+}
+
+/**
+ * The page's one-line answer, under its title.
+ *
+ * The page difference between a quiet target and one with somebody's access
+ * disputed is carried HERE and in each region's lede — by copy in a fixed
+ * place, never by a panel appearing. That is what lets the structure stay
+ * still while the page still reads differently.
+ */
+function TargetLede({
+  target,
+  health,
+  waiting,
+  known,
+}: {
+  target: string;
+  health?: TargetHealth;
+  waiting: number;
+  known: boolean;
+}) {
+  const name = targetLabel(target);
+  const reach = !health
+    ? `Reading ${name}.`
+    : !health.reachable
+      ? `${name} is not answering.`
+      : health.lifecycle && health.lifecycle !== "active"
+        ? `${name} is ${health.lifecycle.replace("_", " ")} — somebody set that on purpose.`
+        : `${health.product_version ?? name}, answering and accepting changes.`;
+
+  return (
+    <p className="max-w-[86ch] text-[15px] leading-[1.6] text-muted">
+      {reach}{" "}
+      {!known ? null : waiting === 0 ? (
+        <span className="text-ink">Nothing is waiting on a person.</span>
+      ) : (
+        <span className="font-semibold text-danger-text">
+          {waiting === 1 ? "One thing is" : `${waiting} things are`} waiting on a person.
+        </span>
+      )}
+    </p>
+  );
+}
+
+/**
+ * The touch form of the four regions (design T5).
+ *
+ * The mobile board made this page four horizontally scrolling tabs. What a
+ * phone actually needs is a way to SKIP a region, not a way to hide three — a
+ * finding behind an unselected tab is a finding nobody is looking at, and the
+ * only fix for that is a badge on the tab, which is data driving structure by
+ * another route.
+ *
+ * So: five rows, always the same five, hollow zeros included, each a jump
+ * rather than a filter. Everything below stays present and scrollable.
+ */
+function RegionIndex({ waiting }: { waiting: number | null }) {
+  const regions: Array<{ id: string; label: string; count?: number | null }> = [
+    { id: "answering", label: "Is it answering" },
+    { id: "waiting", label: "Waiting on a person", count: waiting },
+    { id: "people", label: "People and their access here" },
+    { id: "runs", label: "What runs here" },
+  ];
+
+  return (
+    <nav aria-label="Regions of this page" className="desktop:hidden">
+      <Card>
+        {regions.map((region, i) => (
+          <a
+            key={region.id}
+            href={`#${region.id}`}
+            className={`flex min-h-[48px] items-center gap-3 px-5 py-2.5 text-[14.5px] motion-tint hover:bg-[var(--hover)] ${
+              i === 0 ? "" : "row-divider"
+            }`}
+          >
+            <span className="flex-1">{region.label}</span>
+            {region.count !== undefined && <CountChip n={region.count} />}
+          </a>
+        ))}
+      </Card>
+    </nav>
+  );
+}
+
+/**
+ * What the add-on can perform, read from its manifest.
+ */
+function Capabilities({ registered }: { registered: TargetSummary }) {
+  return (
+    <Card>
+      <CardHeader
+        title="What it can do"
+        note="Read from the add-on's manifest, never from a list here"
+      />
+      {!registered.callable ? (
+        <div className="px-5 pb-5">
+          <p className="text-[14px] text-muted">
+            Registered, and it has not published a capability manifest yet. Registration is a
+            deployment fact; what it can do is a runtime one, and nothing is offered until it
+            answers.
+          </p>
+        </div>
+      ) : (
+        registered.operations.map((op, i) => (
+          <CardRow key={op.id} first={i === 0} className="flex-wrap">
+            <span className="font-mono text-[13.5px]">{op.id}</span>
+            <span className="text-[13px] text-faint">{op.scope}</span>
+            {/* Board §21 draws this beside `account.adopt` and `account.purge`,
+                and the page had been dropping it — the manifest says which
+                operations stop and ask, and this list is the only place an
+                operator can learn that before pressing one. */}
+            {op.confirm && <span className="text-[13px] text-faint">confirmation required</span>}
+            {op.secret_params && op.secret_params.length > 0 && (
+              // Named, never valued. There is nowhere in this payload for a
+              // secret and nowhere on this page to render one.
+              <span className="text-[12.5px] text-faint">
+                never logged: {op.secret_params.join(", ")}
+              </span>
+            )}
+            <span className="flex-1" />
+            {!op.available && (
+              // Shown disabled with its reason rather than omitted: omitted, an
+              // operator wonders whether the feature exists.
+              <span className="text-[13px] text-warn-text">
+                unavailable — {op.unavailable_reason}
+              </span>
+            )}
+          </CardRow>
+        ))
+      )}
     </Card>
   );
 }
@@ -1036,7 +1195,7 @@ function Inventory({ target }: { target: string }) {
   return (
     <Card>
       <CardHeader
-        title="Accounts Syndra did not create"
+        title="Not created by Syndra"
         count={inventory.data?.unmanaged?.length}
         note="Reported, never triaged. These are not drift."
       />

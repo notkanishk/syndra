@@ -114,3 +114,26 @@ export function StatusDot({ tone, className = "" }: { tone: StatusTone; classNam
     />
   );
 }
+
+/**
+ * The count in a region heading. One seat, three things it can say.
+ *
+ * A filled number, a hollow zero, or an em dash when the read failed. It holds
+ * its place at zero — a region that vanished with its count would be structure
+ * moving in response to data, on the page where an operator most needs to know
+ * that a quiet region is quiet rather than missing.
+ *
+ * The em dash is the reason this is not just `Badge`. A failed read and an
+ * empty one are different facts and a `0` for the first is a lie: it says the
+ * region is empty when nobody could look.
+ */
+export function CountChip({ n }: { n: number | null | undefined }) {
+  if (n === null || n === undefined) {
+    return (
+      <Badge hollow aria-label="not read">
+        <span aria-hidden>—</span>
+      </Badge>
+    );
+  }
+  return n === 0 ? <Badge hollow>0</Badge> : <Badge tone="accent">{n}</Badge>;
+}
