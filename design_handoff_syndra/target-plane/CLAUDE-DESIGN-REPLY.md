@@ -8,8 +8,14 @@ Boards:
 
 - `design/Syndra Target Page.dc.html` — the redesigned target page. Figures T1–T5.
 - `design/Syndra Target Screens.dc.html` — the six supporting screens. Figures S1–S15.
+- `design/Syndra Mapping Screen.dc.html` — the mapping screen. Figures M1–M6.
+- `design/Syndra Contradictions.dc.html` — the two states the code forced. Figures B1–B2.
+- `design/Syndra Member Storage.dc.html` — the member's side of a pause. Figures C1–C3.
 - `design/Sidebar.dc.html` — the existing rail component, included so the boards open
   standalone. Unchanged from the handoff bundle.
+
+Commission 3 also changed four things on the commission-1 and commission-2 boards, listed in
+section 4a. The boards in this zip are the corrected ones.
 
 There is no build plan here, nothing is declared canonical, and nothing says to replace
 anything. Where a drawing implies a component should exist, the component is drawn and
@@ -145,6 +151,128 @@ and relies on the headings. A failing disk surfaces here and nowhere else in the
 
 This is the one place my structure contradicts the brief; the argument is in section 4.
 
+### The mapping screen · one thing holds the top of it permanently
+
+The working copy can differ from the newest published version, and that is the fact a table
+row cannot say. So it is not a state the screen falls into — it is a band under the title that
+always occupies the same seat and always says one of three things: *working copy matches
+version 4*, *version 4 plus three edits nobody has published*, or *nothing has been published*.
+Publish and Versions sit in that band and go inert rather than absent, which is what keeps the
+band the same shape in all three.
+
+**And when there are unpublished edits, the band lists them.** "Rolling back undoes work listed
+nowhere" is only true while nothing lists it. Enumerating the three edits — each with its
+author, its age and the number of people it moved — is what makes rollback a decision rather
+than a gamble, and it costs four rows. Once it is listed, the whole reason this could not be a
+table row on the target page is discharged.
+
+The other thing that band has to say, and the thing an operator's intuition from every other
+tool gets backwards: **unpublished does not mean not yet in effect.** Each of the three edits
+landed through its own rehearsal and is already what Syndra converges against. Publishing does
+not apply them; it records the set so a later rollback has something to return to. That is
+stated twice on the figure.
+
+**The plan is the artefact, not the form.** Edit and delete rehearse first — rollback does not
+today, and that is section 4b. By the time anything is approved the form is gone: the edit is one line and the rest of the
+panel is the three consequences, the third of which no form field implies — the accounts move
+group, the files do not follow, and thirty-four people lose access to what the old group owns.
+
+**The scope step is drawn as arriving, not as being there.** It is the backend's refusal
+rendered, and its first sentence says so, so an operator who never crosses the cohort limit
+never learns the step exists and one who does cannot mistake it for a form they filled in
+wrong. Rung 3, with the *number* typed rather than the role name — the role name is in the
+title and typing it back proves nothing, while 34 is the fact the ceremony exists to make
+unmissable. The threshold is never named by the screen.
+
+**A rollback rehearses as one plan for the version.** This is a recommendation, not a rendering
+of what exists (section 4b). The argument is a number: one plan is the only shape that can
+produce *71 distinct people*. Per-mapping rehearsals yield 61, 12 and 3, and nobody adding those
+up gets 71, because five people hold two of the affected roles — so the figure the ceremony
+exists to make unmissable is a figure only the whole-version plan can compute, and the plan's
+last row says where the five went. Per-mapping would also fire the scope step three times for a
+single act, which teaches an operator that the ceremony is a toll rather than a warning.
+Unrehearsed, as today, is the only option that contradicts the screen's own argument: publishing
+a set is rehearsed, and reverting a published set would not be.
+
+The plan is not symmetrical and is not drawn as if it were — *gain* is lime, *lose* is red and
+names dormancy rather than deletion, *move* is amber and repeats M3's file-ownership consequence.
+Twelve people losing a share is the whole risk of a rollback, so it appears three times: in the
+plan, under the typed number, and in the reason prompt. And the cohort count is people, never
+role holders and never rows.
+
+**Value validation is drawn as a pair, because the pair is the rule.** Fail-open on everything
+except a definite no. The definite no is red, echoes the value in the field it came from, names
+the two near-misses, and has no *Try again* — an operator handed a retry on a deterministic
+refusal presses it twice before reading. The far more common case, the check that could not run,
+is amber, allowed through, and spends its space on why that is deliberate and where the
+consequence surfaces instead. Both cards say what state the mapping is in, because a validation
+message that does not say whether the thing saved is the most expensive ambiguity on a screen
+that moves access for thirty-four people.
+
+**The census line and the screen's first paragraph carry the same two facts in the same words.**
+*Two reach it*, and *changing one moves access for everybody holding that role*. An operator who
+clicked because of one sentence should find that sentence at the top of what they clicked into,
+or the click feels like it went somewhere else.
+
+### B1 · a decision somebody else already took
+
+Not red and not shaped like an error: accent, in the accent the decided-and-waiting badge
+already uses, because what happened is that the finding *became decided* — a state the design
+already has a colour for. The three-state block stays at the top and does not dim; it is still
+true and the operator arrived to read it. Below it, the two answers are compared as a claimant
+pair rather than as an error message — what you had picked, what now stands, each with its
+consequence in the words the resolution list uses — so an operator can tell in one glance
+whether they even disagree. Most of the time they will not, and that is the common case the
+figure is written for. The other operator's reason is quoted in full rather than linked: the
+mandatory reason exists exactly for the person who arrives second, and a link would put the one
+thing they need one click away. The API's own sentence — a UUID, a snake_case resolution, a
+subject id — appears nowhere.
+
+### B2 · a lifecycle change that did not land
+
+The refusal and the state are two separate blocks, in that order, and the state block still
+leads with its lime dot and the word *Active*. The single most expensive misreading here is
+that the page looks like read-only took, or like the state is now unknown; it is known, it is
+what it was, and both blocks say so. The typed reason is echoed back rather than cleared — a
+mandatory-reason field that empties itself on a network failure teaches people to type "asdf"
+the second time. The breaker exemption is stated in the copy rather than left as behaviour: an
+operator who presses this four times should know none of the four made the target look worse.
+*Try read-only again* is the one honest retry on a degraded page, and it takes the amber outline
+rather than a violet fill, because the page's violet belongs to *Reconcile now*.
+
+### The member's side · three rules and one word I would not use
+
+**The notice is never the first thing on the page.** A member arrives to get into their files.
+The state of their access comes first and the pause comes second, because the pause does not
+change the answer to what they came for. Reversing those two is the whole failure of this page.
+
+**Nothing is dimmed and nothing is hidden.** Their credentials, paths and instructions stay
+exactly as reachable as before. The moment the credential block dims, the page has said their
+access is affected, which is false. Only what writes is held back, and only that says so.
+
+**No estimate.** "Usually within the hour" is a promise Syndra cannot keep, and a member told an
+hour who waits three has been misled by the page rather than by the drain. What replaces it is
+what *will* happen — nobody has to come back and check — and, for read-only, a person: whoever
+runs the makerspace can see the pause and can lift it. That is the honest escalation and it
+costs Syndra nothing it cannot keep.
+
+**The word I would not use is *maintenance*.** It is the operator's word for a state they chose;
+to a member it means the thing they are trying to use is unavailable, which it is not. *Paused*,
+and what is paused, throughout. *Draining* does not appear either.
+
+C1 and C2 are structurally identical and differ by two clauses, deliberately — a member should
+not have to learn a second page shape because an operator picked a different state. Draining
+says "a few minutes"; read-only says "while we work on the file server" and puts the
+deliberateness on the surface, because a member reading that changes are paused with no end in
+sight concludes something is broken. The badge changes with the sentence: *shortly* attached to
+an open-ended pause is the small lie that makes the rest of the page untrustworthy.
+
+C3 is the only figure where the pause sits *inside* the state card rather than below it. The
+thing they are waiting for is exactly the thing that cannot happen, so the two facts are one
+fact, and separating them would let somebody read the accent half and miss it. The existing copy
+is kept word for word — *recorded, not created yet, nothing needed from you* — because it is
+still true and it is what makes the wait ordinary rather than personal.
+
 ---
 
 ## 2 · The eleven panels of `REFERENCE-current-page.md`
@@ -205,6 +333,20 @@ targets there is no history anywhere else that answers it. The mono `base` · `o
 sit under the three panels because those are the words in the payload and in a support
 conversation.
 
+**Deciding twice: I had it backwards, and the backend's reason is better than mine.** S7 said
+"deciding again replaces the queued work; it does not stack." It fails closed instead, and for
+`unbound` a replacement would release the account on the target while a re-provision sat in the
+outbox. So the row's promise changes kind: from *you can change your mind* to *the first
+decision wins, and if somebody else got there first you will be told whose it was*. That is a
+promise about being informed, which is worth nothing without B1, which is why B1 exists.
+
+**Maintenance surviving an outage was right for the wrong reason.** I argued it edits Syndra's
+own record. It does not — it is `POST {addon}/lifecycle` over the network and it can be refused.
+It survives because that call is deliberately exempt from the breaker, so that a refusal cannot
+be confused with the target having stopped answering. The consequence for the drawing is that
+it needs a failure path, which no figure had; B2 is that path, and the exemption is now stated
+in the copy rather than left as behaviour.
+
 **The unexplained-access screen changed shape once I led with *applied*.** Two of the three rows
 have a full history, which means the operator's question is no longer *where did this come
 from* but *who undid it, and did they mean to*. That produced two labels the brief does not
@@ -236,55 +378,90 @@ where I bent one I have said so.
 
 ---
 
-## 5 · Open questions
+## 4a · What commission 3 changed on the earlier boards
 
-Guesses are drawn, and each one is a question. Several are about the payload rather than the
-design, and the drawing assumes an answer I have no way to check.
+Four things. The boards in this zip are the corrected ones; the figure ids are unchanged.
 
-1. **Is one control staying live during an outage acceptable?** Maintenance is drawn as working
-   while the target is not answering, because it edits Syndra's own record. Rule 4 says every
-   action in a degraded state is inert. Which of the two wins?
-2. **Do the health snapshot and the account list have separate ages?** I drew two freshness
-   strips on the grounds that they are two reads. If `state_read_at` is one value for the whole
-   target, one strip is the honest drawing and the second is a second way of saying how old
-   something is.
-3. **Where do the log-anchor and binding-conflict findings come from?** Only their resolve
-   endpoints are named. I drew both as arriving with the health read, which is where they render
-   today — if they have their own reads, does moving them into region 1 change what the page
-   fetches?
-4. **Should the census line name the two mappings rather than count them?** Two would fit. Five
-   would not, and the line would then be the only thing on the page that changes shape with its
-   data — which is the rule it would be breaking.
-5. **Does the dashed control now carry two meanings?** The system uses dashed for "no endpoint
-   yet". I also used it for "off right now, with a reason" — adoption during a stale read,
-   deciding during an outage. If those need to look different, which one keeps the dashes?
-6. **Is the pool at 94% Syndra's conclusion to draw?** It is amber on arithmetic the target
-   published without raising an alert of its own — the only place in these drawings where Syndra
-   says something the add-on did not. If it stays, is the threshold Syndra's or configured per
-   deployment?
-7. **What routes exist behind "apply it again" and "stop wanting it"?** The two labels follow
-   from leading with *applied*. I did not assume a route for either, and the drift screen's own
-   revoke-and-adopt pair may already be the answer under different words.
-8. **Does deciding a finding twice replace the queued work or add to it?** The
-   decided-and-waiting row says "deciding again replaces the queued work; it does not stack".
-   That is a guess about the backend, written as a promise to the operator.
-9. **Is the half-finished unbind repaired through the same resolve call?** I drew *Finish it* as
-   idempotent and said so in the row — "pressing it again changes nothing on the target". If it
-   is a different call, the copy is still what the row needs to say.
-10. **Which readings on the index can co-occur?** A target could plausibly be backed off *and*
-    have an unreadable transport secret. I drew one reading per row, which forces a precedence I
-    invented; the Health card has the same question with nine readings.
-11. **On a fresh deployment, what does a sweep with nothing owed return?** The card says it will
-    read the target, owe nothing, queue nothing, and say so. That needs a response that
-    distinguishes *read and owed nothing* from *did not read*, and I do not know that it does.
-12. **Does a finding always name a person?** The roster rows carry a count of the findings that
-    name that person, which assumes every finding maps to a subject. A difference on an
-    unmanaged account, or on a group with no binding, would have nowhere to point.
-13. **Is maintenance-stays-live consistent with what the member sees?** If an operator sets
-    read-only during an outage, the member's page needs to say something, and I have not drawn
-    the member side.
+**The dashed disabled control is gone.** In this codebase dashed already means *produced by an
+automatic rule* — a dashed chip on a role, a dashed edge in the access map. It is a provenance
+idiom, so "off right now, with a reason" cannot borrow it: a dashed *Adopt* would read as
+*adoption is automatic here*, which is the opposite of what it says. Every one of them is now
+the disabled control at reduced alpha with its reason as body text on the line beside it or in
+the card footer. Affected: T1, T3, T4, S5. The one remaining dashed border in the package is on
+M6, where it marks a figure boundary rather than a control, and the caption says so.
+
+**The pool warning is the target's own flag.** `pool.query` returns `warning` alongside
+`healthy` and `status`, and Syndra passes it through, so S9's row now renders that flag and
+names whose it is. It was amber on arithmetic over free-over-size, which would have been Syndra
+publishing a conclusion the target declined to publish — the exact conflation the two-card split
+exists to prevent, and in the row indistinguishable from a flag the NAS actually raised. The
+closing card on that board is corrected too; it used to offer this as a decision to overrule.
+
+**S7's promise inverted.** The row no longer says deciding again replaces the queued work. It
+says a finding takes one decision, gives the reason, and points at B1.
+
+**One addition is not an addition.** Section 6's freshness strip already exists as
+`ReadFreshness`, with the tone dot, the age sentence, the truncation clause and the stale-only
+*Read again*. The drawing is unchanged and the entry is now marked as an existing component. I
+had considered the amber banner inside the unmanaged inventory and had no way to see the shared
+component above it.
 
 ---
+
+## 4b · A drift between two file headers and the routes
+
+Two file headers in the repo assert that edit, delete and rollback all rehearse first. Only two
+of the three do: `rehearse-edit` and `rehearse-delete` exist, and
+`versions/{version}/rollback` has no rehearsal — it restores the version and queues a
+convergence per affected holder, unrehearsed, with no cohort acknowledgement. The comments are
+not a specification and the drift is pre-existing.
+
+M7 draws the shape I am recommending rather than the behaviour that exists, and its caption says
+so in its first sentence. M1's footer points at M7 rather than claiming rollback rehearses
+"like any other change", which was the sentence that carried the drift onto the board.
+
+---
+
+## 5 · Open questions
+
+Ten of the thirteen from the last commission are settled by the code and the answers are folded
+into the drawings. Two were wrong in ways that changed a figure and are written up in section 3.
+What remains:
+
+**Still open, and not mine to settle**
+
+1. **What routes sit behind *apply it again* and *stop wanting it*** (S15). The two labels follow
+   from leading with *applied*: the question stops being where this came from. I did not assume a
+   route for either, and the drift screen's own revoke-and-adopt pair may already be the answer
+   under different words.
+2. **Which readings on the Connected systems index can co-occur** (S2). A target could plausibly
+   be backed off *and* have an unreadable transport secret. I drew one reading per row, which
+   forces a precedence I invented; the Health card has the same question with nine readings.
+
+**New, from this commission**
+
+3. **Publishing needs a note field, and it is not the rehearsal's.** Every version in M1 carries
+   a sentence somebody wrote about a *set* — "archive admins split out of fabrication" — which is
+   a different kind of statement from the reason attached to a single edit. Publish is drawn as
+   one violet control in the band; the note it demands is a step I have not drawn, and it is the
+   only ceremony on that screen that is not a rehearsal.
+4. **Whether a rollback should rehearse at all is a product decision, and M7 is my answer:**
+   one plan for the version, rung 3 once, cohort counted in people. It is drawn as a
+   recommendation and section 4b says what exists instead. What I still cannot answer is whether
+   the cohort limit is *meant* to apply to a return to a published state; I assumed it does,
+   because twelve people lose a share either way and where the instruction came from does not
+   change that.
+5. **Does the 71 exist as a number the backend can produce?** The plan needs distinct people
+   across three role cohorts, deduplicated. If the only available count is per-mapping holders,
+   the figure's central claim is undrawable and the honest fallback is to show the three counts
+   and refuse to total them — which weakens the ceremony rather than faking it.
+6. **Who is "whoever runs the makerspace"?** C2 and C3 send a member to a person and C3 gives it
+   a control. Syndra knows who holds the operator role; whether that is a name, a room, or a
+   mailto is a question about this deployment rather than about the design.
+7. **Is a saved-but-unapplied password held anywhere a member can see it was held?** C1 and C2
+   promise "we will apply it as soon as changes resume" and "you do not need to come back". If
+   that queued credential can fail later, the member's page needs a state for that, and I have
+   not drawn one.
 
 ## 6 · What the drawings add to the design system
 
@@ -315,16 +492,22 @@ pill. This one has to carry *none* and *unknown* in the same box without changin
 a different job, and the hollow form borrows the dashed-and-hollow language §29 already uses for
 "there is deliberately nothing here".
 
-### Freshness strip — T1–T5, S1
+### Freshness strip — T1–T5, S1 · **exists already as `ReadFreshness`**
 
 One row: a tone dot, a sentence carrying an age, an optional clause when the read hit its cap,
 and a *Read again* that exists only when the read is stale. Neutral ground at live and ageing;
 amber ground at stale and provisional. Used twice on the target page, for the health snapshot
 and the account list, and nowhere else — no other age is written on the page.
 
-*Considered first:* the amber banner inside §21's unmanaged inventory, which is where this
-behaviour currently lives. It is a warning band, and four of the five freshness states are not
-warnings; wearing amber at *read just now* would spend the colour on the good case.
+Not an addition. The component is `ReadFreshness` and it already carries all four parts; the
+drawing matches it and needs nothing new. Left in this section because the reasoning is worth
+having written down, and because I reached it independently, which is mild evidence the
+component is shaped right.
+
+*Considered first:* the amber banner inside §21's unmanaged inventory, which is where I could
+see this behaviour living. It is a warning band, and four of the five freshness states are not
+warnings; wearing amber at *read just now* would spend the colour on the good case. There is a
+shared component above that banner and I had no way to see it.
 
 ### Claimant pair — S13, S14
 
@@ -346,6 +529,30 @@ not answered yet is the ordinary first minute of its life — colouring it would
 that the colour does not mean anything. Lime was the other candidate and is worse: nothing is
 healthy here, nothing has been read.
 
+### Version state band — M1, M2, M5
+
+A band under the title holding one seat and three readings: *working copy matches version N*,
+*version N plus K unpublished edits* with those K enumerated beneath it, and *nothing has been
+published*. Publish and Versions live in it and go inert rather than absent. It is the whole
+reason the mapping set could not stay a panel on the target page.
+
+*Considered first:* a badge beside the title, and a banner above the rows. A badge cannot hold
+three enumerated edits, and once they are not enumerated the screen is back to hiding the thing
+it exists to show. A banner would have been right if the clean state had nothing to say, but it
+does — *working copy matches version 4* is the sentence that makes the other two readable, and a
+banner that appears only when something is wrong cannot deliver it.
+
+### Rehearsal panel — M3, and behind the add form
+
+A panel that replaces a form with a plan: the edit as one line, then the consequences as counted
+lines with tone dots, then the freshness of the read the plan was built from. Approving approves
+the plan. A stale plan is rehearsed again and shown again rather than sent.
+
+*Considered first:* the confirmation dialog at rung 2, with the counts in its lede. The counts
+are three separate facts here and one of them — files staying with the old group — is a
+consequence no operator infers from a diff, so it needs a line of its own rather than a clause.
+A dialog also cannot host the scope step without becoming a dialog inside a dialog.
+
 ### Region index — T5, touch only
 
 A card at the top of the phone column listing the page's regions in page order, each with its
@@ -363,16 +570,33 @@ you where you are but not what else exists, which is the question a four-region 
 These exist in this reply only. There is no figure for them, and they must not be read as
 handed-over drawings.
 
-- **The mapping screen itself.** Section 1 says what it takes with it from the target page — the
-  rows, the fields, Change and Remove, the published versions, the working-copy distinction —
-  and does not draw any of it.
+- **The add-a-mapping form.** M5 offers *Add the first mapping* and M1 offers *Add a mapping*.
+  The form is the rehearsal panel in M3 with a role picker and a value field in front of it, and
+  the field picker's single option is explained by the card in M1. I would rather you saw the
+  rehearsal and the two refusals than a form.
+- **The publish step and its note field.** Open question 3. Publish is a control in the band on
+  M1, M2 and M5; what it opens is not drawn.
+- **The delete rehearsal.** `rehearse-delete` exists and is not drawn; it is M3 with a plan that
+  only removes. The rollback rehearsal is drawn in M7 as a recommendation, not as existing
+  behaviour.
+- **The mapping screen's own degraded state.** M4's right-hand card shows what an unreadable
+  target does to one validation. What the whole screen looks like when the target has not
+  answered for forty minutes — which rows dim, whether Change stays live, whether the census
+  count is still true — is not drawn, and by the logic of T3 most of it should stay live because
+  mappings are Syndra's own record.
+- **The mapping screen on touch.** T5 establishes the region index for the target page. This
+  screen has a version band, a wide table with holder counts, and a rehearsal panel, none of
+  which I have narrowed.
+- **The member page's no-entitlement state under a pause.** C3 covers entitled-and-waiting. A
+  member with no entitlement has nothing paused and should presumably see nothing, but I have not
+  drawn it to confirm that.
 - **The *backed off* reading.** Described in the footer of S2 and in T3's caption, in words,
   because the deployment I drew has no target in that state. It is red and it sends an operator
   to the Syndra host rather than the add-on.
 - **The populated *Lost their reason* card and its bulk action.** §29 has them; every figure
   here draws that region at zero.
-- **The member side of anything.** No figure shows what a member reads when access is withheld,
-  including the case in open question 13.
+- **The member side of a withdrawal.** C1–C3 cover a pause. What a member reads when access is
+  actually taken away is a different page and a different sentence, and it is not here.
 - **The populated *Not created by Syndra* triage flow past *Adopt*.** The row and its
   consequence sentence are drawn; the adoption confirmation is not.
 - **The scope step behind a blast-radius refusal.** Named in section 1 as a backend refusal

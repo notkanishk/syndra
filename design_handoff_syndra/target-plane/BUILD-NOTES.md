@@ -175,6 +175,78 @@ they set will land once the queue clears, and under read-only it will not.
 
 So **C1 and C2 both stand as drawn.**
 
+## 3c · Commission 3 landed, and M7's number is computable
+
+Zip verified: `M1`–`M7`, `B1`–`B2`, `C1`–`C3` claimed and present, 7 + 2 + 3
+figures across three new boards. `support.js` unchanged, ids continue cleanly.
+
+### The 71 exists. The backend already computes it.
+
+M7's open question — can the backend produce distinct people deduplicated across
+three role cohorts, or only per-mapping holder counts — is answered by the code
+that performs a rollback today:
+
+```go
+// One convergence per subject, not per mapping: two restored mappings on
+// one role would otherwise queue the same resolved set twice.
+seen := map[string]struct{}{}
+for _, m := range mappings {
+    holders, _ := dbMappingHolders(ctx, m.ProjectID, m.RoleKey)
+    for _, id := range holders {
+        if _, dup := seen[id]; dup { continue }
+        seen[id] = struct{}{}
+        ...
+        converged++
+    }
+}
+```
+
+`converged` **is** the distinct-people number. The dedup M7 needs is not new work
+— it is the shape the rollback path already has, and `queued_convergences` in the
+response is that count returned to the caller.
+
+A rehearsal needs it computed *before* the write rather than after, and
+everything for that exists: `db.MappingVersionEntry` carries `ProjectID` and
+`RoleKey` for the version being restored, so the would-be set is knowable without
+mutating anything, and `db.MappingHolders(projectID, roleKey)` is the same lookup
+the loop already calls. The extraction is the dedup half of that loop with no
+convergence recorded.
+
+**So the fallback is not needed. Draw the 71.**
+
+### But today's count is half the cohort — and that is a defect, not a design note
+
+`RollbackMappingVersion` clears the whole working set before reinserting:
+
+```sql
+DELETE FROM target_role_mappings WHERE target = $1
+```
+
+and `rollbackAndConverge` then iterates `dbListRoleMappings` **after** the
+restore. So the loop reaches holders of roles in the *restored* set only.
+
+A person who holds only a role whose mapping the rollback **deletes** is in no
+post-rollback holder list. No convergence is queued for them, and their account
+keeps what that mapping granted. `TestARollbackReResolvesEveryoneItReaches`
+asserts the dedup but stubs one holder list for every mapping, so it cannot see
+the difference between the before-set and the after-set.
+
+Two consequences, and they point the same way:
+
+1. **For M7:** the cohort the ceremony must state is the **union of the before
+   and after sets**, not the after set. Someone losing an entitlement is as
+   affected as someone gaining one, and is arguably the one who should be
+   counted most carefully. Today's `converged` would understate it.
+2. **For the backend:** this looks like a real gap. The six-hourly sweep should
+   catch it — Syndra's desired set moved and the target's did not, which
+   classifies as a fast-forward and applies — so it is a delay of up to six
+   hours rather than a silent permanent divergence. **That expectation is
+   unverified and needs its own test**; it is stated here as the reason this is
+   not urgent, not as a finding.
+
+Neither is a reason to hold the drawing. The union is what M7 should say it
+counts, and the backend change is the same loop reading two sets instead of one.
+
 ## 4 · Still open, and who owns it
 
 - Questions 7, 10 and 13 above.
