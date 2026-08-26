@@ -104,6 +104,23 @@ Recorded because the brief is in this folder and will be read again.
   at 04:00, and the built page has them six panels apart. This is the strongest
   structural finding in the reply.
 
+## 3a · The six proposed components, against `components/ui/`
+
+Reply section 6 proposes six additions. Read against the tree before anything is
+built, which is the check the last commission skipped.
+
+| # | Proposed | Verdict |
+|---|---|---|
+| 1 | Three-state block | **New — build it.** Nothing compares three values with the differing pair marked. It replaces prose: `MergeFindings.tsx` currently says *"It was ["makers"] when Syndra last saw it, and is [] now"*, which is the same content as a sentence and loses the comparison at a glance. |
+| 2 | Count chip, three forms | **Extend `Badge`, do not add a component.** `Badge` already has `hollow` for the zero form. It needs one more form — the em dash for a failed read — and that is a prop, not a peer. |
+| 3 | Freshness strip | **Already exists. Do not build it.** `components/ui/ReadFreshness.tsx` is exactly this: a tone dot, a sentence carrying an age, a truncation clause, and a `Read again` that renders only when the read is stale. The reply says it considered "the amber banner inside §21's unmanaged inventory, which is where this behaviour currently lives" — it did not know the shared component exists, because it could not. **This is this commission's version of the §23 mistake**, caught before it cost anything. |
+| 4 | Claimant pair | **New — build it.** The existing dialog shape pairs a recommended action with a quieter one, and every instance has a preferred answer. The reply's argument is right: a preference here would be the design deciding the thing its own copy says it cannot. |
+| 5 | Neutral reading dot | **Extend `STATUS_TONE`.** It carries healthy / accent / warn / danger; this adds `neutral` at `--faint`. One line, not a component. |
+| 6 | Region index | **New — build it**, touch only. |
+
+So: two genuinely new components, two one-line extensions of existing ones, one
+touch-only addition, and one that must not be built at all.
+
 ## 4 · Still open, and who owns it
 
 - Questions 7, 10 and 13 above.
