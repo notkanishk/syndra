@@ -149,6 +149,12 @@ function TargetPanel({ view }: { view: MyTargetView }) {
               <>Waits on a person, not a timer</>
             )}
           </p>
+          {/* Design C3, and the one place the pause sits INSIDE the state card
+              rather than below it: the thing they are waiting for is exactly the
+              thing that cannot happen, so the two facts are one fact and
+              separating them would let somebody read the first half and miss
+              it. */}
+          <Paused lifecycle={view.lifecycle} label={label} creating />
           {held.length > 0 && <Withheld items={held} />}
         </div>
       </Card>
@@ -179,6 +185,12 @@ function TargetPanel({ view }: { view: MyTargetView }) {
 
         {held.length > 0 && <Withheld items={held} />}
         <NotYetUsable view={view} />
+        {/* Their account first, at full contrast, then the pause. Reversing
+            those two would be the whole failure of this page — and the notice
+            leads with the sentence a member cannot infer, that the server is
+            fine and their access has not changed, because that clause is what
+            stops them going to mount the share to check. */}
+        <Paused lifecycle={view.lifecycle} label={label} />
         <CredentialForm view={view} />
         <StorageUsage view={view} />
         <ConnectionInstructions view={view} />
@@ -289,6 +301,7 @@ function StorageUsage({ view }: { view: MyTargetView }) {
 function CredentialForm({ view }: { view: MyTargetView }) {
   const [password, setPassword] = useState("");
   const set = useSetStorageCredential(view.target);
+  const paused = view.lifecycle === "draining" || view.lifecycle === "read_only";
 
   if (!view.reachable) {
     // Replaced, never disabled. A credential set against a target that never
@@ -348,8 +361,17 @@ function CredentialForm({ view }: { view: MyTargetView }) {
         </p>
       )}
       <div>
+        {/* The label carries the whole promise while changes are paused, so a
+            member who reads nothing else on the page cannot mistake this for
+            taking effect now. The field stays live and the button stays
+            enabled: the moment either dims, the page has said their access is
+            affected, which is false. */}
         <Button type="submit" variant="accent" disabled={!password || set.isPending}>
-          {set.isPending ? "Setting…" : "Set password"}
+          {set.isPending
+            ? "Setting…"
+            : paused
+              ? "Save it for when changes resume"
+              : "Set password"}
         </Button>
       </div>
       {set.data && (
@@ -432,6 +454,112 @@ function Platform({ label, value }: { label: string; value: string }) {
     <div className="grid gap-1">
       <p className="text-[12.5px] text-faint">{label}</p>
       <CopyableValue value={value} label={label} />
+    </div>
+  );
+}
+
+/**
+ * Changes to this account are paused (designs C1, C2, C3).
+ *
+ * An operator sets a target draining or read-only, and the member was told
+ * nothing at all. Under either state their ACCESS is unchanged — the file
+ * server works and their files are where they left them — and what stops is
+ * Syndra making changes to their account, of which the one they can start from
+ * this page is setting a password. So a member set one, watched it not work,
+ * and had no way to learn why.
+ *
+ * Three things this copy will not do.
+ *
+ * It does not say `maintenance`, `draining` or `read-only`. Those are operator
+ * words for a thing a member experiences as a pause, and naming a state nobody
+ * outside the operator's head can interpret is not an explanation.
+ *
+ * It leads with the sentence they cannot infer — the server is fine, your
+ * access has not changed, connect right now — before it says what is paused.
+ * That clause is what stops somebody going to mount the share to check.
+ *
+ * And it gives an estimate to exactly one of the two states. A drain is minutes
+ * and ends by itself; read-only is somebody working on the server and ends when
+ * they say so. "Shortly" attached to an open-ended pause is the small lie that
+ * makes the rest of a page untrustworthy — so in its place, read-only offers a
+ * person, which is an honest escalation and costs nothing Syndra cannot keep.
+ */
+function Paused({
+  lifecycle,
+  label,
+  creating = false,
+}: {
+  lifecycle?: string;
+  label: string;
+  /** The account does not exist yet, so the pause is what is stopping it. */
+  creating?: boolean;
+}) {
+  if (lifecycle !== "draining" && lifecycle !== "read_only") return null;
+  const draining = lifecycle === "draining";
+
+  return (
+    <div className="grid gap-2 rounded-inner border border-warn-line bg-warn-soft px-4 py-3">
+      <p className="text-[14px] font-semibold text-warn-text">
+        {creating
+          ? "Right now it is waiting on us, not on a queue"
+          : draining
+            ? "Changes to this account are paused for a few minutes"
+            : `Changes to this account are paused while we work on ${label}`}
+      </p>
+
+      <p className="text-[13.5px] leading-[1.55] text-muted">
+        {creating ? (
+          <>
+            Somebody is working on {label}, so we have{" "}
+            <span className="font-semibold text-ink">deliberately stopped</span> making
+            changes to accounts on it — which includes creating yours. The server itself is
+            working normally; this is a pause we chose, not a fault. Your account will be
+            created as soon as changes resume. It is first in line and nothing has been lost
+            or missed.
+          </>
+        ) : (
+          <>
+            <span className="font-semibold text-ink">
+              {label} is working normally and your access to it has not changed
+            </span>{" "}
+            — you can connect and use your files right now, exactly as above.{" "}
+            {draining ? (
+              <>
+                What is paused is us making changes to your account on it, while the last few
+                in-flight changes finish.
+              </>
+            ) : (
+              <>
+                Somebody is working on the server, so we have{" "}
+                <span className="font-semibold text-ink">deliberately stopped</span> making
+                changes to accounts on it until they are finished.
+              </>
+            )}
+          </>
+        )}
+      </p>
+
+      {!draining && (
+        // No estimate. A person instead — they can see the pause, they know how
+        // long they expect it to last, and they can lift it. That is a faster
+        // answer than this page can give, and it is one Syndra can keep.
+        <p className="text-[13.5px] leading-[1.55] text-muted">
+          <span className="font-semibold text-ink">
+            If you need {creating ? "it" : "the new password to work"} today
+          </span>
+          , ask whoever runs the makerspace — they can see this pause and how long they expect
+          it to last, and we would rather you asked a person than waited on a page.
+        </p>
+      )}
+
+      {!creating && (
+        <p className="text-[13px] text-faint">
+          You can set a new password now and we will apply it as soon as changes resume. Your
+          current password keeps working until then, and you do not need to come back and do
+          it again. Nothing else on this page is affected — your access, your share and your
+          folder are unchanged.
+        </p>
+      )}
     </div>
   );
 }

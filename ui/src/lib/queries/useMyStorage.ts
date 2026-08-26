@@ -37,6 +37,17 @@ export interface MyTargetView {
   /** The add-on answered. A member whose target is down is told, not shown a form that fails. */
   reachable: boolean;
   /**
+   * The state an operator put the target in: `active`, `draining` or
+   * `read_only`.
+   *
+   * Not a boolean, and the two pauses are not interchangeable. A drain is
+   * minutes and ends by itself; read-only is somebody working on the server and
+   * ends when they say so. One earns the word "shortly" and the other must
+   * never be given it — an estimate attached to an open-ended pause is the
+   * small lie that makes the rest of a page untrustworthy.
+   */
+  lifecycle?: "active" | "draining" | "read_only";
+  /**
    * When their access was written down, for the middle state.
    *
    * The wait is on a person resuming the drain, not on a timer, so the page

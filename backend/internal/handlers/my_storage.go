@@ -59,6 +59,21 @@ type myTargetView struct {
 	// Reachable says the add-on answered. A member whose target is down is told
 	// so rather than shown a credential form that will fail.
 	Reachable bool `json:"reachable"`
+	// Lifecycle is the state an operator put the target in: `active`,
+	// `draining` or `read_only`.
+	//
+	// A member is affected by this and was never told. Under either pause their
+	// ACCESS is unchanged — the file server works and their files are where
+	// they left them — and what stops is Syndra making changes to their
+	// account, of which the one they can start from this page is setting a
+	// password. Saying nothing meant a member set one, watched it not work, and
+	// had no way to learn why.
+	//
+	// The two states are kept apart rather than collapsed to a boolean, because
+	// they differ in exactly the way a member needs: a drain is minutes and ends
+	// by itself, and read-only is somebody working on the server and ends when
+	// they say so. One deserves "shortly" and the other must not be given it.
+	Lifecycle string `json:"lifecycle,omitempty"`
 	// Storage is what the TARGET says about this account: whether it can be
 	// used yet, and how much room is left.
 	//
@@ -200,7 +215,9 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 	if !addonsCallable(target) {
 		return view, nil
 	}
-	view.Reachable = addonsHealth(r.Context(), target).Reachable
+	health := addonsHealth(r.Context(), target)
+	view.Reachable = health.Reachable
+	view.Lifecycle = health.Lifecycle
 
 	// Only where there is an account to connect WITH. In the other two states
 	// the instructions would describe reaching something that is not there —
