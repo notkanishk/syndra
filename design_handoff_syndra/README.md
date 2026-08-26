@@ -29,6 +29,14 @@ first pass and are the newest work in the bundle.
 
 ---
 
+## Commission 2 is open — `addon-2/`
+
+The target page grew from §21's four panels to eleven, and six surfaces built
+since appear on no board at all. `addon-2/README.md` says exactly which, and
+`addon-2/CLAUDE-DESIGN-PROMPTS.md` is the prompt pack that commissions them.
+Prompt A is the one that matters: the target page's *composition*, which was
+never designed even though four of its panels were.
+
 ## Read BUILD-NOTES.md first
 
 `BUILD-NOTES.md` was written after reading the Syndra repo and **overrides this
