@@ -21,7 +21,15 @@ export type BulkOp =
   | "remove_role"
   | "assign_bundle"
   | "remove_bundle"
-  | "extend";
+  | "extend"
+  // The mapping surfaces. They have spoken this shape since they were
+  // rehearsed and were never in the union, so every caller building a result
+  // from one had to launder its own `op` through a cast — which is a type
+  // agreeing to be silent rather than a type that is right.
+  | "create_mapping"
+  | "edit_mapping"
+  | "delete_mapping"
+  | "rollback_mappings";
 
 export interface BulkGrantInput {
   op: BulkOp;
@@ -145,7 +153,21 @@ export function useApplyBulk() {
   });
 }
 
-/** Verb for a headline: "Grant Laser Lab / trained to 47 people". */
+/**
+ * Verb for a headline: "Grant Laser Lab / trained to 47 people".
+ *
+ * Only the people-facing bulk operations reach here — `BulkDialog` is its one
+ * caller, and it composes a cohort by hand. The mapping surfaces speak the same
+ * plan shape and never use this: each one titles its own dialog with the
+ * mapping it is about, which is the fact an operator needs and which a verb
+ * cannot carry.
+ *
+ * They are answered anyway rather than left to fall off the end. The switch was
+ * exhaustive over a union that had been wrong for as long as the mapping
+ * surfaces have existed, so adding them to the union is what made this
+ * reachable — and a function that returns `undefined` where a title goes puts
+ * an empty heading on a dialog rather than failing.
+ */
 export function describeBulkOp(op: BulkOp): string {
   switch (op) {
     case "assign_role":
@@ -158,5 +180,13 @@ export function describeBulkOp(op: BulkOp): string {
       return "Remove from a bundle";
     case "extend":
       return "Extend expiring access";
+    case "create_mapping":
+      return "Add a mapping";
+    case "edit_mapping":
+      return "Change what a role reaches";
+    case "delete_mapping":
+      return "Stop a role reaching that";
+    case "rollback_mappings":
+      return "Roll back a mapping set";
   }
 }
