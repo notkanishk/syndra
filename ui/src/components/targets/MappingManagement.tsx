@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
+import { AddMappingButton, RefusedFields } from "@/components/targets/AddMappingDialog";
 import { ConvergeButton } from "@/components/targets/ConvergeEntitlements";
 import { Relative } from "@/components/ui/Time";
 import { RoleRef, UserName } from "@/components/names";
@@ -65,6 +66,7 @@ export function MappingManagement({ target }: { target: string }) {
           title="What roles reach here"
           count={mappings.data?.length}
           note="Editing one moves access for everybody holding that role"
+          action={<AddMappingButton target={target} first={(mappings.data ?? []).length === 0} />}
         />
         <ListStates
           isLoading={mappings.isLoading}
@@ -74,8 +76,8 @@ export function MappingManagement({ target }: { target: string }) {
           errorTitle="The mappings could not be read"
           empty={
             <EmptyState
-              title="Nothing maps here yet"
-              guidance={`No role confers anything on ${targetLabel(target)}, so nobody is entitled to it.`}
+              title={`No role reaches ${targetLabel(target)}, so no role grants anything on it`}
+              guidance={`What is missing is the sentence that says which role should get an account here — until one exists, nobody is provisioned. Pick a role and the value it should reach, and the rehearsal will say how many people that is before anything is queued. An add-on registered and unmapped is the ordinary state between starting its container and deciding who it is for; it is not an error.`}
             />
           }
         >
@@ -92,6 +94,8 @@ export function MappingManagement({ target }: { target: string }) {
           </>
         </ListStates>
       </Card>
+
+      <RefusedFields target={target} />
 
       <VersionHistory target={target} />
 
