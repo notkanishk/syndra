@@ -92,6 +92,13 @@ reader is somebody months later deciding whether to roll back to it.
 1. **There is no UI for creating a mapping.** The board draws "Add a mapping"
    and it was never built. The backend path, the rehearsal and the typed client
    are all in place, so what is missing is the form itself.
-2. **000045 is unapplied.** `decision_reason` is required by the constraint the
+2. **The requests queue renders every row.** Found by a test that times out
+   under load: asserting the 500-row ceiling means rendering 501 real rows, and
+   `RequestsScreen` caps nothing. The drift queue and the people list both cap
+   at a page and offer a "show all" control; this one does not, so an operator
+   with a long queue pays the whole cost on arrival. Out of scope for this
+   branch — it is not the target plane — and the test carries a raised timeout
+   with the reason rather than a weakened assertion.
+3. **000045 is unapplied.** `decision_reason` is required by the constraint the
    migration adds, so a deployment running the new backend against the old
    schema refuses every decision. It must go out together.

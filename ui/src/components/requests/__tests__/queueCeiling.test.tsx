@@ -69,7 +69,20 @@ beforeEach(() => {
  * sequence the bar exists to prevent.
  */
 describe("the request queue states its ceiling before the tap", () => {
-  it("names the limit over 500", () => {
+  // The ceiling is 500, so exceeding it means rendering 501 real rows through
+  // the real screen — about a second and a half on its own, and more under a
+  // loaded parallel run, where it has crossed the 5s default and failed while
+  // passing in isolation.
+  //
+  // The timeout is raised rather than the assertion weakened. Selecting fewer
+  // rows would not exceed the ceiling, and driving the selection state directly
+  // would test the bar rather than this queue's use of it — which is the thing
+  // that was broken: the bar could say this and the queue was not telling it.
+  //
+  // The row count is not incidental to the cost. `RequestsScreen` renders every
+  // open row, where the drift queue and the people list both cap and offer a
+  // "show all" — see the note in SHIPPED.md.
+  it("names the limit over 500", { timeout: 20_000 }, () => {
     renderQueue(501);
     fireEvent.click(screen.getByRole("checkbox", { name: /Select these 501 requests/ }));
 
