@@ -11,6 +11,7 @@ Paste these three files, **in this order, in one conversation**:
 | 1 | `PROMPT-1-design-system.md` | The design system. Paste it first, on its own, and wait for the acknowledgement. Every later prompt assumes it is in context. |
 | 2 | `PROMPT-2-target-page.md` | **The commission.** Redesign `/system/targets/{target}` as one coherent screen. |
 | 3 | `PROMPT-3-supporting-screens.md` | Six adjacent screens that were built and never drawn. Paste after 2 — they inherit its structural answer. |
+| 4 | `PROMPT-4-what-to-return.md` | What to hand back, and what not to. Paste last. |
 
 `REFERENCE-current-page.md` is **not** a prompt. It is the panel-by-panel
 inventory of what the page holds today, with each panel's endpoint and data.
@@ -39,7 +40,25 @@ findings and their decision form, the target's own system health, the managed
 roster, the two findings that render inside Health, and the applied history on a
 grant somebody removed by hand. Prompt 3.
 
-## What comes back
+## What comes back — and what to do with it
 
-Design canvases (`.dc.html`). Drop them in `design/` beside this README, and
-record what shipped against them the way `BOARD-AUDIT.md` does for §19–§31.
+**Canvases and captions. Not a build plan.** Prompt 4 says so explicitly, and the
+reason is in this bundle's own history: the first commission's handoff declared a
+screen canonical and told the developer to migrate the existing ones onto it. A
+better component already existed, with five callers. `../BUILD-NOTES.md` §2 is
+the correction, and it opens by saying it overrides the design README — because
+the README was written before the code was visible.
+
+None of that was Claude Design's fault. It had not read the repository and could
+not have. The lesson is only that **the reconciliation is the reader's job, not
+the designer's**, and that it is written afterwards.
+
+So the sequence is:
+
+1. Drop the canvases in `design/` beside this README.
+2. Read them against the code and write the reconciliation — panel by panel: what
+   the redesign changes, what is already right, and what it got wrong about the
+   codebase. `../BUILD-NOTES.md` is the shape going in;
+   `openspec/changes/one-control-surface/BOARD-AUDIT.md` is the shape coming back
+   out, recording what shipped against what was drawn.
+3. Only then break it into work.
