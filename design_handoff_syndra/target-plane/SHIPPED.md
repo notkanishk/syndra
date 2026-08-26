@@ -90,8 +90,8 @@ reader is somebody months later deciding whether to roll back to it.
 ## Gaps this work opened or found, in the order they matter
 
 1. **There is no UI for creating a mapping.** The board draws "Add a mapping"
-   and it was never built, so the create path is API-only. The backend is now
-   safe either way, and the rehearsal it needs already exists.
+   and it was never built. The backend path, the rehearsal and the typed client
+   are all in place, so what is missing is the form itself.
 2. **000045 is unapplied.** `decision_reason` is required by the constraint the
    migration adds, so a deployment running the new backend against the old
    schema refuses every decision. It must go out together.
