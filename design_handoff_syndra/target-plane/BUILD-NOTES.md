@@ -121,6 +121,60 @@ built, which is the check the last commission skipped.
 So: two genuinely new components, two one-line extensions of existing ones, one
 touch-only addition, and one that must not be built at all.
 
+## 3b · Two answers sent back before the mapping zip
+
+Both were flagged by the reply as the hardest open questions of commission 3.
+Both are settled by the code, and the first corrects an error in my own brief.
+
+### A rollback does not rehearse. Nothing does it per mapping either.
+
+The brief told Claude Design that "edit, delete and rollback all rehearse before
+they land". **Rollback does not.** There is no rehearsal endpoint for it:
+
+```
+POST /targets/mappings/{id}/rehearse-edit      ← exists
+POST /targets/mappings/{id}/rehearse-delete    ← exists
+POST /targets/{target}/mappings/versions/{version}/rollback   ← no rehearsal
+```
+
+`handleRollbackMappingVersion` restores the version and calls
+`rollbackAndConverge`, returning `queued_convergences` — a convergence queued per
+affected holder, unrehearsed and with no cohort acknowledgement.
+
+I did not invent the claim. `useMappings.ts:14` and `MappingManagement.tsx:40`
+both assert it in comments, and I repeated them without checking the routes.
+**That is pre-existing drift in the repo**, not a design problem: two file
+headers describe a rehearsal the API never grew.
+
+So the honest answer to *does a rollback rehearse as one plan or one per
+mapping* is **neither, today**. Which of the three it should become is a product
+decision, and it is now the more interesting question:
+
+- one plan for the whole version is the only shape that matches what a rollback
+  *is* — a set restored together — and it fires the cohort ceremony once;
+- one per mapping would fire it up to once per row, for a single act;
+- unrehearsed, as now, is the only option that contradicts the screen's own
+  argument, since publishing is rehearsed and reverting a publish is not.
+
+The two stale comments should be corrected either way, and are not to be treated
+as a specification.
+
+### The member payload can tell draining from read-only, and should
+
+`MyTargetView` — what `GET /api/v1/me/targets` already returns — carries
+`reachable: boolean` today. Adding `lifecycle` to it is an extension of a payload
+the member already receives, not a new read.
+
+**It must not be a boolean.** Three values exist at the source and are distinct
+all the way down: the add-on's own `LIFECYCLE_STATE` is `active | draining |
+read_only`, `TargetHealth.lifecycle` carries the same three, and the operator's
+maintenance strip renders all three. Collapsing them at the member boundary would
+be the only place in the system where the distinction is lost, and it is exactly
+the place where it changes what somebody should do: under draining a credential
+they set will land once the queue clears, and under read-only it will not.
+
+So **C1 and C2 both stand as drawn.**
+
 ## 4 · Still open, and who owns it
 
 - Questions 7, 10 and 13 above.
