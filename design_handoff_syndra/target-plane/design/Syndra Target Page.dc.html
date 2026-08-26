@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#080906; color:#f3f5ef; font-family:Figtree, sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:#9b7bff; text-decoration:none; border-bottom:1px solid rgba(155,123,255,.28); }
+  a:hover { color:#c9b6ff; border-bottom-color:rgba(201,182,255,.5); }
+  * { box-sizing:border-box; }
+  @keyframes breathe { 0%,100% { opacity:.35 } 50% { opacity:1 } }
+  .breathing { animation:breathe 2.4s ease-in-out infinite alternate; }
+  @media (prefers-reduced-motion: reduce) { .breathing { animation:none; opacity:.8 } }
+</style>
+</helmet>
+
+<div style="padding:64px 56px 120px;display:flex;flex-direction:column;gap:64px;background:#0b0c0a;min-height:100vh">
+
+  <div style="display:flex;flex-direction:column;gap:16px;max-width:900px">
+    <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#9b7bff">Redesign · /system/targets/{target} · desktop 1440</span>
+    <h1 style="margin:0;font-family:'Bricolage Grotesque',sans-serif;font-size:40px;font-weight:500;letter-spacing:-.02em;line-height:1.1">One precondition, then three regions</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.6);text-wrap:pretty">The four-question spine survives as an argument and stops being four peers. Two of the questions were never independent of each other, one of them grew into a second subject, and the category the board did not anticipate — work waiting on a human — gets a seat with a name rather than being distributed back into the four, which is how the current page happened.</p>
+  </div>
+
+  <div style="display:flex;gap:18px;align-items:stretch;flex-wrap:wrap;max-width:1440px">
+    <div style="flex:1 1 420px;background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;padding:22px 24px;display:flex;flex-direction:column;gap:12px">
+      <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">What merged, and why</div>
+      <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72)"><strong style="font-weight:600">Question 1 and question 4 are one question.</strong> A reachability reading has no meaning on its own: <em>not answering</em> while somebody is draining it for a credential rotation is a different fact from <em>not answering</em> at 04:00 on a Sunday, and an operator who reads the second when the first is true walks to the wrong machine. Health and maintenance cannot sit six panels apart. Together they are the page's precondition — <em>can anything I do here land, and whose machine is it if not</em> — and they sit in a band above everything, beside the target's own readings, because those are a second machine and never the same question.</p>
+      <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72)"><strong style="font-weight:600">Question 3 absorbs the sweep.</strong> What an add-on can do and what actually runs against it are the same question asked twice; the manifest lists the operations and reconciliation is the thing that calls them on a schedule.</p>
+    </div>
+    <div style="flex:1 1 420px;background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;padding:22px 24px;display:flex;flex-direction:column;gap:12px">
+      <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Where the fifth category lives</div>
+      <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72)"><strong style="font-weight:600">Its own region, ranked second.</strong> Distributing it back into the four is exactly what produced the page you have: two findings rendered inside Health, one panel two-thirds of the way down. A difference reconciliation refuses to resolve is not a property of the target and not a property of a person — it is a third kind of thing, and it is the only content on this page that costs somebody access today.</p>
+      <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72)">It is second and not first because it is unreadable without the band: three findings on a target that has not answered for forty minutes are three findings nobody can act on, and the band is what says so.</p>
+    </div>
+    <div style="flex:1 1 420px;background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;padding:22px 24px;display:flex;flex-direction:column;gap:12px">
+      <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">No tabs on the desktop</div>
+      <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72)">A tab bar satisfies <em>nothing appears with its count</em> and fails the thing that rule is for. The four tab labels are identical on both pages; a finding under a tab nobody is looking at is a finding nobody is looking at, and the only way to fix it is a badge on the tab — data driving structure by another route.</p>
+      <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72)"><strong style="font-weight:600">The desktop carries what the phone could not</strong> because 1188px of content column puts four region headings in one scroll, each one a sentence rather than a word, and the page difference is carried by copy in a fixed place: the line under the title, and the region's own lede. Nothing grows a panel; two sentences read differently.</p>
+    </div>
+  </div>
+
+  <div style="max-width:1440px;background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+    <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+      <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Where the eleven panels went</span>
+      <span style="font-size:13.5px;color:rgba(243,245,239,.42);flex:1">Two of them leave the page.</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr">
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;gap:12px;align-items:baseline"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.34);flex:none">01</span><span style="font-size:15px;flex:1">Health</span></div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);border-left:1px solid rgba(255,255,255,.06);font-size:15px;color:rgba(243,245,239,.72)">Band · <strong style="color:#f3f5ef;font-weight:600">Is it answering</strong></div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;gap:12px;align-items:baseline"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.34);flex:none">02</span><span style="font-size:15px;flex:1">What the target reports</span></div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);border-left:1px solid rgba(255,255,255,.06);font-size:15px;color:rgba(243,245,239,.72)">Band · <strong style="color:#f3f5ef;font-weight:600">What TrueNAS reports</strong>, beside it, never merged into it</div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;gap:12px;align-items:baseline"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.34);flex:none">11</span><span style="font-size:15px;flex:1">Maintenance</span></div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);border-left:1px solid rgba(255,255,255,.06);font-size:15px;color:rgba(243,245,239,.72)">Band, footer strip — the state that changes what the readings above it mean</div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;gap:12px;align-items:baseline"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.34);flex:none">09</span><span style="font-size:15px;flex:1">Waiting on a decision</span></div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);border-left:1px solid rgba(255,255,255,.06);font-size:15px;color:rgba(243,245,239,.72)">Region 1 · <strong style="color:#f3f5ef;font-weight:600">Waiting on a person</strong> — with the edited change record and the ownership disagreement, which had no home at all</div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;gap:12px;align-items:baseline"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.34);flex:none">05</span><span style="font-size:15px;flex:1">People with an account here</span></div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);border-left:1px solid rgba(255,255,255,.06);font-size:15px;color:rgba(243,245,239,.72)">Region 2 · <strong style="color:#f3f5ef;font-weight:600">Bound</strong></div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;gap:12px;align-items:baseline"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.34);flex:none">07</span><span style="font-size:15px;flex:1">Accounts Syndra did not create</span></div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);border-left:1px solid rgba(255,255,255,.06);font-size:15px;color:rgba(243,245,239,.72)">Region 2 · <strong style="color:#f3f5ef;font-weight:600">Not created by Syndra</strong> — three populations, three headings, never one count</div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;gap:12px;align-items:baseline"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.34);flex:none">06</span><span style="font-size:15px;flex:1">Accounts nothing explains any more</span></div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);border-left:1px solid rgba(255,255,255,.06);font-size:15px;color:rgba(243,245,239,.72)">Region 2 · <strong style="color:#f3f5ef;font-weight:600">Lost their reason</strong></div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;gap:12px;align-items:baseline"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.34);flex:none">08</span><span style="font-size:15px;flex:1">What it can do</span></div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);border-left:1px solid rgba(255,255,255,.06);font-size:15px;color:rgba(243,245,239,.72)">Region 3 · <strong style="color:#f3f5ef;font-weight:600">What runs here</strong></div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;gap:12px;align-items:baseline"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.34);flex:none">10</span><span style="font-size:15px;flex:1">Reconciliation</span></div>
+      <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);border-left:1px solid rgba(255,255,255,.06);font-size:15px;color:rgba(243,245,239,.72)">Region 3, beside the operations it calls</div>
+      <div style="padding:14px 20px;display:flex;gap:12px;align-items:baseline"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.34);flex:none">03 · 04</span><span style="font-size:15px;flex:1">What roles reach here · Published versions</span></div>
+      <div style="padding:14px 20px;border-left:1px solid rgba(255,255,255,.06);font-size:15px;color:rgba(243,245,239,.72)"><strong style="color:#ff8d82;font-weight:600">Leave the page.</strong> They were designed as a mapping screen and should be one. What stays is a census line — two sentences and one <em>outline</em> control — inside Region 2, because a mapping is <em>why</em> a person is bound</div>
+    </div>
+  </div>
+
+  <div style="max-width:1180px;background:rgba(155,123,255,.09);border:1px solid rgba(155,123,255,.28);border-radius:20px;padding:22px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Two subjects, one page — and the seam is drawn</div>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78)">People and their access keeps its place on this page, under a rule and its own eyebrow, and does not become a second screen. <em>Nothing bound</em> means one thing on a target that answered a second ago and something else entirely on one that has not answered for forty minutes — split them and the roster loses the only sentence that explains it. The seam is a hairline and a heading, not a tab: an operator arriving with <em>why can this person not get in?</em> reads the band, crosses the seam, and is on the roster in one scroll.</p>
+  </div>
+
+  <div style="height:1px;background:rgba(255,255,255,.06);max-width:1440px"></div>
+
+  <figure id="T1" style="margin:0;display:flex;flex-direction:column;gap:16px;width:1440px">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:24px;padding:0 8px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-family:'JetBrains Mono',monospace;font-size:12.5px">T1</span>
+      <span style="font-size:15.5px;font-weight:600">The page, redesigned — a healthy target</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">1440 · rail drawn</span>
+    </div>
+    <div style="width:1440px;background:#080906;border:1px solid rgba(255,255,255,.14);border-radius:20px;overflow:hidden;display:flex;align-items:stretch">
+      <sc-if value="{{ showRail }}" hint-placeholder-val="{{ true }}">
+        <div style="width:252px;flex:none;background:#101210;border-right:1px solid rgba(255,255,255,.06);display:flex;align-items:stretch">
+          <dc-import name="Sidebar" style="width:252px;flex:none" view="advanced" active="TrueNAS" hint-size="252px,1165px"></dc-import>
+        </div>
+      </sc-if>
+      <div style="flex:1;min-width:0;padding:32px 24px 44px;display:flex;flex-direction:column;gap:40px;background:#0b0c0a">
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)"><span>Advanced</span><span>›</span><span>System</span><span>›</span><span style="color:rgba(243,245,239,.6)">TrueNAS</span></div>
+          <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:40px;font-weight:500;letter-spacing:-.02em;line-height:1.1">TrueNAS</div>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">/system/targets/truenas</span>
+          </div>
+          <p style="margin:0;font-size:15px;line-height:1.55;color:rgba(243,245,239,.72);max-width:80ch">TrueNAS 25.10.5, answering and accepting changes. Nothing is waiting on a person.</p>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">Is it answering</div>
+            <span style="font-size:15px;color:rgba(243,245,239,.6);flex:1">Two machines, side by side, never merged into one word.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
+
+            <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+              <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">Syndra's reach</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">GET /targets/truenas/health</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;display:flex;flex-direction:column;gap:5px;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span><span style="font-size:15.5px;font-weight:600;flex:1">Serving</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">serving</span></div>
+                <div style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">TrueNAS 25.10.5. Answering, and accepting changes.</div>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:5px;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15.5px;font-weight:600;flex:1">Key expiry unrecorded</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">key_expiry_unknown</span></div>
+                <div style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">The transport credential can expire without Syndra knowing, and the day it does this target looks like an outage. <strong style="color:#f3f5ef;font-weight:600">Look at Syndra.</strong></div>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:5px;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15.5px;font-weight:600;flex:1">Two shares unaudited</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">shares_unaudited</span></div>
+                <div style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">An activity report for a member on <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.78)">scratch</span> or <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.78)">archive</span> can only come back empty. <strong style="color:#f3f5ef;font-weight:600">Look at the NAS.</strong></div>
+              </div>
+              <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Last answered</span><span style="font-size:15px">3 seconds ago</span></div>
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">In flight</span><span style="font-size:15px">0 calls</span></div>
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Lifecycle</span><span style="font-size:15px">Active</span></div>
+              </div>
+              <div style="padding:13px 20px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:11px;background:rgba(243,245,239,.04)">
+                <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+                <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.72);flex:1">This snapshot was read just now.</span>
+              </div>
+            </div>
+
+            <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+              <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">What TrueNAS reports</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">GET /targets/truenas/system-health</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;display:flex;flex-direction:column;gap:5px;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15.5px;font-weight:600;flex:1">Uncorrectable error on <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#f3f5ef">/dev/sde</span></span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">alert · open</span></div>
+                <div style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">TrueNAS raised it on 14 July and has not cleared it. Syndra is repeating the words the target used. <strong style="color:#f3f5ef;font-weight:600">Look at the NAS.</strong></div>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+                <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:none">tank</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Online. 2.1 TB free of 7.3 TB.</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+                <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:none">smb</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Running, enabled at boot. <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.6)">nfs</span> is off, and was configured off.</span>
+              </div>
+              <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);display:grid;grid-template-columns:1fr 1fr;gap:14px">
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Host</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">nas-01.makerspace.lan</span></div>
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Up</span><span style="font-size:15px">41 days</span></div>
+              </div>
+              <div style="padding:13px 20px;border-top:1px solid rgba(255,255,255,.06);background:rgba(243,245,239,.04);font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.72)">Alerts, pools, services and the host were all read. Nothing here was skipped — <em>nothing is wrong</em> and <em>Syndra could not look</em> never render the same.</div>
+            </div>
+          </div>
+
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:18px;overflow:hidden">
+            <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">What state somebody put it in</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">POST /targets/truenas/lifecycle</span>
+            </div>
+            <div style="padding:16px 20px;display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">
+              <div style="flex:1 1 520px;display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span><span style="font-size:15.5px;font-weight:600">Active — reads and changes both run</span></div>
+                <p style="margin:0;font-size:15px;line-height:1.55;color:rgba(243,245,239,.72)">Draining lets calls already issued settle, and refuses new ones; read-only refuses writes and keeps answering reads. Reads keep working in all three. Pick draining if you are about to pull a credential out from under a call — the number in flight above is what tells you when it is safe.</p>
+              </div>
+              <div style="flex:1 1 340px;display:flex;flex-direction:column;gap:11px">
+                <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+                  <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Say why · required</span>
+                  <span style="font-size:15px;color:rgba(243,245,239,.42)">The person who reads this next is not the person who set it.</span>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap">
+                  <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Start draining</span>
+                  <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Read only</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">Waiting on a person</div>
+            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:32px;padding:0 11px;border-radius:999px;border:1px solid rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-family:'JetBrains Mono',monospace;font-size:13.5px">0</span>
+            <span style="flex:1"></span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">GET /targets/truenas/merge-findings</span>
+          </div>
+          <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.6);max-width:96ch">Differences reconciliation will not resolve on its own, a change record edited after it was queued, and two of Syndra's own records disagreeing about who owns an account. None of these is a status. Each is a piece of work waiting on a human, and this region keeps its seat at zero.</p>
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;padding:22px 20px;display:flex;flex-direction:column;gap:9px">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Nothing is waiting on a person</div>
+            <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72);max-width:96ch">The sweep four hours ago compared what TrueNAS last reported, what Syndra wants and what TrueNAS holds, and resolved every difference it found. Nothing was left over.</p>
+          </div>
+        </div>
+
+        <div style="height:1px;background:rgba(255,255,255,.06)"></div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">The second subject on this page</span>
+            <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">People and their access here</div>
+              <span style="flex:1"></span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">GET /targets/truenas/inventory · /accounts/dormant</span>
+            </div>
+          </div>
+
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:16px 20px;display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+            <div style="flex:1 1 640px;display:flex;flex-direction:column;gap:6px">
+              <span style="font-size:15.5px;font-weight:600">Two role mappings reach TrueNAS. 34 people hold those roles.</span>
+              <span style="font-size:15px;line-height:1.55;color:rgba(243,245,239,.6)">Editing one moves access for everybody holding that role, so the mappings and their published versions live on their own screen — a fact with that reach has no room to breathe in a table row.</span>
+            </div>
+            <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Open mappings</span>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:11px;padding:13px 20px;background:rgba(243,245,239,.04);border:1px solid rgba(255,255,255,.06);border-radius:14px">
+            <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+            <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.72);flex:1">The account list was read just now.</span>
+          </div>
+
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+            <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Bound</span>
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.07);font-family:'JetBrains Mono',monospace;font-size:13.5px">2</span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">A person, an account, and Syndra's promise to keep them together.</span>
+            </div>
+            <div style="padding:14px 20px;min-height:60px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+              <div style="flex:1 1 420px;display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;align-items:baseline;gap:11px;flex-wrap:wrap"><span style="font-size:15.5px;font-weight:600">Ana Møller</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.6)">a.moller</span></div>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6)">Bound 6 weeks ago · uid 3104 · Fabrication share</span>
+              </div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Hold</span>
+                <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,92,77,.4);color:#ff8d82;font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(255,92,77,.1)" style-active="transform:scale(.97)">Take away</span>
+              </div>
+            </div>
+            <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:16px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+              <div style="flex:1 1 420px;display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;align-items:baseline;gap:11px;flex-wrap:wrap"><span style="font-size:15.5px;font-weight:600">Tomas Beck</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.6)">t.beck</span></div>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6)">Bound 12 days ago · uid 3111 · Fabrication share</span>
+              </div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Hold</span>
+                <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,92,77,.4);color:#ff8d82;font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(255,92,77,.1)" style-active="transform:scale(.97)">Take away</span>
+              </div>
+            </div>
+            <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">A binding whose account no longer exists can be forgotten. Syndra stops managing it, nothing is deleted, and it can be bound again by adopting the account if it returns.</div>
+          </div>
+
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+            <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Not created by Syndra</span>
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.07);font-family:'JetBrains Mono',monospace;font-size:13.5px">2</span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Reported, never triaged. These are not drift.</span>
+            </div>
+            <div style="padding:14px 20px;min-height:60px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+              <div style="flex:1 1 420px;display:flex;flex-direction:column;gap:4px">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef">root</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6)">Built in. Not adoptable — Syndra will not take charge of the administrator account it would need in order to manage the others.</span>
+              </div>
+              <span style="padding:9px 15px;border-radius:999px;border:1px dashed rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-size:13.5px;font-weight:600">Adopt</span>
+            </div>
+            <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:16px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+              <div style="flex:1 1 420px;display:flex;flex-direction:column;gap:4px">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef">svc-backup</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6)">Made by hand · last seen 3 days ago</span>
+              </div>
+              <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Adopt</span>
+            </div>
+            <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">A real NAS holds <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.78)">root</span>, service accounts and whatever an admin made by hand. Adopting one ties it to a person and there is no undo: nothing on the account changes now; the next convergence applies their entitlements to it.</div>
+          </div>
+
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+            <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Lost their reason</span>
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;border:1px solid rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-family:'JetBrains Mono',monospace;font-size:13.5px">0</span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Accounts Syndra created and no longer has a reason for.</span>
+            </div>
+            <div style="padding:20px;display:flex;flex-direction:column;gap:9px">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">No account here has lost its reason</div>
+              <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72);max-width:96ch">Every account Syndra created is still granted by a role somebody holds. When one is not, it appears here grouped by cause — a former member's account is housekeeping, and a current member whose role was deleted is somebody quietly locked out. Same dormancy, opposite action.</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">What runs here</div>
+            <span style="font-size:15px;color:rgba(243,245,239,.6);flex:1">What the add-on can perform, and the thing that calls it.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1.32fr 1fr;gap:18px;align-items:start">
+
+            <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+              <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">What it can do</span>
+                <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.07);font-family:'JetBrains Mono',monospace;font-size:13.5px">6</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">From the roster's manifest, never a list in the frontend.</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">account.provision</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One account</span>
+                <span style="font-size:12.5px;font-weight:600;color:rgba(243,245,239,.42)">Runs unattended</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">account.converge</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One account</span>
+                <span style="font-size:12.5px;font-weight:600;color:rgba(243,245,239,.42)">Runs unattended</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">account.release</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One binding</span>
+                <span style="font-size:12.5px;font-weight:600;color:rgba(243,245,239,.42)">Runs unattended</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">account.purge</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One account and its files</span>
+                <span style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(255,92,77,.1);border:1px solid rgba(255,92,77,.4);color:#ff8d82;font-size:12.5px;font-weight:600">Stops and asks</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">credential.set</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One account</span>
+                <span style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(245,165,36,.12);color:#f7b955;font-size:12.5px;font-weight:600">Never logged: password</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">activity.get</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One share</span>
+                <span style="font-size:12.5px;font-weight:600;color:rgba(243,245,239,.42)">Runs unattended</span>
+              </div>
+              <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">An operation removed from the manifest disappears from this list with no change here. One the add-on cannot perform is shown disabled with its reason, never omitted — omitted, an operator wonders whether the feature exists at all.</div>
+            </div>
+
+            <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+              <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">Reconciliation</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">POST /targets/truenas/reconcile</span>
+              </div>
+              <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">
+                <p style="margin:0;font-size:15px;line-height:1.55;color:rgba(243,245,239,.72)">The scheduled sweep runs every six hours. It last ran 4 hours ago and returned 2 bound, 0 queued, 0 stale.</p>
+                <p style="margin:0;font-size:15px;line-height:1.55;color:#f3f5ef"><strong style="font-weight:600">Reconcile now</strong> reads the target and queues what is already owed. Queueing is not applying.</p>
+                <span style="align-self:flex-start;padding:10px 18px;border-radius:999px;background:#7f5af0;color:#f7f4ff;font-size:13.5px;font-weight:600;box-shadow:0 10px 26px -14px rgba(127,90,240,.85);transition:transform 180ms cubic-bezier(.22,.61,.36,1),box-shadow 120ms cubic-bezier(.4,0,.6,1)" style-hover="box-shadow:0 16px 34px -14px rgba(127,90,240,.95)" style-active="transform:scale(.97)">Reconcile now</span>
+              </div>
+              <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">The one violet fill on this page. Everything a row or a finding offers is <em>outline</em>, so a table where one action is quieter than the others cannot happen by accident.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <figcaption style="font-size:14px;line-height:1.6;color:rgba(243,245,239,.6);max-width:1180px;text-wrap:pretty"><strong style="color:#f3f5ef;font-weight:600">T1 · </strong>The healthy page, and healthy is not the absence of amber: two broken assumptions sit in the band on a target that is answering perfectly, because each one will cost an afternoon on the day it matters and neither is a fault to be cleared now. Left card is Syndra's reach and right card is the NAS's own readings; keeping them apart is what makes <em>look at Syndra</em> and <em>look at the NAS</em> possible at all. Freshness appears exactly twice on this page, for the two reads that actually have different ages — the health snapshot and the account list — and no other age is written anywhere. Every row action is outline; the single violet fill belongs to <em>Reconcile now</em>, which is rung 1: it names what it does and does not pretend to have done it.</figcaption>
+  </figure>
+
+  <figure id="T2" style="margin:0;display:flex;flex-direction:column;gap:16px;width:1440px">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:24px;padding:0 8px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-family:'JetBrains Mono',monospace;font-size:12.5px">T2</span>
+      <span style="font-size:15.5px;font-weight:600">The same page with work outstanding — three findings and an edited change record</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">content column · rail unchanged from 1a</span>
+    </div>
+    <div style="width:1440px;background:#080906;border:1px solid rgba(255,255,255,.14);border-radius:20px;overflow:hidden;display:flex;align-items:stretch">
+      <div style="flex:1;min-width:0;padding:32px 24px 44px;display:flex;flex-direction:column;gap:40px;background:#0b0c0a">
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)"><span>Advanced</span><span>›</span><span>System</span><span>›</span><span style="color:rgba(243,245,239,.6)">TrueNAS</span></div>
+          <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:40px;font-weight:500;letter-spacing:-.02em;line-height:1.1">TrueNAS</div>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">/system/targets/truenas</span>
+          </div>
+          <p style="margin:0;font-size:15px;line-height:1.55;color:rgba(243,245,239,.72);max-width:80ch">TrueNAS 25.10.5, answering and accepting changes. <strong style="color:#f3f5ef;font-weight:600">Four things are waiting on a person.</strong></p>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">Is it answering</div>
+            <span style="font-size:15px;color:rgba(243,245,239,.6);flex:1">Unchanged. Findings are not a health reading, and putting them in this card is what buried them.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
+            <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+              <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">Syndra's reach</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">GET /targets/truenas/health</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;display:flex;flex-direction:column;gap:5px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span><span style="font-size:15.5px;font-weight:600;flex:1">Serving</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">serving</span></div>
+                <div style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">TrueNAS 25.10.5. Answering, and accepting changes.</div>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:5px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15.5px;font-weight:600;flex:1">Key expiry unrecorded</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">key_expiry_unknown</span></div>
+                <div style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">The transport credential can expire without Syndra knowing, and the day it does this target looks like an outage. <strong style="color:#f3f5ef;font-weight:600">Look at Syndra.</strong></div>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:5px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15.5px;font-weight:600;flex:1">Two shares unaudited</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">shares_unaudited</span></div>
+                <div style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">An activity report for a member on <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.78)">scratch</span> or <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.78)">archive</span> can only come back empty. <strong style="color:#f3f5ef;font-weight:600">Look at the NAS.</strong></div>
+              </div>
+              <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Last answered</span><span style="font-size:15px">5 seconds ago</span></div>
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">In flight</span><span style="font-size:15px">0 calls</span></div>
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Lifecycle</span><span style="font-size:15px">Active</span></div>
+              </div>
+              <div style="padding:13px 20px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:11px;background:rgba(243,245,239,.04)">
+                <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+                <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.72);flex:1">This snapshot was read just now.</span>
+              </div>
+            </div>
+            <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+              <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">What TrueNAS reports</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">GET /targets/truenas/system-health</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;display:flex;flex-direction:column;gap:5px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15.5px;font-weight:600;flex:1">Uncorrectable error on <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#f3f5ef">/dev/sde</span></span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">alert · open</span></div>
+                <div style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">TrueNAS raised it on 14 July and has not cleared it. <strong style="color:#f3f5ef;font-weight:600">Look at the NAS.</strong></div>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px">
+                <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:none">tank</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Online. 2.1 TB free of 7.3 TB.</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px">
+                <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:none">smb</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Running, enabled at boot. <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.6)">nfs</span> is off, and was configured off.</span>
+              </div>
+              <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);display:grid;grid-template-columns:1fr 1fr;gap:14px">
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Host</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">nas-01.makerspace.lan</span></div>
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Up</span><span style="font-size:15px">41 days</span></div>
+              </div>
+              <div style="padding:13px 20px;border-top:1px solid rgba(255,255,255,.06);background:rgba(243,245,239,.04);font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.72)">Alerts, pools, services and the host were all read. Nothing here was skipped.</div>
+            </div>
+          </div>
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:16px 20px;display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+            <div style="flex:1 1 520px;display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span><span style="font-size:15.5px;font-weight:600">Active — reads and changes both run</span></div>
+              <span style="font-size:15px;line-height:1.55;color:rgba(243,245,239,.6)">Nothing here changes because there is work outstanding. A finding is not a reason to drain a target.</span>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Start draining</span>
+              <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Read only</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">Waiting on a person</div>
+            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:32px;padding:0 11px;border-radius:999px;background:rgba(243,245,239,.09);font-family:'JetBrains Mono',monospace;font-size:13.5px">4</span>
+            <span style="flex:1"></span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">GET /targets/truenas/merge-findings</span>
+          </div>
+          <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.6);max-width:96ch">Three differences the sweep 40 minutes ago would not resolve, and one change record edited after it was queued. Each names the three states it compared, because which two disagree is the whole of the decision.</p>
+
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+            <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+              <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none;margin-top:7px"></span>
+                <span style="font-size:15.5px;font-weight:600;flex:1 1 520px">TrueNAS holds a different uid for <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#f3f5ef">a.moller</span></span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">f_2210 · uid_conflict</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">TrueNAS last reported</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">uid 3104</span></div>
+                <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Syndra wants</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">uid 3104</span></div>
+                <div style="background:#0b0c0a;border:1px solid rgba(245,165,36,.26);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#f7b955">TrueNAS holds</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f7b955">uid 3120</span></div>
+              </div>
+              <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);flex:1 1 520px">A uid decides who owns her files. Reconciliation will not choose between two of these on its own, and a reason is required whichever way you go.</span>
+                <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Decide · 5 ways</span>
+              </div>
+            </div>
+            <div style="padding:16px 20px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:12px;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+              <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none;margin-top:7px"></span>
+                <span style="font-size:15.5px;font-weight:600;flex:1 1 520px">Home directory is not where Syndra recorded it</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">f_2211 · path_conflict</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">TrueNAS last reported</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">/mnt/tank/home/a.moller</span></div>
+                <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Syndra wants</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">/mnt/tank/home/a.moller</span></div>
+                <div style="background:#0b0c0a;border:1px solid rgba(245,165,36,.26);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#f7b955">TrueNAS holds</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f7b955">/mnt/tank/staff/amoller</span></div>
+              </div>
+              <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);flex:1 1 520px">Somebody moved it on the NAS. Pointing Syndra at the new path and moving the files back are different decisions with different consequences for her.</span>
+                <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Decide · 5 ways</span>
+              </div>
+            </div>
+            <div style="padding:16px 20px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:12px;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+              <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="width:7px;height:7px;border-radius:999px;background:#9b7bff;flex:none;margin-top:7px"></span>
+                <span style="font-size:15.5px;font-weight:600;flex:1 1 380px"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#f3f5ef">t.beck</span> is in a group no mapping accounts for</span>
+                <span style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-size:12.5px;font-weight:600">Decided, still standing</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">f_2198 · group_extra</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">TrueNAS last reported</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">fabrication</span></div>
+                <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Syndra wants</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">fabrication</span></div>
+                <div style="background:#0b0c0a;border:1px solid rgba(155,123,255,.28);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#9b7bff">TrueNAS holds</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#9b7bff">fabrication · archive-admins</span></div>
+              </div>
+              <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);flex:1 1 520px">A. Devi decided this 2 days ago — keep the extra group, "he runs the archive restores." It stays here until a later pass sees TrueNAS agree, because a decision is not evidence that anything changed.</span>
+                <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Change the decision</span>
+              </div>
+            </div>
+            <div style="padding:16px 20px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:12px;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+              <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none;margin-top:7px"></span>
+                <span style="font-size:15.5px;font-weight:600;flex:1 1 520px">A queued change was edited after it was queued</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">c_8841 · edited</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);flex:1 1 520px">The record no longer describes what will dispatch when the drain runs. Nothing has reached TrueNAS, and nothing will be corrected by waiting. Open it, read both versions, and either re-queue it or discard it.</span>
+                <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Open the record</span>
+              </div>
+            </div>
+            <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">Two of Syndra's own records disagreeing about who owns an account lands here too, under the same heading and with the same shape: the three states, then one decision.</div>
+          </div>
+        </div>
+
+        <div style="height:1px;background:rgba(255,255,255,.06)"></div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">The second subject on this page</span>
+            <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">People and their access here</div>
+              <span style="flex:1"></span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">GET /targets/truenas/inventory · /accounts/dormant</span>
+            </div>
+          </div>
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:16px 20px;display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+            <div style="flex:1 1 640px;font-size:15.5px;font-weight:600">Two role mappings reach TrueNAS. 34 people hold those roles.</div>
+            <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Open mappings</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:11px;padding:13px 20px;background:rgba(243,245,239,.04);border:1px solid rgba(255,255,255,.06);border-radius:14px">
+            <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+            <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.72);flex:1">The account list was read just now.</span>
+          </div>
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+            <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Bound</span>
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.07);font-family:'JetBrains Mono',monospace;font-size:13.5px">2</span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Ana Møller's row carries the finding above it, and does not repeat it as a status.</span>
+            </div>
+            <div style="padding:14px 20px;min-height:60px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+              <div style="flex:1 1 420px;display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;align-items:baseline;gap:11px;flex-wrap:wrap"><span style="font-size:15.5px;font-weight:600">Ana Møller</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.6)">a.moller</span><span style="display:inline-flex;align-items:center;gap:8px;padding:5px 11px;border-radius:999px;background:rgba(245,165,36,.12);color:#f7b955;font-size:12.5px;font-weight:600">2 waiting on a person</span></div>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6)">Bound 6 weeks ago · uid 3104 · Fabrication share</span>
+              </div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Hold</span>
+                <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,92,77,.4);color:#ff8d82;font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(255,92,77,.1)" style-active="transform:scale(.97)">Take away</span>
+              </div>
+            </div>
+            <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:16px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+              <div style="flex:1 1 420px;display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;align-items:baseline;gap:11px;flex-wrap:wrap"><span style="font-size:15.5px;font-weight:600">Tomas Beck</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.6)">t.beck</span><span style="display:inline-flex;align-items:center;gap:8px;padding:5px 11px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-size:12.5px;font-weight:600">1 decided, standing</span></div>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6)">Bound 12 days ago · uid 3111 · Fabrication share</span>
+              </div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Hold</span>
+                <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,92,77,.4);color:#ff8d82;font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(255,92,77,.1)" style-active="transform:scale(.97)">Take away</span>
+              </div>
+            </div>
+          </div>
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+            <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Not created by Syndra</span>
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.07);font-family:'JetBrains Mono',monospace;font-size:13.5px">2</span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Reported, never triaged. These are not drift.</span>
+            </div>
+            <div style="padding:14px 20px;min-height:60px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+              <div style="flex:1 1 420px;display:flex;flex-direction:column;gap:4px">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef">root</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6)">Built in. Not adoptable.</span>
+              </div>
+              <span style="padding:9px 15px;border-radius:999px;border:1px dashed rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-size:13.5px;font-weight:600">Adopt</span>
+            </div>
+            <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+              <div style="flex:1 1 420px;display:flex;flex-direction:column;gap:4px">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef">svc-backup</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6)">Made by hand · last seen 3 days ago</span>
+              </div>
+              <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Adopt</span>
+            </div>
+          </div>
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+            <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Lost their reason</span>
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;border:1px solid rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-family:'JetBrains Mono',monospace;font-size:13.5px">0</span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Accounts Syndra created and no longer has a reason for.</span>
+            </div>
+            <div style="padding:20px;display:flex;flex-direction:column;gap:9px">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">No account here has lost its reason</div>
+              <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72);max-width:96ch">Same seat, same words as when the page has nothing outstanding. A region that stayed silent until it had something to say would be a region nobody trusts when it speaks.</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">What runs here</div>
+            <span style="font-size:15px;color:rgba(243,245,239,.6);flex:1">Six operations, unchanged — the manifest does not know about findings.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1.32fr 1fr;gap:18px;align-items:start">
+            <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+              <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">What it can do</span>
+                <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.07);font-family:'JetBrains Mono',monospace;font-size:13.5px">6</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">account.provision</span><span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One account</span><span style="font-size:12.5px;font-weight:600;color:rgba(243,245,239,.42)">Runs unattended</span></div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">account.converge</span><span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One account</span><span style="font-size:12.5px;font-weight:600;color:rgba(243,245,239,.42)">Runs unattended</span></div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">account.release</span><span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One binding</span><span style="font-size:12.5px;font-weight:600;color:rgba(243,245,239,.42)">Runs unattended</span></div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">account.purge</span><span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One account and its files</span><span style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(255,92,77,.1);border:1px solid rgba(255,92,77,.4);color:#ff8d82;font-size:12.5px;font-weight:600">Stops and asks</span></div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">credential.set</span><span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One account</span><span style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(245,165,36,.12);color:#f7b955;font-size:12.5px;font-weight:600">Never logged: password</span></div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">activity.get</span><span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One share</span><span style="font-size:12.5px;font-weight:600;color:rgba(243,245,239,.42)">Runs unattended</span></div>
+            </div>
+            <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+              <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">Reconciliation</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">POST /targets/truenas/reconcile</span>
+              </div>
+              <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">
+                <p style="margin:0;font-size:15px;line-height:1.55;color:rgba(243,245,239,.72)">The scheduled sweep runs every six hours. It last ran 40 minutes ago and left three differences it would not resolve.</p>
+                <p style="margin:0;font-size:15px;line-height:1.55;color:#f3f5ef"><strong style="font-weight:600">Reconcile now</strong> reads the target and queues what is already owed. Queueing is not applying.</p>
+                <span style="align-self:flex-start;padding:10px 18px;border-radius:999px;background:#7f5af0;color:#f7f4ff;font-size:13.5px;font-weight:600;box-shadow:0 10px 26px -14px rgba(127,90,240,.85);transition:transform 180ms cubic-bezier(.22,.61,.36,1),box-shadow 120ms cubic-bezier(.4,0,.6,1)" style-hover="box-shadow:0 16px 34px -14px rgba(127,90,240,.95)" style-active="transform:scale(.97)">Reconcile now</span>
+                <p style="margin:0;font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">Running it again will not clear the three above. They are waiting on a person, and another sweep will report them again.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <figcaption style="font-size:14px;line-height:1.6;color:rgba(243,245,239,.6);max-width:1180px;text-wrap:pretty"><strong style="color:#f3f5ef;font-weight:600">T2 · </strong>Nothing on this page appeared. Compare it against <a href="#T1">T1</a> region by region: same four headings in the same seats, same three cards under the seam, same six operations. What changed is a hollow zero becoming a filled 4, one sentence under the title, and one region's contents — and that is the whole of the difference an operator has to read. Each finding names the three states it compared and colours only the one that disagrees, so <em>which two agree</em> is visible before any word is read. The decided finding is accent, not lime and not a tick: somebody chose it on purpose and it is still standing until a later pass sees TrueNAS agree. The roster rows carry a count of the findings that name that person, which is a pointer upward rather than a status on the row — the decision does not live in a table row and neither does its ceremony.</figcaption>
+  </figure>
+
+  <figure id="T3" style="margin:0;display:flex;flex-direction:column;gap:16px;width:1440px">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:24px;padding:0 8px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-family:'JetBrains Mono',monospace;font-size:12.5px">T3</span>
+      <span style="font-size:15.5px;font-weight:600">The same page, target not answering — the figure the redesign exists for</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">content column · rail unchanged from 1a</span>
+    </div>
+    <div style="width:1440px;background:#080906;border:1px solid rgba(255,255,255,.14);border-radius:20px;overflow:hidden;display:flex;align-items:stretch">
+      <div style="flex:1;min-width:0;padding:32px 24px 44px;display:flex;flex-direction:column;gap:40px;background:#0b0c0a">
+
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)"><span>Advanced</span><span>›</span><span>System</span><span>›</span><span style="color:rgba(243,245,239,.6)">TrueNAS</span></div>
+            <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:40px;font-weight:500;letter-spacing:-.02em;line-height:1.1">TrueNAS</div>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">/system/targets/truenas</span>
+            </div>
+            <p style="margin:0;font-size:15px;line-height:1.55;color:rgba(243,245,239,.72);max-width:80ch"><strong style="color:#f3f5ef;font-weight:600">TrueNAS has not answered for 41 minutes.</strong> Three things were waiting on a person when it last answered, and they still are.</p>
+          </div>
+          <div style="background:rgba(245,165,36,.12);border:1px solid rgba(245,165,36,.26);border-radius:18px;padding:16px 20px;display:flex;gap:12px;align-items:flex-start">
+            <span class="breathing" style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none;margin-top:7px"></span>
+            <div style="display:flex;flex-direction:column;gap:5px">
+              <span style="font-size:15.5px;font-weight:600;color:#f7b955">Everything below is the last state Syndra read, 41 minutes ago</span>
+              <span style="font-size:15px;line-height:1.55;color:rgba(243,245,239,.78)">No count on this page is live and no action in a list will reach TrueNAS. The one thing that still does something is the maintenance state, because that is Syndra's own record of what somebody chose.</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">Is it answering</div>
+            <span style="font-size:15px;color:rgba(243,245,239,.6);flex:1">The only region with anything live to say, which is why it is the band and not a card in a column.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
+
+            <div style="background:#141612;border:1px solid rgba(255,92,77,.4);border-radius:20px;overflow:hidden">
+              <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">Syndra's reach</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">GET /targets/truenas/health</span>
+              </div>
+              <div style="padding:16px 20px;min-height:60px;background:rgba(255,92,77,.1);display:flex;flex-direction:column;gap:6px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#ff5c4d;flex:none"></span><span style="font-size:15.5px;font-weight:600;flex:1">Not answering, since 11:04</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">unreachable</span></div>
+                <div style="font-size:15px;line-height:1.55;color:rgba(243,245,239,.78);padding-left:17px">The last three reads got nothing back. Syndra is still trying. <strong style="color:#f3f5ef;font-weight:600">Look at the NAS.</strong></div>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:5px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15.5px;font-weight:600;flex:1">One failure from backing off</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">circuit · closing</span></div>
+                <div style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">After the next failure Syndra starts refusing its own calls, and this reading changes to <em>backed off</em>. When it does, <strong style="color:#f3f5ef;font-weight:600">the machine to look at is this host, not the NAS</strong> — the two words send an operator to different rooms.</div>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:5px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15.5px;font-weight:600;flex:1">Two calls still in flight</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">in_flight = 2</span></div>
+                <div style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">Issued before it stopped answering. Whether they landed is not known, and will not be known until it answers again.</div>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:5px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15.5px;font-weight:600;flex:1">Key expiry unrecorded</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">key_expiry_unknown</span></div>
+                <div style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">Still true, and still Syndra's own record rather than something read from the NAS — so it is not dimmed. It is also the first thing to rule out: an expired credential looks exactly like this.</div>
+              </div>
+              <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Last answered</span><span style="font-size:15px;color:#f7b955">41 minutes ago</span></div>
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">In flight</span><span style="font-size:15px">2 calls</span></div>
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Lifecycle</span><span style="font-size:15px">Active</span></div>
+              </div>
+              <div style="padding:13px 20px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:11px;background:rgba(245,165,36,.12);flex-wrap:wrap">
+                <span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span>
+                <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.78);flex:1 1 320px">Could not read it. This is the last state Syndra saw, 41 minutes ago.</span>
+                <span style="padding:8px 14px;border-radius:999px;border:1px solid rgba(245,165,36,.4);color:#f7b955;font-size:12.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(245,165,36,.12)" style-active="transform:scale(.97)">Read again</span>
+              </div>
+            </div>
+
+            <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+              <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">What TrueNAS reports</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">GET /targets/truenas/system-health</span>
+              </div>
+              <div style="padding:16px 20px;background:rgba(245,165,36,.12);display:flex;flex-direction:column;gap:6px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15.5px;font-weight:600;color:#f7b955;flex:1">Alerts, pools, services and the host could not be read</span></div>
+                <div style="font-size:15px;line-height:1.55;color:rgba(243,245,239,.78);padding-left:17px">All four. This card is not saying the NAS is healthy and it is not saying the NAS is broken — it is saying Syndra could not look.</div>
+              </div>
+              <div style="padding:12px 20px;border-top:1px solid rgba(255,255,255,.06);font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Last seen 41 minutes ago</div>
+              <div style="opacity:.45">
+                <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:5px">
+                  <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15.5px;font-weight:600;flex:1">Uncorrectable error on <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">/dev/sde</span></span></div>
+                  <div style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">Open since 14 July when Syndra last looked. Whether it is still open is unknown.</div>
+                </div>
+                <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px">
+                  <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;flex:none">tank</span>
+                  <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Online, 2.1 TB free of 7.3 TB — as of 41 minutes ago.</span>
+                </div>
+                <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px">
+                  <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;flex:none">smb</span>
+                  <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Running — as of 41 minutes ago.</span>
+                </div>
+              </div>
+              <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">The last readings stay on the page, dimmed and dated. Clearing them would throw away the only evidence an operator has about what the NAS was doing before it went quiet.</div>
+            </div>
+          </div>
+
+          <div style="background:#141612;border:1px solid rgba(155,123,255,.28);border-radius:18px;overflow:hidden">
+            <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">What state somebody put it in</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">POST /targets/truenas/lifecycle</span>
+            </div>
+            <div style="padding:16px 20px;display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">
+              <div style="flex:1 1 520px;display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#9b7bff;flex:none"></span><span style="font-size:15.5px;font-weight:600">Active — and nobody chose that, it is simply the state it was left in</span></div>
+                <p style="margin:0;font-size:15px;line-height:1.55;color:rgba(243,245,239,.72)">This is the one control on the page that still does something, because it changes Syndra's own record rather than the NAS. Setting it to read-only now stops Syndra queueing writes at a target nobody can see, and the reason you type is what the next operator reads instead of guessing.</p>
+              </div>
+              <div style="flex:1 1 340px;display:flex;flex-direction:column;gap:11px">
+                <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+                  <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Say why · required</span>
+                  <span style="font-size:15px;color:rgba(243,245,239,.42)">The person who reads this next is not the person who set it.</span>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap">
+                  <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Start draining</span>
+                  <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Read only</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">Waiting on a person</div>
+            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:32px;padding:0 11px;border-radius:999px;background:rgba(243,245,239,.09);font-family:'JetBrains Mono',monospace;font-size:13.5px">3</span>
+            <span style="flex:1"></span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">GET /targets/truenas/merge-findings</span>
+          </div>
+          <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.6);max-width:96ch">Three, as of the last sweep that completed. A decision made now could not be checked against the target, so the decision itself is off — not the reading of it.</p>
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+            <div style="padding:14px 20px;min-height:60px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;opacity:.45">
+              <div style="flex:1 1 480px;display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15.5px;font-weight:600">TrueNAS holds a different uid for <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">a.moller</span></span></div>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);padding-left:17px">Reported 3104 · wanted 3104 · held 3120, as of 41 minutes ago</span>
+              </div>
+              <span style="padding:9px 15px;border-radius:999px;border:1px dashed rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-size:13.5px;font-weight:600">Decide</span>
+            </div>
+            <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:16px;flex-wrap:wrap;opacity:.45">
+              <div style="flex:1 1 480px;display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15.5px;font-weight:600">Home directory is not where Syndra recorded it</span></div>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);padding-left:17px">Held <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">/mnt/tank/staff/amoller</span>, as of 41 minutes ago</span>
+              </div>
+              <span style="padding:9px 15px;border-radius:999px;border:1px dashed rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-size:13.5px;font-weight:600">Decide</span>
+            </div>
+            <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:16px;flex-wrap:wrap;opacity:.45">
+              <div style="flex:1 1 480px;display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#9b7bff;flex:none"></span><span style="font-size:15.5px;font-weight:600"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">t.beck</span> is in a group no mapping accounts for</span></div>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);padding-left:17px">Decided 2 days ago by A. Devi — still standing</span>
+              </div>
+              <span style="padding:9px 15px;border-radius:999px;border:1px dashed rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-size:13.5px;font-weight:600">Change the decision</span>
+            </div>
+            <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);font-size:15px;line-height:1.55;color:rgba(243,245,239,.72)">Deciding is off while TrueNAS is not answering. A resolution is a claim about what the target holds, and the last read is 41 minutes old. Nothing was changed.</div>
+          </div>
+        </div>
+
+        <div style="height:1px;background:rgba(255,255,255,.06)"></div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">The second subject on this page</span>
+            <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">People and their access here</div>
+              <span style="flex:1"></span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">GET /targets/truenas/inventory · /accounts/dormant</span>
+            </div>
+          </div>
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:16px 20px;display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+            <div style="flex:1 1 640px;display:flex;flex-direction:column;gap:6px">
+              <span style="font-size:15.5px;font-weight:600">Two role mappings reach TrueNAS. 34 people hold those roles.</span>
+              <span style="font-size:15px;line-height:1.55;color:rgba(243,245,239,.6)">Both numbers are Syndra's own and are live. Mappings do not depend on the NAS answering, which is why this line does not dim.</span>
+            </div>
+            <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Open mappings</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:11px;padding:13px 20px;background:rgba(245,165,36,.12);border:1px solid rgba(245,165,36,.26);border-radius:14px;flex-wrap:wrap">
+            <span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span>
+            <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.78);flex:1 1 420px">Could not read the account list. This is the last state Syndra saw, 41 minutes ago.</span>
+            <span style="padding:8px 14px;border-radius:999px;border:1px solid rgba(245,165,36,.4);color:#f7b955;font-size:12.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(245,165,36,.12)" style-active="transform:scale(.97)">Read again</span>
+          </div>
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+            <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Bound</span>
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.07);font-family:'JetBrains Mono',monospace;font-size:13.5px">2</span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Two people were bound here 41 minutes ago. Both still hold the role that binds them.</span>
+            </div>
+            <div style="opacity:.45">
+              <div style="padding:14px 20px;min-height:60px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                <div style="flex:1 1 460px;display:flex;flex-direction:column;gap:4px">
+                  <div style="display:flex;align-items:baseline;gap:11px;flex-wrap:wrap"><span style="font-size:15.5px;font-weight:600">Ana Møller</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.6)">a.moller</span></div>
+                  <span style="font-size:13.5px;color:rgba(243,245,239,.6)">Bound 6 weeks ago · uid 3104 · Fabrication share</span>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap">
+                  <span style="padding:9px 15px;border-radius:999px;border:1px dashed rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-size:13.5px;font-weight:600">Hold</span>
+                  <span style="padding:9px 15px;border-radius:999px;border:1px dashed rgba(255,92,77,.4);color:rgba(255,141,130,.5);font-size:13.5px;font-weight:600">Take away</span>
+                </div>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                <div style="flex:1 1 460px;display:flex;flex-direction:column;gap:4px">
+                  <div style="display:flex;align-items:baseline;gap:11px;flex-wrap:wrap"><span style="font-size:15.5px;font-weight:600">Tomas Beck</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.6)">t.beck</span></div>
+                  <span style="font-size:13.5px;color:rgba(243,245,239,.6)">Bound 12 days ago · uid 3111 · Fabrication share</span>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap">
+                  <span style="padding:9px 15px;border-radius:999px;border:1px dashed rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-size:13.5px;font-weight:600">Hold</span>
+                  <span style="padding:9px 15px;border-radius:999px;border:1px dashed rgba(255,92,77,.4);color:rgba(255,141,130,.5);font-size:13.5px;font-weight:600">Take away</span>
+                </div>
+              </div>
+            </div>
+            <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);font-size:15px;line-height:1.55;color:rgba(243,245,239,.72)">Holding and taking away are off. Both would queue against a target Syndra cannot see, and the member would read <em>withheld</em> on their page while nothing had actually stopped. Nothing was changed.</div>
+          </div>
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+            <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Not created by Syndra</span>
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.07);font-family:'JetBrains Mono',monospace;font-size:13.5px">2</span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Reported, never triaged. These are not drift.</span>
+            </div>
+            <div style="opacity:.45">
+              <div style="padding:14px 20px;min-height:60px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                <div style="flex:1 1 460px;display:flex;flex-direction:column;gap:4px"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">root</span><span style="font-size:13.5px;color:rgba(243,245,239,.6)">Built in. Not adoptable.</span></div>
+                <span style="padding:9px 15px;border-radius:999px;border:1px dashed rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-size:13.5px;font-weight:600">Adopt</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                <div style="flex:1 1 460px;display:flex;flex-direction:column;gap:4px"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">svc-backup</span><span style="font-size:13.5px;color:rgba(243,245,239,.6)">Made by hand · last seen 3 days ago</span></div>
+                <span style="padding:9px 15px;border-radius:999px;border:1px dashed rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-size:13.5px;font-weight:600">Adopt</span>
+              </div>
+            </div>
+            <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);font-size:15px;line-height:1.55;color:rgba(243,245,239,.72)">Adoption is off, and this is the case it was always off for: the list may have moved and there is no undo. Two accounts is what was here 41 minutes ago, not what is here now — and absence proves nothing either way.</div>
+          </div>
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+            <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Lost their reason</span>
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;border:1px solid rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-family:'JetBrains Mono',monospace;font-size:13.5px">0</span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Accounts Syndra created and no longer has a reason for.</span>
+            </div>
+            <div style="padding:20px;display:flex;flex-direction:column;gap:9px">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Nothing was read, so this is not a zero anybody should trust</div>
+              <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72);max-width:96ch">Dormancy is decided by comparing accounts against roles, and half of that comparison is 41 minutes old. The heading keeps its seat and the count is hollow, which is the same shape as <a href="#T1">T1</a> — the sentence is what tells you the two are not the same thing.</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">What runs here</div>
+            <span style="font-size:15px;color:rgba(243,245,239,.6);flex:1">The manifest is Syndra's own copy, so the list is intact and every line is unavailable.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1.32fr 1fr;gap:18px;align-items:start">
+            <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+              <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">What it can do</span>
+                <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.07);font-family:'JetBrains Mono',monospace;font-size:13.5px">6</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Six, disabled — not six missing.</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 200px">account.provision</span><span style="font-size:13.5px;color:rgba(243,245,239,.42);flex:1 1 240px">One account</span><span style="font-size:12.5px;font-weight:600;color:#f7b955">Cannot run — TrueNAS is not answering</span></div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 200px">account.converge</span><span style="font-size:13.5px;color:rgba(243,245,239,.42);flex:1 1 240px">One account</span><span style="font-size:12.5px;font-weight:600;color:#f7b955">Cannot run — TrueNAS is not answering</span></div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 200px">account.release</span><span style="font-size:13.5px;color:rgba(243,245,239,.42);flex:1 1 240px">One binding</span><span style="font-size:12.5px;font-weight:600;color:#f7b955">Cannot run — TrueNAS is not answering</span></div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 200px">account.purge</span><span style="font-size:13.5px;color:rgba(243,245,239,.42);flex:1 1 240px">One account and its files</span><span style="font-size:12.5px;font-weight:600;color:#f7b955">Cannot run — TrueNAS is not answering</span></div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 200px">credential.set</span><span style="font-size:13.5px;color:rgba(243,245,239,.42);flex:1 1 240px">One account</span><span style="font-size:12.5px;font-weight:600;color:#f7b955">Cannot run — TrueNAS is not answering</span></div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 200px">activity.get</span><span style="font-size:13.5px;color:rgba(243,245,239,.42);flex:1 1 240px">One share</span><span style="font-size:12.5px;font-weight:600;color:#f7b955">Cannot run — TrueNAS is not answering</span></div>
+              <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">The list is the manifest, so it does not shrink when the target goes quiet. An operator reading this page during an outage can still answer "will this add-on ever be able to do X" — which is the question they are usually on the phone about.</div>
+            </div>
+            <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+              <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">Reconciliation</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">POST /targets/truenas/reconcile</span>
+              </div>
+              <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">
+                <p style="margin:0;font-size:15px;line-height:1.55;color:rgba(243,245,239,.72)">The scheduled sweep runs every six hours. The last two got nothing back.</p>
+                <p style="margin:0;font-size:15px;line-height:1.55;color:#f3f5ef"><strong style="font-weight:600">Reconcile now</strong> reads the target and queues what is already owed. Queueing is not applying.</p>
+                <span style="align-self:flex-start;padding:10px 18px;border-radius:999px;border:1px dashed rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-size:13.5px;font-weight:600">Reconcile now</span>
+                <p style="margin:0;font-size:15px;line-height:1.55;color:rgba(243,245,239,.72)">Off, because the read it starts with is the read that is failing. Nothing was changed.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <figcaption style="font-size:14px;line-height:1.6;color:rgba(243,245,239,.6);max-width:1180px;text-wrap:pretty"><strong style="color:#f3f5ef;font-weight:600">T3 · </strong>Today this state renders as a column of empty cards. Here nothing is empty, because the last state Syndra read <em>is</em> content: every list keeps its rows, dimmed and dated, and every action states in place why it is off. The page sorts itself into three kinds of fact an operator can use during an outage — what Syndra knows about itself and is still true (the reach card, the mapping census, the manifest, the maintenance state), what was read from the NAS and is now historical (dimmed, with an age), and what cannot be known at all (the right-hand card, which says <em>could not look</em> rather than showing four green lines). The band is where the whole answer lives: not answering since 11:04, one failure from backing off — and the sentence saying that when that happens the machine to look at changes. Maintenance stays live and is the only live control, because it edits Syndra's own record; the caption says so because a developer reading rule 4's "every action inert" would otherwise switch it off.</figcaption>
+  </figure>
+
+  <figure id="T4" style="margin:0;display:flex;flex-direction:column;gap:16px;width:1440px">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:24px;padding:0 8px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-family:'JetBrains Mono',monospace;font-size:12.5px">T4</span>
+      <span style="font-size:15.5px;font-weight:600">A fresh deployment — registered, nothing bound, nothing mapped, no history</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">the live state today</span>
+    </div>
+    <div style="width:1440px;background:#080906;border:1px solid rgba(255,255,255,.14);border-radius:20px;overflow:hidden;display:flex;align-items:stretch">
+      <div style="flex:1;min-width:0;padding:32px 24px 44px;display:flex;flex-direction:column;gap:40px;background:#0b0c0a">
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)"><span>Advanced</span><span>›</span><span>System</span><span>›</span><span style="color:rgba(243,245,239,.6)">TrueNAS</span></div>
+          <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:40px;font-weight:500;letter-spacing:-.02em;line-height:1.1">TrueNAS</div>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">/system/targets/truenas</span>
+          </div>
+          <p style="margin:0;font-size:15px;line-height:1.55;color:rgba(243,245,239,.72);max-width:80ch">TrueNAS 25.10.5, answering and accepting changes. <strong style="color:#f3f5ef;font-weight:600">No role mapping reaches it yet</strong>, so nobody is bound here.</p>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">Is it answering</div>
+            <span style="font-size:15px;color:rgba(243,245,239,.6);flex:1">Complete on day one, and the only region that is.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
+            <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+              <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">Syndra's reach</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">GET /targets/truenas/health</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;display:flex;flex-direction:column;gap:5px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span><span style="font-size:15.5px;font-weight:600;flex:1">Serving</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">serving</span></div>
+                <div style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">TrueNAS 25.10.5. Answering, and accepting changes. Registered 2 days ago.</div>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:5px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15.5px;font-weight:600;flex:1">Key expiry unrecorded</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">key_expiry_unknown</span></div>
+                <div style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">The credential registered with the add-on carries no expiry date. The day it expires this target looks like an outage. <strong style="color:#f3f5ef;font-weight:600">Look at Syndra.</strong></div>
+              </div>
+              <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Last answered</span><span style="font-size:15px">2 seconds ago</span></div>
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">In flight</span><span style="font-size:15px">0 calls</span></div>
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Lifecycle</span><span style="font-size:15px">Active</span></div>
+              </div>
+              <div style="padding:13px 20px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:11px;background:rgba(243,245,239,.04)">
+                <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+                <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.72);flex:1">This snapshot was read just now.</span>
+              </div>
+            </div>
+            <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+              <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">What TrueNAS reports</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">GET /targets/truenas/system-health</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;display:flex;align-items:center;gap:12px">
+                <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+                <span style="font-size:15.5px;font-weight:600;flex:1">No alert open</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">alerts · 0</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px">
+                <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:none">tank</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Online. 6.9 TB free of 7.3 TB.</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px">
+                <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:none">smb</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Running, enabled at boot.</span>
+              </div>
+              <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);display:grid;grid-template-columns:1fr 1fr;gap:14px">
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Host</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">nas-01.makerspace.lan</span></div>
+                <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Up</span><span style="font-size:15px">2 days</span></div>
+              </div>
+              <div style="padding:13px 20px;border-top:1px solid rgba(255,255,255,.06);background:rgba(243,245,239,.04);font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.72)">Alerts, pools, services and the host were all read. <em>No alert open</em> is a reading; it is not the same sentence as the one in <a href="#T3">T3</a>.</div>
+            </div>
+          </div>
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:16px 20px;display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+            <div style="flex:1 1 520px;display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span><span style="font-size:15.5px;font-weight:600">Active — reads and changes both run</span></div>
+              <span style="font-size:15px;line-height:1.55;color:rgba(243,245,239,.6)">Nobody has put it in a maintenance state. Draining and read-only are here on day one and stay here; they are how a rotation is done, not something that appears when trouble does.</span>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Start draining</span>
+              <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Read only</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">Waiting on a person</div>
+            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:32px;padding:0 11px;border-radius:999px;border:1px solid rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-family:'JetBrains Mono',monospace;font-size:13.5px">0</span>
+            <span style="flex:1"></span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">GET /targets/truenas/merge-findings</span>
+          </div>
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;padding:22px 20px;display:flex;flex-direction:column;gap:9px">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Nothing has been compared yet</div>
+            <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72);max-width:96ch">The sweep has not run since TrueNAS was registered, so this zero is a zero of things not yet looked at rather than differences resolved. When it runs, anything it will not resolve on its own arrives here.</p>
+          </div>
+        </div>
+
+        <div style="height:1px;background:rgba(255,255,255,.06)"></div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">The second subject on this page</span>
+            <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">People and their access here</div>
+              <span style="flex:1"></span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">GET /targets/truenas/inventory · /accounts/dormant</span>
+            </div>
+          </div>
+          <div style="background:#141612;border:1px solid rgba(155,123,255,.28);border-radius:18px;padding:16px 20px;display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+            <div style="flex:1 1 640px;display:flex;flex-direction:column;gap:6px">
+              <span style="font-size:15.5px;font-weight:600">No role mapping reaches TrueNAS yet</span>
+              <span style="font-size:15px;line-height:1.55;color:rgba(243,245,239,.72)">Until one does, nobody gets an account here and nothing on this page will change. A mapping ties a role to what it reaches on the add-on, and it is the only thing standing between this deployment and its first member.</span>
+            </div>
+            <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Open mappings</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:11px;padding:13px 20px;background:rgba(243,245,239,.04);border:1px solid rgba(255,255,255,.06);border-radius:14px">
+            <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+            <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.72);flex:1">The account list was read just now.</span>
+          </div>
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+            <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Bound</span>
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;border:1px solid rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-family:'JetBrains Mono',monospace;font-size:13.5px">0</span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">A person, an account, and Syndra's promise to keep them together.</span>
+            </div>
+            <div style="padding:20px;display:flex;flex-direction:column;gap:9px">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Nobody is bound here</div>
+              <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72);max-width:96ch">A mapping is what binds the first person, and there is no mapping. This is not waiting on TrueNAS and not waiting on the drain — it is waiting on somebody deciding which role reaches this add-on.</p>
+            </div>
+          </div>
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+            <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Not created by Syndra</span>
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.07);font-family:'JetBrains Mono',monospace;font-size:13.5px">2</span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Reported, never triaged. These are not drift.</span>
+            </div>
+            <div style="padding:14px 20px;min-height:60px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+              <div style="flex:1 1 460px;display:flex;flex-direction:column;gap:4px">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef">root</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6)">Built in. Not adoptable — Syndra will not take charge of the administrator account it would need in order to manage the others.</span>
+              </div>
+              <span style="padding:9px 15px;border-radius:999px;border:1px dashed rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-size:13.5px;font-weight:600">Adopt</span>
+            </div>
+            <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:16px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+              <div style="flex:1 1 460px;display:flex;flex-direction:column;gap:4px">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef">svc-backup</span>
+                <span style="font-size:13.5px;color:rgba(243,245,239,.6)">Made by hand · last seen 3 days ago</span>
+              </div>
+              <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Adopt</span>
+            </div>
+            <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);font-size:15px;line-height:1.55;color:rgba(243,245,239,.72)">This is the first sweep after deployment and the only list on the page with anything in it. A NAS that has been running for years arrives with accounts; rendering these two as untraced access would bury the triage queue on the day trust in it is set.</div>
+          </div>
+          <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+            <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Lost their reason</span>
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;border:1px solid rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-family:'JetBrains Mono',monospace;font-size:13.5px">0</span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Accounts Syndra created and no longer has a reason for.</span>
+            </div>
+            <div style="padding:20px;display:flex;flex-direction:column;gap:9px">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Syndra has not created an account here</div>
+              <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72);max-width:96ch">Nothing can have lost its reason yet. The two accounts above are not Syndra's and never become dormant — they are somebody else's decision, reported and left alone.</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">What runs here</div>
+            <span style="font-size:15px;color:rgba(243,245,239,.6);flex:1">Six operations on day one, because the manifest arrives with the add-on.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1.32fr 1fr;gap:18px;align-items:start">
+            <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+              <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">What it can do</span>
+                <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.07);font-family:'JetBrains Mono',monospace;font-size:13.5px">6</span>
+              </div>
+              <div style="padding:14px 20px;min-height:60px;display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">account.provision</span><span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One account</span><span style="font-size:12.5px;font-weight:600;color:rgba(243,245,239,.42)">Runs unattended</span></div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">account.converge</span><span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One account</span><span style="font-size:12.5px;font-weight:600;color:rgba(243,245,239,.42)">Runs unattended</span></div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">account.release</span><span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One binding</span><span style="font-size:12.5px;font-weight:600;color:rgba(243,245,239,.42)">Runs unattended</span></div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">account.purge</span><span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One account and its files</span><span style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(255,92,77,.1);border:1px solid rgba(255,92,77,.4);color:#ff8d82;font-size:12.5px;font-weight:600">Stops and asks</span></div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">credential.set</span><span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One account</span><span style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(245,165,36,.12);color:#f7b955;font-size:12.5px;font-weight:600">Never logged: password</span></div>
+              <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef;flex:1 1 200px">activity.get</span><span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 180px">One share</span><span style="font-size:12.5px;font-weight:600;color:rgba(243,245,239,.42)">Runs unattended</span></div>
+              <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">The one region that looks the same on day one as it will in a year. It is also the answer to "what will this add-on be able to do for us" — asked most often by the person who just registered it.</div>
+            </div>
+            <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+              <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">Reconciliation</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">POST /targets/truenas/reconcile</span>
+              </div>
+              <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">
+                <p style="margin:0;font-size:15px;line-height:1.55;color:rgba(243,245,239,.72)">The scheduled sweep runs every six hours. It has not run yet.</p>
+                <p style="margin:0;font-size:15px;line-height:1.55;color:#f3f5ef"><strong style="font-weight:600">Reconcile now</strong> reads the target and queues what is already owed. Queueing is not applying.</p>
+                <span style="align-self:flex-start;padding:10px 18px;border-radius:999px;background:#7f5af0;color:#f7f4ff;font-size:13.5px;font-weight:600;box-shadow:0 10px 26px -14px rgba(127,90,240,.85);transition:transform 180ms cubic-bezier(.22,.61,.36,1),box-shadow 120ms cubic-bezier(.4,0,.6,1)" style-hover="box-shadow:0 16px 34px -14px rgba(127,90,240,.95)" style-active="transform:scale(.97)">Reconcile now</span>
+                <p style="margin:0;font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">With no mapping in place it will read TrueNAS, owe nothing, and queue nothing. It will say that rather than reporting success.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <figcaption style="font-size:14px;line-height:1.6;color:rgba(243,245,239,.6);max-width:1180px;text-wrap:pretty"><strong style="color:#f3f5ef;font-weight:600">T4 · </strong>Three hollow zeros and one populated list, and the page reads as <em>registered and idle</em> rather than broken because every empty state names who it is waiting on: the mapping (a person's decision), the sweep (a schedule), and Syndra's own account creation (a consequence of the first two). No empty state here says "nothing to do" and none of them is an error. The one list with content is the one nobody has to act on, which is deliberate — it is also the moment the phrase <em>reported, never triaged</em> earns its keep, because a first sweep that files <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">root</span> as untraced access is a triage queue nobody opens twice. Two zeros differ from <a href="#T3">T3</a>'s zeros in wording only, which is the point: the count cannot carry the difference, so the sentence does.</figcaption>
+  </figure>
+
+  <figure id="T5" style="margin:0;display:flex;flex-direction:column;gap:16px;max-width:1180px">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:24px;padding:0 8px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-family:'JetBrains Mono',monospace;font-size:12.5px">T5</span>
+      <span style="font-size:15.5px;font-weight:600">The touch form — the four tabs become an index, not a filter</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">390 × 844</span>
+    </div>
+    <div style="display:flex;gap:30px;align-items:flex-start;flex-wrap:wrap">
+      <div style="width:390px;height:844px;flex:none;background:#0b0c0a;border:1px solid rgba(255,255,255,.14);border-radius:20px;overflow:hidden;display:flex;flex-direction:column">
+        <div style="padding:18px 16px 14px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid rgba(255,255,255,.06)">
+          <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)"><span>System</span><span>›</span><span style="color:rgba(243,245,239,.6)">TrueNAS</span></div>
+          <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em;line-height:1.1">TrueNAS</div>
+          <p style="margin:0;font-size:15px;line-height:1.5;color:rgba(243,245,239,.72)">Answering. <strong style="color:#f3f5ef;font-weight:600">Four things are waiting on a person.</strong></p>
+        </div>
+        <div style="flex:1;min-height:0;padding:14px 16px;display:flex;flex-direction:column;gap:12px;overflow:hidden">
+          <div style="flex:none;background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:18px;overflow:hidden">
+            <div style="padding:14px 16px;min-height:60px;display:flex;flex-direction:column;gap:5px">
+              <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span><span style="font-size:15.5px;font-weight:600;flex:1">Serving</span></div>
+              <div style="font-size:13.5px;line-height:1.5;color:rgba(243,245,239,.6);padding-left:17px">TrueNAS 25.10.5 · 0 in flight · Active</div>
+            </div>
+            <div style="padding:14px 16px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px">
+              <span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span>
+              <span style="font-size:15.5px;font-weight:600;flex:1">Uncorrectable error on <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">/dev/sde</span></span>
+            </div>
+            <div style="padding:13px 16px;border-top:1px solid rgba(255,255,255,.06);background:rgba(243,245,239,.04);display:flex;align-items:center;gap:10px">
+              <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.72);flex:1">Read just now.</span>
+            </div>
+          </div>
+          <div style="flex:none;background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:18px;overflow:hidden">
+            <div style="padding:13px 16px;border-bottom:1px solid rgba(255,255,255,.06);font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">On this page</div>
+            <div style="padding:0 16px;min-height:48px;display:flex;align-items:center;gap:12px;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)"><span style="font-size:15.5px;font-weight:600;flex:1;padding:11px 0">Waiting on a person</span><span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.09);font-family:'JetBrains Mono',monospace;font-size:13.5px">4</span></div>
+            <div style="padding:0 16px;min-height:48px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)"><span style="font-size:15.5px;font-weight:600;flex:1;padding:11px 0">Bound</span><span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.09);font-family:'JetBrains Mono',monospace;font-size:13.5px">2</span></div>
+            <div style="padding:0 16px;min-height:48px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)"><span style="font-size:15.5px;font-weight:600;flex:1;padding:11px 0">Not created by Syndra</span><span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.09);font-family:'JetBrains Mono',monospace;font-size:13.5px">2</span></div>
+            <div style="padding:0 16px;min-height:48px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)"><span style="font-size:15.5px;font-weight:600;flex:1;padding:11px 0">Lost their reason</span><span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;border:1px solid rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-family:'JetBrains Mono',monospace;font-size:13.5px">0</span></div>
+            <div style="padding:0 16px;min-height:48px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)"><span style="font-size:15.5px;font-weight:600;flex:1;padding:11px 0">What runs here</span><span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.09);font-family:'JetBrains Mono',monospace;font-size:13.5px">6</span></div>
+          </div>
+          <div style="flex:none;display:flex;align-items:baseline;gap:12px;padding-top:2px">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:26px;font-weight:600;letter-spacing:-.01em">Waiting on a person</div>
+            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.09);font-family:'JetBrains Mono',monospace;font-size:13.5px">4</span>
+          </div>
+          <div style="flex:none;background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:18px;overflow:hidden">
+            <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:flex-start;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none;margin-top:7px"></span><span style="font-size:15.5px;font-weight:600;flex:1">TrueNAS holds a different uid for <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">a.moller</span></span></div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:11px 13px;display:flex;align-items:baseline;gap:10px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34);flex:1">Reported · wanted</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">3104</span></div>
+                <div style="background:#0b0c0a;border:1px solid rgba(245,165,36,.26);border-radius:14px;padding:11px 13px;display:flex;align-items:baseline;gap:10px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#f7b955;flex:1">Held</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f7b955">3120</span></div>
+              </div>
+              <span style="align-self:stretch;text-align:center;padding:13px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:15px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Decide · 5 ways</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption style="flex:1 1 420px;font-size:14px;line-height:1.6;color:rgba(243,245,239,.6);text-wrap:pretty"><strong style="color:#f3f5ef;font-weight:600">T5 · </strong>The touch board made this four horizontally scrolling tabs, and the desktop does not inherit that. What the phone actually needs is a way to skip a region, not a way to hide three of them — so the four names become an <strong style="color:#f3f5ef;font-weight:600">index at the top of one column</strong>, each carrying its count as a number in the row rather than a badge on a tab, each a jump rather than a filter. Everything below it is present and scrollable, so a finding cannot end up behind a tab nobody selected. Three consequences of the same structure survive the narrowing: the band comes first and collapses to the reading plus the target's own standing alert; the three populations stay three headings with three counts, because merging them here would be the one change that alters meaning rather than layout; and every control clears 44px — the <em>Decide</em> button goes full width because a decision with five outcomes is not a thing to tap at the edge of a row. The index itself obeys the no-structure-from-data rule: five rows, always the same five, hollow zeros included.</figcaption>
+    </div>
+  </figure>
+
+  <div style="max-width:1180px;background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;padding:22px 24px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">What the mapping screen takes with it, and what stays</div>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72)"><strong style="font-weight:600">It takes:</strong> the mapping rows with their project, role key, field and value; the holder count; Change and Remove; the published versions with their notes and rollback; and the working-copy-versus-published distinction, which is the thing a table row cannot say — "current version 4" meaning version 4 plus three unpublished edits is a sentence, and rolling back from there undoes work listed nowhere. Per the build notes, the blast-radius acknowledgement is a backend refusal producing a scope step, not a checkbox drawn upfront.</p>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72)"><strong style="font-weight:600">The target page keeps:</strong> two sentences and one outline control. How many mappings reach this add-on and how many people hold those roles — the answer to <em>why is she bound here</em> — and a way through to the screen that can change it. Navigation does not change: the mapping screen is reached from this line and from the role, not from a new rail row, because a rail row per add-on already exists and a second one for its mappings would be structure competing with itself.</p>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.6)">The one thing I would put to you before it is built: whether the census line should name the two mappings rather than count them. Two fits; five would not, and the line would then be the only thing on the page that changes shape with its data.</p>
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showRail&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Figures&quot;},&quot;showEndpoints&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Figures&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      showRail: this.props.showRail ?? true,
+      showEndpoints: this.props.showEndpoints ?? true
+    };
+  }
+}
+</script>
+</body>
+</html>
