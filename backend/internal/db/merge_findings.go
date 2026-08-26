@@ -79,6 +79,11 @@ type MergeFinding struct {
 	Decision  string     `json:"decision,omitempty"`
 	DecidedBy string     `json:"decided_by,omitempty"`
 	DecidedAt *time.Time `json:"decided_at,omitempty"`
+	// Why they chose it. Shown to whoever arrives second, which is who the
+	// mandatory reason was always for — a finding takes one decision, so the
+	// next operator can only agree or disagree, and neither is possible
+	// without this.
+	DecisionReason string `json:"decision_reason,omitempty"`
 }
 
 // RecordMergeFinding raises a finding, or refreshes the one already standing.
@@ -138,7 +143,7 @@ func nullableJSON(raw json.RawMessage) any {
 func StandingMergeFindings(ctx context.Context, target string) ([]MergeFinding, error) {
 	const q = `
 		SELECT id, target, subject_id, field, outcome, base_value, ours_value, theirs_value,
-		       detected_at, last_seen_at, decision, decided_by, decided_at
+		       detected_at, last_seen_at, decision, decided_by, decided_at, decision_reason
 		FROM target_merge_findings
 		WHERE target = $1 AND resolved_at IS NULL
 		ORDER BY detected_at DESC`
@@ -152,15 +157,18 @@ func StandingMergeFindings(ctx context.Context, target string) ([]MergeFinding, 
 	for rows.Next() {
 		var f MergeFinding
 		var base, ours, theirs []byte
-		var decision, decidedBy *string
+		var decision, decidedBy, decisionReason *string
 		if err := rows.Scan(&f.ID, &f.Target, &f.SubjectID, &f.Field, &f.Outcome,
 			&base, &ours, &theirs, &f.DetectedAt, &f.LastSeenAt,
-			&decision, &decidedBy, &f.DecidedAt); err != nil {
+			&decision, &decidedBy, &f.DecidedAt, &decisionReason); err != nil {
 			return nil, fmt.Errorf("scan merge finding on %s: %w", target, err)
 		}
 		f.Base, f.Ours, f.Theirs = json.RawMessage(base), json.RawMessage(ours), json.RawMessage(theirs)
 		if decision != nil {
 			f.Decision = *decision
+		}
+		if decisionReason != nil {
+			f.DecisionReason = *decisionReason
 		}
 		if decidedBy != nil {
 			f.DecidedBy = *decidedBy
@@ -195,15 +203,15 @@ func CountStandingMergeFindings(ctx context.Context) (int, error) {
 func GetStandingMergeFinding(ctx context.Context, id string) (MergeFinding, error) {
 	const q = `
 		SELECT id, target, subject_id, field, outcome, base_value, ours_value, theirs_value,
-		       detected_at, last_seen_at, decision, decided_by, decided_at
+		       detected_at, last_seen_at, decision, decided_by, decided_at, decision_reason
 		FROM target_merge_findings
 		WHERE id = $1::uuid AND resolved_at IS NULL`
 	var f MergeFinding
 	var base, ours, theirs []byte
-	var decision, decidedBy *string
+	var decision, decidedBy, decisionReason *string
 	err := querier(ctx).QueryRow(ctx, q, id).Scan(&f.ID, &f.Target, &f.SubjectID, &f.Field,
 		&f.Outcome, &base, &ours, &theirs, &f.DetectedAt, &f.LastSeenAt,
-		&decision, &decidedBy, &f.DecidedAt)
+		&decision, &decidedBy, &f.DecidedAt, &decisionReason)
 	if err != nil {
 		return MergeFinding{}, fmt.Errorf("%w: %s", ErrNoSuchMergeFinding, id)
 	}
@@ -217,6 +225,9 @@ func GetStandingMergeFinding(ctx context.Context, id string) (MergeFinding, erro
 	}
 	if decidedBy != nil {
 		f.DecidedBy = *decidedBy
+	}
+	if decisionReason != nil {
+		f.DecisionReason = *decisionReason
 	}
 	return f, nil
 }
@@ -233,12 +244,17 @@ func GetStandingMergeFinding(ctx context.Context, id string) (MergeFinding, erro
 //
 // The row closes when a pass observes that the two sides agree, carrying this
 // decision rather than the anonymous `agreed`.
-func RecordMergeDecision(ctx context.Context, id, actor, decision string) (MergeFinding, error) {
+func RecordMergeDecision(ctx context.Context, id, actor, decision, reason string) (MergeFinding, error) {
 	switch {
 	case strings.TrimSpace(actor) == "":
 		return MergeFinding{}, fmt.Errorf("record merge decision: no actor")
 	case !isMergeResolution(decision):
 		return MergeFinding{}, fmt.Errorf("record merge decision: %q is not a decision", decision)
+	case strings.TrimSpace(reason) == "":
+		// Refused here as well as at the handler, because the whole point of
+		// the column is the person who arrives second, and a decision that
+		// reached the table without one is a decision they cannot argue with.
+		return MergeFinding{}, fmt.Errorf("record merge decision: no reason")
 	}
 	// `decision IS NULL` is the whole guarantee. Without it this was an
 	// unconditional overwrite: a second request could replace a decision whose
@@ -251,23 +267,27 @@ func RecordMergeDecision(ctx context.Context, id, actor, decision string) (Merge
 	// the outcome depend on which HTTP request happened to arrive last.
 	const q = `
 		UPDATE target_merge_findings
-		SET decision = $3, decided_by = $2, decided_at = NOW()
+		SET decision = $3, decided_by = $2, decided_at = NOW(), decision_reason = $4
 		WHERE id = $1::uuid AND resolved_at IS NULL AND decision IS NULL
 		RETURNING id, target, subject_id, field, outcome, detected_at, last_seen_at`
 	var f MergeFinding
-	err := querier(ctx).QueryRow(ctx, q, id, actor, decision).Scan(&f.ID, &f.Target,
+	err := querier(ctx).QueryRow(ctx, q, id, actor, decision, reason).Scan(&f.ID, &f.Target,
 		&f.SubjectID, &f.Field, &f.Outcome, &f.DetectedAt, &f.LastSeenAt)
 	if err != nil {
 		// Either it is gone, or somebody decided first. Told apart here, because
 		// they are different sentences to an operator: one is "that is already
 		// settled", the other is "somebody else just answered this".
 		if standing, readErr := GetStandingMergeFinding(ctx, id); readErr == nil && standing.Decision != "" {
-			return MergeFinding{}, fmt.Errorf("%w: %s already decided as %s by %s",
+			// The standing finding rides along with the error, so the surface
+			// can show the second operator WHAT was chosen and WHY rather than
+			// only that they lost. The reason was made mandatory for exactly
+			// this reader.
+			return standing, fmt.Errorf("%w: %s already decided as %s by %s",
 				ErrMergeFindingDecided, id, standing.Decision, standing.DecidedBy)
 		}
 		return MergeFinding{}, fmt.Errorf("%w: %s", ErrNoSuchMergeFinding, id)
 	}
-	f.Decision, f.DecidedBy = decision, actor
+	f.Decision, f.DecidedBy, f.DecisionReason = decision, actor, reason
 	return f, nil
 }
 

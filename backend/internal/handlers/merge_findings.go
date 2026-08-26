@@ -304,8 +304,10 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 	// on this side of the wire.
 	if req.Resolution == db.ResolutionUnbound {
 		if !repair {
-			if _, err := dbRecordMergeDecision(r.Context(), id, actor, req.Resolution); err != nil {
-				writeResolutionError(w, err)
+			// The standing row rides back with the refusal, so the surface can
+			// show the second operator what was chosen and why.
+			if standing, err := dbRecordMergeDecision(r.Context(), id, actor, req.Resolution, req.Reason); err != nil {
+				writeResolutionError(w, mergeDecidedBy{error: err, standing: standing})
 				return
 			}
 		}
@@ -369,8 +371,13 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 			resolved, err = dbResolveMergeFinding(ctx, id, actor, req.Resolution)
 			return err
 		}
-		resolved, err = dbRecordMergeDecision(ctx, id, actor, req.Resolution)
-		return err
+		var standing db.MergeFinding
+		standing, err = dbRecordMergeDecision(ctx, id, actor, req.Resolution, req.Reason)
+		if err != nil {
+			return mergeDecidedBy{error: err, standing: standing}
+		}
+		resolved = standing
+		return nil
 	})
 
 	if err != nil {
@@ -422,10 +429,19 @@ func writeResolutionError(w http.ResponseWriter, err error) {
 	case errors.Is(err, errReleaseNotConfirmed):
 		jsonErrorResponse(w, http.StatusBadGateway, "RELEASE_NOT_CONFIRMED", err.Error())
 	case errors.Is(err, db.ErrMergeFindingDecided):
-		// 409, and it names who. The two answers here are opposites, so a second
-		// operator has to know that somebody chose — not merely that their own
-		// request failed.
-		jsonErrorResponse(w, http.StatusConflict, "ALREADY_DECIDED", err.Error())
+		// 409, and it names who, what and WHY. The two answers here are
+		// opposites, so a second operator has to know that somebody chose — and
+		// the reason is what lets them agree or disagree rather than only lose.
+		// It was made mandatory for this reader and then shown to everybody
+		// except them.
+		//
+		// The API's own sentence is not the copy: a surface renders these
+		// fields, and a UUID beside a snake_case resolution is raw material.
+		jsonResponse(w, http.StatusConflict, ErrorResponse{
+			Error:   "ALREADY_DECIDED",
+			Message: err.Error(),
+			Details: decidedDetails(err),
+		})
 	default:
 		jsonErrorResponse(w, http.StatusInternalServerError, "RESOLVE_FAILED", err.Error())
 	}
@@ -584,3 +600,37 @@ func mergeFindingCount(ctx context.Context) int {
 	}
 	return n
 }
+
+// decidedDetails carries what the second operator needs from a refusal: what
+// was chosen, by whom, and why.
+//
+// The reason in particular. It is mandatory on every resolution and it exists
+// for exactly this reader — a finding takes one decision, so somebody arriving
+// second can only agree or disagree, and neither is possible from "already
+// decided as take_theirs by u_5f2c". Until now it was written and shown to
+// everybody except the person it was written for.
+func decidedDetails(err error) map[string]string {
+	var standing db.MergeFinding
+	var carrier mergeDecidedBy
+	if !errors.As(err, &carrier) {
+		return nil
+	}
+	standing = carrier.standing
+	details := map[string]string{"decision": standing.Decision, "decided_by": standing.DecidedBy}
+	if standing.DecisionReason != "" {
+		details["decision_reason"] = standing.DecisionReason
+	}
+	if standing.DecidedAt != nil {
+		details["decided_at"] = standing.DecidedAt.UTC().Format(time.RFC3339)
+	}
+	return details
+}
+
+// mergeDecidedBy carries the standing finding alongside the refusal, so the
+// surface renders fields rather than parsing a sentence.
+type mergeDecidedBy struct {
+	error
+	standing db.MergeFinding
+}
+
+func (m mergeDecidedBy) Unwrap() error { return m.error }
