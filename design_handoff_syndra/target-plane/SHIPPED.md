@@ -87,18 +87,39 @@ band published with one. One control now, and the backend refuses a blank note
 outright — the note is the only record of why a set was right, and its whole
 reader is somebody months later deciding whether to roll back to it.
 
-## Gaps this work opened or found, in the order they matter
+## Gaps this work opened or found
 
-1. **There is no UI for creating a mapping.** The board draws "Add a mapping"
-   and it was never built. The backend path, the rehearsal and the typed client
-   are all in place, so what is missing is the form itself.
-2. **The requests queue renders every row.** Found by a test that times out
-   under load: asserting the 500-row ceiling means rendering 501 real rows, and
-   `RequestsScreen` caps nothing. The drift queue and the people list both cap
-   at a page and offer a "show all" control; this one does not, so an operator
-   with a long queue pays the whole cost on arrival. Out of scope for this
-   branch — it is not the target plane — and the test carries a raised timeout
-   with the reason rather than a weakened assertion.
-3. **000045 is unapplied.** `decision_reason` is required by the constraint the
-   migration adds, so a deployment running the new backend against the old
-   schema refuses every decision. It must go out together.
+All three that were open are closed.
+
+**The create form exists.** `AddMappingDialog` composes project, role, field and
+value, rehearses through the shared dialog, meets the cohort ceremony if the
+backend refuses for size, and applies the plan it showed. The field is a text
+box prefilled with `group` rather than a list: the add-on's schema is the
+authority on which fields exist, and a hard-coded list here would be a second
+definition that goes stale the day an add-on declares a third.
+
+**The requests queue has a visible end.** It rendered every row it was given,
+where the drift queue and the people list both cap at a page. The cap is on
+rendering only — selection stays scoped to the whole pending queue, so the
+bar's ceiling message keeps counting what it always counted.
+
+**000045 verified against the live schema.** A throwaway clone of production's
+schema (at 44) took the migration cleanly, the widened constraint refused a
+decision with no reason and accepted one with it, and the down migration
+restored the narrower constraint and dropped the column without disturbing a
+row that already carried a decision. The probe was dropped; production is
+untouched at `44 | not dirty`.
+
+**It still has to ship with its backend.** The constraint requires a reason, so
+the new code against the old schema refuses every decision, and the old code
+against the new schema writes decisions the constraint rejects. One deploy.
+
+## Found on the way, not fixed here
+
+- **`BulkOp` never contained the mapping surfaces**, though they have spoken
+  that shape since they were rehearsed. Widening it broke an exhaustive switch,
+  which is the compiler pointing at what the type had been hiding. Fixed, and
+  worth remembering as the shape of that class of bug.
+- **`RequestsScreen`'s field hints were inside their labels**, making each
+  control's accessible name its title plus a paragraph. Fixed in the new form;
+  the pattern may exist elsewhere and has not been swept for.
