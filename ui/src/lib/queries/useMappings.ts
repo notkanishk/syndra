@@ -205,6 +205,30 @@ export function usePublishMappingVersion(target: string) {
   });
 }
 
+/**
+ * What a rollback would do, before it does it.
+ *
+ * It was the one mapping change that did not rehearse — edit and delete both
+ * state their cohort and wait, while reverting a publish, which can move more
+ * people than either, went straight through.
+ *
+ * One plan for the whole version rather than one per mapping: two mappings on
+ * one role reach the same people, so per-mapping counts cannot be added up, and
+ * somebody whose mapping the rollback deletes appears in the working copy and
+ * in no version at all. Only the whole-version plan computes distinct people
+ * across the union.
+ */
+export async function rehearseMappingRollback(
+  target: string,
+  version: number,
+  acknowledgeScope: boolean,
+): Promise<BulkPlan> {
+  return request<BulkPlan>(
+    `/targets/${target}/mappings/versions/${version}/rehearse-rollback`,
+    { method: "POST", body: { acknowledge_scope: acknowledgeScope } },
+  );
+}
+
 export function useRollbackMappingVersion(target: string) {
   const client = useQueryClient();
   return useMutation({

@@ -21,6 +21,7 @@ import {
   useMappings,
   usePublishMappingVersion,
   useRollbackMappingVersion,
+  rehearseMappingRollback,
   type MappingApplyResult,
   type MappingVersion,
   type RoleMapping,
@@ -381,7 +382,8 @@ function VersionRow({
   unpublished: boolean;
 }) {
   const rollback = useRollbackMappingVersion(target);
-  const [confirming, setConfirming] = useState(false);
+  const [rehearsing, setRehearsing] = useState(false);
+  const [rehearsed, setRehearsed] = useState<BulkPlan | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   return (
@@ -402,7 +404,7 @@ function VersionRow({
           </span>
         ) : null}
         {(!current || unpublished) && (
-          <Button variant="outline" size="sm" onClick={() => setConfirming(true)}>
+          <Button variant="outline" size="sm" onClick={() => setRehearsing(true)}>
             Roll back to this
           </Button>
         )}
@@ -429,87 +431,51 @@ function VersionRow({
           operator is looking at and the thing that changed. */}
       {outcome && <ActionOutcome outcome={outcome} className="mt-3" />}
 
-      {confirming && (
-        <RollbackConfirm
-          version={version}
-          pending={rollback.isPending}
-          onCancel={() => setConfirming(false)}
-          onConfirm={() =>
-            rollback.mutate(version.version, {
-              onSuccess: (result) => {
-                setConfirming(false);
-                // Queued, never applied. The bindings are restored here and the
-                // people they move are converged by the drain — a rollback that
-                // changed the definition and left the target alone is the
-                // definition and the world disagreeing, silently.
-                setOutcome({
-                  kind: "queued",
-                  message: `Rolled back to version ${version.version} — ${
-                    result.queued_convergences
-                  } ${result.queued_convergences === 1 ? "person is" : "people are"} queued for convergence`,
-                  detail:
-                    "Nothing has reached the target yet — resume the queue on Pending changes.",
-                });
-              },
+      {rehearsing && (
+        <RehearsalDialog
+          title={`Roll back to version ${version.version}`}
+          lede={`This replaces what roles reach ${targetLabel(target)} with the ${
+            version.entries.length
+          } binding${version.entries.length === 1 ? "" : "s"} in version ${version.version}.`}
+          noun={["person", "people"]}
+          consequence={
+            <>
+              Anything added since version {version.version} is removed — a rollback restores
+              a set, it does not merge one. The people it moves include everybody who loses a
+              mapping, not only those who gain one.
+            </>
+          }
+          onRehearse={async (acknowledgeScope) => {
+            const plan = await rehearseMappingRollback(target, version.version, acknowledgeScope);
+            setRehearsed(plan);
+            return plan;
+          }}
+          onApply={async () =>
+            new Promise((resolve, reject) => {
+              rollback.mutate(version.version, {
+                onSuccess: (result) => {
+                  setOutcome({
+                    kind: "queued",
+                    message: `Rolled back to version ${version.version} — ${
+                      result.queued_convergences
+                    } ${result.queued_convergences === 1 ? "person is" : "people are"} queued for convergence`,
+                    detail:
+                      "Nothing has reached the target yet — resume the queue on Pending changes.",
+                  });
+                  // The plan the dialog showed is the one being reported back,
+                  // with every row now queued — `asPlan` carries the outcomes
+                  // through so the result step lists the same people the
+                  // rehearsal did, rather than an empty summary.
+                  resolve(asPlan("rollback_mappings", rehearsed ?? emptyPlan("rollback_mappings"), result));
+                },
+                onError: reject,
+              });
             })
           }
+          onClose={() => setRehearsing(false)}
         />
       )}
     </div>
   );
 }
 
-/**
- * Rolling back, acknowledged at rung 2.
- *
- * The number inside the sentence is the binding count rather than a head count,
- * and that is the honest one: a rollback restores a SET, and how many people it
- * moves depends on who holds those roles at the moment the drain runs. Claiming
- * a person count here would be claiming a rehearsal this endpoint does not do.
- */
-function RollbackConfirm({
-  version,
-  pending,
-  onConfirm,
-  onCancel,
-}: {
-  version: MappingVersion;
-  pending: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  const [acknowledged, setAcknowledged] = useState(false);
-
-  return (
-    <div className="mt-3 grid gap-3 rounded-inner border border-warn-line bg-warn-soft px-4 py-3">
-      <p className="text-[13.5px] text-muted">
-        This replaces what roles reach here with the {version.entries.length} binding
-        {version.entries.length === 1 ? "" : "s"} in version {version.version}. Anything
-        added since is removed — a rollback restores a set, it does not merge one.
-      </p>
-      <label className="flex cursor-pointer items-start gap-3 text-[14px]">
-        <input
-          type="checkbox"
-          className="mt-1 size-4 shrink-0 accent-[var(--accent)]"
-          checked={acknowledged}
-          onChange={(e) => setAcknowledged(e.target.checked)}
-        />
-        <span>
-          I understand this restores{" "}
-          <span className="font-semibold">
-            {version.entries.length} binding{version.entries.length === 1 ? "" : "s"}
-          </span>{" "}
-          and removes anything added since.
-        </span>
-      </label>
-      <div className="flex gap-2">
-        <Button variant="accent" size="sm" disabled={!acknowledged || pending} onClick={onConfirm}>
-          {pending ? "Rolling back…" : `Roll back to version ${version.version}`}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </div>
-  );
-}

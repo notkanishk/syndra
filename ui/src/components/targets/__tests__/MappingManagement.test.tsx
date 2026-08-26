@@ -206,19 +206,16 @@ describe("version history", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: /roll back to this/i })[0]);
 
-    // Rung 2: the number sits inside the sentence being ticked, and it is the
-    // binding count rather than a head count — how many people it moves depends
-    // on who holds those roles when the drain runs, and claiming a person count
-    // would be claiming a rehearsal this endpoint does not do.
-    // In the sentence being ticked, not merely somewhere on the row.
-    expect(
-      screen.getByText(/I understand this restores/i).textContent,
-    ).toMatch(/2 bindings/);
-    const confirm = screen.getByRole("button", { name: /roll back to version 1/i });
-    expect(confirm).toBeDisabled();
-
-    fireEvent.click(screen.getByRole("checkbox"));
-    expect(confirm).toBeEnabled();
+    // It rehearses now, like every other change on this screen. It used to
+    // acknowledge a BINDING count instead — an honest number at the time,
+    // because no endpoint could tell it how many people the set moved. One can,
+    // so the ceremony is the plan and the count is people.
+    expect(screen.getByRole("dialog", { name: /Roll back to version 1/i })).toBeTruthy();
+    expect(screen.getByText(/it does not merge one/)).toBeTruthy();
+    // And the thing an operator would otherwise not think to check: a rollback
+    // reaches the people it takes a mapping AWAY from, not only those it gives
+    // one to.
+    expect(screen.getByText(/not only those who gain one/)).toBeTruthy();
   });
 });
 
