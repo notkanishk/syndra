@@ -221,3 +221,34 @@ describe("version history", () => {
     expect(confirm).toBeEnabled();
   });
 });
+
+/**
+ * The consequence the plan's own numbers cannot state (design M3).
+ *
+ * A mapping edit moves a group. It does not move what the old group owns, and
+ * Syndra has no way to: the files stay owned by the group that owned them, and
+ * everybody who moved loses access to them until somebody on the target re-owns
+ * them.
+ *
+ * No count implies that, so it is stated beside the plan rather than left to be
+ * discovered afterwards by the thirty-four people it happens to.
+ */
+describe("changing what a role reaches · the consequence no count implies", () => {
+  it("says the old group keeps its files, and names the target that must re-own them", async () => {
+    renderMappings();
+
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.change(screen.getByRole("textbox", { name: /new value/i }), {
+      target: { value: "lab_x" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+
+    // On the REVIEW step, beside the plan — it is part of what is being
+    // approved, not a caveat about the form that composed it.
+    await waitFor(() => expect(screen.getByText(/stay owned by it/)).toBeTruthy());
+    expect(screen.getByText(/re-owns them on TrueNAS/)).toBeTruthy();
+    // The group it is leaving, named — "the old group" is not something an
+    // operator can check against the NAS.
+    expect(screen.getByText("lab_makers")).toBeTruthy();
+  });
+});

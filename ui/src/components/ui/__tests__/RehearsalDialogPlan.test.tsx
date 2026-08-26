@@ -228,9 +228,38 @@ describe("a change bigger than the usual one", () => {
     // they are being warned about.
     expect(notice).toHaveTextContent("63");
     expect(notice).toHaveTextContent("25");
-    expect(screen.getByRole("button", { name: /Yes, plan for 63 people/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Plan for 63 people/ })).toBeInTheDocument();
     // Nothing has been computed, so there is nothing to apply.
     expect(screen.queryByRole("button", { name: /^Apply/ })).not.toBeInTheDocument();
+  });
+
+  // Rung 2 is the tick, not the label. A button carrying the count is something
+  // a hand reaches past; the ceremony has to be an act, and it has to be an act
+  // about the number.
+  it("holds the plan behind an acknowledgement carrying the count", async () => {
+    onRehearse = vi.fn().mockRejectedValue(refusal());
+    open();
+    await screen.findByRole("status");
+
+    const tick = screen.getByRole("checkbox");
+    expect(tick).not.toBeChecked();
+    expect(screen.getByText(/I understand this moves/)).toHaveTextContent("63 people");
+    expect(screen.getByRole("button", { name: /Plan for 63 people/ })).toBeDisabled();
+
+    fireEvent.click(tick);
+    expect(screen.getByRole("button", { name: /Plan for 63 people/ })).toBeEnabled();
+  });
+
+  // It computes a plan and writes nothing, so it is not the solid red fill that
+  // is reserved for the button which performs a destruction.
+  it("does not dress computing a plan as a destructive confirm", async () => {
+    onRehearse = vi.fn().mockRejectedValue(refusal());
+    open();
+    await screen.findByRole("status");
+
+    expect(screen.getByRole("button", { name: /Plan for 63 people/ }).className).not.toMatch(
+      /bg-danger\b/,
+    );
   });
 
   it("re-rehearses with the acknowledgement, and only then", async () => {
@@ -239,7 +268,8 @@ describe("a change bigger than the usual one", () => {
     await screen.findByRole("status");
 
     expect(vi.mocked(onRehearse)).toHaveBeenNthCalledWith(1, false);
-    fireEvent.click(screen.getByRole("button", { name: /Yes, plan for 63 people/ }));
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: /Plan for 63 people/ }));
     await screen.findByRole("button", { name: "Apply to 1 person" });
     expect(vi.mocked(onRehearse)).toHaveBeenNthCalledWith(2, true);
   });
@@ -293,5 +323,45 @@ describe("queued rows say what happens next", () => {
       summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 1, queued: 0 },
     });
     expect(note).toBeUndefined();
+  });
+});
+
+/**
+ * A plan that arrives without its rows.
+ *
+ * The list is read off a payload like every other list in the product, and every
+ * other one is read with `?? []`. This one was not, so a short payload threw
+ * inside render and the error boundary blanked the screen — on the surface an
+ * operator is standing on halfway through approving a change that moves
+ * somebody's access.
+ *
+ * The right failure is a plan with no rows beside its summary. The backend
+ * being wrong is not a reason to lose the page.
+ */
+describe("a plan whose rows did not arrive", () => {
+  it("renders without them rather than taking the screen down", async () => {
+    onRehearse = vi
+      .fn()
+      .mockResolvedValue({ ...plan(), outcomes: undefined } as unknown as BulkPlan);
+    open();
+
+    expect(await screen.findByText(/came back without its rows/)).toBeInTheDocument();
+    // And the approval is still reachable: the summary is what it reported.
+    expect(screen.getByRole("button", { name: /^Apply/ })).toBeInTheDocument();
+  });
+
+  // The other half of the same payload problem, and the worse one: it does not
+  // fail loudly, it puts a non-number in the label of the button that performs
+  // the change.
+  it("does not put a count it does not have on the apply button", async () => {
+    onRehearse = vi.fn().mockResolvedValue({
+      ...plan(),
+      summary: { ...plan().summary, apply: undefined },
+    } as unknown as BulkPlan);
+    open();
+
+    const apply = await screen.findByRole("button", { name: /^Apply/ });
+    expect(apply).toHaveTextContent("Apply this plan");
+    expect(apply.textContent).not.toMatch(/undefined|NaN/);
   });
 });

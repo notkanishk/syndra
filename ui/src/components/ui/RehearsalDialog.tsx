@@ -9,6 +9,7 @@ import {
   type ActionOutcome as Outcome,
   type OutcomeKind,
 } from "@/lib/outcome";
+import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PlanReview, applyLabel, planNote } from "@/components/ui/PlanReview";
@@ -105,6 +106,16 @@ interface RehearsalDialogProps {
   /** Solid destructive confirm rather than accent. */
   destructive?: boolean;
   /**
+   * A consequence of this operation that the plan's own numbers cannot state.
+   *
+   * The plan counts what Syndra will change. Some operations also have an
+   * effect Syndra does not perform and cannot undo — a mapping edit moves a
+   * group, and the files the old group owns stay owned by it — and no count
+   * implies that. Rendered under the plan, on the review step, because it is
+   * part of what is being approved rather than a caveat about the form.
+   */
+  consequence?: React.ReactNode;
+  /**
    * Computes the plan. Takes the scope acknowledgement rather than reading it
    * from the caller, so a surface cannot acknowledge on the operator's behalf.
    */
@@ -184,6 +195,7 @@ export function RehearsalDialog({
   compose,
   ready = true,
   destructive = false,
+  consequence,
   onRehearse,
   onApply,
   onClose,
@@ -210,6 +222,7 @@ export function RehearsalDialog({
   const [stalePlan, setStalePlan] = useState<{ code: string; subjects: string[] } | null>(null);
   /** Set when the backend refuses to approve a change of this size unasked. */
   const [scope, setScope] = useState<{ affected: string; limit: string } | null>(null);
+  const [scopeAcknowledged, setScopeAcknowledged] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   /**
@@ -230,6 +243,7 @@ export function RehearsalDialog({
       const oversized = cohortRefusal(error);
       if (oversized) {
         setScope(oversized);
+        setScopeAcknowledged(false);
         setStep("scope");
         return null;
       }
@@ -328,20 +342,34 @@ export function RehearsalDialog({
       {step === "compose" ? (
         <div className="flex flex-col gap-4 px-6">{compose}</div>
       ) : step === "scope" ? (
-        <div className="px-6">
-          <div
-            role="status"
-            className="rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-[13.5px] text-warn-text"
-          >
-            <p className="font-medium">
-              This would change access for {scope?.affected} {noun[1]}.
-            </p>
-            <p className="mt-1">
-              Anything above {scope?.limit} is confirmed separately, because a number is the one
-              part of a bulk change that is easy to get wrong and hard to see. Confirming computes
-              the plan — it still writes nothing.
-            </p>
-          </div>
+        <div className="grid gap-3 px-6">
+          {/* The step did not exist a moment ago and does not appear below the
+              limit. Said first, so an operator who crosses the threshold once
+              cannot mistake it for a form they filled in wrong — and one who
+              never crosses it never learns the step exists. */}
+          <p role="status" className="text-[13.5px] leading-[1.55] text-muted">
+            The plan moves{" "}
+            <strong className="font-semibold text-ink">
+              {scope?.affected} {noun[1]}
+            </strong>
+            , and anything above {scope?.limit} is refused until somebody says the number out
+            loud. Confirming computes the plan — it still writes nothing.
+          </p>
+          {/* Rung 2, and the product's own primitive for it. This step used to
+              be a warn panel and a button carrying the count, which is a rung
+              below what it claims: the ceremony is the tick, and a label is
+              something a hand reaches past. Not rung 3 either — copying digits
+              trains an operator not to look, and typing back a number the
+              screen already shows proves nothing. Rung 3 stays reserved for
+              taking access from a person somebody named. */}
+          <AcknowledgeCount
+            checked={scopeAcknowledged}
+            onChange={setScopeAcknowledged}
+            count={Number(scope?.affected ?? 0)}
+            noun={noun[1]}
+            verb="moves"
+            disabled={busy}
+          />
         </div>
       ) : (
         <>
@@ -369,6 +397,11 @@ export function RehearsalDialog({
             </div>
           )}
           <PlanReview plan={plan} />
+          {consequence && (
+            <div className="px-6">
+              <p className="text-[13.5px] leading-[1.55] text-warn-text">{consequence}</p>
+            </div>
+          )}
         </>
       )}
 
@@ -404,12 +437,16 @@ export function RehearsalDialog({
 
         {step === "scope" && (
           <>
+            {/* Accent, not a solid red fill. This button computes a plan and
+                writes nothing, and `dangerConfirm` is reserved for the button
+                that performs a destruction. */}
             <Button
-              variant="dangerConfirm"
+              variant="accent"
               isPending={busy}
+              disabled={!scopeAcknowledged}
               onClick={() => void rehearse(true).catch(() => {})}
             >
-              Yes, plan for {scope?.affected} {noun[1]}
+              Plan for {scope?.affected} {noun[1]}
             </Button>
             <Button disabled={busy} onClick={compose ? () => setStep("compose") : onClose}>
               {compose ? "Back" : "Cancel"}
