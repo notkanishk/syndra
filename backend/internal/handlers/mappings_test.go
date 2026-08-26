@@ -14,6 +14,7 @@ import (
 	"syndra/internal/addons"
 	"syndra/internal/auth"
 	"syndra/internal/db"
+	"syndra/internal/services"
 )
 
 // 7.4, 8.6/8.10 — the surfaces around mappings and allowances, and the split
@@ -25,7 +26,10 @@ type mappingHarness struct {
 	valueErr error
 
 	// The apply half: who holds the role, what the edit did, and what it queued.
-	holders   []string
+	holders []string
+	// Per-role holders, keyed "project\x00role", for the tests where the whole
+	// point is that two roles reach different people. Falls back to `holders`.
+	holdersBy map[string][]string
 	claimed   []db.PlanCitation
 	claimErr  error
 	updated   []string
@@ -75,7 +79,12 @@ func stubMappingApplyPath(t *testing.T, h *mappingHarness) {
 		dbUpdateRoleMappingValue, dbDeleteRoleMapping = update, del
 	})
 
-	dbMappingHolders = func(context.Context, string, string) ([]string, error) { return h.holders, nil }
+	dbMappingHolders = func(_ context.Context, project, role string) ([]string, error) {
+		if who, ok := h.holdersBy[project+"\x00"+role]; ok {
+			return who, nil
+		}
+		return h.holders, nil
+	}
 	svcInTxLockingAccess = func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
 	dbClaimPlanVerified = func(_ context.Context, c db.PlanCitation, _ func([]db.PlanSubject) error) (db.Plan, []db.PlanSubject, error) {
 		h.claimed = append(h.claimed, c)
@@ -635,8 +644,15 @@ func TestARollbackThatDidNotRestoreQueuesNothing(t *testing.T) {
 	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
 	h.holders = []string{"u1"}
 
-	roll := dbRollbackMappingVersion
-	t.Cleanup(func() { dbRollbackMappingVersion = roll })
+	list, roll := dbListRoleMappings, dbRollbackMappingVersion
+	t.Cleanup(func() { dbListRoleMappings, dbRollbackMappingVersion = list, roll })
+	// Read before the restore now, because the restore is what removes the
+	// mappings whose holders would otherwise be missed. Read-only either way.
+	dbListRoleMappings = func(context.Context, string) ([]db.RoleMapping, error) {
+		return []db.RoleMapping{
+			{ID: "m1", Target: "truenas", ProjectID: "pLab", RoleKey: "trained", Field: "group", Value: "lab_makers"},
+		}, nil
+	}
 	dbRollbackMappingVersion = func(context.Context, string, int, string) error {
 		return db.ErrMappingNotFound
 	}
@@ -669,5 +685,195 @@ func TestTheMappingErrorsAreClassifiedOnTheAddonsOwnSentinels(t *testing.T) {
 	}
 	if !strings.Contains(string(src), "addons.ErrValueNotResolvable") {
 		t.Error("the value refusal must be classified on the add-on package's own sentinel")
+	}
+}
+
+// A rollback restores a SET, so it reaches everybody the set moved — including
+// the people whose mapping it deletes.
+//
+// `RollbackMappingVersion` clears the whole working set and reinserts the
+// version's entries, and the convergence loop then read the mappings that
+// REMAIN. A person holding only a role whose mapping the rollback removes was
+// in no list it walked: nothing was queued for them, and their account kept
+// what that mapping granted until a sweep happened to notice, up to six hours
+// later.
+//
+// Losing an entitlement is as much a change as gaining one, and it is the half
+// an operator is less likely to check.
+func TestARollbackReconvergesTheHoldersOfWhatItDeletes(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	stubResolvedIntent(t)
+	h.holdersBy = map[string][]string{
+		"pLab\x00trained":  {"u1", "u2"},
+		"pArchive\x00lead": {"u3"},
+	}
+
+	list, roll := dbListRoleMappings, dbRollbackMappingVersion
+	t.Cleanup(func() { dbListRoleMappings, dbRollbackMappingVersion = list, roll })
+
+	// Before the restore the working copy holds both. After it, only the first:
+	// the archive mapping is what the rollback removes.
+	restored := false
+	dbRollbackMappingVersion = func(context.Context, string, int, string) error {
+		restored = true
+		return nil
+	}
+	dbListRoleMappings = func(context.Context, string) ([]db.RoleMapping, error) {
+		if restored {
+			return []db.RoleMapping{
+				{ID: "m1", Target: "truenas", ProjectID: "pLab", RoleKey: "trained", Field: "group", Value: "lab_makers"},
+			}, nil
+		}
+		return []db.RoleMapping{
+			{ID: "m1", Target: "truenas", ProjectID: "pLab", RoleKey: "trained", Field: "group", Value: "lab_makers"},
+			{ID: "m2", Target: "truenas", ProjectID: "pArchive", RoleKey: "lead", Field: "group", Value: "archive"},
+		}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/truenas/mappings/versions/2/rollback", nil)
+	r.SetPathValue("target", "truenas")
+	r.SetPathValue("version", "2")
+	handleRollbackMappingVersion(rr, r)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+
+	got := map[string]bool{}
+	for _, c := range h.converged {
+		got[c.SubjectID] = true
+	}
+	// u3 held only the deleted mapping's role. They are the whole test.
+	for _, who := range []string{"u1", "u2", "u3"} {
+		if !got[who] {
+			t.Errorf("%s was moved by this rollback and was not reconverged: %+v", who, h.converged)
+		}
+	}
+	if len(h.converged) != 3 {
+		t.Errorf("one convergence per person reached, got %d: %+v", len(h.converged), h.converged)
+	}
+}
+
+// A rollback rehearses, and its cohort is the union.
+//
+// It was the one mapping change that did not rehearse, which made the screen's
+// own promise — every change here is rehearsed before it lands — untrue for the
+// change that can move the most people.
+//
+// The number it states is distinct PEOPLE across the roles the working copy
+// reaches and the roles the version reaches. Per-mapping counts cannot be added
+// up: two mappings on one role reach the same people, and somebody whose
+// mapping the rollback deletes appears in the current set and in no version.
+func TestARollbackRehearsesTheUnionOfBothSets(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h.holdersBy = map[string][]string{
+		// Overlaps deliberately: u2 holds both, so the honest count is three.
+		"pLab\x00trained":  {"u1", "u2"},
+		"pArchive\x00lead": {"u2", "u3"},
+	}
+
+	list, hist := dbListRoleMappings, dbListMappingHistory
+	t.Cleanup(func() { dbListRoleMappings, dbListMappingHistory = list, hist })
+
+	// The working copy reaches pArchive/lead. Version 2 reaches pLab/trained.
+	// Neither set alone is the cohort.
+	dbListRoleMappings = func(context.Context, string) ([]db.RoleMapping, error) {
+		return []db.RoleMapping{
+			{ID: "m2", Target: "truenas", ProjectID: "pArchive", RoleKey: "lead", Field: "group", Value: "archive"},
+		}, nil
+	}
+	dbListMappingHistory = func(context.Context, string) (db.MappingHistory, error) {
+		return db.MappingHistory{
+			Target: "truenas", CurrentVersion: 2,
+			Versions: []db.MappingVersion{{
+				Version: 2,
+				Entries: []db.MappingVersionEntry{
+					{ProjectID: "pLab", RoleKey: "trained", Field: "group", Value: "lab_makers"},
+				},
+			}},
+		}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost,
+		"/api/v1/targets/truenas/mappings/versions/2/rehearse-rollback",
+		strings.NewReader(`{"acknowledge_scope":true}`))
+	r.SetPathValue("target", "truenas")
+	r.SetPathValue("version", "2")
+	handleRehearseMappingRollback(rr, r)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	var plan services.BulkPlan
+	if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil {
+		t.Fatalf("decode plan: %v", err)
+	}
+
+	// Three, not four: u2 is one person however many roles reach them.
+	if plan.Summary.Apply != 3 {
+		t.Errorf("want three distinct people, got %d: %+v", plan.Summary.Apply, plan.Outcomes)
+	}
+	seen := map[string]int{}
+	for _, o := range plan.Outcomes {
+		seen[o.UserID]++
+	}
+	for _, who := range []string{"u1", "u2", "u3"} {
+		if seen[who] != 1 {
+			t.Errorf("%s should appear exactly once, appeared %d times", who, seen[who])
+		}
+	}
+	// And nothing was written by rehearsing it.
+	if len(h.converged) != 0 {
+		t.Errorf("a rehearsal queues nothing: %+v", h.converged)
+	}
+}
+
+// The same ceremony, at the same threshold, from the same place. A rollback
+// that skipped it would be the largest change on the screen asking for the
+// least.
+func TestARollbackTooLargeIsRefusedUntilAcknowledged(t *testing.T) {
+	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+
+	many := make([]string, 40)
+	for i := range many {
+		many[i] = fmt.Sprintf("u%02d", i)
+	}
+	list, hist := dbListRoleMappings, dbListMappingHistory
+	t.Cleanup(func() { dbListRoleMappings, dbListMappingHistory = list, hist })
+	dbListRoleMappings = func(context.Context, string) ([]db.RoleMapping, error) {
+		return []db.RoleMapping{
+			{ID: "m1", Target: "truenas", ProjectID: "pLab", RoleKey: "trained", Field: "group", Value: "lab_makers"},
+		}, nil
+	}
+	dbListMappingHistory = func(context.Context, string) (db.MappingHistory, error) {
+		return db.MappingHistory{Target: "truenas", CurrentVersion: 2,
+			Versions: []db.MappingVersion{{Version: 2}}}, nil
+	}
+	holders := dbMappingHolders
+	t.Cleanup(func() { dbMappingHolders = holders })
+	dbMappingHolders = func(context.Context, string, string) ([]string, error) { return many, nil }
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost,
+		"/api/v1/targets/truenas/mappings/versions/2/rehearse-rollback", strings.NewReader(`{}`))
+	r.SetPathValue("target", "truenas")
+	r.SetPathValue("version", "2")
+	handleRehearseMappingRollback(rr, r)
+
+	// 422 and COHORT_ACKNOWLEDGEMENT_REQUIRED, which is what every other
+	// mapping change already answers — the board's caption labels this step
+	// "409 · COHORT_LIMIT" and is wrong about both. The surface branches on the
+	// code and never on the status, so the label was never load-bearing.
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "COHORT_ACKNOWLEDGEMENT_REQUIRED") {
+		t.Errorf("the surface branches on this code: %s", rr.Body.String())
+	}
+	// The number it computed, so the ceremony can state it.
+	if !strings.Contains(rr.Body.String(), "40") {
+		t.Errorf("the refusal must carry the count it computed: %s", rr.Body.String())
 	}
 }

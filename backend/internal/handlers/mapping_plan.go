@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,6 +37,9 @@ import (
 const (
 	planSurfaceMappingEdit   = "mappings.edit"
 	planSurfaceMappingDelete = "mappings.delete"
+	// A rollback is not a change to one mapping. It restores a SET, so its plan
+	// is issued against the target and the version rather than against a row.
+	planSurfaceMappingRollback = "mappings.rollback"
 )
 
 type mappingPlanRequest struct {
@@ -305,45 +310,186 @@ var svcResolveEntitlementsFor = func(ctx context.Context, subjectID, target stri
 // version carries, because a rollback can reinstate a binding for a role nobody
 // currently holds a mapping for, and those holders are exactly the ones whose
 // access the rollback is meant to bring back.
+// rollbackCohort is everybody a rollback to `version` would move: the distinct
+// holders of every role reached by the working copy OR by the version.
+//
+// The UNION, and that is the correction. The convergence loop used to walk only
+// the mappings that survived the restore, so a person holding just a role whose
+// mapping the rollback deletes was in no list it read — nothing was queued for
+// them and their account kept what that mapping granted until a sweep noticed,
+// up to six hours later. Losing an entitlement is as much a change as gaining
+// one, and it is the half nobody thinks to check.
+//
+// Distinct PEOPLE rather than per-mapping holders, because two mappings on one
+// role reach the same person and a ceremony that adds them up states a number
+// nobody can verify. One read per role, however many mappings touch it.
+func rollbackCohort(ctx context.Context, before, after []db.RoleMapping) ([]string, error) {
+	roles := map[[2]string]struct{}{}
+	for _, set := range [][]db.RoleMapping{before, after} {
+		for _, m := range set {
+			roles[[2]string{m.ProjectID, m.RoleKey}] = struct{}{}
+		}
+	}
+
+	seen := map[string]struct{}{}
+	cohort := []string{}
+	for role := range roles {
+		holders, err := dbMappingHolders(ctx, role[0], role[1])
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range holders {
+			if _, dup := seen[id]; dup {
+				continue
+			}
+			seen[id] = struct{}{}
+			cohort = append(cohort, id)
+		}
+	}
+	sort.Strings(cohort)
+	return cohort, nil
+}
+
 func rollbackAndConverge(ctx context.Context, target string, version int, actor string) (int, error) {
 	converged := 0
 	err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
+		// Read BEFORE the restore, because the restore is what removes the
+		// mappings whose holders would otherwise be missed.
+		before, err := dbListRoleMappings(ctx, target)
+		if err != nil {
+			return err
+		}
 		if err := dbRollbackMappingVersion(ctx, target, version, actor); err != nil {
 			return err
 		}
-		mappings, err := dbListRoleMappings(ctx, target)
+		after, err := dbListRoleMappings(ctx, target)
 		if err != nil {
 			return err
 		}
 
-		// One convergence per subject, not per mapping: two restored mappings on
-		// one role would otherwise queue the same resolved set twice.
-		seen := map[string]struct{}{}
-		for _, m := range mappings {
-			holders, err := dbMappingHolders(ctx, m.ProjectID, m.RoleKey)
+		cohort, err := rollbackCohort(ctx, before, after)
+		if err != nil {
+			return err
+		}
+		for _, id := range cohort {
+			// Resolved AFTER the restore, so somebody who lost a mapping
+			// converges to a set that no longer contains what it granted.
+			set, err := svcResolveEntitlementsFor(ctx, id, target)
 			if err != nil {
 				return err
 			}
-			for _, id := range holders {
-				if _, dup := seen[id]; dup {
-					continue
-				}
-				seen[id] = struct{}{}
-				set, err := svcResolveEntitlementsFor(ctx, id, target)
-				if err != nil {
-					return err
-				}
-				if _, _, err := dbRecordSystemConvergence(ctx, db.SystemConvergence{
-					Target: target, SubjectID: id, Actor: actor,
-					Reason:  fmt.Sprintf("Mapping set rolled back to v%d", version),
-					Desired: set,
-				}); err != nil {
-					return err
-				}
-				converged++
+			if _, _, err := dbRecordSystemConvergence(ctx, db.SystemConvergence{
+				Target: target, SubjectID: id, Actor: actor,
+				Reason:  fmt.Sprintf("Mapping set rolled back to v%d", version),
+				Desired: set,
+			}); err != nil {
+				return err
 			}
+			converged++
 		}
 		return nil
 	})
 	return converged, err
+}
+
+// handleRehearseMappingRollback states what a rollback would do, before it does
+// it.
+//
+// Until this existed, a rollback was the one mapping change that did not
+// rehearse: edit and delete both stated their cohort and waited, and reverting
+// a publish — which restores an entire set and can move more people than either
+// — went straight through. The screen's own argument is that every change here
+// is rehearsed before it lands, and this was the exception that made it untrue.
+//
+// One plan for the whole version, never one per mapping. Two mappings on one
+// role reach the same people, so per-mapping rehearsals produce counts nobody
+// can add up: the number that matters is distinct PEOPLE across the union of
+// what the working copy reaches and what the version reaches, and only a
+// whole-version plan can compute it.
+func handleRehearseMappingRollback(w http.ResponseWriter, r *http.Request) {
+	target := r.PathValue("target")
+	version, err := strconv.Atoi(r.PathValue("version"))
+	if err != nil || version < 1 {
+		jsonValidationErrorResponse(w, "version must be a positive integer",
+			map[string]string{"version": "invalid"})
+		return
+	}
+	var req mappingPlanRequest
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
+	}
+
+	history, err := dbListMappingHistory(r.Context(), target)
+	if err != nil {
+		writeMappingError(w, err)
+		return
+	}
+	var restoring *db.MappingVersion
+	for i := range history.Versions {
+		if history.Versions[i].Version == version {
+			restoring = &history.Versions[i]
+			break
+		}
+	}
+	if restoring == nil {
+		writeMappingError(w, fmt.Errorf("%w: %s v%d", db.ErrMappingNotFound, target, version))
+		return
+	}
+
+	current, err := dbListRoleMappings(r.Context(), target)
+	if err != nil {
+		writeMappingError(w, err)
+		return
+	}
+
+	// The version's entries, as mappings, so the cohort is computed over the
+	// same shape on both sides.
+	would := make([]db.RoleMapping, 0, len(restoring.Entries))
+	for _, e := range restoring.Entries {
+		would = append(would, db.RoleMapping{
+			Target: target, ProjectID: e.ProjectID, RoleKey: e.RoleKey,
+			Field: e.Field, Value: e.Value,
+		})
+	}
+
+	cohort, err := rollbackCohort(r.Context(), current, would)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+
+	plan := services.BulkPlan{Op: "rollback_mappings"}
+	detail := fmt.Sprintf("Their access is resolved again from the %d binding%s in version %d.",
+		len(restoring.Entries), plural(len(restoring.Entries)), version)
+	consequence := "Anything added since version " + strconv.Itoa(version) +
+		" is removed — a rollback restores a set, it does not merge one."
+	for _, id := range cohort {
+		plan.Outcomes = append(plan.Outcomes, services.BulkOutcome{
+			UserID: id, Effect: services.EffectApply,
+			Detail: detail, Consequence: consequence,
+			// Bound to the version being restored, not to any one mapping: the
+			// approval is for restoring THIS set, and a different version is a
+			// different act.
+			Fingerprint: services.Fingerprint("rollback", target, strconv.Itoa(version), id),
+		})
+	}
+	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
+
+	// The same ceremony every other mapping change meets, at the same
+	// threshold, from the same place. A rollback that skipped it would be the
+	// largest change on the screen asking for the least.
+	if limit := cohortLimit(); !req.AcknowledgeScope && plan.Summary.Apply > limit {
+		writePlanIssueError(w, &cohortTooLarge{Affected: plan.Summary.Apply, Limit: limit})
+		return
+	}
+
+	jsonResponse(w, http.StatusOK, plan)
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
