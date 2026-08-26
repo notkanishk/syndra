@@ -89,6 +89,16 @@ export function Mono({
  */
 export const STATUS_TONE = {
   healthy: { dot: "bg-healthy", label: "text-ink" },
+  // A reading that is a runtime fact and not a state of health: a target that
+  // is registered and has not published a manifest yet.
+  //
+  // Amber was wrong here and had shipped that way. Amber is a deadline or a
+  // broken assumption, and an add-on that has not answered yet is the ordinary
+  // first minute of its life — spending the colour on it teaches an operator
+  // that the colour does not mean anything, which is the only thing that makes
+  // amber useful anywhere else. Lime is worse: nothing has been read, so
+  // nothing is healthy.
+  neutral: { dot: "bg-faint", label: "text-muted" },
   accent: { dot: "bg-accent", label: "text-accent-text" },
   warn: { dot: "bg-warn", label: "text-warn-text" },
   danger: { dot: "bg-danger", label: "text-danger-text" },
