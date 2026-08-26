@@ -41,6 +41,17 @@ findings and their decision form, the target's own system health, the managed
 roster, the two findings that render inside Health, and the applied history on a
 grant somebody removed by hand. Prompt 3.
 
+## The reply has landed — read `BUILD-NOTES.md` first
+
+`design/` holds two boards and twenty figures; `CLAUDE-DESIGN-REPLY.md` is the
+prose, recorded verbatim; `FIGURES.md` is the inventory, verified against the
+boards. **`BUILD-NOTES.md` overrides the reply where the two disagree** — it is
+the reply read against the code, and it answers ten of the thirteen open
+questions. Start there, not with the boards.
+
+One thing in the reply would break something if built as drawn. It is §1 of the
+build notes.
+
 ## Nothing to download?
 
 Ask for a zip — `PROMPT-5`. It specifies a layout that unzips straight on top of

@@ -1,0 +1,30 @@
+# Figures
+
+One row per figure that exists on a board. Twenty figures: T1–T5 on the target-page board,
+S1–S15 on the supporting-screens board. Ids are stamped into each figure's caption.
+
+Panel numbers refer to the eleven panels of `REFERENCE-current-page.md`; the disposition of
+each panel is in `CLAUDE-DESIGN-REPLY.md` section 2.
+
+| Figure id | Board file | What it shows | Endpoint it reads | Which of the eleven panels it covers |
+|---|---|---|---|---|
+| T1 | design/Syndra Target Page.dc.html | The page redesigned, healthy target. All four regions, rail drawn. | `GET /targets/{t}/health` · `GET /targets/{t}/system-health` · `POST /targets/{t}/lifecycle` · `GET /targets/{t}/merge-findings` · `GET /targets/mappings?target={t}` · `GET /targets/{t}/inventory` · `GET /targets/{t}/accounts/dormant` · roster manifest · `POST /targets/{t}/reconcile` | 1, 2, 5, 6, 7, 8, 10, 11 — and 3/4 as the census line only |
+| T2 | design/Syndra Target Page.dc.html | Same page with four things waiting on a person: three findings and a change record edited after it was queued. | as T1, plus the edited change record (read endpoint unknown — open question 3) | 9 primarily; 1, 2, 5, 6, 7, 8, 10, 11 unchanged around it |
+| T3 | design/Syndra Target Page.dc.html | Same page, target not answering for 41 minutes. Last-read state dimmed and dated, every list action inert with its reason in place, maintenance still live. | as T1. `state_read_at` carries every age; manifest, census and lifecycle are Syndra-side and stay live | 1, 2, 5, 6, 7, 8, 9, 10, 11 |
+| T4 | design/Syndra Target Page.dc.html | A fresh deployment: registered, nothing mapped, nothing bound, no sweep yet. Three hollow zeros and one populated list. | as T1 | 1, 2, 5, 6, 7, 8, 10, 11 — 9 at zero |
+| T5 | design/Syndra Target Page.dc.html | The touch form, 390 × 844. Band, then a region index carrying counts in the row, then the regions in page order. | as T1 — the index is derived from what is already loaded | 1, 2, 5, 6, 7, 8, 9 |
+| S1 | design/Syndra Target Screens.dc.html | Connected systems with nothing registered: what an add-on is, what registers one, what Syndra is consequently not doing. Rail drawn. | `GET /api/v1/targets` (`ADDON_TARGETS` named as prose, not read) | none — new screen |
+| S2 | design/Syndra Target Screens.dc.html | Three registered add-ons: answering · registered with no manifest read yet · transport secret will not load. *Backed off* described in the footer. | `GET /api/v1/targets` | none — new screen |
+| S3 | design/Syndra Target Screens.dc.html | The index read itself failed. Em dash in the count seat, red dot, request id. | `GET /api/v1/targets` | none — new screen |
+| S4 | design/Syndra Target Screens.dc.html | The three merge outcomes — `theirs_only`, `conflict`, `deleted_upstream` — one row shape, three states each, tint on the sides that moved. | `GET /targets/{t}/merge-findings` | 9 |
+| S5 | design/Syndra Target Screens.dc.html | Why one row offers to take the target's value and the other cannot: a per-account field beside a mapping-produced value, with the governing mapping and holder count named. | `GET /targets/{t}/merge-findings` · `GET /targets/mappings?target={t}` | 9, and 3 as the inline mapping reference |
+| S6 | design/Syndra Target Screens.dc.html | The decision open in place: five resolutions, each stating its physical consequence, mandatory reason, rung-1 confirm. | `POST /targets/{t}/merge-findings/{id}/resolve` | 9 |
+| S7 | design/Syndra Target Screens.dc.html | Decided and waiting, with its reason quoted and its cascade id; and the half-finished unbind that offers to finish and is safe to press twice. | `GET /targets/{t}/merge-findings` · `POST …/{id}/resolve` (repair path assumed — open question 9) | 9 |
+| S8 | design/Syndra Target Screens.dc.html | Region 1 empty, drawn as good news: what was compared, and that it can change with nobody doing anything. | `GET /targets/{t}/merge-findings` | 9 |
+| S9 | design/Syndra Target Screens.dc.html | What the target reports, all four read: nothing open; and the live deployment's standing `/dev/sde` alert beside a pool at 94% that raised no alert of its own. | `GET /targets/{t}/system-health` | 2 |
+| S10 | design/Syndra Target Screens.dc.html | A partial read (alerts unread, three answered) beside no read at all (`degraded` on all four, last readings dimmed and dated). | `GET /targets/{t}/system-health` | 2 |
+| S11 | design/Syndra Target Screens.dc.html | Both log-anchor violations — fewer entries than the anchor, and the same count hashing differently — in region 1, with the band's one red line pointing at them. | read endpoint not named in the brief; drawn as arriving with `GET /targets/{t}/health` | 9, and the line it leaves behind in 1 |
+| S12 | design/Syndra Target Screens.dc.html | Re-baselining the anchor: the head cited as read when the dialog opened, mandatory note, no dismiss. | `POST /targets/{t}/log-anchor/resolve` | 9 |
+| S13 | design/Syndra Target Screens.dc.html | Two of Syndra's own records disagreeing about who owns an account. Two identical claimant panels, neither preferred. | read endpoint not named in the brief; drawn as arriving with `GET /targets/{t}/health` | 9 |
+| S14 | design/Syndra Target Screens.dc.html | The ownership dialog — each option stating what the other person loses, nothing pre-selected — and the after state naming what has not changed. | `POST /targets/{t}/binding-conflicts/{id}/resolve` | 9 |
+| S15 | design/Syndra Target Screens.dc.html | Unexplained access with its applied history: a removal with a full history, one with the actor missing from the provider's record, one with no history at all. | `GET /api/v1/governance/drift` · `GET /api/v1/governance/drift/{id}/origin` | none — belongs to the drift screen |
