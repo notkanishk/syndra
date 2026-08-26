@@ -86,7 +86,7 @@ describe("connected systems", () => {
     state.targets = [target({ callable: false, operations: [] })];
     render(<ConnectedSystemsPage />);
 
-    expect(screen.getByText("no manifest yet")).toBeTruthy();
+    expect(screen.getByText("no manifest read yet")).toBeTruthy();
     expect(screen.queryByText("0")).toBeNull();
     expect(screen.getByText("—")).toBeTruthy();
   });
@@ -107,5 +107,40 @@ describe("connected systems", () => {
 
     expect(screen.getByText("calls suspended")).toBeTruthy();
     expect(screen.queryByText("answering")).toBeNull();
+  });
+});
+
+/**
+ * The tone on "registered, no manifest read yet".
+ *
+ * It shipped amber, and amber in this system is a deadline or a broken
+ * assumption. This is neither: it is where every add-on starts, and it resolves
+ * on its own within a refresh interval. Spending amber on the ordinary first
+ * minute of something's life is how amber stops meaning anything on the screens
+ * where it does — the unrecorded key expiry two cards up, for one.
+ */
+describe("the tone a reading wears", () => {
+  const toneOf = (label: string) =>
+    screen.getByText(label).className.match(/text-(muted|warn-text|danger-text|healthy)/)?.[1];
+
+  it("does not spend amber on a target that has simply not answered yet", () => {
+    state.targets = [target({ callable: false, operations: [] })];
+    render(<ConnectedSystemsPage />);
+
+    expect(toneOf("no manifest read yet")).toBe("muted");
+  });
+
+  it("keeps amber for the reading that is a real fault on this host", () => {
+    state.targets = [target({ transport_status: "error", transport_error: "no such file" })];
+    render(<ConnectedSystemsPage />);
+
+    expect(toneOf("transport failed")).toBe("danger-text");
+  });
+
+  it("keeps amber for a breaker somebody has to act on", () => {
+    state.targets = [target({ circuit_open: true })];
+    render(<ConnectedSystemsPage />);
+
+    expect(toneOf("calls suspended")).toBe("warn-text");
   });
 });
