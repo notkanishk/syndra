@@ -78,13 +78,13 @@ export function TargetOverview({ target }: { target: string }) {
 
       <div className="grid gap-8">
         {/* Region 0 · the band.
-        
+
             Health and maintenance are one question, and they used to sit six
             panels apart. A reachability reading has no meaning on its own: NOT
             ANSWERING while somebody is draining it for a credential rotation is
             a different fact from NOT ANSWERING at 04:00, and an operator who
             reads the second when the first is true walks to the wrong machine.
-        
+
             Two cards side by side and never merged into one word: the left is
             Syndra's ability to reach the target, the right is the target's own
             account of itself. Keeping them apart is what makes "look at Syndra"
@@ -113,7 +113,7 @@ export function TargetOverview({ target }: { target: string }) {
         </Region>
 
         {/* Region 1 · second on the page, and not first.
-        
+
             Three findings on a target that has not answered for forty minutes
             are three findings nobody can act on, and the band is what says so.
             But it comes before people and before capabilities, because it is
@@ -134,7 +134,7 @@ export function TargetOverview({ target }: { target: string }) {
         </Region>
 
         {/* Region 2 · the second subject.
-        
+
             Six panels on this page are about the target and five are about
             people and their access. They stay on one page under a seam rather
             than becoming a second screen: NOTHING BOUND means one thing on a
@@ -507,7 +507,7 @@ function Health({
             which is the definition of the region below. A reader who met them
             in a list of readings skimmed them in the same rhythm as
             `in flight: 0`.
-            
+
             What stays is one red line saying something below needs a person
             before this card can be trusted. */}
         {needsAPerson > 0 && (
@@ -1450,13 +1450,13 @@ function LifecycleControl({ target, health }: { target: string; health: TargetHe
           ))}
         </div>
         {/* A lifecycle change that did not land (design B2).
-        
+
             The refusal and the state are two blocks, in that order, and the
             state still leads with its own dot and the word it always wore.
             The single most expensive misreading here is that the page looks
             like the change took, or like the state is now unknown. It is
             known: it is what it was.
-        
+
             Amber and not red, because nothing is broken by this and nothing was
             lost — including the typed reason, which stays in the field. A
             mandatory-reason box that empties itself on a network failure
