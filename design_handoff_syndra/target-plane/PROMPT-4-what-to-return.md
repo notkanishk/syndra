@@ -2,9 +2,25 @@
 
 Paste last, once the screens are drawn.
 
+## How to hand it over
+
+**Publish each commission as a design canvas and give me its link.** One canvas
+per commission — the target page, then the supporting screens — with the figures
+laid out on it. A link I can open is the deliverable; do not describe a canvas
+you have not published.
+
+If you are not able to publish a canvas, say so plainly in one line and answer in
+prose instead. Prose is genuinely useful and gets recorded verbatim — but I need
+to know which of the two I am reading, because a described figure and a drawn one
+are not the same thing and I have previously been handed the first while
+believing it was the second.
+
+Either way, **finish with a single list of every figure you actually drew**, by
+id. Not the ones you discussed. The ones that exist on a canvas.
+
 ## Give me
 
-1. **The canvases** — `.dc.html`, one per commission, with every figure captioned.
+1. **The canvases** — one per commission, published and linked, with every figure captioned.
    The caption is the part I read when the drawing does not cover my case, so it
    carries the *reasoning*, not a label. "Grouped under Health because a target
    that cannot be reached makes the next three panels unanswerable" is a caption.
