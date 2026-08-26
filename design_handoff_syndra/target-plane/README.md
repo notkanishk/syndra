@@ -11,7 +11,8 @@ Paste these three files, **in this order, in one conversation**:
 | 1 | `PROMPT-1-design-system.md` | The design system. Paste it first, on its own, and wait for the acknowledgement. Every later prompt assumes it is in context. |
 | 2 | `PROMPT-2-target-page.md` | **The commission.** Redesign `/system/targets/{target}` as one coherent screen. |
 | 3 | `PROMPT-3-supporting-screens.md` | Six adjacent screens that were built and never drawn. Paste after 2 — they inherit its structural answer. |
-| 4 | `PROMPT-4-what-to-return.md` | What to hand back, and what not to. Paste last. |
+| 4 | `PROMPT-4-what-to-return.md` | What to hand back, and what not to. |
+| 5 | `PROMPT-5-package-the-zip.md` | Ask for it as a zip laid out to drop straight into this folder. Paste last. |
 
 `REFERENCE-current-page.md` is **not** a prompt. It is the panel-by-panel
 inventory of what the page holds today, with each panel's endpoint and data.
@@ -42,10 +43,14 @@ grant somebody removed by hand. Prompt 3.
 
 ## Nothing to download?
 
-That is normal — Claude Design answers in the conversation and there is often no
-bundle. `HOW-TO-LAND-THE-REPLY.md` says how to get it into the repo anyway. The
-short version: paste the reply into a Claude Code session and ask for it to be
-filed, or hand over the canvas's URL if one was published.
+Ask for a zip — `PROMPT-5`. It specifies a layout that unzips straight on top of
+this folder, so the boards land in `design/` with their runtime beside them and
+nothing has to be moved afterwards.
+
+Claude Design otherwise answers in the conversation and there is often no bundle;
+that is what happened on the last commission. `HOW-TO-LAND-THE-REPLY.md` covers
+the fallbacks — paste the prose into a Claude Code session and have it filed, or
+hand over a canvas URL if one was published.
 
 ## What comes back — and what to do with it
 
