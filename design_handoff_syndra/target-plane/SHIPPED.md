@@ -53,16 +53,45 @@ that state. The reading exists in code and has never been seen.
 - **§29's populated dormant card and its bulk action** — already shipped, not
   redrawn, and unchanged by this work.
 
+## Four exceptions that made the copy untrue, and are now closed
+
+The mapping flow is this branch's safety story, and it had four holes that each
+made an otherwise careful sentence false.
+
+**The rollback rehearsal could not be applied, and the endpoint could be
+bypassed.** The rehearsal returned a transient plan with no `plan_id`; the
+shared dialog disables Apply without one, correctly — so every rollback that
+reached anybody was a dead end on screen, while the endpoint would still change
+the mapping set for anyone calling it directly. A ceremony only the UI performs
+is a suggestion, and one the UI cannot complete is worse than having none. The
+rehearsal issues a real approval now, bound to the target and the version, and
+the apply spends it under the same lock the cohort is read under.
+
+**Creating a mapping silently changed access.** Edit and delete cite an approval
+and queue a convergence per holder; create wrote the row and stopped. Because
+entitlements are DERIVED from mappings, the row alone changed what every holder
+was entitled to — and nothing else would have found them, since the periodic
+reconciler walks existing bindings and a person never bound to that target is in
+no list it reads. Create now takes the same path: rehearsal, citation,
+transaction, convergence.
+
+**`DELETE` discarded its decode error.** The tolerance was written for an empty
+body — a mapping nobody holds needs no citation — and tolerated far more: a
+misspelled key decoded to an empty struct and was acted on as though no plan had
+been cited, on the one endpoint in that file that removes access. The empty body
+is still tolerated and nothing else is.
+
+**Two publish controls, and they disagreed.** The band and the history panel each
+owned a note field and a Publish button; the panel refused a blank note and the
+band published with one. One control now, and the backend refuses a blank note
+outright — the note is the only record of why a set was right, and its whole
+reader is somebody months later deciding whether to roll back to it.
+
 ## Gaps this work opened or found, in the order they matter
 
-1. **The rollback apply does not cite its plan.** Edit and delete do, and get
-   `PLAN_STALE` protection; rollback recomputes its cohort at apply time, so the
-   act stays correct and the number an operator approved can differ from the
-   number that converges.
-2. **`ResolvesValue` fails open and now says so — but only on the rehearsal.**
-   The create path validates the same way and its response carries no
-   `value_checked`, so a mapping created against an unreachable target says
-   nothing about the check not having run.
-3. **000045 is unapplied.** `decision_reason` is required by the constraint the
+1. **There is no UI for creating a mapping.** The board draws "Add a mapping"
+   and it was never built, so the create path is API-only. The backend is now
+   safe either way, and the rehearsal it needs already exists.
+2. **000045 is unapplied.** `decision_reason` is required by the constraint the
    migration adds, so a deployment running the new backend against the old
    schema refuses every decision. It must go out together.

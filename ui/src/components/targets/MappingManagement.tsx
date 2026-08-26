@@ -19,7 +19,6 @@ import {
   useMappingHistory,
   useMappingHolders,
   useMappings,
-  usePublishMappingVersion,
   useRollbackMappingVersion,
   rehearseMappingRollback,
   type MappingApplyResult,
@@ -301,11 +300,8 @@ function emptyPlan(op: string): BulkPlan {
  */
 function VersionHistory({ target }: { target: string }) {
   const history = useMappingHistory(target);
-  const publish = usePublishMappingVersion(target);
-  const [note, setNote] = useState("");
   // Publishing and rolling back both report here: the version spine is the
   // thing they change, and it is what the operator is looking at.
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   return (
     <Card>
@@ -317,47 +313,18 @@ function VersionHistory({ target }: { target: string }) {
         count={history.data?.versions.length}
       />
 
-      <div className="grid gap-2 px-5 pb-4">
+      {/* The note and the Publish control live in the version band above, and
+          only there. Two of each on one screen was two things that could
+          disagree — and they did: this one refused a blank note and the band
+          did not. A reader working out which is authoritative has already
+          lost. What stays here is the list, and the sentence saying what a
+          version is for. */}
+      <div className="px-5 pb-4">
         <p className="text-[13.5px] text-muted">
-          Publishing snapshots what roles reach here right now, so a later change can be
-          rolled back to it. The note is the only record of why this set was the right
-          one — it is what somebody reads when they are deciding whether to come back.
+          A version is a snapshot of what roles reach here, so a later change can be rolled
+          back to it. The note is the only record of why this set was the right one — it is
+          what somebody reads when they are deciding whether to come back.
         </p>
-        {/* Stacked, not side by side. An `Input` is 15px on py-3 and a `sm`
-            button is 13px on py-1.5 above the desktop breakpoint — roughly 48px
-            beside roughly 32px, which reads as a control that failed to line up
-            rather than as a pair. The Maintenance panel below asks the same
-            shape of question (a reason, then an action) and already stacks
-            them; these two sit on one page and now look like one idea. */}
-        <Input
-          aria-label="Why this set"
-          placeholder="Why this set is the one to keep"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-        />
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!note.trim() || publish.isPending}
-            onClick={() =>
-              publish.mutate(note, {
-                onSuccess: (created) => {
-                  setNote("");
-                  setOutcome({
-                    kind: "applied",
-                    message: `Published version ${created.version}`,
-                    detail: "Nobody moves onto it until holders are moved.",
-                  });
-                },
-              })
-            }
-          >
-            {publish.isPending ? "Publishing…" : "Publish this set"}
-          </Button>
-        </div>
-
-        {outcome && <ActionOutcome outcome={outcome} className="mt-3" />}
       </div>
 
       <ListStates
@@ -469,9 +436,9 @@ function VersionRow({
             setRehearsed(plan);
             return plan;
           }}
-          onApply={async () =>
+          onApply={async (planId) =>
             new Promise((resolve, reject) => {
-              rollback.mutate(version.version, {
+              rollback.mutate({ version: version.version, planId }, {
                 onSuccess: (result) => {
                   setOutcome({
                     kind: "queued",

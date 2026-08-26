@@ -238,6 +238,9 @@ func NewRouter() http.Handler {
 	// And the approval for it. Two surfaces rather than one flag: an edit and a
 	// delete reach the same cohort and do opposite things to it, so a citation
 	// must not be able to cross between them.
+	// Creating one is an access change too, and was the exception that made the
+	// screen's promise untrue.
+	mux.HandleFunc("POST /api/v1/targets/mappings/rehearse-create", withCORS(withOperatorAuth(handleRehearseMappingCreate)))
 	mux.HandleFunc("POST /api/v1/targets/mappings/{id}/rehearse-edit", withCORS(withOperatorAuth(handleRehearseMappingEdit)))
 	mux.HandleFunc("POST /api/v1/targets/mappings/{id}/rehearse-delete", withCORS(withOperatorAuth(handleRehearseMappingDelete)))
 	mux.HandleFunc("POST /api/v1/targets/mappings/versions", withCORS(withOperatorAuth(handlePublishMappingVersion)))
