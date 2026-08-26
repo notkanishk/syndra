@@ -44,13 +44,31 @@
 - [x] 4.3 Mutation-checked: restoring one hand-rolled pill fails it with the
       file and line.
 
-## 5. Verification
+## 5. Against the board
 
-- [x] 5.1 `bun run test` (785), `bun run lint`, `bun run build`.
-- [x] 5.2 Looked at in a browser, both themes: the target page, the add-on
+- [x] 5.0 `BOARD-AUDIT.md` — §19–§31 read section by section against what
+      shipped. Faithful: the nav delta, the member's three states, all five
+      health readings, the unmanaged inventory's stale-blocks-adoption rule, the
+      connection instructions, and `ReadFreshness` as one component.
+- [x] 5.0a **One real gap.** §21 draws *confirmation required* beside the
+      operations that stop and ask. Every operation carries `confirm`, the type
+      declares it, and the capability list never rendered it — so the one place
+      an operator can learn which operations will ask said nothing. Fixed, with
+      a test, mutation-checked.
+- [x] 5.0b The freshness strip's `Read again` is the strip's only action and was
+      `ghost`; now `outline`, per §1.
+- [ ] 5.0c Maintenance buttons are labelled with states (`Draining`) where the
+      board labels them with verbs (`Drain`), so the buttons agree with the
+      definition list above them instead. A button named for a state is weaker
+      than one named for the act. Left as built; worth revisiting with the copy.
+
+## 6. Verification
+
+- [x] 6.1 `bun run test` (786), `bun run lint`, `bun run build`.
+- [x] 6.2 Looked at in a browser, both themes: the target page, the add-on
       index, the drift queue, projects, requests.
 
 ## Open
 
-- [ ] 6.1 The shell's own chrome is exempt by argument, not by inspection. The
+- [ ] 7.1 The shell's own chrome is exempt by argument, not by inspection. The
       tab bar and the account sheet were not read closely in this pass.

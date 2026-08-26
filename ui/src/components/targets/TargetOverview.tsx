@@ -107,6 +107,16 @@ export function TargetOverview({ target }: { target: string }) {
                 <CardRow key={op.id} first={i === 0} className="flex-wrap">
                   <span className="font-mono text-[13.5px]">{op.id}</span>
                   <span className="text-[13px] text-faint">{op.scope}</span>
+                  {/* Board §21 draws this beside `account.adopt` and
+                      `account.purge`, and the page had been dropping it — the
+                      manifest says which operations stop and ask, and this list
+                      is the only place an operator can learn that before
+                      pressing one. The same argument the section makes for
+                      showing an unavailable operation rather than omitting it:
+                      what is missing from the list is read as not existing. */}
+                  {op.confirm && (
+                    <span className="text-[13px] text-faint">confirmation required</span>
+                  )}
                   {op.secret_params && op.secret_params.length > 0 && (
                     // Named, never valued. There is nowhere in this payload for
                     // a secret and nowhere on this page to render one.

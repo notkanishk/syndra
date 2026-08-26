@@ -145,7 +145,7 @@ export function ReadFreshness({
         <span className="text-faint">· not the whole list — the read hit its cap</span>
       )}
       {onRefresh && reading === "stale" && (
-        <Button variant="ghost" size="sm" onClick={onRefresh} disabled={refreshing}>
+        <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
           {refreshing ? "Reading…" : "Read again"}
         </Button>
       )}
