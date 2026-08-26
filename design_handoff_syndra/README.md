@@ -29,13 +29,16 @@ first pass and are the newest work in the bundle.
 
 ---
 
-## Commission 2 is open — `addon-2/`
+## Commission 2 is open — `target-plane/`
 
-The target page grew from §21's four panels to eleven, and six surfaces built
-since appear on no board at all. `addon-2/README.md` says exactly which, and
-`addon-2/CLAUDE-DESIGN-PROMPTS.md` is the prompt pack that commissions them.
-Prompt A is the one that matters: the target page's *composition*, which was
-never designed even though four of its panels were.
+`/system/targets/{target}` was drawn twice — §21 here and M20 on the touch board,
+both as *four questions about one add-on* — and now carries eleven panels with no
+organising structure. Its panels were designed; its composition never was.
+
+`target-plane/` commissions the redesign, plus six surfaces built since that
+appear on no board at all. It is **self-contained** — it repeats the design
+system rather than pointing at this file, so it can be handed over on its own.
+`target-plane/README.md` says which three files to paste and in what order.
 
 ## Read BUILD-NOTES.md first
 
