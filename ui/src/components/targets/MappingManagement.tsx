@@ -279,10 +279,12 @@ function VersionHistory({ target }: { target: string }) {
 
   return (
     <Card>
+      {/* No `note` about unpublished changes. The version band above says it,
+          and says it far better — it names the edits. Two statements of one
+          fact on one screen is a reader wondering which is authoritative. */}
       <CardHeader
         title="Published versions"
         count={history.data?.versions.length}
-        note={history.data?.unpublished ? "The working copy has unpublished changes" : undefined}
       />
 
       <div className="grid gap-2 px-5 pb-4">

@@ -3,13 +3,12 @@
 import { Fragment, useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
-import { MappingManagement } from "@/components/targets/MappingManagement";
 import { DormantAccounts } from "@/components/targets/DormantAccounts";
 import { MergeFindings } from "@/components/targets/MergeFindings";
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
 import { Mono, STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -19,6 +18,7 @@ import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
 import { formatBytes } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
+import { useMappings } from "@/lib/queries/useMappings";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 import {
   useAdoptAccount,
@@ -73,10 +73,13 @@ export function TargetOverview({ target }: { target: string }) {
             "and is the machine itself all right". A failing disk shows up here
             and nowhere else in Syndra. */}
         <SystemHealth target={target} />
-        {/* What roles reach here, before whose accounts are on it: the mappings
-            are the reason any of those accounts exist, and reading the
-            inventory first invites the question this panel answers. */}
-        <MappingManagement target={target} />
+        {/* Two sentences and one control, where two panels used to be.
+            Editing a mapping moves access for everybody holding that role, and
+            a fact with that reach has no room to breathe in a table row — so
+            the mappings and their published versions live on their own screen
+            (design M6). What stays here is the answer to "why is she bound
+            here", and a way through to the screen that can change it. */}
+        <MappingCensus target={target} />
         {/* Whose accounts are on it — the managed half first, because it is the
             half an operator acts on, and the unmanaged inventory below reads as
             "and what else is here". */}
@@ -943,6 +946,64 @@ function Line({ label, children }: { label: string; children: React.ReactNode })
       <dt className="w-40 shrink-0 text-faint">{label}</dt>
       <dd className="text-muted">{children}</dd>
     </div>
+  );
+}
+
+/**
+ * How many roles reach this target, and how many people hold them.
+ *
+ * The census, not the mappings. It carries no reading about health and no count
+ * of people bound — those are elsewhere on this page — and its control is
+ * outline, because the one violet fill here belongs to Reconcile now.
+ *
+ * The two sentences are repeated verbatim at the top of the screen they lead
+ * to. That is deliberate: an operator who clicked because of a sentence should
+ * find that sentence at the top of what they clicked into, or the click feels
+ * like it went somewhere else.
+ */
+function MappingCensus({ target }: { target: string }) {
+  const mappings = useMappings(target);
+  const rows = mappings.data ?? [];
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-start gap-4 px-5 py-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <p className="text-[14.5px]">
+            {mappings.isLoading ? (
+              <span className="text-faint">Reading what reaches this target…</span>
+            ) : rows.length === 0 ? (
+              <>
+                <strong className="font-semibold">No role reaches {targetLabel(target)}</strong>,
+                so no role grants anything on it.
+              </>
+            ) : (
+              <>
+                <strong className="font-semibold">
+                  {rows.length === 1 ? "One role mapping reaches" : `${rows.length} role mappings reach`}{" "}
+                  {targetLabel(target)}.
+                </strong>{" "}
+                {/* M6 states how many people hold those roles here. The number
+                    is distinct people across every mapped role, and nothing
+                    returns it: holders are read per mapping, so counting them
+                    here means one request per row and then a union — and two
+                    mappings on one role would otherwise be added together and
+                    overstate it. Deferred rather than approximated; the rule is
+                    that a screen never invents a number. */}
+              </>
+            )}
+          </p>
+          <p className="max-w-[78ch] text-[13.5px] leading-[1.55] text-muted">
+            Editing one moves access for everybody holding that role, so the mappings and
+            their published versions live on their own screen — a fact with that reach has
+            no room to breathe in a table row.
+          </p>
+        </div>
+        <ButtonLink href={`/system/targets/${target}/mappings`} size="sm" className="shrink-0">
+          {rows.length === 0 ? "Add the first mapping" : "Open mappings"}
+        </ButtonLink>
+      </div>
+    </Card>
   );
 }
 

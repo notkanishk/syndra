@@ -53,6 +53,36 @@ export interface MappingVersion {
   entries: MappingVersionEntry[];
 }
 
+/**
+ * One difference between the working copy and the newest published version.
+ *
+ * Enumerated rather than counted, which is the whole argument for the version
+ * band: "rolling back undoes work listed nowhere" stops being true the moment
+ * something lists it.
+ */
+export interface MappingChange {
+  kind: "added" | "changed" | "removed";
+  project_id: string;
+  role_key: string;
+  field: string;
+  /** What the working copy holds. Absent on a removal, which has no row. */
+  value?: string;
+  /** What the published version holds. Set on a change and on a removal. */
+  was_value?: string;
+  /**
+   * Who last touched the row, and when.
+   *
+   * Both are absent on a REMOVAL and the surface must cope: a deleted row takes
+   * its `updated_by` with it and nothing records the deletion, so a removal is
+   * shown without attribution rather than credited to whoever published the
+   * version — who did not remove it.
+   */
+  actor?: string;
+  at?: string;
+  /** How many people hold the role this change reaches. */
+  holders: number;
+}
+
 export interface MappingHistory {
   target: string;
   /** The newest published version, or 0. What the list tints. */
@@ -66,6 +96,8 @@ export interface MappingHistory {
    * back to 4 from there would be undoing work not listed anywhere.
    */
   unpublished: boolean;
+  /** What differs. Empty when the working copy matches, never absent. */
+  unpublished_changes: MappingChange[];
   versions: MappingVersion[];
 }
 
