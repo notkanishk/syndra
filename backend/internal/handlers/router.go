@@ -244,6 +244,9 @@ func NewRouter() http.Handler {
 	// The history behind those versions. Read-only, and operator-gated like the
 	// rest: a version's note names who decided what a role means.
 	mux.HandleFunc("GET /api/v1/targets/{target}/mappings/versions", withCORS(withOperatorAuth(handleMappingHistory)))
+	// Rehearsed like every other mapping change. It was the exception, and it
+	// is the one that can move the most people.
+	mux.HandleFunc("POST /api/v1/targets/{target}/mappings/versions/{version}/rehearse-rollback", withCORS(withOperatorAuth(handleRehearseMappingRollback)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/mappings/versions/{version}/rollback", withCORS(withOperatorAuth(handleRollbackMappingVersion)))
 
 	// A member's own storage view and the one action on it. Self-scoped by
