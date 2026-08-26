@@ -127,8 +127,22 @@ export function useMappingHolders(id: string | undefined) {
  * two-step flow and needs to await each leg, and a mutation's `mutateAsync`
  * would add a second copy of the pending state it already tracks.
  */
+/**
+ * A rehearsal, plus whether the value was actually checked.
+ *
+ * `value_checked: false` means the add-on could not be asked — it is not
+ * answering, or it cannot enumerate this field — and the edit was allowed
+ * through deliberately. Refusing an edit while a NAS reboots would make an
+ * outage look like the operator's mistake, so the check fails open on
+ * everything except a definite no.
+ *
+ * But a check that did not run must not read as one that passed, which is what
+ * it did while success carried no distinction at all.
+ */
+export type MappingRehearsal = BulkPlan & { value_checked?: boolean };
+
 export function rehearseMappingEdit(id: string, value: string, acknowledgeScope: boolean) {
-  return request<BulkPlan>(`/targets/mappings/${id}/rehearse-edit`, {
+  return request<MappingRehearsal>(`/targets/mappings/${id}/rehearse-edit`, {
     method: "POST",
     body: { value, acknowledge_scope: acknowledgeScope },
   });

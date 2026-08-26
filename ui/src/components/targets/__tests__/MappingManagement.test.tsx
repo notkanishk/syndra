@@ -30,11 +30,14 @@ const state: {
   holders: string[];
   history: MappingHistory;
   rehearsals: Array<{ acknowledgeScope: boolean }>;
+  /** Whatever the rehearsal should carry beyond the plan — `value_checked`. */
+  rehearsalExtras: Record<string, unknown>;
 } = {
   mappings: [mapping],
   holders: [],
   history: { target: "truenas", current_version: 0, unpublished: false, versions: [] },
   rehearsals: [],
+  rehearsalExtras: {},
 };
 
 vi.mock("@/lib/queries/useMappings", async () => {
@@ -72,6 +75,7 @@ vi.mock("@/lib/queries/useMappings", async () => {
           },
         ],
         summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
+        ...state.rehearsalExtras,
       };
     }),
     rehearseMappingDelete: vi.fn(async () => ({
@@ -100,6 +104,7 @@ beforeEach(() => {
   state.holders = [];
   state.history = { target: "truenas", current_version: 0, unpublished: false, versions: [] };
   state.rehearsals = [];
+  state.rehearsalExtras = {};
 });
 
 describe("what roles reach a target", () => {
@@ -247,5 +252,49 @@ describe("changing what a role reaches · the consequence no count implies", () 
     // The group it is leaving, named — "the old group" is not something an
     // operator can check against the NAS.
     expect(screen.getByText("lab_makers")).toBeTruthy();
+  });
+});
+
+/**
+ * Design M4's pair, and the half that would otherwise read as a bug.
+ *
+ * The value check fails open on everything except a definite no: an unreadable
+ * target, a field the add-on cannot enumerate, and an unregistered add-on all
+ * pass, because refusing an edit while a NAS reboots would make an outage look
+ * like the operator's mistake.
+ *
+ * That is right, and it was invisible. "Checked and fine" and "nobody could be
+ * asked" both arrived as a plain success, so the screen could not tell an
+ * operator which of the two it was showing them.
+ */
+describe("a value the target could not be asked about", () => {
+  it("says the check did not run, and why the edit was allowed through anyway", async () => {
+    state.rehearsalExtras = { value_checked: false };
+    renderMappings();
+
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.change(screen.getByRole("textbox", { name: /new value/i }), {
+      target: { value: "archive-write" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+
+    await waitFor(() => expect(screen.getByText(/could not be asked whether/)).toBeTruthy());
+    expect(screen.getByText(/make an outage look like your mistake/)).toBeTruthy();
+    // And it says where the consequence lands instead of here.
+    expect(screen.getByText(/queued change that will not settle/)).toBeTruthy();
+  });
+
+  it("says nothing of the sort when the target answered", async () => {
+    state.rehearsalExtras = { value_checked: true };
+    renderMappings();
+
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.change(screen.getByRole("textbox", { name: /new value/i }), {
+      target: { value: "archive-write" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+
+    await waitFor(() => expect(screen.getByText(/stay owned by it/)).toBeTruthy());
+    expect(screen.queryByText(/could not be asked whether/)).toBeNull();
   });
 });

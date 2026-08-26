@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/services"
 )
@@ -80,11 +81,13 @@ func rehearseMappingChange(w http.ResponseWriter, r *http.Request, surface strin
 		writeMappingError(w, err)
 		return
 	}
+	var resolution addons.Resolution
 	if surface == planSurfaceMappingEdit {
 		// Validated before the rehearsal, not after it. A plan for a value the
 		// target cannot resolve is a diff an operator would approve and the apply
 		// would then refuse — which teaches them the approval means nothing.
-		if _, _, err := validateMappingAgainstTarget(r.Context(), mapping.Target, mapping.Field, req.Value); err != nil {
+		var err error
+		if _, _, resolution, err = validateMappingAgainstTarget(r.Context(), mapping.Target, mapping.Field, req.Value); err != nil {
 			writeMappingError(w, err)
 			return
 		}
@@ -104,7 +107,30 @@ func rehearseMappingChange(w http.ResponseWriter, r *http.Request, surface strin
 		writePlanIssueError(w, err)
 		return
 	}
-	jsonResponse(w, http.StatusOK, plan)
+	// The plan, plus whether the value was actually checked.
+	//
+	// Embedded rather than added to `BulkPlan`, which is shared with bulk
+	// grants, requests, drift and bundles and has no business carrying a fact
+	// about mapping values. The JSON flattens, so the surface reads one object.
+	jsonResponse(w, http.StatusOK, struct {
+		services.BulkPlan
+		// Present only on an edit. False means the add-on could not be asked —
+		// it is not answering, or it cannot enumerate this field — and the edit
+		// was allowed through on purpose. A screen must be able to say that
+		// rather than let a check that did not run read as one that passed.
+		ValueChecked *bool `json:"value_checked,omitempty"`
+	}{BulkPlan: plan, ValueChecked: checkedFlag(surface, resolution)})
+}
+
+// checkedFlag is nil on any surface where the question does not arise, so the
+// key is absent rather than false — absent is "not applicable", false is "we
+// tried and could not".
+func checkedFlag(surface string, r addons.Resolution) *bool {
+	if surface != planSurfaceMappingEdit {
+		return nil
+	}
+	checked := r.Checked
+	return &checked
 }
 
 // rehearseMapping states the change once per person it reaches.

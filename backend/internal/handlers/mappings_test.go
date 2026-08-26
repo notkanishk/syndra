@@ -24,6 +24,9 @@ type mappingHarness struct {
 	created  []db.RoleMapping
 	resolved []string
 	valueErr error
+	// What the check was able to establish. The zero value is "nobody could be
+	// asked", which is the honest default for a harness with no add-on.
+	resolution addons.Resolution
 
 	// The apply half: who holds the role, what the edit did, and what it queued.
 	holders []string
@@ -56,9 +59,9 @@ func stubMappingDeps(t *testing.T, schema []addons.EntitlementField) *mappingHar
 		m.ID = "m1"
 		return m, nil
 	}
-	addonsResolvesValue = func(_ context.Context, target, field, value string) error {
+	addonsResolvesValue = func(_ context.Context, target, field, value string) (addons.Resolution, error) {
 		h.resolved = append(h.resolved, target+"|"+field+"|"+value)
-		return h.valueErr
+		return h.resolution, h.valueErr
 	}
 	stubMappingApplyPath(t, h)
 	return h
@@ -875,5 +878,69 @@ func TestARollbackTooLargeIsRefusedUntilAcknowledged(t *testing.T) {
 	// The number it computed, so the ceremony can state it.
 	if !strings.Contains(rr.Body.String(), "40") {
 		t.Errorf("the refusal must carry the count it computed: %s", rr.Body.String())
+	}
+}
+
+// A value the target does not recognise is answered by naming what it might
+// have been, never by a retry.
+//
+// The refusal is deterministic: the same question gets the same answer, so a
+// "try again" is the one response that cannot help, and an operator handed one
+// presses it twice before reading. What helps is seeing the two names that do
+// exist beside the one that does not.
+func TestARefusedValueNamesWhatItMightHaveBeen(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h.resolution = addons.Resolution{
+		Checked: true,
+		Known:   []string{"fabrication", "fabrication-leads", "archive", "lab_makers"},
+	}
+	h.valueErr = fmt.Errorf("%w: truenas has no group named %q",
+		addons.ErrValueNotResolvable, "fabrication-2026")
+
+	rr := postMapping(`{"target":"truenas","project_id":"pLab","role_key":"maker","field":"group","value":"fabrication-2026"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	for _, near := range []string{"fabrication-leads", "fabrication"} {
+		if !strings.Contains(body, near) {
+			t.Errorf("the refusal must name %q as a candidate: %s", near, body)
+		}
+	}
+	// And not every group on the NAS: a haystack is not a suggestion.
+	if strings.Contains(body, "lab_makers") {
+		t.Errorf("an unrelated name is not a near miss: %s", body)
+	}
+}
+
+// The other half of the pair, and the one that would otherwise read as a bug:
+// the add-on could not be asked, the edit is allowed through, and the surface
+// has to be able to say so. "Checked and fine" and "nobody could be asked" both
+// arrived as success before this.
+func TestARehearsalSaysWhenTheValueCouldNotBeChecked(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h.resolution = addons.Resolution{Checked: false}
+	stubResolvedIntent(t)
+
+	get := dbGetRoleMapping
+	t.Cleanup(func() { dbGetRoleMapping = get })
+	dbGetRoleMapping = func(context.Context, string) (db.RoleMapping, error) {
+		return db.RoleMapping{
+			ID: "m1", Target: "truenas", ProjectID: "pLab", RoleKey: "maker",
+			Field: "group", Value: "lab_makers",
+		}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/mappings/m1/rehearse-edit",
+		strings.NewReader(`{"value":"archive-write"}`))
+	r.SetPathValue("id", "m1")
+	handleRehearseMappingEdit(rr, r)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("the edit is allowed through: want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"value_checked":false`) {
+		t.Errorf("the plan must say the check did not run: %s", rr.Body.String())
 	}
 }
