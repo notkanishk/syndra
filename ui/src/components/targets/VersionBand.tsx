@@ -98,10 +98,21 @@ export function VersionBand({ target, history }: { target: string; history?: Map
           </span>
           {/* Inert, never absent. The seat is what keeps the band one shape
               across all three readings. */}
+          {/* The band says a note is required and then published without one.
+              The note is the whole audit record a rollback operator reads
+              before deciding whether to come back — an empty one makes the
+              version a date with no argument, which is the state the sentence
+              beneath this field exists to prevent. The backend refuses it too;
+              this is where somebody is told, not what enforces it. */}
           <Button
             size="sm"
-            disabled={!pending || publish.isPending}
+            disabled={!pending || !note.trim() || publish.isPending}
             isPending={publish.isPending}
+            reason={
+              pending && !note.trim()
+                ? "Say why this set is the one to keep. It is what the next operator reads."
+                : undefined
+            }
             onClick={() => publish.mutate(note, { onSuccess: () => setNote("") })}
           >
             {pending ? `Publish as version ${current + 1}` : "Publish"}

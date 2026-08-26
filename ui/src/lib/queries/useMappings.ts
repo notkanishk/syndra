@@ -246,10 +246,13 @@ export async function rehearseMappingRollback(
 export function useRollbackMappingVersion(target: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (version: number) =>
+    // The approval the rehearsal issued, cited on apply. It travels in the body
+    // for the same reason the delete's does: an approval in a query parameter
+    // ends up in browser history and access logs.
+    mutationFn: ({ version, planId }: { version: number; planId: string }) =>
       request<MappingApplyResult & { version: number }>(
         `/targets/${target}/mappings/versions/${version}/rollback`,
-        { method: "POST", body: {} },
+        { method: "POST", body: { plan_id: planId } },
       ),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ["targets", target, "mapping-versions"] });

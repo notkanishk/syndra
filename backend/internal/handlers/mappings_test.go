@@ -38,6 +38,9 @@ type mappingHarness struct {
 	updated   []string
 	deleted   []string
 	converged []db.SystemConvergence
+	// Approvals this rehearsal handed out. A rehearsal that issues none is a
+	// rehearsal nothing can spend.
+	issued []db.NewPlan
 }
 
 func stubMappingDeps(t *testing.T, schema []addons.EntitlementField) *mappingHarness {
@@ -76,11 +79,16 @@ func stubMappingDeps(t *testing.T, schema []addons.EntitlementField) *mappingHar
 func stubMappingApplyPath(t *testing.T, h *mappingHarness) {
 	t.Helper()
 	holders, inTx, claim, record := dbMappingHolders, svcInTxLockingAccess, dbClaimPlanVerified, dbRecordSystemConvergence
-	update, del := dbUpdateRoleMappingValue, dbDeleteRoleMapping
+	update, del, create := dbUpdateRoleMappingValue, dbDeleteRoleMapping, dbCreatePlan
 	t.Cleanup(func() {
 		dbMappingHolders, svcInTxLockingAccess, dbClaimPlanVerified, dbRecordSystemConvergence = holders, inTx, claim, record
-		dbUpdateRoleMappingValue, dbDeleteRoleMapping = update, del
+		dbUpdateRoleMappingValue, dbDeleteRoleMapping, dbCreatePlan = update, del, create
 	})
+
+	dbCreatePlan = func(_ context.Context, p db.NewPlan) (db.Plan, error) {
+		h.issued = append(h.issued, p)
+		return db.Plan{ID: "plan_issued"}, nil
+	}
 
 	dbMappingHolders = func(_ context.Context, project, role string) ([]string, error) {
 		if who, ok := h.holdersBy[project+"\x00"+role]; ok {
@@ -616,7 +624,8 @@ func TestARollbackReResolvesEveryoneItReaches(t *testing.T) {
 	}
 
 	rr := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/truenas/mappings/versions/2/rollback", nil)
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/truenas/mappings/versions/2/rollback",
+		strings.NewReader(`{"plan_id":"plan_issued"}`))
 	r.SetPathValue("target", "truenas")
 	r.SetPathValue("version", "2")
 	handleRollbackMappingVersion(rr, r)
@@ -734,7 +743,8 @@ func TestARollbackReconvergesTheHoldersOfWhatItDeletes(t *testing.T) {
 	}
 
 	rr := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/truenas/mappings/versions/2/rollback", nil)
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/truenas/mappings/versions/2/rollback",
+		strings.NewReader(`{"plan_id":"plan_issued"}`))
 	r.SetPathValue("target", "truenas")
 	r.SetPathValue("version", "2")
 	handleRollbackMappingVersion(rr, r)
@@ -942,5 +952,243 @@ func TestARehearsalSaysWhenTheValueCouldNotBeChecked(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), `"value_checked":false`) {
 		t.Errorf("the plan must say the check did not run: %s", rr.Body.String())
+	}
+}
+
+// The one endpoint in this file that removes access decoded its body and threw
+// the error away.
+//
+// The tolerance was written for an EMPTY body — a mapping nobody holds needs no
+// citation — and it tolerated far more than that. A payload with a misspelled
+// key decoded to an empty struct and was acted on as though no plan had been
+// cited; a malformed one the same. Every other mutation in the product decodes
+// strictly, and this was not a deliberate exception.
+func TestDeletingAMappingRefusesABodyItCannotUnderstand(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	get := dbGetRoleMapping
+	t.Cleanup(func() { dbGetRoleMapping = get })
+	dbGetRoleMapping = func(context.Context, string) (db.RoleMapping, error) {
+		return db.RoleMapping{
+			ID: "m1", Target: "truenas", ProjectID: "pLab", RoleKey: "maker",
+			Field: "group", Value: "lab_makers",
+		}, nil
+	}
+
+	for _, body := range []string{
+		// A misspelled citation key. It used to decode to nothing and delete.
+		`{"planId":"plan_1"}`,
+		`{"plan_id":"plan_1","extra":true}`,
+		`{"plan_id":`,
+	} {
+		rr := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodDelete, "/api/v1/targets/mappings/m1", strings.NewReader(body))
+		r.SetPathValue("id", "m1")
+		handleDeleteRoleMapping(rr, r)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("body %q: want 400, got %d (%s)", body, rr.Code, rr.Body.String())
+		}
+	}
+	if len(h.deleted) != 0 {
+		t.Errorf("nothing may be removed on a body that could not be read: %v", h.deleted)
+	}
+}
+
+// And the tolerance it was actually written for still holds.
+func TestDeletingAMappingNobodyHoldsNeedsNoBody(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	stubResolvedIntent(t)
+	get := dbGetRoleMapping
+	t.Cleanup(func() { dbGetRoleMapping = get })
+	dbGetRoleMapping = func(context.Context, string) (db.RoleMapping, error) {
+		return db.RoleMapping{
+			ID: "m1", Target: "truenas", ProjectID: "pLab", RoleKey: "maker",
+			Field: "group", Value: "lab_makers",
+		}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodDelete, "/api/v1/targets/mappings/m1", nil)
+	r.SetPathValue("id", "m1")
+	handleDeleteRoleMapping(rr, r)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(h.deleted) != 1 {
+		t.Errorf("a mapping nobody holds is removed without a citation: %v", h.deleted)
+	}
+}
+
+// A rehearsal that hands back no approval is a rehearsal nothing can spend.
+//
+// The shared dialog disables Apply without a `plan_id` — correctly — so a
+// rollback rehearsal that returned a transient plan made every rollback
+// reaching anybody a dead end on screen, while the rollback endpoint itself
+// still changed the mapping set for anyone calling it directly. A ceremony only
+// the UI performs is a suggestion, and one the UI cannot complete is worse than
+// having none.
+func TestARollbackRehearsalIssuesAnApprovalItsApplyWillSpend(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h.holders = []string{"u1", "u2"}
+
+	list, hist := dbListRoleMappings, dbListMappingHistory
+	t.Cleanup(func() { dbListRoleMappings, dbListMappingHistory = list, hist })
+	dbListRoleMappings = func(context.Context, string) ([]db.RoleMapping, error) {
+		return []db.RoleMapping{
+			{ID: "m1", Target: "truenas", ProjectID: "pLab", RoleKey: "trained", Field: "group", Value: "lab_makers"},
+		}, nil
+	}
+	dbListMappingHistory = func(context.Context, string) (db.MappingHistory, error) {
+		return db.MappingHistory{Target: "truenas", CurrentVersion: 2,
+			Versions: []db.MappingVersion{{Version: 2}}}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost,
+		"/api/v1/targets/truenas/mappings/versions/2/rehearse-rollback",
+		strings.NewReader(`{"acknowledge_scope":true}`))
+	r.SetPathValue("target", "truenas")
+	r.SetPathValue("version", "2")
+	handleRehearseMappingRollback(rr, r)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"plan_id"`) {
+		t.Fatalf("the rehearsal must hand back an approval: %s", rr.Body.String())
+	}
+	if len(h.issued) != 1 {
+		t.Fatalf("want one plan issued, got %d", len(h.issued))
+	}
+	// Bound to the version, so an approval for one cannot spend on another.
+	if h.issued[0].Surface != planSurfaceMappingRollback {
+		t.Errorf("the plan must be citable only here: %q", h.issued[0].Surface)
+	}
+	if h.issued[0].RequestFingerprint == rollbackRequestFingerprint("truenas", 3) {
+		t.Error("an approval to restore v2 must not spend on v3")
+	}
+}
+
+// And the apply refuses without it. A rollback that reaches nobody still needs
+// none — the same rule edit and delete follow, because there is nothing to
+// review about a change to a definition that moves no one.
+func TestARollbackThatReachesSomebodyRefusesWithoutTheApproval(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	stubResolvedIntent(t)
+	h.holders = []string{"u1"}
+
+	list, roll := dbListRoleMappings, dbRollbackMappingVersion
+	t.Cleanup(func() { dbListRoleMappings, dbRollbackMappingVersion = list, roll })
+	dbRollbackMappingVersion = func(context.Context, string, int, string) error { return nil }
+	dbListRoleMappings = func(context.Context, string) ([]db.RoleMapping, error) {
+		return []db.RoleMapping{
+			{ID: "m1", Target: "truenas", ProjectID: "pLab", RoleKey: "trained", Field: "group", Value: "lab_makers"},
+		}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost,
+		"/api/v1/targets/truenas/mappings/versions/2/rollback", strings.NewReader(`{}`))
+	r.SetPathValue("target", "truenas")
+	r.SetPathValue("version", "2")
+	handleRollbackMappingVersion(rr, r)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("want a citation refusal, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(h.converged) != 0 {
+		t.Errorf("nothing may be queued without the approval: %+v", h.converged)
+	}
+}
+
+// Creating a mapping is an access change, and it was the one that skipped the
+// ceremony.
+//
+// Entitlements are DERIVED from mappings, so writing the row alone changes what
+// everybody holding that role is entitled to. Nothing queued it, and nothing
+// else would have found them: the periodic reconciler walks existing bindings,
+// so a person who has never been bound to this target is in no list it reads.
+// The result was a mapping that silently granted access which then never
+// arrived — on the screen whose whole argument is that every change here is
+// rehearsed before it lands.
+func TestCreatingAMappingQueuesEveryHolderItReaches(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	stubResolvedIntent(t)
+	h.holders = []string{"u1", "u2", "u3"}
+
+	rr := postMapping(`{"target":"truenas","project_id":"pLab","role_key":"maker","field":"group","value":"lab_makers","plan_id":"plan_issued"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("want 201, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(h.converged) != 3 {
+		t.Fatalf("one convergence per holder, got %d: %+v", len(h.converged), h.converged)
+	}
+	// Queued, never applied: the row is written here and the drain moves the
+	// people it reaches.
+	if !strings.Contains(rr.Body.String(), "queued_convergences") {
+		t.Errorf("the response must say the target has not moved yet: %s", rr.Body.String())
+	}
+}
+
+// The same rule edit and delete follow: a change that reaches nobody needs no
+// approval, because there is nothing to review about a definition.
+func TestCreatingAMappingRefusesWithoutTheApprovalWhenItReachesSomebody(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	stubResolvedIntent(t)
+	h.holders = []string{"u1"}
+
+	rr := postMapping(`{"target":"truenas","project_id":"pLab","role_key":"maker","field":"group","value":"lab_makers"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("want a citation refusal, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(h.created) != 0 {
+		t.Errorf("nothing may be written without the approval: %+v", h.created)
+	}
+	if len(h.converged) != 0 {
+		t.Errorf("and nothing queued: %+v", h.converged)
+	}
+}
+
+func TestCreatingAMappingOnARoleNobodyHoldsNeedsNoApproval(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h.holders = nil
+
+	rr := postMapping(`{"target":"truenas","project_id":"pLab","role_key":"maker","field":"group","value":"lab_makers"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("want 201, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(h.created) != 1 {
+		t.Errorf("a mapping nobody holds is a definition: %+v", h.created)
+	}
+}
+
+// The rehearsal states who it reaches, before the row exists to rehearse
+// against — so the plan is keyed on what would be written rather than a row id.
+func TestTheCreateRehearsalNamesWhoTheNewMappingWouldReach(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h.holders = []string{"u1", "u2"}
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/mappings/rehearse-create",
+		strings.NewReader(`{"target":"truenas","project_id":"pLab","role_key":"maker","field":"group","value":"lab_makers"}`))
+	handleRehearseMappingCreate(rr, r)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	var plan services.BulkPlan
+	if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil {
+		t.Fatalf("decode plan: %v", err)
+	}
+	if plan.Summary.Apply != 2 {
+		t.Errorf("want two people, got %d", plan.Summary.Apply)
+	}
+	if plan.PlanID == "" {
+		t.Error("a rehearsal that hands back no approval is one nothing can spend")
+	}
+	// And nothing was written by rehearsing it.
+	if len(h.created) != 0 || len(h.converged) != 0 {
+		t.Errorf("a rehearsal writes nothing: %+v / %+v", h.created, h.converged)
 	}
 }

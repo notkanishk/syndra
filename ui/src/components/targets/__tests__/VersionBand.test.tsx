@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { VersionBand } from "@/components/targets/VersionBand";
@@ -161,5 +161,44 @@ describe("the band enumerates what a rollback would undo", () => {
 
     expect(screen.queryByText(/what a rollback to version 4 would undo/)).toBeNull();
     expect(screen.queryByText(/Publishing does not re-apply them/)).toBeNull();
+  });
+});
+
+/**
+ * The band said a note was required and published without one.
+ *
+ * The note is the only record of why this set was the right one, and its whole
+ * reader is somebody months later deciding whether to roll back to it. A blank
+ * one makes the version a date with no argument — which is precisely what the
+ * version history exists to stop being necessary.
+ */
+describe("the note is the audit record, so it is required", () => {
+  it("will not publish without one, and says why", () => {
+    render(
+      <VersionBand
+        target="truenas"
+        history={history({ unpublished: true, unpublished_changes: [change()] })}
+      />,
+    );
+
+    const publish = screen.getByRole("button", { name: /Publish as version 5/ });
+    expect(publish.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText(/It is what the next operator reads/)).toBeTruthy();
+  });
+
+  it("offers it once a reason is given", () => {
+    render(
+      <VersionBand
+        target="truenas"
+        history={history({ unpublished: true, unpublished_changes: [change()] })}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/Why this set is the one to keep/), {
+      target: { value: "summer build cohort" },
+    });
+    expect(
+      screen.getByRole("button", { name: /Publish as version 5/ }).hasAttribute("disabled"),
+    ).toBe(false);
   });
 });

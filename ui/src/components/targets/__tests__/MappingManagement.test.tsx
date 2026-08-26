@@ -298,3 +298,30 @@ describe("a value the target could not be asked about", () => {
     expect(screen.queryByText(/could not be asked whether/)).toBeNull();
   });
 });
+
+/**
+ * One publish control, and it enforces what it says.
+ *
+ * The band and the history panel both owned a note field and a Publish button.
+ * Two of each on one screen is two things that can disagree, and they did: the
+ * panel refused a blank note and the band published with one. A reader working
+ * out which is authoritative has already lost.
+ *
+ * The note is the only record of why a set was the right one, and its whole
+ * reader is somebody months later deciding whether to roll back to it. A blank
+ * one makes the version a date with no argument.
+ */
+describe("publishing a version", () => {
+  it("is offered in one place, not two", () => {
+    state.history = {
+      target: "truenas",
+      current_version: 0,
+      unpublished: true,
+      versions: [],
+    };
+    renderMappings();
+
+    expect(screen.queryAllByRole("button", { name: /^Publish/ })).toHaveLength(0);
+    expect(screen.queryAllByPlaceholderText(/Why this set is the one to keep/)).toHaveLength(0);
+  });
+});

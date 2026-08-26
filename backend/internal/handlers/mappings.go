@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -35,6 +36,10 @@ type mappingRequest struct {
 	RoleKey   string `json:"role_key"`
 	Field     string `json:"field"`
 	Value     string `json:"value"`
+	// PlanID cites the rehearsal that showed who this reaches. Required
+	// whenever the role has holders — a mapping on a role nobody holds is a
+	// definition, and there is nothing to review.
+	PlanID string `json:"plan_id,omitempty"`
 }
 
 func handleListRoleMappings(w http.ResponseWriter, r *http.Request) {
@@ -62,15 +67,30 @@ func handleCreateRoleMapping(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The normalised pair, never `req`.
-	created, err := dbCreateRoleMapping(r.Context(), db.RoleMapping{
+	//
+	// Through the same path edit and delete take: an approval cited whenever
+	// the role has holders, the write and the convergences in one transaction
+	// under the access lock. Creating a mapping used to write the row and stop
+	// — and because entitlements are DERIVED from mappings, the row alone
+	// changed what every holder was entitled to while nothing queued it.
+	//
+	// Nothing else would have found them either. The periodic reconciler walks
+	// existing bindings, so a person who has never been bound to this target is
+	// in no list it reads.
+	created, converged, err := createMappingAndConverge(r.Context(), db.RoleMapping{
 		Target: req.Target, ProjectID: req.ProjectID, RoleKey: req.RoleKey,
 		Field: field, Value: value, CreatedBy: resolveActor(r, ""),
-	})
+	}, resolveActor(r, ""), req.PlanID)
 	if err != nil {
-		writeMappingError(w, err)
+		writeMappingPlanError(w, err)
 		return
 	}
-	jsonResponse(w, http.StatusCreated, created)
+	jsonResponse(w, http.StatusCreated, map[string]any{
+		"mapping": created,
+		// Queued, never applied. The mapping is written here and the people it
+		// reaches are converged by the drain.
+		"queued_convergences": converged,
+	})
 }
 
 type mappingValueRequest struct {
@@ -111,10 +131,22 @@ type mappingDeleteRequest struct {
 func handleDeleteRoleMapping(w http.ResponseWriter, r *http.Request) {
 	// A DELETE with a body, because the citation has to travel somewhere and a
 	// query parameter is a place approvals end up in browser history and access
-	// logs. An empty body is tolerated: a mapping nobody holds needs no citation.
+	// logs. An EMPTY body is tolerated — a mapping nobody holds needs no
+	// citation — and that is the only thing tolerated.
+	//
+	// The decode error used to be discarded outright, which tolerated far more
+	// than the empty body it was written for: a payload with a misspelled key
+	// decoded to an empty struct and was acted on as though no plan had been
+	// cited, and a malformed one the same. On the one endpoint in this file
+	// that removes access, silently. Every other mutation in the product
+	// decodes strictly; this was the exception, and it was not a deliberate
+	// one.
 	var req mappingDeleteRequest
 	if r.Body != nil {
-		_ = decodeJSONStrict(r.Body, &req)
+		if err := decodeJSONStrict(r.Body, &req); err != nil && !errors.Is(err, io.EOF) {
+			jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+			return
+		}
 	}
 	existing, err := dbGetRoleMapping(r.Context(), r.PathValue("id"))
 	if err != nil {
@@ -190,7 +222,20 @@ func handlePublishMappingVersion(w http.ResponseWriter, r *http.Request) {
 			map[string]string{"target": "unregistered"})
 		return
 	}
-	version, err := dbPublishMappingVersion(r.Context(), req.Target, req.Note, resolveActor(r, ""))
+	// A version with no note is a date with no argument.
+	//
+	// The note is the only record of why this set was the right one, and its
+	// entire reader is somebody months later deciding whether to roll back to
+	// it. Rolling back to a version whose reason is blank is a guess — which is
+	// exactly what the version history exists to stop being necessary. Refused
+	// here rather than only in the form, because a surface that asks nicely is
+	// a suggestion.
+	if strings.TrimSpace(req.Note) == "" {
+		jsonValidationErrorResponse(w, "a note is required to publish a version",
+			map[string]string{"note": "required"})
+		return
+	}
+	version, err := dbPublishMappingVersion(r.Context(), req.Target, strings.TrimSpace(req.Note), resolveActor(r, ""))
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -205,10 +250,23 @@ func handleRollbackMappingVersion(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "version must be a positive integer", map[string]string{"version": "invalid"})
 		return
 	}
+	// The citation the rehearsal issued. Carried in the body for the same
+	// reason the delete's is: an approval in a query parameter ends up in
+	// browser history and access logs.
+	var req mappingDeleteRequest
+	if r.Body != nil {
+		if err := decodeJSONStrict(r.Body, &req); err != nil && !errors.Is(err, io.EOF) {
+			jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+			return
+		}
+	}
+
 	actor := resolveActor(r, "")
-	converged, err := rollbackAndConverge(r.Context(), target, version, actor)
+	converged, err := rollbackAndConverge(r.Context(), target, version, actor, req.PlanID)
 	if err != nil {
-		writeMappingError(w, err)
+		// A citation refusal is not a mapping refusal, and an operator is told
+		// which of the two to act on.
+		writeMappingPlanError(w, err)
 		return
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{
