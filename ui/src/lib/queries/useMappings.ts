@@ -183,17 +183,63 @@ export function applyMappingDelete(id: string, planId: string) {
   });
 }
 
+/** What a new mapping would be, before there is a row to name it by. */
+export interface NewMapping {
+  target: string;
+  projectId: string;
+  roleKey: string;
+  field: string;
+  value: string;
+}
+
+/**
+ * Who a new mapping would reach, before it exists.
+ *
+ * Creating one is an access change like editing one: entitlements are derived
+ * from mappings, so the row alone changes what everybody holding that role is
+ * entitled to. It is keyed on what WOULD be written rather than on a row id,
+ * because there is no row yet to rehearse against.
+ *
+ * Carries `value_checked` for the same reason the edit's rehearsal does — a
+ * check that could not run must not read as one that passed.
+ */
+export function rehearseMappingCreate(
+  input: NewMapping,
+  acknowledgeScope: boolean,
+): Promise<MappingRehearsal> {
+  return request<MappingRehearsal>("/targets/mappings/rehearse-create", {
+    method: "POST",
+    body: {
+      target: input.target,
+      project_id: input.projectId,
+      role_key: input.roleKey,
+      field: input.field,
+      value: input.value,
+      acknowledge_scope: acknowledgeScope,
+    },
+  });
+}
+
+/**
+ * The result of writing one: the row, and how many people it moved.
+ *
+ * Queued, never applied. The mapping is written and the people it reaches are
+ * converged by the drain.
+ */
+export interface MappingCreateResult {
+  mapping: RoleMapping;
+  queued_convergences: number;
+}
+
 export function useCreateMapping() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: {
-      target: string;
-      projectId: string;
-      roleKey: string;
-      field: string;
-      value: string;
-    }) =>
-      request<RoleMapping>("/targets/mappings", {
+    // The approval the rehearsal issued, cited whenever the role has holders.
+    // A mapping on a role nobody holds is a definition and needs none — which
+    // is why `planId` is optional here and required by the backend exactly when
+    // it matters.
+    mutationFn: (input: NewMapping & { planId?: string }) =>
+      request<MappingCreateResult>("/targets/mappings", {
         method: "POST",
         body: {
           target: input.target,
@@ -201,9 +247,15 @@ export function useCreateMapping() {
           role_key: input.roleKey,
           field: input.field,
           value: input.value,
+          ...(input.planId ? { plan_id: input.planId } : {}),
         },
       }),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["targets", "mappings"] }),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["targets", "mappings"] });
+      // The convergences it queued show up as pending changes, the same as
+      // every other mapping change.
+      client.invalidateQueries({ queryKey: ["propagation"] });
+    },
   });
 }
 
