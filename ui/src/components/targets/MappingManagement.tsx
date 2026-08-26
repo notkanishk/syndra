@@ -211,6 +211,16 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
           </span>
         </label>
       }
+      // The consequence no count implies, and the one an operator is most
+      // likely to discover afterwards. Syndra moves the group; it does not move
+      // what the old group owns, and it has no way to.
+      consequence={
+        <>
+          Files owned by <span className="type-mono">{mapping.value}</span> stay owned by it.
+          Everybody moving loses access to those files unless somebody re-owns them on{" "}
+          {targetLabel(mapping.target)}.
+        </>
+      }
       onRehearse={async (acknowledgeScope) => {
         const plan = await rehearseMappingEdit(mapping.id, value, acknowledgeScope);
         setRehearsed(plan);
