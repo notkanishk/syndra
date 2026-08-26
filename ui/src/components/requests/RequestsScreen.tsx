@@ -72,6 +72,9 @@ export function requestOutcome(status: string): {
 /** What a member asks for, in the units a member thinks in. */
 type HowLong = "7" | "30" | "term";
 
+/** Explicit pagination. The queue must have a visible end. */
+const PAGE = 25;
+
 export function RequestsScreen({ isOperator, userId }: { isOperator: boolean; userId: string }) {
   return isOperator ? <OperatorQueue /> : <MemberRequests userId={userId} />;
 }
@@ -93,6 +96,18 @@ function OperatorQueue() {
   // Only open requests can be decided, so only they can be selected — offering
   // a checkbox on a settled row would be offering an action that cannot happen.
   const openRows = useMemo(() => rows.filter((entry) => entry.status === "pending"), [rows]);
+
+  // The queue must have a visible end, the way the drift queue and the people
+  // list already do. This screen rendered every row it was given: a long queue
+  // paid its whole cost on arrival, and there was no point at which a reader
+  // could tell how much more there was.
+  //
+  // The cap is on RENDERING and on nothing else. Selection stays scoped to
+  // every open row above, so "select all" keeps meaning the whole pending
+  // queue rather than quietly meaning the page — which would change what the
+  // bar's ceiling message is counting without saying so.
+  const [limit, setLimit] = useState(PAGE);
+  const visible = useMemo(() => rows.slice(0, limit), [rows, limit]);
   const selection = useRowSelection(useMemo(() => openRows.map((entry) => entry.id), [openRows]));
   // Deciding one request at a time is what this queue is for; the bulk verbs
   // are the exception, so they arrive behind a named control rather than a
@@ -191,7 +206,7 @@ function OperatorQueue() {
             />
           }
         >
-          {rows.map((entry) => (
+          {visible.map((entry) => (
             <div
               key={entry.id}
               className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px] ${
@@ -256,6 +271,17 @@ function OperatorQueue() {
               )}
             </div>
           ))}
+
+          {rows.length > visible.length && (
+            <div className="row-divider flex items-center gap-4 px-5 py-3.5">
+              <span className="text-[13.5px] text-faint">
+                {rows.length - visible.length} more
+              </span>
+              <Button onClick={() => setLimit((current) => current + PAGE)}>
+                Load next {Math.min(PAGE, rows.length - visible.length)}
+              </Button>
+            </div>
+          )}
         </ListStates>
         </div>
       </Card>
