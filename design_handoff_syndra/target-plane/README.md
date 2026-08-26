@@ -40,6 +40,13 @@ findings and their decision form, the target's own system health, the managed
 roster, the two findings that render inside Health, and the applied history on a
 grant somebody removed by hand. Prompt 3.
 
+## Nothing to download?
+
+That is normal — Claude Design answers in the conversation and there is often no
+bundle. `HOW-TO-LAND-THE-REPLY.md` says how to get it into the repo anyway. The
+short version: paste the reply into a Claude Code session and ask for it to be
+filed, or hand over the canvas's URL if one was published.
+
 ## What comes back — and what to do with it
 
 **Canvases and captions. Not a build plan.** Prompt 4 says so explicitly, and the
