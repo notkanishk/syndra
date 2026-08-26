@@ -23,6 +23,7 @@ import {
   useRollbackMappingVersion,
   rehearseMappingRollback,
   type MappingApplyResult,
+  type MappingRehearsal,
   type MappingVersion,
   type RoleMapping,
 } from "@/lib/queries/useMappings";
@@ -190,7 +191,7 @@ function asPlan(op: string, previous: BulkPlan, result: MappingApplyResult): Bul
 
 function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose: () => void }) {
   const [value, setValue] = useState(mapping.value);
-  const [rehearsed, setRehearsed] = useState<BulkPlan | null>(null);
+  const [rehearsed, setRehearsed] = useState<MappingRehearsal | null>(null);
   const touch = useIsTouch();
 
   return (
@@ -215,11 +216,29 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
       // The consequence no count implies, and the one an operator is most
       // likely to discover afterwards. Syndra moves the group; it does not move
       // what the old group owns, and it has no way to.
+      //
+      // The second half is the other card of design M4's pair: when the add-on
+      // could not be asked, the edit is allowed through on purpose and the
+      // screen has to say so — a check that did not run must not read as one
+      // that passed. Amber and not red, because nothing is wrong.
       consequence={
         <>
           Files owned by <span className="type-mono">{mapping.value}</span> stay owned by it.
           Everybody moving loses access to those files unless somebody re-owns them on{" "}
           {targetLabel(mapping.target)}.
+          {rehearsed?.value_checked === false && (
+            <>
+              {" "}
+              <span className="font-semibold">
+                {targetLabel(mapping.target)} could not be asked whether{" "}
+                <span className="type-mono">{value}</span> exists,
+              </span>{" "}
+              so the value was not checked and the edit is allowed through — refusing it
+              while a target is unreachable would make an outage look like your mistake. If
+              the value turns out not to exist, the convergence that applies this mapping
+              fails, and it arrives as a queued change that will not settle.
+            </>
+          )}
         </>
       }
       onRehearse={async (acknowledgeScope) => {
