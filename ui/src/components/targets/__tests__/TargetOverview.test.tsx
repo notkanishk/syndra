@@ -542,3 +542,35 @@ describe("a disputed account", () => {
     expect(screen.getByText(/queued for both people/)).toBeInTheDocument();
   });
 });
+
+/**
+ * Board §21, "Capabilities · rendered from the manifest".
+ *
+ * The manifest says which operations stop and ask before they run, and this
+ * list is the only place an operator can learn that before pressing one. It was
+ * being dropped — `confirm` arrived on every operation and reached no pixel.
+ *
+ * The section's own argument for showing an unavailable operation rather than
+ * omitting it applies here unchanged: what is absent from the list reads as not
+ * existing, so an operator who has not seen "confirmation required" concludes
+ * that nothing here will ask.
+ */
+describe("what it can do · the confirmation the manifest declares", () => {
+  it("says which operations stop and ask, and does not say it of the rest", () => {
+    state.roster = [
+      summary([
+        { id: "account.provision", scope: "member", confirm: false, available: true },
+        { id: "account.purge", scope: "member", confirm: true, available: true },
+      ]),
+    ];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    const purge = screen.getByText("account.purge").parentElement;
+    expect(purge?.textContent).toContain("confirmation required");
+
+    const provision = screen.getByText("account.provision").parentElement;
+    expect(provision?.textContent).not.toContain("confirmation required");
+  });
+});
