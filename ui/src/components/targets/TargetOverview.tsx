@@ -1449,10 +1449,42 @@ function LifecycleControl({ target, health }: { target: string; health: TargetHe
             </Button>
           ))}
         </div>
+        {/* A lifecycle change that did not land (design B2).
+        
+            The refusal and the state are two blocks, in that order, and the
+            state still leads with its own dot and the word it always wore.
+            The single most expensive misreading here is that the page looks
+            like the change took, or like the state is now unknown. It is
+            known: it is what it was.
+        
+            Amber and not red, because nothing is broken by this and nothing was
+            lost — including the typed reason, which stays in the field. A
+            mandatory-reason box that empties itself on a network failure
+            teaches people to type "asdf" the second time. */}
         {set.error && (
-          <p className="text-[13.5px] text-danger-text">
-            {set.error instanceof Error ? set.error.message : "That could not be applied."}
-          </p>
+          <div className="grid gap-2 rounded-inner border border-warn-line bg-warn-soft px-4 py-3">
+            <p className="text-[13.5px] font-semibold text-warn-text">
+              That did not take. {targetLabel(target)} did not answer the request.
+            </p>
+            <p className="text-[13.5px] text-muted">
+              <span className="font-semibold text-ink">
+                The state is still {current.replace("_", " ")}
+              </span>{" "}
+              — the one above, unchanged. Nothing about the attempt is recorded as a state,
+              and this message is its only trace.
+            </p>
+            <p className="text-[13px] text-faint">
+              This attempt does not count towards Syndra backing off. Telling a target to stop
+              is deliberately exempt, because a refusal here means{" "}
+              <em>we could not tell it</em> and never <em>it stopped answering</em> — and the
+              reading above has to keep meaning only the second thing.
+            </p>
+            {reason && (
+              <p className="text-[13px] text-muted">
+                Your reason was kept. Trying again sends the same request with the same reason.
+              </p>
+            )}
+          </div>
         )}
       </div>
     </Card>

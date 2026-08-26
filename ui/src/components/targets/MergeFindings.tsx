@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
+import { ApiError } from "@/lib/api-client";
 import { UserName } from "@/components/names";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -214,7 +215,9 @@ function DecisionForm({
   onCancel: () => void;
 }) {
   const [reason, setReason] = useState("");
+  const [resolution, setResolution] = useState<string | null>(null);
   const gone = finding.outcome === "deleted_upstream";
+  const alreadyDecided = decidedElsewhere(error);
 
   return (
     <div className="row-divider grid gap-3 px-5 py-4">
@@ -230,13 +233,11 @@ function DecisionForm({
           variant="outline"
           isPending={pending}
           disabled={!reason.trim()}
-          onClick={() =>
-            onResolve({
-              id: finding.id,
-              resolution: gone ? "reprovisioned" : "keep_ours",
-              reason,
-            })
-          }
+          onClick={() => {
+            const pick = gone ? "reprovisioned" : "keep_ours";
+            setResolution(pick);
+            onResolve({ id: finding.id, resolution: pick, reason });
+          }}
         >
           {gone ? "Provision it again" : "Keep Syndra's"}
         </Button>
@@ -246,10 +247,12 @@ function DecisionForm({
             variant="outline"
             isPending={pending}
             disabled={!reason.trim()}
-            onClick={() =>
+            onClick={() => {
+              const pick = gone ? "unbound" : "take_theirs";
+              setResolution(pick);
               onResolve({
                 id: finding.id,
-                resolution: gone ? "unbound" : "take_theirs",
+                resolution: pick,
                 // A suspension adopted from the target is a decision that has to
                 // end or be looked at again — the schema underneath refuses one
                 // with neither. Six months is the review interval, not an expiry:
@@ -257,8 +260,8 @@ function DecisionForm({
                 // guessing when it should lapse would be inventing policy.
                 ...(gone ? {} : { review_date: sixMonthsOut() }),
                 reason,
-              })
-            }
+              });
+            }}
           >
             {gone ? "Stop managing it" : "Take the target's"}
           </Button>
@@ -287,15 +290,19 @@ function DecisionForm({
           ))}
         </div>
       )}
-      {Boolean(error) && (
-        // The refusals are the useful half. Adopting a group value has nowhere
-        // to live — it belongs to a mapping that reaches every holder of that
-        // role — and the backend says so with the policy named. Rendered in
-        // full rather than replaced with "could not resolve", which would leave
-        // an operator pressing a button that never works.
-        <span className="text-[13.5px] text-warn-text">
-          {error instanceof Error ? error.message : "That decision could not be carried out."}
-        </span>
+      {alreadyDecided ? (
+        <AlreadyDecided taken={alreadyDecided} picked={resolution} />
+      ) : (
+        Boolean(error) && (
+          // The refusals are the useful half. Adopting a group value has nowhere
+          // to live — it belongs to a mapping that reaches every holder of that
+          // role — and the backend says so with the policy named. Rendered in
+          // full rather than replaced with "could not resolve", which would leave
+          // an operator pressing a button that never works.
+          <span className="text-[13.5px] text-warn-text">
+            {error instanceof Error ? error.message : "That decision could not be carried out."}
+          </span>
+        )
       )}
     </div>
   );
@@ -305,4 +312,108 @@ function sixMonthsOut(): string {
   const d = new Date();
   d.setMonth(d.getMonth() + 6);
   return d.toISOString();
+}
+
+/** What the backend sends back when somebody decided first. */
+interface DecidedElsewhere {
+  decision: string;
+  decided_by: string;
+  decision_reason?: string;
+  decided_at?: string;
+}
+
+/**
+ * A finding takes one decision, so the second operator to press is refused.
+ *
+ * Read as fields rather than as a sentence: the API's own message carries a
+ * UUID and a snake_case resolution, which is raw material and not copy.
+ */
+function decidedElsewhere(error: unknown): DecidedElsewhere | null {
+  if (!(error instanceof ApiError) || error.code !== "ALREADY_DECIDED") return null;
+  const details = error.details ?? {};
+  if (!details.decision) return null;
+  return {
+    decision: details.decision,
+    decided_by: details.decided_by ?? "",
+    decision_reason: details.decision_reason,
+    decided_at: details.decided_at,
+  };
+}
+
+/**
+ * Somebody decided this while the form was open (design B1).
+ *
+ * Accent, and not shaped like an error. What happened is that the finding
+ * became DECIDED — which is a state the product already has a colour for, and
+ * the same accent the decided-and-waiting row wears. The operator did nothing
+ * wrong and nothing was changed by pressing.
+ *
+ * Two answers side by side, so a reader can tell in one glance whether they
+ * even disagree. Most of the time they will not, and that is the common case
+ * this is written for.
+ *
+ * The other operator's reason is quoted in full rather than linked. The reason
+ * is mandatory on every resolution and exists for exactly the person who
+ * arrives second — putting it one click away would be putting the only thing
+ * they need one click away.
+ */
+function AlreadyDecided({
+  taken,
+  picked,
+}: {
+  taken: DecidedElsewhere;
+  picked: string | null;
+}) {
+  const agree = picked !== null && picked === taken.decision;
+
+  return (
+    <div className="grid gap-2.5 rounded-inner border border-accent-line bg-accent-soft px-4 py-3">
+      <p className="text-[13.5px] font-semibold text-accent-text">
+        <UserName id={taken.decided_by} fallback="Somebody" /> decided this
+        {taken.decided_at ? (
+          <>
+            {" "}
+            <Relative iso={taken.decided_at} />
+          </>
+        ) : null}
+        , while this page was open.
+      </p>
+
+      <p className="text-[13.5px] text-muted">
+        They chose <span className="font-semibold text-ink">{decisionLabel(taken.decision)}</span>
+        {taken.decision_reason ? (
+          <>
+            {" "}
+            — &ldquo;{taken.decision_reason}&rdquo;
+          </>
+        ) : null}
+        . Your choice was not applied and nothing was changed by pressing.
+      </p>
+
+      {picked !== null && (
+        <p className="text-[13.5px] text-muted">
+          {agree ? (
+            <>
+              You had picked{" "}
+              <span className="font-semibold text-ink">{decisionLabel(picked)}</span> too, so
+              there is nothing to disagree about.
+            </>
+          ) : (
+            <>
+              You had picked{" "}
+              <span className="font-semibold text-ink">{decisionLabel(picked)}</span>. A finding
+              takes one decision because the answers are opposites: keeping Syndra&rsquo;s value
+              and taking the target&rsquo;s cannot both be queued without one of them releasing
+              an account the other is re-provisioning.
+            </>
+          )}
+        </p>
+      )}
+
+      <p className="text-[13px] text-faint">
+        The finding has not gone anywhere. It stays here as decided-and-waiting until a later
+        pass reads the account and finds the two sides agree.
+      </p>
+    </div>
+  );
 }
