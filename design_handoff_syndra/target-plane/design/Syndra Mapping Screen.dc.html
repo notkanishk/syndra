@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#080906; color:#f3f5ef; font-family:Figtree, sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:#9b7bff; text-decoration:none; border-bottom:1px solid rgba(155,123,255,.28); }
+  a:hover { color:#c9b6ff; border-bottom-color:rgba(201,182,255,.5); }
+  * { box-sizing:border-box; }
+</style>
+</helmet>
+
+<div style="padding:64px 56px 120px;display:flex;flex-direction:column;gap:56px;background:#0b0c0a;min-height:100vh">
+
+  <div style="display:flex;flex-direction:column;gap:16px;max-width:920px">
+    <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#9b7bff">A · /system/targets/{target}/mappings · desktop 1440</span>
+    <h1 style="margin:0;font-family:'Bricolage Grotesque',sans-serif;font-size:40px;font-weight:500;letter-spacing:-.02em;line-height:1.1">The screen the census line points at</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.6);text-wrap:pretty">Figures M1–M6. The target page cannot give up <em>What roles reach here</em> and <em>Published versions</em> until this exists, so it is drawn first and in full. Reached from the census line in region 2 and from a role; no new rail row.</p>
+  </div>
+
+  <div style="max-width:1180px;background:rgba(155,123,255,.09);border:1px solid rgba(155,123,255,.28);border-radius:20px;padding:22px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">One thing holds the top of this screen permanently</div>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78)">The working copy can differ from the newest published version, and that is the fact a table row cannot say. So it is not a state the screen falls into — it is a band under the title that always occupies the same seat and always says one of two things: <em>working copy matches version 4</em>, or <em>version 4 plus three edits nobody has published</em>. Everything else on the screen is rows.</p>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78)"><strong style="font-weight:600">And when there are unpublished edits, the band lists them.</strong> "Rolling back undoes work listed nowhere" is only true while nothing lists it. Enumerating the three edits is what makes rollback a decision rather than a gamble, and it costs three rows.</p>
+  </div>
+
+  <figure id="M1" style="margin:0;display:flex;flex-direction:column;gap:16px;width:1440px">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:24px;padding:0 8px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-family:'JetBrains Mono',monospace;font-size:12.5px">M1</span>
+      <span style="font-size:15.5px;font-weight:600">Two mappings, one version published, working copy clean</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">1440 · rail drawn</span>
+    </div>
+    <div style="width:1440px;background:#080906;border:1px solid rgba(255,255,255,.14);border-radius:20px;overflow:hidden;display:flex;align-items:stretch">
+      <sc-if value="{{ showRail }}" hint-placeholder-val="{{ true }}">
+        <div style="width:252px;flex:none;background:#101210;border-right:1px solid rgba(255,255,255,.06);display:flex;align-items:stretch">
+          <dc-import name="Sidebar" style="width:252px;flex:none" view="advanced" active="TrueNAS" hint-size="252px,1020px"></dc-import>
+        </div>
+      </sc-if>
+      <div style="flex:1;min-width:0;padding:32px 24px 44px;display:flex;flex-direction:column;gap:32px;background:#0b0c0a">
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)"><span>Advanced</span><span>›</span><span>System</span><span>›</span><span>TrueNAS</span><span>›</span><span style="color:rgba(243,245,239,.6)">Mappings</span></div>
+          <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:40px;font-weight:500;letter-spacing:-.02em;line-height:1.1">Mappings</div>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">/system/targets/truenas/mappings</span>
+          </div>
+          <p style="margin:0;font-size:15px;line-height:1.55;color:rgba(243,245,239,.72);max-width:82ch">A mapping ties a role to what it reaches on TrueNAS. Two reach it. Changing one moves access for everybody holding that role, which is why every change here is rehearsed before it lands.</p>
+        </div>
+
+        <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:16px 20px;display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+          <div style="flex:1 1 560px;display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span><span style="font-size:15.5px;font-weight:600">Working copy matches version 4</span></div>
+            <span style="font-size:15px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">Published 3 weeks ago by A. Devi — "summer build cohort". Nothing is waiting to be published, so what the rows below say is what version 4 says.</span>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Versions · 4</span>
+            <span style="padding:9px 16px;border-radius:999px;color:rgba(243,245,239,.34);border:1px solid rgba(255,255,255,.06);font-size:13.5px;font-weight:600">Publish</span>
+          </div>
+        </div>
+
+        <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+          <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">What roles reach TrueNAS</span>
+            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.07);font-family:'JetBrains Mono',monospace;font-size:13.5px">2</span>
+            <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">Unique on target, project, role and field. One row per mapping.</span>
+            <span style="padding:9px 16px;border-radius:999px;background:#7f5af0;color:#f7f4ff;font-size:13.5px;font-weight:600;box-shadow:0 10px 26px -14px rgba(127,90,240,.85);transition:transform 180ms cubic-bezier(.22,.61,.36,1),box-shadow 120ms cubic-bezier(.4,0,.6,1)" style-hover="box-shadow:0 16px 34px -14px rgba(127,90,240,.95)" style-active="transform:scale(.97)">Add a mapping</span>
+          </div>
+          <div style="padding:16px 20px;min-height:60px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+            <div style="flex:1 1 300px;display:flex;flex-direction:column;gap:5px">
+              <span style="font-size:15.5px;font-weight:600">Fabrication / lead</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">p_fabrication · lead</span>
+            </div>
+            <div style="flex:1 1 300px;display:flex;flex-direction:column;gap:5px">
+              <div style="display:flex;align-items:baseline;gap:9px"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:rgba(243,245,239,.6)">group</span><span style="color:rgba(243,245,239,.34)">→</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef">fabrication</span></div>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.42)">TrueNAS recognises this group.</span>
+            </div>
+            <div style="flex:1 1 260px;display:flex;flex-direction:column;gap:5px">
+              <span style="font-size:15px"><strong style="font-weight:600">34 people</strong> hold this role today</span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6)">Changing this row moves access for all 34.</span>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Change</span>
+              <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,92,77,.4);color:#ff8d82;font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(255,92,77,.1)" style-active="transform:scale(.97)">Remove</span>
+            </div>
+          </div>
+          <div style="padding:16px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:18px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+            <div style="flex:1 1 300px;display:flex;flex-direction:column;gap:5px">
+              <span style="font-size:15.5px;font-weight:600">Archive / admin</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">p_archive · admin</span>
+            </div>
+            <div style="flex:1 1 300px;display:flex;flex-direction:column;gap:5px">
+              <div style="display:flex;align-items:baseline;gap:9px"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:rgba(243,245,239,.6)">group</span><span style="color:rgba(243,245,239,.34)">→</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef">archive-admins</span></div>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.42)">TrueNAS recognises this group.</span>
+            </div>
+            <div style="flex:1 1 260px;display:flex;flex-direction:column;gap:5px">
+              <span style="font-size:15px"><strong style="font-weight:600">3 people</strong> hold this role today</span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6)">Changing this row moves access for all 3.</span>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Change</span>
+              <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,92,77,.4);color:#ff8d82;font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(255,92,77,.1)" style-active="transform:scale(.97)">Remove</span>
+            </div>
+          </div>
+          <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);display:grid;grid-template-columns:1fr 1fr;gap:18px">
+            <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Fabrication / lead</span><span style="font-size:13.5px;color:rgba(243,245,239,.6)">Created by A. Devi, 12 June. Last changed by A. Devi, 3 weeks ago.</span></div>
+            <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Archive / admin</span><span style="font-size:13.5px;color:rgba(243,245,239,.6)">Created by R. Iyer, 3 July. Never changed.</span></div>
+          </div>
+        </div>
+
+        <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:16px 20px;display:flex;flex-direction:column;gap:9px">
+          <span style="font-size:15.5px;font-weight:600">Two fields Syndra will not map, and it is not an omission</span>
+          <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72);max-width:88ch"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#f3f5ef">enabled</span> and <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#f3f5ef">smb_enabled</span> follow from whether somebody is entitled to this add-on at all. Mapping them would let a role switch an account off while the entitlement that created it still stood, so the API refuses them. <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#f3f5ef">group</span> is the field a mapping can set.</p>
+          <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">Named here rather than left out of the picker, because a picker with one option and no explanation reads as unfinished software.</span>
+        </div>
+
+        <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+          <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Published versions</span>
+            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.07);font-family:'JetBrains Mono',monospace;font-size:13.5px">4</span>
+            <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">A snapshot of the whole set, not of one row.</span>
+          </div>
+          <div style="padding:14px 20px;min-height:60px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+            <div style="flex:1 1 120px;display:flex;align-items:center;gap:11px"><span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span><span style="font-size:15.5px;font-weight:600">Version 4</span></div>
+            <span style="flex:1 1 420px;font-size:13.5px;color:rgba(243,245,239,.72)">A. Devi, 3 weeks ago — "summer build cohort"</span>
+            <span style="font-size:13.5px;color:rgba(243,245,239,.42);flex:none">2 mappings</span>
+            <span style="padding:9px 15px;border-radius:999px;color:rgba(243,245,239,.34);border:1px solid rgba(255,255,255,.06);font-size:13.5px;font-weight:600">Roll back</span>
+          </div>
+          <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:18px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+            <div style="flex:1 1 120px;display:flex;align-items:center;gap:11px"><span style="width:7px;height:7px;border-radius:999px;background:rgba(243,245,239,.42);flex:none"></span><span style="font-size:15.5px;font-weight:600">Version 3</span></div>
+            <span style="flex:1 1 420px;font-size:13.5px;color:rgba(243,245,239,.72)">A. Devi, 8 weeks ago — "archive admins split out of fabrication"</span>
+            <span style="font-size:13.5px;color:rgba(243,245,239,.42);flex:none">2 mappings</span>
+            <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Roll back</span>
+          </div>
+          <div style="padding:14px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:18px;flex-wrap:wrap;transition:background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)">
+            <div style="flex:1 1 120px;display:flex;align-items:center;gap:11px"><span style="width:7px;height:7px;border-radius:999px;background:rgba(243,245,239,.42);flex:none"></span><span style="font-size:15.5px;font-weight:600">Version 2</span></div>
+            <span style="flex:1 1 420px;font-size:13.5px;color:rgba(243,245,239,.72)">R. Iyer, 4 months ago — "first mapping for the new NAS"</span>
+            <span style="font-size:13.5px;color:rgba(243,245,239,.42);flex:none">1 mapping</span>
+            <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Roll back</span>
+          </div>
+          <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">Rolling back restores a set, so it rehearses as one plan for the whole version rather than one per row — drawn in <a href="#M7">M7</a>. It does not publish itself. A note is required to publish, never to edit: the note explains a set, and an edit is explained by its rehearsal.</div>
+        </div>
+
+      </div>
+    </div>
+    <figcaption style="font-size:14px;line-height:1.6;color:rgba(243,245,239,.6);max-width:1180px;text-wrap:pretty"><strong style="color:#f3f5ef;font-weight:600">M1 · </strong>The clean state, and it is drawn first so the seat of the version band is established before <a href="#M2">M2</a> fills it: lime dot, <em>working copy matches version 4</em>, and Publish inert because there is nothing to publish — inert rather than absent, so the band never changes shape. Every row carries the holder count and the sentence that count implies, in the row and not in a tooltip, because <em>34 people</em> read as a statistic and <em>moves access for all 34</em> reads as a consequence. Roll back on version 4 is inert for the same reason Publish is: rolling back to the version you are already on is a no-op the screen should show rather than hide. Two mono field names sit under the rows, and the card below names the two fields that are refused — a field picker offering <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">enabled</span> would be offering something the API rejects at three layers.</figcaption>
+  </figure>
+
+  <figure id="M2" style="margin:0;display:flex;flex-direction:column;gap:16px;max-width:1180px">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:24px;padding:0 8px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-family:'JetBrains Mono',monospace;font-size:12.5px">M2</span>
+      <span style="font-size:15.5px;font-weight:600">The working copy ahead of the published version — the figure the screen exists for</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div style="background:#141612;border:1px solid rgba(245,165,36,.26);border-radius:18px;overflow:hidden">
+        <div style="padding:16px 20px;display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">
+          <div style="flex:1 1 560px;display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15.5px;font-weight:600">Version 4, plus three edits nobody has published</span></div>
+            <span style="font-size:15px;line-height:1.55;color:rgba(243,245,239,.78);padding-left:17px">The rows below are the working copy and they are what Syndra converges against. Version 4 is what a rollback would return you to, and it does not contain these three.</span>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Versions · 4</span>
+            <span style="padding:9px 16px;border-radius:999px;background:#7f5af0;color:#f7f4ff;font-size:13.5px;font-weight:600;box-shadow:0 10px 26px -14px rgba(127,90,240,.85);transition:transform 180ms cubic-bezier(.22,.61,.36,1),box-shadow 120ms cubic-bezier(.4,0,.6,1)" style-hover="box-shadow:0 16px 34px -14px rgba(127,90,240,.95)" style-active="transform:scale(.97)">Publish as version 5</span>
+          </div>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid rgba(255,255,255,.06);font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">The three · what a rollback to version 4 would undo</div>
+        <div style="padding:13px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;padding:6px 12px;border-radius:999px;background:rgba(243,245,239,.07);font-size:12.5px;font-weight:600;flex:none">Changed</span>
+          <span style="flex:1 1 460px;font-size:13.5px;color:rgba(243,245,239,.78)"><strong style="font-weight:600">Archive / admin</strong> · <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">group</span> from <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">archive-admins</span> to <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">archive-write</span></span>
+          <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:none">A. Devi, 2 days ago · 3 people</span>
+        </div>
+        <div style="padding:13px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;padding:6px 12px;border-radius:999px;background:rgba(163,230,53,.12);color:#c2e96b;font-size:12.5px;font-weight:600;flex:none">Added</span>
+          <span style="flex:1 1 460px;font-size:13.5px;color:rgba(243,245,239,.78)"><strong style="font-weight:600">Laser / operator</strong> · <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">group</span> → <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">laser-users</span></span>
+          <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:none">A. Devi, 2 days ago · 12 people</span>
+        </div>
+        <div style="padding:13px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;padding:6px 12px;border-radius:999px;background:rgba(255,92,77,.1);border:1px solid rgba(255,92,77,.4);color:#ff8d82;font-size:12.5px;font-weight:600;flex:none">Removed</span>
+          <span style="flex:1 1 460px;font-size:13.5px;color:rgba(243,245,239,.78)"><strong style="font-weight:600">Fabrication / member</strong> · <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">group</span> → <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">fabrication-read</span></span>
+          <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:none">R. Iyer, 5 hours ago · 61 people</span>
+        </div>
+        <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.72)">Each of the three landed through its own rehearsal, so each one has already been approved once. Publishing does not re-apply them — they are already what Syndra converges against. Publishing records this set as version 5 so that a later rollback has something to return to.</div>
+      </div>
+
+      <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">What roles reach TrueNAS</span>
+          <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(243,245,239,.07);font-family:'JetBrains Mono',monospace;font-size:13.5px">3</span>
+          <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1">The working copy. Two rows differ from version 4.</span>
+        </div>
+        <div style="padding:16px 20px;min-height:60px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+          <div style="flex:1 1 280px;display:flex;flex-direction:column;gap:5px"><span style="font-size:15.5px;font-weight:600">Fabrication / lead</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">p_fabrication · lead</span></div>
+          <div style="flex:1 1 300px;display:flex;align-items:baseline;gap:9px"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:rgba(243,245,239,.6)">group</span><span style="color:rgba(243,245,239,.34)">→</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef">fabrication</span></div>
+          <div style="flex:1 1 240px;display:flex;flex-direction:column;gap:5px"><span style="font-size:15px"><strong style="font-weight:600">34 people</strong></span><span style="font-size:13.5px;color:rgba(243,245,239,.42)">Same as version 4.</span></div>
+          <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Change</span>
+        </div>
+        <div style="padding:16px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:18px;flex-wrap:wrap;background:rgba(245,165,36,.06)">
+          <div style="flex:1 1 280px;display:flex;flex-direction:column;gap:5px"><span style="font-size:15.5px;font-weight:600">Archive / admin</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">p_archive · admin</span></div>
+          <div style="flex:1 1 300px;display:flex;flex-direction:column;gap:5px">
+            <div style="display:flex;align-items:baseline;gap:9px"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:rgba(243,245,239,.6)">group</span><span style="color:rgba(243,245,239,.34)">→</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f7b955">archive-write</span></div>
+            <span style="font-size:13.5px;color:rgba(243,245,239,.6)">Version 4 has <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">archive-admins</span>.</span>
+          </div>
+          <div style="flex:1 1 240px;display:flex;flex-direction:column;gap:5px"><span style="font-size:15px"><strong style="font-weight:600">3 people</strong></span><span style="font-size:13.5px;color:rgba(243,245,239,.6)">Already moved. This is live.</span></div>
+          <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Change</span>
+        </div>
+        <div style="padding:16px 20px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:18px;flex-wrap:wrap;background:rgba(163,230,53,.05)">
+          <div style="flex:1 1 280px;display:flex;flex-direction:column;gap:5px"><span style="font-size:15.5px;font-weight:600">Laser / operator</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">p_laser · operator</span></div>
+          <div style="flex:1 1 300px;display:flex;flex-direction:column;gap:5px">
+            <div style="display:flex;align-items:baseline;gap:9px"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:rgba(243,245,239,.6)">group</span><span style="color:rgba(243,245,239,.34)">→</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#c2e96b">laser-users</span></div>
+            <span style="font-size:13.5px;color:rgba(243,245,239,.6)">Not in version 4.</span>
+          </div>
+          <div style="flex:1 1 240px;display:flex;flex-direction:column;gap:5px"><span style="font-size:15px"><strong style="font-weight:600">12 people</strong></span><span style="font-size:13.5px;color:rgba(243,245,239,.6)">Already granted. This is live.</span></div>
+          <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Change</span>
+        </div>
+      </div>
+    </div>
+    <figcaption style="font-size:14px;line-height:1.6;color:rgba(243,245,239,.6);max-width:1180px;text-wrap:pretty"><strong style="color:#f3f5ef;font-weight:600">M2 · </strong>Three edits enumerated, each with its author, its age and the number of people it moved, because "rolling back undoes work listed nowhere" is only true while nothing lists it — and once it is listed, rollback stops being a gamble and the whole reason this screen could not be a table row is discharged in four rows. The band is amber, not red: three unpublished edits is a normal working state, not a fault, and the copy says so twice — <em>each landed through its own rehearsal</em> and <em>publishing does not re-apply them</em>. That second sentence is the one an operator needs most: the intuition from every other tool is that unpublished means not yet in effect, and here it is exactly backwards. The rows carry the difference on the row rather than in a separate diff — one added row on a lime wash, one changed row on an amber wash, each naming what version 4 holds instead. The removed mapping is not a row, because a removed mapping has no row; it lives in the band's list, which is the only place it can be seen at all.</figcaption>
+  </figure>
+
+  <figure id="M3" style="margin:0;display:flex;flex-direction:column;gap:16px;max-width:1180px">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:24px;padding:0 8px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-family:'JetBrains Mono',monospace;font-size:12.5px">M3</span>
+      <span style="font-size:15.5px;font-weight:600">An edit rehearsed, and the scope step the refusal produced</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">two states of one panel</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:18px">
+
+      <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">Fabrication / lead · what this change would do</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">step 1 of 2 · rehearsed, nothing sent</span>
+        </div>
+        <div style="padding:16px 20px;display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+          <div style="flex:1 1 300px;background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:7px">
+            <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">The edit</span>
+            <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap"><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:rgba(243,245,239,.6)">group</span><span style="color:rgba(243,245,239,.34)">→</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:rgba(243,245,239,.6);text-decoration:line-through">fabrication</span><span style="color:rgba(243,245,239,.34)">→</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#f3f5ef">fabrication-2026</span></div>
+            <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">TrueNAS answered and recognises <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.78)">fabrication-2026</span>.</span>
+          </div>
+          <div style="flex:1 1 420px;background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:9px">
+            <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">The plan · this is what gets approved</span>
+            <div style="display:flex;align-items:center;gap:11px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15px;flex:1"><strong style="font-weight:600">34 accounts</strong> leave <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">fabrication</span> and join <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">fabrication-2026</span></span></div>
+            <div style="display:flex;align-items:center;gap:11px"><span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span><span style="font-size:15px;flex:1"><strong style="font-weight:600">0 accounts</strong> are created and <strong style="font-weight:600">0</strong> are removed</span></div>
+            <div style="display:flex;align-items:center;gap:11px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15px;flex:1">Files owned by <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">fabrication</span> stay owned by it. <strong style="font-weight:600">34 people lose access to those files</strong> unless somebody re-owns them on the NAS.</span></div>
+            <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">Read from TrueNAS 6 seconds ago. Nothing has been queued.</span>
+          </div>
+        </div>
+        <div style="padding:0 20px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="padding:10px 18px;border-radius:999px;background:#7f5af0;color:#f7f4ff;font-size:13.5px;font-weight:600;box-shadow:0 10px 26px -14px rgba(127,90,240,.85);transition:transform 180ms cubic-bezier(.22,.61,.36,1),box-shadow 120ms cubic-bezier(.4,0,.6,1)" style-hover="box-shadow:0 16px 34px -14px rgba(127,90,240,.95)" style-active="transform:scale(.97)">Queue this plan</span>
+          <span style="padding:10px 16px;border-radius:999px;color:rgba(243,245,239,.6);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)" style-active="transform:scale(.97)">Cancel</span>
+          <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);flex:1 1 320px">The plan is what is approved, not the form. If the rehearsal is stale by the time you press, it is rehearsed again and shown again.</span>
+        </div>
+      </div>
+
+      <div style="background:#141612;border:1px solid rgba(255,92,77,.4);border-radius:20px;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">Step 2 · the backend refused this plan for its size</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">409 · COHORT_LIMIT · limit 25</span>
+        </div>
+        <div style="padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+          <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78);max-width:88ch">The plan moves <strong style="color:#f3f5ef;font-weight:600">34 people</strong> and anything above 25 is refused until somebody says the number out loud. This step was not here a moment ago and does not appear for a plan under the limit — the threshold is the backend's, and this screen never guesses at it.</p>
+          <div style="background:#0b0c0a;border:1px solid rgba(255,92,77,.4);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:11px">
+            <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#ff8d82">Type the number of people this moves</span>
+            <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+              <span style="min-width:120px;padding:11px 15px;border-radius:14px;background:#141612;border:1px solid rgba(255,255,255,.14);font-family:'JetBrains Mono',monospace;font-size:15px;color:rgba(243,245,239,.34)">34</span>
+              <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);flex:1 1 340px">The number and not the role name, because the number is the thing that is easy not to notice and the role name is already in the title.</span>
+            </div>
+          </div>
+          <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:13px 15px;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Say why · required</span>
+            <span style="font-size:15px;color:rgba(243,245,239,.42)">Thirty-four people will find their access moved. This is what they are told.</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span style="padding:10px 18px;border-radius:999px;background:rgba(127,90,240,.35);color:rgba(247,244,255,.5);font-size:13.5px;font-weight:600">Queue this plan for 34 people</span>
+            <span style="padding:10px 16px;border-radius:999px;color:rgba(243,245,239,.6);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)" style-active="transform:scale(.97)">Cancel</span>
+            <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);flex:1 1 320px">Nothing was queued by the refusal. The plan above is unchanged and still rehearsed.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption style="font-size:14px;line-height:1.6;color:rgba(243,245,239,.6);max-width:1180px;text-wrap:pretty"><strong style="color:#f3f5ef;font-weight:600">M3 · </strong>The plan is the artefact, so the form is gone by the time anything is approved: the top panel shows the edit as one line and spends the rest of its space on the three consequences, the third of which is the one no form field implies — thirty-four people lose the files the old group owns, and the NAS will not follow them. The second panel is not a state of the first; it arrived <em>because the backend refused</em>, and it says so in the first sentence, so an operator who never crosses the limit never learns this step exists and one who does cannot mistake it for a form they filled in wrong. Rung 3, with the number typed rather than the role name — the role name is in the title and typing it back proves nothing, while 34 is the fact the ceremony exists to make unmissable. The confirm carries the count too, and stays inert until the field matches. Red on the panel, violet on the button: the refusal is the alarming thing, the action still is what it is.</figcaption>
+  </figure>
+
+  <figure id="M4" style="margin:0;display:flex;flex-direction:column;gap:16px;max-width:1180px">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:24px;padding:0 8px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-family:'JetBrains Mono',monospace;font-size:12.5px">M4</span>
+      <span style="font-size:15.5px;font-weight:600">A value the add-on does not recognise, beside a check that could not run</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
+      <div style="background:#141612;border:1px solid rgba(255,92,77,.4);border-radius:20px;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:5px">
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">TrueNAS answered, and it has no such group</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">422 · VALUE_NOT_FOUND</span>
+        </div>
+        <div style="padding:16px 20px;display:flex;flex-direction:column;gap:13px">
+          <div style="background:#0b0c0a;border:1px solid rgba(255,92,77,.4);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:7px">
+            <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#ff8d82">The value</span>
+            <span style="min-width:200px;padding:11px 15px;border-radius:14px;background:#141612;border:1px solid rgba(255,92,77,.4);font-family:'JetBrains Mono',monospace;font-size:15px;color:#f3f5ef">fabrication-2026</span>
+            <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.78)">TrueNAS enumerated its groups 2 seconds ago and this is not one of them. Nothing about the mapping has changed.</span>
+          </div>
+          <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78)">A retry would ask the same question and get the same answer. Either the group needs creating on the NAS, or the value is a typo — <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.78)">fabrication</span> and <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.78)">fabrication-leads</span> both exist.</p>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Correct the value</span>
+            <span style="padding:9px 16px;border-radius:999px;color:rgba(243,245,239,.6);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)" style-active="transform:scale(.97)">Cancel</span>
+          </div>
+          <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">No <em>Try again</em>. This is the only refusal the check ever issues, and it is answered by changing something.</span>
+        </div>
+      </div>
+      <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:5px">
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">TrueNAS could not be asked, so it passes</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">200 · checked: false</span>
+        </div>
+        <div style="padding:16px 20px;display:flex;flex-direction:column;gap:13px">
+          <div style="background:#0b0c0a;border:1px solid rgba(245,165,36,.26);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:7px">
+            <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span><span style="font-size:15.5px;font-weight:600;color:#f7b955;flex:1">The value was not checked</span></div>
+            <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.78);padding-left:17px">TrueNAS is not answering, so Syndra could not ask whether <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.78)">archive-write</span> exists. The edit is allowed through.</span>
+          </div>
+          <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78)">Refusing an edit while a NAS reboots would make an outage look like your mistake, so an unreadable target, a field the add-on cannot enumerate, and an unregistered add-on all pass. <strong style="color:#f3f5ef;font-weight:600">The only refusal is a definite no.</strong></p>
+          <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72)">The consequence lands later and lands somewhere visible: if the group turns out not to exist, the convergence that applies this mapping fails, and the failure arrives as a queued change that will not settle.</p>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Rehearse it anyway</span>
+            <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:1 1 200px">The rehearsal will say the same thing about the check.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption style="font-size:14px;line-height:1.6;color:rgba(243,245,239,.6);max-width:1180px;text-wrap:pretty"><strong style="color:#f3f5ef;font-weight:600">M4 · </strong>Drawn as a pair because the pair is the rule: fail-open on everything except a definite no. Left, the definite no — red, the value echoed in the field it came from, the two near-misses named so the correction takes one glance, and <strong style="color:#f3f5ef;font-weight:600">no <em>Try again</em></strong>, since an operator handed a retry on a deterministic refusal will press it twice before reading. Right is the far more common case and the one that would otherwise read as a bug: the check did not run, the edit is allowed, and the card spends its space on why that is deliberate and where the consequence will surface instead. Amber and not red, because nothing is wrong. Both cards say what state the mapping is in — unchanged on the left, allowed through on the right — since a validation message that does not say whether the thing saved is the most expensive kind of ambiguity on a screen that moves access for thirty-four people.</figcaption>
+  </figure>
+
+  <figure id="M5" style="margin:0;display:flex;flex-direction:column;gap:16px;max-width:1180px">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:24px;padding:0 8px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-family:'JetBrains Mono',monospace;font-size:12.5px">M5</span>
+      <span style="font-size:15.5px;font-weight:600">No mapping reaches this target — the live deployment's real state</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:16px 20px;display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+        <div style="flex:1 1 560px;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:rgba(243,245,239,.42);flex:none"></span><span style="font-size:15.5px;font-weight:600">Nothing has been published</span></div>
+          <span style="font-size:15px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">No version exists yet, so there is nothing to roll back to and nothing to compare the working copy against.</span>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <span style="padding:9px 16px;border-radius:999px;color:rgba(243,245,239,.34);border:1px solid rgba(255,255,255,.06);font-size:13.5px;font-weight:600">Versions · 0</span>
+          <span style="padding:9px 16px;border-radius:999px;color:rgba(243,245,239,.34);border:1px solid rgba(255,255,255,.06);font-size:13.5px;font-weight:600">Publish</span>
+        </div>
+      </div>
+      <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">What roles reach TrueNAS</span>
+          <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 10px;border-radius:999px;border:1px solid rgba(255,255,255,.14);color:rgba(243,245,239,.34);font-family:'JetBrains Mono',monospace;font-size:13.5px">0</span>
+          <span style="flex:1"></span>
+          <span style="padding:9px 16px;border-radius:999px;background:#7f5af0;color:#f7f4ff;font-size:13.5px;font-weight:600;box-shadow:0 10px 26px -14px rgba(127,90,240,.85);transition:transform 180ms cubic-bezier(.22,.61,.36,1),box-shadow 120ms cubic-bezier(.4,0,.6,1)" style-hover="box-shadow:0 16px 34px -14px rgba(127,90,240,.95)" style-active="transform:scale(.97)">Add the first mapping</span>
+        </div>
+        <div style="padding:24px 20px;display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;flex-direction:column;gap:10px;max-width:88ch">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">No role reaches TrueNAS, so no role grants anything on it</div>
+            <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78)">TrueNAS is registered and answering. Syndra can read it, and will keep reading it. What is missing is the sentence that says which role should get an account here — until one exists, nobody is provisioned and nothing on the target page will change.</p>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
+            <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:9px">
+              <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">What one mapping does</span>
+              <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78)">Pick a role and the group it should reach. Everybody holding that role gets an account on TrueNAS with that group, at the next convergence. The rehearsal will tell you how many people that is before anything is queued.</p>
+            </div>
+            <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:9px">
+              <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">This is not an error</span>
+              <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78)">An add-on registered and unmapped is the ordinary state between a deployment starting its container and somebody deciding who it is for. Two accounts already on the NAS are reported on the target page and are not affected by anything here.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption style="font-size:14px;line-height:1.6;color:rgba(243,245,239,.6);max-width:1180px;text-wrap:pretty"><strong style="color:#f3f5ef;font-weight:600">M5 · </strong>The state the live deployment is actually in, so it gets the same care as the populated one: two hollow zeros holding their seats, a neutral dot rather than amber on the version band, and every sentence naming who it waits on — a person deciding which role this add-on is for. The band still occupies its seat and still says one of its two things; <em>nothing has been published</em> is the third reading it needs, and it is neutral because no version yet is not a deficiency on day two. Publish and Versions are inert rather than absent, which is what keeps the band the same shape here as in <a href="#M1">M1</a> and <a href="#M2">M2</a>. The one violet fill is <em>Add the first mapping</em>, and the card beside it exists to stop the empty state reading as broken: it names the two accounts that already exist on the NAS and are unaffected, because an operator who has just read <em>nothing reaches this target</em> on a NAS with users on it will otherwise assume the screen is lying.</figcaption>
+  </figure>
+
+  <figure id="M6" style="margin:0;display:flex;flex-direction:column;gap:16px;max-width:1180px">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:24px;padding:0 8px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-family:'JetBrains Mono',monospace;font-size:12.5px">M6</span>
+      <span style="font-size:15.5px;font-weight:600">Both ends of the handoff — the census line, and what it arrives at</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">On the target page · region 2, above the three populations</span>
+      <div style="background:#0b0c0a;border:1px dashed rgba(255,255,255,.14);border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">The second subject on this page</span>
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:500;letter-spacing:-.02em">People and their access here</div>
+          </div>
+        </div>
+        <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:16px 20px;display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+          <div style="flex:1 1 640px;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:15.5px;font-weight:600">Two role mappings reach TrueNAS. 34 people hold those roles.</span>
+            <span style="font-size:15px;line-height:1.55;color:rgba(243,245,239,.6)">Editing one moves access for everybody holding that role, so the mappings and their published versions live on their own screen — a fact with that reach has no room to breathe in a table row.</span>
+          </div>
+          <span style="padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Open mappings</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">What it arrives at · the top of the mapping screen</span>
+      <div style="background:#0b0c0a;border:1px dashed rgba(255,255,255,.14);border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:18px">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)"><span>Advanced</span><span>›</span><span>System</span><span>›</span><span style="color:#9b7bff">TrueNAS</span><span>›</span><span style="color:rgba(243,245,239,.6)">Mappings</span></div>
+          <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:40px;font-weight:500;letter-spacing:-.02em;line-height:1.1">Mappings</div>
+          <p style="margin:0;font-size:15px;line-height:1.55;color:rgba(243,245,239,.72);max-width:82ch">A mapping ties a role to what it reaches on TrueNAS. <strong style="color:#f3f5ef;font-weight:600">Two reach it.</strong> Changing one moves access for everybody holding that role, which is why every change here is rehearsed before it lands.</p>
+        </div>
+        <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:16px 20px;display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+          <div style="flex:1 1 560px;display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span><span style="font-size:15.5px;font-weight:600">Working copy matches version 4</span></div>
+            <span style="font-size:15px;line-height:1.55;color:rgba(243,245,239,.6);padding-left:17px">Published 3 weeks ago by A. Devi — "summer build cohort".</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption style="font-size:14px;line-height:1.6;color:rgba(243,245,239,.6);max-width:1180px;text-wrap:pretty"><strong style="color:#f3f5ef;font-weight:600">M6 · </strong>Two sentences and one outline control, arriving at a page whose first paragraph repeats the same two facts in the same words — <em>two reach it</em>, and <em>changing one moves access for everybody holding that role</em>. The repetition is deliberate and is the whole handoff: an operator who clicked because of one sentence should find that sentence at the top of what they clicked into, or the click feels like it went somewhere else. The breadcrumb keeps the target as a live link, because the second most likely thing after opening mappings is going back to the page you were reading. The census line carries no count of people bound and no reading about health — those are elsewhere on that page — and the control is outline, since the one violet fill on the target page belongs to <em>Reconcile now</em>. Dashed borders here mark figure boundaries, not UI: this is a fragment of one page above a fragment of another.</figcaption>
+  </figure>
+
+  <figure id="M7" style="margin:0;display:flex;flex-direction:column;gap:16px;max-width:1180px">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:24px;padding:0 8px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-family:'JetBrains Mono',monospace;font-size:12.5px">M7</span>
+      <span style="font-size:15.5px;font-weight:600">Rolling back to version 4, rehearsed as one plan</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">POST …/versions/4/rollback · no rehearsal today</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">Roll back to version 4 · what this would do</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">step 1 of 2 · one plan, rehearsed, nothing sent</span>
+        </div>
+        <div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px">
+          <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78);max-width:88ch">Version 4 is the set A. Devi published 3 weeks ago — "summer build cohort". Restoring it undoes the three edits made since, together, as one act. <strong style="color:#f3f5ef;font-weight:600">It does not publish itself:</strong> the working copy becomes version 4's contents and sits unpublished, exactly as it would after three manual edits.</p>
+          <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.06);font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">The plan · this is what gets approved</div>
+            <div style="padding:13px 16px;min-height:60px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+              <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+              <span style="flex:1 1 420px;font-size:15px"><strong style="font-weight:600">61 people gain</strong> a share — <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">Fabrication / member</span> returns and provisions accounts with <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">fabrication-read</span></span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:none">61 accounts created</span>
+            </div>
+            <div style="padding:13px 16px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+              <span style="width:7px;height:7px;border-radius:999px;background:#ff5c4d;flex:none"></span>
+              <span style="flex:1 1 420px;font-size:15px"><strong style="font-weight:600">12 people lose</strong> theirs — <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">Laser / operator</span> is not in version 4, so those accounts lose their reason and stop being converged</span>
+              <span style="font-size:13.5px;color:#ff8d82;flex:none">12 accounts left dormant</span>
+            </div>
+            <div style="padding:13px 16px;min-height:60px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+              <span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none"></span>
+              <span style="flex:1 1 420px;font-size:15px"><strong style="font-weight:600">3 people move</strong> group — <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">archive-write</span> back to <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">archive-admins</span>. Files owned by <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">archive-write</span> stay owned by it</span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:none">3 accounts converged</span>
+            </div>
+            <div style="padding:13px 16px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:rgba(243,245,239,.04)">
+              <span style="flex:1 1 420px;font-size:15px;font-weight:600">76 role holders · <span style="color:#f7b955">71 distinct people</span></span>
+              <span style="font-size:13.5px;color:rgba(243,245,239,.6);flex:none">5 hold two of these roles and are counted once</span>
+            </div>
+          </div>
+          <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">Read from TrueNAS 4 seconds ago. Nothing has been queued.</span>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span style="padding:10px 18px;border-radius:999px;background:#7f5af0;color:#f7f4ff;font-size:13.5px;font-weight:600;box-shadow:0 10px 26px -14px rgba(127,90,240,.85);transition:transform 180ms cubic-bezier(.22,.61,.36,1),box-shadow 120ms cubic-bezier(.4,0,.6,1)" style-hover="box-shadow:0 16px 34px -14px rgba(127,90,240,.95)" style-active="transform:scale(.97)">Queue this plan</span>
+            <span style="padding:10px 16px;border-radius:999px;color:rgba(243,245,239,.6);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)" style-active="transform:scale(.97)">Cancel</span>
+            <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);flex:1 1 300px">One plan for the version, not one per mapping. A rollback is a set restored together, and approving it three times would not make it three acts.</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#141612;border:1px solid rgba(255,92,77,.4);border-radius:20px;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600;flex:1">Step 2 · the backend refused this plan for its size</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">409 · COHORT_LIMIT · limit 25</span>
+        </div>
+        <div style="padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+          <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78);max-width:88ch">The plan moves <strong style="color:#f3f5ef;font-weight:600">71 people</strong> — the count of people, not of mappings and not of role holders. Returning to a version somebody published is not less consequential than the edits that left it, so the same limit applies and the ceremony fires <strong style="color:#f3f5ef;font-weight:600">once</strong>.</p>
+          <div style="background:#0b0c0a;border:1px solid rgba(255,92,77,.4);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:11px">
+            <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#ff8d82">Type the number of people this moves</span>
+            <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+              <span style="min-width:120px;padding:11px 15px;border-radius:14px;background:#141612;border:1px solid rgba(255,255,255,.14);font-family:'JetBrains Mono',monospace;font-size:15px;color:rgba(243,245,239,.34)">71</span>
+              <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);flex:1 1 340px">Twelve of the seventy-one lose access they have today. That is the fact the number is standing in for.</span>
+            </div>
+          </div>
+          <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:13px 15px;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Say why · required</span>
+            <span style="font-size:15px;color:rgba(243,245,239,.42)">Seventy-one people will find their access moved, and twelve will lose a share. This is what they are told.</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span style="padding:10px 18px;border-radius:999px;background:rgba(127,90,240,.35);color:rgba(247,244,255,.5);font-size:13.5px;font-weight:600">Roll back for 71 people</span>
+            <span style="padding:10px 16px;border-radius:999px;color:rgba(243,245,239,.6);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.04)" style-active="transform:scale(.97)">Cancel</span>
+            <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6);flex:1 1 320px">Nothing was queued by the refusal. The plan above is unchanged and still rehearsed.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption style="font-size:14px;line-height:1.6;color:rgba(243,245,239,.6);max-width:1180px;text-wrap:pretty"><strong style="color:#f3f5ef;font-weight:600">M7 · </strong><strong style="color:#f3f5ef;font-weight:600">One plan per version, and it is a recommendation rather than a rendering of what exists</strong> — there is no rollback rehearsal endpoint today, so this figure is the shape I am arguing for. The argument is in the plan's last row: one plan is the only shape that can produce <em>71 distinct people</em>. Per-mapping rehearsals yield 61, 12 and 3, and nobody adding those up gets 71, because five people hold two of these roles — so the number the ceremony is built to make unmissable is a number only the whole-version plan can compute, and the row says where the five went. Per-mapping would also fire the step three times for a single act, teaching an operator that the ceremony is a toll rather than a warning; unrehearsed, as today, is the only option that contradicts the screen's own argument, since publishing a set is rehearsed and reverting a published set would not be. The plan is not symmetrical and is not drawn as if it were: <em>gain</em> is lime, <em>lose</em> is red and names dormancy rather than deletion, <em>move</em> is amber and repeats the file-ownership consequence from <a href="#M3">M3</a>. Twelve losing a share is the whole risk of a rollback, so it appears three times — in the plan, in the line under the typed number, and in the reason prompt.</figcaption>
+  </figure>
+
+  <div style="max-width:1180px;background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;padding:22px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">One thing this screen implies that I have not drawn</div>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72)"><strong style="font-weight:600">Publishing needs its own note field and it is not the rehearsal's.</strong> Every version in <a href="#M1">M1</a> carries a sentence somebody wrote about a set — "archive admins split out of fabrication" — which is a different kind of statement from the reason attached to a single edit. Publish is drawn as one violet control in the band; the note it demands is a step I have not drawn, and it is the only ceremony on this screen that is not a rehearsal.</p>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.6)">Also not drawn: the add-a-mapping form itself. It is the rehearsal panel in <a href="#M3">M3</a> with a role picker and a value field in front of it, and the field picker's one option is explained by the card in <a href="#M1">M1</a>. I would rather you saw the rehearsal and the refusals than a form.</p>
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showRail&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Figures&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return { showRail: this.props.showRail ?? true };
+  }
+}
+</script>
+</body>
+</html>

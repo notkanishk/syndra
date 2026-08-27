@@ -210,6 +210,25 @@ describe("the target rows", () => {
     expect(targetNav([])).toBe(ADVANCED_NAV);
   });
 
+  // A target's own pages had no breadcrumb at all: the rows are appended from
+  // deployment configuration and are not in the tree `crumbsFor` walks. The id
+  // is in the path and `targetLabel` needs no lookup, so the chain is derivable
+  // without the roster.
+  it("names a target from its own path, and keeps it a link on a sub-route", () => {
+    expect(crumbsFor("/system/targets/truenas", "advanced")).toEqual([
+      { label: "System" },
+      { label: "TrueNAS" },
+    ]);
+    expect(crumbsFor("/system/targets/truenas/mappings", "advanced")).toEqual([
+      { label: "System" },
+      { label: "TrueNAS", href: "/system/targets/truenas" },
+    ]);
+  });
+
+  it("does not claim a target's path for a basic operator, who has no System group", () => {
+    expect(crumbsFor("/system/targets/truenas", "basic")).toEqual([]);
+  });
+
   // Static also means the breadcrumb can find it. A row the rail highlights and
   // the crumb cannot name is a page that reads as being nowhere.
   it("gives the index a breadcrumb, which a derived row could not have", () => {

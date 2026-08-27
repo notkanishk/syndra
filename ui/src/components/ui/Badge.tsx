@@ -89,6 +89,16 @@ export function Mono({
  */
 export const STATUS_TONE = {
   healthy: { dot: "bg-healthy", label: "text-ink" },
+  // A reading that is a runtime fact and not a state of health: a target that
+  // is registered and has not published a manifest yet.
+  //
+  // Amber was wrong here and had shipped that way. Amber is a deadline or a
+  // broken assumption, and an add-on that has not answered yet is the ordinary
+  // first minute of its life — spending the colour on it teaches an operator
+  // that the colour does not mean anything, which is the only thing that makes
+  // amber useful anywhere else. Lime is worse: nothing has been read, so
+  // nothing is healthy.
+  neutral: { dot: "bg-faint", label: "text-muted" },
   accent: { dot: "bg-accent", label: "text-accent-text" },
   warn: { dot: "bg-warn", label: "text-warn-text" },
   danger: { dot: "bg-danger", label: "text-danger-text" },
@@ -103,4 +113,27 @@ export function StatusDot({ tone, className = "" }: { tone: StatusTone; classNam
       className={`size-1.5 shrink-0 rounded-pill ${STATUS_TONE[tone].dot} ${className}`}
     />
   );
+}
+
+/**
+ * The count in a region heading. One seat, three things it can say.
+ *
+ * A filled number, a hollow zero, or an em dash when the read failed. It holds
+ * its place at zero — a region that vanished with its count would be structure
+ * moving in response to data, on the page where an operator most needs to know
+ * that a quiet region is quiet rather than missing.
+ *
+ * The em dash is the reason this is not just `Badge`. A failed read and an
+ * empty one are different facts and a `0` for the first is a lie: it says the
+ * region is empty when nobody could look.
+ */
+export function CountChip({ n }: { n: number | null | undefined }) {
+  if (n === null || n === undefined) {
+    return (
+      <Badge hollow aria-label="not read">
+        <span aria-hidden>—</span>
+      </Badge>
+    );
+  }
+  return n === 0 ? <Badge hollow>0</Badge> : <Badge tone="accent">{n}</Badge>;
 }

@@ -41,6 +41,12 @@ type RoleMapping struct {
 	Value     string `json:"value"`
 	CreatedBy string `json:"created_by"`
 	UpdatedBy string `json:"updated_by,omitempty"`
+	// Both columns have existed since 000029 and were never selected. The
+	// version band needs them: an unpublished edit an operator is deciding
+	// whether to roll back is a different thing at two hours old and at two
+	// months, and "who" without "when" is half an attribution.
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func (m RoleMapping) validate() error {
@@ -134,10 +140,10 @@ func GetRoleMapping(ctx context.Context, id string) (RoleMapping, error) {
 		return RoleMapping{}, fmt.Errorf("%w: %s", ErrMappingNotFound, id)
 	}
 	const q = `
-		SELECT id, target, project_id, role_key, field, value, created_by, updated_by
+		SELECT id, target, project_id, role_key, field, value, created_by, updated_by, created_at, updated_at
 		  FROM target_role_mappings WHERE id = $1`
 	var m RoleMapping
-	err := querier(ctx).QueryRow(ctx, q, id).Scan(&m.ID, &m.Target, &m.ProjectID, &m.RoleKey, &m.Field, &m.Value, &m.CreatedBy, &m.UpdatedBy)
+	err := querier(ctx).QueryRow(ctx, q, id).Scan(&m.ID, &m.Target, &m.ProjectID, &m.RoleKey, &m.Field, &m.Value, &m.CreatedBy, &m.UpdatedBy, &m.CreatedAt, &m.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return RoleMapping{}, fmt.Errorf("%w: %s", ErrMappingNotFound, id)
 	}
@@ -151,7 +157,7 @@ func GetRoleMapping(ctx context.Context, id string) (RoleMapping, error) {
 // target is empty.
 func ListRoleMappings(ctx context.Context, target string) ([]RoleMapping, error) {
 	const q = `
-		SELECT id, target, project_id, role_key, field, value, created_by, updated_by
+		SELECT id, target, project_id, role_key, field, value, created_by, updated_by, created_at, updated_at
 		  FROM target_role_mappings
 		 WHERE ($1 = '' OR target = $1)
 		 ORDER BY target, project_id, role_key, field`
@@ -276,7 +282,7 @@ func scanRoleMappings(rows pgx.Rows) ([]RoleMapping, error) {
 	var out []RoleMapping
 	for rows.Next() {
 		var m RoleMapping
-		if err := rows.Scan(&m.ID, &m.Target, &m.ProjectID, &m.RoleKey, &m.Field, &m.Value, &m.CreatedBy, &m.UpdatedBy); err != nil {
+		if err := rows.Scan(&m.ID, &m.Target, &m.ProjectID, &m.RoleKey, &m.Field, &m.Value, &m.CreatedBy, &m.UpdatedBy, &m.CreatedAt, &m.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan role mapping: %w", err)
 		}
 		out = append(out, m)
@@ -442,8 +448,138 @@ type MappingHistory struct {
 	CurrentVersion int `json:"current_version"`
 	// Unpublished says the working copy differs from that newest version — or
 	// that there is no version at all and every binding is unpublished.
-	Unpublished bool             `json:"unpublished"`
-	Versions    []MappingVersion `json:"versions"`
+	Unpublished bool `json:"unpublished"`
+	// What differs, not merely that something does. Empty when the working copy
+	// matches — never null, so a surface can render a count without a guard.
+	UnpublishedChanges []MappingChange  `json:"unpublished_changes"`
+	Versions           []MappingVersion `json:"versions"`
+}
+
+// MappingChange is one difference between the working copy and the newest
+// published version.
+//
+// Enumerated rather than counted, and that is the whole point of the type. A
+// boolean says an operator would be undoing something; a list says WHAT, and
+// once the edits are named, "rolling back undoes work listed nowhere" stops
+// being true — which is the objection that kept this off a table row.
+type MappingChange struct {
+	// added | changed | removed.
+	Kind      string `json:"kind"`
+	ProjectID string `json:"project_id"`
+	RoleKey   string `json:"role_key"`
+	Field     string `json:"field"`
+	// What the working copy holds. Empty for a removal, which has no row.
+	Value string `json:"value,omitempty"`
+	// What the published version holds. Set for a change and a removal.
+	WasValue string `json:"was_value,omitempty"`
+	// Who last touched the live row, and when.
+	//
+	// Both are ABSENT on a removal, and that is a limit rather than an
+	// oversight: a deleted row takes its `updated_by` with it and nothing else
+	// records the deletion. A surface must say "no longer here" without
+	// attributing it to anybody, because the alternative is naming whoever
+	// published the version — who did not remove it.
+	Actor string     `json:"actor,omitempty"`
+	At    *time.Time `json:"at,omitempty"`
+	// How many people hold the role this change reaches. The number the
+	// ceremony exists to make unmissable, and the only one a reader can act on.
+	Holders int `json:"holders"`
+}
+
+// bindingKey identifies a mapping by everything except its value.
+//
+// (target, project, role, field) is the table's own uniqueness constraint, so
+// two rows sharing it cannot exist and a value that differs across the pair is
+// necessarily an EDIT rather than an addition beside a removal. Keying on the
+// value as well — which `sameBindings` does, correctly, for its own question —
+// would report every change as one of each, and would double the cohort.
+func bindingKey(project, role, field string) string {
+	return project + "\x00" + role + "\x00" + field
+}
+
+// diffAgainstVersion enumerates what the working copy holds that a version does
+// not, and the reverse. Holder counts are read per distinct role, not per
+// change: two edits on one role are one cohort.
+func diffAgainstVersion(ctx context.Context, live []RoleMapping, snapshot []MappingVersionEntry) ([]MappingChange, error) {
+	changes := classifyMappingChanges(live, snapshot)
+
+	cohort := map[string]int{}
+	for i, c := range changes {
+		role := c.ProjectID + "\x00" + c.RoleKey
+		if _, done := cohort[role]; !done {
+			holders, err := MappingHolders(ctx, c.ProjectID, c.RoleKey)
+			if err != nil {
+				return nil, fmt.Errorf("count holders for %s/%s: %w", c.ProjectID, c.RoleKey, err)
+			}
+			cohort[role] = len(holders)
+		}
+		changes[i].Holders = cohort[role]
+	}
+	return changes, nil
+}
+
+// classifyMappingChanges is the half of the diff that needs no database, and it
+// is separated for exactly that reason: this package has no live-DB harness, and
+// the subtle decision here — that a value differing across the uniqueness key is
+// one CHANGE rather than an addition beside a removal — is the part worth a test.
+func classifyMappingChanges(live []RoleMapping, snapshot []MappingVersionEntry) []MappingChange {
+	was := make(map[string]MappingVersionEntry, len(snapshot))
+	for _, e := range snapshot {
+		was[bindingKey(e.ProjectID, e.RoleKey, e.Field)] = e
+	}
+
+	changes := []MappingChange{}
+	seen := make(map[string]struct{}, len(live))
+	for _, m := range live {
+		k := bindingKey(m.ProjectID, m.RoleKey, m.Field)
+		seen[k] = struct{}{}
+		prior, wasPublished := was[k]
+		switch {
+		case !wasPublished:
+			changes = append(changes, MappingChange{
+				Kind: "added", ProjectID: m.ProjectID, RoleKey: m.RoleKey,
+				Field: m.Field, Value: m.Value,
+				Actor: actorOf(m), At: touchedAt(m),
+			})
+		case prior.Value != m.Value:
+			changes = append(changes, MappingChange{
+				Kind: "changed", ProjectID: m.ProjectID, RoleKey: m.RoleKey,
+				Field: m.Field, Value: m.Value, WasValue: prior.Value,
+				Actor: actorOf(m), At: touchedAt(m),
+			})
+		}
+	}
+	for _, e := range snapshot {
+		if _, still := seen[bindingKey(e.ProjectID, e.RoleKey, e.Field)]; still {
+			continue
+		}
+		// No actor and no timestamp: see MappingChange.Actor.
+		changes = append(changes, MappingChange{
+			Kind: "removed", ProjectID: e.ProjectID, RoleKey: e.RoleKey,
+			Field: e.Field, WasValue: e.Value,
+		})
+	}
+	return changes
+}
+
+// actorOf prefers who last CHANGED a row over who created it, because an
+// unpublished edit is attributed to the edit and not to the row's origin.
+func actorOf(m RoleMapping) string {
+	if strings.TrimSpace(m.UpdatedBy) != "" {
+		return m.UpdatedBy
+	}
+	return m.CreatedBy
+}
+
+func touchedAt(m RoleMapping) *time.Time {
+	at := m.UpdatedAt
+	if at.IsZero() {
+		at = m.CreatedAt
+	}
+	if at.IsZero() {
+		return nil
+	}
+	return &at
 }
 
 // ListMappingHistory reads a target's version history and compares the newest
@@ -452,7 +588,9 @@ func ListMappingHistory(ctx context.Context, target string) (MappingHistory, err
 	if strings.TrimSpace(target) == "" {
 		return MappingHistory{}, fmt.Errorf("list mapping history: no target")
 	}
-	history := MappingHistory{Target: target, Versions: []MappingVersion{}}
+	history := MappingHistory{
+		Target: target, Versions: []MappingVersion{}, UnpublishedChanges: []MappingChange{},
+	}
 
 	const q = `
 		SELECT v.version, v.note, v.published_by, v.published_at,
@@ -499,10 +637,27 @@ func ListMappingHistory(ctx context.Context, target string) (MappingHistory, err
 		return MappingHistory{}, err
 	}
 	if len(history.Versions) == 0 {
+		// Nothing published, so every binding is unpublished — and each one is
+		// an addition against the empty set, which is exactly what an operator
+		// on day two needs listed before they publish a first version.
+		changes, err := diffAgainstVersion(ctx, live, nil)
+		if err != nil {
+			return MappingHistory{}, err
+		}
+		history.UnpublishedChanges = changes
 		history.Unpublished = len(live) > 0
 		return history, nil
 	}
 	history.CurrentVersion = history.Versions[0].Version
+	changes, err := diffAgainstVersion(ctx, live, history.Versions[0].Entries)
+	if err != nil {
+		return MappingHistory{}, err
+	}
+	history.UnpublishedChanges = changes
+	// Kept as its own field rather than derived from the list at every call
+	// site: `sameBindings` answers by content and by count, and a caller asking
+	// "is there anything to publish" should not have to know that an empty list
+	// and a matching set are the same thing.
 	history.Unpublished = !sameBindings(live, history.Versions[0].Entries)
 	return history, nil
 }

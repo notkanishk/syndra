@@ -574,3 +574,50 @@ describe("what it can do · the confirmation the manifest declares", () => {
     expect(provision?.textContent).not.toContain("confirmation required");
   });
 });
+
+/**
+ * The census line, and what left with it (design M6).
+ *
+ * Two panels — the mapping rows and their published versions — moved to their
+ * own screen, because editing one mapping moves access for everybody holding
+ * that role and a fact with that reach has no room to breathe in a table row.
+ *
+ * What has to stay true afterwards: the target page still answers "why is she
+ * bound here", and there is a way through to the screen that can change it.
+ * A page that dropped the panels and offered no route would have lost a
+ * capability rather than moved one.
+ */
+describe("what roles reach here · the census and its handoff", () => {
+  it("no longer holds the mappings table or the version history", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    expect(screen.queryByText("What roles reach here")).toBeNull();
+    expect(screen.queryByText("Published versions")).toBeNull();
+  });
+
+  it("offers the route that received them", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    const through = screen.getByRole("link", { name: /mapping/i });
+    expect(through.getAttribute("href")).toBe("/system/targets/truenas/mappings");
+  });
+
+  // The sentence is the reason somebody clicks, and it is repeated verbatim at
+  // the top of the screen it leads to.
+  it("keeps the sentence that explains why the mappings left", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    expect(
+      screen.getByText(/Editing one moves access for everybody holding that role/),
+    ).toBeTruthy();
+  });
+});

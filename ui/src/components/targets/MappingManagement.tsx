@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
+import { AddMappingButton, RefusedFields } from "@/components/targets/AddMappingDialog";
 import { ConvergeButton } from "@/components/targets/ConvergeEntitlements";
 import { Relative } from "@/components/ui/Time";
 import { RoleRef, UserName } from "@/components/names";
@@ -19,9 +20,10 @@ import {
   useMappingHistory,
   useMappingHolders,
   useMappings,
-  usePublishMappingVersion,
   useRollbackMappingVersion,
+  rehearseMappingRollback,
   type MappingApplyResult,
+  type MappingRehearsal,
   type MappingVersion,
   type RoleMapping,
 } from "@/lib/queries/useMappings";
@@ -64,6 +66,7 @@ export function MappingManagement({ target }: { target: string }) {
           title="What roles reach here"
           count={mappings.data?.length}
           note="Editing one moves access for everybody holding that role"
+          action={<AddMappingButton target={target} first={(mappings.data ?? []).length === 0} />}
         />
         <ListStates
           isLoading={mappings.isLoading}
@@ -73,8 +76,8 @@ export function MappingManagement({ target }: { target: string }) {
           errorTitle="The mappings could not be read"
           empty={
             <EmptyState
-              title="Nothing maps here yet"
-              guidance={`No role confers anything on ${targetLabel(target)}, so nobody is entitled to it.`}
+              title={`No role reaches ${targetLabel(target)}, so no role grants anything on it`}
+              guidance={`What is missing is the sentence that says which role should get an account here — until one exists, nobody is provisioned. Pick a role and the value it should reach, and the rehearsal will say how many people that is before anything is queued. An add-on registered and unmapped is the ordinary state between starting its container and deciding who it is for; it is not an error.`}
             />
           }
         >
@@ -91,6 +94,8 @@ export function MappingManagement({ target }: { target: string }) {
           </>
         </ListStates>
       </Card>
+
+      <RefusedFields target={target} />
 
       <VersionHistory target={target} />
 
@@ -189,12 +194,13 @@ function asPlan(op: string, previous: BulkPlan, result: MappingApplyResult): Bul
 
 function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose: () => void }) {
   const [value, setValue] = useState(mapping.value);
-  const [rehearsed, setRehearsed] = useState<BulkPlan | null>(null);
+  const [rehearsed, setRehearsed] = useState<MappingRehearsal | null>(null);
   const touch = useIsTouch();
 
   return (
     <RehearsalDialog
       title="Change what this role reaches"
+      definitionLabel="Save the change"
       lede={`${mapping.role_key} currently confers ${mapping.field} = ${mapping.value} on ${targetLabel(mapping.target)}. Everybody holding the role moves with it.`}
       noun={["person", "people"]}
       ready={value.trim() !== "" && value !== mapping.value}
@@ -210,6 +216,34 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
             value it does not recognise is refused here rather than at apply.
           </span>
         </label>
+      }
+      // The consequence no count implies, and the one an operator is most
+      // likely to discover afterwards. Syndra moves the group; it does not move
+      // what the old group owns, and it has no way to.
+      //
+      // The second half is the other card of design M4's pair: when the add-on
+      // could not be asked, the edit is allowed through on purpose and the
+      // screen has to say so — a check that did not run must not read as one
+      // that passed. Amber and not red, because nothing is wrong.
+      consequence={
+        <>
+          Files owned by <span className="type-mono">{mapping.value}</span> stay owned by it.
+          Everybody moving loses access to those files unless somebody re-owns them on{" "}
+          {targetLabel(mapping.target)}.
+          {rehearsed?.value_checked === false && (
+            <>
+              {" "}
+              <span className="font-semibold">
+                {targetLabel(mapping.target)} could not be asked whether{" "}
+                <span className="type-mono">{value}</span> exists,
+              </span>{" "}
+              so the value was not checked and the edit is allowed through — refusing it
+              while a target is unreachable would make an outage look like your mistake. If
+              the value turns out not to exist, the convergence that applies this mapping
+              fails, and it arrives as a queued change that will not settle.
+            </>
+          )}
+        </>
       }
       onRehearse={async (acknowledgeScope) => {
         const plan = await rehearseMappingEdit(mapping.id, value, acknowledgeScope);
@@ -231,6 +265,7 @@ function DeleteMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClo
   return (
     <RehearsalDialog
       title="Stop this role reaching that"
+      definitionLabel="Remove the mapping"
       lede={`${mapping.role_key} will no longer confer ${mapping.field} = ${mapping.value} on ${targetLabel(mapping.target)}. They keep the role and lose what it reached.`}
       noun={["person", "people"]}
       // Destructive, because it takes access away — but still rung 2: the
@@ -271,61 +306,31 @@ function emptyPlan(op: string): BulkPlan {
  */
 function VersionHistory({ target }: { target: string }) {
   const history = useMappingHistory(target);
-  const publish = usePublishMappingVersion(target);
-  const [note, setNote] = useState("");
   // Publishing and rolling back both report here: the version spine is the
   // thing they change, and it is what the operator is looking at.
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   return (
     <Card>
+      {/* No `note` about unpublished changes. The version band above says it,
+          and says it far better — it names the edits. Two statements of one
+          fact on one screen is a reader wondering which is authoritative. */}
       <CardHeader
         title="Published versions"
         count={history.data?.versions.length}
-        note={history.data?.unpublished ? "The working copy has unpublished changes" : undefined}
       />
 
-      <div className="grid gap-2 px-5 pb-4">
+      {/* The note and the Publish control live in the version band above, and
+          only there. Two of each on one screen was two things that could
+          disagree — and they did: this one refused a blank note and the band
+          did not. A reader working out which is authoritative has already
+          lost. What stays here is the list, and the sentence saying what a
+          version is for. */}
+      <div className="px-5 pb-4">
         <p className="text-[13.5px] text-muted">
-          Publishing snapshots what roles reach here right now, so a later change can be
-          rolled back to it. The note is the only record of why this set was the right
-          one — it is what somebody reads when they are deciding whether to come back.
+          A version is a snapshot of what roles reach here, so a later change can be rolled
+          back to it. The note is the only record of why this set was the right one — it is
+          what somebody reads when they are deciding whether to come back.
         </p>
-        {/* Stacked, not side by side. An `Input` is 15px on py-3 and a `sm`
-            button is 13px on py-1.5 above the desktop breakpoint — roughly 48px
-            beside roughly 32px, which reads as a control that failed to line up
-            rather than as a pair. The Maintenance panel below asks the same
-            shape of question (a reason, then an action) and already stacks
-            them; these two sit on one page and now look like one idea. */}
-        <Input
-          aria-label="Why this set"
-          placeholder="Why this set is the one to keep"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-        />
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!note.trim() || publish.isPending}
-            onClick={() =>
-              publish.mutate(note, {
-                onSuccess: (created) => {
-                  setNote("");
-                  setOutcome({
-                    kind: "applied",
-                    message: `Published version ${created.version}`,
-                    detail: "Nobody moves onto it until holders are moved.",
-                  });
-                },
-              })
-            }
-          >
-            {publish.isPending ? "Publishing…" : "Publish this set"}
-          </Button>
-        </div>
-
-        {outcome && <ActionOutcome outcome={outcome} className="mt-3" />}
       </div>
 
       <ListStates
@@ -369,7 +374,8 @@ function VersionRow({
   unpublished: boolean;
 }) {
   const rollback = useRollbackMappingVersion(target);
-  const [confirming, setConfirming] = useState(false);
+  const [rehearsing, setRehearsing] = useState(false);
+  const [rehearsed, setRehearsed] = useState<BulkPlan | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   return (
@@ -390,7 +396,7 @@ function VersionRow({
           </span>
         ) : null}
         {(!current || unpublished) && (
-          <Button variant="outline" size="sm" onClick={() => setConfirming(true)}>
+          <Button variant="outline" size="sm" onClick={() => setRehearsing(true)}>
             Roll back to this
           </Button>
         )}
@@ -417,87 +423,51 @@ function VersionRow({
           operator is looking at and the thing that changed. */}
       {outcome && <ActionOutcome outcome={outcome} className="mt-3" />}
 
-      {confirming && (
-        <RollbackConfirm
-          version={version}
-          pending={rollback.isPending}
-          onCancel={() => setConfirming(false)}
-          onConfirm={() =>
-            rollback.mutate(version.version, {
-              onSuccess: (result) => {
-                setConfirming(false);
-                // Queued, never applied. The bindings are restored here and the
-                // people they move are converged by the drain — a rollback that
-                // changed the definition and left the target alone is the
-                // definition and the world disagreeing, silently.
-                setOutcome({
-                  kind: "queued",
-                  message: `Rolled back to version ${version.version} — ${
-                    result.queued_convergences
-                  } ${result.queued_convergences === 1 ? "person is" : "people are"} queued for convergence`,
-                  detail:
-                    "Nothing has reached the target yet — resume the queue on Pending changes.",
-                });
-              },
+      {rehearsing && (
+        <RehearsalDialog
+          title={`Roll back to version ${version.version}`}
+          lede={`This replaces what roles reach ${targetLabel(target)} with the ${
+            version.entries.length
+          } binding${version.entries.length === 1 ? "" : "s"} in version ${version.version}.`}
+          noun={["person", "people"]}
+          definitionLabel={`Roll back to version ${version.version}`}
+          consequence={
+            <>
+              Anything added since version {version.version} is removed — a rollback restores
+              a set, it does not merge one. The people it moves include everybody who loses a
+              mapping, not only those who gain one.
+            </>
+          }
+          onRehearse={async (acknowledgeScope) => {
+            const plan = await rehearseMappingRollback(target, version.version, acknowledgeScope);
+            setRehearsed(plan);
+            return plan;
+          }}
+          onApply={async (planId) =>
+            new Promise((resolve, reject) => {
+              rollback.mutate({ version: version.version, planId }, {
+                onSuccess: (result) => {
+                  setOutcome({
+                    kind: "queued",
+                    message: `Rolled back to version ${version.version} — ${
+                      result.queued_convergences
+                    } ${result.queued_convergences === 1 ? "person is" : "people are"} queued for convergence`,
+                    detail:
+                      "Nothing has reached the target yet — resume the queue on Pending changes.",
+                  });
+                  // The plan the dialog showed is the one being reported back,
+                  // with every row now queued — `asPlan` carries the outcomes
+                  // through so the result step lists the same people the
+                  // rehearsal did, rather than an empty summary.
+                  resolve(asPlan("rollback_mappings", rehearsed ?? emptyPlan("rollback_mappings"), result));
+                },
+                onError: reject,
+              });
             })
           }
+          onClose={() => setRehearsing(false)}
         />
       )}
-    </div>
-  );
-}
-
-/**
- * Rolling back, acknowledged at rung 2.
- *
- * The number inside the sentence is the binding count rather than a head count,
- * and that is the honest one: a rollback restores a SET, and how many people it
- * moves depends on who holds those roles at the moment the drain runs. Claiming
- * a person count here would be claiming a rehearsal this endpoint does not do.
- */
-function RollbackConfirm({
-  version,
-  pending,
-  onConfirm,
-  onCancel,
-}: {
-  version: MappingVersion;
-  pending: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  const [acknowledged, setAcknowledged] = useState(false);
-
-  return (
-    <div className="mt-3 grid gap-3 rounded-inner border border-warn-line bg-warn-soft px-4 py-3">
-      <p className="text-[13.5px] text-muted">
-        This replaces what roles reach here with the {version.entries.length} binding
-        {version.entries.length === 1 ? "" : "s"} in version {version.version}. Anything
-        added since is removed — a rollback restores a set, it does not merge one.
-      </p>
-      <label className="flex cursor-pointer items-start gap-3 text-[14px]">
-        <input
-          type="checkbox"
-          className="mt-1 size-4 shrink-0 accent-[var(--accent)]"
-          checked={acknowledged}
-          onChange={(e) => setAcknowledged(e.target.checked)}
-        />
-        <span>
-          I understand this restores{" "}
-          <span className="font-semibold">
-            {version.entries.length} binding{version.entries.length === 1 ? "" : "s"}
-          </span>{" "}
-          and removes anything added since.
-        </span>
-      </label>
-      <div className="flex gap-2">
-        <Button variant="accent" size="sm" disabled={!acknowledged || pending} onClick={onConfirm}>
-          {pending ? "Rolling back…" : `Roll back to version ${version.version}`}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
     </div>
   );
 }

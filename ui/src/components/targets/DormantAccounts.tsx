@@ -67,7 +67,7 @@ export function DormantAccounts({ target }: { target: string }) {
   return (
     <Card>
       <CardHeader
-        title="Accounts nothing explains any more"
+        title="Lost their reason"
         count={accounts.length}
         note="No active role grants any of these"
       />

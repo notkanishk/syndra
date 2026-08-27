@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -34,6 +36,10 @@ type mappingRequest struct {
 	RoleKey   string `json:"role_key"`
 	Field     string `json:"field"`
 	Value     string `json:"value"`
+	// PlanID cites the rehearsal that showed who this reaches. Required
+	// whenever the role has holders — a mapping on a role nobody holds is a
+	// definition, and there is nothing to review.
+	PlanID string `json:"plan_id,omitempty"`
 }
 
 func handleListRoleMappings(w http.ResponseWriter, r *http.Request) {
@@ -54,22 +60,37 @@ func handleCreateRoleMapping(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
 		return
 	}
-	field, value, err := validateMappingAgainstTarget(r.Context(), req.Target, req.Field, req.Value)
+	field, value, _, err := validateMappingAgainstTarget(r.Context(), req.Target, req.Field, req.Value)
 	if err != nil {
 		writeMappingError(w, err)
 		return
 	}
 
 	// The normalised pair, never `req`.
-	created, err := dbCreateRoleMapping(r.Context(), db.RoleMapping{
+	//
+	// Through the same path edit and delete take: an approval cited whenever
+	// the role has holders, the write and the convergences in one transaction
+	// under the access lock. Creating a mapping used to write the row and stop
+	// — and because entitlements are DERIVED from mappings, the row alone
+	// changed what every holder was entitled to while nothing queued it.
+	//
+	// Nothing else would have found them either. The periodic reconciler walks
+	// existing bindings, so a person who has never been bound to this target is
+	// in no list it reads.
+	created, converged, err := createMappingAndConverge(r.Context(), db.RoleMapping{
 		Target: req.Target, ProjectID: req.ProjectID, RoleKey: req.RoleKey,
 		Field: field, Value: value, CreatedBy: resolveActor(r, ""),
-	})
+	}, resolveActor(r, ""), req.PlanID)
 	if err != nil {
-		writeMappingError(w, err)
+		writeMappingPlanError(w, err)
 		return
 	}
-	jsonResponse(w, http.StatusCreated, created)
+	jsonResponse(w, http.StatusCreated, map[string]any{
+		"mapping": created,
+		// Queued, never applied. The mapping is written here and the people it
+		// reaches are converged by the drain.
+		"queued_convergences": converged,
+	})
 }
 
 type mappingValueRequest struct {
@@ -95,7 +116,7 @@ func handleUpdateRoleMapping(w http.ResponseWriter, r *http.Request) {
 		writeMappingError(w, err)
 		return
 	}
-	_, value, err := validateMappingAgainstTarget(r.Context(), existing.Target, existing.Field, req.Value)
+	_, value, _, err := validateMappingAgainstTarget(r.Context(), existing.Target, existing.Field, req.Value)
 	if err != nil {
 		writeMappingError(w, err)
 		return
@@ -110,10 +131,22 @@ type mappingDeleteRequest struct {
 func handleDeleteRoleMapping(w http.ResponseWriter, r *http.Request) {
 	// A DELETE with a body, because the citation has to travel somewhere and a
 	// query parameter is a place approvals end up in browser history and access
-	// logs. An empty body is tolerated: a mapping nobody holds needs no citation.
+	// logs. An EMPTY body is tolerated — a mapping nobody holds needs no
+	// citation — and that is the only thing tolerated.
+	//
+	// The decode error used to be discarded outright, which tolerated far more
+	// than the empty body it was written for: a payload with a misspelled key
+	// decoded to an empty struct and was acted on as though no plan had been
+	// cited, and a malformed one the same. On the one endpoint in this file
+	// that removes access, silently. Every other mutation in the product
+	// decodes strictly; this was the exception, and it was not a deliberate
+	// one.
 	var req mappingDeleteRequest
 	if r.Body != nil {
-		_ = decodeJSONStrict(r.Body, &req)
+		if err := decodeJSONStrict(r.Body, &req); err != nil && !errors.Is(err, io.EOF) {
+			jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+			return
+		}
 	}
 	existing, err := dbGetRoleMapping(r.Context(), r.PathValue("id"))
 	if err != nil {
@@ -189,7 +222,20 @@ func handlePublishMappingVersion(w http.ResponseWriter, r *http.Request) {
 			map[string]string{"target": "unregistered"})
 		return
 	}
-	version, err := dbPublishMappingVersion(r.Context(), req.Target, req.Note, resolveActor(r, ""))
+	// A version with no note is a date with no argument.
+	//
+	// The note is the only record of why this set was the right one, and its
+	// entire reader is somebody months later deciding whether to roll back to
+	// it. Rolling back to a version whose reason is blank is a guess — which is
+	// exactly what the version history exists to stop being necessary. Refused
+	// here rather than only in the form, because a surface that asks nicely is
+	// a suggestion.
+	if strings.TrimSpace(req.Note) == "" {
+		jsonValidationErrorResponse(w, "a note is required to publish a version",
+			map[string]string{"note": "required"})
+		return
+	}
+	version, err := dbPublishMappingVersion(r.Context(), req.Target, strings.TrimSpace(req.Note), resolveActor(r, ""))
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -204,10 +250,23 @@ func handleRollbackMappingVersion(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "version must be a positive integer", map[string]string{"version": "invalid"})
 		return
 	}
+	// The citation the rehearsal issued. Carried in the body for the same
+	// reason the delete's is: an approval in a query parameter ends up in
+	// browser history and access logs.
+	var req mappingDeleteRequest
+	if r.Body != nil {
+		if err := decodeJSONStrict(r.Body, &req); err != nil && !errors.Is(err, io.EOF) {
+			jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+			return
+		}
+	}
+
 	actor := resolveActor(r, "")
-	converged, err := rollbackAndConverge(r.Context(), target, version, actor)
+	converged, err := rollbackAndConverge(r.Context(), target, version, actor, req.PlanID)
 	if err != nil {
-		writeMappingError(w, err)
+		// A citation refusal is not a mapping refusal, and an operator is told
+		// which of the two to act on.
+		writeMappingPlanError(w, err)
 		return
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{
@@ -226,7 +285,7 @@ func handleRollbackMappingVersion(w http.ResponseWriter, r *http.Request) {
 // verdict. Both sides of the intersection have to be normalised or neither is:
 // a mapping stored as `lab_makers ` is one no allowance can ever match, and a
 // carve-out on it would be accepted and do nothing.
-func validateMappingAgainstTarget(ctx context.Context, target, field, value string) (string, string, error) {
+func validateMappingAgainstTarget(ctx context.Context, target, field, value string) (string, string, addons.Resolution, error) {
 	field, value = services.NormaliseTerm(field, value)
 	schema, err := addonsEntitlementSchema(target)
 	switch {
@@ -234,11 +293,11 @@ func validateMappingAgainstTarget(ctx context.Context, target, field, value stri
 		// Nothing about a mapping to a target the deployment does not run can
 		// be validated, and the foreign key would refuse the row anyway — with
 		// a message about a constraint rather than about the deployment.
-		return "", "", fmt.Errorf("%w: %s is not a registered add-on target", db.ErrMappingInvalid, target)
+		return "", "", addons.Resolution{}, fmt.Errorf("%w: %s is not a registered add-on target", db.ErrMappingInvalid, target)
 	case err != nil:
 		// Registered and never answered. Structure could still be checked
 		// against a manifest we do not have, which is to say it could not.
-		return "", "", fmt.Errorf("%w: %s has not published a capability manifest yet, so its entitlement schema is unknown", errMappingTargetSilent, target)
+		return "", "", addons.Resolution{}, fmt.Errorf("%w: %s has not published a capability manifest yet, so its entitlement schema is unknown", errMappingTargetSilent, target)
 	}
 
 	declared := make([]string, 0, len(schema))
@@ -253,16 +312,20 @@ func validateMappingAgainstTarget(ctx context.Context, target, field, value stri
 		declared = append(declared, f.Name)
 	}
 	if err := services.ValidateMappingField(declared, field); err != nil {
-		return "", "", err
+		return "", "", addons.Resolution{}, err
 	}
 
 	// Reference, last, and only once structure holds. This is the network call,
 	// and spending it to be told a field is misspelled would make an outage
 	// look like a validation failure.
-	if err := addonsResolvesValue(ctx, target, field, value); err != nil {
-		return "", "", err
+	// The resolution comes back whether or not it refused, because "the value is
+	// fine" and "nobody could be asked" are different answers and a surface has
+	// to be able to say which one it is showing.
+	resolution, err := addonsResolvesValue(ctx, target, field, value)
+	if err != nil {
+		return "", "", resolution, resolutionCarrier{error: err, known: resolution.Known, value: value}
 	}
-	return field, value, nil
+	return field, value, resolution, nil
 }
 
 // errMappingTargetSilent separates "the add-on is wrong" from "the add-on has
@@ -288,7 +351,15 @@ func writeMappingError(w http.ResponseWriter, err error) {
 		// operator typo, the single likeliest mistake on this form — fell
 		// through to the default and came back 500 DB_ERROR. The target had
 		// answered clearly and the operator was shown an internal error.
-		jsonValidationErrorResponse(w, err.Error(), map[string]string{"value": "unresolvable"})
+		// The near misses, when the add-on enumerated any. A typo is answered by
+		// seeing the two names it might have been; being told to try again is
+		// the one response that cannot help, since the same question gets the
+		// same answer.
+		details := map[string]string{"value": "unresolvable"}
+		if near := nearestValues(err); near != "" {
+			details["near"] = near
+		}
+		jsonValidationErrorResponse(w, err.Error(), details)
 	default:
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 	}
@@ -306,4 +377,55 @@ func handleMappingHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, history)
+}
+
+// resolutionCarrier lets a refusal carry what the add-on enumerated, so the
+// surface can name near misses without a second call.
+type resolutionCarrier struct {
+	error
+	known []string
+	value string
+}
+
+func (r resolutionCarrier) Unwrap() error { return r.error }
+
+// nearestValues names up to three enumerated values that share a prefix with
+// what was typed, longest prefix first. Empty when nothing is close — a list of
+// every group on the NAS is not a suggestion, it is a haystack.
+func nearestValues(err error) string {
+	var carrier resolutionCarrier
+	if !errors.As(err, &carrier) || len(carrier.known) == 0 {
+		return ""
+	}
+	typed := strings.ToLower(carrier.value)
+	type scored struct {
+		name string
+		n    int
+	}
+	near := []scored{}
+	for _, candidate := range carrier.known {
+		n := commonPrefix(typed, strings.ToLower(candidate))
+		// Three characters, so an unrelated name starting with the same letter
+		// is not offered as a correction.
+		if n >= 3 {
+			near = append(near, scored{candidate, n})
+		}
+	}
+	sort.SliceStable(near, func(i, j int) bool { return near[i].n > near[j].n })
+	names := []string{}
+	for i, s := range near {
+		if i == 3 {
+			break
+		}
+		names = append(names, s.name)
+	}
+	return strings.Join(names, ", ")
+}
+
+func commonPrefix(a, b string) int {
+	n := 0
+	for n < len(a) && n < len(b) && a[n] == b[n] {
+		n++
+	}
+	return n
 }

@@ -39,7 +39,7 @@ const applied = (): BulkPlan =>
 let onRehearse: (acknowledgeScope: boolean) => Promise<BulkPlan>;
 let onApply: (planId: string) => Promise<BulkPlan>;
 
-function open() {
+function open(extra: { definitionLabel?: string } = {}) {
   return render(
     <RehearsalDialog
       title="Grant a role"
@@ -48,6 +48,7 @@ function open() {
       onRehearse={onRehearse}
       onApply={onApply}
       onClose={() => {}}
+      {...extra}
     />,
   );
 }
@@ -228,9 +229,38 @@ describe("a change bigger than the usual one", () => {
     // they are being warned about.
     expect(notice).toHaveTextContent("63");
     expect(notice).toHaveTextContent("25");
-    expect(screen.getByRole("button", { name: /Yes, plan for 63 people/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Plan for 63 people/ })).toBeInTheDocument();
     // Nothing has been computed, so there is nothing to apply.
     expect(screen.queryByRole("button", { name: /^Apply/ })).not.toBeInTheDocument();
+  });
+
+  // Rung 2 is the tick, not the label. A button carrying the count is something
+  // a hand reaches past; the ceremony has to be an act, and it has to be an act
+  // about the number.
+  it("holds the plan behind an acknowledgement carrying the count", async () => {
+    onRehearse = vi.fn().mockRejectedValue(refusal());
+    open();
+    await screen.findByRole("status");
+
+    const tick = screen.getByRole("checkbox");
+    expect(tick).not.toBeChecked();
+    expect(screen.getByText(/I understand this moves/)).toHaveTextContent("63 people");
+    expect(screen.getByRole("button", { name: /Plan for 63 people/ })).toBeDisabled();
+
+    fireEvent.click(tick);
+    expect(screen.getByRole("button", { name: /Plan for 63 people/ })).toBeEnabled();
+  });
+
+  // It computes a plan and writes nothing, so it is not the solid red fill that
+  // is reserved for the button which performs a destruction.
+  it("does not dress computing a plan as a destructive confirm", async () => {
+    onRehearse = vi.fn().mockRejectedValue(refusal());
+    open();
+    await screen.findByRole("status");
+
+    expect(screen.getByRole("button", { name: /Plan for 63 people/ }).className).not.toMatch(
+      /bg-danger\b/,
+    );
   });
 
   it("re-rehearses with the acknowledgement, and only then", async () => {
@@ -239,7 +269,8 @@ describe("a change bigger than the usual one", () => {
     await screen.findByRole("status");
 
     expect(vi.mocked(onRehearse)).toHaveBeenNthCalledWith(1, false);
-    fireEvent.click(screen.getByRole("button", { name: /Yes, plan for 63 people/ }));
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: /Plan for 63 people/ }));
     await screen.findByRole("button", { name: "Apply to 1 person" });
     expect(vi.mocked(onRehearse)).toHaveBeenNthCalledWith(2, true);
   });
@@ -293,5 +324,160 @@ describe("queued rows say what happens next", () => {
       summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 1, queued: 0 },
     });
     expect(note).toBeUndefined();
+  });
+});
+
+/**
+ * A plan that arrives without its rows.
+ *
+ * The list is read off a payload like every other list in the product, and every
+ * other one is read with `?? []`. This one was not, so a short payload threw
+ * inside render and the error boundary blanked the screen — on the surface an
+ * operator is standing on halfway through approving a change that moves
+ * somebody's access.
+ *
+ * The right failure is a plan with no rows beside its summary. The backend
+ * being wrong is not a reason to lose the page.
+ */
+describe("a plan whose rows did not arrive", () => {
+  it("renders without them rather than taking the screen down", async () => {
+    onRehearse = vi
+      .fn()
+      .mockResolvedValue({ ...plan(), outcomes: undefined } as unknown as BulkPlan);
+    open();
+
+    expect(await screen.findByText(/came back without its rows/)).toBeInTheDocument();
+    // And the approval is still reachable: the summary is what it reported.
+    expect(screen.getByRole("button", { name: /^Apply/ })).toBeInTheDocument();
+  });
+
+  // The other half of the same payload problem, and the worse one: it does not
+  // fail loudly, it puts a non-number in the label of the button that performs
+  // the change.
+  it("does not put a count it does not have on the apply button", async () => {
+    onRehearse = vi.fn().mockResolvedValue({
+      ...plan(),
+      summary: { ...plan().summary, apply: undefined },
+    } as unknown as BulkPlan);
+    open();
+
+    const apply = await screen.findByRole("button", { name: /^Apply/ });
+    expect(apply).toHaveTextContent("Apply this plan");
+    expect(apply.textContent).not.toMatch(/undefined|NaN/);
+  });
+});
+
+/**
+ * A change that reaches nobody, on a surface where that is a real act.
+ *
+ * The dialog assumed every plan moves at least one person. That is right for a
+ * bulk grant — a plan for nobody means nobody was selected — and wrong for the
+ * mapping surfaces, where a change to a role nobody holds alters what the role
+ * WILL confer. The backend writes those and issues no approval, because there
+ * is nothing to review; the dialog then disabled Apply on both counts.
+ *
+ * Defining before assigning is the ordinary order, and it was the one order
+ * this dialog could not express — for creates, edits, deletes and rollbacks
+ * alike, since all four share it.
+ */
+describe("applying a change that reaches nobody", () => {
+  const empty = (): BulkPlan =>
+    ({
+      ...plan(),
+      plan_id: undefined,
+      outcomes: [],
+      summary: { total: 0, apply: 0, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
+    }) as unknown as BulkPlan;
+
+  it("is refused by default, because for most surfaces it is a no-op", async () => {
+    onRehearse = vi.fn().mockResolvedValue(empty());
+    open();
+
+    const apply = await screen.findByRole("button", { name: /Nothing to apply/ });
+    expect(apply).toBeDisabled();
+  });
+
+  it("is offered where the surface says a definition is an act", async () => {
+    onRehearse = vi.fn().mockResolvedValue(empty());
+    open({ definitionLabel: "Save mapping" });
+
+    const save = await screen.findByRole("button", { name: "Save mapping" });
+    expect(save).toBeEnabled();
+
+    fireEvent.click(save);
+    // Applied without an approval, because none was issued.
+    await waitFor(() => expect(vi.mocked(onApply)).toHaveBeenCalledWith(""));
+  });
+
+  /**
+   * "Reaches nobody" is three conditions, and `apply === 0` is only one of
+   * them.
+   *
+   * A plan can count forty people and change nothing for any of them: forty
+   * rows, every one `no_change`, an apply count of zero. That is not a
+   * definition — it reaches forty people — and reading it as one would put the
+   * definition label on it, submit it with no citation, and meet a backend
+   * refusal the label had just promised would not happen.
+   *
+   * The backend is not fooled either way; it rechecks holders and refuses a
+   * missing citation. What is at stake is the UI telling an operator the wrong
+   * thing about what they are doing, and then being contradicted.
+   */
+  describe("what counts as reaching nobody", () => {
+    const shaped = (over: Record<string, unknown>): BulkPlan =>
+      ({ ...empty(), ...over }) as unknown as BulkPlan;
+
+    it("does not read forty unchanged people as a definition", async () => {
+      onRehearse = vi.fn().mockResolvedValue(
+        shaped({
+          outcomes: Array.from({ length: 40 }, (_, i) => ({
+            user_id: `u${i}`,
+            effect: "no_change",
+            detail: "already has it",
+          })),
+          summary: { total: 40, apply: 0, no_change: 40, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
+        }),
+      );
+      open({ definitionLabel: "Save mapping" });
+
+      expect(await screen.findByRole("button", { name: /Nothing to apply/ })).toBeDisabled();
+      expect(screen.queryByRole("button", { name: "Save mapping" })).toBeNull();
+    });
+
+    // An empty list with a non-zero total is a plan this dialog does not
+    // understand. The safe reading of one of those is the ordinary path.
+    it("does not read an empty list with a count as a definition", async () => {
+      onRehearse = vi.fn().mockResolvedValue(
+        shaped({
+          outcomes: [],
+          summary: { total: 40, apply: 0, no_change: 40, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
+        }),
+      );
+      open({ definitionLabel: "Save mapping" });
+
+      expect(await screen.findByRole("button", { name: /Nothing to apply/ })).toBeDisabled();
+    });
+
+    // An absent array is a payload that arrived short, not an empty cohort.
+    it("does not read a payload that arrived short as a definition", async () => {
+      onRehearse = vi.fn().mockResolvedValue(shaped({ outcomes: undefined }));
+      open({ definitionLabel: "Save mapping" });
+
+      expect(await screen.findByRole("button", { name: /Nothing to apply/ })).toBeDisabled();
+      expect(screen.getByText(/came back without its rows/)).toBeInTheDocument();
+    });
+  });
+
+  // The relaxation is exact. A surface that can define is still a surface that
+  // must cite an approval the moment its change reaches somebody.
+  it("does not relax the citation once the change reaches somebody", async () => {
+    onRehearse = vi
+      .fn()
+      .mockResolvedValue({ ...plan(), plan_id: undefined } as unknown as BulkPlan);
+    open({ definitionLabel: "Save mapping" });
+
+    const apply = await screen.findByRole("button", { name: /^Apply/ });
+    expect(apply).toBeDisabled();
+    expect(vi.mocked(onApply)).not.toHaveBeenCalled();
   });
 });

@@ -473,17 +473,33 @@ var ErrValueNotResolvable = errors.New("addon: the target does not recognise tha
 // That asymmetry is the whole design of this check: it is a reference check, not
 // an authorisation one. Structure — is this a field the schema declares, is it a
 // lifecycle field — is Syndra's own and is enforced whatever the target says.
-func ResolvesValue(ctx context.Context, target, field, value string) error {
+// Resolution is what the check was able to establish.
+//
+// `Checked` is the half that was missing and the half a surface most needs. The
+// function fails open on everything except a definite no, which is right — but
+// "the value is fine" and "nobody could be asked" both arrived as a nil error,
+// so a screen had no way to tell an operator which of the two it was showing
+// them. A check that did not run must not read as a check that passed.
+type Resolution struct {
+	// The add-on answered and could enumerate this field.
+	Checked bool
+	// What it enumerated. Present only when Checked, and used to name near
+	// misses on a refusal — a typo is answered by seeing the two names it might
+	// have been, not by being told to try again.
+	Known []string
+}
+
+func ResolvesValue(ctx context.Context, target, field, value string) (Resolution, error) {
 	a, err := Get(target)
 	if err != nil {
-		return nil
+		return Resolution{}, nil
 	}
 	if !a.br.allow(timeNow()) {
-		return nil
+		return Resolution{}, nil
 	}
 	cred, err := credentialFor(a.Registration)
 	if err != nil {
-		return nil
+		return Resolution{}, nil
 	}
 
 	resp := doAuthenticated(ctx, cred, http.MethodGet,
@@ -492,7 +508,7 @@ func ResolvesValue(ctx context.Context, target, field, value string) error {
 	if resp.Outcome != OutcomeSucceeded {
 		// Includes a 404 for a field this add-on does not enumerate. Not an
 		// answer about the value.
-		return nil
+		return Resolution{}, nil
 	}
 
 	var decoded struct {
@@ -500,23 +516,25 @@ func ResolvesValue(ctx context.Context, target, field, value string) error {
 		Enumerable bool     `json:"enumerable"`
 	}
 	if err := json.Unmarshal(resp.Body, &decoded); err != nil {
-		return nil
+		return Resolution{}, nil
 	}
 	if !decoded.Enumerable {
 		// The add-on can serve the field and cannot bound it — a path, a quota.
 		// Structure only, and never "no value is valid".
-		return nil
+		return Resolution{}, nil
 	}
+
+	checked := Resolution{Checked: true, Known: decoded.Values}
 	for _, candidate := range decoded.Values {
 		if candidate == value {
-			return nil
+			return checked, nil
 		}
 	}
 	// The value is echoed, and this is the one place in the add-on layer that
 	// does it deliberately: a mapping value is a group name an operator typed,
 	// not a secret, and showing them what they typed is most of what makes the
 	// refusal actionable (16.8).
-	return fmt.Errorf("%w: %s has no %s named %q", ErrValueNotResolvable, target, field, value)
+	return checked, fmt.Errorf("%w: %s has no %s named %q", ErrValueNotResolvable, target, field, value)
 }
 
 // StorageStatus is one member's own account on a target, as the target sees it
