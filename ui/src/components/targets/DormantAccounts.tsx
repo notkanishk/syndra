@@ -12,7 +12,7 @@ import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
-import { Input } from "@/components/ui/Input";
+import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import {
   useDormantAccounts,
   useSweepDormant,
@@ -168,23 +168,26 @@ export function DormantAccounts({ target }: { target: string }) {
             verb="removes"
             consequence={filesSentence(chosen)}
           />
-          <label className="grid gap-1.5 text-[14px]">
-            <span>A credential that may delete accounts</span>
+          <div>
+            <FieldLabel htmlFor="sweep-credential">
+              A credential that may delete accounts
+            </FieldLabel>
             <Input
+              id="sweep-credential"
               type="password"
               autoComplete="off"
               value={elevatedKey}
               onChange={(e) => setElevatedKey(e.target.value)}
             />
-            <span className="text-[13px] text-faint">
+            <FieldHint>
               {/* Why the operator is being asked at all, said once. It is the
                   reason a compromise of the add-on cannot destroy anybody's
                   files, and without the explanation it reads as friction. */}
               The add-on holds none of its own — its session can read and write
               accounts and cannot remove one. This is used for these removals and kept
               nowhere.
-            </span>
-          </label>
+            </FieldHint>
+          </div>
           <div className="flex gap-2">
             <Button
               variant="dangerConfirm"

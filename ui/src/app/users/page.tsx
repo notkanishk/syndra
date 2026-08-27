@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { ListStates, EmptyState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
+import { FilterChip } from "@/components/ui/FilterChip";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -220,24 +221,30 @@ export default function PeoplePage() {
         <div className="flex flex-wrap items-center gap-2">
           {filters.role && (
             <FilterChip
-              label={`Holding ${filters.role}${projectName ? ` in ${projectName}` : ""}`}
               onClear={() => setParams({ role: "" })}
-            />
+              clearLabel={`Clear filter: holding ${filters.role}`}
+            >
+              {`Holding ${filters.role}${projectName ? ` in ${projectName}` : ""}`}
+            </FilterChip>
           )}
           {filters.bundle && (
             // Two chips, not one, because they clear independently: dropping
             // the version to see the whole bundle is the move an operator makes
             // constantly once they have found the stragglers.
             <FilterChip
-              label={`In the ${filters.bundle} bundle`}
               onClear={() => setParams({ bundle: "", version: "" })}
-            />
+              clearLabel={`Clear filter: in the ${filters.bundle} bundle`}
+            >
+              {`In the ${filters.bundle} bundle`}
+            </FilterChip>
           )}
           {filters.version && (
             <FilterChip
-              label={`on v${filters.version}`}
               onClear={() => setParams({ version: "" })}
-            />
+              clearLabel={`Clear filter: on v${filters.version}`}
+            >
+              {`on v${filters.version}`}
+            </FilterChip>
           )}
         </div>
       )}
@@ -373,23 +380,6 @@ export default function PeoplePage() {
           onClose={() => setBulkOp(null)}
         />
       )}
-    </div>
-  );
-}
-
-/** A filter that has no dropdown of its own — arrived by link, cleared by hand. */
-function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
-  return (
-    <div className="flex items-center gap-2.5 self-start rounded-pill bg-tint-2 py-1.5 pl-4 pr-2.5 text-[13.5px]">
-      {label}
-      <button
-        type="button"
-        onClick={onClear}
-        aria-label={`Clear filter: ${label}`}
-        className="rounded-pill px-2 py-0.5 font-semibold text-muted motion-tint hover:text-ink"
-      >
-        ✕
-      </button>
     </div>
   );
 }

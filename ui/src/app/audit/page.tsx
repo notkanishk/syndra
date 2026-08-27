@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { FilterChip } from "@/components/ui/FilterChip";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -109,19 +110,12 @@ export default function AuditPage() {
       {scopedUser && (
         // A scoped log must always show a way back out, or an operator who
         // arrived by link has no way to tell they are not looking at everything.
-        <div className="flex items-center gap-2.5 self-start rounded-pill bg-tint-2 py-1.5 pl-4 pr-2.5 text-[13.5px]">
-          <span>
-            Scoped to <UserName id={scopedUser} />
-          </span>
-          <button
-            type="button"
-            onClick={() => router.replace("/audit", { scroll: false })}
-            aria-label="Show the whole audit log"
-            className="rounded-pill px-2 py-0.5 font-semibold text-muted motion-tint hover:text-ink"
-          >
-            ✕
-          </button>
-        </div>
+        <FilterChip
+          onClear={() => router.replace("/audit", { scroll: false })}
+          clearLabel="Show the whole audit log"
+        >
+          Scoped to <UserName id={scopedUser} />
+        </FilterChip>
       )}
 
       <Card>

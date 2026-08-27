@@ -526,13 +526,14 @@ function RoleGroup({
             {/* No dead ends: Basic names the cause and offers one scoped jump. */}
             {!advanced && strongest?.kind === "mapping" && (
               <div className="w-full">
-                <button
-                  type="button"
+                <Button
+                  variant="accentSoft"
+                  size="sm"
+                  className="mt-1"
                   onClick={() => onReveal(`role-${projectId}-${role.role_key}`)}
-                  className="mt-1 inline-flex items-center gap-2 rounded-pill bg-accent-soft px-4 py-2 text-[13.5px] font-semibold text-accent-text"
                 >
                   This came from an automatic rule — Open automation details →
-                </button>
+                </Button>
               </div>
             )}
           </div>

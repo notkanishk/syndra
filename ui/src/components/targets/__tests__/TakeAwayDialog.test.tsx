@@ -84,7 +84,10 @@ describe("taking access away on a target", () => {
     const confirm = screen.getByRole("button", { name: /queue the revocation/i });
     expect(confirm).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText(/Shown to them on their own page/), { target: { value: "offboarding" } });
+    // Queried by the label, which is now all the label is. The hint used to
+    // live inside it, so this field's accessible name was its title plus a
+    // paragraph — and this test could only find it by that paragraph.
+    fireEvent.change(screen.getByLabelText("Why"), { target: { value: "offboarding" } });
     expect(confirm).toBeDisabled();
 
     fireEvent.change(screen.getByRole("textbox", { name: /type the person's name/i }), {
@@ -109,7 +112,7 @@ describe("taking access away on a target", () => {
     };
     renderTakeAway();
 
-    fireEvent.change(screen.getByLabelText(/Shown to them on their own page/), { target: { value: "offboarding" } });
+    fireEvent.change(screen.getByLabelText("Why"), { target: { value: "offboarding" } });
     fireEvent.change(screen.getByRole("textbox", { name: /type the person's name/i }), {
       target: { value: "Ada Rivera" },
     });

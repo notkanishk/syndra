@@ -948,17 +948,18 @@ function ResolveConflictDialog({
           </p>
         </div>
 
-        <label className="grid gap-1.5 text-[14px]">
-          <span>How you know</span>
+        <div>
+          <FieldLabel htmlFor="conflict-note">How you know</FieldLabel>
           <Input
+            id="conflict-note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Checked the home directory contents with them"
           />
-          <span className="text-[13px] text-faint">
+          <FieldHint>
             The row somebody reads when the other person asks where their account went.
-          </span>
-        </label>
+          </FieldHint>
+        </div>
 
         <ConfirmByTyping
           expected={conflict.username}
@@ -1031,19 +1032,20 @@ function ResolveFindingDialog({
             replaced volume — and not to clear a warning.
           </p>
         </div>
-        <label className="grid gap-1.5 text-[14px]">
-          <span>Why the log changed</span>
+        <div>
+          <FieldLabel htmlFor="finding-note">Why the log changed</FieldLabel>
           <Input
+            id="finding-note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="We replaced the add-on&rsquo;s volume on the 4th"
           />
-          <span className="text-[13px] text-faint">
+          <FieldHint>
             Kept with the resolution. &ldquo;We replaced the volume&rdquo; and &ldquo;we do
             not know&rdquo; leave the anchor in the same state and are completely different
             facts.
-          </span>
-        </label>
+          </FieldHint>
+        </div>
         <ConfirmByTyping
           expected={target}
           value={confirmation.typed}

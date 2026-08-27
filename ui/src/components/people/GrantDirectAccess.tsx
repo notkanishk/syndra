@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { Button } from "@/components/ui/Button";
+import { Button, PILL } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
@@ -122,7 +122,7 @@ export function GrantDirectAccess({
         </div>
 
         <div>
-          <FieldLabel>Expires</FieldLabel>
+          <FieldLabel htmlFor="grant-expiry-date">Expires</FieldLabel>
           <div className="mb-2.5 flex flex-wrap gap-2">
             {(
               [
@@ -132,12 +132,15 @@ export function GrantDirectAccess({
                 ["never", "Never"],
               ] as Array<[Preset, string]>
             ).map(([value, label]) => (
+              // The same control as the request form's "how long", and now the
+              // same box: it had restated the pill by hand at 13px/7px, which
+              // is both a drifted surface and a 30px target on a phone.
               <button
                 key={value}
                 type="button"
                 aria-pressed={preset === value}
                 onClick={() => setPreset(value)}
-                className={`rounded-pill px-3.5 py-[7px] text-[13px] font-semibold motion-tint ${
+                className={`rounded-pill font-semibold motion-tint ${PILL.md} ${
                   preset === value ? "bg-accent-dense text-accent-ink" : "bg-tint-2 text-ink"
                 }`}
               >
@@ -150,6 +153,7 @@ export function GrantDirectAccess({
             // Native date input: the platform's picker is keyboard-accessible,
             // localised and familiar. A custom one would be none of those.
             <Input
+              id="grant-expiry-date"
               type="date"
               value={customDate}
               onChange={(event) => setCustomDate(event.target.value)}
