@@ -82,40 +82,67 @@ export function WithdrawnAccess() {
           />
         }
       >
+        {/* Both buckets always, in this order, whatever either one holds.
+            They used to render only when non-empty, so a revocation going
+            terminal INSERTED a red card above the queue somebody was reading —
+            the list moved under them because the data changed, which is the one
+            thing the structure is not allowed to do. A bucket at zero is also
+            the answer to a real question: "is anything stuck?" reads better as
+            a hollow zero than as a card that is not there. */}
         <div className="grid gap-4">
-          {spent.length > 0 && (
-            <Card>
-              <CardHeader
-                title="Not going to happen"
-                count={spent.length}
-                tone="danger"
-                note="Terminal. Nothing will dispatch these again."
-              />
-              <ul className="grid gap-3 text-sm">
-                {spent.map((row) => (
-                  <Row key={row.id} row={row} />
-                ))}
-              </ul>
-            </Card>
-          )}
-          {queued.length > 0 && (
-            <Card>
-              <CardHeader
-                title="Still draining"
-                count={queued.length}
-                tone="accent"
-                note="Queued and being retried. How long they have waited is the signal."
-              />
-              <ul className="grid gap-3 text-sm">
-                {queued.map((row) => (
-                  <Row key={row.id} row={row} />
-                ))}
-              </ul>
-            </Card>
-          )}
+          <Bucket
+            title="Not going to happen"
+            tone="danger"
+            note="Terminal. Nothing will dispatch these again."
+            empty="Nothing has given up. Every withdrawal still has a way to reach its target."
+            rows={spent}
+          />
+          <Bucket
+            title="Still draining"
+            tone="accent"
+            note="Queued and being retried. How long they have waited is the signal."
+            empty="Nothing is waiting. Every withdrawal has either landed or given up."
+            rows={queued}
+          />
         </div>
       </ListStates>
     </>
+  );
+}
+
+/**
+ * One of the two buckets, present at any count.
+ *
+ * The empty sentence is not decoration: on this page the interesting fact is
+ * often which bucket is empty, and "no terminal failures" is a different
+ * statement from "this section is not on the page today".
+ */
+function Bucket({
+  title,
+  tone,
+  note,
+  empty,
+  rows,
+}: {
+  title: string;
+  tone: "accent" | "danger";
+  note: string;
+  empty: string;
+  rows: UnconfirmedRevocation[];
+}) {
+  return (
+    <Card>
+      <CardHeader title={title} count={rows.length} tone={tone} note={note} />
+      {rows.length === 0 ? (
+        <p className="px-5 pb-4 text-[13.5px] text-faint">{empty}</p>
+      ) : (
+        <ul className="grid gap-3 text-sm">
+          {rows.map((row) => (
+            <Row key={row.id} row={row} />
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 

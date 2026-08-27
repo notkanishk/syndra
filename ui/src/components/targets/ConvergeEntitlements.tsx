@@ -104,7 +104,10 @@ function PlanProvenance({ plan }: { plan: EntitlementPlan }) {
       className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-6"
       style={{ bottom: "calc(var(--touch-nav-height) + 24px)" }}
     >
-      <div className="pointer-events-auto rounded-pill border border-line bg-surface-1 px-4 py-2 shadow-popover">
+      {/* The dock rises like everything else that appears. The transform is on
+          the pill and not on the `fixed` parent, which would drag it off its own
+          edge. */}
+      <div className="settle-in pointer-events-auto rounded-pill border border-line bg-surface-1 px-4 py-2 shadow-popover">
         <ReadFreshness
           subject="This plan's view of the target"
           state={{

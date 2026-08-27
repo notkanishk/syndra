@@ -89,12 +89,58 @@
       label; it had a placeholder and an `aria-label`, and a placeholder is gone
       the moment anybody types.
 
+## 8. The sweep the adoption form earned (2026-08-27)
+
+Every rule below already existed — in `Button`'s doc comment, in the IA design,
+in a review comment on a neighbouring file. None was checked against the source,
+and each had been broken somewhere. Four new source guards now hold them.
+
+- [x] 8.1 **Eight** field hints (not three, as first estimated from a cruder
+      grep) were written inside their `<label>`, making each control's
+      accessible name its title plus a paragraph. All eight moved to
+      `FieldLabel` + `FieldHint`. Two tests were querying a field BY its hint,
+      which is how the defect had become load-bearing.
+- [x] 8.2 The pill guard's signature was `rounded-pill` AND the touch floor on
+      one line — it caught the careful copies and could never catch a copy that
+      simply forgot the floor. Five had: the ✕ that clears a filter (twice, in
+      two files, both 20px), a fourth "load next" pill, an accent jump on a
+      person's access, and the "how long" choice on a grant. The filter chip is
+      now one primitive; the rest use `Button` or import `PILL`.
+- [x] 8.3 `dangerConfirm` is guarded by the label's own verb, with two argued
+      exceptions listed by name (recording a binding owner, adopting a log as
+      baseline) rather than by loosening the rule. Both destroy something the
+      verb does not name.
+- [x] 8.4 A row whose only action was `ghost` — invisible as a control until
+      hovered, and hover is not a thing on a phone. `outline`, per the rule this
+      change already wrote down.
+- [x] 8.5 Motion: the graph's typeahead popover appeared without rising, the
+      plan's freshness dock appeared without rising, and the dashboard's two
+      lists composed their own rows and so never got `arrive`. All three now
+      move the way the rest of the product does.
+- [x] 8.6 The graph's search field had been shaped into a pill — the one thing
+      `Input` says not to do, since a field somebody types into reads as a
+      container and a pill reads as a control.
+- [x] 8.7 `CountChip` and `CardHeader` disagreed on exactly one case: a zero.
+      Hollow now in both, so "Not going to happen · 0" stops being an alarm
+      about nothing happening.
+- [x] 8.8 The withdrawn-access page's two buckets rendered only when non-empty,
+      so a revocation going terminal inserted a red card above the queue
+      somebody was reading. Both keep their seats, and an empty one says what
+      its emptiness means.
+- [x] 8.9 The way out of a card header ("See all", "Full audit log") existed
+      twice and the copies disagreed about whether it was a control: one carried
+      the touch floor, the other was 20px of text. One `CardHeaderLink`, guarded.
+
 ## Open
 
-- [ ] 7.4 The shell's own chrome is exempt by argument, not by inspection. The
+- [ ] 9.1 The shell's own chrome is exempt by argument, not by inspection. The
       tab bar and the account sheet were not read closely in this pass.
-- [ ] 7.5 Three field hints are still written INSIDE their `<label>`
-      (`DormantAccounts`, and two others), which makes each control's accessible
-      name its title plus a paragraph. `FieldLabel`/`FieldHint` are the fix, and
-      it is a sweep rather than a fix, so it is recorded rather than smuggled
-      into this one.
+- [ ] 9.2 `PersonAccess` drops its "withheld" card when nothing is withheld.
+      Left as built, deliberately: the seat rule earns its keep on a page whose
+      sections ARE the answer, and a "nothing is withheld from you" card on
+      every member's own page is noise about a question they did not ask. Worth
+      revisiting if members start asking why access they expected is missing.
+- [ ] 9.3 Nothing guards MOTION by role — that an opener rises, that only
+      `breathe` loops. The three found here were found by reading. A guard would
+      need to know which surfaces are openers, which is not visible in the
+      classes alone.

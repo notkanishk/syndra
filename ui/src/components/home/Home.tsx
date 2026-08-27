@@ -1,13 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import { AccessSource } from "@/components/access/AccessSource";
 import { Makerspace } from "@/components/home/Makerspace";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { Button, ButtonLink } from "@/components/ui/Button";
-import { Card, CardHeader, CardRow } from "@/components/ui/Card";
+import { Card, CardHeader, CardHeaderLink, CardRow } from "@/components/ui/Card";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
 import { useGovernanceSummary, type UnreconciledTarget } from "@/lib/queries/useGovernance";
 import {
@@ -209,17 +208,17 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
       <CardHeader
         title="Open requests"
         count={visible.length}
-        action={
-          <Link href="/requests" className="text-[13.5px] font-semibold text-accent-text">
-            See all →
-          </Link>
-        }
+        action={<CardHeaderLink href="/requests">See all →</CardHeaderLink>}
       />
-      {visible.map((entry) => (
-        <CardRow key={entry.id}>
-          <UserAvatar id={entry.requester_id} size="list" />
-          <div className="w-[170px] shrink-0 truncate text-[15px] font-semibold">
-            <UserName id={entry.requester_id} />
+      {/* `arrive`, the same stagger every list in the product gets from
+          `ListStates`. These two lists compose their own rows and so had none:
+          the dashboard was the one screen whose rows appeared all at once. */}
+      <div className="contents arrive-list">
+        {visible.map((entry) => (
+          <CardRow key={entry.id}>
+            <UserAvatar id={entry.requester_id} size="list" />
+            <div className="w-[170px] shrink-0 truncate text-[15px] font-semibold">
+              <UserName id={entry.requester_id} />
           </div>
           <div className="w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
             <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
@@ -248,6 +247,7 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
           )}
         </CardRow>
       ))}
+      </div>
     </Card>
   );
 }
@@ -401,22 +401,24 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
   return (
     <Card>
       <CardHeader title="Targets Syndra can't vouch for" count={targets.length} tone="danger" />
-      {targets.map((t, i) => (
-        <CardRow key={t.target} first={i === 0} className="flex-wrap">
-          <div className="flex-1 text-[14.5px]">
-            <strong className="font-semibold">{targetLabel(t.target)}</strong> hasn&rsquo;t been
-            read since <Relative iso={t.since} />.
-            <span className="text-faint">
-              {" "}
-              Nothing found on it means nothing was looked at — not that it is clean.
-            </span>
-            {t.reason && <div className="mt-1 text-[13px] text-faint">{t.reason}</div>}
+      <div className="contents arrive-list">
+        {targets.map((t, i) => (
+          <CardRow key={t.target} first={i === 0} className="flex-wrap">
+            <div className="flex-1 text-[14.5px]">
+              <strong className="font-semibold">{targetLabel(t.target)}</strong> hasn&rsquo;t been
+              read since <Relative iso={t.since} />.
+              <span className="text-faint">
+                {" "}
+                Nothing found on it means nothing was looked at — not that it is clean.
+              </span>
+              {t.reason && <div className="mt-1 text-[13px] text-faint">{t.reason}</div>}
           </div>
           <ButtonLink href={`/system/targets/${t.target}`} size="sm">
             Open target
           </ButtonLink>
         </CardRow>
       ))}
+      </div>
     </Card>
   );
 }

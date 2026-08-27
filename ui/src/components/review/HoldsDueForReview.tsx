@@ -61,9 +61,14 @@ export function HoldsDueForReview() {
               <span className="flex-1" />
               {/* Lifting is rung 1: it restores access a role already grants,
                   and doing the opposite — holding it again — is one click away
-                  on the person's own page. */}
+                  on the person's own page.
+
+                  Rung 1 is about the CEREMONY, not about whether the control is
+                  visible. `ghost` is the quieter half of a pair, and this row
+                  has no pair — drawn borderless it read as text until hovered,
+                  which on a phone is never. */}
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 disabled={lift.isPending}
                 onClick={() => lift.mutate(hold.id)}
