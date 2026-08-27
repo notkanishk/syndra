@@ -287,7 +287,7 @@ func run() error {
 		// Empty paths: the certificate is already in TLSConfig, derived and
 		// self-signed in memory. There is no file to serve it from.
 		if err := httpSrv.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("[SERVE] %v", err)
+			log.Fatalf("[STARTUP] %v", err)
 		}
 	}()
 
