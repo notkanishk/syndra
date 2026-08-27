@@ -70,7 +70,11 @@ thing to do before this deploys.
 ### Phase 5 — Automation & Governance
 
 - **Service Catalog Abstraction** — the spec'd service→bundle request mapping still falls back to project/role. [`specs/service-catalog`]
-- **Partial Failure Rollback** — `EnforceMappingRules` / `RevokeMappingRules` are best-effort log-and-continue. No compensating revocation when a Zitadel call partially fails, so a half-applied mapping rule stays half-applied silently.
+- **Untraced rule propagation** — `EnforceMappingRules` / `RevokeMappingRules` call the Zitadel Management API **directly**: no ledger row, no outbox row, no audit line, and a failure that is logged and stepped over. Every other Syndra-mediated Zitadel mutation leaves its trace before the call, which is the premise the drift sweep reasons from — `deps.go` states the rule for handlers ("the handlers no longer call Zitadel grant APIs directly"), and nothing stated it for anybody else.
+
+  **Dormant, not live:** the loop body runs only when a mapping rule exists, and production has **zero** (`select count(*) from mapping_rules` → 0, checked 2026-08-27). This is a trap that springs on whoever creates the first rule, not a hole open today. Drift does not currently false-positive on it either, because `expectedViaRule` explains rule-derived grants without needing a trace.
+
+  The fix is to enqueue rather than call — the outbox already carries "rule cascades" per the architecture. Doing that changes a live webhook path, so it wants its own change rather than a sweep. Guarded meanwhile by `repoguard.TestOnlyTheTracedPathWritesZitadelGrants`, which lists this file by name with the argument, so a **second** untraced writer cannot appear the way the first did. Supersedes the old "Partial Failure Rollback" entry, which described the swallowed-failure half only.
 - **Rate Limiting** — webhook, action-injection, and shadow-password endpoints are unthrottled. **Blocked on one decision: in-process vs Redis-backed.** Redis is already a dependency, so the cost difference is small; the real question is whether limits must hold across replicas.
 - **Advanced Filters** — multi-dimensional user search (project, role, account age, grant staleness).
 - **Bulk Operations** — mass grant/revoke with preview, per-user outcomes, idempotent retry.

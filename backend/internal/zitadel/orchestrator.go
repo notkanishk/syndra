@@ -97,7 +97,7 @@ func EnforceMappingRules(ctx context.Context, userID, sourceProjectID, sourceRol
 
 	rules, err := dbGetActiveMappingRules(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to query mapping rules: %v", err)
+		return fmt.Errorf("query mapping rules: %w", err)
 	}
 
 	for _, rule := range rules {
@@ -106,7 +106,7 @@ func EnforceMappingRules(ctx context.Context, userID, sourceProjectID, sourceRol
 				sourceProjectID, sourceRoleKey, rule.TargetProject, rule.TargetRole, userID)
 
 			if err := MgmtClient.AddUserGrant(ctx, userID, rule.TargetProject, []string{rule.TargetRole}); err != nil {
-				log.Printf("[ZITADEL ERROR] Grant failed: %v", err)
+				log.Printf("[ZITADEL] grant failed: %v", err)
 				// Don't abort — try subsequent rules
 			}
 		}
@@ -128,13 +128,13 @@ func RevokeMappingRules(ctx context.Context, userID, sourceProjectID, sourceRole
 
 	rules, err := dbGetActiveMappingRules(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to query mapping rules: %v", err)
+		return fmt.Errorf("query mapping rules: %w", err)
 	}
 
 	// Fetch ALL of the user's grants (paginate until exhausted).
 	allGrants, err := fetchAllUserGrants(ctx, userID)
 	if err != nil {
-		return fmt.Errorf("failed to list user grants for revocation: %v", err)
+		return fmt.Errorf("list user grants for revocation: %w", err)
 	}
 
 	// Index: "projectID:roleKey" -> grant (full object, needed to inspect all roles).
@@ -163,7 +163,7 @@ func RevokeMappingRules(ctx context.Context, userID, sourceProjectID, sourceRole
 				log.Printf("[ZITADEL] Removing grant %s (sole role %s:%s) for user %s",
 					g.ID, rule.TargetProject, rule.TargetRole, userID)
 				if err := MgmtClient.RemoveUserGrant(ctx, userID, g.ID); err != nil {
-					log.Printf("[ZITADEL ERROR] Grant removal failed: %v", err)
+					log.Printf("[ZITADEL] grant removal failed: %v", err)
 				}
 			} else {
 				// Multiple roles — update the grant to remove only the derived role.
@@ -176,7 +176,7 @@ func RevokeMappingRules(ctx context.Context, userID, sourceProjectID, sourceRole
 				log.Printf("[ZITADEL] Updating grant %s: removing role %s, keeping %v for user %s",
 					g.ID, rule.TargetRole, remaining, userID)
 				if err := MgmtClient.UpdateUserGrant(ctx, userID, g.ID, remaining); err != nil {
-					log.Printf("[ZITADEL ERROR] Grant update failed: %v", err)
+					log.Printf("[ZITADEL] grant update failed: %v", err)
 				}
 			}
 		}
