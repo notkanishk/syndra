@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { renderHook, act } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { Card, CardColumns, CardRow, RowField } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, CardRow, RowField } from "@/components/ui/Card";
 import { useOpenRow } from "@/lib/useOpenRow";
 
 describe("a row that discloses the rest of itself", () => {
@@ -164,5 +164,38 @@ describe("a row opened by a control inside it", () => {
       </CardRow>,
     );
     expect(screen.queryByText("body")).toBeNull();
+  });
+});
+
+/**
+ * One count, one rendering of zero.
+ *
+ * `CountChip` (region headings) and `CardHeader` (card headings) both draw a
+ * count, and they agreed everywhere except the case that carries the message:
+ * `CountChip` holds a zero hollow, `CardHeader` filled it solid. A solid badge
+ * is an alarm, so "Not going to happen · 0" was an alarm about nothing
+ * happening.
+ */
+describe("a count of zero", () => {
+  it("is hollow, not a filled alarm", () => {
+    render(
+      <Card>
+        <CardHeader title="Not going to happen" count={0} tone="danger" />
+      </Card>,
+    );
+    const badge = screen.getByText("0");
+    expect(badge.className).toContain("border");
+    expect(badge.className, "danger fill on a zero says something is wrong").not.toContain(
+      "bg-danger",
+    );
+  });
+
+  it("still fills a real number, in its own tone", () => {
+    render(
+      <Card>
+        <CardHeader title="Not going to happen" count={4} tone="danger" />
+      </Card>,
+    );
+    expect(screen.getByText("4").className).toContain("bg-danger");
   });
 });

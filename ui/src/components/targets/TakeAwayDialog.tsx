@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { targetLabel } from "@/lib/nav";
 import { useRevokeTargetAccess, type RevocationResult } from "@/lib/queries/useHolds";
@@ -107,9 +107,10 @@ export function TakeAwayDialog({
           {SESSION_SENTENCE}
         </p>
 
-        <label className="grid gap-1.5 text-[14px]">
-          <span>Why</span>
+        <div>
+          <FieldLabel htmlFor="takeaway-reason">Why</FieldLabel>
           <Input
+            id="takeaway-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="What happened — this is what somebody reads six months from now"
@@ -120,20 +121,25 @@ export function TakeAwayDialog({
             // raise and no reason to make the operator reach for the mouse.
             autoFocus={!touch}
           />
-          <span className="text-[13px] text-faint">
+          <FieldHint>
             Shown to them on their own page, and on every surface where they still
             appear as held.
-          </span>
-        </label>
+          </FieldHint>
+        </div>
 
-        <label className="grid gap-1.5 text-[14px]">
-          <span>Look at this again by</span>
-          <Input type="date" value={reviewDate} onChange={(e) => setReviewDate(e.target.value)} />
-          <span className="text-[13px] text-faint">
+        <div>
+          <FieldLabel htmlFor="takeaway-review-date">Look at this again by</FieldLabel>
+          <Input
+            id="takeaway-review-date"
+            type="date"
+            value={reviewDate}
+            onChange={(e) => setReviewDate(e.target.value)}
+          />
+          <FieldHint>
             A hold does not lapse on its own — it stays until somebody lifts it. This is
             the date it starts asking. Left empty, one is set for you.
-          </span>
-        </label>
+          </FieldHint>
+        </div>
 
         <ConfirmByTyping
           expected={subjectName}

@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { targetLabel } from "@/lib/nav";
 import { useCreateHold } from "@/lib/queries/useHolds";
@@ -117,29 +117,37 @@ export function HoldDialog({
           </label>
         </fieldset>
 
-        <label className="grid gap-1.5 text-[14px]">
-          <span>{ending === "stays" ? "Ask about it on" : "Lifts on"}</span>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          <span className="text-[13px] text-faint">
+        <div>
+          <FieldLabel htmlFor="hold-until">
+            {ending === "stays" ? "Ask about it on" : "Lifts on"}
+          </FieldLabel>
+          <Input
+            id="hold-until"
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+          <FieldHint>
             {/* Both forms are bounded, and this is why: a hold with no bound is an
                 open-ended carve-out nobody is prompted to revisit. */}
             A hold with no end is one nobody comes back to. The backend refuses it, so
             this is required either way.
-          </span>
-        </label>
+          </FieldHint>
+        </div>
 
-        <label className="grid gap-1.5 text-[14px]">
-          <span>Why — shown to {subjectName}</span>
+        <div>
+          <FieldLabel htmlFor="hold-reason">Why — shown to {subjectName}</FieldLabel>
           <Input
+            id="hold-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="They read this on their own page"
           />
-          <span className="text-[13px] text-faint">
+          <FieldHint>
             A member who sees access they expect and do not have, with no explanation,
             asks an operator. One who can read the reason does not have to.
-          </span>
-        </label>
+          </FieldHint>
+        </div>
 
         {create.error && (
           <p className="text-[13.5px] text-danger-text">

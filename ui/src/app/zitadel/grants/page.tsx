@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { UpstreamShell } from "@/components/upstream/UpstreamShell";
 import { Mono } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { ProjectName, UserName } from "@/components/names";
@@ -119,13 +120,12 @@ export default function UpstreamGrantsPage() {
           {rows.length > visible.length && (
             <div className="row-divider flex items-center gap-4 px-5 py-3">
               <span className="text-[13.5px] text-faint">{rows.length - visible.length} more</span>
-              <button
-                type="button"
-                onClick={() => setLimit((current) => current + PAGE)}
-                className="rounded-pill border border-line-strong px-4 py-1.5 text-[13.5px] font-semibold motion-tint hover:bg-[var(--hover)]"
-              >
+              {/* The fourth copy of this pill. Three were found and replaced
+                  by `one-control-surface`; this one was outside the sweep and
+                  had already lost the touch floor. */}
+              <Button size="sm" onClick={() => setLimit((current) => current + PAGE)}>
                 Load next {Math.min(PAGE, rows.length - visible.length)}
-              </button>
+              </Button>
             </div>
           )}
         </ListStates>
