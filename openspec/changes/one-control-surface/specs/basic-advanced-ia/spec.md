@@ -44,7 +44,7 @@ revocation read as routine.
 
 #### Scenario: A confirm removes access
 
-- **WHEN** a confirm revokes, removes, purges or deletes
+- **WHEN** a confirm revokes, removes, purges, deletes, or discards evidence
 - **THEN** it MUST be `dangerConfirm`
 
 ### Requirement: A panel opened from a row MUST render under that row
@@ -128,3 +128,51 @@ thing being named.
 
 - **WHEN** a sentence names an account, a role key, a chain head or a grant id
 - **THEN** it MUST be rendered with `Mono`
+
+### Requirement: A control MUST carry the touch floor, whoever wrote it
+
+Every pressable control MUST meet the 44px floor through the tablet range,
+including one composed by hand from `PILL` or from classes. A control that
+restates the pill without the floor MUST NOT ship.
+
+The first guard on this rule looked for a pill that ALSO claimed the floor —
+the careful copy. It could never catch the careless one, which is the copy that
+matters: five hand-rolled pills had simply omitted the floor, among them the ✕
+that clears a filter (a 20px target, on the only way out of a view somebody
+reached by link) and the "how long" choice on a grant.
+
+#### Scenario: A control is composed by hand
+
+- **WHEN** a component builds a pressable pill outside `components/ui`
+- **THEN** it MUST import `PILL` or use `Button`
+- **AND** the rendered control MUST meet the 44px floor below the desktop
+  breakpoint
+
+### Requirement: One count MUST have one rendering, including at zero
+
+`CountChip` and `CardHeader` both draw a count. They MUST agree at zero: hollow,
+never a filled badge. A solid badge is an alarm, and a solid `0` beside "Not
+going to happen" is an alarm about nothing happening.
+
+#### Scenario: A section holds nothing
+
+- **WHEN** a card or region heading renders a count of zero
+- **THEN** the count MUST render hollow, keeping its seat
+
+### Requirement: A page's own sections MUST keep their seats
+
+A page composed of classification buckets MUST render every bucket at every
+count, in one order, with a sentence saying what an empty one means. A bucket
+that appears with its first row inserts itself above whatever the operator was
+reading.
+
+This is the nav rule applied where it also holds. On the withdrawn-access page
+the two buckets are the page: a revocation going terminal inserted a red card
+above the queue somebody was reading, and "nothing has given up" is the good
+news that its absence could not state.
+
+#### Scenario: A bucket is empty
+
+- **WHEN** one of a page's buckets holds nothing
+- **THEN** it MUST keep its position and its heading
+- **AND** it MUST say what its emptiness means, rather than being absent

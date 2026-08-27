@@ -5,7 +5,7 @@ import { useState } from "react";
 import { EmptyState, ListStates } from "@/components/states";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
+import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import { AddMappingButton, RefusedFields } from "@/components/targets/AddMappingDialog";
 import { ConvergeButton } from "@/components/targets/ConvergeEntitlements";
@@ -205,17 +205,22 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
       noun={["person", "people"]}
       ready={value.trim() !== "" && value !== mapping.value}
       compose={
-        <label className="grid gap-1.5 text-[14px]">
-          <span>New value for {mapping.field}</span>
+        <div>
+          <FieldLabel htmlFor="mapping-new-value">New value for {mapping.field}</FieldLabel>
           {/* Same reason as the take-away dialog: on touch, focusing on mount
               raises the keyboard over the lede saying that everybody holding
               this role moves with the change. */}
-          <Input value={value} onChange={(e) => setValue(e.target.value)} autoFocus={!touch} />
-          <span className="text-[13px] text-faint">
+          <Input
+            id="mapping-new-value"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            autoFocus={!touch}
+          />
+          <FieldHint>
             Checked against {targetLabel(mapping.target)} before anything is planned — a
             value it does not recognise is refused here rather than at apply.
-          </span>
-        </label>
+          </FieldHint>
+        </div>
       }
       // The consequence no count implies, and the one an operator is most
       // likely to discover afterwards. Syndra moves the group; it does not move

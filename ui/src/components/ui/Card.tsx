@@ -1,3 +1,4 @@
+import Link from "next/link";
 import React from "react";
 
 /**
@@ -48,8 +49,17 @@ export function CardHeader({
   return (
     <div className={`flex flex-wrap items-center gap-[11px] px-5 py-4 ${className}`}>
       <span className="type-card-title">{title}</span>
+      {/* Hollow at zero, filled otherwise — the same thing `CountChip` says on
+          a region heading. A solid badge is an alarm, and a solid `0` beside
+          "Not going to happen" is an alarm about nothing happening. The two
+          renderings of one count disagreed only in this case, which is the case
+          where the difference is the whole message. */}
       {count !== undefined && (
-        <span className={`rounded-pill px-2.5 py-0.5 text-[12.5px] font-bold ${badgeTone}`}>
+        <span
+          className={`rounded-pill px-2.5 py-0.5 text-[12.5px] font-bold ${
+            count === 0 ? "border border-line-strong text-label" : badgeTone
+          }`}
+        >
           {count}
         </span>
       )}
@@ -138,6 +148,27 @@ export function CardRow({
       </button>
       {panel}
     </div>
+  );
+}
+
+/**
+ * The quiet way out of a card — "See all", "Full audit log".
+ *
+ * Not a `ButtonLink`: a pill in a card header competes with the card's own
+ * title, and this is a way onward rather than the card's action. It is still a
+ * control, so it carries the touch floor.
+ *
+ * It existed twice, on two cards of the same dashboard, and the copies had
+ * already disagreed about exactly that: one was a 20px-tall line of text.
+ */
+export function CardHeaderLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent-text motion-tint hover:brightness-110 desktop:min-h-0"
+    >
+      {children}
+    </Link>
   );
 }
 

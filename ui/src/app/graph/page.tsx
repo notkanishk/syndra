@@ -127,15 +127,17 @@ export default function AccessMapPage() {
       <Card className="flex min-h-[560px] flex-col tablet:flex-row">
         <div className="flex w-full flex-none flex-col gap-4 border-b border-line p-4 tablet:w-[228px] tablet:border-b-0 tablet:border-r">
           <div className="relative">
+            {/* The primitive's own box. It was shaped into a pill here, which
+                is the one thing `Input` says not to do: a field somebody types
+                into reads as a container, and a pill reads as a control. */}
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Find a node…"
               aria-label="Find a node"
-              className="rounded-pill py-2.5 text-[14px]"
             />
             {matches.length > 0 && (
-              <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 overflow-hidden rounded-block border border-line-strong bg-surface-2 shadow-popover">
+              <div className="settle-in absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-panel border border-line-strong bg-surface-2 shadow-popover">
                 {matches.map((node) => (
                   <button
                     key={node.id}

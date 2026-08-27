@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 
 import { UserName } from "@/components/names";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { describeAction, machineName } from "@/lib/audit-vocabulary";
 import { formatClock, humanizeKey } from "@/lib/format";
 import { peopleHref } from "@/lib/people-filters";
@@ -307,12 +307,7 @@ function RecentActivity() {
       <CardHeader
         title="Lately"
         action={
-          <Link
-            href="/audit"
-            className="inline-flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent-text"
-          >
-            Full audit log →
-          </Link>
+          <CardHeaderLink href="/audit">Full audit log →</CardHeaderLink>
         }
       />
       {rows.length === 0 ? (
