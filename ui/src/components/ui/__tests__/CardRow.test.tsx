@@ -99,3 +99,70 @@ describe("one row open at a time", () => {
     expect(result.current.isOpen("a")).toBe(false);
   });
 });
+
+/**
+ * The second shape: a row whose own control opens the panel.
+ *
+ * The row here already holds a button, and a row that is ALSO a button nests
+ * one inside the other — invalid, and two overlapping targets. So `onToggle`
+ * is omitted and the row stays inert. What must not change is where the panel
+ * lands: this branch used to drop the disclosure on the floor, which is why the
+ * adopt form rendered at the foot of the account list instead of under the
+ * account it was about.
+ */
+describe("a row opened by a control inside it", () => {
+  it("puts the panel under its own row, not somewhere else", () => {
+    render(
+      <Card>
+        <CardRow first expanded disclosure={<span>adopt sai</span>}>
+          <span>sai</span>
+          <button type="button">Adopt</button>
+        </CardRow>
+        <CardRow expanded={false} disclosure={null}>
+          <span>syndra</span>
+        </CardRow>
+      </Card>,
+    );
+
+    // The wrapper the panel lives in: `settle-in` box, then the row wrapper.
+    const owner = screen.getByText("adopt sai").parentElement!.parentElement!;
+    expect(owner.textContent, "the panel belongs to the row it is about").toContain("sai");
+    expect(
+      owner.textContent,
+      "and not to the last row in the list, which is where it used to appear",
+    ).not.toContain("syndra");
+  });
+
+  it("keeps the row inert — no button inside a button", () => {
+    render(
+      <CardRow expanded disclosure={<span>body</span>}>
+        <span>sai</span>
+        <button type="button">Adopt</button>
+      </CardRow>,
+    );
+
+    // Exactly one button: the row's own control. The row itself is not one.
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.getByRole("button")).toHaveTextContent("Adopt");
+  });
+
+  // Everything in this product that opens rises into place. A panel that simply
+  // appears is the one thing on the screen that did not.
+  it("settles in like every other thing that opens", () => {
+    render(
+      <CardRow expanded disclosure={<span>body</span>}>
+        <span>sai</span>
+      </CardRow>,
+    );
+    expect(screen.getByText("body").parentElement!.className).toContain("settle-in");
+  });
+
+  it("renders nothing while it is closed", () => {
+    render(
+      <CardRow disclosure={<span>body</span>}>
+        <span>sai</span>
+      </CardRow>,
+    );
+    expect(screen.queryByText("body")).toBeNull();
+  });
+});

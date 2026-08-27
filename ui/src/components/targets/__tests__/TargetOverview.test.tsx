@@ -18,6 +18,8 @@ const state = {
   released: [] as string[],
   releaseResult: { status: "released" } as Record<string, unknown>,
   ownerDecided: [] as Array<{ id: string; owner: string; note: string }>,
+  adopted: [] as Array<{ username: string; subjectId: string }>,
+  adoptResult: { status: "adopted", detail: "The account is now bound to that person." } as unknown,
 };
 
 vi.mock("@/lib/queries/useTargets", async () => {
@@ -34,7 +36,17 @@ vi.mock("@/lib/queries/useTargets", async () => {
       error: null,
       refetch: vi.fn(),
     }),
-    useAdoptAccount: () => ({ mutate: vi.fn(), isPending: false }),
+    useAdoptAccount: () => ({
+      mutate: (
+        input: { username: string; subjectId: string },
+        opts?: { onSuccess?: (r: unknown) => void },
+      ) => {
+        state.adopted.push(input);
+        opts?.onSuccess?.(state.adoptResult);
+      },
+      isPending: false,
+      error: null,
+    }),
     useReleaseBinding: () => ({
       mutate: (subjectId: string, opts?: { onSuccess?: (r: unknown) => void }) => {
         state.released.push(subjectId);
@@ -619,5 +631,98 @@ describe("what roles reach here · the census and its handoff", () => {
     expect(
       screen.getByText(/Editing one moves access for everybody holding that role/),
     ).toBeTruthy();
+  });
+});
+
+/**
+ * Adopting one account, and the four things that were wrong about asking.
+ *
+ * Adoption is the one irreversible act on this page, so the form that performs
+ * it has to be readable under pressure: attached to the account it names, in
+ * the product's own motion, in the product's own colour for a grant, and in
+ * sentences that do not appear to contradict each other.
+ */
+describe("adopting an account", () => {
+  const twoAccounts = {
+    target: "truenas",
+    bound: 0,
+    unmanaged: [
+      { username: "sai", uid: 3000 },
+      { username: "kabir", uid: 3002 },
+    ],
+    current: true,
+    // Adoption is blocked off anything but a live or ageing read (§31 A), so
+    // the fixture has to carry one for the form to be reachable at all.
+    read_at: new Date().toISOString(),
+  };
+
+  function openAdoptForSai() {
+    state.adopted = [];
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = twoAccounts;
+    renderTarget();
+    fireEvent.click(screen.getAllByRole("button", { name: "Adopt" })[0]);
+  }
+
+  // It used to render after the whole list: click Adopt on the first account
+  // and the form opened under the LAST one, describing an account nobody had
+  // pointed at.
+  it("opens under the account it is about, not at the foot of the list", () => {
+    openAdoptForSai();
+
+    const owner = screen.getByLabelText("Adopt it for").closest("form")!.parentElement!
+      .parentElement!;
+    expect(owner.textContent).toContain("sai");
+    expect(owner.textContent, "the form is not attached to another account").not.toContain("kabir");
+  });
+
+  // Red is this product's word for a click that takes access away. This one
+  // gives somebody an account.
+  it("does not dress a grant as a destruction", () => {
+    openAdoptForSai();
+
+    const submit = screen.getByRole("button", { name: /Adopt sai for this person/ });
+    expect(submit.className, "dangerConfirm is reserved for removing access").not.toContain(
+      "bg-danger",
+    );
+    // The irreversibility is carried by rung 3 and by the copy, both of which
+    // must still be there for the colour change to be safe.
+    expect(screen.getByText(/There is no undo/)).toBeInTheDocument();
+    expect(screen.getByText(/Type the account name/)).toBeInTheDocument();
+  });
+
+  // The old copy said "hands ... to that person" above a field that had not
+  // asked who yet, and directly above "nothing on the account changes now".
+  // Both true, and together they read as a contradiction.
+  it("names the person it is referring to, and separates what moves from what stays", () => {
+    openAdoptForSai();
+
+    // A visible label, not a placeholder that disappears the moment you type.
+    expect(screen.getByLabelText("Adopt it for")).toBeInTheDocument();
+    expect(screen.getByText(/becomes the account of the person named below/)).toBeInTheDocument();
+    expect(screen.getByText(/is theirs from that moment/)).toBeInTheDocument();
+    // What stays: Syndra writes nothing to the account itself.
+    expect(screen.getByText(/writes nothing to the account itself/)).toBeInTheDocument();
+    // And the target is named IN THE SENTENCE, because "its shares" is not a
+    // thing an operator can go and check against anything.
+    expect(
+      screen.getByText(/becomes the account of the person named below/).textContent,
+    ).toContain("TrueNAS");
+  });
+
+  it("reports the outcome under the account it happened to", () => {
+    openAdoptForSai();
+
+    fireEvent.change(screen.getByLabelText("Adopt it for"), { target: { value: "s-99" } });
+    fireEvent.change(screen.getByLabelText(/Type the account name/), { target: { value: "sai" } });
+    fireEvent.click(screen.getByRole("button", { name: /Adopt sai for this person/ }));
+
+    expect(state.adopted).toEqual([{ username: "sai", subjectId: "s-99" }]);
+    const outcome = screen.getByText(/bound to that person/).closest("[role=status]")!;
+    expect(
+      outcome.parentElement!.parentElement!.textContent,
+      "an unattributed outcome says 'Adopted.' about none of eight accounts in particular",
+    ).toContain("sai");
   });
 });
