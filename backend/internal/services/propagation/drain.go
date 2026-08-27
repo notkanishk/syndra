@@ -279,7 +279,7 @@ func (res *DrainResult) abandoned(id, step string, err error) bool {
 	if !errors.Is(err, db.ErrPropagationNotInFlight) {
 		return false
 	}
-	log.Printf("[DRAIN] outbox=%s %s: the row was terminated while its dispatch was out; leaving it terminal", id, step)
+	log.Printf("[PROPAGATION] outbox=%s %s: the row was terminated while its dispatch was out; leaving it terminal", id, step)
 	res.Abandoned++
 	return true
 }
@@ -450,7 +450,7 @@ func rememberPropagation(ctx context.Context, row models.PendingPropagation) err
 			Field:    row.ProjectID + "/" + role,
 			OutboxID: row.ID, Actor: row.InitiatedBy,
 		}); err != nil {
-			log.Printf("[DRAIN] %s landed and could not be remembered: %v (non-fatal)", row.ID, err)
+			log.Printf("[PROPAGATION] %s landed and could not be remembered: %v (non-fatal)", row.ID, err)
 		}
 	}
 
