@@ -242,10 +242,24 @@ export function RehearsalDialog({
   /** Set when the backend refuses to approve a change of this size unasked. */
   const [scope, setScope] = useState<{ affected: string; limit: string } | null>(null);
   const [scopeAcknowledged, setScopeAcknowledged] = useState(false);
-  // Only when the cohort is genuinely empty AND the surface says an empty one
-  // is still an act. A plan that reaches somebody takes the ordinary path
-  // whatever this dialog was told.
-  const isDefinitionApply = Boolean(definitionLabel) && plan?.summary.apply === 0;
+  // Only when the plan genuinely reaches NOBODY, and the surface says that is
+  // still an act. A plan that reaches somebody takes the ordinary path whatever
+  // this dialog was told.
+  //
+  // "Reaches nobody" is three conditions, not one. `apply === 0` alone is the
+  // tempting version and it is wrong: a plan carrying forty rows that all
+  // resolve to `no_change` has an apply count of zero and is not a definition —
+  // it reaches forty people and changes nothing for them. That would take the
+  // definition label, submit with no citation, and meet a backend refusal the
+  // label had just promised would not happen.
+  //
+  // So: the rows must have ARRIVED (an absent array is a payload that came
+  // short, not an empty cohort), there must be none of them, and the plan must
+  // say it counted nobody. Any two without the third is a plan this dialog does
+  // not understand, and the safe reading of one of those is the ordinary path.
+  const reachesNobody =
+    Array.isArray(plan?.outcomes) && plan.outcomes.length === 0 && plan.summary.total === 0;
+  const isDefinitionApply = Boolean(definitionLabel) && reachesNobody;
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   /**
