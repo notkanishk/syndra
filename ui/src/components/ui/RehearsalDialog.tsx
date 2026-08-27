@@ -106,6 +106,24 @@ interface RehearsalDialogProps {
   /** Solid destructive confirm rather than accent. */
   destructive?: boolean;
   /**
+   * The label for applying a change that reaches NOBODY, on a surface where
+   * that is a real act rather than a no-op.
+   *
+   * Every plan in this dialog used to be assumed to move at least one person,
+   * which is right for a bulk grant — a plan for nobody means nobody was
+   * selected — and wrong for the mapping surfaces. A mapping on a role nobody
+   * holds is a definition: it changes what the role WILL confer, the backend
+   * writes it and issues no approval for it because there is nothing to
+   * review, and the dialog then refused to let it be saved. Defining before
+   * assigning is the ordinary order, and it was the one order this dialog
+   * could not express.
+   *
+   * The relaxation is exact. It applies only when the cohort is empty; the
+   * moment a plan reaches somebody, the approval is required again and this
+   * prop does nothing. Absent, the dialog behaves as it always has.
+   */
+  definitionLabel?: string;
+  /**
    * A consequence of this operation that the plan's own numbers cannot state.
    *
    * The plan counts what Syndra will change. Some operations also have an
@@ -195,6 +213,7 @@ export function RehearsalDialog({
   compose,
   ready = true,
   destructive = false,
+  definitionLabel,
   consequence,
   onRehearse,
   onApply,
@@ -223,6 +242,10 @@ export function RehearsalDialog({
   /** Set when the backend refuses to approve a change of this size unasked. */
   const [scope, setScope] = useState<{ affected: string; limit: string } | null>(null);
   const [scopeAcknowledged, setScopeAcknowledged] = useState(false);
+  // Only when the cohort is genuinely empty AND the surface says an empty one
+  // is still an act. A plan that reaches somebody takes the ordinary path
+  // whatever this dialog was told.
+  const isDefinitionApply = Boolean(definitionLabel) && plan?.summary.apply === 0;
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   /**
@@ -263,10 +286,14 @@ export function RehearsalDialog({
    * new one is a new decision. So this refreshes and stops.
    */
   async function applyPlan() {
-    if (!plan?.plan_id) return;
+    if (!plan) return;
+    // A definition apply carries no approval, because the backend issued none:
+    // there was nothing to review. Every other apply still cites one, and the
+    // guard below is what keeps those two apart.
+    if (!plan.plan_id && !isDefinitionApply) return;
     setBusy(true);
     try {
-      const result = await onApply(plan.plan_id);
+      const result = await onApply(plan.plan_id ?? "");
       setPlan(result);
       setStalePlan(null);
       setStep("result");
@@ -459,10 +486,14 @@ export function RehearsalDialog({
             <Button
               variant={destructive ? "dangerConfirm" : "accent"}
               isPending={busy}
-              disabled={!plan?.plan_id || plan.summary.apply === 0}
+              disabled={isDefinitionApply ? busy : !plan?.plan_id || plan.summary.apply === 0}
               onClick={() => void applyPlan()}
             >
-              {plan ? applyLabel(plan, noun) : "Rehearsing…"}
+              {!plan
+                ? "Rehearsing…"
+                : isDefinitionApply
+                  ? definitionLabel
+                  : applyLabel(plan, noun)}
             </Button>
             {/*
               Disabled while a write is out. Abandoning the dialog mid-apply

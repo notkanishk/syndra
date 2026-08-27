@@ -148,3 +148,83 @@ describe("adding a mapping", () => {
     );
   });
 });
+
+/**
+ * A mapping on a role nobody holds — the ordinary definition-before-assignment
+ * case, and the one the dialog could not express.
+ *
+ * The shared dialog assumed every plan moves at least one person. That is right
+ * for a bulk grant, where a plan reaching nobody means nobody was selected, and
+ * wrong here: a mapping on an unheld role changes what the role WILL confer,
+ * the backend writes it and issues no approval because there is nothing to
+ * review, and Apply was then disabled on both counts — no `plan_id`, and a
+ * cohort of zero.
+ *
+ * So an operator could rehearse a definition and never save it.
+ */
+describe("a mapping on a role nobody holds", () => {
+  beforeEach(() => {
+    state.rehearsed = {
+      op: "create_mapping",
+      applied: false,
+      // No approval: the backend issues none when there is nothing to review.
+      outcomes: [],
+      summary: { total: 0, apply: 0, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
+      value_checked: true,
+    } as unknown as MappingRehearsal;
+  });
+
+  it("can be saved, without an approval it was never given", async () => {
+    compose();
+    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+
+    const save = await screen.findByRole("button", { name: "Save mapping" });
+    expect(save.hasAttribute("disabled")).toBe(false);
+
+    fireEvent.click(save);
+    await waitFor(() => expect(state.created.length).toBe(1));
+    // No citation, because none exists — and the backend requires one only
+    // once the role has holders.
+    expect(state.created[0].planId).toBe("");
+  });
+
+  // "Nothing to apply" is what the shared label says at zero, and it is exactly
+  // the wrong sentence: there IS something to do, and it is the thing the
+  // operator came here for.
+  it("does not tell the operator there is nothing to apply", async () => {
+    compose();
+    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+    await screen.findByRole("button", { name: "Save mapping" });
+
+    expect(screen.queryByRole("button", { name: /Nothing to apply/ })).toBeNull();
+  });
+
+  // An absent outcomes array is a payload that arrived short. An empty one is a
+  // change that reaches nobody. Telling an operator their good plan is broken
+  // is the failure this distinction exists to prevent.
+  it("says it reaches nobody, not that its rows failed to arrive", async () => {
+    compose();
+    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+    await screen.findByRole("button", { name: "Save mapping" });
+
+    expect(document.body.textContent).toMatch(/This reaches nobody/);
+    expect(document.body.textContent).not.toMatch(/came back without its rows/);
+  });
+
+  // The relaxation is exact: the moment a plan reaches somebody, the approval
+  // is required again whatever the surface was told.
+  it("still requires the approval once the role has holders", async () => {
+    state.rehearsed = {
+      ...(state.rehearsed as MappingRehearsal),
+      plan_id: undefined,
+      outcomes: [{ user_id: "u1", effect: "apply", detail: "x" }],
+      summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
+    } as unknown as MappingRehearsal;
+    compose();
+    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+
+    const apply = await screen.findByRole("button", { name: /^Apply/ });
+    expect(apply.hasAttribute("disabled")).toBe(true);
+    expect(state.created).toEqual([]);
+  });
+});
