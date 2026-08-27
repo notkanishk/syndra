@@ -68,7 +68,33 @@
 - [x] 6.2 Looked at in a browser, both themes: the target page, the add-on
       index, the drift queue, projects, requests.
 
+## 7. The adoption form (reported from production, 2026-08-27)
+
+- [x] 7.1 The panel opened after the whole inventory rather than under the row
+      whose Adopt was clicked. `CardRow` already had a disclosure that puts a
+      panel under its own row, in the product's one disclosure motion — and it
+      silently dropped the panel whenever `onToggle` was absent, which is every
+      row that already holds a button. That branch now renders, and the adoption
+      form and its outcome both go through it.
+- [x] 7.2 The confirm was `dangerConfirm`. Adoption gives somebody an account;
+      red is this product's word for taking one away. Now `accent`, with the
+      irreversibility where it belongs — rung 3, and a sentence that says there
+      is no undo.
+- [x] 7.3 The copy read as a contradiction: "hands its home directory ... to
+      that person" directly above "nothing on the account changes now", with
+      "that person" referring to a field that had not been asked for yet.
+      Rewritten so that what MOVES (who the account belongs to) and what STAYS
+      (everything in it, untouched by Syndra) are named apart, and the person is
+      referred to only as "named below". The subject field gained a visible
+      label; it had a placeholder and an `aria-label`, and a placeholder is gone
+      the moment anybody types.
+
 ## Open
 
-- [ ] 7.1 The shell's own chrome is exempt by argument, not by inspection. The
+- [ ] 7.4 The shell's own chrome is exempt by argument, not by inspection. The
       tab bar and the account sheet were not read closely in this pass.
+- [ ] 7.5 Three field hints are still written INSIDE their `<label>`
+      (`DormantAccounts`, and two others), which makes each control's accessible
+      name its title plus a paragraph. `FieldLabel`/`FieldHint` are the fix, and
+      it is a sweep rather than a fix, so it is recorded rather than smuggled
+      into this one.

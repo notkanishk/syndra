@@ -11,7 +11,7 @@ import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowled
 import { CountChip, Mono, STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
+import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { blocksIrreversibleAction, ReadFreshness } from "@/components/ui/ReadFreshness";
@@ -1183,7 +1183,10 @@ function Inventory({ target }: { target: string }) {
   const inventory = useTargetInventory(target);
   const adopt = useAdoptAccount(target);
   const [adopting, setAdopting] = useState<string | null>(null);
-  const [result, setResult] = useState<AdoptionResult | null>(null);
+  // The outcome is kept WITH the account it happened to. It used to be one
+  // unattributed result at the foot of the card, which on a list of eight
+  // accounts said "Adopted." about none of them in particular.
+  const [result, setResult] = useState<{ username: string; result: AdoptionResult } | null>(null);
 
   const read = {
     readAt: inventory.data?.read_at,
@@ -1222,7 +1225,36 @@ function Inventory({ target }: { target: string }) {
       >
         <>
           {(inventory.data?.unmanaged ?? []).map((account, i) => (
-            <CardRow key={account.username} first={i === 0}>
+            <CardRow
+              key={account.username}
+              first={i === 0}
+              // Under the row it is about, never at the foot of the list.
+              expanded={adopting === account.username || result?.username === account.username}
+              disclosure={
+                adopting === account.username ? (
+                  <AdoptPanel
+                    username={account.username}
+                    target={target}
+                    pending={adopt.isPending}
+                    error={adopt.error}
+                    onCancel={() => setAdopting(null)}
+                    onAdopt={(subjectId) =>
+                      adopt.mutate(
+                        { username: account.username, subjectId },
+                        {
+                          onSuccess: (res) => {
+                            setResult({ username: account.username, result: res });
+                            setAdopting(null);
+                          },
+                        },
+                      )
+                    }
+                  />
+                ) : result?.username === account.username ? (
+                  <AdoptionOutcome result={result.result} onDismiss={() => setResult(null)} />
+                ) : null
+              }
+            >
               <span className="font-mono text-[13.5px]">{account.username}</span>
               {account.uid !== undefined && (
                 <span className="text-[13px] text-faint">uid {account.uid}</span>
@@ -1254,28 +1286,6 @@ function Inventory({ target }: { target: string }) {
           ))}
         </>
       </ListStates>
-
-      {adopting && (
-        <AdoptPanel
-          username={adopting}
-          pending={adopt.isPending}
-          error={adopt.error}
-          onCancel={() => setAdopting(null)}
-          onAdopt={(subjectId) =>
-            adopt.mutate(
-              { username: adopting, subjectId },
-              {
-                onSuccess: (res) => {
-                  setResult(res);
-                  setAdopting(null);
-                },
-              },
-            )
-          }
-        />
-      )}
-
-      {result && <AdoptionOutcome result={result} onDismiss={() => setResult(null)} />}
     </Card>
   );
 }
@@ -1290,12 +1300,14 @@ function Inventory({ target }: { target: string }) {
  */
 function AdoptPanel({
   username,
+  target,
   pending,
   error,
   onAdopt,
   onCancel,
 }: {
   username: string;
+  target: string;
   pending: boolean;
   error: unknown;
   onAdopt: (subjectId: string) => void;
@@ -1303,30 +1315,49 @@ function AdoptPanel({
 }) {
   const [subjectId, setSubjectId] = useState("");
   const confirm = useTypedConfirmation(username);
+  const fieldId = `adopt-subject-${username}`;
 
   return (
     <form
-      className="row-divider grid gap-3 px-5 py-4 text-[14px]"
+      className="grid gap-3.5 text-[14px]"
       onSubmit={(e) => {
         e.preventDefault();
         onAdopt(subjectId);
       }}
     >
+      {/* Two sentences that used to read as a contradiction — "hands over
+          everything" directly above "nothing changes" — because the thing that
+          moves and the thing that stays were never named apart. What moves is
+          who the account BELONGS to. What stays is everything in it.
+
+          "that person" was also a pronoun with nothing in front of it: the
+          field naming the person came afterwards, so the first thing an
+          operator read referred to something they had not been asked for yet. */}
       <p className="text-muted">
-        Adopting <Mono className="text-ink">{username}</Mono> hands its home
-        directory, its shares and its group memberships to that person.{" "}
-        <strong className="font-semibold text-ink">There is no undo.</strong>
+        <Mono className="text-ink">{username}</Mono> becomes the account of the person named
+        below. Everything it already holds on {targetLabel(target)} — its home directory, its
+        shares, its group memberships — is theirs from that moment.{" "}
+        <strong className="font-semibold text-ink">There is no undo</strong>, and none that
+        gives the data back.
       </p>
       <p className="text-[13.5px] text-faint">
-        Nothing on the account changes now; the next convergence applies their entitlements
-        to it.
+        Syndra writes nothing to the account itself. At the next convergence it adds whatever
+        that person&rsquo;s roles entitle them to, on top of what is already there.
       </p>
-      <Input
-        aria-label="Person to adopt it for"
-        placeholder="Subject id"
-        value={subjectId}
-        onChange={(e) => setSubjectId(e.target.value)}
-      />
+      <div>
+        <FieldLabel htmlFor={fieldId}>Adopt it for</FieldLabel>
+        <Input
+          id={fieldId}
+          placeholder="Subject id"
+          value={subjectId}
+          onChange={(e) => setSubjectId(e.target.value)}
+        />
+        {/* The hint is outside the label on purpose: inside it, every control's
+            accessible name becomes its title plus a paragraph. */}
+        <FieldHint>
+          The Syndra subject id of the person this account belongs to.
+        </FieldHint>
+      </div>
       <ConfirmByTyping
         expected={username}
         noun="account name"
@@ -1334,9 +1365,16 @@ function AdoptPanel({
         onChange={confirm.setTyped}
       />
       <div className="flex gap-2">
+        {/* Not `dangerConfirm`. A solid red fill is this product's word for a
+            click that TAKES ACCESS AWAY, and this one gives an account to
+            somebody. Dressing a grant as a destruction spends the red on the
+            wrong act, and the next real one reads as routine. What makes this
+            irreversible is carried where it belongs: rung 3 above, and the
+            sentence that says there is no undo. */}
         <Button
           type="submit"
-          variant="dangerConfirm"
+          variant="accent"
+          isPending={pending}
           disabled={!subjectId || !confirm.armed || pending}
         >
           {pending ? "Adopting…" : `Adopt ${username} for this person`}
@@ -1366,7 +1404,7 @@ function AdoptionOutcome({ result, onDismiss }: { result: AdoptionResult; onDism
   return (
     <div
       role="status"
-      className={`row-divider flex flex-wrap items-baseline gap-2 px-5 py-3.5 text-[13.5px] ${
+      className={`flex flex-wrap items-baseline gap-2 text-[13.5px] ${
         unconfirmed ? "text-warn-text" : "text-muted"
       }`}
     >

@@ -69,8 +69,15 @@ export function CardHeader({
  * a 16px target inside a 60px row is a row that looks tappable and mostly
  * is not.
  *
- * Both props are optional and additive, so every existing caller is unchanged
- * and renders exactly as it did.
+ * `onToggle` is optional, and its absence is the second shape rather than a
+ * mistake: a row that already holds a button cannot also BE one — that nests a
+ * button inside a button — so the row's own control opens the panel and the row
+ * stays inert. Both shapes put the panel in the same place, which is the point.
+ * A panel that opens under the last row of a list instead of under the row you
+ * clicked is a panel about the wrong account.
+ *
+ * All three props are optional and additive, so every existing caller is
+ * unchanged and renders exactly as it did.
  */
 export function CardRow({
   className = "",
@@ -86,18 +93,38 @@ export function CardRow({
   expanded?: boolean;
   onToggle?: () => void;
 }) {
-  const line = (
-    <div
-      className={`flex min-h-[60px] items-center gap-[18px] px-5 py-3.5 tablet:min-h-0 ${
-        first ? "" : "row-divider"
-      } ${className}`}
-      {...props}
-    >
-      {children}
-    </div>
-  );
+  // One definition of the line, used by all three shapes. It used to be typed
+  // twice, and the copies had already drifted: only one of them lifted its
+  // 60px floor above the tablet breakpoint.
+  const line = `flex min-h-[60px] items-center gap-[18px] px-5 py-3.5 tablet:min-h-0 ${className}`;
 
-  if (!disclosure || !onToggle) return line;
+  if (!disclosure) {
+    return (
+      <div className={`${line} ${first ? "" : "row-divider"}`} {...props}>
+        {children}
+      </div>
+    );
+  }
+
+  // Pushed, never overlapped. The rows below move down and the operator keeps
+  // their place in the list; an overlay would cover the row they were comparing
+  // this one against. `settle-in` because everything in this product that opens
+  // rises into place — a panel that simply appears is the one thing on the
+  // screen that did not.
+  const panel = expanded ? <div className="settle-in px-5 pb-4 pt-1">{disclosure}</div> : null;
+
+  // `first` on the inner line so the divider is not drawn twice: it belongs to
+  // the wrapper now, which is what the next row sits under.
+  if (!onToggle) {
+    return (
+      <div className={first ? "" : "row-divider"}>
+        <div className={line} {...props}>
+          {children}
+        </div>
+        {panel}
+      </div>
+    );
+  }
 
   return (
     <div className={first ? "" : "row-divider"}>
@@ -107,17 +134,9 @@ export function CardRow({
         aria-expanded={expanded}
         className="w-full text-left motion-press"
       >
-        {/* `first` on the inner line so the divider is not drawn twice: it
-            belongs to the wrapper now, which is what the next row sits under. */}
-        <div className={`flex min-h-[60px] items-center gap-[18px] px-5 py-3.5 ${className}`}>
-          {children}
-        </div>
+        <div className={line}>{children}</div>
       </button>
-
-      {/* Pushed, never overlapped. The rows below move down and the operator
-          keeps their place in the list; an overlay would cover the row they
-          were comparing this one against. */}
-      {expanded && <div className="settle-in px-5 pb-4 pt-1">{disclosure}</div>}
+      {panel}
     </div>
   );
 }
