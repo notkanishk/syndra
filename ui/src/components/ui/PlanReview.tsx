@@ -26,12 +26,35 @@ import { PLAN_EFFECT_LABEL, PLAN_EFFECT_TONE } from "@/lib/outcome";
 export function PlanReview({ plan }: { plan: BulkPlan | null }) {
   if (!plan) return null;
 
+  // `?? []`, as everywhere else that reads a list off a payload. A plan with no
+  // outcomes array means the backend is wrong, and the right failure for that
+  // is a plan showing no rows beside its summary — not an error boundary
+  // blanking the screen an operator is standing on halfway through approving a
+  // change. This crashed the page the first time a payload arrived short.
+  //
+  // The two empties are told apart. An ABSENT array is a payload that arrived
+  // short; an EMPTY one is a change that reaches nobody, which on the mapping
+  // surfaces is an ordinary act — a definition written before anybody holds the
+  // role. Rendering the same sentence for both would tell an operator their
+  // perfectly good plan was broken.
+  const missing = plan.outcomes === undefined || plan.outcomes === null;
+  const outcomes = plan.outcomes ?? [];
+
   return (
     <div className="px-6">
       <div className="max-h-[46vh] overflow-y-auto rounded-inner border border-line-strong">
-        {plan.outcomes.map((outcome) => (
-          <PlanRow key={outcome.user_id} outcome={outcome} />
-        ))}
+        {missing ? (
+          <p className="px-4 py-3 text-[13.5px] text-faint">
+            This plan came back without its rows. The summary below is what it reported.
+          </p>
+        ) : outcomes.length === 0 ? (
+          <p className="px-4 py-3 text-[13.5px] text-muted">
+            This reaches nobody. Nothing on the target changes, and nothing is queued —
+            what changes is what the role will confer once somebody holds it.
+          </p>
+        ) : (
+          outcomes.map((outcome) => <PlanRow key={outcome.user_id} outcome={outcome} />)
+        )}
       </div>
     </div>
   );
@@ -79,7 +102,13 @@ export function planNote(plan: BulkPlan): string {
 
 /** "Apply to 4 people" / "Nothing to apply". The button's own label states its scope. */
 export function applyLabel(plan: BulkPlan, noun: [string, string]): string {
-  const n = plan.summary.apply;
+  const n = plan.summary?.apply;
+  // A count that did not arrive is not a count. Rendering it produces "Apply to
+  // undefined people" on the button that performs the change — which is both
+  // the screen inventing a number and the screen lying about one, on the
+  // control where it can least afford to. The action stays available, because a
+  // backend that renamed a field should not block work; only the claim goes.
+  if (typeof n !== "number") return "Apply this plan";
   if (n === 0) return "Nothing to apply";
   return `Apply to ${n} ${n === 1 ? noun[0] : noun[1]}`;
 }

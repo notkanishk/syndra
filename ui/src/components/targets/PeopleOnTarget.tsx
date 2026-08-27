@@ -33,7 +33,10 @@ export function PeopleOnTarget({ target }: { target: string }) {
   return (
     <Card>
       <CardHeader
-        title="People with an account here"
+        // "Bound", not "People with an account here". The region heading above says
+        // whose accounts these are; repeating it in every card title spends the
+        // width on a sentence the reader has already read.
+        title="Bound"
         count={inventory.data?.bound}
         note="Pause what a role grants, or take the access away"
       />

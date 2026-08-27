@@ -153,3 +153,50 @@ func TestPropagationsMigration_DownDropsWhatUpCreated(t *testing.T) {
 		t.Error("the down migration must drop the table the up one created")
 	}
 }
+
+// The reason is for whoever arrives second (000045).
+//
+// A finding takes one decision, so the operator who opens it second is refused
+// and can only agree or disagree with what the first one chose. The reason is
+// mandatory on every resolution and was written for that reader — and was kept
+// nowhere they could see it.
+//
+// The constraint widens with the column rather than being left behind: a
+// decision with no author decided itself, and a decision with no reason cannot
+// be argued with.
+func TestMergeFindingsMigration_KeepsTheReasonForTheSecondReader(t *testing.T) {
+	up, err := os.ReadFile("../../db/migrations/000045_the_reason_is_for_whoever_arrives_second.up.sql")
+	if err != nil {
+		t.Fatalf("read up migration: %v", err)
+	}
+	sql := string(up)
+
+	for _, want := range []string{
+		"ADD COLUMN IF NOT EXISTS decision_reason",
+		// Rebuilt, not merely re-added: the old constraint would still pass a
+		// decision with an empty reason.
+		"DROP CONSTRAINT IF EXISTS merge_finding_decision_is_attributed",
+		"btrim(coalesce(decision_reason, '')) <> ''",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("000045 up migration missing %q", want)
+		}
+	}
+
+	down, err := os.ReadFile("../../db/migrations/000045_the_reason_is_for_whoever_arrives_second.down.sql")
+	if err != nil {
+		t.Fatalf("read down migration: %v", err)
+	}
+	// The down has to restore the narrower constraint before dropping the
+	// column, or it leaves a CHECK referencing something that is gone.
+	dropAt := strings.Index(string(down), "DROP COLUMN IF EXISTS decision_reason")
+	addAt := strings.Index(string(down), "ADD CONSTRAINT merge_finding_decision_is_attributed")
+	switch {
+	case dropAt < 0:
+		t.Error("the down migration must drop the column the up one added")
+	case addAt < 0:
+		t.Error("the down migration must restore the constraint without the reason")
+	case addAt > dropAt:
+		t.Error("the constraint must be restored before the column it referenced is dropped")
+	}
+}

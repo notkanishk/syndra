@@ -30,11 +30,14 @@ const state: {
   holders: string[];
   history: MappingHistory;
   rehearsals: Array<{ acknowledgeScope: boolean }>;
+  /** Whatever the rehearsal should carry beyond the plan — `value_checked`. */
+  rehearsalExtras: Record<string, unknown>;
 } = {
   mappings: [mapping],
   holders: [],
   history: { target: "truenas", current_version: 0, unpublished: false, versions: [] },
   rehearsals: [],
+  rehearsalExtras: {},
 };
 
 vi.mock("@/lib/queries/useMappings", async () => {
@@ -72,6 +75,7 @@ vi.mock("@/lib/queries/useMappings", async () => {
           },
         ],
         summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
+        ...state.rehearsalExtras,
       };
     }),
     rehearseMappingDelete: vi.fn(async () => ({
@@ -100,6 +104,7 @@ beforeEach(() => {
   state.holders = [];
   state.history = { target: "truenas", current_version: 0, unpublished: false, versions: [] };
   state.rehearsals = [];
+  state.rehearsalExtras = {};
 });
 
 describe("what roles reach a target", () => {
@@ -206,18 +211,117 @@ describe("version history", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: /roll back to this/i })[0]);
 
-    // Rung 2: the number sits inside the sentence being ticked, and it is the
-    // binding count rather than a head count — how many people it moves depends
-    // on who holds those roles when the drain runs, and claiming a person count
-    // would be claiming a rehearsal this endpoint does not do.
-    // In the sentence being ticked, not merely somewhere on the row.
-    expect(
-      screen.getByText(/I understand this restores/i).textContent,
-    ).toMatch(/2 bindings/);
-    const confirm = screen.getByRole("button", { name: /roll back to version 1/i });
-    expect(confirm).toBeDisabled();
+    // It rehearses now, like every other change on this screen. It used to
+    // acknowledge a BINDING count instead — an honest number at the time,
+    // because no endpoint could tell it how many people the set moved. One can,
+    // so the ceremony is the plan and the count is people.
+    expect(screen.getByRole("dialog", { name: /Roll back to version 1/i })).toBeTruthy();
+    expect(screen.getByText(/it does not merge one/)).toBeTruthy();
+    // And the thing an operator would otherwise not think to check: a rollback
+    // reaches the people it takes a mapping AWAY from, not only those it gives
+    // one to.
+    expect(screen.getByText(/not only those who gain one/)).toBeTruthy();
+  });
+});
 
-    fireEvent.click(screen.getByRole("checkbox"));
-    expect(confirm).toBeEnabled();
+/**
+ * The consequence the plan's own numbers cannot state (design M3).
+ *
+ * A mapping edit moves a group. It does not move what the old group owns, and
+ * Syndra has no way to: the files stay owned by the group that owned them, and
+ * everybody who moved loses access to them until somebody on the target re-owns
+ * them.
+ *
+ * No count implies that, so it is stated beside the plan rather than left to be
+ * discovered afterwards by the thirty-four people it happens to.
+ */
+describe("changing what a role reaches · the consequence no count implies", () => {
+  it("says the old group keeps its files, and names the target that must re-own them", async () => {
+    renderMappings();
+
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.change(screen.getByRole("textbox", { name: /new value/i }), {
+      target: { value: "lab_x" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+
+    // On the REVIEW step, beside the plan — it is part of what is being
+    // approved, not a caveat about the form that composed it.
+    await waitFor(() => expect(screen.getByText(/stay owned by it/)).toBeTruthy());
+    expect(screen.getByText(/re-owns them on TrueNAS/)).toBeTruthy();
+    // The group it is leaving, named — "the old group" is not something an
+    // operator can check against the NAS.
+    expect(screen.getByText("lab_makers")).toBeTruthy();
+  });
+});
+
+/**
+ * Design M4's pair, and the half that would otherwise read as a bug.
+ *
+ * The value check fails open on everything except a definite no: an unreadable
+ * target, a field the add-on cannot enumerate, and an unregistered add-on all
+ * pass, because refusing an edit while a NAS reboots would make an outage look
+ * like the operator's mistake.
+ *
+ * That is right, and it was invisible. "Checked and fine" and "nobody could be
+ * asked" both arrived as a plain success, so the screen could not tell an
+ * operator which of the two it was showing them.
+ */
+describe("a value the target could not be asked about", () => {
+  it("says the check did not run, and why the edit was allowed through anyway", async () => {
+    state.rehearsalExtras = { value_checked: false };
+    renderMappings();
+
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.change(screen.getByRole("textbox", { name: /new value/i }), {
+      target: { value: "archive-write" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+
+    await waitFor(() => expect(screen.getByText(/could not be asked whether/)).toBeTruthy());
+    expect(screen.getByText(/make an outage look like your mistake/)).toBeTruthy();
+    // And it says where the consequence lands instead of here.
+    expect(screen.getByText(/queued change that will not settle/)).toBeTruthy();
+  });
+
+  it("says nothing of the sort when the target answered", async () => {
+    state.rehearsalExtras = { value_checked: true };
+    renderMappings();
+
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.change(screen.getByRole("textbox", { name: /new value/i }), {
+      target: { value: "archive-write" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+
+    await waitFor(() => expect(screen.getByText(/stay owned by it/)).toBeTruthy());
+    expect(screen.queryByText(/could not be asked whether/)).toBeNull();
+  });
+});
+
+/**
+ * One publish control, and it enforces what it says.
+ *
+ * The band and the history panel both owned a note field and a Publish button.
+ * Two of each on one screen is two things that can disagree, and they did: the
+ * panel refused a blank note and the band published with one. A reader working
+ * out which is authoritative has already lost.
+ *
+ * The note is the only record of why a set was the right one, and its whole
+ * reader is somebody months later deciding whether to roll back to it. A blank
+ * one makes the version a date with no argument.
+ */
+describe("publishing a version", () => {
+  it("is offered in one place, not two", () => {
+    state.history = {
+      target: "truenas",
+      current_version: 0,
+      unpublished: true,
+      versions: [],
+    };
+    renderMappings();
+
+    expect(screen.queryAllByRole("button", { name: /^Publish/ })).toHaveLength(0);
+    expect(screen.queryAllByPlaceholderText(/Why this set is the one to keep/)).toHaveLength(0);
   });
 });

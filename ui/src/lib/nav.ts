@@ -266,6 +266,23 @@ export interface Crumb {
 export function crumbsFor(pathname: string, audience: Audience): Crumb[] {
   const entries = navFor(audience);
 
+  // A target's own routes, resolved from the PATH rather than from the roster.
+  //
+  // The per-target rows are appended by `targetNav` from deployment
+  // configuration, so they are not in the static tree this function walks and a
+  // target page has never had a breadcrumb. `targetLabel` turns an id into a
+  // name with no lookup, so the chain is derivable here without the roster and
+  // without making this function async or data-dependent.
+  //
+  // The target stays a LINK on its sub-routes, because the likeliest move after
+  // opening a target's mappings is going back to the page you opened them from.
+  const onTarget = /^\/system\/targets\/([^/]+)(\/.*)?$/.exec(pathname);
+  if (onTarget && audience === "advanced") {
+    const [, target, rest] = onTarget;
+    const self: Crumb = { label: targetLabel(target), href: `/system/targets/${target}` };
+    return rest ? [{ label: "System" }, self] : [{ label: "System" }, { label: self.label }];
+  }
+
   for (const entry of entries) {
     if (entry.kind === "leaf") {
       if (entry.href === pathname) return [{ label: entry.label }];

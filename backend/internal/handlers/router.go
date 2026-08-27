@@ -238,12 +238,18 @@ func NewRouter() http.Handler {
 	// And the approval for it. Two surfaces rather than one flag: an edit and a
 	// delete reach the same cohort and do opposite things to it, so a citation
 	// must not be able to cross between them.
+	// Creating one is an access change too, and was the exception that made the
+	// screen's promise untrue.
+	mux.HandleFunc("POST /api/v1/targets/mappings/rehearse-create", withCORS(withOperatorAuth(handleRehearseMappingCreate)))
 	mux.HandleFunc("POST /api/v1/targets/mappings/{id}/rehearse-edit", withCORS(withOperatorAuth(handleRehearseMappingEdit)))
 	mux.HandleFunc("POST /api/v1/targets/mappings/{id}/rehearse-delete", withCORS(withOperatorAuth(handleRehearseMappingDelete)))
 	mux.HandleFunc("POST /api/v1/targets/mappings/versions", withCORS(withOperatorAuth(handlePublishMappingVersion)))
 	// The history behind those versions. Read-only, and operator-gated like the
 	// rest: a version's note names who decided what a role means.
 	mux.HandleFunc("GET /api/v1/targets/{target}/mappings/versions", withCORS(withOperatorAuth(handleMappingHistory)))
+	// Rehearsed like every other mapping change. It was the exception, and it
+	// is the one that can move the most people.
+	mux.HandleFunc("POST /api/v1/targets/{target}/mappings/versions/{version}/rehearse-rollback", withCORS(withOperatorAuth(handleRehearseMappingRollback)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/mappings/versions/{version}/rollback", withCORS(withOperatorAuth(handleRollbackMappingVersion)))
 
 	// A member's own storage view and the one action on it. Self-scoped by

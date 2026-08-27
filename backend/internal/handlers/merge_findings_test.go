@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
@@ -34,6 +35,9 @@ type findingHarness struct {
 	// request deciding the opposite while the first is calling the target.
 	reservationsCleared []string
 	decideErr           error
+	// What the standing row says when a decision is refused: the harness's
+	// stand-in for somebody having decided first.
+	standing db.MergeFinding
 	// forgetErr fails THIS side after the add-on has already let go — the
 	// half-done unbind the repair path exists for.
 	forgetErr error
@@ -87,9 +91,9 @@ func stubFindings(t *testing.T, h *findingHarness) {
 		h.resolved = append(h.resolved, resolution)
 		return h.finding, nil
 	}
-	dbRecordMergeDecision = func(_ context.Context, id, actor, decision string) (db.MergeFinding, error) {
+	dbRecordMergeDecision = func(_ context.Context, id, actor, decision, reason string) (db.MergeFinding, error) {
 		if h.decideErr != nil {
-			return db.MergeFinding{}, h.decideErr
+			return h.standing, h.decideErr
 		}
 		h.decided = append(h.decided, decision)
 		return h.finding, nil
@@ -751,5 +755,46 @@ func TestARepairIsNotAWayToChangeTheAnswer(t *testing.T) {
 	}
 	if len(h.converged) != 0 || len(h.dispatched) != 0 {
 		t.Fatal("a refused change of answer must do nothing")
+	}
+}
+
+// The refusal a second operator meets carries what they need to agree or
+// disagree — not only that they lost (design B1).
+//
+// A finding takes one decision, because the answers are opposites: keeping
+// Syndra's value and taking the target's cannot both be queued without one
+// releasing an account the other is re-provisioning. So somebody arriving
+// second is refused, and the only useful thing the refusal can give them is
+// what was chosen and WHY.
+//
+// The reason is mandatory on every resolution and was written for exactly this
+// reader. Until now it was stored nowhere they could see, and the refusal
+// handed them a sentence with a UUID in it.
+func TestARefusedDecisionCarriesWhatWasChosenAndWhy(t *testing.T) {
+	h := &findingHarness{finding: theirsOnly("uid", "3120")}
+	decidedAt := time.Now().UTC().Add(-40 * time.Second)
+	h.standing = db.MergeFinding{
+		ID: "f1", Target: "truenas", SubjectID: "u_moller", Field: "uid",
+		Decision: db.ResolutionTakeTheirs, DecidedBy: "u_iyer", DecidedAt: &decidedAt,
+		DecisionReason: "renumbered by hand during the migration; her files are all under 3120",
+	}
+	h.decideErr = db.ErrMergeFindingDecided
+	stubFindings(t, h)
+
+	rr := resolveFinding(t, `{"resolution":"keep_ours","reason":"hers should be 3131"}`)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("want 409, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	for _, want := range []string{
+		"ALREADY_DECIDED",
+		db.ResolutionTakeTheirs,
+		"u_iyer",
+		"renumbered by hand during the migration",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the refusal must carry %q so the second reader can argue with it: %s", want, body)
+		}
 	}
 }

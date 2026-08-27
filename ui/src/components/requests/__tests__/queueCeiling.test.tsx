@@ -69,6 +69,10 @@ beforeEach(() => {
  * sequence the bar exists to prevent.
  */
 describe("the request queue states its ceiling before the tap", () => {
+  // 501 requests in the queue, 25 rows on screen. The ceiling is about the
+  // SELECTION and not about what is rendered, which is the whole reason the
+  // cap could be added without touching this assertion — and the reason the
+  // test below exists to hold those two apart.
   it("names the limit over 500", () => {
     renderQueue(501);
     fireEvent.click(screen.getByRole("checkbox", { name: /Select these 501 requests/ }));
@@ -81,5 +85,48 @@ describe("the request queue states its ceiling before the tap", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /Select these 3 requests/ }));
 
     expect(screen.queryByText(/is the most that can run at once/)).toBeNull();
+  });
+});
+
+/**
+ * The cap is on rendering and on nothing else.
+ *
+ * This screen used to render every row it was given, so a long queue paid its
+ * whole cost on arrival — and there was no point at which a reader could tell
+ * how much more there was. The drift queue and the people list both cap at a
+ * page and offer the next one; this one did not.
+ *
+ * What must not follow is "select all" quietly coming to mean "select the
+ * page". The bar's ceiling message counts the pending queue, so a cap that
+ * narrowed the selection would change what that number is about without
+ * saying so — and an operator would tap it believing they had the queue.
+ */
+describe("the queue has a visible end", () => {
+  it("renders a page rather than the whole queue", () => {
+    renderQueue(60);
+
+    // A page, not sixty.
+    expect(screen.getAllByRole("checkbox", { name: /Select this request/ }).length).toBe(25);
+    expect(screen.getByRole("button", { name: /Load next 25/ })).toBeTruthy();
+    expect(screen.getByText("35 more")).toBeTruthy();
+  });
+
+  it("still selects the whole queue, not the page", () => {
+    renderQueue(60);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Select these 60 requests/ }));
+
+    // Sixty is under the ceiling, so no warning — and the count is the queue's.
+    expect(screen.queryByText(/is the most that can run at once/)).toBeNull();
+    // Sixty, not twenty-five: the bar counts the queue and the page is only
+    // what is drawn.
+    expect(document.body.textContent).toMatch(/60 requests selected/);
+  });
+
+  it("shows the next page on request", () => {
+    renderQueue(60);
+    fireEvent.click(screen.getByRole("button", { name: /Load next 25/ }));
+
+    expect(screen.getAllByRole("checkbox", { name: /Select this request/ }).length).toBe(50);
+    expect(screen.getByText("10 more")).toBeTruthy();
   });
 });

@@ -9,6 +9,7 @@ import {
   type ActionOutcome as Outcome,
   type OutcomeKind,
 } from "@/lib/outcome";
+import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PlanReview, applyLabel, planNote } from "@/components/ui/PlanReview";
@@ -105,6 +106,34 @@ interface RehearsalDialogProps {
   /** Solid destructive confirm rather than accent. */
   destructive?: boolean;
   /**
+   * The label for applying a change that reaches NOBODY, on a surface where
+   * that is a real act rather than a no-op.
+   *
+   * Every plan in this dialog used to be assumed to move at least one person,
+   * which is right for a bulk grant — a plan for nobody means nobody was
+   * selected — and wrong for the mapping surfaces. A mapping on a role nobody
+   * holds is a definition: it changes what the role WILL confer, the backend
+   * writes it and issues no approval for it because there is nothing to
+   * review, and the dialog then refused to let it be saved. Defining before
+   * assigning is the ordinary order, and it was the one order this dialog
+   * could not express.
+   *
+   * The relaxation is exact. It applies only when the cohort is empty; the
+   * moment a plan reaches somebody, the approval is required again and this
+   * prop does nothing. Absent, the dialog behaves as it always has.
+   */
+  definitionLabel?: string;
+  /**
+   * A consequence of this operation that the plan's own numbers cannot state.
+   *
+   * The plan counts what Syndra will change. Some operations also have an
+   * effect Syndra does not perform and cannot undo — a mapping edit moves a
+   * group, and the files the old group owns stay owned by it — and no count
+   * implies that. Rendered under the plan, on the review step, because it is
+   * part of what is being approved rather than a caveat about the form.
+   */
+  consequence?: React.ReactNode;
+  /**
    * Computes the plan. Takes the scope acknowledgement rather than reading it
    * from the caller, so a surface cannot acknowledge on the operator's behalf.
    */
@@ -184,6 +213,8 @@ export function RehearsalDialog({
   compose,
   ready = true,
   destructive = false,
+  definitionLabel,
+  consequence,
   onRehearse,
   onApply,
   onClose,
@@ -210,6 +241,25 @@ export function RehearsalDialog({
   const [stalePlan, setStalePlan] = useState<{ code: string; subjects: string[] } | null>(null);
   /** Set when the backend refuses to approve a change of this size unasked. */
   const [scope, setScope] = useState<{ affected: string; limit: string } | null>(null);
+  const [scopeAcknowledged, setScopeAcknowledged] = useState(false);
+  // Only when the plan genuinely reaches NOBODY, and the surface says that is
+  // still an act. A plan that reaches somebody takes the ordinary path whatever
+  // this dialog was told.
+  //
+  // "Reaches nobody" is three conditions, not one. `apply === 0` alone is the
+  // tempting version and it is wrong: a plan carrying forty rows that all
+  // resolve to `no_change` has an apply count of zero and is not a definition —
+  // it reaches forty people and changes nothing for them. That would take the
+  // definition label, submit with no citation, and meet a backend refusal the
+  // label had just promised would not happen.
+  //
+  // So: the rows must have ARRIVED (an absent array is a payload that came
+  // short, not an empty cohort), there must be none of them, and the plan must
+  // say it counted nobody. Any two without the third is a plan this dialog does
+  // not understand, and the safe reading of one of those is the ordinary path.
+  const reachesNobody =
+    Array.isArray(plan?.outcomes) && plan.outcomes.length === 0 && plan.summary.total === 0;
+  const isDefinitionApply = Boolean(definitionLabel) && reachesNobody;
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   /**
@@ -230,6 +280,7 @@ export function RehearsalDialog({
       const oversized = cohortRefusal(error);
       if (oversized) {
         setScope(oversized);
+        setScopeAcknowledged(false);
         setStep("scope");
         return null;
       }
@@ -249,10 +300,14 @@ export function RehearsalDialog({
    * new one is a new decision. So this refreshes and stops.
    */
   async function applyPlan() {
-    if (!plan?.plan_id) return;
+    if (!plan) return;
+    // A definition apply carries no approval, because the backend issued none:
+    // there was nothing to review. Every other apply still cites one, and the
+    // guard below is what keeps those two apart.
+    if (!plan.plan_id && !isDefinitionApply) return;
     setBusy(true);
     try {
-      const result = await onApply(plan.plan_id);
+      const result = await onApply(plan.plan_id ?? "");
       setPlan(result);
       setStalePlan(null);
       setStep("result");
@@ -328,20 +383,34 @@ export function RehearsalDialog({
       {step === "compose" ? (
         <div className="flex flex-col gap-4 px-6">{compose}</div>
       ) : step === "scope" ? (
-        <div className="px-6">
-          <div
-            role="status"
-            className="rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-[13.5px] text-warn-text"
-          >
-            <p className="font-medium">
-              This would change access for {scope?.affected} {noun[1]}.
-            </p>
-            <p className="mt-1">
-              Anything above {scope?.limit} is confirmed separately, because a number is the one
-              part of a bulk change that is easy to get wrong and hard to see. Confirming computes
-              the plan — it still writes nothing.
-            </p>
-          </div>
+        <div className="grid gap-3 px-6">
+          {/* The step did not exist a moment ago and does not appear below the
+              limit. Said first, so an operator who crosses the threshold once
+              cannot mistake it for a form they filled in wrong — and one who
+              never crosses it never learns the step exists. */}
+          <p role="status" className="text-[13.5px] leading-[1.55] text-muted">
+            The plan moves{" "}
+            <strong className="font-semibold text-ink">
+              {scope?.affected} {noun[1]}
+            </strong>
+            , and anything above {scope?.limit} is refused until somebody says the number out
+            loud. Confirming computes the plan — it still writes nothing.
+          </p>
+          {/* Rung 2, and the product's own primitive for it. This step used to
+              be a warn panel and a button carrying the count, which is a rung
+              below what it claims: the ceremony is the tick, and a label is
+              something a hand reaches past. Not rung 3 either — copying digits
+              trains an operator not to look, and typing back a number the
+              screen already shows proves nothing. Rung 3 stays reserved for
+              taking access from a person somebody named. */}
+          <AcknowledgeCount
+            checked={scopeAcknowledged}
+            onChange={setScopeAcknowledged}
+            count={Number(scope?.affected ?? 0)}
+            noun={noun[1]}
+            verb="moves"
+            disabled={busy}
+          />
         </div>
       ) : (
         <>
@@ -369,6 +438,11 @@ export function RehearsalDialog({
             </div>
           )}
           <PlanReview plan={plan} />
+          {consequence && (
+            <div className="px-6">
+              <p className="text-[13.5px] leading-[1.55] text-warn-text">{consequence}</p>
+            </div>
+          )}
         </>
       )}
 
@@ -404,12 +478,16 @@ export function RehearsalDialog({
 
         {step === "scope" && (
           <>
+            {/* Accent, not a solid red fill. This button computes a plan and
+                writes nothing, and `dangerConfirm` is reserved for the button
+                that performs a destruction. */}
             <Button
-              variant="dangerConfirm"
+              variant="accent"
               isPending={busy}
+              disabled={!scopeAcknowledged}
               onClick={() => void rehearse(true).catch(() => {})}
             >
-              Yes, plan for {scope?.affected} {noun[1]}
+              Plan for {scope?.affected} {noun[1]}
             </Button>
             <Button disabled={busy} onClick={compose ? () => setStep("compose") : onClose}>
               {compose ? "Back" : "Cancel"}
@@ -422,10 +500,14 @@ export function RehearsalDialog({
             <Button
               variant={destructive ? "dangerConfirm" : "accent"}
               isPending={busy}
-              disabled={!plan?.plan_id || plan.summary.apply === 0}
+              disabled={isDefinitionApply ? busy : !plan?.plan_id || plan.summary.apply === 0}
               onClick={() => void applyPlan()}
             >
-              {plan ? applyLabel(plan, noun) : "Rehearsing…"}
+              {!plan
+                ? "Rehearsing…"
+                : isDefinitionApply
+                  ? definitionLabel
+                  : applyLabel(plan, noun)}
             </Button>
             {/*
               Disabled while a write is out. Abandoning the dialog mid-apply

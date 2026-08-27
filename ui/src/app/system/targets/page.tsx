@@ -128,5 +128,8 @@ function readingFor(row: TargetSummary): { tone: StatusTone; label: string } {
   if (row.transport_status === "error") return { tone: "danger", label: "transport failed" };
   if (row.circuit_open) return { tone: "warn", label: "calls suspended" };
   if (row.callable) return { tone: "healthy", label: "answering" };
-  return { tone: "warn", label: "no manifest yet" };
+  // Neutral, not amber. Registered-and-not-yet-answered is where every add-on
+  // starts, and it resolves on its own within a refresh interval — see the tone
+  // itself for why colouring it would cost amber its meaning elsewhere.
+  return { tone: "neutral", label: "no manifest read yet" };
 }

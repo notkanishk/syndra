@@ -53,6 +53,36 @@ export interface MappingVersion {
   entries: MappingVersionEntry[];
 }
 
+/**
+ * One difference between the working copy and the newest published version.
+ *
+ * Enumerated rather than counted, which is the whole argument for the version
+ * band: "rolling back undoes work listed nowhere" stops being true the moment
+ * something lists it.
+ */
+export interface MappingChange {
+  kind: "added" | "changed" | "removed";
+  project_id: string;
+  role_key: string;
+  field: string;
+  /** What the working copy holds. Absent on a removal, which has no row. */
+  value?: string;
+  /** What the published version holds. Set on a change and on a removal. */
+  was_value?: string;
+  /**
+   * Who last touched the row, and when.
+   *
+   * Both are absent on a REMOVAL and the surface must cope: a deleted row takes
+   * its `updated_by` with it and nothing records the deletion, so a removal is
+   * shown without attribution rather than credited to whoever published the
+   * version — who did not remove it.
+   */
+  actor?: string;
+  at?: string;
+  /** How many people hold the role this change reaches. */
+  holders: number;
+}
+
 export interface MappingHistory {
   target: string;
   /** The newest published version, or 0. What the list tints. */
@@ -66,6 +96,8 @@ export interface MappingHistory {
    * back to 4 from there would be undoing work not listed anywhere.
    */
   unpublished: boolean;
+  /** What differs. Empty when the working copy matches, never absent. */
+  unpublished_changes: MappingChange[];
   versions: MappingVersion[];
 }
 
@@ -95,8 +127,22 @@ export function useMappingHolders(id: string | undefined) {
  * two-step flow and needs to await each leg, and a mutation's `mutateAsync`
  * would add a second copy of the pending state it already tracks.
  */
+/**
+ * A rehearsal, plus whether the value was actually checked.
+ *
+ * `value_checked: false` means the add-on could not be asked — it is not
+ * answering, or it cannot enumerate this field — and the edit was allowed
+ * through deliberately. Refusing an edit while a NAS reboots would make an
+ * outage look like the operator's mistake, so the check fails open on
+ * everything except a definite no.
+ *
+ * But a check that did not run must not read as one that passed, which is what
+ * it did while success carried no distinction at all.
+ */
+export type MappingRehearsal = BulkPlan & { value_checked?: boolean };
+
 export function rehearseMappingEdit(id: string, value: string, acknowledgeScope: boolean) {
-  return request<BulkPlan>(`/targets/mappings/${id}/rehearse-edit`, {
+  return request<MappingRehearsal>(`/targets/mappings/${id}/rehearse-edit`, {
     method: "POST",
     body: { value, acknowledge_scope: acknowledgeScope },
   });
@@ -137,17 +183,63 @@ export function applyMappingDelete(id: string, planId: string) {
   });
 }
 
+/** What a new mapping would be, before there is a row to name it by. */
+export interface NewMapping {
+  target: string;
+  projectId: string;
+  roleKey: string;
+  field: string;
+  value: string;
+}
+
+/**
+ * Who a new mapping would reach, before it exists.
+ *
+ * Creating one is an access change like editing one: entitlements are derived
+ * from mappings, so the row alone changes what everybody holding that role is
+ * entitled to. It is keyed on what WOULD be written rather than on a row id,
+ * because there is no row yet to rehearse against.
+ *
+ * Carries `value_checked` for the same reason the edit's rehearsal does — a
+ * check that could not run must not read as one that passed.
+ */
+export function rehearseMappingCreate(
+  input: NewMapping,
+  acknowledgeScope: boolean,
+): Promise<MappingRehearsal> {
+  return request<MappingRehearsal>("/targets/mappings/rehearse-create", {
+    method: "POST",
+    body: {
+      target: input.target,
+      project_id: input.projectId,
+      role_key: input.roleKey,
+      field: input.field,
+      value: input.value,
+      acknowledge_scope: acknowledgeScope,
+    },
+  });
+}
+
+/**
+ * The result of writing one: the row, and how many people it moved.
+ *
+ * Queued, never applied. The mapping is written and the people it reaches are
+ * converged by the drain.
+ */
+export interface MappingCreateResult {
+  mapping: RoleMapping;
+  queued_convergences: number;
+}
+
 export function useCreateMapping() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: {
-      target: string;
-      projectId: string;
-      roleKey: string;
-      field: string;
-      value: string;
-    }) =>
-      request<RoleMapping>("/targets/mappings", {
+    // The approval the rehearsal issued, cited whenever the role has holders.
+    // A mapping on a role nobody holds is a definition and needs none — which
+    // is why `planId` is optional here and required by the backend exactly when
+    // it matters.
+    mutationFn: (input: NewMapping & { planId?: string }) =>
+      request<MappingCreateResult>("/targets/mappings", {
         method: "POST",
         body: {
           target: input.target,
@@ -155,9 +247,15 @@ export function useCreateMapping() {
           role_key: input.roleKey,
           field: input.field,
           value: input.value,
+          ...(input.planId ? { plan_id: input.planId } : {}),
         },
       }),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["targets", "mappings"] }),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["targets", "mappings"] });
+      // The convergences it queued show up as pending changes, the same as
+      // every other mapping change.
+      client.invalidateQueries({ queryKey: ["propagation"] });
+    },
   });
 }
 
@@ -173,13 +271,40 @@ export function usePublishMappingVersion(target: string) {
   });
 }
 
+/**
+ * What a rollback would do, before it does it.
+ *
+ * It was the one mapping change that did not rehearse — edit and delete both
+ * state their cohort and wait, while reverting a publish, which can move more
+ * people than either, went straight through.
+ *
+ * One plan for the whole version rather than one per mapping: two mappings on
+ * one role reach the same people, so per-mapping counts cannot be added up, and
+ * somebody whose mapping the rollback deletes appears in the working copy and
+ * in no version at all. Only the whole-version plan computes distinct people
+ * across the union.
+ */
+export async function rehearseMappingRollback(
+  target: string,
+  version: number,
+  acknowledgeScope: boolean,
+): Promise<BulkPlan> {
+  return request<BulkPlan>(
+    `/targets/${target}/mappings/versions/${version}/rehearse-rollback`,
+    { method: "POST", body: { acknowledge_scope: acknowledgeScope } },
+  );
+}
+
 export function useRollbackMappingVersion(target: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (version: number) =>
+    // The approval the rehearsal issued, cited on apply. It travels in the body
+    // for the same reason the delete's does: an approval in a query parameter
+    // ends up in browser history and access logs.
+    mutationFn: ({ version, planId }: { version: number; planId: string }) =>
       request<MappingApplyResult & { version: number }>(
         `/targets/${target}/mappings/versions/${version}/rollback`,
-        { method: "POST", body: {} },
+        { method: "POST", body: { plan_id: planId } },
       ),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ["targets", target, "mapping-versions"] });

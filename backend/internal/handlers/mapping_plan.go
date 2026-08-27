@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/services"
 )
@@ -35,6 +38,12 @@ import (
 const (
 	planSurfaceMappingEdit   = "mappings.edit"
 	planSurfaceMappingDelete = "mappings.delete"
+	// A rollback is not a change to one mapping. It restores a SET, so its plan
+	// is issued against the target and the version rather than against a row.
+	planSurfaceMappingRollback = "mappings.rollback"
+	// Creating a mapping is an access change like any other, and was the one
+	// that skipped the ceremony.
+	planSurfaceMappingCreate = "mappings.create"
 )
 
 type mappingPlanRequest struct {
@@ -75,11 +84,13 @@ func rehearseMappingChange(w http.ResponseWriter, r *http.Request, surface strin
 		writeMappingError(w, err)
 		return
 	}
+	var resolution addons.Resolution
 	if surface == planSurfaceMappingEdit {
 		// Validated before the rehearsal, not after it. A plan for a value the
 		// target cannot resolve is a diff an operator would approve and the apply
 		// would then refuse — which teaches them the approval means nothing.
-		if _, _, err := validateMappingAgainstTarget(r.Context(), mapping.Target, mapping.Field, req.Value); err != nil {
+		var err error
+		if _, _, resolution, err = validateMappingAgainstTarget(r.Context(), mapping.Target, mapping.Field, req.Value); err != nil {
 			writeMappingError(w, err)
 			return
 		}
@@ -99,7 +110,30 @@ func rehearseMappingChange(w http.ResponseWriter, r *http.Request, surface strin
 		writePlanIssueError(w, err)
 		return
 	}
-	jsonResponse(w, http.StatusOK, plan)
+	// The plan, plus whether the value was actually checked.
+	//
+	// Embedded rather than added to `BulkPlan`, which is shared with bulk
+	// grants, requests, drift and bundles and has no business carrying a fact
+	// about mapping values. The JSON flattens, so the surface reads one object.
+	jsonResponse(w, http.StatusOK, struct {
+		services.BulkPlan
+		// Present only on an edit. False means the add-on could not be asked —
+		// it is not answering, or it cannot enumerate this field — and the edit
+		// was allowed through on purpose. A screen must be able to say that
+		// rather than let a check that did not run read as one that passed.
+		ValueChecked *bool `json:"value_checked,omitempty"`
+	}{BulkPlan: plan, ValueChecked: checkedFlag(surface, resolution)})
+}
+
+// checkedFlag is nil on any surface where the question does not arise, so the
+// key is absent rather than false — absent is "not applicable", false is "we
+// tried and could not".
+func checkedFlag(surface string, r addons.Resolution) *bool {
+	if surface != planSurfaceMappingEdit {
+		return nil
+	}
+	checked := r.Checked
+	return &checked
 }
 
 // rehearseMapping states the change once per person it reaches.
@@ -305,45 +339,417 @@ var svcResolveEntitlementsFor = func(ctx context.Context, subjectID, target stri
 // version carries, because a rollback can reinstate a binding for a role nobody
 // currently holds a mapping for, and those holders are exactly the ones whose
 // access the rollback is meant to bring back.
-func rollbackAndConverge(ctx context.Context, target string, version int, actor string) (int, error) {
+// rollbackCohort is everybody a rollback to `version` would move: the distinct
+// holders of every role reached by the working copy OR by the version.
+//
+// The UNION, and that is the correction. The convergence loop used to walk only
+// the mappings that survived the restore, so a person holding just a role whose
+// mapping the rollback deletes was in no list it read — nothing was queued for
+// them and their account kept what that mapping granted until a sweep noticed,
+// up to six hours later. Losing an entitlement is as much a change as gaining
+// one, and it is the half nobody thinks to check.
+//
+// Distinct PEOPLE rather than per-mapping holders, because two mappings on one
+// role reach the same person and a ceremony that adds them up states a number
+// nobody can verify. One read per role, however many mappings touch it.
+func rollbackCohort(ctx context.Context, before, after []db.RoleMapping) ([]string, error) {
+	roles := map[[2]string]struct{}{}
+	for _, set := range [][]db.RoleMapping{before, after} {
+		for _, m := range set {
+			roles[[2]string{m.ProjectID, m.RoleKey}] = struct{}{}
+		}
+	}
+
+	seen := map[string]struct{}{}
+	cohort := []string{}
+	for role := range roles {
+		holders, err := dbMappingHolders(ctx, role[0], role[1])
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range holders {
+			if _, dup := seen[id]; dup {
+				continue
+			}
+			seen[id] = struct{}{}
+			cohort = append(cohort, id)
+		}
+	}
+	sort.Strings(cohort)
+	return cohort, nil
+}
+
+func rollbackAndConverge(ctx context.Context, target string, version int, actor, planID string) (int, error) {
 	converged := 0
 	err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
+		// Read BEFORE the restore, because the restore is what removes the
+		// mappings whose holders would otherwise be missed.
+		before, err := dbListRoleMappings(ctx, target)
+		if err != nil {
+			return err
+		}
 		if err := dbRollbackMappingVersion(ctx, target, version, actor); err != nil {
 			return err
 		}
-		mappings, err := dbListRoleMappings(ctx, target)
+		after, err := dbListRoleMappings(ctx, target)
 		if err != nil {
 			return err
 		}
 
-		// One convergence per subject, not per mapping: two restored mappings on
-		// one role would otherwise queue the same resolved set twice.
-		seen := map[string]struct{}{}
-		for _, m := range mappings {
-			holders, err := dbMappingHolders(ctx, m.ProjectID, m.RoleKey)
+		cohort, err := rollbackCohort(ctx, before, after)
+		if err != nil {
+			return err
+		}
+
+		// The approval is spent here, inside the same lock the cohort is read
+		// under — one approval, one apply, this operator, this version.
+		//
+		// A rollback that reaches nobody needs none, which is the same rule
+		// edit and delete follow: there is nothing to review about a change to
+		// a definition that moves no one.
+		if len(cohort) > 0 {
+			if strings.TrimSpace(planID) == "" {
+				return errPlanCitationMissing
+			}
+			if err := claimMappingPlan(ctx, db.PlanCitation{
+				PlanID: planID, Target: target, Surface: planSurfaceMappingRollback, Actor: actor,
+				RequestFingerprint: rollbackRequestFingerprint(target, version),
+			}); err != nil {
+				return err
+			}
+		}
+
+		for _, id := range cohort {
+			// Resolved AFTER the restore, so somebody who lost a mapping
+			// converges to a set that no longer contains what it granted.
+			set, err := svcResolveEntitlementsFor(ctx, id, target)
 			if err != nil {
 				return err
 			}
-			for _, id := range holders {
-				if _, dup := seen[id]; dup {
-					continue
-				}
-				seen[id] = struct{}{}
-				set, err := svcResolveEntitlementsFor(ctx, id, target)
-				if err != nil {
-					return err
-				}
-				if _, _, err := dbRecordSystemConvergence(ctx, db.SystemConvergence{
-					Target: target, SubjectID: id, Actor: actor,
-					Reason:  fmt.Sprintf("Mapping set rolled back to v%d", version),
-					Desired: set,
-				}); err != nil {
-					return err
-				}
-				converged++
+			if _, _, err := dbRecordSystemConvergence(ctx, db.SystemConvergence{
+				Target: target, SubjectID: id, Actor: actor,
+				Reason:  fmt.Sprintf("Mapping set rolled back to v%d", version),
+				Desired: set,
+			}); err != nil {
+				return err
 			}
+			converged++
 		}
 		return nil
 	})
 	return converged, err
+}
+
+// handleRehearseMappingRollback states what a rollback would do, before it does
+// it.
+//
+// Until this existed, a rollback was the one mapping change that did not
+// rehearse: edit and delete both stated their cohort and waited, and reverting
+// a publish — which restores an entire set and can move more people than either
+// — went straight through. The screen's own argument is that every change here
+// is rehearsed before it lands, and this was the exception that made it untrue.
+//
+// One plan for the whole version, never one per mapping. Two mappings on one
+// role reach the same people, so per-mapping rehearsals produce counts nobody
+// can add up: the number that matters is distinct PEOPLE across the union of
+// what the working copy reaches and what the version reaches, and only a
+// whole-version plan can compute it.
+func handleRehearseMappingRollback(w http.ResponseWriter, r *http.Request) {
+	target := r.PathValue("target")
+	version, err := strconv.Atoi(r.PathValue("version"))
+	if err != nil || version < 1 {
+		jsonValidationErrorResponse(w, "version must be a positive integer",
+			map[string]string{"version": "invalid"})
+		return
+	}
+	var req mappingPlanRequest
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
+	}
+
+	history, err := dbListMappingHistory(r.Context(), target)
+	if err != nil {
+		writeMappingError(w, err)
+		return
+	}
+	var restoring *db.MappingVersion
+	for i := range history.Versions {
+		if history.Versions[i].Version == version {
+			restoring = &history.Versions[i]
+			break
+		}
+	}
+	if restoring == nil {
+		writeMappingError(w, fmt.Errorf("%w: %s v%d", db.ErrMappingNotFound, target, version))
+		return
+	}
+
+	current, err := dbListRoleMappings(r.Context(), target)
+	if err != nil {
+		writeMappingError(w, err)
+		return
+	}
+
+	// The version's entries, as mappings, so the cohort is computed over the
+	// same shape on both sides.
+	would := make([]db.RoleMapping, 0, len(restoring.Entries))
+	for _, e := range restoring.Entries {
+		would = append(would, db.RoleMapping{
+			Target: target, ProjectID: e.ProjectID, RoleKey: e.RoleKey,
+			Field: e.Field, Value: e.Value,
+		})
+	}
+
+	cohort, err := rollbackCohort(r.Context(), current, would)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+
+	plan := services.BulkPlan{Op: "rollback_mappings"}
+	detail := fmt.Sprintf("Their access is resolved again from the %d binding%s in version %d.",
+		len(restoring.Entries), plural(len(restoring.Entries)), version)
+	consequence := "Anything added since version " + strconv.Itoa(version) +
+		" is removed — a rollback restores a set, it does not merge one."
+	for _, id := range cohort {
+		plan.Outcomes = append(plan.Outcomes, services.BulkOutcome{
+			UserID: id, Effect: services.EffectApply,
+			Detail: detail, Consequence: consequence,
+			// Bound to the version being restored, not to any one mapping: the
+			// approval is for restoring THIS set, and a different version is a
+			// different act.
+			Fingerprint: services.Fingerprint("rollback", target, strconv.Itoa(version), id),
+		})
+	}
+	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
+
+	// The same ceremony every other mapping change meets, at the same
+	// threshold, from the same place. A rollback that skipped it would be the
+	// largest change on the screen asking for the least.
+	if limit := cohortLimit(); !req.AcknowledgeScope && plan.Summary.Apply > limit {
+		writePlanIssueError(w, &cohortTooLarge{Affected: plan.Summary.Apply, Limit: limit})
+		return
+	}
+
+	// And it is PERSISTED, which the first version of this was not.
+	//
+	// A rehearsal that returns no approval is a rehearsal nothing can spend:
+	// the shared dialog disables Apply without a `plan_id`, correctly, so every
+	// rollback that reached anybody was a dead end on screen — while the
+	// rollback endpoint itself would still change the mapping set for anyone
+	// who called it directly. A ceremony that only the UI performs is a
+	// suggestion, and one the UI cannot complete is worse than none.
+	if err := issueRollbackPlan(r.Context(), target, version, resolveActor(r, ""), &plan); err != nil {
+		writePlanIssueError(w, err)
+		return
+	}
+
+	jsonResponse(w, http.StatusOK, struct {
+		services.BulkPlan
+	}{BulkPlan: plan})
+}
+
+// rollbackRequestFingerprint binds an approval to the target and the version
+// being restored. A different version is a different act, and an approval for
+// one must not spend on another.
+func rollbackRequestFingerprint(target string, version int) string {
+	return services.Fingerprint("mapping_change", planSurfaceMappingRollback, target, strconv.Itoa(version))
+}
+
+func issueRollbackPlan(ctx context.Context, target string, version int, actor string, plan *services.BulkPlan) error {
+	if len(plan.Outcomes) == 0 {
+		// A version whose roles reach nobody. There is nothing to approve and
+		// nothing to converge, so the rollback needs no citation — and issuing
+		// one would hand back an approval that applies to nobody.
+		return nil
+	}
+
+	subjects := make([]db.NewPlanSubject, 0, len(plan.Outcomes))
+	for _, out := range plan.Outcomes {
+		subjects = append(subjects, db.NewPlanSubject{
+			SubjectID: out.UserID, Fingerprint: out.Fingerprint,
+			Outcome: db.PlanOutcome{Effect: db.PlanEffectApply},
+		})
+	}
+
+	created, err := dbCreatePlan(ctx, db.NewPlan{
+		Target:             target,
+		Surface:            planSurfaceMappingRollback,
+		CreatedBy:          actor,
+		Lifetime:           planLifetime(),
+		StateReadAt:        time.Now().UTC(),
+		RequestFingerprint: rollbackRequestFingerprint(target, version),
+		Subjects:           subjects,
+	})
+	if err != nil {
+		return err
+	}
+	plan.PlanID = created.ID
+	return nil
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
+// handleRehearseMappingCreate states who a new mapping would reach.
+//
+// Creating one was the exception in this file, and it was the wrong exception
+// to have. Edit and delete both cite an approval and queue a convergence per
+// holder; create wrote the row and stopped there. Entitlements are DERIVED from
+// mappings, so the row alone changes what everybody holding that role is
+// entitled to — and nothing else discovers them: the periodic reconciler walks
+// existing bindings, so a person who has never been bound to this target is in
+// no list it reads.
+//
+// The effect was a mapping that silently granted access which then never
+// arrived, on the screen whose whole argument is that every change here is
+// rehearsed before it lands.
+//
+// There is no mapping to rehearse against yet, so the plan is keyed on what
+// would be written rather than on a row id.
+func handleRehearseMappingCreate(w http.ResponseWriter, r *http.Request) {
+	var req mappingCreateRehearsal
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
+	}
+
+	// Validated before the rehearsal, for the reason the edit path gives: a
+	// plan for a value the target cannot resolve is a diff an operator would
+	// approve and the write would then refuse.
+	field, value, resolution, err := validateMappingAgainstTarget(r.Context(), req.Target, req.Field, req.Value)
+	if err != nil {
+		writeMappingError(w, err)
+		return
+	}
+
+	holders, err := dbMappingHolders(r.Context(), req.ProjectID, req.RoleKey)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+
+	plan := services.BulkPlan{Op: "create_mapping"}
+	detail := fmt.Sprintf("%s starts conferring %s = %s on %s.", req.RoleKey, field, value, req.Target)
+	for _, id := range holders {
+		plan.Outcomes = append(plan.Outcomes, services.BulkOutcome{
+			UserID: id, Effect: services.EffectApply, Detail: detail,
+			Consequence: "They get an account here if they have none, at the next convergence.",
+			Fingerprint: services.Fingerprint("mapping_create", req.Target, req.ProjectID, req.RoleKey, field, value, id),
+		})
+	}
+	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
+
+	if limit := cohortLimit(); !req.AcknowledgeScope && plan.Summary.Apply > limit {
+		writePlanIssueError(w, &cohortTooLarge{Affected: plan.Summary.Apply, Limit: limit})
+		return
+	}
+	if err := issueCreatePlan(r.Context(), req, field, value, resolveActor(r, ""), &plan); err != nil {
+		writePlanIssueError(w, err)
+		return
+	}
+
+	jsonResponse(w, http.StatusOK, struct {
+		services.BulkPlan
+		ValueChecked *bool `json:"value_checked,omitempty"`
+	}{BulkPlan: plan, ValueChecked: &resolution.Checked})
+}
+
+type mappingCreateRehearsal struct {
+	Target           string `json:"target"`
+	ProjectID        string `json:"project_id"`
+	RoleKey          string `json:"role_key"`
+	Field            string `json:"field"`
+	Value            string `json:"value"`
+	AcknowledgeScope bool   `json:"acknowledge_scope,omitempty"`
+}
+
+// createRequestFingerprint binds the approval to the exact binding that would
+// be written. A plan for one value must not spend on another.
+func createRequestFingerprint(target, project, role, field, value string) string {
+	return services.Fingerprint("mapping_change", planSurfaceMappingCreate, target, project, role, field, value)
+}
+
+func issueCreatePlan(ctx context.Context, req mappingCreateRehearsal, field, value, actor string, plan *services.BulkPlan) error {
+	if len(plan.Outcomes) == 0 {
+		// A role nobody holds. There is nothing to approve and nothing to
+		// converge — the mapping is a definition until somebody holds it.
+		return nil
+	}
+	subjects := make([]db.NewPlanSubject, 0, len(plan.Outcomes))
+	for _, out := range plan.Outcomes {
+		subjects = append(subjects, db.NewPlanSubject{
+			SubjectID: out.UserID, Fingerprint: out.Fingerprint,
+			Outcome: db.PlanOutcome{Effect: db.PlanEffectApply},
+		})
+	}
+	created, err := dbCreatePlan(ctx, db.NewPlan{
+		Target:             req.Target,
+		Surface:            planSurfaceMappingCreate,
+		CreatedBy:          actor,
+		Lifetime:           planLifetime(),
+		StateReadAt:        time.Now().UTC(),
+		RequestFingerprint: createRequestFingerprint(req.Target, req.ProjectID, req.RoleKey, field, value),
+		Subjects:           subjects,
+	})
+	if err != nil {
+		return err
+	}
+	plan.PlanID = created.ID
+	return nil
+}
+
+// createMappingAndConverge writes the row and queues one convergence per
+// holder, in one transaction and under the access lock — the same shape edit
+// and delete already had.
+func createMappingAndConverge(ctx context.Context, m db.RoleMapping, actor, planID string) (db.RoleMapping, int, error) {
+	var created db.RoleMapping
+	converged := 0
+	err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
+		holders, err := dbMappingHolders(ctx, m.ProjectID, m.RoleKey)
+		if err != nil {
+			return err
+		}
+		if len(holders) > 0 {
+			if strings.TrimSpace(planID) == "" {
+				return errPlanCitationMissing
+			}
+			if err := claimMappingPlan(ctx, db.PlanCitation{
+				PlanID: planID, Target: m.Target, Surface: planSurfaceMappingCreate, Actor: actor,
+				RequestFingerprint: createRequestFingerprint(m.Target, m.ProjectID, m.RoleKey, m.Field, m.Value),
+			}); err != nil {
+				return err
+			}
+		}
+
+		created, err = dbCreateRoleMapping(ctx, m)
+		if err != nil {
+			return err
+		}
+
+		// Resolved AFTER the write, so each holder converges to a set that
+		// contains what the new mapping confers. Reading before would queue
+		// everybody's old state, which is the change not happening at all.
+		for _, id := range holders {
+			set, err := svcResolveEntitlementsFor(ctx, id, m.Target)
+			if err != nil {
+				return err
+			}
+			if _, _, err := dbRecordSystemConvergence(ctx, db.SystemConvergence{
+				Target: m.Target, SubjectID: id, Actor: actor,
+				Reason:  "A role-to-target mapping was created",
+				Desired: set,
+			}); err != nil {
+				return err
+			}
+			converged++
+		}
+		return nil
+	})
+	return created, converged, err
 }

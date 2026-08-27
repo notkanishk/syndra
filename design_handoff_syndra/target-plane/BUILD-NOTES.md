@@ -104,6 +104,149 @@ Recorded because the brief is in this folder and will be read again.
   at 04:00, and the built page has them six panels apart. This is the strongest
   structural finding in the reply.
 
+## 3a · The six proposed components, against `components/ui/`
+
+Reply section 6 proposes six additions. Read against the tree before anything is
+built, which is the check the last commission skipped.
+
+| # | Proposed | Verdict |
+|---|---|---|
+| 1 | Three-state block | **New — build it.** Nothing compares three values with the differing pair marked. It replaces prose: `MergeFindings.tsx` currently says *"It was ["makers"] when Syndra last saw it, and is [] now"*, which is the same content as a sentence and loses the comparison at a glance. |
+| 2 | Count chip, three forms | **Extend `Badge`, do not add a component.** `Badge` already has `hollow` for the zero form. It needs one more form — the em dash for a failed read — and that is a prop, not a peer. |
+| 3 | Freshness strip | **Already exists. Do not build it.** `components/ui/ReadFreshness.tsx` is exactly this: a tone dot, a sentence carrying an age, a truncation clause, and a `Read again` that renders only when the read is stale. The reply says it considered "the amber banner inside §21's unmanaged inventory, which is where this behaviour currently lives" — it did not know the shared component exists, because it could not. **This is this commission's version of the §23 mistake**, caught before it cost anything. |
+| 4 | Claimant pair | **New — build it.** The existing dialog shape pairs a recommended action with a quieter one, and every instance has a preferred answer. The reply's argument is right: a preference here would be the design deciding the thing its own copy says it cannot. |
+| 5 | Neutral reading dot | **Extend `STATUS_TONE`.** It carries healthy / accent / warn / danger; this adds `neutral` at `--faint`. One line, not a component. |
+| 6 | Region index | **New — build it**, touch only. |
+
+So: two genuinely new components, two one-line extensions of existing ones, one
+touch-only addition, and one that must not be built at all.
+
+## 3b · Two answers sent back before the mapping zip
+
+Both were flagged by the reply as the hardest open questions of commission 3.
+Both are settled by the code, and the first corrects an error in my own brief.
+
+### A rollback does not rehearse. Nothing does it per mapping either.
+
+The brief told Claude Design that "edit, delete and rollback all rehearse before
+they land". **Rollback does not.** There is no rehearsal endpoint for it:
+
+```
+POST /targets/mappings/{id}/rehearse-edit      ← exists
+POST /targets/mappings/{id}/rehearse-delete    ← exists
+POST /targets/{target}/mappings/versions/{version}/rollback   ← no rehearsal
+```
+
+`handleRollbackMappingVersion` restores the version and calls
+`rollbackAndConverge`, returning `queued_convergences` — a convergence queued per
+affected holder, unrehearsed and with no cohort acknowledgement.
+
+I did not invent the claim. `useMappings.ts:14` and `MappingManagement.tsx:40`
+both assert it in comments, and I repeated them without checking the routes.
+**That is pre-existing drift in the repo**, not a design problem: two file
+headers describe a rehearsal the API never grew.
+
+So the honest answer to *does a rollback rehearse as one plan or one per
+mapping* is **neither, today**. Which of the three it should become is a product
+decision, and it is now the more interesting question:
+
+- one plan for the whole version is the only shape that matches what a rollback
+  *is* — a set restored together — and it fires the cohort ceremony once;
+- one per mapping would fire it up to once per row, for a single act;
+- unrehearsed, as now, is the only option that contradicts the screen's own
+  argument, since publishing is rehearsed and reverting a publish is not.
+
+The two stale comments should be corrected either way, and are not to be treated
+as a specification.
+
+### The member payload can tell draining from read-only, and should
+
+`MyTargetView` — what `GET /api/v1/me/targets` already returns — carries
+`reachable: boolean` today. Adding `lifecycle` to it is an extension of a payload
+the member already receives, not a new read.
+
+**It must not be a boolean.** Three values exist at the source and are distinct
+all the way down: the add-on's own `LIFECYCLE_STATE` is `active | draining |
+read_only`, `TargetHealth.lifecycle` carries the same three, and the operator's
+maintenance strip renders all three. Collapsing them at the member boundary would
+be the only place in the system where the distinction is lost, and it is exactly
+the place where it changes what somebody should do: under draining a credential
+they set will land once the queue clears, and under read-only it will not.
+
+So **C1 and C2 both stand as drawn.**
+
+## 3c · Commission 3 landed, and M7's number is computable
+
+Zip verified: `M1`–`M7`, `B1`–`B2`, `C1`–`C3` claimed and present, 7 + 2 + 3
+figures across three new boards. `support.js` unchanged, ids continue cleanly.
+
+### The 71 exists. The backend already computes it.
+
+M7's open question — can the backend produce distinct people deduplicated across
+three role cohorts, or only per-mapping holder counts — is answered by the code
+that performs a rollback today:
+
+```go
+// One convergence per subject, not per mapping: two restored mappings on
+// one role would otherwise queue the same resolved set twice.
+seen := map[string]struct{}{}
+for _, m := range mappings {
+    holders, _ := dbMappingHolders(ctx, m.ProjectID, m.RoleKey)
+    for _, id := range holders {
+        if _, dup := seen[id]; dup { continue }
+        seen[id] = struct{}{}
+        ...
+        converged++
+    }
+}
+```
+
+`converged` **is** the distinct-people number. The dedup M7 needs is not new work
+— it is the shape the rollback path already has, and `queued_convergences` in the
+response is that count returned to the caller.
+
+A rehearsal needs it computed *before* the write rather than after, and
+everything for that exists: `db.MappingVersionEntry` carries `ProjectID` and
+`RoleKey` for the version being restored, so the would-be set is knowable without
+mutating anything, and `db.MappingHolders(projectID, roleKey)` is the same lookup
+the loop already calls. The extraction is the dedup half of that loop with no
+convergence recorded.
+
+**So the fallback is not needed. Draw the 71.**
+
+### But today's count is half the cohort — and that is a defect, not a design note
+
+`RollbackMappingVersion` clears the whole working set before reinserting:
+
+```sql
+DELETE FROM target_role_mappings WHERE target = $1
+```
+
+and `rollbackAndConverge` then iterates `dbListRoleMappings` **after** the
+restore. So the loop reaches holders of roles in the *restored* set only.
+
+A person who holds only a role whose mapping the rollback **deletes** is in no
+post-rollback holder list. No convergence is queued for them, and their account
+keeps what that mapping granted. `TestARollbackReResolvesEveryoneItReaches`
+asserts the dedup but stubs one holder list for every mapping, so it cannot see
+the difference between the before-set and the after-set.
+
+Two consequences, and they point the same way:
+
+1. **For M7:** the cohort the ceremony must state is the **union of the before
+   and after sets**, not the after set. Someone losing an entitlement is as
+   affected as someone gaining one, and is arguably the one who should be
+   counted most carefully. Today's `converged` would understate it.
+2. **For the backend:** this looks like a real gap. The six-hourly sweep should
+   catch it — Syndra's desired set moved and the target's did not, which
+   classifies as a fast-forward and applies — so it is a delay of up to six
+   hours rather than a silent permanent divergence. **That expectation is
+   unverified and needs its own test**; it is stated here as the reason this is
+   not urgent, not as a finding.
+
+Neither is a reason to hold the drawing. The union is what M7 should say it
+counts, and the backend change is the same loop reading two sets instead of one.
+
 ## 4 · Still open, and who owns it
 
 - Questions 7, 10 and 13 above.

@@ -1,7 +1,8 @@
 # Figures
 
-One row per figure that exists on a board. Twenty figures: T1–T5 on the target-page board,
-S1–S15 on the supporting-screens board. Ids are stamped into each figure's caption.
+One row per figure that exists on a board. Thirty-two figures: T1–T5 on the target-page board,
+S1–S15 on the supporting-screens board, M1–M7 on the mapping board, B1–B2 on the contradictions
+board, C1–C3 on the member-storage board. Ids are stamped into each figure's caption.
 
 Panel numbers refer to the eleven panels of `REFERENCE-current-page.md`; the disposition of
 each panel is in `CLAUDE-DESIGN-REPLY.md` section 2.
@@ -28,3 +29,15 @@ each panel is in `CLAUDE-DESIGN-REPLY.md` section 2.
 | S13 | design/Syndra Target Screens.dc.html | Two of Syndra's own records disagreeing about who owns an account. Two identical claimant panels, neither preferred. | read endpoint not named in the brief; drawn as arriving with `GET /targets/{t}/health` | 9 |
 | S14 | design/Syndra Target Screens.dc.html | The ownership dialog — each option stating what the other person loses, nothing pre-selected — and the after state naming what has not changed. | `POST /targets/{t}/binding-conflicts/{id}/resolve` | 9 |
 | S15 | design/Syndra Target Screens.dc.html | Unexplained access with its applied history: a removal with a full history, one with the actor missing from the provider's record, one with no history at all. | `GET /api/v1/governance/drift` · `GET /api/v1/governance/drift/{id}/origin` | none — belongs to the drift screen |
+| M1 | design/Syndra Mapping Screen.dc.html | The mapping screen with two mappings, version 4 published, working copy clean. Rail drawn. Holder counts on every row; the two derived fields named as refused; three published versions with rollback. | `GET /targets/mappings?target={t}` · `GET /targets/mappings/versions?target={t}` · role holder counts | 3, 4 — the panels the target page gives up |
+| M2 | design/Syndra Mapping Screen.dc.html | The working copy ahead of the published version: three unpublished edits on top of v4, enumerated with author, age and people moved, and the rows carrying their difference inline. | as M1 | 3, 4 |
+| M3 | design/Syndra Mapping Screen.dc.html | An edit rehearsed as a plan, then the scope step the backend's cohort refusal produced — rung 3, number typed. | rehearsal endpoint not named in the brief · refusal is `409 COHORT_LIMIT` | 3 |
+| M4 | design/Syndra Mapping Screen.dc.html | A value TrueNAS answered and does not recognise, beside a check that could not run and passes. | value check on the mapping write path (`422 VALUE_NOT_FOUND` / `checked: false`) | 3 |
+| M5 | design/Syndra Mapping Screen.dc.html | No mapping reaches the target — the live deployment's real state. Two hollow zeros, nothing published, and the two existing NAS accounts named as unaffected. | as M1 | 3, 4 |
+| M6 | design/Syndra Mapping Screen.dc.html | Both ends of the handoff: the census line in region 2 of the target page, above the top of the mapping screen it arrives at. | `GET /targets/mappings?target={t}` | 3, 4 |
+| M7 | design/Syndra Mapping Screen.dc.html | Rolling back to version 4 rehearsed as one plan for the whole version — 61 gain, 12 lose, 3 move, totalled as 71 distinct people — then the cohort step, fired once. Recommendation: no rollback rehearsal exists today. | `POST /targets/{target}/mappings/versions/{version}/rollback` — <strong>no rehearsal endpoint</strong>; refusal would be `409 COHORT_LIMIT` | 3, 4 |
+| B1 | design/Syndra Contradictions.dc.html | A decision another operator already took: the refusal in place, naming who decided and as what, comparing it with what this operator had picked. | `POST /targets/{t}/merge-findings/{id}/resolve` → `409 ALREADY_DECIDED` | 9 |
+| B2 | design/Syndra Contradictions.dc.html | The maintenance strip after a lifecycle change that did not land, on a target that is not answering. State unchanged and said so; typed reason kept; breaker exemption stated. | `POST /targets/{t}/lifecycle` (exempt from the breaker) | 11 |
+| C1 | design/Syndra Member Storage.dc.html | The member's storage page, account present, target draining. Access untouched at full contrast; the pause second; the password field live with its promise in the button label. | `GET /api/v1/me/targets` (MyTargetView — carries `reachable`; `lifecycle` is an extension of it) | none — member surface |
+| C2 | design/Syndra Member Storage.dc.html | The same page under read-only: two clauses different, no estimate, and a person to ask instead. | as C1 | none — member surface |
+| C3 | design/Syndra Member Storage.dc.html | Entitled, no account yet, target read-only — the pause inside the state card, first in line, and the escalation given a control. | as C1 | none — member surface |

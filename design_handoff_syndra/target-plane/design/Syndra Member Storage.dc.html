@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#080906; color:#f3f5ef; font-family:Figtree, sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:#9b7bff; text-decoration:none; border-bottom:1px solid rgba(155,123,255,.28); }
+  a:hover { color:#c9b6ff; border-bottom-color:rgba(201,182,255,.5); }
+  * { box-sizing:border-box; }
+</style>
+</helmet>
+
+<div style="padding:64px 56px 120px;display:flex;flex-direction:column;gap:56px;background:#0b0c0a;min-height:100vh">
+
+  <div style="display:flex;flex-direction:column;gap:16px;max-width:920px">
+    <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#9b7bff">C · /storage · Member › Network storage</span>
+    <h1 style="margin:0;font-family:'Bricolage Grotesque',sans-serif;font-size:40px;font-weight:500;letter-spacing:-.02em;line-height:1.1">What a member reads while writes are paused</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.6);text-wrap:pretty">Figures C1–C3. Draining and read-only cut across the three states this page already has. The sentence all three have to carry: <strong style="color:#f3f5ef;font-weight:600">the file server is fine and Syndra has paused writing to it on purpose.</strong> A member who reads it as an outage will go and mount the share, which will work, and then decide the page lies to them.</p>
+  </div>
+
+  <div style="max-width:1180px;background:rgba(155,123,255,.09);border:1px solid rgba(155,123,255,.28);border-radius:20px;padding:22px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:600">Three rules I held to, and one word I would not use</div>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78)"><strong style="font-weight:600">The notice is never the first thing on the page.</strong> A member arrives to get into their files. The state of their access comes first, the pause comes second, because the pause does not change the answer to what they came for.</p>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78)"><strong style="font-weight:600">Nothing is dimmed and nothing is hidden.</strong> Their credentials, their paths and their instructions are exactly as reachable as before — dimming them would say <em>your access is affected</em>, which is the one thing that is not true. Only what writes is held back, and only that says so.</p>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78)"><strong style="font-weight:600">No estimate.</strong> "Usually within the hour" is a promise Syndra cannot keep, and a member who is told an hour and waits three has been misled by the page rather than by the drain. What replaces it is what will happen — nobody has to come back and check.</p>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.6)">The word I would not use is <em>maintenance</em>. It is the operator's word for a state they chose, and to a member it means the thing they are trying to use is unavailable — which it is not. <em>Paused</em>, and what is paused, throughout.</p>
+  </div>
+
+  <figure id="C1" style="margin:0;display:flex;flex-direction:column;gap:16px;max-width:1180px">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:24px;padding:0 8px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-family:'JetBrains Mono',monospace;font-size:12.5px">C1</span>
+      <span style="font-size:15.5px;font-weight:600">Account present, target draining</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.42)">960 content column</span>
+    </div>
+    <div style="width:960px;max-width:100%;background:#080906;border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:32px 28px 40px;display:flex;flex-direction:column;gap:26px">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)"><span>Member</span><span>›</span><span style="color:rgba(243,245,239,.6)">Network storage</span></div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:40px;font-weight:500;letter-spacing:-.02em;line-height:1.1">Network storage</div>
+        <p style="margin:0;font-size:15px;line-height:1.55;color:rgba(243,245,239,.72);max-width:76ch">Your account on the makerspace file server, and how to connect to it.</p>
+      </div>
+
+      <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+        <div style="padding:18px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:26px;font-weight:600;flex:1 1 300px">Your account is active</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:rgba(243,245,239,.72)">a.moller</span>
+        </div>
+        <div style="padding:0 20px 18px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Your share</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">\\nas-01\fabrication</span></div>
+          <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Your home folder</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">/mnt/tank/home/a.moller</span></div>
+        </div>
+        <div style="padding:16px 20px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:8px">
+          <span style="font-size:15.5px;font-weight:600">Connecting</span>
+          <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72)">On a Mac, open Finder, press ⌘K and enter <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.78)">smb://nas-01.makerspace.lan/fabrication</span>. Sign in with the username above and the password you set here.</p>
+        </div>
+      </div>
+
+      <div style="background:#141612;border:1px solid rgba(245,165,36,.26);border-radius:20px;overflow:hidden">
+        <div style="padding:16px 20px;background:rgba(245,165,36,.09);display:flex;gap:12px;align-items:flex-start">
+          <span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none;margin-top:8px"></span>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-size:15.5px;font-weight:600;color:#f7b955">Changes to this account are paused for a few minutes</span>
+            <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78);max-width:76ch">The file server is working normally and your access to it has not changed — you can connect and use your files right now, exactly as above. What is paused is us making changes to your account on it, while the last few in-flight changes finish.</p>
+          </div>
+        </div>
+        <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">
+          <span style="font-size:15.5px;font-weight:600">One thing on this page will wait</span>
+          <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="font-size:15.5px;font-weight:600;flex:1 1 240px">Set a new password</span>
+              <span style="display:inline-flex;align-items:center;padding:6px 12px;border-radius:999px;background:rgba(245,165,36,.12);color:#f7b955;font-size:12.5px;font-weight:600">Will be applied shortly</span>
+            </div>
+            <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78)">You can set one now. It will not work on the file server until the pause lifts, and your current password keeps working until it does. We will apply it as soon as changes resume — you do not need to come back and do it again.</p>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <span style="min-width:260px;padding:12px 15px;border-radius:14px;background:#141612;border:1px solid rgba(255,255,255,.14);font-size:15px;color:rgba(243,245,239,.34)">New password</span>
+              <span style="padding:11px 18px;border-radius:999px;background:#7f5af0;color:#f7f4ff;font-size:13.5px;font-weight:600;box-shadow:0 10px 26px -14px rgba(127,90,240,.85);transition:transform 180ms cubic-bezier(.22,.61,.36,1),box-shadow 120ms cubic-bezier(.4,0,.6,1)" style-hover="box-shadow:0 16px 34px -14px rgba(127,90,240,.95)" style-active="transform:scale(.97)">Save it for when changes resume</span>
+            </div>
+          </div>
+          <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">Nothing else on this page is affected. Your access, your share and your folder are unchanged.</span>
+        </div>
+      </div>
+    </div>
+    <figcaption style="font-size:14px;line-height:1.6;color:rgba(243,245,239,.6);max-width:1180px;text-wrap:pretty"><strong style="color:#f3f5ef;font-weight:600">C1 · </strong>Their account comes first, at full contrast, with the paths and the connection instructions they came for — then the pause. Reversing those two would be the whole failure of this page. The notice leads with the sentence a member cannot infer — the server is fine, your access has not changed, connect right now — before it says what is paused, because the first clause is what stops them going to mount the share to check. Draining is minutes, so it says "a few minutes" rather than naming a state nobody outside the operator's head knows the meaning of; the word <em>draining</em> does not appear, nor does <em>maintenance</em>. The password field stays live and the button carries the whole promise in its label — <em>save it for when changes resume</em> — so a member who reads nothing else still cannot mistake it for taking effect now. Two sentences carry the two things they would otherwise have to ask: the old password keeps working, and nobody has to come back. Amber on the notice only, and the account card is untouched: the moment the credential block dims, the page has said their access is affected, which is false.</figcaption>
+  </figure>
+
+  <figure id="C2" style="margin:0;display:flex;flex-direction:column;gap:16px;max-width:1180px">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:24px;padding:0 8px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-family:'JetBrains Mono',monospace;font-size:12.5px">C2</span>
+      <span style="font-size:15.5px;font-weight:600">Account present, target read-only</span>
+    </div>
+    <div style="width:960px;max-width:100%;background:#080906;border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:32px 28px 40px;display:flex;flex-direction:column;gap:26px">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)"><span>Member</span><span>›</span><span style="color:rgba(243,245,239,.6)">Network storage</span></div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:40px;font-weight:500;letter-spacing:-.02em;line-height:1.1">Network storage</div>
+        <p style="margin:0;font-size:15px;line-height:1.55;color:rgba(243,245,239,.72);max-width:76ch">Your account on the makerspace file server, and how to connect to it.</p>
+      </div>
+
+      <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+        <div style="padding:18px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="width:7px;height:7px;border-radius:999px;background:#a3e635;flex:none"></span>
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:26px;font-weight:600;flex:1 1 300px">Your account is active</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:rgba(243,245,239,.72)">a.moller</span>
+        </div>
+        <div style="padding:0 20px 18px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Your share</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">\\nas-01\fabrication</span></div>
+          <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">Your home folder</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">/mnt/tank/home/a.moller</span></div>
+        </div>
+        <div style="padding:16px 20px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:8px">
+          <span style="font-size:15.5px;font-weight:600">Connecting</span>
+          <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72)">On a Mac, open Finder, press ⌘K and enter <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:rgba(243,245,239,.78)">smb://nas-01.makerspace.lan/fabrication</span>. Sign in with the username above and the password you set here.</p>
+        </div>
+      </div>
+
+      <div style="background:#141612;border:1px solid rgba(245,165,36,.26);border-radius:20px;overflow:hidden">
+        <div style="padding:16px 20px;background:rgba(245,165,36,.09);display:flex;gap:12px;align-items:flex-start">
+          <span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none;margin-top:8px"></span>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-size:15.5px;font-weight:600;color:#f7b955">Changes to this account are paused while we work on the file server</span>
+            <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78);max-width:76ch">The file server is working normally and your access to it has not changed — you can connect and use your files right now, exactly as above. Somebody is working on the server, so we have deliberately stopped making changes to accounts on it until they are finished.</p>
+          </div>
+        </div>
+        <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">
+          <span style="font-size:15.5px;font-weight:600">One thing on this page will wait</span>
+          <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="font-size:15.5px;font-weight:600;flex:1 1 240px">Set a new password</span>
+              <span style="display:inline-flex;align-items:center;padding:6px 12px;border-radius:999px;background:rgba(245,165,36,.12);color:#f7b955;font-size:12.5px;font-weight:600">Will be applied when changes resume</span>
+            </div>
+            <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78)">You can set one now and we will apply it as soon as changes resume. Your current password keeps working until then, and you do not need to come back and do it again.</p>
+            <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78)"><strong style="color:#f3f5ef;font-weight:600">If you need the new password to work today</strong>, ask whoever runs the makerspace — they can see this pause and how long they expect it to last, and we would rather you asked a person than waited on a page.</p>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <span style="min-width:260px;padding:12px 15px;border-radius:14px;background:#141612;border:1px solid rgba(255,255,255,.14);font-size:15px;color:rgba(243,245,239,.34)">New password</span>
+              <span style="padding:11px 18px;border-radius:999px;background:#7f5af0;color:#f7f4ff;font-size:13.5px;font-weight:600;box-shadow:0 10px 26px -14px rgba(127,90,240,.85);transition:transform 180ms cubic-bezier(.22,.61,.36,1),box-shadow 120ms cubic-bezier(.4,0,.6,1)" style-hover="box-shadow:0 16px 34px -14px rgba(127,90,240,.95)" style-active="transform:scale(.97)">Save it for when changes resume</span>
+            </div>
+          </div>
+          <span style="font-size:13.5px;line-height:1.55;color:rgba(243,245,239,.6)">Nothing else on this page is affected. Your access, your share and your folder are unchanged.</span>
+        </div>
+      </div>
+    </div>
+    <figcaption style="font-size:14px;line-height:1.6;color:rgba(243,245,239,.6);max-width:1180px;text-wrap:pretty"><strong style="color:#f3f5ef;font-weight:600">C2 · </strong>Structurally identical to <a href="#C1">C1</a>, and the difference is two clauses — which is the point: a member should not have to learn a second page shape because an operator picked a different state. Read-only has no natural end the way a drain does, so where C1 says "for a few minutes" this says "while we work on the file server", and the deliberateness is on the surface: <em>somebody is working on the server, so we have deliberately stopped</em>. That word is doing the load-bearing work — without it, a member reading that changes are paused with no end in sight concludes something is broken. In place of an estimate the page offers a person: whoever runs the makerspace can see the pause and how long they expect it to last. That is the honest escalation, and it costs Syndra nothing it cannot keep. The badge changes with the sentence — <em>when changes resume</em> rather than <em>shortly</em> — because "shortly" attached to an open-ended pause is the small lie that makes the rest of the page untrustworthy.</figcaption>
+  </figure>
+
+  <figure id="C3" style="margin:0;display:flex;flex-direction:column;gap:16px;max-width:1180px">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:24px;padding:0 8px;border-radius:999px;background:rgba(155,123,255,.15);border:1px solid rgba(155,123,255,.28);color:#9b7bff;font-family:'JetBrains Mono',monospace;font-size:12.5px">C3</span>
+      <span style="font-size:15.5px;font-weight:600">Entitled, no account yet, target read-only — the cruellest combination</span>
+    </div>
+    <div style="width:960px;max-width:100%;background:#080906;border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:32px 28px 40px;display:flex;flex-direction:column;gap:26px">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)"><span>Member</span><span>›</span><span style="color:rgba(243,245,239,.6)">Network storage</span></div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:40px;font-weight:500;letter-spacing:-.02em;line-height:1.1">Network storage</div>
+        <p style="margin:0;font-size:15px;line-height:1.55;color:rgba(243,245,239,.72);max-width:76ch">Your account on the makerspace file server, and how to connect to it.</p>
+      </div>
+
+      <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;overflow:hidden">
+        <div style="padding:20px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span style="width:7px;height:7px;border-radius:999px;background:#9b7bff;flex:none"></span>
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:26px;font-weight:600;flex:1 1 300px">You have storage. Your account is recorded and not created yet.</span>
+          </div>
+          <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78);max-width:76ch">Your Fabrication role includes a share on the makerspace file server. We have written that down, and creating the account is our job, not yours — nothing is needed from you.</p>
+          <div style="background:#0b0c0a;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:5px">
+            <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,245,239,.34)">The share you will get</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">\\nas-01\fabrication</span>
+          </div>
+        </div>
+        <div style="padding:16px 20px;background:rgba(245,165,36,.09);border-top:1px solid rgba(245,165,36,.26);display:flex;gap:12px;align-items:flex-start">
+          <span style="width:7px;height:7px;border-radius:999px;background:#f5a524;flex:none;margin-top:8px"></span>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-size:15.5px;font-weight:600;color:#f7b955">Right now it is waiting on us, not on a queue</span>
+            <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78);max-width:76ch">Somebody is working on the file server, so we have deliberately stopped making changes to accounts on it — which includes creating yours. The server itself is working normally; this is a pause we chose, not a fault.</p>
+            <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.78);max-width:76ch">Your account will be created as soon as changes resume. It is first in line and nothing has been lost or missed.</p>
+          </div>
+        </div>
+        <div style="padding:16px 20px;border-top:1px solid rgba(255,255,255,.06);display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+          <div style="flex:1 1 520px;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:15.5px;font-weight:600">If you need it today</span>
+            <span style="font-size:15px;line-height:1.55;color:rgba(243,245,239,.78)">Ask whoever runs the makerspace. They can see this pause, they know how long they expect it to last, and they can lift it. That is a faster answer than this page can give you.</span>
+          </div>
+          <span style="padding:11px 18px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:13.5px;font-weight:600;transition:transform 180ms cubic-bezier(.22,.61,.36,1),background-color 120ms cubic-bezier(.4,0,.6,1)" style-hover="background-color:rgba(243,245,239,.07)" style-active="transform:scale(.97)">Who runs this</span>
+        </div>
+      </div>
+
+      <div style="background:#141612;border:1px solid rgba(255,255,255,.06);border-radius:20px;padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+        <span style="font-size:15.5px;font-weight:600">Connecting, once it exists</span>
+        <p style="margin:0;font-size:15px;line-height:1.6;color:rgba(243,245,239,.72)">You will set a password on this page, then connect from Finder or Explorer using the share above. There is nothing to install and nothing to request.</p>
+      </div>
+    </div>
+    <figcaption style="font-size:14px;line-height:1.6;color:rgba(243,245,239,.6);max-width:1180px;text-wrap:pretty"><strong style="color:#f3f5ef;font-weight:600">C3 · </strong>The thing they are waiting for is exactly the thing that cannot happen, so this is the one figure where the pause is inside the state card rather than below it — the two facts are one fact here, and separating them would let somebody read the accent half and miss it. The existing copy is kept word for word — <em>recorded, not created yet, nothing needed from you</em> — because it is still true and it is the sentence that makes the wait ordinary rather than personal. What is added: that the pause is chosen and not a fault, that the server is fine, that their account is first in line, and that nothing was lost. Then the honest escalation, given a control rather than a sentence: the operator can see the pause and can lift it, and a member who needs their files today should be talking to them within a minute of landing here rather than refreshing. No estimate anywhere, and no lime dot — the accent dot says <em>on its way</em>, which is what the state is; lime would claim something is done. The <em>connecting once it exists</em> card stays at full contrast, because knowing there is nothing to install is a real answer to the question they arrived with.</figcaption>
+  </figure>
+
+</div>
+
+</x-dc>
+</body>
+</html>
