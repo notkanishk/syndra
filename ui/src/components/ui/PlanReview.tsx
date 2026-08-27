@@ -31,14 +31,26 @@ export function PlanReview({ plan }: { plan: BulkPlan | null }) {
   // is a plan showing no rows beside its summary — not an error boundary
   // blanking the screen an operator is standing on halfway through approving a
   // change. This crashed the page the first time a payload arrived short.
+  //
+  // The two empties are told apart. An ABSENT array is a payload that arrived
+  // short; an EMPTY one is a change that reaches nobody, which on the mapping
+  // surfaces is an ordinary act — a definition written before anybody holds the
+  // role. Rendering the same sentence for both would tell an operator their
+  // perfectly good plan was broken.
+  const missing = plan.outcomes === undefined || plan.outcomes === null;
   const outcomes = plan.outcomes ?? [];
 
   return (
     <div className="px-6">
       <div className="max-h-[46vh] overflow-y-auto rounded-inner border border-line-strong">
-        {outcomes.length === 0 ? (
+        {missing ? (
           <p className="px-4 py-3 text-[13.5px] text-faint">
             This plan came back without its rows. The summary below is what it reported.
+          </p>
+        ) : outcomes.length === 0 ? (
+          <p className="px-4 py-3 text-[13.5px] text-muted">
+            This reaches nobody. Nothing on the target changes, and nothing is queued —
+            what changes is what the role will confer once somebody holds it.
           </p>
         ) : (
           outcomes.map((outcome) => <PlanRow key={outcome.user_id} outcome={outcome} />)

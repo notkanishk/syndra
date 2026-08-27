@@ -56,6 +56,7 @@ export function AddMappingDialog({ target, onClose }: { target: string; onClose:
       lede={`Everybody holding the role gets an account on ${targetLabel(target)} with this value, at the next convergence. Nothing is written until the plan below is applied.`}
       noun={["person", "people"]}
       ready={ready}
+      definitionLabel="Save mapping"
       compose={
         <div className="grid gap-3">
           <label className="grid gap-1.5 text-[14px]">

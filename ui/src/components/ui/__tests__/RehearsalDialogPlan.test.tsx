@@ -39,7 +39,7 @@ const applied = (): BulkPlan =>
 let onRehearse: (acknowledgeScope: boolean) => Promise<BulkPlan>;
 let onApply: (planId: string) => Promise<BulkPlan>;
 
-function open() {
+function open(extra: { definitionLabel?: string } = {}) {
   return render(
     <RehearsalDialog
       title="Grant a role"
@@ -48,6 +48,7 @@ function open() {
       onRehearse={onRehearse}
       onApply={onApply}
       onClose={() => {}}
+      {...extra}
     />,
   );
 }
@@ -363,5 +364,61 @@ describe("a plan whose rows did not arrive", () => {
     const apply = await screen.findByRole("button", { name: /^Apply/ });
     expect(apply).toHaveTextContent("Apply this plan");
     expect(apply.textContent).not.toMatch(/undefined|NaN/);
+  });
+});
+
+/**
+ * A change that reaches nobody, on a surface where that is a real act.
+ *
+ * The dialog assumed every plan moves at least one person. That is right for a
+ * bulk grant — a plan for nobody means nobody was selected — and wrong for the
+ * mapping surfaces, where a change to a role nobody holds alters what the role
+ * WILL confer. The backend writes those and issues no approval, because there
+ * is nothing to review; the dialog then disabled Apply on both counts.
+ *
+ * Defining before assigning is the ordinary order, and it was the one order
+ * this dialog could not express — for creates, edits, deletes and rollbacks
+ * alike, since all four share it.
+ */
+describe("applying a change that reaches nobody", () => {
+  const empty = (): BulkPlan =>
+    ({
+      ...plan(),
+      plan_id: undefined,
+      outcomes: [],
+      summary: { total: 0, apply: 0, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
+    }) as unknown as BulkPlan;
+
+  it("is refused by default, because for most surfaces it is a no-op", async () => {
+    onRehearse = vi.fn().mockResolvedValue(empty());
+    open();
+
+    const apply = await screen.findByRole("button", { name: /Nothing to apply/ });
+    expect(apply).toBeDisabled();
+  });
+
+  it("is offered where the surface says a definition is an act", async () => {
+    onRehearse = vi.fn().mockResolvedValue(empty());
+    open({ definitionLabel: "Save mapping" });
+
+    const save = await screen.findByRole("button", { name: "Save mapping" });
+    expect(save).toBeEnabled();
+
+    fireEvent.click(save);
+    // Applied without an approval, because none was issued.
+    await waitFor(() => expect(vi.mocked(onApply)).toHaveBeenCalledWith(""));
+  });
+
+  // The relaxation is exact. A surface that can define is still a surface that
+  // must cite an approval the moment its change reaches somebody.
+  it("does not relax the citation once the change reaches somebody", async () => {
+    onRehearse = vi
+      .fn()
+      .mockResolvedValue({ ...plan(), plan_id: undefined } as unknown as BulkPlan);
+    open({ definitionLabel: "Save mapping" });
+
+    const apply = await screen.findByRole("button", { name: /^Apply/ });
+    expect(apply).toBeDisabled();
+    expect(vi.mocked(onApply)).not.toHaveBeenCalled();
   });
 });

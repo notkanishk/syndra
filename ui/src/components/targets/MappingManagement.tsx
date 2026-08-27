@@ -200,6 +200,7 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
   return (
     <RehearsalDialog
       title="Change what this role reaches"
+      definitionLabel="Save the change"
       lede={`${mapping.role_key} currently confers ${mapping.field} = ${mapping.value} on ${targetLabel(mapping.target)}. Everybody holding the role moves with it.`}
       noun={["person", "people"]}
       ready={value.trim() !== "" && value !== mapping.value}
@@ -264,6 +265,7 @@ function DeleteMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClo
   return (
     <RehearsalDialog
       title="Stop this role reaching that"
+      definitionLabel="Remove the mapping"
       lede={`${mapping.role_key} will no longer confer ${mapping.field} = ${mapping.value} on ${targetLabel(mapping.target)}. They keep the role and lose what it reached.`}
       noun={["person", "people"]}
       // Destructive, because it takes access away — but still rung 2: the
@@ -428,6 +430,7 @@ function VersionRow({
             version.entries.length
           } binding${version.entries.length === 1 ? "" : "s"} in version ${version.version}.`}
           noun={["person", "people"]}
+          definitionLabel={`Roll back to version ${version.version}`}
           consequence={
             <>
               Anything added since version {version.version} is removed — a rollback restores
