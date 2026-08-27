@@ -409,6 +409,65 @@ describe("applying a change that reaches nobody", () => {
     await waitFor(() => expect(vi.mocked(onApply)).toHaveBeenCalledWith(""));
   });
 
+  /**
+   * "Reaches nobody" is three conditions, and `apply === 0` is only one of
+   * them.
+   *
+   * A plan can count forty people and change nothing for any of them: forty
+   * rows, every one `no_change`, an apply count of zero. That is not a
+   * definition — it reaches forty people — and reading it as one would put the
+   * definition label on it, submit it with no citation, and meet a backend
+   * refusal the label had just promised would not happen.
+   *
+   * The backend is not fooled either way; it rechecks holders and refuses a
+   * missing citation. What is at stake is the UI telling an operator the wrong
+   * thing about what they are doing, and then being contradicted.
+   */
+  describe("what counts as reaching nobody", () => {
+    const shaped = (over: Record<string, unknown>): BulkPlan =>
+      ({ ...empty(), ...over }) as unknown as BulkPlan;
+
+    it("does not read forty unchanged people as a definition", async () => {
+      onRehearse = vi.fn().mockResolvedValue(
+        shaped({
+          outcomes: Array.from({ length: 40 }, (_, i) => ({
+            user_id: `u${i}`,
+            effect: "no_change",
+            detail: "already has it",
+          })),
+          summary: { total: 40, apply: 0, no_change: 40, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
+        }),
+      );
+      open({ definitionLabel: "Save mapping" });
+
+      expect(await screen.findByRole("button", { name: /Nothing to apply/ })).toBeDisabled();
+      expect(screen.queryByRole("button", { name: "Save mapping" })).toBeNull();
+    });
+
+    // An empty list with a non-zero total is a plan this dialog does not
+    // understand. The safe reading of one of those is the ordinary path.
+    it("does not read an empty list with a count as a definition", async () => {
+      onRehearse = vi.fn().mockResolvedValue(
+        shaped({
+          outcomes: [],
+          summary: { total: 40, apply: 0, no_change: 40, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
+        }),
+      );
+      open({ definitionLabel: "Save mapping" });
+
+      expect(await screen.findByRole("button", { name: /Nothing to apply/ })).toBeDisabled();
+    });
+
+    // An absent array is a payload that arrived short, not an empty cohort.
+    it("does not read a payload that arrived short as a definition", async () => {
+      onRehearse = vi.fn().mockResolvedValue(shaped({ outcomes: undefined }));
+      open({ definitionLabel: "Save mapping" });
+
+      expect(await screen.findByRole("button", { name: /Nothing to apply/ })).toBeDisabled();
+      expect(screen.getByText(/came back without its rows/)).toBeInTheDocument();
+    });
+  });
+
   // The relaxation is exact. A surface that can define is still a surface that
   // must cite an approval the moment its change reaches somebody.
   it("does not relax the citation once the change reaches somebody", async () => {
