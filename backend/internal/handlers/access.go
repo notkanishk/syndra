@@ -68,7 +68,7 @@ func resolveActor(r *http.Request, bodyValue string) string {
 
 func handleGetUserDirectGrants(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
-	grants, err := services.UserDirectGrants(r.Context(), userID)
+	grants, err := svcUserDirectGrants(r.Context(), userID)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return

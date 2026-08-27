@@ -319,8 +319,13 @@ func writeMappingPlanError(w http.ResponseWriter, err error) {
 
 // svcResolveEntitlementsFor is the resolver as this file needs it: the encoded
 // intent rather than the whole set, so nothing here has to know the shape.
+//
+// It goes through `svcResolveEntitlementSet` rather than calling the service
+// itself. Two seams over one function is a trap: substituting the one in
+// deps.go left these four call sites talking to the real resolver, and a test
+// that thought it had stubbed the package had stubbed one fifth of it.
 var svcResolveEntitlementsFor = func(ctx context.Context, subjectID, target string) (map[string]json.RawMessage, error) {
-	set, err := services.ResolveEntitlements(ctx, subjectID, target)
+	set, err := svcResolveEntitlementSet(ctx, subjectID, target)
 	if err != nil {
 		return nil, err
 	}

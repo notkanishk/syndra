@@ -116,7 +116,7 @@ func CompileUserCache(ctx context.Context, userID, projectID string) error {
 	if profile, ok, err := cacheFindUser(ctx, userID); err != nil {
 		// Non-fatal: roles are the load-bearing part of the token. A missing
 		// email claim is a degraded token; a missing roles claim is a locked door.
-		log.Printf("[CACHE WARN] Profile attributes unavailable for %s: %v", userID, err)
+		log.Printf("[CACHE] profile attributes unavailable for %s: %v", userID, err)
 	} else if ok {
 		facts.Email, facts.Name, facts.Title, facts.Team = profile.Email, profile.Name, profile.Title, profile.Team
 	}
@@ -160,7 +160,7 @@ func RebuildUserCache(ctx context.Context, userID string, projectIDs []string) {
 	_ = InvalidateUser(ctx, userID)
 	for _, pid := range projectIDs {
 		if err := CompileUserCache(ctx, userID, pid); err != nil {
-			log.Printf("[CACHE ERROR] Rebuild failed for %s/%s: %v", userID, pid, err)
+			log.Printf("[CACHE] rebuild failed for %s/%s: %v", userID, pid, err)
 		}
 	}
 }

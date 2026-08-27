@@ -47,7 +47,7 @@ var (
 func bundleRolesFor(ctx context.Context, userID string) []models.BundleRole {
 	byBundle, err := dbGetUserBundleRoles(ctx, userID)
 	if err != nil {
-		log.Printf("[CACHE WARN] Failed to fetch bundle roles for %s: %v", userID, err)
+		log.Printf("[CACHE] bundle roles unavailable for %s: %v", userID, err)
 		return nil
 	}
 	var roles []models.BundleRole
