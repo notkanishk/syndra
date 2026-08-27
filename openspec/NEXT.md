@@ -37,6 +37,12 @@ thing to do before this deploys.
 
 - **BIA-35** — exercise the claim editor, the simulator, role → members and `DELETE /users/{id}/grants/{grantId}` against a live Postgres + Redis + Zitadel. Unit-tested only; the write paths have never run against a real database.
 - **BIA-36** — the per-route manual a11y checklist (empty / loading / error / dense / ultra-wide / narrow / keyboard / light-theme contrast). The components are built to pass it; nobody has walked it.
+- **BIA-38** — three field hints are written INSIDE their `<label>`
+  (`DormantAccounts`'s elevated credential, and two others in
+  `AddMappingDialog` / `TakeAwayDialog` / `HoldDialog` / `MappingManagement`),
+  so each control's accessible name is its title plus a paragraph.
+  `FieldLabel` + `FieldHint` are the fix. Found while repairing the adoption
+  form on 2026-08-27; recorded rather than swept in with an unrelated change.
 - **BIA-37** — legacy path alignment (`/policies` → `/automation/rules`, `/graph` → `/automation/access-map`, `/operations` → `/system/events`) behind redirects. Cosmetic, deliberately deferred: the nav labels are already right, only the URLs lag.
 - **Claim template versioning (C5)** — a claim profile edit takes effect on the next token with no record of what the previous shape was. If an app breaks after an edit, the audit row says who changed it, not what it was. **Trigger:** the first production claim change that needs comparison or reversal. Build it as an immutable snapshot tied to the application and the audit event, not a draft/publish lifecycle — a bundle edit reaches people, a claim edit reaches a token shape, and the question asked of it is "what was it before".
 

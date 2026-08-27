@@ -23,6 +23,57 @@ control state a difference in weight that is not there.
 - **THEN** the confirm MUST be `accent` or `dangerConfirm`
 - **AND** the way out MUST be `ghost`
 
+### Requirement: `dangerConfirm` MUST follow what the act does, not how final it is
+
+A solid destructive fill MUST be used only for a confirm that takes access away
+or destroys data. A confirm that GRANTS — an adoption, a binding, a provision —
+MUST be `accent`, however irreversible it is. Irreversibility is carried by the
+confirmation rung and by the copy, never by the colour.
+
+"`accent` or `dangerConfirm`" left the choice to whoever wrote the screen, and
+the adoption form took the red one: adopting an account gives a person a home
+directory, and it was drawn in the product's word for taking one away. Spending
+red on a grant is not a harmless over-warning — it is what makes the next real
+revocation read as routine.
+
+#### Scenario: An irreversible grant is confirmed
+
+- **WHEN** a confirm binds, adopts or provisions, and cannot be undone
+- **THEN** it MUST be `accent`
+- **AND** the irreversibility MUST be stated in the copy and gated by its rung
+
+#### Scenario: A confirm removes access
+
+- **WHEN** a confirm revokes, removes, purges or deletes
+- **THEN** it MUST be `dangerConfirm`
+
+### Requirement: A panel opened from a row MUST render under that row
+
+A form or an outcome belonging to one item in a list MUST render attached to
+that item, through `CardRow`'s disclosure, and MUST NOT be rendered after the
+list. Where the row's own control opens it, `onToggle` MUST be omitted so the
+row does not also become a button — a button inside a button is two overlapping
+targets and invalid markup.
+
+The adopt form rendered after the whole inventory: clicking Adopt on the first
+account opened a form under the LAST one, naming an account the operator had not
+pointed at. The same treatment carries the product's one disclosure motion, so a
+panel that opts out of it is also the only thing on the screen that appears
+without settling into place.
+
+#### Scenario: A row's control opens a form
+
+- **WHEN** a control inside a row opens a form about that row's item
+- **THEN** the form MUST render directly beneath that row
+- **AND** it MUST use the shared disclosure treatment, including `settle-in`
+- **AND** the row itself MUST NOT become a button
+
+#### Scenario: An action reports what it did to one item
+
+- **WHEN** an action on a single row completes
+- **THEN** its outcome MUST render beneath that row rather than at the foot of
+  the card
+
 ### Requirement: A control's surface MUST have exactly one definition
 
 `Button`, `ButtonLink`, `Tabs`, `FilterPills` and `Badge` are the surfaces.
