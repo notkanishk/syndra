@@ -149,7 +149,7 @@ describe("Unexplained access — triage", () => {
   it("states that bulk revoke is deliberately absent rather than leaving a hole", () => {
     renderTriage();
     expect(
-      screen.getByText(/Bulk adopt and bulk mark-as-external exist; bulk revoke does not\./),
+      screen.getByText(/You can adopt several rows at once/),
     ).toBeInTheDocument();
   });
 
@@ -161,9 +161,9 @@ describe("Unexplained access — triage", () => {
     // Both verbs name the next step — a plan — rather than the write at the end
     // of it, because tapping either one resolves nothing on its own.
     const bar = screen.getByRole("region", { name: "Selection" });
-    expect(within(bar).getByRole("button", { name: "Review adopting these" })).toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "Preview adopting these" })).toBeInTheDocument();
     expect(
-      within(bar).getByRole("button", { name: "Review marking these owned elsewhere" }),
+      within(bar).getByRole("button", { name: "Preview marking these owned elsewhere" }),
     ).toBeInTheDocument();
     expect(within(bar).queryByRole("button", { name: /Revoke/ })).not.toBeInTheDocument();
   });
@@ -226,7 +226,7 @@ describe("Unexplained access — triage", () => {
 
     // Drift arrives in clusters — one rule, one person, one project — and no
     // amount of shift-clicking finds the cluster as reliably as asking for it.
-    fireEvent.click(screen.getAllByRole("button", { name: "Select similar" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Select similar rows" })[0]);
     expect(screen.getByText(/3 items selected/)).toBeInTheDocument();
   });
 
@@ -241,7 +241,7 @@ describe("Unexplained access — triage", () => {
   it("admits it does not know the actor rather than naming a plausible one", () => {
     renderTriage();
     expect(
-      screen.getByText(/compares grant lists and can't see who made the change/),
+      screen.getByText(/compares lists and cannot see who made the change/),
     ).toBeInTheDocument();
   });
 
@@ -255,7 +255,7 @@ describe("Unexplained access — triage", () => {
   it("says a role is missing from the catalogue, in words as well as colour", () => {
     drift.data = [item({ role_in_catalogue: false })];
     renderTriage();
-    expect(screen.getByText("Role not in catalogue")).toBeInTheDocument();
+    expect(screen.getByText("Role unknown to Syndra")).toBeInTheDocument();
   });
 
   it("puts the revoke consequence and the person's other items inside the dialog", () => {
@@ -299,7 +299,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       summary: { total: 2, apply: 1, no_change: 1, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
     selectTwo();
-    fireEvent.click(screen.getByRole("button", { name: "Review adopting these" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview adopting these" }));
 
     // Rows are named, and the confirm button counts only what will change —
     // offering "Apply to 2" when one is already resolved would be a lie.
@@ -318,7 +318,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
     selectTwo();
-    fireEvent.click(screen.getByRole("button", { name: "Review adopting these" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview adopting these" }));
 
     await waitFor(() => expect(bulk.rehearsals).toBeGreaterThan(0));
     expect(bulk.applies).toBe(0);
@@ -338,7 +338,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       summary: { total: 1, apply: 0, no_change: 1, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
     selectTwo();
-    fireEvent.click(screen.getByRole("button", { name: "Review adopting these" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview adopting these" }));
 
     expect(await screen.findByRole("button", { name: "Nothing to apply" })).toBeDisabled();
   });
@@ -355,7 +355,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       summary: { total: 2, apply: 2, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
     selectTwo();
-    fireEvent.click(screen.getByRole("button", { name: "Review adopting these" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview adopting these" }));
     fireEvent.click(await screen.findByRole("button", { name: "Apply to 2 items" }));
 
     // The result is a diff against the plan that was approved, not a fresh
@@ -379,7 +379,7 @@ it("does not call an add-on role retired", () => {
     }),
   ];
   renderTriage();
-  expect(screen.queryByText("Role not in catalogue")).not.toBeInTheDocument();
+  expect(screen.queryByText("Role unknown to Syndra")).not.toBeInTheDocument();
 
 });
 
@@ -459,7 +459,7 @@ describe("the queue states its ceiling before the tap", () => {
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Select these 501 items/ }));
 
-    expect(screen.getByText(/500 is the most that can run at once/)).toBeTruthy();
+    expect(screen.getByText(/you can change at most 500 items at once/)).toBeTruthy();
   });
 
   it("leaves a selection inside the ceiling alone", () => {
@@ -469,7 +469,7 @@ describe("the queue states its ceiling before the tap", () => {
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Select these 3 items/ }));
 
-    expect(screen.queryByText(/is the most that can run at once/)).toBeNull();
+    expect(screen.queryByText(/you can change at most/)).toBeNull();
   });
 });
 
@@ -517,7 +517,7 @@ describe("who made it", () => {
     fireEvent.click(screen.getByRole("button", { name: "Who made it?" }));
 
     await waitFor(() =>
-      expect(screen.getByText(/not a finding that nobody made it/i)).toBeInTheDocument(),
+      expect(screen.getByText(/not known who/i)).toBeInTheDocument(),
     );
   });
 

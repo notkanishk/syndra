@@ -136,13 +136,13 @@ export function ReadFreshness({
               : "border border-muted"
         }`}
       />
-      <span className={TONE[reading]}>{sentence(reading, subject, age)}</span>
+      <span className={TONE[reading]}>{sentence(reading, subject, age, Boolean(onRefresh))}</span>
       {state.truncated && (
         // Its own clause, never folded into the age. A capped read is complete
         // about what it saw and silent about the rest, and an operator who
         // reads it as "that is everything" concludes an absence from a list
         // that was cut off.
-        <span className="text-faint">· not the whole list — the read hit its cap</span>
+        <span className="text-faint">· not the whole list — only the first part was read</span>
       )}
       {onRefresh && reading === "stale" && (
         <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
@@ -153,19 +153,31 @@ export function ReadFreshness({
   );
 }
 
-function sentence(reading: Freshness, subject: string, age: string | null): string {
+function sentence(
+  reading: Freshness,
+  subject: string,
+  age: string | null,
+  canRefresh: boolean,
+): string {
   switch (reading) {
     case "live":
       return `${subject} was read just now`;
     case "ageing":
       return `${subject} was read ${age}`;
-    case "stale":
-      return `${subject} was read ${age} — too old to act on`;
+    case "stale": {
+      // Always the way out. The button is the way out when there is one;
+      // otherwise the sentence has to say it, or the reader is left with a
+      // warning and no move.
+      const wayOut = canRefresh ? "" : " — reload the page to read it again";
+      return age
+        ? `${subject} was read ${age} — too old to act on${wayOut}`
+        : `${subject} has not been read yet${wayOut}`;
+    }
     case "provisional":
       // Never "unreachable" alone. The useful half is that what is on screen is
       // real and dated, not that the network is down.
       return age
-        ? `Could not read the target — this is the last state seen, ${age}`
-        : "Could not read the target, and there is no earlier copy to show";
+        ? `Could not reach the connected system — this is the last state seen, ${age}`
+        : "Could not reach the connected system, and there is no earlier copy to show";
   }
 }

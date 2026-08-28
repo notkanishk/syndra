@@ -69,13 +69,13 @@ describe("the strip", () => {
     render(<ReadFreshness state={{ readAt: ago(4), current: true }} subject="The account list" />);
     // "recently" is not something an operator can act on: the number is the
     // whole content of the label.
-    expect(screen.getByText(/4m ago/)).toBeInTheDocument();
+    expect(screen.getByText(/4 min ago/)).toBeInTheDocument();
   });
 
   it("says a provisional read is the last state seen, with its age", () => {
     render(<ReadFreshness state={{ readAt: ago(14), current: false }} />);
     expect(screen.getByText(/last state seen/i)).toBeInTheDocument();
-    expect(screen.getByText(/14m ago/)).toBeInTheDocument();
+    expect(screen.getByText(/14 min ago/)).toBeInTheDocument();
   });
 
   // Truncation is orthogonal — a complete statement about what was seen and a
@@ -83,7 +83,7 @@ describe("the strip", () => {
   // replacing it.
   it("reports truncation beside the age rather than instead of it", () => {
     render(<ReadFreshness state={{ readAt: ago(2), current: true, truncated: true }} />);
-    expect(screen.getByText(/2m ago/)).toBeInTheDocument();
+    expect(screen.getByText(/2 min ago/)).toBeInTheDocument();
     expect(screen.getByText(/not the whole list/i)).toBeInTheDocument();
   });
 

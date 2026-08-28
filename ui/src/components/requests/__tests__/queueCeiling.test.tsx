@@ -77,14 +77,14 @@ describe("the request queue states its ceiling before the tap", () => {
     renderQueue(501);
     fireEvent.click(screen.getByRole("checkbox", { name: /Select these 501 requests/ }));
 
-    expect(screen.getByText(/500 is the most that can run at once/)).toBeTruthy();
+    expect(screen.getByText(/you can change at most 500 requests at once/)).toBeTruthy();
   });
 
   it("leaves a selection inside the ceiling alone", () => {
     renderQueue(3);
     fireEvent.click(screen.getByRole("checkbox", { name: /Select these 3 requests/ }));
 
-    expect(screen.queryByText(/is the most that can run at once/)).toBeNull();
+    expect(screen.queryByText(/you can change at most/)).toBeNull();
   });
 });
 
@@ -116,7 +116,7 @@ describe("the queue has a visible end", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /Select these 60 requests/ }));
 
     // Sixty is under the ceiling, so no warning — and the count is the queue's.
-    expect(screen.queryByText(/is the most that can run at once/)).toBeNull();
+    expect(screen.queryByText(/you can change at most/)).toBeNull();
     // Sixty, not twenty-five: the bar counts the queue and the page is only
     // what is drawn.
     expect(document.body.textContent).toMatch(/60 requests selected/);

@@ -58,7 +58,7 @@ describe("Identity provider · signing key", () => {
     renderPage();
     expect(await screen.findByText(/ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT/)).toBeInTheDocument();
     expect(screen.getByText(/docker compose restart backend/)).toBeInTheDocument();
-    expect(screen.getByText(/custom claims simply go\s+missing/)).toBeInTheDocument();
+    expect(screen.getByText(/access\s+details Syndra normally adds at sign-in are missing/)).toBeInTheDocument();
   });
 
   it("does not offer to rotate the key itself", async () => {
@@ -70,7 +70,7 @@ describe("Identity provider · signing key", () => {
   it("states the age against the threshold in words", async () => {
     renderPage();
     expect(
-      await screen.findByText(/12 days old, within the 90-day threshold/),
+      await screen.findByText(/12 days old, within the 90-day limit/),
     ).toBeInTheDocument();
   });
 
@@ -83,7 +83,7 @@ describe("Identity provider · signing key", () => {
       rotate_command: "make zitadel-actions-rotate-key",
     };
     renderPage();
-    expect(await screen.findByText(/past twice the 90-day threshold/)).toBeInTheDocument();
+    expect(await screen.findByText(/more than twice the 90-day limit/)).toBeInTheDocument();
   });
 
   // "disabled" reads like "not set up yet" and means every inbound Action
@@ -98,7 +98,7 @@ describe("Identity provider · signing key", () => {
       rotate_command: "make zitadel-actions-rotate-key",
     };
     renderPage();
-    expect(await screen.findByText(/passing every Action request through unchecked/)).toBeInTheDocument();
+    expect(await screen.findByText(/accepts every request that claims to come from Zitadel without checking/)).toBeInTheDocument();
     expect(screen.getByText("make zitadel-actions-register")).toBeInTheDocument();
     expect(screen.queryByText("make zitadel-actions-rotate-key")).not.toBeInTheDocument();
   });

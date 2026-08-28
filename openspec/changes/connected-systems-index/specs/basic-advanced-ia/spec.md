@@ -29,7 +29,7 @@ most easily misread.
 
 - **WHEN** one or more targets are registered
 - **THEN** `Connected systems` MUST remain in place, above the per-target rows
-- **AND** `Identity provider` MUST remain the first row of the group
+- **AND** `Zitadel` (formerly `Identity provider`) MUST remain the first row of the group
 - **AND** the index MUST NOT claim a target's own route as its own
 
 ### Requirement: The index MUST NOT collapse registration, reachability and transport into one status

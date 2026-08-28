@@ -65,23 +65,23 @@ describe("taking access away on a target", () => {
   it("says what it cannot do, before the form", () => {
     renderTakeAway();
     expect(
-      screen.getByText(/Sessions already established end when they next reconnect/),
+      screen.getByText(/they stay connected until they disconnect/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/this target has no way to close one/)).toBeInTheDocument();
+    expect(screen.getByText(/TrueNAS cannot end a session/)).toBeInTheDocument();
   });
 
   // What it does, not what it means. Everything on these screens queues, and
   // this button says so rather than claiming the access is gone.
   it("names the queue in the button", () => {
     renderTakeAway();
-    expect(screen.getByRole("button", { name: /queue the revocation/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /revoke access for Ada Rivera/i })).toBeInTheDocument();
   });
 
   // Rung 3, the same gesture as every other revocation: muscle memory must not
   // depend on which one an operator is doing.
   it("will not fire until the name is typed and a reason given", () => {
     renderTakeAway();
-    const confirm = screen.getByRole("button", { name: /queue the revocation/i });
+    const confirm = screen.getByRole("button", { name: /revoke access for Ada Rivera/i });
     expect(confirm).toBeDisabled();
 
     // Queried by the label, which is now all the label is. The hint used to
@@ -116,9 +116,9 @@ describe("taking access away on a target", () => {
     fireEvent.change(screen.getByRole("textbox", { name: /type the person's name/i }), {
       target: { value: "Ada Rivera" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /queue the revocation/i }));
+    fireEvent.click(screen.getByRole("button", { name: /revoke access for Ada Rivera/i }));
 
-    expect(screen.getByText(/Half of it went through/i)).toBeInTheDocument();
+    expect(screen.getByText(/Partly done/i)).toBeInTheDocument();
     expect(screen.getByText(/Still outstanding: password.rotate/)).toBeInTheDocument();
   });
 });
@@ -134,7 +134,7 @@ describe("putting a hold on", () => {
           target="truenas"
           field="enabled"
           value="true"
-          label="access to this target"
+          label="access to TrueNAS"
           onClose={() => {}}
         />
       </QueryClientProvider>,
@@ -144,7 +144,7 @@ describe("putting a hold on", () => {
   // Framed as what happens if nobody comes back, which is the actual decision.
   it("asks how it ends rather than for an expiry", () => {
     renderHold();
-    expect(screen.getByText(/How it ends/)).toBeInTheDocument();
+    expect(screen.getByText(/What happens if nobody comes back to this/)).toBeInTheDocument();
     expect(screen.getByText(/It stays until somebody decides/)).toBeInTheDocument();
     expect(screen.getByText(/It lifts itself on a date/)).toBeInTheDocument();
   });
@@ -153,10 +153,10 @@ describe("putting a hold on", () => {
   // backend, so the UI does not offer one.
   it("requires a date and a reason either way", () => {
     renderHold();
-    const confirm = screen.getByRole("button", { name: /hold access to this target/i });
+    const confirm = screen.getByRole("button", { name: /hold access to TrueNAS/i });
     expect(confirm).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText(/Ask about it on/), { target: { value: "2026-12-01" } });
+    fireEvent.change(screen.getByLabelText(/Remind us on/), { target: { value: "2026-12-01" } });
     expect(confirm).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText(/shown to Ada Rivera/i), {
@@ -170,13 +170,13 @@ describe("putting a hold on", () => {
   // by the resolver.
   it("sends the resolver's value and shows the operator's words", () => {
     renderHold();
-    expect(screen.getByText(/Hold access to this target for Ada Rivera/)).toBeInTheDocument();
+    expect(screen.getByText(/Hold access to TrueNAS for Ada Rivera/)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText(/Ask about it on/), { target: { value: "2026-12-01" } });
+    fireEvent.change(screen.getByLabelText(/Remind us on/), { target: { value: "2026-12-01" } });
     fireEvent.change(screen.getByLabelText(/shown to Ada Rivera/i), {
       target: { value: "safety review" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /hold access to this target/i }));
+    fireEvent.click(screen.getByRole("button", { name: /hold access to TrueNAS/i }));
 
     expect(state.held[0]).toMatchObject({ field: "enabled", value: "true", reason: "safety review" });
     // "It stays" is the default, so the date is a review date and not an expiry:

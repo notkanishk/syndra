@@ -89,7 +89,7 @@ beforeEach(() => {
 describe("token format editor", () => {
   it("states that the project default changes every app reading the project", () => {
     renderEditor("app_bookings");
-    expect(screen.getByText(/apps reading Laser Lab receive/i)).toBeInTheDocument();
+    expect(screen.getByText(/apps on Laser Lab — a change here changes what every one of them receives/i)).toBeInTheDocument();
   });
 
   it("saves the claim name and format an operator actually typed", async () => {
@@ -130,7 +130,7 @@ describe("token format editor", () => {
   it("shows every key the token carries and who owns each one", () => {
     renderEditor("app_badge");
 
-    expect(screen.getByText("A token for this project carries")).toBeInTheDocument();
+    expect(screen.getByText("Claims in this project’s token")).toBeInTheDocument();
     expect(screen.getByText("badge.roles")).toBeInTheDocument();
     // A sibling's key is present and attributed — an operator should learn
     // that here, not by decoding a production token.
@@ -145,7 +145,7 @@ describe("token format editor", () => {
       ],
     });
 
-    expect(screen.getByText(/is claimed twice/i)).toBeInTheDocument();
+    expect(screen.getByText(/is used by both/i)).toBeInTheDocument();
     expect(screen.getByText(/one value per name/i)).toBeInTheDocument();
   });
 

@@ -26,7 +26,7 @@ export function TopBar({ session }: { session: SessionUser }) {
 
   return (
     <header className="flex h-[66px] flex-none items-center gap-2.5 border-b border-line px-4 tablet:gap-4 tablet:px-[26px]">
-      <nav aria-label="Breadcrumb" className="min-w-0 truncate text-[14.5px]">
+      <nav aria-label="Where you are" className="min-w-0 truncate text-[14.5px]">
         {trail.length === 0 ? (
           <span className="font-semibold text-ink">Syndra</span>
         ) : (

@@ -83,7 +83,7 @@ describe("dormant accounts", () => {
     renderDormant();
 
     expect(screen.getByText(/Their membership ended/)).toBeInTheDocument();
-    expect(screen.getByText(/Still a member, and nothing reaches here/)).toBeInTheDocument();
+    expect(screen.getByText(/Still a member, but no role gives them access here/)).toBeInTheDocument();
     expect(screen.getByText(/locks the person out rather than tidying up/i)).toBeInTheDocument();
   });
 
@@ -107,7 +107,7 @@ describe("dormant accounts", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /I understand/i }));
     expect(remove).toBeDisabled(); // still no credential
 
-    fireEvent.change(screen.getByLabelText(/credential that may delete/i), {
+    fireEvent.change(screen.getByLabelText(/API key that is allowed to delete/i), {
       target: { value: "k" },
     });
     expect(remove).toBeEnabled();
@@ -126,7 +126,7 @@ describe("dormant accounts", () => {
     renderDormant();
     fireEvent.click(screen.getByLabelText("Select former-member"));
     fireEvent.click(screen.getByRole("checkbox", { name: /I understand/i }));
-    fireEvent.change(screen.getByLabelText(/credential that may delete/i), {
+    fireEvent.change(screen.getByLabelText(/API key that is allowed to delete/i), {
       target: { value: "super-secret" },
     });
     fireEvent.click(screen.getByRole("button", { name: /remove 1 account/i }));
@@ -166,6 +166,6 @@ describe("dormant accounts", () => {
     renderDormant();
     fireEvent.click(screen.getByLabelText("Select former-member"));
 
-    expect(screen.getByText(/does not queue/i)).toBeInTheDocument();
+    expect(screen.getByText(/happens at once, not from Pending changes/i)).toBeInTheDocument();
   });
 });

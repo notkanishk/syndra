@@ -31,9 +31,10 @@ export default function ConnectedSystemsPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Connected systems"
+        lede="The systems Syndra creates and manages accounts on — today, TrueNAS, the network storage server. Each one is joined to Syndra by an add-on, a small program that connects Syndra to the system. Open a system to see whether it is answering, who has an account there, and anything waiting on you."
         meta={
           rows.length > 0
-            ? `${rows.length} ${rows.length === 1 ? "add-on" : "add-ons"} registered`
+            ? `${rows.length} ${rows.length === 1 ? "system" : "systems"} connected`
             : undefined
         }
       />
@@ -41,8 +42,8 @@ export default function ConnectedSystemsPage() {
       <Card>
         <CardColumns>
           <span className="min-w-0 flex-1">System</span>
-          <span className="w-[150px] shrink-0">Reachable</span>
-          <span className="w-[110px] shrink-0 text-right">Operations</span>
+          <span className="w-[150px] shrink-0">Status</span>
+          <span className="w-[110px] shrink-0 text-right">Things it can do</span>
         </CardColumns>
 
         <ListStates
@@ -50,17 +51,18 @@ export default function ConnectedSystemsPage() {
           error={targets.error}
           isEmpty={rows.length === 0}
           onRetry={() => targets.refetch()}
-          errorTitle="Couldn't load the add-on roster."
+          errorTitle="The list of connected systems could not be read."
           skeleton={<RowSkeleton rows={2} avatar={false} label="Loading connected systems" />}
           empty={
             <EmptyState
               title="No system is connected."
               guidance={
-                "Syndra manages accounts on a target — a NAS, a door controller — through an " +
-                "add-on running in its own container. One appears here after the deployment " +
-                "names it in ADDON_TARGETS and starts its container; see DEPLOY.md, " +
-                "“Bringing up the TrueNAS add-on”. Until then Syndra governs identity only, " +
-                "and nothing outside the identity provider is being reconciled."
+                "Syndra manages accounts on a system outside itself — network storage, a door " +
+                "controller — through an add-on running in its own container. For whoever runs " +
+                "the Syndra server: one appears here after the deployment names it in " +
+                "ADDON_TARGETS and starts its container; see DEPLOY.md, “Bringing up the " +
+                "TrueNAS add-on”. Until then Syndra manages sign-in only, and no outside " +
+                "system is being kept in step."
               }
             />
           }
@@ -113,6 +115,12 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
       <span className="w-[110px] shrink-0 text-right text-[15px]">
         {row.callable ? row.operations.length : <span className="text-faint">—</span>}
       </span>
+
+      {/* Which machine to look at. The status word alone sends a reader to the
+          wrong one: two of these are faults on the Syndra server. */}
+      {reading.detail && (
+        <span className="w-full text-[13px] text-muted">{reading.detail}</span>
+      )}
     </CardRow>
   );
 }
@@ -124,12 +132,27 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
  * a broken transport explains everything below it, and a suspended breaker
  * explains a target that would otherwise answer.
  */
-function readingFor(row: TargetSummary): { tone: StatusTone; label: string } {
-  if (row.transport_status === "error") return { tone: "danger", label: "transport failed" };
-  if (row.circuit_open) return { tone: "warn", label: "calls suspended" };
-  if (row.callable) return { tone: "healthy", label: "answering" };
+function readingFor(row: TargetSummary): { tone: StatusTone; label: string; detail?: string } {
+  const name = targetLabel(row.target);
+  if (row.transport_status === "error")
+    return {
+      tone: "danger",
+      label: "Cannot connect",
+      detail: `Syndra cannot read the key it signs requests with. Look at the Syndra server, not at ${name}.`,
+    };
+  if (row.circuit_open)
+    return {
+      tone: "warn",
+      label: "Paused after failures",
+      detail: `Syndra stopped calling ${name} after repeated failures and will try again by itself. This does not mean ${name} is down — look at the Syndra server.`,
+    };
+  if (row.callable) return { tone: "healthy", label: "Answering" };
   // Neutral, not amber. Registered-and-not-yet-answered is where every add-on
   // starts, and it resolves on its own within a refresh interval — see the tone
   // itself for why colouring it would cost amber its meaning elsewhere.
-  return { tone: "neutral", label: "no manifest read yet" };
+  return {
+    tone: "neutral",
+    label: "Not answered yet",
+    detail: `The add-on is configured and has not answered yet. This usually clears by itself within a minute or two.`,
+  };
 }

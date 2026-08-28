@@ -6,19 +6,24 @@ import { ErrorState, RowSkeleton } from "@/components/states";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Segmented } from "@/components/ui/Select";
 import { useTopology, type TopologyNode } from "@/lib/queries/useTopology";
 import { useDebounce } from "@/lib/useDebounce";
 
-type Depth = "1" | "2" | "all";
-
 /** Kind order at the root: the thing you almost always start from comes first. */
 const KIND_ORDER: Array<{ kind: TopologyNode["kind"]; label: string; blurb: string }> = [
-  { kind: "project", label: "Projects", blurb: "A boundary that owns roles." },
-  { kind: "role", label: "Roles", blurb: "What somebody actually holds." },
-  { kind: "bundle", label: "Bundles", blurb: "A set of roles handed out as one unit." },
-  { kind: "application", label: "Apps", blurb: "Things that receive a token." },
+  { kind: "project", label: "Projects", blurb: "A machine or area with its own set of roles." },
+  { kind: "role", label: "Roles", blurb: "One named kind of access, inside a project." },
+  { kind: "bundle", label: "Bundles", blurb: "A set of roles given together." },
+  { kind: "application", label: "Apps", blurb: "Something people sign in to." },
 ];
+
+/** The singular, plain noun for a kind — "app", never the API's "application". */
+const KIND_NOUN: Record<string, string> = {
+  project: "project",
+  role: "role",
+  bundle: "bundle",
+  application: "app",
+};
 
 /**
  * S5 · Automation › Access map.
@@ -44,7 +49,6 @@ export default function AccessMapPage() {
   // most-connected node used to make the map look like it had no overview at
   // all, and left no way back to one.
   const [focusId, setFocusId] = useState<string | null>(null);
-  const [depth, setDepth] = useState<Depth>("1");
   // Holds the kinds that are switched OFF, so the default (an empty set) shows
   // everything. A legend where clicking one entry silently hides the other
   // three reads as a bug the first time it happens.
@@ -67,21 +71,11 @@ export default function AccessMapPage() {
     return counts;
   }, [edges]);
 
-  const { incoming, outgoing, secondHop } = useMemo(() => {
-    if (!focus) return { incoming: [], outgoing: [], secondHop: 0 };
+  const { incoming, outgoing } = useMemo(() => {
+    if (!focus) return { incoming: [], outgoing: [] };
 
     const inbound = edges.filter((edge) => edge.target === focus.id);
     const outbound = edges.filter((edge) => edge.source === focus.id);
-
-    const neighbours = new Set([
-      ...inbound.map((edge) => edge.source),
-      ...outbound.map((edge) => edge.target),
-    ]);
-    const second = edges.filter(
-      (edge) =>
-        (neighbours.has(edge.source) && edge.target !== focus.id && !neighbours.has(edge.target)) ||
-        (neighbours.has(edge.target) && edge.source !== focus.id && !neighbours.has(edge.source)),
-    ).length;
 
     return {
       incoming: inbound.map((edge) => ({
@@ -94,7 +88,6 @@ export default function AccessMapPage() {
         label: edge.label,
         viaRule: edge.kind === "rule",
       })),
-      secondHop: second,
     };
   }, [focus, edges, byId]);
 
@@ -117,11 +110,7 @@ export default function AccessMapPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Access map"
-        meta={
-          focus
-            ? "One node at a time, and what it touches."
-            : "Everything Syndra knows about, grouped. Pick something to see what feeds it and what it feeds."
-        }
+        lede="Every project, role, bundle and app, and how they connect. Pick one to see what gives access to it and what it gives access to."
       />
 
       <Card className="flex min-h-[560px] flex-col tablet:flex-row">
@@ -133,8 +122,8 @@ export default function AccessMapPage() {
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Find a node…"
-              aria-label="Find a node"
+              placeholder="Find a project, role, bundle or app"
+              aria-label="Find a project, role, bundle or app"
             />
             {matches.length > 0 && (
               <div className="settle-in absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-panel border border-line-strong bg-surface-2 shadow-popover">
@@ -181,29 +170,14 @@ export default function AccessMapPage() {
                   two roles rather than a thing you can hold. */}
               <div className="flex items-center gap-2.5 px-2 py-1.5">
                 <span className="h-3.5 w-3.5 flex-none rounded-[5px] border-[1.5px] border-dashed border-ink/70" />
-                <span>Automatic rules</span>
+                <span>Automatic rules (dashed links)</span>
               </div>
             </div>
           </div>
 
-          <div>
-            <div className="mb-2.5 type-label">Depth</div>
-            <Segmented<Depth>
-              label="How many hops to draw"
-              size="sm"
-              value={depth}
-              onChange={setDepth}
-              options={[
-                { value: "1", label: "1 hop" },
-                { value: "2", label: "2" },
-                { value: "all", label: "All" },
-              ]}
-            />
-          </div>
-
           <div className="mt-auto text-[13px] leading-[1.55] text-faint">
-            {nodes.length} nodes, {edges.length} edges in total. Drawing them all at once is what
-            made this screen useless.
+            {nodes.length} {nodes.length === 1 ? "item" : "items"} and {edges.length}{" "}
+            {edges.length === 1 ? "connection" : "connections"} in total.
           </div>
         </div>
 
@@ -217,7 +191,12 @@ export default function AccessMapPage() {
               onRetry={() => topology.refetch()}
             />
           ) : nodes.length === 0 ? (
-            <div className="type-empty-title">Nothing to draw yet.</div>
+            <div className="flex flex-col gap-2">
+              <div className="type-empty-title">Nothing to show yet.</div>
+              <p className="max-w-[52ch] text-[14px] text-muted">
+                Items appear here once Syndra has at least one project and one role.
+              </p>
+            </div>
           ) : !focus ? (
             <RootView
               nodes={nodes}
@@ -237,7 +216,7 @@ export default function AccessMapPage() {
                   onClick={() => setFocusId(null)}
                   className="font-semibold text-accent-text motion-tint hover:brightness-110"
                 >
-                  All nodes
+                  Everything
                 </button>
                 <span className="text-faint">/</span>
                 <span className="font-semibold">{focus.label}</span>
@@ -248,15 +227,15 @@ export default function AccessMapPage() {
                   {focus.label}
                 </h2>
                 <span className="text-[14px] text-faint">
-                  {incoming.length} in · {outgoing.length} out
+                  Given by {incoming.length} · Gives {outgoing.length}
                 </span>
               </div>
 
               <div className="flex flex-col items-stretch gap-4 tablet:flex-row tablet:flex-wrap tablet:gap-0">
                 <NodeColumn
-                  title="Feeds in"
+                  title="What gives this"
                   entries={incoming}
-                  empty="Nothing produces this."
+                  empty="Nothing gives this automatically — it is only handed out directly."
                   onFocus={setFocusId}
                 />
                 <Rail direction="in" />
@@ -267,7 +246,7 @@ export default function AccessMapPage() {
                       {focus.label}
                     </div>
                     <div className="mt-1 text-[13.5px] text-muted">
-                      {focus.kind}
+                      {KIND_NOUN[focus.kind] ?? focus.kind}
                       {focus.project_id && focus.project_id !== focus.id ? (
                         <> · {byId.get(focus.project_id)?.label ?? focus.project_id}</>
                       ) : null}
@@ -276,21 +255,10 @@ export default function AccessMapPage() {
                 </div>
                 <Rail direction="out" />
                 <NodeColumn
-                  title="Feeds out"
+                  title="What this gives"
                   entries={outgoing}
-                  empty="Nothing reads this."
+                  empty="This gives nothing further."
                   onFocus={setFocusId}
-                  footer={
-                    depth === "1" && secondHop > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => setDepth("2")}
-                        className="rounded-block border border-dashed border-line-strong px-4 py-3 text-center text-[13.5px] text-faint hover:text-ink"
-                      >
-                        Expand to 2 hops · {secondHop} more nodes
-                      </button>
-                    ) : null
-                  }
                 />
               </div>
             </div>
@@ -332,7 +300,7 @@ function RootView({
       <div className="flex flex-col gap-2">
         <div className="type-empty-title">Nothing shown.</div>
         <p className="max-w-[52ch] text-[14px] text-muted">
-          Every kind is switched off in the panel on the left. Turn one back on.
+          Every type of item is hidden. Turn one back on under Show.
         </p>
       </div>
     );
@@ -383,13 +351,11 @@ function NodeColumn({
   entries,
   empty,
   onFocus,
-  footer,
 }: {
   title: string;
   entries: Array<{ node?: TopologyNode; label: string; viaRule: boolean }>;
   empty: string;
   onFocus: (id: string) => void;
-  footer?: React.ReactNode;
 }) {
   return (
     <div className="flex w-full flex-col gap-3 tablet:min-w-[240px] tablet:flex-1">
@@ -414,7 +380,7 @@ function NodeColumn({
               <span className="min-w-0">
                 <span className="block truncate text-[14.5px] font-semibold">{node.label}</span>
                 <span className="block truncate text-[12.5px] text-faint">
-                  {viaRule ? "automatic rule" : node.kind}
+                  {viaRule ? "automatic rule" : (KIND_NOUN[node.kind] ?? node.kind)}
                   {label ? ` · ${label}` : ""}
                 </span>
               </span>
@@ -423,9 +389,10 @@ function NodeColumn({
         )
       )}
       {entries.length > 6 && (
-        <div className="text-[13px] text-faint">and {entries.length - 6} more</div>
+        <div className="text-[13px] text-faint">
+          and {entries.length - 6} more — search for them by name
+        </div>
       )}
-      {footer}
     </div>
   );
 }

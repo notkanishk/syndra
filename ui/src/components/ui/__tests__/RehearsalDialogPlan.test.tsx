@@ -159,7 +159,7 @@ describe("a stale approval", () => {
 
     const banner = await screen.findByRole("alert");
     expect(banner).toHaveTextContent("Nothing was applied");
-    expect(banner).toHaveTextContent("review it again before applying");
+    expect(banner).toHaveTextContent("This is a fresh preview");
   });
 
   // The one code where "nothing was applied" is false: the earlier apply
@@ -174,8 +174,8 @@ describe("a stale approval", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply to 1 person" }));
 
     const banner = await screen.findByRole("alert");
-    expect(banner).toHaveTextContent("Nothing was applied twice");
-    expect(banner).toHaveTextContent("already applied once");
+    expect(banner).toHaveTextContent("Nothing was applied a second time");
+    expect(banner).toHaveTextContent("fresh preview");
   });
 
   it("clears the notice once a fresh approval is applied", async () => {
@@ -229,7 +229,7 @@ describe("a change bigger than the usual one", () => {
     // they are being warned about.
     expect(notice).toHaveTextContent("63");
     expect(notice).toHaveTextContent("25");
-    expect(screen.getByRole("button", { name: /Plan for 63 people/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Preview the change for 63 people/ })).toBeInTheDocument();
     // Nothing has been computed, so there is nothing to apply.
     expect(screen.queryByRole("button", { name: /^Apply/ })).not.toBeInTheDocument();
   });
@@ -244,11 +244,11 @@ describe("a change bigger than the usual one", () => {
 
     const tick = screen.getByRole("checkbox");
     expect(tick).not.toBeChecked();
-    expect(screen.getByText(/I understand this moves/)).toHaveTextContent("63 people");
-    expect(screen.getByRole("button", { name: /Plan for 63 people/ })).toBeDisabled();
+    expect(screen.getByText(/I understand this changes access for/)).toHaveTextContent("63 people");
+    expect(screen.getByRole("button", { name: /Preview the change for 63 people/ })).toBeDisabled();
 
     fireEvent.click(tick);
-    expect(screen.getByRole("button", { name: /Plan for 63 people/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Preview the change for 63 people/ })).toBeEnabled();
   });
 
   // It computes a plan and writes nothing, so it is not the solid red fill that
@@ -258,7 +258,7 @@ describe("a change bigger than the usual one", () => {
     open();
     await screen.findByRole("status");
 
-    expect(screen.getByRole("button", { name: /Plan for 63 people/ }).className).not.toMatch(
+    expect(screen.getByRole("button", { name: /Preview the change for 63 people/ }).className).not.toMatch(
       /bg-danger\b/,
     );
   });
@@ -270,7 +270,7 @@ describe("a change bigger than the usual one", () => {
 
     expect(vi.mocked(onRehearse)).toHaveBeenNthCalledWith(1, false);
     fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: /Plan for 63 people/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Preview the change for 63 people/ }));
     await screen.findByRole("button", { name: "Apply to 1 person" });
     expect(vi.mocked(onRehearse)).toHaveBeenNthCalledWith(2, true);
   });
@@ -302,8 +302,8 @@ describe("queued rows say what happens next", () => {
       outcomes: [],
       summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 1 },
     });
-    expect(note).toMatch(/send themselves|leaves within/i);
-    expect(note).toMatch(/access holds until it does/i);
+    expect(note).toMatch(/sends it on its own/i);
+    expect(note).toMatch(/the person still has the access/i);
   });
 
   it("tells a grant it is waiting for someone", () => {
@@ -313,7 +313,7 @@ describe("queued rows say what happens next", () => {
       outcomes: [],
       summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 1 },
     });
-    expect(note).toMatch(/resume the queue/i);
+    expect(note).toMatch(/Pending changes/);
   });
 
   it("says nothing when nothing is queued", () => {
@@ -346,7 +346,7 @@ describe("a plan whose rows did not arrive", () => {
       .mockResolvedValue({ ...plan(), outcomes: undefined } as unknown as BulkPlan);
     open();
 
-    expect(await screen.findByText(/came back without its rows/)).toBeInTheDocument();
+    expect(await screen.findByText(/The list of people did not load/)).toBeInTheDocument();
     // And the approval is still reachable: the summary is what it reported.
     expect(screen.getByRole("button", { name: /^Apply/ })).toBeInTheDocument();
   });
@@ -362,7 +362,7 @@ describe("a plan whose rows did not arrive", () => {
     open();
 
     const apply = await screen.findByRole("button", { name: /^Apply/ });
-    expect(apply).toHaveTextContent("Apply this plan");
+    expect(apply).toHaveTextContent("Apply the change");
     expect(apply.textContent).not.toMatch(/undefined|NaN/);
   });
 });
@@ -464,7 +464,7 @@ describe("applying a change that reaches nobody", () => {
       open({ definitionLabel: "Save mapping" });
 
       expect(await screen.findByRole("button", { name: /Nothing to apply/ })).toBeDisabled();
-      expect(screen.getByText(/came back without its rows/)).toBeInTheDocument();
+      expect(screen.getByText(/The list of people did not load/)).toBeInTheDocument();
     });
   });
 

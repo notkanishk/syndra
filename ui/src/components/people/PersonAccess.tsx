@@ -116,6 +116,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
         <PageHeader
           className="flex-1"
           title={user.name}
+          lede="Everything this person can use, and where each piece of access came from. Change it here; Syndra keeps the record of why."
           meta={
             <MetaRow>
               {[
@@ -385,7 +386,7 @@ function ZitadelGrantId({
   if (!id) {
     return (
       <span className="text-[13px] text-faint">
-        Zitadel grant · none — see Review › Reconciliation
+        Not in Zitadel — see Unexplained access › Side by side
       </span>
     );
   }
@@ -558,7 +559,7 @@ function findMultiSource(
           const qualifier = sourceQualifier(source);
           if (source.kind === "bundle") return `the ${qualifier ?? "assigned"} bundle`;
           if (source.kind === "mapping") return `an automatic rule${qualifier ? ` from ${qualifier}` : ""}`;
-          return "a direct grant";
+          return "direct access";
         });
         return {
           projectName: project.project_name,

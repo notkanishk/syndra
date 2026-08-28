@@ -59,6 +59,7 @@ export default function RoleMembersPage({
       <PageHeader
         eyebrow={view?.project_name ?? id}
         title={view?.display_name || humanizeKey(roleKey)}
+        lede="Everyone who holds this role, and how each came to hold it — directly, through a bundle, or by an automatic rule."
         meta={
           <span className="flex flex-wrap items-center gap-3">
             <Mono className="rounded-pill border border-line-strong px-3 py-1 text-[14px] text-muted">
@@ -254,7 +255,7 @@ function MemberRow({
         </Button>
       ) : (
         <Button variant="danger" size="sm" onClick={() => open("direct")}>
-          Remove direct access
+          Revoke direct access
         </Button>
       )}
     </div>

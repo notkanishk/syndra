@@ -62,7 +62,7 @@ export function PublishVersionDialog({
       compose={
         <div className="flex flex-col gap-4">
           <div>
-            <FieldLabel>What v{draft.next_version} contains</FieldLabel>
+            <FieldLabel>What changes in v{draft.next_version}</FieldLabel>
             <div className="mt-1.5 flex flex-col gap-1.5 rounded-inner border border-line-strong px-4 py-3 text-[14px]">
               {draft.added.map((role) => (
                 <div
@@ -97,25 +97,29 @@ export function PublishVersionDialog({
           {holders > 0 && (
             <div>
               <FieldLabel>The {holders} who already hold it</FieldLabel>
-              <div className="mt-1.5 flex flex-col gap-2">
+              <div
+                role="radiogroup"
+                aria-label={`The ${holders} who already hold it`}
+                className="mt-1.5 flex flex-col gap-2"
+              >
                 <Choice
                   selected={migrate === true}
                   onSelect={() => setMigrate(true)}
                   title={`Move everyone to v${draft.next_version}`}
-                  detail="Their access changes to match the new version. The plan below says what that does to each of them."
+                  detail="Their access changes to match the new version. The preview below lists what that does to each of them."
                 />
                 <Choice
                   selected={migrate === false}
                   onSelect={() => setMigrate(false)}
                   title={`Leave them on the version they are on`}
-                  detail={`v${draft.next_version} applies to new assignments only. Nobody's access changes, and you can move them later.`}
+                  detail={`v${draft.next_version} goes only to people given this bundle from now on. Nobody's access changes, and you can move them later.`}
                 />
               </div>
             </div>
           )}
 
           <div>
-            <FieldLabel htmlFor="version-note">Why? (optional)</FieldLabel>
+            <FieldLabel htmlFor="version-note">Note for the history (optional)</FieldLabel>
             <Input
               id="version-note"
               value={note}

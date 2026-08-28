@@ -22,7 +22,11 @@ export function TraceCell({ entry, className }: { entry: AuditEntry; className?:
   return (
     <span className={className}>
       {trace.kind === "cascade" ? (
-        <Link href={trace.href} className="text-[13px] font-semibold text-accent-text">
+        <Link
+          href={trace.href}
+          aria-label="See what this change set off, in Change history"
+          className="text-[13px] font-semibold text-accent-text"
+        >
           <Mono>{trace.label}</Mono>
         </Link>
       ) : trace.kind === "object" ? (

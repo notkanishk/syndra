@@ -76,12 +76,12 @@ describe("a paused target, from the member's side", () => {
     state.view = view({ lifecycle: "draining" });
     const { unmount } = render(<MyStorage />);
     expect(text()).toMatch(/for a few minutes/);
-    expect(text()).not.toMatch(/ask whoever runs the makerspace/i);
+    expect(text()).not.toMatch(/ask makerspace staff/i);
     unmount();
 
     state.view = view({ lifecycle: "read_only" });
     render(<MyStorage />);
-    expect(text()).toMatch(/ask whoever runs the makerspace/i);
+    expect(text()).toMatch(/ask makerspace staff/i);
     expect(text()).not.toMatch(/a few minutes/);
   });
 
@@ -93,7 +93,7 @@ describe("a paused target, from the member's side", () => {
 
     // The label carries the whole promise, so a member who reads nothing else
     // cannot mistake it for taking effect now.
-    const save = screen.getByRole("button", { name: /Save it for when changes resume/ });
+    const save = screen.getByRole("button", { name: /Save it for when changes start again/ });
     const field = screen.getByLabelText(/password/i);
     expect(field.hasAttribute("disabled")).toBe(false);
 

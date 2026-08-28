@@ -20,7 +20,7 @@ export function Skeleton({ className = "", ...props }: SkeletonProps) {
 /** Convenience: a stack of card-sized skeletons. */
 export function SkeletonCardList({ count = 3 }: { count?: number }) {
   return (
-    <div className="space-y-3" aria-busy="true" aria-label="Loading">
+    <div className="space-y-3" aria-busy="true" aria-label="Loading this list">
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="rounded-block border border-line p-4 space-y-2">
           <Skeleton className="h-5 w-1/3" />

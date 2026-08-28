@@ -49,7 +49,7 @@ describe("a write attempted with no network", () => {
     setOnline(false);
     const outcome = outcomeFromError(await request("/x", { method: "POST" }).catch((e) => e));
 
-    expect(outcome.detail).toContain("Nothing was queued");
+    expect(outcome.detail).toContain("Nothing was sent");
     expect(outcome.detail?.toLowerCase()).not.toContain("will send");
   });
 

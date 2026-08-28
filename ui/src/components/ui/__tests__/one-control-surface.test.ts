@@ -180,7 +180,7 @@ describe("a control states its role in the vocabulary the product already has", 
     const ARGUED: Record<string, string> = {
       "Record the owner":
         "the other claimant stops holding the account in Syndra, immediately and without being told",
-      "Adopt this log as the baseline":
+      "Accept this log and start over":
         "the only act in the product that discards evidence — the missing records stay missing and Syndra stops being able to say so",
     };
 

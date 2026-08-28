@@ -6,20 +6,22 @@ import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { targetLabel } from "@/lib/nav";
+import { NOTHING_CHANGED } from "@/lib/outcome";
 import { useCreateHold } from "@/lib/queries/useHolds";
 
 /**
  * Putting a hold on something a role grants (9.22; design §25).
  *
  * A hold takes away access a role still confers, without touching the role. It
- * is the same object the member reads as *withheld* on their own page, which is
+ * is the same object the member reads as *paused* on their own page, which is
  * why the reason field is labelled with who reads it: an operator writing "per
  * the safety review" is writing it to a person, not to a log.
  *
- * **Framed as "how it ends", not as "expiry / review date".** The operator is
- * choosing what happens if they never come back, and that is the actual
- * decision — the dates are how it gets recorded. Two bounded forms and no
- * third: the backend refuses a hold with neither, so the UI does not offer one.
+ * **Framed as "what happens if nobody comes back", not as "expiry / review
+ * date".** The operator is choosing what happens if they never return, and
+ * that is the actual decision — the dates are how it gets recorded. Two bounded
+ * forms and no third: the backend refuses a hold with neither, so the UI does
+ * not offer one.
  */
 
 type Ending = "lifts" | "stays";
@@ -36,7 +38,7 @@ export function HoldDialog({
   subjectId: string;
   subjectName: string;
   target: string;
-  /** The entitlement field being held — `group`, `share`, `enabled`. */
+  /** The field being held — `group`, `share`, `enabled`. */
   field: string;
   /**
    * The value the RESOLVER reads, sent verbatim.
@@ -75,12 +77,12 @@ export function HoldDialog({
       <ModalHeader
         titleId="hold-title"
         title={`Hold ${spoken} for ${subjectName}`}
-        lede={`They keep every role they hold. This holds ${spoken} on ${targetLabel(target)}, and nothing else.`}
+        lede={`They keep every role they have. This blocks ${spoken} on ${targetLabel(target)}, and nothing else.`}
       />
 
       <div className="grid gap-4 px-6">
         <fieldset className="grid gap-2">
-          <legend className="mb-1 text-[14px]">How it ends</legend>
+          <legend className="mb-1 text-[14px]">What happens if nobody comes back to this</legend>
 
           <label className="flex cursor-pointer items-start gap-3 rounded-inner border border-line px-3.5 py-3 text-[14px] has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft">
             <input
@@ -93,8 +95,8 @@ export function HoldDialog({
             <span>
               <span className="font-semibold">It stays until somebody decides.</span>
               <span className="block text-[13.5px] text-muted">
-                Doing nothing keeps the access blocked. It surfaces under Review on the
-                date below and stays in force until it is lifted.
+                Doing nothing keeps the access blocked. On the date below it appears under
+                Review › Holds due as a reminder, and stays blocked until somebody lifts it.
               </span>
             </span>
           </label>
@@ -111,7 +113,7 @@ export function HoldDialog({
               <span className="font-semibold">It lifts itself on a date.</span>
               <span className="block text-[13.5px] text-muted">
                 Doing nothing gives the access back. Use this when the reason has an end
-                you already know — a suspension to the end of term.
+                you already know — a hold to the end of term.
               </span>
             </span>
           </label>
@@ -119,7 +121,7 @@ export function HoldDialog({
 
         <div>
           <FieldLabel htmlFor="hold-until">
-            {ending === "stays" ? "Ask about it on" : "Lifts on"}
+            {ending === "stays" ? "Remind us on" : "Lifts on"}
           </FieldLabel>
           <Input
             id="hold-until"
@@ -130,8 +132,8 @@ export function HoldDialog({
           <FieldHint>
             {/* Both forms are bounded, and this is why: a hold with no bound is an
                 open-ended carve-out nobody is prompted to revisit. */}
-            A hold with no end is one nobody comes back to. The backend refuses it, so
-            this is required either way.
+            A hold with no date is one nobody comes back to, so a date is required either
+            way.
           </FieldHint>
         </div>
 
@@ -141,22 +143,25 @@ export function HoldDialog({
             id="hold-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="They read this on their own page"
+            placeholder="Until the safety refresher on 3 October"
           />
           <FieldHint>
-            A member who sees access they expect and do not have, with no explanation,
-            asks an operator. One who can read the reason does not have to.
+            {subjectName} sees this on their own page instead of having to ask makerspace
+            staff why the access is missing.
           </FieldHint>
         </div>
 
         {create.error && (
           <p className="text-[13.5px] text-danger-text">
-            {create.error instanceof Error ? create.error.message : "That could not be applied."}
+            {create.error instanceof Error
+              ? create.error.message
+              : "The hold could not be placed."}{" "}
+            {NOTHING_CHANGED}
           </p>
         )}
       </div>
 
-      <ModalFooter note="Holding a share does not take the role that grants it.">
+      <ModalFooter note={`Holding ${spoken} does not remove the role that gives it.`}>
         <Button
           variant="accent"
           disabled={!ready}

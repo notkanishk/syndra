@@ -34,13 +34,13 @@ export default function AutomationSettingsPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Automation settings"
-        meta="Policy that applies to every future rule and cascade."
+        lede="How automatic rules (if someone holds one role they also get another, with nobody clicking) behave when they are created from now on. A rule's changes either wait in Pending changes until someone sends them, or reach Zitadel (the service everyone signs in through) at once."
       />
 
       <Card>
         <CardHeader
           title="Default confirmation mode"
-          note="What a newly created rule does when it fires. Existing rules keep their own setting."
+          note="What a new rule does when its condition is met. Existing rules keep their own setting."
         />
 
         {/*
@@ -59,8 +59,8 @@ export default function AutomationSettingsPage() {
                   kind: "applied",
                   message:
                     next === "auto"
-                      ? "New rules will apply immediately"
-                      : "New rules will queue for review",
+                      ? "New rules will apply their changes immediately"
+                      : "New rules will leave their changes waiting in Pending changes",
                   // The sentence a settings page owes and rarely says: this
                   // changed the default, not the rules that already exist.
                   detail: "Existing rules keep the mode they were created with.",
@@ -70,7 +70,7 @@ export default function AutomationSettingsPage() {
               }
             }}
             options={[
-              { value: "manual", label: "Queue for review" },
+              { value: "manual", label: "Wait for review" },
               { value: "auto", label: "Apply immediately" },
             ]}
           />
@@ -85,10 +85,10 @@ export default function AutomationSettingsPage() {
                 mode === "manual" ? "border-accent-line bg-accent-soft" : "border-line"
               }`}
             >
-              <div className="text-[14.5px] font-semibold">Queue for review</div>
+              <div className="text-[14.5px] font-semibold">Wait for review</div>
               <p className="mt-1 text-[13.5px] leading-[1.55] text-muted">
-                Writes wait in Pending changes until someone confirms them. Slower, and nothing
-                reaches a machine without a person seeing it first.
+                Changes wait in Pending changes until someone sends them. Slower, and nothing
+                reaches Zitadel without a person seeing it first.
               </p>
             </div>
             <div
@@ -98,8 +98,8 @@ export default function AutomationSettingsPage() {
             >
               <div className="text-[14.5px] font-semibold">Apply immediately</div>
               <p className="mt-1 text-[13.5px] leading-[1.55] text-muted">
-                Cascades reach the identity provider the moment a rule fires. Fewer clicks, and no
-                chance to catch a bad rule before it lands.
+                Changes reach Zitadel the moment a rule&rsquo;s condition is met. Fewer clicks, and no
+                chance to catch a bad rule before it takes effect.
               </p>
             </div>
           </div>
@@ -118,10 +118,7 @@ export default function AutomationSettingsPage() {
             !
           </span>
           <p className="max-w-[86ch] text-[13.5px] leading-[1.55] text-muted">
-            This is org-wide policy, which is why it has a page inside Automation rather than a row
-            in a preferences drawer. A setting that changes what happens to everybody must not sit
-            where personal preferences live — someone will flip it for the whole makerspace
-            thinking they changed something about themselves.
+            This applies to the whole makerspace, not just to you.
           </p>
         </div>
       </Card>
@@ -132,8 +129,9 @@ export default function AutomationSettingsPage() {
           <div className="min-w-[280px] flex-1">
             <div className="text-[14.5px] font-semibold">Sound on new unexplained access</div>
             <p className="mt-1 text-[13.5px] text-muted">
-              Plays once when the unexplained-access count rises while this tab is open. Per
-              browser, not per organisation.
+              Plays once whenever the Unexplained access count goes up while this tab is open.
+              Saved in this browser only — it does not follow you to another browser or affect
+              anyone else.
             </p>
           </div>
           <ChimeToggle />

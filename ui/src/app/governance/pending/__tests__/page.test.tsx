@@ -56,9 +56,9 @@ describe("Pending changes", () => {
     pending.data = [row({ id: "o1" }), row({ id: "o2", role_keys: ["door"] })];
     renderPending();
     expect(
-      screen.getByText(/These 2 writes share cascade/),
+      screen.getByText(/These 2 changes come from one edit/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/They confirm together or not at all\./)).toBeInTheDocument();
+    expect(screen.getByText(/They are sent together or not at all\./)).toBeInTheDocument();
   });
 
   it("does not claim a lone write is a cascade", () => {
@@ -82,10 +82,10 @@ describe("Pending changes", () => {
     pending.data = [row()];
     renderPending();
 
-    expect(screen.getByText(/Identity provider unreachable/)).toBeInTheDocument();
+    expect(screen.getByText(/Zitadel is not answering/)).toBeInTheDocument();
     expect(
-      screen.getByText(/Confirming is disabled, not failing silently/),
+      screen.getByText(/Sending is paused/),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Confirm all/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^Send / })).toBeDisabled();
   });
 });

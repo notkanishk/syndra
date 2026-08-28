@@ -78,20 +78,26 @@ export default function AutomaticRulesPage() {
     chosen.length === 0
       ? ""
       : [
-          immediate > 0 ? `${immediate} immediate` : "",
-          chosen.length - immediate > 0 ? `${chosen.length - immediate} queued` : "",
+          immediate > 0 ? `${immediate} apply at once` : "",
+          chosen.length - immediate > 0
+            ? `${chosen.length - immediate} wait under Pending changes`
+            : "",
         ]
           .filter(Boolean)
           .join(" · ");
 
   async function applyMode(mode: ConfirmationMode) {
     const ids = chosen.map((rule) => rule.id);
-    const target = mode === "auto" ? "fire immediately" : "queue for confirmation";
+    const one = ids.length === 1;
+    const target =
+      mode === "auto"
+        ? `${one ? "applies" : "apply"} at once`
+        : `${one ? "waits" : "wait"} under Pending changes`;
     try {
       await bulkMode.mutateAsync({ kind: "rule", ids, mode });
       setOutcome({
         kind: "applied",
-        message: `${ids.length} ${ids.length === 1 ? "rule" : "rules"} now ${target}`,
+        message: `${ids.length} ${one ? "rule" : "rules"} now ${target}`,
         detail: "This changes what the rules do next, not what they have already done.",
       });
       selection.clear();
@@ -104,7 +110,7 @@ export default function AutomaticRulesPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Automatic rules"
-        meta="Holding one role produces another, without anybody clicking."
+        lede="Each rule is a sentence: if someone holds the first role, they also get the second. Rules that apply at once give access with no review; rules that wait put it under Pending changes first."
         actions={
           <>
             {/* No rules, nothing to select. A mode control over an empty list
@@ -126,8 +132,8 @@ export default function AutomaticRulesPage() {
           {selecting && <span className="w-11 shrink-0 desktop:w-[18px]" />}
           <span className="w-[110px]">Rule</span>
           <span className="flex-1">If … then</span>
-          <span className="w-[90px] text-right">Holders</span>
-          <span className="w-[150px] text-right">On fire</span>
+          <span className="w-[130px] text-right">Hold the first role</span>
+          <span className="w-[210px] text-right">When it applies</span>
         </CardColumns>
 
         {selecting && rows.length > 0 && (
@@ -150,8 +156,8 @@ export default function AutomaticRulesPage() {
           empty={
             <EmptyState
               title="No automatic rules."
-              guidance="Every role somebody holds was given to them deliberately. Add a rule when one role should always imply another."
-              action={{ label: "Create a rule", onClick: () => setEditing("new") }}
+              guidance="Every role somebody holds was given to them on purpose. Add a rule when holding one role should always come with a second one."
+              action={{ label: "New rule", onClick: () => setEditing("new") }}
             />
           }
         >
@@ -180,27 +186,30 @@ export default function AutomaticRulesPage() {
                   <span className="text-muted">
                     <ProjectName id={rule.source_project} /> / <Mono>{rule.source_role}</Mono>
                   </span>
-                  <span className="mx-2.5 text-faint">⇒</span>
+                  <span aria-hidden className="mx-2.5 text-faint">⇒</span>
+                  <span className="sr-only">then </span>
                   <span className="font-semibold">
                     <ProjectName id={rule.target_project} /> / <Mono>{rule.target_role}</Mono>
                   </span>
                 </span>
 
-                <span className="text-[15px] tablet:w-[90px] tablet:text-right">
+                <span className="text-[15px] tablet:w-[130px] tablet:text-right">
                   {rule.holder_count ?? 0}
                   <span className="text-[13px] text-faint tablet:hidden">
-                    {(rule.holder_count ?? 0) === 1 ? " holder" : " holders"}
+                    {(rule.holder_count ?? 0) === 1 ? " holds" : " hold"} the first role
                   </span>
                 </span>
 
-                <span className="flex tablet:w-[150px] tablet:justify-end">
+                <span className="flex tablet:w-[210px] tablet:justify-end">
                   {/*
                     Amber for "Immediate": it is not an error, but it is the
                     setting where a bad rule reaches every holder before anybody
                     can look at it. Queue is the quiet default.
                   */}
                   <Badge tone={rule.confirmation_mode === "auto" ? "warn" : "neutral"}>
-                    {rule.confirmation_mode === "auto" ? "Immediate" : "Queue"}
+                    {rule.confirmation_mode === "auto"
+                      ? "Applies at once"
+                      : "Waits under Pending changes"}
                   </Badge>
                 </span>
               </button>
@@ -228,16 +237,16 @@ export default function AutomaticRulesPage() {
           disabled={bulkMode.isPending}
           onClick={() => applyMode("auto")}
         >
-          Set {chosenThings} to fire immediately
+          Set {chosenThings} to apply at once
         </SelectionAction>
         <SelectionAction disabled={bulkMode.isPending} onClick={() => applyMode("manual")}>
-          Set {chosenThings} to queue for confirmation
+          Set {chosenThings} to wait under Pending changes
         </SelectionAction>
       </SelectionBar>
 
       <p className="max-w-[900px] text-[14px] leading-[1.55] text-faint">
-        A rule that triggers another rule is the single most surprising thing this system does, so
-        validation names the chain before you save.
+        One rule can set off another. Before you can save a rule, Check lists every rule yours
+        would set off, and who would gain access.
       </p>
 
       {editing && (
@@ -322,8 +331,8 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
         notes: [
           check.reason ??
             (check.self_reference
-              ? "A role can't produce itself."
-              : "That would close a loop — the rules would keep firing."),
+              ? "The two roles are the same. Pick a different second role."
+              : "That would make a loop: each rule would keep giving the other's role."),
         ],
       });
       return false;
@@ -335,8 +344,11 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
       (role) => role.project_id === sourceProject && role.role_key === sourceRole,
     )?.assigned_user_count;
     if (holders) {
+      const who = `${holders} ${holders === 1 ? "person already holds" : "people already hold"} the first role`;
       notes.push(
-        `Would grant ${targetRoleName} to ${holders} ${holders === 1 ? "person" : "people"} immediately on save.`,
+        mode === "auto"
+          ? `${who}, so saving gives them ${targetRoleName} at once.`
+          : `${who}. Saving would give them ${targetRoleName}, and that would wait under Pending changes first.`,
       );
     }
 
@@ -347,7 +359,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
       if (chained.id === rule?.id) continue;
       if (chained.source_project === targetProject && chained.source_role === targetRole) {
         notes.push(
-          `Chains into ${shortRuleId(chained.id)}, which would then also give them ${roleLabel(
+          `Also sets off ${shortRuleId(chained.id)}, which would then give them ${roleLabel(
             chained.target_project,
             chained.target_role,
           )}.`,
@@ -375,7 +387,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
       <ModalHeader
         title={rule ? `Editing ${shortRuleId(rule.id)}` : "New automatic rule"}
         titleId="rule-title"
-        lede="Anybody who holds the first role gets the second, from now on and retroactively."
+        lede="Anybody who holds the first role gets the second — everyone who holds it today, and everyone who is given it later."
       />
 
       <div className="flex flex-col gap-3.5 px-6">
@@ -399,7 +411,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
             </Select>
           </div>
           <div>
-            <FieldLabel htmlFor="rule-source-role">Role</FieldLabel>
+            <FieldLabel htmlFor="rule-source-role">Role they hold</FieldLabel>
             <Select
               id="rule-source-role"
               value={sourceRole}
@@ -440,7 +452,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
             </Select>
           </div>
           <div>
-            <FieldLabel htmlFor="rule-target-role">Role</FieldLabel>
+            <FieldLabel htmlFor="rule-target-role">Role to give</FieldLabel>
             <Select
               id="rule-target-role"
               value={targetRole}
@@ -458,20 +470,22 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
         </div>
 
         <div>
-          <FieldLabel>When this rule fires</FieldLabel>
+          <FieldLabel>When this rule applies</FieldLabel>
           <Segmented<"auto" | "manual">
-            label="Confirmation mode"
+            label="When this rule applies"
             value={mode}
-            onChange={setModeValue}
+            // Through `change`, because the checked note reads the mode: a
+            // verdict about "at once" says nothing about "waits".
+            onChange={change(setModeValue)}
             options={[
-              { value: "manual", label: "Queue for review" },
-              { value: "auto", label: "Apply immediately" },
+              { value: "manual", label: "Waits under Pending changes" },
+              { value: "auto", label: "Applies at once" },
             ]}
           />
           <FieldHint>
             {mode === "manual"
-              ? "Its writes wait under Pending changes until somebody confirms them."
-              : "Its writes reach the identity provider the moment the rule fires."}
+              ? "The access this rule gives waits under Pending changes until you send it. Nobody's access changes before then."
+              : "The access this rule gives takes effect the moment the rule applies. Nobody reviews it first."}
           </FieldHint>
         </div>
 
@@ -484,9 +498,9 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
             >
               {validated.ok
                 ? validated.notes.length
-                  ? `Validated — ${validated.notes.length} ${validated.notes.length === 1 ? "thing" : "things"} to know`
-                  : "Validated"
-                : "Not valid"}
+                  ? `Checked — ${validated.notes.length} ${validated.notes.length === 1 ? "thing" : "things"} to know`
+                  : "Checked"
+                : "This rule can't be saved"}
             </div>
             {validated.notes.length ? (
               <ul className="flex flex-col gap-1 text-muted">
@@ -495,7 +509,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
                 ))}
               </ul>
             ) : (
-              <p className="text-muted">Nothing changes for anybody who already holds the role.</p>
+              <p className="text-muted">Nobody holds the first role yet, so saving changes nothing today.</p>
             )}
           </div>
         )}
@@ -505,7 +519,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
 
       <ModalFooter
         note={
-          validated?.ok ? undefined : "Save is blocked until validation passes."
+          validated?.ok ? undefined : "Check the rule before you can save it."
         }
       >
         <Button
@@ -528,14 +542,14 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
                 setOutcome({
                   kind: "applied",
                   message: "Rule updated",
-                  detail: "It applies to what happens from now on.",
+                  detail: savedDetail(mode),
                 });
               } else {
                 await create.mutateAsync({ ...input, confirmation_mode: mode });
                 setOutcome({
                   kind: "applied",
                   message: "Rule created",
-                  detail: "It applies to what happens from now on.",
+                  detail: savedDetail(mode),
                 });
               }
               onClose();
@@ -557,7 +571,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
             }
           }}
         >
-          {validated ? "Re-validate" : "Validate"}
+          {validated ? "Check again" : "Check rule"}
         </Button>
         <Button onClick={onClose}>Cancel</Button>
         {/*
@@ -573,6 +587,13 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
       </ModalFooter>
     </Modal>
   );
+}
+
+/** What a saved rule does next, in the rule's own mode. */
+function savedDetail(mode: "auto" | "manual"): string {
+  return mode === "auto"
+    ? "People who already hold the first role get the second at once; anyone given the first role later gets the second too."
+    : "The access this rule gives waits under Pending changes; send it from there. Anyone given the first role later is handled the same way.";
 }
 
 /**
@@ -613,24 +634,25 @@ function DeleteRuleConfirm({
       <ModalHeader
         title={`Delete ${shortRuleId(rule.id)}?`}
         titleId="rule-delete-title"
-        lede={`This rule is the only reason some people hold ${label}.`}
+        lede={`Some people may hold ${label} only because of this rule.`}
       />
 
       <div className="px-6">
         <div className="danger-note px-4 py-3.5 text-[14px] leading-[1.55]">
           <div className="type-label mb-1 text-danger-text">What happens</div>
           <ul className="flex flex-col gap-1 text-muted">
-            <li>The rule stops producing {label} for anybody.</li>
+            <li>The rule stops giving {label} to anybody.</li>
             <li>
               {holders === 0
-                ? "Nobody holds the role that triggers it, so nothing is taken back."
-                : `${holders} ${holders === 1 ? "person holds" : "people hold"} the role that triggers it, ` +
-                  `and lose ${label} unless a bundle or a direct grant also gives it to them.`}
+                ? "Nobody holds the first role, so nobody's access is revoked (ends)."
+                : `${holders} ${holders === 1 ? "person holds" : "people hold"} the first role. ` +
+                  `Their ${label} is revoked (their access to it ends) unless they also hold it through a bundle ` +
+                  `(a set of roles given together) or were given it by hand.`}
             </li>
             <li>
               {rule.confirmation_mode === "auto"
-                ? "The revokes reach the identity provider immediately."
-                : "The revokes wait under Pending changes until somebody confirms them."}
+                ? "Their access ends at once, with no review."
+                : "Revoking waits under Pending changes until you send it. Until then, their access stays."}
             </li>
           </ul>
         </div>
@@ -638,7 +660,7 @@ function DeleteRuleConfirm({
 
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
-      <ModalFooter note="Retarget the rule instead if you only want it to produce something else.">
+      <ModalFooter note="If you only want the rule to give a different role, edit it instead of deleting it.">
         {!gone && (
         <Button
           variant="dangerConfirm"
@@ -653,7 +675,7 @@ function DeleteRuleConfirm({
                   ? {
                       kind: "applied",
                       message: `${shortRuleId(rule.id)} deleted`,
-                      detail: "Nobody's access changed — the rule was producing nothing.",
+                      detail: "Nobody's access changed — the rule was giving nothing.",
                     }
                   : {
                       // Queued unless the rule fired unattended: the
@@ -662,11 +684,11 @@ function DeleteRuleConfirm({
                       // would say access is gone that is still there.
                       kind: auto ? "applied" : "queued",
                       message: `${shortRuleId(rule.id)} deleted — ${n} ${
-                        n === 1 ? "change" : "changes"
-                      } ${auto ? "applied" : "waiting"}`,
+                        n === 1 ? "revocation" : "revocations"
+                      } ${auto ? "sent" : "waiting to be sent"}`,
                       detail: auto
-                        ? "The rule fired unattended, so its withdrawals went with it."
-                        : "They sit under Pending changes until somebody resumes the queue.",
+                        ? "The rule applied without review, so the access it gave was revoked without review too."
+                        : "The revocations wait under Pending changes until you send them. Until then, that access stays.",
                     },
               );
             } catch (error) {
@@ -674,7 +696,7 @@ function DeleteRuleConfirm({
             }
           }}
         >
-          Delete and revoke
+          Delete rule and revoke access
         </Button>
         )}
         {/* `onDeleted` closes the editor this dialog opened over, and it was

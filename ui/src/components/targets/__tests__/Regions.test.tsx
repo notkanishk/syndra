@@ -44,7 +44,7 @@ describe("a region keeps its seat", () => {
 describe("the count chip", () => {
   it("says nothing was read, rather than saying zero", () => {
     render(<CountChip n={null} />);
-    expect(screen.getByLabelText("not read")).toBeTruthy();
+    expect(screen.getByLabelText("count could not be read")).toBeTruthy();
     expect(screen.queryByText("0")).toBeNull();
   });
 

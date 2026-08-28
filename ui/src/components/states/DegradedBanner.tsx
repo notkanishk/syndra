@@ -87,32 +87,43 @@ export function DegradedBanner() {
           <>
             <div className="font-display text-[19px] font-bold">These numbers are not real.</div>
             <p className="max-w-[70ch] text-[14px] font-medium">
-              The identity provider is configured but unreachable, so Syndra is serving demo data.
-              Don&rsquo;t grant or revoke anything until this clears.
-              {data.reason ? ` (${data.reason})` : ""}
+              Syndra cannot reach Zitadel (the service everyone signs in through), so it is showing
+              sample data instead of real people and access. Do not give or revoke (end) any access
+              until this banner goes away.
             </p>
+            {data.reason ? (
+              <p className="mt-1.5 max-w-[70ch] text-[13px]">
+                For the person who runs the Syndra server: {data.reason}
+              </p>
+            ) : null}
           </>
         ) : (
           <>
             <div className="font-display text-[19px] font-bold">
-              {residue} rows here came from the demo seeder.
+              {residue} items on these screens are sample data.
             </div>
             <p className="max-w-[74ch] text-[14px] font-medium">
-              People and projects are real. Some bundles, rules, grants and audit entries are
-              fixtures, and nothing else on screen tells them apart.{" "}
-              {data?.seed_active
-                ? "Seeding is still switched on, so a restart would put back anything you delete — set SYNDRA_SEED_DEMO=false first."
-                : "Seeding is already off, so these are leftovers from an earlier run; turning the flag off never removed the rows it had already written."}
+              People and projects are real. Some bundles, rules, access and history entries are
+              sample data, and nothing else on screen tells them apart. Ask the person who runs
+              the Syndra server to clear the sample data. Until then, treat anything you cannot
+              confirm as sample.
             </p>
+            {/* Marked as theirs, so staff know the paragraph below is not for them. */}
             <div className="mt-3 max-w-[86ch]">
+              <div className="mb-1.5 type-label">For the person who runs the Syndra server</div>
+              <p className="mb-2 max-w-[74ch] text-[13.5px]">
+                {data?.seed_active
+                  ? "Sample data is still switched on, so a restart would put it back after you clear it. Set SYNDRA_SEED_DEMO=false first."
+                  : "Sample data is switched off, so what remains is left over from an earlier run. Switching it off never removes what was already written."}
+              </p>
               <CommandBlock
                 tone="onWarn"
                 command={data?.reset_command ?? "make reset-demo-data"}
-                caption="Run this on the deployment host. It prints what it would delete and stops — add APPLY=1 to commit."
+                caption="Run this on the server that hosts Syndra. It prints what it would delete and stops. Add APPLY=1 to delete."
                 steps={[
-                  "Only rows referencing a demo fixture go. Real people, real projects and every decision you actually made stay exactly as they are.",
-                  "Nothing upstream is touched. Zitadel keeps whatever it holds; the next reconciliation sweep reports anything unaccounted for as unexplained access.",
-                  "For a genuine blank slate instead — no bundles, no rules, no history — use make reset-all-data APPLY=1.",
+                  "Only sample data is deleted. Real people, real projects and every decision you made stay exactly as they are.",
+                  "Zitadel is not changed. Anything left over there is reported under Unexplained access at the next check.",
+                  "For a blank slate instead — no bundles, no rules, no history — use make reset-all-data APPLY=1.",
                 ]}
               />
             </div>

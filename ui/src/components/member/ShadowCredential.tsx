@@ -195,7 +195,7 @@ function SetPasswordDialog({
 
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
-      <ModalFooter note="Nobody, including a lab manager, can read this back to you afterwards.">
+      <ModalFooter note="Nobody, including makerspace staff, can read this back to you afterwards.">
         <Button
           variant="accent"
           disabled={!ready}

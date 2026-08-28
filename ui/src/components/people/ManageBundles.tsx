@@ -86,7 +86,7 @@ export function ManageBundles({
           changes.length === 1
             ? "One bundle change recorded"
             : `${changes.length} bundle changes recorded`,
-        detail: "Nothing has reached a target yet — the writes dispatch on the next drain.",
+        detail: "Nothing has reached Zitadel or a connected system yet. The changes wait under Pending changes until you send them.",
       });
       setStaged(new Set());
     } catch (error) {
@@ -147,7 +147,7 @@ export function ManageBundles({
       {previewBundle && (
         <div className="mx-6 mt-5 rounded-block border border-line bg-tint-1 px-[18px] py-4">
           <div className="mb-2.5 type-label">
-            {previewAdding ? `Adding ${previewBundle.name} would grant` : `Removing ${previewBundle.name} would take away`}
+            {previewAdding ? `Adding ${previewBundle.name} would grant` : `Removing ${previewBundle.name} would revoke`}
           </div>
           <div className="flex flex-col gap-[7px] text-[14px]">
             {previewRoles.length === 0 && (
@@ -184,7 +184,7 @@ export function ManageBundles({
                         aria-hidden
                         className="h-1.5 w-1.5 rounded-pill border border-dashed border-ink/60"
                       />
-                      and cascade to <RoleRef projectId={cascade.target_project} roleKey={cascade.target_role} />
+                      and, through an automatic rule, <RoleRef projectId={cascade.target_project} roleKey={cascade.target_role} />
                     </div>
                   )}
                 </div>

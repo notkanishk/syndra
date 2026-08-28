@@ -56,7 +56,7 @@ export const OUTCOME_TONE: Record<OutcomeKind, string> = {
 
 export const OUTCOME_LABEL: Record<OutcomeKind, string> = {
   applied: "Applied",
-  queued: "Queued",
+  queued: "Waiting to be sent",
   no_change: "No change",
   refused: "Refused",
   failed: "Failed",
@@ -69,7 +69,7 @@ export const PLAN_EFFECT_LABEL: Record<PlanEffect, string> = {
   no_change: "No change",
   blocked: "Refused",
   failed: "Failed",
-  queued: "Queued",
+  queued: "Waiting to be sent",
 };
 
 export const PLAN_EFFECT_TONE: Record<PlanEffect, string> = {
@@ -91,12 +91,12 @@ export function sentence(text: string): string {
 /** What went wrong, in the product's voice rather than the transport's. */
 export function describeFailure(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.status === 403) return "You don't have access to this.";
-    if (error.status === 404) return "It no longer exists.";
+    if (error.status === 403) return "You don't have permission to do this.";
+    if (error.status === 404) return "That item no longer exists — someone may have removed it.";
     return error.message;
   }
   if (error instanceof Error) return error.message;
-  return "The request failed.";
+  return "Something went wrong and the request did not go through.";
 }
 
 /**
@@ -126,12 +126,12 @@ export function outcomeFromError(error: unknown): ActionOutcome {
     // design, so nothing sends itself, and saying otherwise would be the
     // product promising something it has deliberately refused to build.
     detail: offline
-      ? "Nothing was queued and nothing was sent. Try again once the connection is back."
+      ? "Nothing was sent. Try again once you are back online."
       : sessionEnded
         // Both halves, and neither may be dropped. "Nothing was changed" is
         // what an operator needs before anything else; "still here" is what
         // stops them abandoning a plan they had already read and approved.
-        ? "Nothing was changed, and what you were doing is still here. Sign in again and press it once more."
+        ? "Nothing was changed, and what you were doing is still here. Sign in again, then press the same button once more."
         : undefined,
     requestId: typeof requestId === "string" ? requestId : undefined,
   };

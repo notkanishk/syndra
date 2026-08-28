@@ -33,24 +33,29 @@ export function MappingScreen({ target }: { target: string }) {
 
   return (
     <div className="flex flex-col gap-[18px]">
-      <PageHeader title="Mappings" />
-
-      <p className="max-w-[80ch] text-[14.5px] leading-[1.6] text-muted">
-        A mapping ties a role to what it reaches on {name}.{" "}
-        {reach !== undefined && (
+      <PageHeader
+        title="Mappings"
+        lede={
           <>
-            <strong className="font-semibold text-ink">
-              {reach === 0
-                ? "Nothing reaches it."
-                : reach === 1
-                  ? "One reaches it."
-                  : `${reach} reach it.`}
-            </strong>{" "}
+            A mapping ties a role to a group on {name} — a group is what decides which
+            folders an account can open — so everybody holding the role gets an account in
+            that group.{" "}
+            {reach !== undefined && (
+              <>
+                <strong className="font-semibold text-ink">
+                  {reach === 0
+                    ? "No role is mapped yet."
+                    : reach === 1
+                      ? "One role is mapped."
+                      : `${reach} roles are mapped.`}
+                </strong>{" "}
+              </>
+            )}
+            Changing one moves access for everybody holding that role, so every change here
+            is previewed before it is applied.
           </>
-        )}
-        Changing one moves access for everybody holding that role, which is why every
-        change here is rehearsed before it lands.
-      </p>
+        }
+      />
 
       <VersionBand target={target} history={history.data} />
 

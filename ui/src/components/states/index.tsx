@@ -88,7 +88,7 @@ export function EmptyState({
             href={action.href}
             className="mt-1 inline-flex min-h-[44px] items-center self-start text-[13.5px] font-semibold text-accent-text hover:underline"
           >
-            {action.label} →
+            {action.label} <span aria-hidden="true">→</span>
           </Link>
         ) : (
           <button
@@ -96,7 +96,7 @@ export function EmptyState({
             onClick={action.onClick}
             className="mt-1 inline-flex min-h-[44px] items-center self-start text-[13.5px] font-semibold text-accent-text hover:underline"
           >
-            {action.label} →
+            {action.label} <span aria-hidden="true">→</span>
           </button>
         ))}
     </div>
@@ -153,7 +153,12 @@ export function ErrorState({
         {/* A labelled copy row rather than bare mono: an operator pasting this
             into a message needs to be able to say what it is, and it is the
             one thing here that gets the failure looked at. */}
-        {requestId && <CopyableValue value={requestId} label="Request id" className="mt-1" />}
+        {requestId && (
+          <div className="mt-1">
+            <CopyableValue value={requestId} label="Reference" />
+            <p className="mt-1 text-[12.5px] text-faint">Quote this if you ask for help.</p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -47,7 +47,7 @@ describe("the two densities say the same thing", () => {
         <Withheld items={[ITEM]} audience="operator" />
       </>,
     );
-    expect(container.textContent).toMatch(/Withheld/);
+    expect(container.textContent).toMatch(/On hold/);
     expect(container.textContent).not.toMatch(/suspend/i);
     expect(container.textContent).not.toMatch(/allowance/i);
   });

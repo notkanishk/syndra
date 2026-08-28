@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BADGE_TONE, DOT_TONE, loudestTone } from "@/components/shell/navTones";
+import { VIEW_EXPLANATION, VIEW_HINT } from "@/components/shell/ViewSwitch";
 import { useDialogFocusTrap } from "@/components/ui/Modal";
 import { leafMatches, navFor, targetNav, type IndicatorKey, type NavLeaf } from "@/lib/nav";
 import { useIndicators } from "@/lib/queries/useIndicators";
@@ -50,7 +51,7 @@ export function TouchNav() {
 
   return (
     <nav
-      aria-label="Primary"
+      aria-label="Main navigation"
       // `tablet:hidden` and not a JS branch: the rail takes over at the same
       // width, and one of the two is always the only one visible.
       className="flex-none border-t border-line bg-rail px-1.5 pb-[env(safe-area-inset-bottom)] pt-2 tablet:hidden"
@@ -264,7 +265,7 @@ function NavSheet({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Go to"
+      aria-label="Go to a page"
       className="settle-scrim fixed inset-0 z-50 flex items-end bg-black/70"
       onClick={(event) => {
         if (event.target === event.currentTarget) dismiss();
@@ -277,10 +278,10 @@ function NavSheet({
         <button
           type="button"
           onClick={dismiss}
-          // "Dismiss", the same word Modal's grabber answers to. Two sheets
-          // whose handles have different names are two sheets to anything
-          // querying by accessible name, a screen reader included.
-          aria-label="Dismiss"
+          // The same words Modal's grabber answers to. Two sheets whose
+          // handles have different names are two sheets to anything querying
+          // by accessible name, a screen reader included.
+          aria-label="Close this sheet"
           // Out of the tab order, for the reason `focusableIn` documents: as
           // the panel's first focusable element it took the focus the trap
           // gives on open, so the nav sheet opened with the cursor on "close
@@ -302,13 +303,14 @@ function NavSheet({
           // Switching reveals in place and never navigates, so the sheet stays
           // open around it — the operator is choosing what this screen shows,
           // not where to go.
-          <div className="mb-3 flex rounded-pill bg-tint-1 p-1">
+          <div role="group" aria-label="Basic or Advanced view" className="mb-3 flex rounded-pill bg-tint-1 p-1">
             {(["basic", "advanced"] as const).map((option) => (
               <button
                 key={option}
                 type="button"
                 onClick={() => setView(option)}
                 aria-pressed={view === option}
+                title={VIEW_HINT[option]}
                 className={`min-h-[44px] flex-1 rounded-pill text-[13.5px] capitalize motion-press ${
                   // Dense, not bright: the label is 13.5px and the bright
                   // accent fails AA under 18.5px.
@@ -319,6 +321,9 @@ function NavSheet({
               </button>
             ))}
           </div>
+        )}
+        {isOperator && (
+          <p className="mb-3 px-3.5 text-[12.5px] leading-[1.5] text-faint">{VIEW_EXPLANATION}</p>
         )}
 
         <div className="flex flex-col gap-0.5">

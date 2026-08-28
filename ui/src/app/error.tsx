@@ -35,16 +35,17 @@ export default function AppError({ error }: { error: Error & { digest?: string }
   return (
     <div className="flex min-h-[60dvh] items-center justify-center px-5">
       <div className="w-full max-w-[52ch] rounded-[18px] border border-danger-line bg-surface-2 px-6 py-7">
-        <h1 className="type-card-title">Syndra stopped drawing this page.</h1>
+        <h1 className="type-card-title">This page could not be shown.</h1>
         <p className="mt-2 text-[14.5px] leading-[1.55] text-muted">
           Something in the page itself failed, not something you did. Nothing was changed:
-          this happened while showing you a screen, not while writing anything.
+          this happened while showing you a screen, not while saving anything.
         </p>
 
         {error.digest ? (
           <div className="mt-4">
-            <div className="mb-1 type-label">Error id</div>
-            <CopyableValue label="Error id" value={error.digest} />
+            <div className="mb-1 type-label">Reference</div>
+            <CopyableValue label="Reference" value={error.digest} />
+            <p className="mt-1 text-[12.5px] text-faint">Quote this if you ask for help.</p>
           </div>
         ) : null}
 
@@ -57,7 +58,7 @@ export default function AppError({ error }: { error: Error & { digest?: string }
           href="/"
           className="mt-5 inline-flex min-h-[44px] items-center rounded-pill bg-accent-dense px-4 text-[13.5px] font-semibold text-accent-ink"
         >
-          Go to the start
+          Go to the home page
         </a>
       </div>
     </div>

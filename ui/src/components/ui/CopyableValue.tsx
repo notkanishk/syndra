@@ -33,6 +33,8 @@ export function CopyableValue({
 }) {
   const [copied, setCopied] = useState(false);
   const [selected, setSelected] = useState(false);
+  // "Your account name" mid-sentence is "your account name"; "TrueNAS host" stays.
+  const object = label.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase());
   // Resolved after mount. Rendering the answer on the server would mean a
   // hydration mismatch on every insecure origin — and getting it wrong in
   // that direction offers a control that cannot work.
@@ -101,6 +103,9 @@ export function CopyableValue({
       <button
         type="button"
         onClick={canCopy ? copy : select}
+        // Six rows on one page are six buttons, and "Copy" six times is one
+        // name for six things. The name says what it copies.
+        aria-label={`${canCopy ? (copied ? "Copied" : "Copy") : selected ? "Selected" : "Select"} ${object}`}
         className={`min-h-[44px] shrink-0 rounded-pill px-2.5 text-[12.5px] font-semibold motion-tint ${
           copied || selected ? "text-healthy" : "text-muted hover:bg-[var(--hover)] hover:text-ink"
         }`}
@@ -111,7 +116,7 @@ export function CopyableValue({
       {/* Announced rather than only coloured: the label change is the whole
           feedback, and a sighted user gets it from the button's own text. */}
       <span aria-live="polite" className="sr-only">
-        {copied ? `${label} copied` : selected ? `${label} selected` : ""}
+        {copied ? `${label} copied` : selected ? `${label} is selected — hold to copy` : ""}
       </span>
     </div>
   );

@@ -76,7 +76,7 @@ describe("deleting an automatic rule", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete rule" }));
 
     expect(state.remove).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Delete and revoke" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Delete rule and revoke access" })).toBeTruthy();
     // The form is gone — the question is not asked over the top of the thing it is about.
     expect(screen.queryByRole("button", { name: "Save rule" })).toBeNull();
   });
@@ -86,10 +86,10 @@ describe("deleting an automatic rule", () => {
     openTheRule();
     fireEvent.click(screen.getByRole("button", { name: "Delete rule" }));
 
-    expect(document.body.textContent).toMatch(/12 people hold the role that triggers it/);
+    expect(document.body.textContent).toMatch(/12 people hold the first role/);
     // And that holding it elsewhere keeps it — the backend works this out per person, so the
     // dialog must not promise a precise loss.
-    expect(document.body.textContent).toMatch(/unless a bundle or a direct grant/);
+    expect(document.body.textContent).toMatch(/unless they also hold it through a bundle/);
   });
 
   // A queued rule's revokes queue too. Saying "applied" here would have an operator believe a
@@ -99,14 +99,14 @@ describe("deleting an automatic rule", () => {
     const { unmount } = render(<AutomaticRulesPage />);
     fireEvent.click(screen.getByText(/^R-/));
     fireEvent.click(screen.getByRole("button", { name: "Delete rule" }));
-    expect(document.body.textContent).toMatch(/wait under Pending changes/);
+    expect(document.body.textContent).toMatch(/waits under Pending changes/);
     unmount();
 
     state.rules = [rule({ confirmation_mode: "auto" })];
     render(<AutomaticRulesPage />);
     fireEvent.click(screen.getByText(/^R-/));
     fireEvent.click(screen.getByRole("button", { name: "Delete rule" }));
-    expect(document.body.textContent).toMatch(/reach the identity provider immediately/);
+    expect(document.body.textContent).toMatch(/ends at once, with no review/);
   });
 
   it("says nothing is taken back when nobody holds the trigger role", () => {
@@ -114,7 +114,7 @@ describe("deleting an automatic rule", () => {
     openTheRule();
     fireEvent.click(screen.getByRole("button", { name: "Delete rule" }));
 
-    expect(document.body.textContent).toMatch(/nothing is taken back/i);
+    expect(document.body.textContent).toMatch(/nobody's access is revoked/i);
   });
 
   it("backs out to the editor rather than closing everything", () => {
@@ -129,7 +129,7 @@ describe("deleting an automatic rule", () => {
   it("deletes on the confirming click", async () => {
     openTheRule();
     fireEvent.click(screen.getByRole("button", { name: "Delete rule" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete and revoke" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete rule and revoke access" }));
 
     await waitFor(() =>
       expect(state.remove).toHaveBeenCalledWith("aaaabbbb-1111-2222-3333-444455556666"),
@@ -161,7 +161,7 @@ describe("after a rule is deleted", () => {
       .mockResolvedValue({ cascade: { enqueued: 3, mode: "auto" } });
     openTheRule();
     fireEvent.click(screen.getByRole("button", { name: "Delete rule" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete and revoke" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete rule and revoke access" }));
     await waitFor(() => expect(state.remove).toHaveBeenCalled());
   }
 
@@ -169,7 +169,7 @@ describe("after a rule is deleted", () => {
     await deleteTheRule();
 
     await waitFor(() => expect(document.body.textContent).toMatch(/deleted/i));
-    expect(screen.queryByRole("button", { name: "Delete and revoke" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete rule and revoke access" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Keep the rule" })).toBeNull();
     expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
   });
@@ -189,13 +189,13 @@ describe("after a rule is deleted", () => {
   });
 
   it("returns to the editor when the delete failed", async () => {
-    state.remove = vi.fn().mockRejectedValue(new Error("the identity provider is unreachable"));
+    state.remove = vi.fn().mockRejectedValue(new Error("Zitadel is unreachable"));
     openTheRule();
     fireEvent.click(screen.getByRole("button", { name: "Delete rule" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete and revoke" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete rule and revoke access" }));
 
     await waitFor(() => expect(document.body.textContent).toMatch(/unreachable/i));
-    expect(screen.getByRole("button", { name: "Delete and revoke" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Delete rule and revoke access" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
 
     // The rule is still there, so backing out puts the operator back on it.

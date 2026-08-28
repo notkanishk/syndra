@@ -43,7 +43,7 @@ describe("traceFor", () => {
     expect(traceFor(entry())).toEqual({
       kind: "object",
       label: "R_9a8b",
-      title: `Rule ${RULE}`,
+      title: "Rule",
     });
   });
 

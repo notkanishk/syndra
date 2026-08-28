@@ -43,14 +43,14 @@ export function loginFailure(code: string | undefined): LoginFailure | null {
   if (REFUSED.has(code)) {
     return {
       head: "Zitadel didn't let you through.",
-      sub: "Nothing was signed in. Check you used your makerspace account, or find a steward in the space.",
+      sub: "Nothing was signed in. Check you used your makerspace account, or ask makerspace staff.",
     };
   }
 
   if (HANDSHAKE.has(code)) {
     return {
       head: "The sign-in didn't complete.",
-      sub: "Nothing was signed in. Try again — if it keeps happening, find a steward in the space.",
+      sub: "Nothing was signed in. Try again. If it keeps happening, ask makerspace staff.",
     };
   }
 
@@ -59,6 +59,6 @@ export function loginFailure(code: string | undefined): LoginFailure | null {
   // nobody answered the door.
   return {
     head: "Zitadel didn't answer.",
-    sub: "Nothing was signed in. Try again in a minute, or find a steward in the space.",
+    sub: "Nothing was signed in. Try again in a minute, or ask makerspace staff.",
   };
 }
