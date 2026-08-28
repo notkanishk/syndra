@@ -1,5 +1,6 @@
 "use client";
 
+import { Term } from "@/components/ui/Term";
 import Link from "next/link";
 
 /**
@@ -43,7 +44,7 @@ export function UpstreamShell({
             title tells them where they are before they decide anything. Those
             are two different jobs and both are wanted. */}
         <p className="mt-1.5 text-[13.5px] font-semibold text-warn-text">
-          Changes here go straight to Zitadel (the service everyone signs in through), and Syndra
+          Changes here go straight to <Term name="zitadel">Zitadel</Term>, and Syndra
           keeps no record of them.
         </p>
         <p className="mt-2 max-w-[80ch] text-[14.5px] leading-[1.55] text-muted">

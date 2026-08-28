@@ -1,5 +1,6 @@
 "use client";
 
+import { Term } from "@/components/ui/Term";
 import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
@@ -51,7 +52,13 @@ export default function PendingChangesPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Pending changes"
-        lede="Changes Syndra has decided on that have not reached Zitadel (the service everyone signs in through) or a connected system yet. Nothing here takes effect until you send it."
+        lede={
+          <>
+            Changes Syndra has decided on that have not reached <Term name="zitadel">Zitadel</Term>{" "}
+            or a connected system yet. They wait in the <Term name="outbox">outbox</Term>; nothing
+            here takes effect until you send it.
+          </>
+        }
         actions={
           <Button
             variant="accent"
