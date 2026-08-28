@@ -128,18 +128,20 @@ export function MemberAccess({ session }: { session: SessionUser }) {
       <MemberCatalog heldByProject={heldByProject} />
 
       {/*
-        The workshop password card used to sit here, last on the page. It is withdrawn from the
-        member view for now — nothing reads that password yet (the door and machine bridge is
-        unbuilt, see System > Hardware sync), so the card asked members to set a credential that
-        does nothing and then had to spend a paragraph admitting it.
+        The workshop password card used to sit here, last on the page, and is
+        deleted rather than commented out.
 
-        <ShadowCredential/> is intact and tested. ITS BACKEND IS NOT: the set endpoint it calls,
-        PUT /users/{uid}/shadow-credential, was deleted (backend internal/handlers/vault.go says
-        so where it stood), and setting a credential now goes per target through
-        POST /me/targets/{target}/credential — which Network storage already uses. So restoring
-        this card is NOT re-adding the line: re-add it as written and every member who sets a
-        password gets a 404 on a form that promises "it will work on the workshop machines".
-        Point it at the per-target route first, or lift the working panel out of MyStorage.
+        It called PUT /users/{uid}/shadow-credential, which the backend removed
+        (internal/handlers/vault.go says so where the handler stood): a member
+        sets a credential per target now, through
+        POST /me/targets/{target}/credential. Network storage already does that
+        and is the one working door.
+
+        What stood here was 385 lines calling a route that 404s, kept alive by
+        a test that mocked the dead hook into passing — which is what made it
+        look maintained. If the door and machine bridge ever needs a card on
+        this page, lift the working panel out of MyStorage; do not restore this
+        one from history.
       */}
     </div>
   );
