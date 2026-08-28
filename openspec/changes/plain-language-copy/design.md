@@ -253,7 +253,7 @@ specs. It does not appear on screen.
 | **Audit** | what people did in Syndra |
 | **Zitadel** | the service everyone signs in through, and whether Syndra can reach it |
 | **Connected systems** | the systems Syndra creates accounts on |
-| **Zitadel events** | what Zitadel told Syndra, in order |
+| **Incoming events** | what reached Syndra from outside — access changed in Zitadel, and people joining |
 
 ### Words that never appear on screen
 

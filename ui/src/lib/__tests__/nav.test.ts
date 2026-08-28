@@ -205,7 +205,7 @@ describe("the target rows", () => {
     const system = targetNav([]).find((e) => e.kind === "group" && e.label === "System");
     const labels = system?.kind === "group" ? system.children.map((c) => c.label) : [];
 
-    expect(labels).toEqual(["Zitadel", "Connected systems", "Zitadel events"]);
+    expect(labels).toEqual(["Zitadel", "Connected systems", "Incoming events"]);
     // Static, so it is the same array — nothing is derived to produce it.
     expect(targetNav([])).toBe(ADVANCED_NAV);
   });

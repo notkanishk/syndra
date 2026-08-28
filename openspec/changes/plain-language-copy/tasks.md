@@ -18,10 +18,10 @@
 - [x] 3.4 Every shared primitive rewritten — RehearsalDialog (Preview → Apply), PlanReview, ActionOutcome, ReadFreshness, SelectionBar, Acknowledge, Withheld, CopyableValue, Modal.
 - [x] 3.5 People, Home, Requests, member screens.
 - [x] 3.6 Projects, Roles, Apps, Bundles, token format.
-- [x] 3.7 Review queues, Pending changes, Audit, Change history, Zitadel events, `drain-outcome`, `audit-vocabulary` (missing action keys filled).
+- [x] 3.7 Review queues, Pending changes, Audit, Change history, Incoming events, `drain-outcome`, `audit-vocabulary` (missing action keys filled).
 - [x] 3.8 Connected systems, target page, mappings, dormant accounts, member storage.
 - [x] 3.9 Automatic rules, Access map, Zitadel pages.
-- [x] 3.10 Nav labels: Identity provider → Zitadel; Withdrawn access → Unfinished revocations; Event activity → Zitadel events. Order, grouping and hrefs unchanged.
+- [x] 3.10 Nav labels: Identity provider → Zitadel; Withdrawn access → Unfinished revocations; Event activity → Incoming events. Order, grouping and hrefs unchanged.
 - [x] 3.11 Relative times read as words ("4 min ago", "3 hours ago", "2 days ago").
 
 ## 4. Untrue sentences found and fixed
@@ -52,6 +52,13 @@
 - [x] 8.1 The guard could not see one-word string literals, so every banned word that lives as a bare label — a badge, a filter option, a column header — passed it. `{next === "approved" ? "Approved" : "Denied"}` sat in Requests through the guard's own release, along with two more `Denied` labels beside it.
 - [x] 8.2 Found by mutation-checking an exception rather than trusting it: the argued entry for `Operator` passed with the word still in the file, which is only possible if the guard never read it. An exception that is never exercised is a permission granted to nobody, and it says the rule is being kept when it is not.
 - [x] 8.3 A capitalised one-word literal is now read as a label. Lowercase single words stay out — that is the shape of a code string (`"admin"`, `"oidc"`, a query key). Three real `Denied` labels fixed; mutation-checked with a planted label.
+
+## 9. A rename that was confidently wrong
+
+- [x] 9.1 `Event activity` was renamed `Zitadel events`. The page merges two streams — Zitadel's webhook events AND onboarding triggers, whose own `source` is `webhook` / `manual` / `system` — so it carries rows Zitadel never sent, and its own source filter offers "Zitadel" as one option of three. The title named a subset of the page as the whole of it, and the lede ("What Zitadel told Syndra") was false for every manual or system trigger.
+- [x] 9.2 The empty state one screen below said it correctly the whole time — "when somebody changes access in Zitadel, **or when a new person joins**" — so the page contradicted itself in two places a reader sees together. The old name was merely vague; the new one was vague replaced by wrong, which is worse, because a reader believes it.
+- [x] 9.3 Now `Incoming events`: what reached Syndra from outside. The lede names both streams.
+- [x] 9.4 The guard cannot catch this class. Every word in "Zitadel events" is permitted vocabulary; what was wrong was the claim, and no word list can see a title that names part of its page. It is the same limit as §6.4 — read the sentence beside what it describes.
 
 ## 6. Open
 
