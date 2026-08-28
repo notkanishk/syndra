@@ -14,21 +14,30 @@ reading the sentence aloud to somebody who does not work here.
 
 ## 1. Who is reading
 
-**Members** — students, faculty, visiting researchers. They come here to see
-what they can use, to ask for more, and to reach network storage. They may
-open Syndra twice a term. Nothing they see may assume a previous visit.
+**Makerspace staff.** They run an academic makerspace at a university. They
+know what an identity provider is, they can name every product in their own
+rack, and they configured most of it. Write for a competent colleague: they
+do not need *token* explained, and a sentence that explains it anyway costs
+them a clause and tells them you assumed otherwise.
 
-**Makerspace staff** — the people who decide who may use what. They know the
-space, the machines, and the people. They do not know what an identity
-provider is, and they should not need to learn in order to approve a request
-or take a lapsed member off the laser cutter.
+What they cannot know from experience is the vocabulary **this product
+invented** — a cascade, the outbox, a merge finding, a log anchor, what
+Syndra means by adopting an account. Those are not difficult, they are
+simply local, and the only place they are ever explained is here.
 
-**The person who runs the server** — one or two people who installed Syndra.
-They may read a terminal command. Text for them is marked as for them, and
-placed where staff can step over it.
+**Members.** Students, faculty, visiting researchers. They come to see what
+they can use, to ask for more, and to reach storage. They may open Syndra
+twice a term, and they are not administrators of anything. They get the plain
+register — but they get the real names of the systems they actually use, TrueNAS
+and Zitadel among them, because a student who cannot mount a share is going to
+type the product's name into a search box, not "the network storage server".
 
-Write for the first two. Address the third by name — *"for whoever runs the
-Syndra server"* — so everyone else knows the paragraph is not theirs.
+**The person who runs the server.** One or two people. Text for them is
+marked as theirs — *for whoever runs the Syndra server* — so everyone else
+knows the paragraph is not.
+
+The register differs by audience. The **facts** never do, and neither does
+the vocabulary: one word per thing, for everybody.
 
 ## 2. Register
 
@@ -46,8 +55,13 @@ intelligence, and it never performs either.
   consequence names the person it falls on. "Some of these may not apply" is
   not a sentence Syndra writes; "3 of the 12 already hold this role and will
   not change" is.
-- **Plain.** Short words where they exist. The reader should never feel a
-  sentence was written to sound authoritative.
+- **Plain, but not simplified.** Short words where a short word is as exact —
+  never a longer paraphrase in place of the right term. "The changes this edit
+  set off" is not plainer than "cascade", it is vaguer and four words longer,
+  and it leaves the reader without the word the rest of the product uses.
+  Precision is the courtesy; §6 says where a term carries its definition with
+  it. The reader should never feel a sentence was written to sound
+  authoritative, nor that it doubted them.
 - **Never clever.** No wordplay, no arch asides, no jokes. Cleverness costs the
   reader a second reading and gives them nothing for it.
 - **Never lecturing.** Design rationale belongs in code comments and in this
@@ -154,141 +168,131 @@ it from *Pending changes*."
 
 ## 6. Vocabulary
 
-One word for one thing, everywhere. The table is the product's glossary; the
-gloss column is the sentence used on first appearance on a page.
+One word for one thing, everywhere, and the precise word in preference to a
+paraphrase of it. Where the precise word is a term of art, it carries its
+definition with it rather than being replaced by a plainer, vaguer one.
 
-### Systems
+### The mechanism
 
-| Say | Gloss on first use per page | Never say |
-|---|---|---|
-| **Zitadel** | the service everyone signs in through | identity provider, IdP, the provider, upstream, downstream, the directory, the catalogue |
-| **TrueNAS** (or the system's own name via `targetLabel`) | the network storage server | target, the NAS, the add-on (*except* on *Connected systems*, where the add-on — the small program that connects Syndra to the system — is explained once) |
-| **connected system** | a system Syndra creates and manages accounts on | target, integration |
-| **Syndra** | — | the app, the system, the tool |
-| **Google** | the makerspace's Google account | Workspace, the IdP chain |
+`lib/glossary.ts` holds every defined term, once. `<Term name="cascade">` sets
+the word in the sentence and puts the definition one hover, tap or Tab away.
 
-### People
+Mark up a term's **first appearance on each page**, and only the first. A page
+that marks up every occurrence is a page of dotted underlines; a page that
+marks up none has left a reader with nowhere to go. A member who opens
+*Network storage* has not read *Bundles*, so "first use" is per page, not per
+product.
 
-| Say | Meaning | Never say |
-|---|---|---|
-| **person / people** | a human, in staff-facing copy | user, subject, principal, holder (as a noun), account (for a human) |
-| **you** | the reader, in member-facing copy | the member, the user |
-| **member** | someone who belongs to the makerspace; the audience name | — |
-| **makerspace staff** | the people who manage access, in member-facing copy | operator, steward, admin, lab manager, whoever runs the makerspace |
-| **the person who runs the Syndra server** | the installer, in copy meant for them | administrator, sysadmin, ops |
-| **account** | a person's account *on a connected system* ("their TrueNAS account") | — |
+Three kinds live in the glossary, and the difference decides how the copy
+around them reads:
 
-The word *operator* names a view and an audience in the code and in the
-specs. It does not appear on screen.
+- **Products** — Zitadel, TrueNAS, Google Workspace. Use the bare name. Never
+  gloss inline: no "Zitadel (the service everyone signs in through)". Marked
+  up on first use so a new colleague in their first week has somewhere to look.
+- **Standard terms** — grant, entitlement, provision, reconciliation, drift,
+  claim, token, OIDC, SAML, role key, service account. The field's own
+  vocabulary. Use it plainly. The definition is a courtesy, not a lesson.
+- **Syndra's own** — bundle, automatic rule, cascade, outbox, drain, hold,
+  mapping, merge finding, adopt, baseline, log anchor, unvouched, intent
+  ledger. Nobody knows these from experience, however senior. Their
+  definitions carry the consequence, not just the meaning, because they are
+  the only explanation the product ever offers.
 
-### Things a person can have
+Adding a term to the glossary is how a word becomes permitted. A term of art
+that is *not* in the glossary is not licensed by this section — it is
+unexplained jargon, and the fix is to define it, not to paraphrase it away.
 
-| Say | Gloss on first use per page | Never say |
-|---|---|---|
-| **access** | what a person can use | grant (noun), entitlement, permission (staff copy) |
-| **role** | one named kind of access, inside a project | grant, claim |
-| **project** | a machine or area with its own set of roles — the Laser Cutter, the Studio | org, boundary, Zitadel project |
-| **app** | something people sign in to — the booking site, the badge reader | application, client, OIDC client |
-| **bundle** | a set of roles given together | — |
-| **automatic rule** | if someone holds one role they also get another, with nobody clicking | policy, mapping rule |
-| **mapping** | which TrueNAS group a role gives | binding (in this sense) |
-| **hold** | a block on someone's access with a date to look at it again | withheld access (as a noun), suspension |
-| **direct access** | access somebody gave this person by hand | direct grant, standalone grant |
-| **via a bundle / automatic** | how the access arrived | source kind, carrier |
+### One name per thing
 
-### Verbs
+These are not difficulty problems, they are consistency problems: the same
+thing under two names reads as two things.
 
-| Say | Meaning | Never say |
-|---|---|---|
-| **give** (access, a role) | make somebody hold it | grant (as the only verb — *grant* may appear where the noun is *access*: "grant access"), assign, provision |
-| **revoke** | end a person's access. Glossed once per page: *revoke (end their access)* | remove access, withdraw access, take away, drop, retire access, deprovision |
-| **withdraw** | a member takes back their own request | — |
-| **remove** | take a thing out of a set — a role out of a bundle, a person out of a selection | — |
-| **delete** | an object ceases to exist — a rule, a mapping, an account on TrueNAS | purge, sweep, drop |
-| **retire** | a bundle is closed to new members and kept in history | delete (for bundles) |
-| **preview** | see what would change before it does | rehearse, plan, dry run, simulate |
-| **apply** | make the previewed change | commit, execute, run, fire |
-| **send** | dispatch waiting changes to Zitadel or a connected system | drain, resume, flush, dispatch |
-| **check** | compare what Syndra expects with what a system holds | reconcile, sweep, converge, sync |
-| **bring accounts in line** | make a connected system match what people's roles say | converge, reconcile |
-| **approve / decline** | decide a request | deny, reject |
-| **extend** | move an expiry date later | renew, prolong |
-| **lift** | end a hold | release, unblock |
-| **put on hold** | begin a hold | withhold, suspend, pause |
+| Say | Not |
+|---|---|
+| **Zitadel** | the identity provider (as a name), the provider, the directory, the catalogue, upstream, downstream, IdP |
+| **TrueNAS**, or the system's own name via `targetLabel` | the target, the NAS |
+| **connected system** (the class) | target, integration |
+| **person / people** | user, subject, principal, holder (as a noun) |
+| **makerspace staff** — in member-facing copy | lab manager, steward, operator, whoever runs the makerspace |
+| **revoke** — end a person's access | withdraw access, take away, drop, retire access |
+| **withdraw** — a member takes back their own request | — |
+| **remove** — take a thing out of a set | — |
+| **delete** — an object ceases to exist | purge |
+| **retire** — a bundle closes to new members | delete (of a bundle) |
+| **preview** then **apply** | rehearse, dry run, simulate |
+| **send** — dispatch what is waiting | flush |
+| **decline** | deny, reject |
+| **lift** — end a hold | release, unblock |
+
+*Operator* names an audience and a view. It is correct on staff screens and
+wrong in anything a member reads.
 
 ### States
 
-| Say | Meaning | Never say |
-|---|---|---|
-| **waiting to be sent** | recorded in Syndra, not yet at the system | queued, pending, in the outbox |
-| **sent** | the system accepted it | applied, landed, dispatched |
-| **failed** | the system refused it; Syndra will try again | errored, requeued |
-| **given up** | Syndra tried its limit and stopped; a person must act | terminal, exhausted, out of retries |
-| **no change** | already in that state | no-op, untouched |
-| **refused** | Syndra declined to do it, and says why | blocked, rejected |
-| **expires on / expired** | access with an end date | lapses, TTL |
-| **on hold** | blocked by a hold | withheld, suspended, held |
-| **unexplained** | access a person has that Syndra did not give | drift, out-of-band, unvouched |
-| **not created by Syndra** | an account on a system that arrived some other way | orphan, foreign, unbound |
-| **could not be read** | Syndra asked and got no answer | degraded, stale, unreachable (as a state word) |
-| **read at 09:14** | when Syndra last looked | freshness, cached |
+One set of words for a change's life, everywhere it is reported:
+
+**waiting to be sent** → **sent** → (**failed**, and Syndra will retry) →
+(**given up**, and a person must act). Plus **no change** (already in that
+state) and **refused** (Syndra declined, and says why).
 
 ### Pages
 
-| Nav label | What the lede says it is |
+| Nav label | What its lede says it is |
 |---|---|
 | **Home** | what needs you today |
 | **People** | everyone Syndra knows, and what each can use |
-| **Projects / Roles / Apps** | the things access is made of |
+| **Projects / Roles / Apps** | what access is made of |
 | **Requests** | what members have asked for |
-| **Bundles** | sets of roles given together |
+| **Bundles** | sets of roles handed out together |
 | **Automatic rules** | roles that follow from other roles |
 | **Pending changes** | changes waiting for you to send |
-| **Change history** | what each edit to a bundle or rule set off |
+| **Change history** | what each edit set off, and whether it landed |
 | **Access map** | how roles, bundles and rules connect |
-| **Unexplained access** | access Syndra did not give |
-| **Unfinished revocations** | access someone revoked that is still there |
-| **Expiring access** | access that ends soon, and ends whether or not you look |
-| **Holds due** | holds past their review date, which stay in force until you act |
+| **Drift** | access with no record explaining it |
+| **Unfinished revocations** | access somebody revoked that is still there |
+| **Expiring access** | access that ends soon, whether or not you look |
+| **Holds due** | holds past their review date, still in force |
 | **Audit** | what people did in Syndra |
-| **Zitadel** | the service everyone signs in through, and whether Syndra can reach it |
-| **Connected systems** | the systems Syndra creates accounts on |
-| **Incoming events** | what reached Syndra from outside — access changed in Zitadel, and people joining |
+| **Zitadel** | whether Syndra can reach it, and what it holds |
+| **Connected systems** | the systems Syndra maintains accounts on |
+| **Incoming events** | what reached Syndra from outside |
 
-### Words that never appear on screen
+A page's title names **everything** the page shows, never one of its parts.
+If a filter offers a source the title does not admit, the title is wrong —
+that is how *Incoming events* spent a release called *Zitadel events* while
+carrying onboarding triggers Zitadel never sent.
 
-Mechanism words. Each has a plain replacement above or is simply omitted:
+### Still never on screen
 
-`drain`, `resume` (of a queue), `write` (as a noun), `outbox`, `ledger`,
-`cascade`, `propagate`, `propagation`, `reconcile`, `reconciliation`,
-`converge`, `convergence`, `sweep`, `drift`, `rehearse`, `rehearsal`, `plan`
-(as the preview), `target`, `upstream`, `downstream`, `identity provider`,
-`IdP`, `subject`, `principal`, `entitlement`, `binding` (for ownership),
-`cache compile`, `hydrate`, `payload`, `mutation`, `idempotent`, `fixture`,
-`seeder`, `manifest`, `capability`, `truncated`, `degraded`, `terminal`,
-`exhausted`, `fire` (of a rule), `hop`, `node`, `edge`.
+Not jargon — noise, or the developer talking:
 
-A few technical words are allowed **with their gloss**, because the thing has
-no plain name: `share` (a storage folder), `group` (on TrueNAS, what decides
-which folders an account can open), `token` (what an app is handed when
-someone signs in, listing their roles), `claim` (one field inside a token),
-`role key` (the short name other systems see for a role), `API key` (a
-password for a program rather than a person).
+`payload`, `mutation`, `idempotent`, `fixture`, `seeder`, `hydrate`,
+`truncated` (say *cut short*), `degraded` (say what could not be read),
+`manifest`, `node`, `edge`, `hop`, and any raw identifier where a name
+resolves. No `please`, no `sorry`, no `oops`, no exclamation marks.
+
+Design rationale never appears on screen. A sentence explaining why a section
+keeps its seat is written for whoever maintains the code, and belongs in the
+code.
 
 ## 7. Members and staff read differently
 
-The same fact is written twice when both audiences see it.
+Same facts, same vocabulary, different register. A member is not an
+administrator, so their copy names a person to ask rather than a mechanism to
+understand — but it does not hide which system they are dealing with. A
+student whose share will not mount searches for *TrueNAS*, not for "the
+network storage server".
 
 | Fact | To staff | To a member |
 |---|---|---|
 | a role held via a bundle | "Via Lab Tech (bundle)" | "Because you're in Lab Tech" |
 | access expiring | "Expires 12 Sep" | "Ends 12 Sep — ask before then if you still need it" |
 | a hold | "On hold until 3 Oct: safety refresher" | "Paused. Makerspace staff will look again on 3 Oct. If you think this is a mistake, ask them and mention the reason shown here." |
-| a queued change | "Waiting to be sent to TrueNAS" | "Your storage access is on its way. It usually takes a few minutes." |
-| Zitadel | "Zitadel (the service everyone signs in through)" | "your makerspace sign-in" |
+| a queued change | "Waiting to be sent to TrueNAS" | "Your TrueNAS access is on its way. It usually takes a few minutes." |
+| the sign-in service | "Zitadel" | "Zitadel" — marked up, so the definition is one tap away |
 
-Member copy names a person to ask and never a mechanism to understand. Staff
-copy may name the mechanism *after* the consequence, when it helps them decide.
+Members never meet *operator*, *drift*, *cascade*, *outbox* or *reconcile*:
+those name work they do not do. They do meet the products they use, by name.
 
 ## 8. Errors and system failures
 
@@ -321,23 +325,27 @@ copy may name the mechanism *after* the consequence, when it helps them decide.
 
 ## 10. What the guard checks
 
-`plain-language.test.ts` reads every component's user-facing strings — JSX
-text, and the string values of `title`, `label`, `lede`, `meta`, `guidance`,
-`placeholder`, `aria-label`, `note`, `hint`, `consequence`, `subject` — and
-fails on:
+`plain-language.test.ts` reads every component's copy — JSX text and string
+literals, through a tokenizer that knows where code and comments are, and that
+reads a capitalised one-word literal as a label — and fails on:
 
-1. any word from the *never appear on screen* list;
-2. a `PageHeader` with no `lede`;
-3. a sentence in `meta`;
-4. an exclamation mark;
-5. "please", "sorry", "oops";
-6. a bare "Dismiss", "OK", "Submit", "Confirm", "Go" as a whole button label;
-7. `aria-label="Copy"` or any aria-label that is a single verb.
+1. a name from the *one name per thing* table's right-hand column;
+2. a word from *still never on screen*;
+3. a `PageHeader` with no `lede`;
+4. a sentence in `meta`;
+5. an exclamation mark, or `please` / `sorry` / `oops`;
+6. a bare `Dismiss`, `OK`, `Submit`, `Confirm`, `Go` as a whole button label;
+7. an `aria-label` that is a single verb;
+8. a glossary term used on a page that never marks up any term — the
+   definition is reachable from somewhere on that page, or the term is
+   unexplained jargon again;
+9. an `ARGUED` entry whose file no longer exists.
 
-Exceptions are argued in the test's `ARGUED` map, one line of reason each,
-and the map is the record of every place the product chose to break its own
-rule.
+Exceptions are argued in `ARGUED`, one reason each, and that map is the record
+of every place the product chose to break its own rule.
 
-The guard cannot check tone, referents, or whether the consequence is stated.
-Those are checked by the one test that matters: read the sentence to somebody
-who has never seen the product, and watch whether they ask a question.
+What it cannot check is whether a sentence is **true**. Every word in "Zitadel
+events" was permitted vocabulary; the claim was false. A title that names part
+of its page, a timing that does not match the scheduler, a sentence true in
+one branch and false in another — those are found by reading the copy against
+the code that produces it, and nothing here substitutes for that.
