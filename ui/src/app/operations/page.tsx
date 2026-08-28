@@ -20,7 +20,7 @@ import { outcomeOf, type EventOutcome } from "@/lib/event-outcome";
 type Source = "all" | "provider" | "onboarding";
 
 /**
- * S11 · System › Zitadel events.
+ * S11 · System › Incoming events.
  *
  * A raw timeline, not a dashboard. Its job is forensic — "what did Zitadel
  * tell us at 09:38, and what did we do about it". No tiles, no counts, no
@@ -68,8 +68,8 @@ export default function EventActivityPage() {
   return (
     <div className="flex flex-col gap-[18px]">
       <PageHeader
-        title="Zitadel events"
-        lede="What Zitadel (the service everyone signs in through) told Syndra, in the order it arrived. Nothing here needs a decision."
+        title="Incoming events"
+        lede="Things that happened outside Syndra and reached it: access changed in Zitadel (the service everyone signs in through), and people joining. Newest first. Nothing here needs a decision."
         actions={
           <>
             <FilterPills<Source>
@@ -119,7 +119,7 @@ export default function EventActivityPage() {
             events.refetch();
             triggers.refetch();
           }}
-          errorTitle="Couldn't load Zitadel events."
+          errorTitle="Couldn't load the events."
           skeleton={<RowSkeleton rows={6} avatar={false} label="Loading events" />}
           empty={
             // An emptied filter and an empty log are different facts, and only
@@ -139,7 +139,7 @@ export default function EventActivityPage() {
             ) : (
               <EmptyState
                 title="Nothing has happened yet."
-                guidance="Events arrive when somebody changes access in Zitadel, or when a new person joins."
+                guidance="An event lands here when somebody changes access in Zitadel, or when a new person joins."
               />
             )
           }
