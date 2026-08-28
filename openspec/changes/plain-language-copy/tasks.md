@@ -60,6 +60,65 @@
 - [x] 9.3 Now `Incoming events`: what reached Syndra from outside. The lede names both streams.
 - [x] 9.4 The guard cannot catch this class. Every word in "Zitadel events" is permitted vocabulary; what was wrong was the claim, and no word list can see a title that names part of its page. It is the same limit as §6.4 — read the sentence beside what it describes.
 
+## 10. The accuracy sweep
+
+Three read-only agents checked every claim in the UI against the code that
+produces it: 25 high-severity findings across pages, timing and conditionals.
+Reports in the job scratch directory (`V1-pages.md`, `V2-timing.md`,
+`V3-components.md`).
+
+- [x] 10.1 **The invented minute.** "within about a minute" appeared in six
+  places and was wrong in all of them, against three different mechanisms. It
+  was mine: the first sweep turned the mechanism word *cache compile* into a
+  promise, and no such cadence exists. The revocation drain is five minutes and
+  can be switched off (`cmd/api/main.go:361-372`), the drift sweep is six
+  hours, and grant propagation does not move until somebody presses Send. The
+  one immediate path — drift revoke — drains inline (`handlers/drift.go:266`)
+  and was hedging when it could have been definite.
+- [x] 10.2 **A warning that rotted.** Every `/zitadel` screen warned that
+  changes there skip Syndra and leave no record. The handlers moved onto
+  `EnqueueDirectGrantPropagation`, which writes ledger, audit and outbox in one
+  transaction and returns 202. `DirectWriteWarning` now takes `traced` so each
+  surface tells its own truth; project and role edits, which really do go
+  straight out, keep the original warning.
+- [x] 10.3 **Lifting a hold does not give access back.** `handleLiftAllowance`
+  updates one column and returns 200; nothing queues a convergence. The page
+  claimed the opposite and reported `applied`.
+- [x] 10.4 **A halted pass reported three zeroes.** `halt()` returns the
+  struct untouched, so the card rendered unmeasured zeros in the same shape a
+  healthy converged system produces. `halted` was missing from the UI's type
+  entirely. Added, branched on, and covered by `HaltedReconcile.test.tsx`.
+- [x] 10.5 **Counts named the wrong thing.** `assigned_user_count` is
+  `direct_role_grants` only, so a role forty people held through a bundle read
+  `0` under "Members" — and the rule editor said "saving changes nothing today"
+  in front of a Save that would reach all forty. The column is now "Direct" and
+  the sentence says what it did not count. Separately, a rule's `holder_count`
+  counts holders of its *target* role produced by the rule, while the copy
+  called it "the first role" — the wrong role named over a real number.
+- [x] 10.6 **A trap defused.** `ShadowCredential` is withdrawn from the member
+  view behind a comment saying "its backend are intact; restoring it is
+  re-adding the line". The backend is not intact — its `PUT` route was deleted
+  and setting a credential moved to `POST /me/targets/{target}/credential`.
+  Re-adding the line as written would have shipped a password form that 404s.
+
+## 11. Needs your decision — not fixed
+
+- [ ] 11.1 **`zitadel_reachable` is `MgmtClient != nil`**
+  (`services/deps.go:53`) — a configuration check wearing a probe's words. The
+  "Zitadel is not answering" banner cannot fire during a real outage, and Send
+  stays enabled. Fixing it means giving the indicator a real probe; the copy
+  cannot be made true on its own.
+- [ ] 11.2 **Effective holder counts.** The honest fix for 10.5 is a query that
+  counts bundle- and rule-derived holders, not a relabelled column. Backend
+  change.
+- [ ] 11.3 **`ShadowCredential`** — repoint it at the per-target route, or
+  delete it and let Network storage be the one door. It is dormant either way.
+- [ ] 11.4 **Cascade atomicity.** "They are sent together or not at all" was
+  removed as false — `DrainBatch` processes rows one at a time and can break
+  mid-cascade. Whether it *should* be atomic is a design question.
+- [ ] 11.5 The `R_` handle prefix is hardcoded for every row while the legend
+  says `R_` = rule, `b_` = bundle.
+
 ## 6. Open
 
 - [ ] 6.1 A person picker for adopting an account (the field is labelled *Person* with a hint saying where the id is found; a staffer still has to paste an id).
