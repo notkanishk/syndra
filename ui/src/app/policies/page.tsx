@@ -644,10 +644,9 @@ function DeleteRuleConfirm({
             <li>The rule stops giving {label} to anybody.</li>
             <li>
               {holders === 0
-                ? "Nobody holds the first role, so nobody's access is revoked (ends)."
+                ? "Nobody holds the first role, so nothing is revoked."
                 : `${holders} ${holders === 1 ? "person holds" : "people hold"} the first role. ` +
-                  `Their ${label} is revoked (their access to it ends) unless they also hold it through a bundle ` +
-                  `(a set of roles given together) or were given it by hand.`}
+                  `Their ${label} is revoked unless a bundle or a direct grant also gives it.`}
             </li>
             <li>
               {rule.confirmation_mode === "auto"

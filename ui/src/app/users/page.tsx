@@ -285,7 +285,7 @@ export default function PeoplePage() {
               guidance={
                 hasAnyFilter(filters)
                   ? "Try a shorter search, part of an email address, or a role key."
-                  : "People appear here once they exist in Zitadel (the service everyone signs in through)."
+                  : "People appear here once they exist in Zitadel."
               }
               action={
                 hasAnyFilter(filters)

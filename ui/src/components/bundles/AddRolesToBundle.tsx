@@ -171,8 +171,8 @@ export function AddRolesToBundle({
       <div className="mt-3 max-h-[46vh] overflow-y-auto px-6">
         {groups.length === 0 ? (
           <p className="py-6 text-[14px] text-muted">
-            No role matches “{query}”. A role created directly in Zitadel (the service everyone
-            signs in through) may not be listed here yet — check there, or create it in Syndra.
+            No role matches “{query}”. A role created directly in Zitadel may not be listed here
+            yet — check there, or create it in Syndra.
           </p>
         ) : (
           groups.map((group) => (
