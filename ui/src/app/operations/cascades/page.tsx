@@ -1,5 +1,6 @@
 "use client";
 
+import { Term } from "@/components/ui/Term";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
@@ -36,7 +37,14 @@ export default function ChangeHistoryPage() {
         lede={
           asked
             ? "One edit, followed from the audit entry that recorded it, and what it changed for people."
-            : "What each edit to a bundle (a set of roles given together) or an automatic rule then changed for people in Zitadel (the service everyone signs in through), newest first. Audit records who did what; this page records what those edits set off."
+            : (
+                <>
+                  What each edit to a <Term name="bundle">bundle</Term> or an automatic rule then
+                  changed for people in Zitadel, newest first — one{" "}
+                  <Term name="cascade">cascade</Term> per row. Audit records who did what; this
+                  page records what those edits set off.
+                </>
+              )
         }
         actions={
           asked ? (

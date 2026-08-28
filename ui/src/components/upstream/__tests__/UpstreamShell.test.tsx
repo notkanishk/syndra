@@ -46,6 +46,10 @@ describe("the standing line on an upstream console", () => {
         <p>rows</p>
       </UpstreamShell>,
     );
-    expect(screen.getByText(/Changes here go straight to Zitadel \(the service everyone signs in through\), and Syndra keeps no record of them\./)).toBeTruthy();
+    // Split across a <Term>, whose definition sits in the same paragraph's
+    // textContent — so the sentence is never contiguous in either an element
+    // query or a body match. Assert the halves.
+    expect(document.body.textContent).toMatch(/Changes here go straight to Zitadel/);
+    expect(document.body.textContent).toMatch(/Syndra\s*keeps no record of them\./);
   });
 });

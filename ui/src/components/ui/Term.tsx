@@ -30,6 +30,14 @@ import { GLOSSARY, type TermName } from "@/lib/glossary";
  * Opening is sticky (click, and it stays until dismissed) because a definition
  * you cannot keep on screen is one you have to re-open to re-read, and on a
  * touch screen there is no hover to fall back on.
+ *
+ * NOTE FOR TESTS: the definition is a sibling of the button and inside the same
+ * paragraph, so it lands in that paragraph's `textContent` even while clipped.
+ * A sentence containing a term is therefore never contiguous — `getByText(/the
+ * whole sentence/)` will not match. Assert either side of the term, or query
+ * the term itself. The definition is deliberately NOT `aria-hidden`: it is what
+ * `aria-describedby` resolves to, and hiding it would leave the marked-up word
+ * with no meaning attached for exactly the readers who most need one.
  */
 export function Term({ name, children }: { name: TermName; children?: React.ReactNode }) {
   const entry = GLOSSARY[name];

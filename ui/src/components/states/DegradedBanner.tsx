@@ -1,5 +1,6 @@
 "use client";
 
+import { Term } from "@/components/ui/Term";
 import { useQuery } from "@tanstack/react-query";
 
 import { CommandBlock } from "@/components/ui/CommandBlock";
@@ -87,7 +88,7 @@ export function DegradedBanner() {
           <>
             <div className="font-display text-[19px] font-bold">These numbers are not real.</div>
             <p className="max-w-[70ch] text-[14px] font-medium">
-              Syndra cannot reach Zitadel (the service everyone signs in through), so it is showing
+              Syndra cannot reach <Term name="zitadel">Zitadel</Term>, so it is showing
               sample data instead of real people and access. Do not give or revoke (end) any access
               until this banner goes away.
             </p>

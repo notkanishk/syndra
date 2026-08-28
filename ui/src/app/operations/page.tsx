@@ -1,5 +1,6 @@
 "use client";
 
+import { Term } from "@/components/ui/Term";
 import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
@@ -69,7 +70,13 @@ export default function EventActivityPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Incoming events"
-        lede="Things that happened outside Syndra and reached it: access changed in Zitadel (the service everyone signs in through), and people joining. Newest first. Nothing here needs a decision."
+        lede={
+          <>
+            Things that happened outside Syndra and reached it: access changed in{" "}
+            <Term name="zitadel">Zitadel</Term>, and people joining. Newest first. Nothing here
+            needs a decision.
+          </>
+        }
         actions={
           <>
             <FilterPills<Source>
@@ -266,12 +273,12 @@ function fromTrigger(trigger: OnboardingTriggerRow): StreamRow {
               "— given automatically", which reads as nothing having been given.
             */}
             <BundleName id={trigger.bundle_id} fallback="a bundle since retired" /> given
-            automatically as the default bundle (set of roles) for new members
+            automatically as the default <Term name="bundle">bundle</Term> for new members
           </>
         ) : (
           <span className="text-faint">
             {" "}
-            — no default bundle (set of roles) for new members is set, so nothing was given
+            — no default bundle for new members is set, so nothing was given
           </span>
         )}
       </>
