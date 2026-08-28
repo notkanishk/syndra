@@ -1,5 +1,6 @@
 "use client";
 
+import { Term } from "@/components/ui/Term";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 
@@ -153,7 +154,12 @@ export function UnexplainedAccess() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Unexplained access"
-        lede="Access that exists in Zitadel (the service everyone signs in through) that nothing in Syndra gave. Until you resolve a row, the person keeps that access."
+        lede={
+          <>
+            <Term name="drift">Drift</Term> — access that exists in Zitadel that nothing in Syndra
+            gave. Until you resolve a row, the person keeps that access.
+          </>
+        }
         meta={
           items.length > 0
             ? `${items.length} ${items.length === 1 ? "item" : "items"}${

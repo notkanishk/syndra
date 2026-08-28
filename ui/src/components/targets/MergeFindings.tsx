@@ -1,5 +1,6 @@
 "use client";
 
+import { Term } from "@/components/ui/Term";
 import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
@@ -45,7 +46,12 @@ export function MergeFindings({ target }: { target: string }) {
       <CardHeader
         title="Waiting on a decision"
         count={rows.length}
-        note={`Differences between Syndra and ${name} that Syndra will not settle on its own.`}
+        note={
+          <>
+            <Term name="mergeFinding">Merge findings</Term> — differences between Syndra and {name}{" "}
+            that reconciliation will not settle on its own.
+          </>
+        }
       />
       <ListStates
         isLoading={findings.isLoading}

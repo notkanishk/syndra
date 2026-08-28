@@ -1,5 +1,6 @@
 "use client";
 
+import { Term } from "@/components/ui/Term";
 import { HoldsDueForReview } from "@/components/review/HoldsDueForReview";
 import { PageHeader } from "@/components/ui/PageHeader";
 
@@ -18,7 +19,12 @@ export default function HoldsDuePage() {
     <>
       <PageHeader
         title="Holds due"
-        lede="Holds (a block on someone's access, with a date to look at it again) whose review date has passed. Doing nothing keeps the access blocked."
+        lede={
+          <>
+            <Term name="hold">Holds</Term> whose review date has passed. Doing nothing keeps the
+            access blocked.
+          </>
+        }
       />
       <HoldsDueForReview />
     </>
