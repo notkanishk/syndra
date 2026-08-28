@@ -554,7 +554,7 @@ function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
       <div>
         <div className="type-label mb-1.5">If you revoke</div>
         <p className="text-[13.5px] leading-[1.55] text-muted">
-          The access is removed from Zitadel. The person loses this role within about a minute.
+          The access is removed from Zitadel as you confirm. An app they are already signed in to keeps what it was told until they sign in again.
         </p>
       </div>
       <div>
@@ -639,7 +639,7 @@ function ResolutionDialog({
               </strong>
               <br />
               <span className="text-[14px] text-muted">
-                Access stops within about a minute.
+                The grant is removed from Zitadel as you confirm.
               </span>
             </div>
             <p className="text-[13.5px] leading-[1.55] text-muted">
@@ -684,7 +684,7 @@ function ResolutionDialog({
                       kind: "queued",
                       message: "Revocation recorded",
                       detail:
-                        "Waiting to be sent to Zitadel; revocations send themselves within about a minute. Until then the person still has the access.",
+                        "Waiting to be sent to Zitadel; revocations send on their own, every few minutes. Until then the person still has the access.",
                     }
                   : { kind: "applied", message: "Resolved. It will not be listed again." },
               );

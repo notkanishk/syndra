@@ -63,7 +63,7 @@ describe("navigation contract", () => {
     // Work is accent, a deadline is amber, something already wrong is red.
     expect(byLabel.get("Requests")?.tone ?? "accent").toBe("accent");
     expect(byLabel.get("Expiring access")?.tone).toBe("warn");
-    expect(byLabel.get("Unexplained access")?.tone).toBe("danger");
+    expect(byLabel.get("Drift")?.tone).toBe("danger");
   });
 
   it("routes /grants nowhere — it ceased to exist as a destination", () => {

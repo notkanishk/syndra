@@ -68,7 +68,14 @@ export function TargetOverview({ target }: { target: string }) {
     <div className="grid gap-5">
       <PageHeader
         title={name}
-        lede={`Whether Syndra can reach ${name} and what it says about itself, who has an account there, and anything waiting on you. Syndra provisions an account on ${name} for every person whose role is mapped to a group there, reconciles it every six hours, and asks you when it finds something it should not decide alone.`}
+        lede={
+          <>
+            Whether Syndra can reach {name} and what it says about itself, who has an account
+            there, and anything waiting on you. Syndra{" "}
+            <Term name="provision">provisions</Term> an account for every person whose roles
+            reach {name}, and keeps it in step.
+          </>
+        }
         meta={registered ? authLabel(registered.auth_mode, name) : undefined}
       />
 
@@ -350,9 +357,17 @@ function ReconcileControl({ target }: { target: string }) {
       />
       <CardRow>
         <div className="flex-1 text-[14.5px] text-muted">
-          {result
-            ? `${result.bound} accounts managed · ${result.queued} fixes waiting to be sent · ${result.stale?.length ?? 0} accounts missing from ${name}`
-            : "Syndra checks by itself every six hours."}
+          {!result ? (
+            "Syndra checks by itself every six hours."
+          ) : result.halted ? (
+            <span className="text-warn-text">
+              The check stopped before it concluded anything
+              {result.reason ? ` — ${result.reason}` : ""}. Nothing was learned about {name}; try
+              again once it is reachable.
+            </span>
+          ) : (
+            `${result.bound} accounts managed · ${result.queued} fixes waiting to be sent · ${result.stale?.length ?? 0} accounts missing from ${name}`
+          )}
         </div>
         <Button
           variant="outline"

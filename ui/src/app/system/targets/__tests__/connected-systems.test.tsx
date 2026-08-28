@@ -73,7 +73,10 @@ describe("connected systems", () => {
     state.targets = [target()];
     render(<ConnectedSystemsPage />);
 
-    expect(screen.getByText("TrueNAS")).toBeTruthy();
+    // The lede now defines TrueNAS with a <Term>, so the bare name appears
+    // twice. The row is what this test is about — assert on the link, not on
+    // whichever copy the query happens to reach first.
+    expect(screen.getByRole("link", { name: /TrueNAS/ })).toBeTruthy();
     expect(screen.getByText("1 system connected")).toBeTruthy();
     expect(screen.getByText("Answering")).toBeTruthy();
     expect(screen.getByText("2")).toBeTruthy();

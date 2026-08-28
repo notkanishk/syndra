@@ -35,7 +35,7 @@ export function HoldsDueForReview() {
         title="Holds due"
         count={rows.length}
         tone="warn"
-        note="These holds are still blocking access. Being listed here does not end them; only lifting does, and lifting gives the access back straight away."
+        note="These holds are still blocking access. Being listed here does not end them — only lifting does. Lifting clears the block in Syndra at once; the access itself returns when the connected system is next brought in line."
       />
       <ListStates
         isLoading={due.isLoading}
@@ -103,7 +103,16 @@ function HoldRow({ hold, first }: { hold: Hold; first: boolean }) {
         onClick={async () => {
           try {
             await lift.mutateAsync(hold.id);
-            setOutcome({ kind: "applied", message: `Hold lifted — they have ${label} again.` });
+            // Not "they have it again": lifting is one column in Syndra
+            // (`handleLiftAllowance` → `dbLiftAllowance`, HTTP 200 and
+            // return). Nothing queues a convergence, so the account on the
+            // connected system is still without the access until the next
+            // pass. Reporting the stronger thing sent an operator away
+            // believing somebody could work.
+            setOutcome({
+              kind: "applied",
+              message: `Hold lifted. ${label} returns when the connected system is next brought in line.`,
+            });
           } catch (error) {
             setOutcome(outcomeFromError(error));
           }

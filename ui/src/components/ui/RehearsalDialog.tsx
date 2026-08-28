@@ -70,7 +70,7 @@ export function queuedNote(plan: BulkPlan, system: string = "Zitadel"): string |
   if (plan.summary.queued === 0) return undefined;
   const revocation = plan.op === "remove_role" || plan.op === "remove_bundle";
   return revocation
-    ? `Recorded in Syndra and waiting to be sent to ${system}. Syndra sends it on its own within a few minutes; until then the person still has the access.`
+    ? `Recorded in Syndra and waiting to be sent to ${system}. Syndra sends revocations on their own, every few minutes; until then the person still has the access.`
     : `Recorded in Syndra and waiting to be sent to ${system}. Nothing has changed there yet; send it from Pending changes.`;
 }
 
