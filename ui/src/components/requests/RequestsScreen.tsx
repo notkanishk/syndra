@@ -60,7 +60,7 @@ export function requestOutcome(status: string): {
     case "approved":
       return { tone: "accent", operator: "Approved", member: "Approved" };
     case "rejected":
-      return { tone: "neutral", operator: "Denied", member: "Not approved" };
+      return { tone: "neutral", operator: "Declined", member: "Not approved" };
     case "withdrawn":
       return { tone: "neutral", operator: "Withdrawn", member: "You withdrew this" };
     case "pending":
@@ -122,7 +122,7 @@ function OperatorQueue() {
         ...prev,
         [entry.id]: {
           kind: "applied",
-          message: next === "approved" ? "Approved" : "Denied",
+          message: next === "approved" ? "Approved" : "Declined",
         },
       }));
     } catch (error) {
@@ -152,7 +152,7 @@ function OperatorQueue() {
             options={[
               { value: "pending", label: "Open" },
               { value: "approved", label: "Approved" },
-              { value: "rejected", label: "Denied" },
+              { value: "rejected", label: "Declined" },
               { value: "withdrawn", label: "Withdrawn" },
               { value: "all", label: "All" },
             ]}

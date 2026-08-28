@@ -94,12 +94,12 @@ export function LoginDoor({ mode, identities, failure, next = "/" }: Props) {
 
   const label =
     scene === "unreachable"
-      ? "Back to sign in"
+      ? "Try again"
       : mode === "demo"
-        ? "Sign in as a test person"
+        ? "Choose an identity"
         : handedOff
           ? "Opening…"
-          : "Sign in with your makerspace account";
+          : "Sign in with Zitadel";
 
   const action = (
     <>
@@ -161,15 +161,18 @@ export function LoginDoor({ mode, identities, failure, next = "/" }: Props) {
       </div>
 
       <div className="login-base">
-        {/* Syndra's job in one line, not Syn's biography: the voice is a
-            doorkeeper, and access here always carries the reason it exists. */}
+        {/* The gloss earns its place because "keeps the door" is literally the
+            screen you are looking at. What follows it has to be Syndra's job,
+            not more of Syn's biography — the voice is a doorkeeper, not a
+            character, and a grant here always carries the reason it exists. */}
         <p className="login-syn" data-door="syn">
-          Syndra keeps the list of who can get in, and the reason for every name on it.
+          Syn — the goddess who keeps the door. Syndra keeps the list, and the reason for every
+          name on it.
         </p>
         <p className="login-credit" data-door="credit">
           <span>Built in the lab it runs.</span>
           <span className="login-credit-dot" aria-hidden="true" />
-          <span>Zitadel handles the sign-in.</span>
+          <span>Powered by Zitadel</span>
         </p>
       </div>
 
@@ -181,12 +184,12 @@ export function LoginDoor({ mode, identities, failure, next = "/" }: Props) {
         {scene === "opening" &&
           (mode === "oidc" ? (
             <>
-              <p className="login-message-head">Taking you to the sign-in page.</p>
+              <p className="login-message-head">Handing you to Zitadel.</p>
               <p className="login-message-sub">You&rsquo;ll come back here signed in.</p>
             </>
           ) : (
             <>
-              <p className="login-message-head">Test people</p>
+              <p className="login-message-head">Development identities</p>
               <div className="login-identities">
                 {identities.map((identity) => (
                   <form key={identity.id} action="/auth/login" method="post">
@@ -195,7 +198,7 @@ export function LoginDoor({ mode, identities, failure, next = "/" }: Props) {
                     <button type="submit" className="login-identity" data-door-identity>
                       {identity.name}{" "}
                       <span className="login-identity-role">
-                        · {identity.role === "admin" ? "Staff" : "Member"}
+                        · {identity.role === "admin" ? "Operator" : "Member"}
                       </span>
                     </button>
                   </form>
