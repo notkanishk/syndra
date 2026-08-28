@@ -101,23 +101,53 @@ Reports in the job scratch directory (`V1-pages.md`, `V2-timing.md`,
   and setting a credential moved to `POST /me/targets/{target}/credential`.
   Re-adding the line as written would have shipped a password form that 404s.
 
-## 11. Needs your decision — not fixed
+## 11. The claims behind the copy — fixed
 
-- [ ] 11.1 **`zitadel_reachable` is `MgmtClient != nil`**
-  (`services/deps.go:53`) — a configuration check wearing a probe's words. The
-  "Zitadel is not answering" banner cannot fire during a real outage, and Send
-  stays enabled. Fixing it means giving the indicator a real probe; the copy
-  cannot be made true on its own.
-- [ ] 11.2 **Effective holder counts.** The honest fix for 10.5 is a query that
-  counts bundle- and rule-derived holders, not a relabelled column. Backend
-  change.
-- [ ] 11.3 **`ShadowCredential`** — repoint it at the per-target route, or
-  delete it and let Network storage be the one door. It is dormant either way.
-- [ ] 11.4 **Cascade atomicity.** "They are sent together or not at all" was
-  removed as false — `DrainBatch` processes rows one at a time and can break
-  mid-cascade. Whether it *should* be atomic is a design question.
-- [ ] 11.5 The `R_` handle prefix is hardcoded for every row while the legend
-  says `R_` = rule, `b_` = bundle.
+- [x] 11.1 **`zitadel_reachable` now asks Zitadel.** It was `MgmtClient != nil`
+  — a question about configuration wearing the words of a question about the
+  network, driving a banner that reads "Zitadel is not answering" and gating
+  Send. During a real outage, with the client configured, it stayed green.
+  `zitadelAnswering` makes the same cheap limit-1 call the propagation drain
+  already used, memoised for 30s so a room full of dashboards costs one
+  request — and a *failure* is cached for only 5s, because recovery is the
+  moment somebody is waiting on. Tested, including a test through the seam
+  itself: every test that calls the probe directly still passes if the seam is
+  quietly rewired to the old check, which is how the weak version survived.
+- [x] 11.2 **Counts include bundle holders.** `GetEffectiveUserCounts` unions
+  direct grants with the bundle join through each person's *pinned* version —
+  the same join the per-person path uses. The direct-only query is deleted
+  rather than left beside it: two functions answering "who holds this" is how
+  they come to disagree. Validated against the production schema read-only.
+  Rules are still not counted, and that is deliberate — they chain, resolving
+  them is an iterative forward pass (`cache.CompileUserCache`), and a SQL twin
+  of a resolver is a second definition of holding. The copy names the gap.
+- [x] 11.3 **`ShadowCredential` deleted.** 385 lines calling
+  `PUT /users/{uid}/shadow-credential`, which the backend removed; setting a
+  credential moved per-target to `POST /me/targets/{target}/credential`, which
+  Network storage already implements. It was kept alive by a test that mocked
+  the dead hook into passing, which is exactly what made it look maintained.
+- [x] 11.5 **The handle prefix comes from the row.** It was hardcoded to `"R"`,
+  so every bundle cascade printed a rule's handle underneath a legend
+  explaining that `R_` meant a rule. The legend was right; the rows were lying
+  to it.
+
+### 11.4 Cascade atomicity — assessed, not built
+
+The copy claiming a cascade is "sent together or not at all" was removed
+because it was false. It should stay removed, and the behaviour should not
+change to match it.
+
+A cascade dispatches to Zitadel and to add-ons over HTTP. There is no
+transaction spanning those, so "all or nothing" could only mean compensating
+actions — revoking what had already been applied when a later row failed. For
+access management that is strictly worse than a partial apply: it takes access
+away from people the operator meant to keep it for, to satisfy a property
+nobody asked for. Row-at-a-time with retry, halting on an unreachable target,
+is the right shape, and Change history already reports the truth when a
+cascade lands partly ("8 went through and 2 failed").
+
+The defect was never the behaviour. It was a sentence describing behaviour
+nobody had built.
 
 ## 6. Open
 
