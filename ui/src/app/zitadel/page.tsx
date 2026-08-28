@@ -50,17 +50,18 @@ export default function IdentityProviderPage() {
   return (
     <div className="flex flex-col gap-[18px]">
       <PageHeader
-        title="Identity provider"
-        meta={health.data?.domain ? <Mono>{health.data.domain}</Mono> : "Zitadel"}
+        title="Zitadel"
+        lede="Zitadel is the service everyone signs in through. It decides whether you are who you say you are; Syndra decides what that gets you, and keeps the record of why. This page shows whether Syndra can reach Zitadel. Nothing here changes anyone's access."
+        meta={health.data?.domain ? <Mono>{health.data.domain}</Mono> : undefined}
       />
 
       {health.isLoading ? (
         <Card>
-          <RowSkeleton rows={2} avatar={false} label="Checking the identity provider" />
+          <RowSkeleton rows={2} avatar={false} label="Checking whether Syndra can reach Zitadel" />
         </Card>
       ) : health.error ? (
         <ErrorState
-          title="Couldn't reach the health endpoint."
+          title="Couldn't check whether Zitadel is reachable."
           error={health.error}
           onRetry={() => health.refetch()}
         />
@@ -80,28 +81,32 @@ export default function IdentityProviderPage() {
           tone={rotation.data?.status === "ok" ? "neutral" : "warn"}
           detail={
             rotation.data?.last_rotated_at
-              ? `Last rotated ${formatLongDate(rotation.data.last_rotated_at)}`
-              : "The key signs every claim-injection call. Rotating it invalidates the old one immediately."
+              ? `Last replaced ${formatLongDate(rotation.data.last_rotated_at)}`
+              : "A secret Syndra and Zitadel share so each can trust the other during sign-in."
           }
         />
         <StatCard
-          label="Projects upstream"
+          label="Projects in Zitadel"
           value={
             live
               ? `${health.data?.projects_total ?? projects.data?.length ?? 0}`
               : `${projects.data?.length ?? 0}`
           }
           tone="neutral"
-          detail={live ? "As of the last successful read." : "From Syndra's own cache."}
+          detail={
+            live
+              ? "As Zitadel reported them just now."
+              : "As Syndra last remembered them — Zitadel cannot be asked right now."
+          }
         />
         <StatCard
-          label="Mode"
-          value={health.data?.mode === "live" ? "Live" : "Local policy only"}
+          label="Connection"
+          value={health.data?.mode === "live" ? "Connected" : "Not connected"}
           tone={health.data?.mode === "live" ? "neutral" : "warn"}
           detail={
             health.data?.mode === "live"
-              ? "Syndra reads and writes the real directory."
-              : "No management client is configured, so nothing Syndra decides reaches a machine."
+              ? "Syndra can read and change access in Zitadel."
+              : "Syndra is not set up to talk to Zitadel, so decisions made here change nobody's real access."
           }
         />
       </div>
@@ -166,19 +171,23 @@ function SigningKey({
     <Card>
       <CardHeader
         title="Action signing key"
-        note="Zitadel signs every claim-injection call with it. Zitadel never expires it — rotation is a decision, not a schedule."
+        note="Zitadel uses it to prove to Syndra that a sign-in request is genuine. It never expires on its own; someone has to decide to replace it."
       />
 
       <div className="flex flex-col gap-4 px-5 py-4">
+        <p className="max-w-[84ch] text-[13.5px] leading-[1.55] text-muted">
+          This section is for the person who runs the Syndra server. If that is not you, nothing
+          here needs your attention unless the headline above is amber.
+        </p>
         <p className="max-w-[84ch] text-[14.5px] leading-[1.6]">{rotationSentence(status, error)}</p>
 
         {loading ? (
-          <RowSkeleton rows={1} avatar={false} label="Reading the key's rotation state" />
+          <RowSkeleton rows={1} avatar={false} label="Checking when the key was last replaced" />
         ) : !status?.key_installed && !error ? (
           <CommandBlock
             tone="warn"
             command="make zitadel-actions-register"
-            caption="No key is installed, so nothing is being verified. Registering the Action targets mints one."
+            caption="No key is set up, so Syndra cannot tell genuine Zitadel requests from forged ones. Run this to register with Zitadel; it creates a key."
             steps={[
               <>
                 Copy the printed key into <Mono>ZITADEL_ACTION_SIGNING_KEY</Mono> in{" "}
@@ -195,12 +204,11 @@ function SigningKey({
         ) : (
           <CommandBlock
             command={rotateCommand}
-            caption="Run this in a terminal on the deployment host. This panel does not rotate anything itself — the restart afterwards is yours to make, and a half-finished rotation is worse than an old key."
+            caption="Run this in a terminal on the server Syndra runs on. This panel does not replace the key itself — you must restart afterwards, and a half-done replacement is worse than an old key."
             steps={[
               <>
-                Rotation writes the new key to{" "}
-                <Mono>zitadel/actions/.action-signing-key.&lt;target&gt;</Mono> and backs up the
-                old one alongside it.
+                The command writes the new key to a file under <Mono>zitadel/actions/</Mono>, one
+                per registered Action, and backs up the old one alongside it.
               </>,
               <>
                 Put the new value in <Mono>ZITADEL_ACTION_SIGNING_KEY</Mono>, and the printed
@@ -211,16 +219,16 @@ function SigningKey({
                 Restart the backend: <Mono>docker compose restart backend</Mono>.
               </>,
               <>
-                Verify: <Mono>make zitadel-actions-verify</Mono>.
+                Confirm it took: <Mono>make zitadel-actions-verify</Mono>.
               </>,
             ]}
           />
         )}
 
         <p className="max-w-[84ch] text-[13.5px] leading-[1.55] text-muted">
-          Between the rotation and the restart, Syndra rejects Action calls as unsigned and Zitadel
-          issues tokens with stock claims only. Nobody is locked out — custom claims simply go
-          missing for the length of the gap, so keep it short and do it outside a session.
+          Between replacing the key and restarting, people can still sign in, but the access
+          details Syndra normally adds at sign-in are missing. Keep the gap short and do it when
+          nobody is working.
         </p>
       </div>
     </Card>
@@ -235,27 +243,27 @@ function SigningKey({
  */
 function rotationSentence(status: RotationStatus | undefined, error: unknown): string {
   if (error) {
-    return "Couldn't read the key's rotation state, so its age is unknown. The key itself is unaffected — this is the status endpoint, not the key.";
+    return "Couldn't check when the key was last replaced. The key itself still works.";
   }
   if (!status) return "";
 
   if (!status.key_installed) {
-    return "No signing key is installed, so signature verification is passing every Action request through unchecked. Anything that can reach the endpoint can shape a token. Install a key before this deployment carries real access.";
+    return "No key is set up, so Syndra accepts every request that claims to come from Zitadel without checking. Anyone who can reach Syndra on the network could change what a sign-in grants. Set up a key before real access depends on this.";
   }
 
   const threshold = status.threshold_days ?? 90;
   const age = status.age_days;
 
   if (age === undefined) {
-    return `The key is installed and verifying, but its rotation date is unset, unparseable, or in the future — so its age can't be checked against the ${threshold}-day threshold. Set ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT to the value rotate.sh prints.`;
+    return `The key works, but Syndra does not know when it was last replaced, so it cannot warn you when the ${threshold}-day limit is reached. Set ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT to the date the rotate command printed.`;
   }
   if (status.status === "stale") {
-    return `The key is ${age} days old — past twice the ${threshold}-day threshold. Rotate it now.`;
+    return `The key is ${age} days old — more than twice the ${threshold}-day limit. Replace it now.`;
   }
   if (status.status === "warn") {
-    return `The key is ${age} days old, over the ${threshold}-day threshold. Schedule a rotation.`;
+    return `The key is ${age} days old, over the ${threshold}-day limit. Plan to replace it.`;
   }
-  return `The key is ${age} days old, within the ${threshold}-day threshold. Nothing to do.`;
+  return `The key is ${age} days old, within the ${threshold}-day limit. Nothing to do.`;
 }
 
 function HealthVerdict({
@@ -280,7 +288,8 @@ function HealthVerdict({
           Reachable — answered in {latency ?? 0}ms.
         </div>
         <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-          Syndra is reading the live directory. Queued writes drain as they are confirmed.
+          Syndra is talking to Zitadel normally. Changes you send from Pending changes reach
+          Zitadel as soon as you send them.
         </p>
       </div>
     );
@@ -294,12 +303,12 @@ function HealthVerdict({
         }`}
       >
         {notConfigured
-          ? "Not configured — Syndra is running on local policy only."
-          : "Unreachable — the last call to the identity provider failed."}
+          ? "Not connected — Syndra is not set up to talk to Zitadel, so nothing decided here changes anyone's real access."
+          : "Unreachable — Syndra's last attempt to reach Zitadel failed."}
       </div>
       <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
         {detail ||
-          "Syndra is serving its own cache. Nothing is lost: writes stay queued and in order until it returns."}
+          "Syndra is showing what it last knew. Nothing is lost: changes waiting to be sent stay in order and go through when Zitadel is back."}
       </p>
     </div>
   );
@@ -337,17 +346,22 @@ function StatCard({
  * is nothing to read.
  */
 function UpstreamInspection({ reachable }: { reachable: boolean }) {
-  const rows: Array<{ label: string; path: string; href: string }> = [
-    { label: "Projects and their roles", path: "/zitadel/projects", href: "/zitadel/projects" },
-    { label: "Users", path: "/zitadel/users", href: "/zitadel/users" },
-    { label: "Grants", path: "/zitadel/grants", href: "/zitadel/grants" },
+  const rows: Array<{ label: string; open: string; path: string; href: string }> = [
+    {
+      label: "Projects and their roles",
+      open: "Open projects",
+      path: "/zitadel/projects",
+      href: "/zitadel/projects",
+    },
+    { label: "People", open: "Open people", path: "/zitadel/users", href: "/zitadel/users" },
+    { label: "Roles held", open: "Open roles held", path: "/zitadel/grants", href: "/zitadel/grants" },
   ];
 
   return (
     <Card>
       <CardHeader
-        title="Inspect upstream directly"
-        note="What the identity provider holds, not what Syndra thinks it holds."
+        title="Look inside Zitadel directly"
+        note="What Zitadel holds, not what Syndra thinks it holds. Reading only; nothing here changes anything."
       />
       {rows.map((row) => (
         <div key={row.path} className="row-divider flex flex-wrap items-center gap-4 px-5 py-3.5">
@@ -355,19 +369,19 @@ function UpstreamInspection({ reachable }: { reachable: boolean }) {
           <Mono className="w-[190px] shrink-0 truncate text-faint">{row.path}</Mono>
           {reachable ? (
             <ButtonLink href={row.href} size="sm">
-              Open
+              {row.open}
             </ButtonLink>
           ) : (
             <Button size="sm" disabled>
-              Open
+              {row.open}
             </Button>
           )}
         </div>
       ))}
       {!reachable && (
         <div className="row-divider border-dashed border-danger-line bg-danger-soft px-5 py-3 text-[13.5px] text-danger-text">
-          All three are disabled while the provider is unreachable — they read live, and there is
-          nothing to read.
+          All three are disabled while Zitadel is unreachable — they show live data, and there is
+          none to show.
         </div>
       )}
     </Card>
@@ -395,7 +409,7 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
         aria-expanded={open}
         className="flex w-full flex-wrap items-center gap-3 px-5 py-4 text-left"
       >
-        <span className="type-card-title text-danger-text">Direct writes to the provider</span>
+        <span className="type-card-title text-danger-text">Change Zitadel directly (last resort)</span>
         <span className="flex-1" />
         <span className="text-[13.5px] text-faint">{open ? "Hide" : "Show"}</span>
       </button>
@@ -407,29 +421,29 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
               Do not use these unless nothing else will do.
             </div>
             <p className="mt-1 max-w-[86ch] text-[14px] leading-[1.55] text-muted">
-              Everything here bypasses Syndra entirely — no ledger row, no outbox entry, no audit
-              trail tying the change to a decision. Three things follow from that. The next cache
-              compile can overwrite what you did. The drift sweep will report it as unexplained
-              access created by somebody it cannot name. And nobody reading Change history
-              afterwards will find out it happened. Prefer the equivalent action in Syndra: grant
-              from a person&rsquo;s page, remove from role membership, edit roles under Access.
+              Changes made here skip Syndra entirely, so Syndra keeps no record of why they
+              happened beyond one line in Audit. Three things follow. Syndra may undo the change
+              within about a minute. It will list the change under Unexplained access, with
+              nobody&rsquo;s name on it. And it will not appear in Change history. Do the same
+              thing inside Syndra instead where you can: give access from a person&rsquo;s page,
+              remove it from the role&rsquo;s member list, or edit roles under Access.
             </p>
           </div>
 
           <div className="row-divider flex flex-wrap items-center gap-4 px-5 py-3.5">
             <span className="min-w-[200px] flex-1 text-[14.5px]">
-              Assign, change or remove a grant on one person
+              Give, change or revoke one person&rsquo;s roles in Zitadel
             </span>
             <Mono className="w-[190px] shrink-0 truncate text-faint">
               /zitadel/users/&#123;id&#125;/grants
             </Mono>
             {reachable ? (
               <ButtonLink href="/zitadel/users" size="sm" variant="danger">
-                Open
+                Open people
               </ButtonLink>
             ) : (
               <Button size="sm" variant="danger" disabled>
-                Open
+                Open people
               </Button>
             )}
           </div>
@@ -443,18 +457,18 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
             </Mono>
             {reachable ? (
               <ButtonLink href="/zitadel/projects" size="sm" variant="danger">
-                Open
+                Open projects
               </ButtonLink>
             ) : (
               <Button size="sm" variant="danger" disabled>
-                Open
+                Open projects
               </Button>
             )}
           </div>
 
           {!reachable && (
             <div className="row-divider border-dashed border-danger-line bg-danger-soft px-5 py-3 text-[13.5px] text-danger-text">
-              Disabled — the provider is unreachable, and these write to it live.
+              Disabled — Zitadel is unreachable, and these change it directly.
             </div>
           )}
         </>
@@ -465,11 +479,12 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
 
 function rotationHeadline(status: RotationStatus | undefined, error: unknown): string {
   if (error) return "Unknown";
-  if (!status?.key_installed) return "Not installed";
+  if (!status?.key_installed) return "Not set up";
   const threshold = status.threshold_days ?? 90;
   const age = status.age_days;
-  if (age === undefined) return status.status ?? "Installed";
+  if (age === undefined) return "Installed";
   const remaining = threshold - age;
-  if (remaining <= 0) return "Overdue";
-  return `Rotates in ${remaining} day${remaining === 1 ? "" : "s"}`;
+  if (remaining <= 0) return "Due for replacement";
+  // "Replace within", not "rotates in": nothing replaces this key by itself.
+  return `Replace within ${remaining} day${remaining === 1 ? "" : "s"}`;
 }

@@ -25,7 +25,7 @@ async function resolveAuthToken(explicitToken?: string): Promise<string> {
     const token = session?.accessToken;
     if (!token) {
       throw new Error(
-        "SSR fetch: no user access token available in OIDC mode. " +
+        "SSR fetch: no access token for this person in OIDC mode. " +
         "Ensure getSession() is called before fetching and ZITADEL_DOMAIN is correctly configured."
       );
     }

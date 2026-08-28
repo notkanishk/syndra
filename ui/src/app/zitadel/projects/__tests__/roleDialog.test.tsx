@@ -27,9 +27,9 @@ vi.mock("@/lib/queries/useUpstream", () => ({
 
 function openTheDialog() {
   render(<UpstreamProjectsPage />);
-  fireEvent.click(screen.getByRole("button", { name: "New role upstream" }));
+  fireEvent.click(screen.getByRole("button", { name: "New role in Zitadel" }));
   fireEvent.change(screen.getByLabelText("Role key"), { target: { value: "trained" } });
-  fireEvent.click(screen.getByRole("checkbox", { name: /I understand this writes to Zitadel/ }));
+  fireEvent.click(screen.getByRole("checkbox", { name: /I understand this changes Zitadel/ }));
 }
 
 beforeEach(() => {
@@ -48,12 +48,12 @@ describe("the upstream role dialog becomes its own result", () => {
     state.create.mockResolvedValue(undefined);
     openTheDialog();
 
-    fireEvent.click(screen.getByRole("button", { name: "Create upstream" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create in Zitadel" }));
 
     // Scoped to the dialog: the empty roles list behind it is a `status` too.
     const report = await within(screen.getByRole("dialog")).findByRole("status");
     expect(report.textContent).toContain("trained created in Zitadel");
-    expect(report.textContent).toContain("no record of this change");
+    expect(report.textContent).toContain("recorded one line in Audit and nothing else");
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
 
@@ -66,10 +66,10 @@ describe("the upstream role dialog becomes its own result", () => {
     state.create.mockResolvedValue(undefined);
     openTheDialog();
 
-    fireEvent.click(screen.getByRole("button", { name: "Create upstream" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create in Zitadel" }));
     await within(screen.getByRole("dialog")).findByRole("status");
 
-    expect(screen.getByRole("button", { name: "Create upstream" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create in Zitadel" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
     expect(state.create).toHaveBeenCalledTimes(1);
   });
@@ -78,12 +78,12 @@ describe("the upstream role dialog becomes its own result", () => {
     state.create.mockRejectedValue(new ApiError(403, { error: "FORBIDDEN", message: "Not allowed" }));
     openTheDialog();
 
-    fireEvent.click(screen.getByRole("button", { name: "Create upstream" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create in Zitadel" }));
 
     const report = await screen.findByRole("alert");
     expect(report.textContent).toContain("Refused");
     await waitFor(() => expect(screen.getByLabelText("Role key")).toHaveValue("trained"));
     // Still writable: a refusal is a state the operator can act on from here.
-    expect(screen.getByRole("button", { name: "Create upstream" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create in Zitadel" })).not.toBeDisabled();
   });
 });

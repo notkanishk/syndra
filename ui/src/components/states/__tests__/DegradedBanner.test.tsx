@@ -55,8 +55,8 @@ describe("Degraded banner", () => {
       degraded: false,
     };
     renderBanner();
-    expect(await screen.findByText("12 rows here came from the demo seeder.")).toBeInTheDocument();
-    expect(screen.getByText(/set SYNDRA_SEED_DEMO=false first/)).toBeInTheDocument();
+    expect(await screen.findByText("12 items on these screens are sample data.")).toBeInTheDocument();
+    expect(screen.getByText(/Set SYNDRA_SEED_DEMO=false first/)).toBeInTheDocument();
   });
 
   // The regression this whole field exists for. An operator sees demo data,
@@ -71,8 +71,8 @@ describe("Degraded banner", () => {
       degraded: false,
     };
     renderBanner();
-    expect(await screen.findByText("31 rows here came from the demo seeder.")).toBeInTheDocument();
-    expect(screen.getByText(/Seeding is already off/)).toBeInTheDocument();
+    expect(await screen.findByText("31 items on these screens are sample data.")).toBeInTheDocument();
+    expect(screen.getByText(/Sample data is switched off/)).toBeInTheDocument();
   });
 
   it("offers the backend's own reset command, not a hardcoded one", async () => {
@@ -101,6 +101,6 @@ describe("Degraded banner", () => {
     };
     renderBanner();
     expect(await screen.findByText("These numbers are not real.")).toBeInTheDocument();
-    expect(screen.queryByText(/came from the demo seeder/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/are sample data\./)).not.toBeInTheDocument();
   });
 });

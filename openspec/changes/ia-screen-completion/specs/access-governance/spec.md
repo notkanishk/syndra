@@ -150,14 +150,14 @@ Every such control MUST carry the destructive tone regardless of the verb, and e
 
 #### Scenario: The write section is collapsed by default
 
-- **GIVEN** the Identity provider page rendered
+- **GIVEN** the Zitadel page rendered
 - **WHEN** it first loads
 - **THEN** no direct-write control MUST be visible until the operator expands the section
 
 #### Scenario: Upstream reads are disabled with a stated reason when unreachable
 
 - **GIVEN** the identity provider is unreachable
-- **WHEN** the Identity provider page renders
+- **WHEN** the Zitadel page renders
 - **THEN** the inspection actions MUST be disabled
 - **AND** the reason MUST appear in visible copy, not only in a title attribute
 
@@ -170,7 +170,7 @@ Health MUST be rendered as a sentence carrying a cause and, where the provider i
 #### Scenario: An unreachable provider explains itself
 
 - **GIVEN** the identity provider is unreachable
-- **WHEN** the Identity provider page renders
+- **WHEN** the Zitadel page renders
 - **THEN** it MUST state that it is unreachable, give the reported cause, and say that writes stay queued and nothing is lost
 
 ### Requirement: A parked capability MUST read as unbuilt, not as idle

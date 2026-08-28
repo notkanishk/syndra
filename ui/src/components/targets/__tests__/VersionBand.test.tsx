@@ -79,7 +79,7 @@ describe("the version band keeps one shape", () => {
   it("offers Publish inert rather than absent when there is nothing to publish", () => {
     render(<VersionBand target="truenas" history={history()} />);
 
-    expect(screen.getByText(/Working copy matches version 4/)).toBeTruthy();
+    expect(screen.getByText(/The live mappings match version 4/)).toBeTruthy();
     expect(publishButton().hasAttribute("disabled")).toBe(true);
   });
 
@@ -131,7 +131,7 @@ describe("the band enumerates what a rollback would undo", () => {
     );
 
     expect(
-      screen.getByText(/Publishing does not re-apply them/),
+      screen.getByText(/Publishing applies nothing again/),
     ).toBeTruthy();
   });
 
@@ -160,7 +160,7 @@ describe("the band enumerates what a rollback would undo", () => {
     render(<VersionBand target="truenas" history={history()} />);
 
     expect(screen.queryByText(/what a rollback to version 4 would undo/)).toBeNull();
-    expect(screen.queryByText(/Publishing does not re-apply them/)).toBeNull();
+    expect(screen.queryByText(/Publishing applies nothing again/)).toBeNull();
   });
 });
 
@@ -183,7 +183,7 @@ describe("the note is the audit record, so it is required", () => {
 
     const publish = screen.getByRole("button", { name: /Publish as version 5/ });
     expect(publish.hasAttribute("disabled")).toBe(true);
-    expect(screen.getByText(/It is what the next operator reads/)).toBeTruthy();
+    expect(screen.getByText(/It is what the next person to roll back reads/)).toBeTruthy();
   });
 
   it("offers it once a reason is given", () => {

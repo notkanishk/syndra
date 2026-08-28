@@ -64,7 +64,7 @@ describe("PublishVersionDialog", () => {
       <PublishVersionDialog bundleId="b1" name="Lab Tech" draft={draft()} onClose={vi.fn()} />,
     );
     fireEvent.click(screen.getByText("Move everyone to v3"));
-    fireEvent.click(screen.getByRole("button", { name: "Rehearse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview the change" }));
 
     await waitFor(() => expect(state.rehearse).toHaveBeenCalled());
     expect(state.rehearse.mock.calls[0][0]).toMatchObject({ migrate: true });
@@ -75,7 +75,7 @@ describe("PublishVersionDialog", () => {
       <PublishVersionDialog bundleId="b1" name="Lab Tech" draft={draft()} onClose={vi.fn()} />,
     );
     fireEvent.click(screen.getByText("Leave them on the version they are on"));
-    fireEvent.click(screen.getByRole("button", { name: "Rehearse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview the change" }));
 
     await waitFor(() => expect(state.rehearse).toHaveBeenCalled());
     expect(state.rehearse.mock.calls[0][0]).toMatchObject({ migrate: false });
@@ -93,7 +93,7 @@ describe("PublishVersionDialog", () => {
       />,
     );
     expect(screen.queryAllByRole("radio")).toHaveLength(0);
-    fireEvent.click(screen.getByRole("button", { name: "Rehearse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview the change" }));
     await waitFor(() => expect(state.rehearse).toHaveBeenCalled());
     expect(state.rehearse.mock.calls[0][0]).toMatchObject({ migrate: false });
   });

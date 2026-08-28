@@ -76,7 +76,7 @@ describe("Home › The makerspace", () => {
     // so the operator went hunting through the nav instead.
     renderMakerspace();
     expect(screen.getByText("The makerspace")).toBeInTheDocument();
-    expect(screen.getByText("Identity provider")).toBeInTheDocument();
+    expect(screen.getByText("Zitadel")).toBeInTheDocument();
   });
 
   it("surfaces both ends of a person's life here as links, not just counts", () => {
@@ -128,7 +128,7 @@ describe("Home › The makerspace", () => {
     const dots = document.querySelectorAll(".bg-healthy");
     expect(dots.length, "a calm cell marks itself with a healthy dot").toBeGreaterThan(0);
     expect(
-      screen.getByText("Writes stay queued — nothing is lost").querySelector(".bg-healthy"),
+      screen.getByText("Changes wait here — nothing is lost").querySelector(".bg-healthy"),
       "an unhealthy cell gets no healthy dot",
     ).toBeNull();
   });

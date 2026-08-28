@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProjectName, UserName } from "@/components/names";
+import { shortId } from "@/lib/audit-vocabulary";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
@@ -22,13 +23,13 @@ import { ClockTime, Relative } from "@/components/ui/Time";
 /**
  * S3 · Automation › Pending changes.
  *
- * Queued identity-provider writes awaiting confirmation. The queue is the
- * safety property, not a defect: a write sitting here is a write that has not
+ * Changes waiting to be sent to Zitadel or a connected system. The queue is the
+ * safety property, not a defect: a change sitting here is a change that has not
  * happened yet and can still be examined.
  *
  * Grouped by cascade, never flat by timestamp. A half-applied cascade is the
- * thing that creates unexplained access, so the writes one event produced stay
- * visibly together — they confirm together or not at all.
+ * thing that creates unexplained access, so the changes one event produced stay
+ * visibly together — they are sent together or not at all.
  */
 export default function PendingChangesPage() {
   const pending = usePendingPropagations();
@@ -38,9 +39,9 @@ export default function PendingChangesPage() {
   const rows = useMemo(() => pending.data ?? [], [pending.data]);
   const reachable = summary.data?.pending_propagation.zitadel_reachable ?? true;
 
-  // The drain reports under the button that ran it, and stays there. It used
+  // The send reports under the button that ran it, and stays there. It used
   // to be a toast, which meant the account of a pass that requeued eight
-  // writes was gone in four seconds — on the one screen whose entire subject
+  // changes was gone in four seconds — on the one screen whose entire subject
   // is what is still outstanding.
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
@@ -50,7 +51,7 @@ export default function PendingChangesPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Pending changes"
-        meta="Writes Syndra has decided on and the identity provider hasn't received yet."
+        lede="Changes Syndra has decided on that have not reached Zitadel (the service everyone signs in through) or a connected system yet. Nothing here takes effect until you send it."
         actions={
           <Button
             variant="accent"
@@ -65,10 +66,16 @@ export default function PendingChangesPage() {
               }
             }}
           >
-            Confirm all {rows.length}
+            Send {rows.length} {rows.length === 1 ? "change" : "changes"}
           </Button>
         }
       />
+
+      <p className="max-w-[80ch] text-[14px] leading-[1.55] text-muted">
+        Sending delivers every change below to the system it is for, in order, and each
+        person&rsquo;s access changes as theirs arrives. Revocations also send themselves within
+        about a minute; everything else waits for you.
+      </p>
 
       {outcome && <ActionOutcome outcome={outcome} />}
 
@@ -87,11 +94,11 @@ export default function PendingChangesPage() {
           </span>
           <div>
             <div className="text-[15px] font-semibold text-warn-text">
-              Identity provider unreachable as of <ClockTime />.
+              Zitadel is not answering, as of <ClockTime />.
             </div>
             <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-              Confirming is disabled, not failing silently. Writes stay queued and in order;
-              nothing is lost and nothing has reached a machine.
+              Sending is paused. Nothing is lost: the changes wait in order, and nothing has
+              reached any system. Send them once Zitadel is back.
             </p>
           </div>
         </div>
@@ -100,9 +107,9 @@ export default function PendingChangesPage() {
       <Card>
         <CardColumns>
           <span className="w-[150px]">Who</span>
-          <span className="flex-1">Write</span>
+          <span className="flex-1">Change</span>
           <span className="w-[160px]">Caused by</span>
-          <span className="w-[78px] text-right">Queued</span>
+          <span className="w-[78px] text-right">Waiting</span>
         </CardColumns>
 
         <ListStates
@@ -110,12 +117,12 @@ export default function PendingChangesPage() {
           error={pending.error}
           isEmpty={rows.length === 0}
           onRetry={() => pending.refetch()}
-          errorTitle="Couldn't load the queue."
-          skeleton={<RowSkeleton rows={4} label="Loading queued writes" />}
+          errorTitle="Couldn't load pending changes."
+          skeleton={<RowSkeleton rows={4} label="Loading pending changes" />}
           empty={
             <EmptyState
-              title="Nothing is waiting."
-              guidance="Every decision Syndra has made has reached the identity provider."
+              title="Nothing is waiting to be sent."
+              guidance="Every change Syndra has decided on has reached the system it was for."
               resolved
             />
           }
@@ -152,7 +159,8 @@ export default function PendingChangesPage() {
 
                   {row.status === "failed" && (
                     <div className="w-full text-[13px] text-danger-text">
-                      Failed{row.last_error ? ` — ${row.last_error}` : ""}
+                      Failed, and Syndra will try again
+                      {row.last_error ? `: ${row.last_error}` : "."}
                     </div>
                   )}
                 </div>
@@ -160,14 +168,17 @@ export default function PendingChangesPage() {
 
               {group.rows.length > 1 && (
                 <p className="row-divider bg-surface-0 px-5 py-2.5 text-[13.5px] leading-[1.5] text-muted">
-                  These {group.rows.length} writes share cascade{" "}
-                  <Mono className="text-faint">{shortId(group.key, "c")}</Mono> — one event
-                  produced all of them. They confirm together or not at all.
+                  These {group.rows.length} changes come from one edit (
+                  <Mono className="text-faint">{shortId(group.key, "c")}</Mono>). They are
+                  sent together or not at all.
                 </p>
               )}
             </div>
           ))}
         </ListStates>
+        <p className="px-5 py-3 text-[13px] text-faint">
+          Handles: R_ is an automatic rule, b_ a bundle, c_ one edit&rsquo;s set of changes.
+        </p>
       </Card>
     </div>
   );
@@ -198,13 +209,7 @@ function groupByCascade(rows: PendingPropagationRow[]): CascadeGroup[] {
 }
 
 function verb(opType: string): string {
-  if (opType === "revoke") return "remove";
+  if (opType === "revoke") return "revoke";
   if (opType === "replace") return "replace";
-  return "grant";
-}
-
-/** "c_8841" from a uuid — short enough to compare across three screens by eye. */
-function shortId(id: string | undefined, prefix: string): string {
-  if (!id) return "—";
-  return `${prefix}_${id.replace(/-/g, "").slice(0, 4)}`;
+  return "give";
 }

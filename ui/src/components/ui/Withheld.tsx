@@ -42,7 +42,7 @@ export function WithheldPill({ className = "" }: { className?: string }) {
     <span
       className={`inline-flex items-center rounded-pill bg-warn-soft px-2.5 py-0.5 text-[12.5px] font-semibold text-warn-text ${className}`}
     >
-      Withheld
+      On hold
     </span>
   );
 }
@@ -73,9 +73,9 @@ export function Withheld({
         <p className="text-[13.5px] font-semibold text-warn-text">
           {audience === "member"
             ? items.length === 1
-              ? "Something a role of yours grants is being held"
-              : "Some of what your roles grant is being held"
-            : `${items.length} ${items.length === 1 ? "hold" : "holds"} in force`}
+              ? "One part of your access is on hold"
+              : "Some of your access is on hold"
+            : `${items.length} ${items.length === 1 ? "hold" : "holds"}`}
         </p>
       </div>
       <ul className="mt-2 grid gap-1.5">
@@ -89,13 +89,15 @@ export function Withheld({
               // Who decided it, first. An operator looking at a hold is
               // deciding whether to lift it, and that is a conversation with a
               // person rather than a judgement about a row.
-              <span className="text-muted"> — held by {item.actorId}</span>
+              <span className="text-muted"> — put on hold by {item.actorId}</span>
             )}
             <span className="text-muted">
-              {audience === "operator" ? (item.reason ? `, because ${item.reason}` : "") : ` — ${item.reason}`}
+              {audience === "operator" ? (item.reason ? ` — because ${item.reason}` : "") : ` — ${item.reason}`}
             </span>
             {item.reviewDue && (
-              <span className="text-warn-text"> · past its review date</span>
+              <span className="text-warn-text">
+                {audience === "operator" ? " · review date passed — needs a decision" : " · due for review"}
+              </span>
             )}
           </li>
         ))}
@@ -105,15 +107,17 @@ export function Withheld({
         // not. A role-holder list reads as full access, and this is precisely
         // the case where it is not.
         <p className="mt-2 text-[13px] text-faint">
-          They may still hold a role that maps to it; this is why they cannot use it.
+          This person may still hold the role that normally gives this. The hold is why they
+          cannot use it.
         </p>
       )}
       {audience === "member" && (
         // The mechanism, once, at the bottom. A member who reads this knows the
         // hold is a decision with an owner rather than a fault with a queue.
         <p className="mt-2 text-[13px] text-faint">
-          A hold does not take the role away. An operator lifts it, or it lapses on its
-          own date.
+          You still have your role; this one part of it is on hold. Makerspace staff can lift
+          the hold, or it ends on its own on the review date. If you think this should be
+          lifted, ask makerspace staff and mention the reason shown here.
         </p>
       )}
     </div>
@@ -145,7 +149,9 @@ export function WithheldInline({ items }: { items: WithheldItem[] }) {
           <span className="font-mono text-[12.5px] text-ink">{item.value}</span>
           {item.target && <span className="text-faint">on {item.target}</span>}
           {item.reason && <span className="text-muted">— {item.reason}</span>}
-          {item.reviewDue && <span className="text-warn-text">· past its review date</span>}
+          {item.reviewDue && (
+            <span className="text-warn-text">· review date passed — needs a decision</span>
+          )}
         </li>
       ))}
     </ul>

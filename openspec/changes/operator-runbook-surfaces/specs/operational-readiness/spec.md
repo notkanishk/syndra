@@ -93,7 +93,7 @@ Clipboard failure MUST be silent and the command MUST remain selectable text. Th
 
 #### Scenario: Rotation states the restart it depends on
 
-- **GIVEN** the Identity provider page with a signing key installed
+- **GIVEN** the Zitadel page with a signing key installed
 - **WHEN** the signing-key panel renders
 - **THEN** it MUST show the rotate command the backend reported
 - **AND** it MUST state the environment variables to update and the restart that must follow

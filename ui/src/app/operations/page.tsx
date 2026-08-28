@@ -20,12 +20,12 @@ import { outcomeOf, type EventOutcome } from "@/lib/event-outcome";
 type Source = "all" | "provider" | "onboarding";
 
 /**
- * S11 · System › Event activity.
+ * S11 · System › Zitadel events.
  *
- * A raw timeline, not a dashboard. Its job is forensic — "what did the identity
- * provider tell us at 09:38, and what did we do about it". No tiles, no counts,
- * no roll-ups: Home already owns actionable summary, and a second dashboard
- * here would make it ambiguous which one is authoritative.
+ * A raw timeline, not a dashboard. Its job is forensic — "what did Zitadel
+ * tell us at 09:38, and what did we do about it". No tiles, no counts, no
+ * roll-ups: Home already owns actionable summary, and a second dashboard here
+ * would make it ambiguous which one is authoritative.
  *
  * Webhook events and onboarding triggers are ONE time-ordered stream. They are
  * two tables in the database and one sequence of things that happened; a
@@ -37,7 +37,7 @@ export default function EventActivityPage() {
   const [outcome, setOutcome] = useState<EventOutcome>("all");
   const events = useWebhookEvents();
   const triggers = useOnboardingTriggers();
-  const [openPayload, setOpenPayload] = useState<string | null>(null);
+  const [openDetails, setOpenDetails] = useState<string | null>(null);
 
   const all = useMemo(() => {
     const rows: StreamRow[] = [];
@@ -68,8 +68,8 @@ export default function EventActivityPage() {
   return (
     <div className="flex flex-col gap-[18px]">
       <PageHeader
-        title="Event activity"
-        meta="What the identity provider told us, in the order it told us."
+        title="Zitadel events"
+        lede="What Zitadel (the service everyone signs in through) told Syndra, in the order it arrived. Nothing here needs a decision."
         actions={
           <>
             <FilterPills<Source>
@@ -78,8 +78,8 @@ export default function EventActivityPage() {
               onChange={setSource}
               options={[
                 { value: "all", label: "All sources" },
-                { value: "provider", label: "Identity provider" },
-                { value: "onboarding", label: "Onboarding" },
+                { value: "provider", label: "Zitadel" },
+                { value: "onboarding", label: "New people" },
               ]}
             />
             <FilterPills<EventOutcome>
@@ -119,7 +119,7 @@ export default function EventActivityPage() {
             events.refetch();
             triggers.refetch();
           }}
-          errorTitle="Couldn't load event activity."
+          errorTitle="Couldn't load Zitadel events."
           skeleton={<RowSkeleton rows={6} avatar={false} label="Loading events" />}
           empty={
             // An emptied filter and an empty log are different facts, and only
@@ -139,7 +139,7 @@ export default function EventActivityPage() {
             ) : (
               <EmptyState
                 title="Nothing has happened yet."
-                guidance="Events arrive when somebody changes access in the identity provider, or when a new person is onboarded."
+                guidance="Events arrive when somebody changes access in Zitadel, or when a new person joins."
               />
             )
           }
@@ -169,17 +169,17 @@ export default function EventActivityPage() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => setOpenPayload((cur) => (cur === row.id ? null : row.id))}
-                  aria-expanded={openPayload === row.id}
+                  onClick={() => setOpenDetails((cur) => (cur === row.id ? null : row.id))}
+                  aria-expanded={openDetails === row.id}
                   className="shrink-0 text-[13px] text-faint motion-tint hover:text-ink"
                 >
-                  payload {openPayload === row.id ? "⌃" : "⌄"}
+                  {openDetails === row.id ? "Hide details" : "Show details"}
                 </button>
               </div>
 
-              {openPayload === row.id && (
+              {openDetails === row.id && (
                 <pre className="row-divider overflow-x-auto bg-surface-0 px-5 py-3.5 font-mono text-[12.5px] leading-[1.7] text-muted">
-                  {JSON.stringify(row.payload, null, 2)}
+                  {JSON.stringify(row.details, null, 2)}
                 </pre>
               )}
             </div>
@@ -200,7 +200,7 @@ interface StreamRow {
   /** See `outcomeOf`. */
   outcome: string;
   failed: boolean;
-  payload: unknown;
+  details: unknown;
 }
 
 function fromWebhook(event: WebhookEventRow): StreamRow {
@@ -209,15 +209,15 @@ function fromWebhook(event: WebhookEventRow): StreamRow {
   return {
     id: `w:${event.id}`,
     at: event.created_at,
-    type: `provider.${event.event_type}`,
+    type: `zitadel.${event.event_type}`,
     source: "provider",
     outcome,
     failed,
-    payload: event,
+    details: event,
     sentence: failed ? (
       <>
-        {event.error_message || "Processing failed."} — <UserName id={event.user_id} />,{" "}
-        <ProjectName id={event.source_project} />
+        Failed: {event.error_message || "Syndra could not process it."} —{" "}
+        <UserName id={event.user_id} />, <ProjectName id={event.source_project} />
       </>
     ) : (
       <>
@@ -231,7 +231,7 @@ function fromWebhook(event: WebhookEventRow): StreamRow {
         {outcome === "dropped" ? (
           <span className="text-faint"> — received and deliberately not acted on</span>
         ) : (
-          <span className="text-faint"> — processed</span>
+          <span className="text-faint"> — recorded</span>
         )}
       </>
     ),
@@ -248,27 +248,31 @@ function fromTrigger(trigger: OnboardingTriggerRow): StreamRow {
     source: "onboarding",
     outcome,
     failed,
-    payload: trigger,
+    details: trigger,
     sentence: failed ? (
       <>
-        {trigger.error_message || "Onboarding failed."} — <UserName id={trigger.user_id} />
+        Failed: {trigger.error_message || "Syndra could not welcome them."} —{" "}
+        <UserName id={trigger.user_id} />
       </>
     ) : (
       <>
-        <UserName id={trigger.user_id} /> arrived via {trigger.source}
+        <UserName id={trigger.user_id} /> joined
         {trigger.bundle_id ? (
           <>
             {" — "}
             {/*
               Bundles are deletable, and this log outlives them: the trigger row keeps the id
               of whatever was handed out at the time. The default em dash would render that as
-              "— assigned automatically", which reads as nothing having been assigned.
+              "— given automatically", which reads as nothing having been given.
             */}
-            <BundleName id={trigger.bundle_id} fallback="a bundle since deleted" /> assigned
-            automatically
+            <BundleName id={trigger.bundle_id} fallback="a bundle since retired" /> given
+            automatically as the default bundle (set of roles) for new members
           </>
         ) : (
-          <span className="text-faint"> — no default bundle configured, nothing assigned</span>
+          <span className="text-faint">
+            {" "}
+            — no default bundle (set of roles) for new members is set, so nothing was given
+          </span>
         )}
       </>
     ),

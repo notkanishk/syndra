@@ -5,12 +5,13 @@ import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { DirectWriteWarning, UpstreamShell } from "@/components/upstream/UpstreamShell";
+import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { FieldLabel, Input } from "@/components/ui/Input";
+import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { ProjectName } from "@/components/names";
@@ -24,6 +25,16 @@ import {
   useUpstreamUsers,
 } from "@/lib/queries/useUpstream";
 import { useDebounce } from "@/lib/useDebounce";
+import { humanizeKey } from "@/lib/format";
+
+/** "USER_STATE_ACTIVE" → "Active": the API's word, in ours. */
+function userStateLabel(state: string): string {
+  return humanizeKey(state.replace(/^USER_STATE_/, "").toLowerCase());
+}
+
+/** What is recorded when a change goes straight to Zitadel: one line, and no explanation. */
+const AUDIT_ONLY =
+  "Syndra recorded one line in Audit and nothing else; it will not explain this access anywhere.";
 
 /**
  * Users and their grants, as the identity provider holds them.
@@ -52,20 +63,20 @@ export default function UpstreamUsersPage() {
 
   return (
     <UpstreamShell
-      title="Users"
-      lede="Read live from the identity provider, including accounts Syndra has never seen."
+      title="People in Zitadel"
+      lede="Read live from Zitadel, including accounts Syndra has never seen."
       syndraHref="/users"
       syndraLabel="See the same people as Syndra understands them"
     >
       <div className="flex flex-col items-stretch gap-5 tablet:flex-row tablet:flex-wrap tablet:items-start">
         <Card className="w-full tablet:w-[320px] tablet:min-w-[260px] tablet:flex-none">
-          <CardHeader title="Accounts" count={rows.length} />
+          <CardHeader title="People" count={rows.length} />
           <div className="row-divider px-4 py-3">
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search name, username or email"
-              aria-label="Search upstream users"
+              placeholder="Name, username or email"
+              aria-label="Search people by name, username or email"
             />
           </div>
           <ListStates
@@ -73,15 +84,15 @@ export default function UpstreamUsersPage() {
             error={users.error}
             isEmpty={rows.length === 0}
             onRetry={() => users.refetch()}
-            errorTitle="Couldn't read users from the identity provider. Syndra itself is fine."
-            skeleton={<RowSkeleton rows={6} label="Reading users" />}
+            errorTitle="Couldn't read people from Zitadel. Syndra itself is fine."
+            skeleton={<RowSkeleton rows={6} label="Reading people" />}
             empty={
               <EmptyState
-                title={search ? "Nobody matches that." : "No users upstream."}
+                title={search ? "Nobody matches that." : "Zitadel has no people."}
                 guidance={
                   search
                     ? "Try part of an email address."
-                    : "Either none exist, or the service account cannot see them."
+                    : "Either there are none, or the account Syndra uses to read Zitadel is not allowed to see them."
                 }
               />
             }
@@ -132,6 +143,10 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
   const [editing, setEditing] = useState<{ grantId: string; roleKeys: string[]; projectId: string } | null>(
     null,
   );
+  const [revoking, setRevoking] = useState<{ grantId: string; roleKeys: string[]; projectId: string } | null>(
+    null,
+  );
+  const [acknowledged, setAcknowledged] = useState(false);
 
   const rows = grants.data?.items ?? [];
 
@@ -140,16 +155,16 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
       <CardHeader
         title={name}
         count={rows.length}
-        note={state}
+        note={userStateLabel(state)}
         action={
           <Button size="sm" variant="danger" onClick={() => setAssigning(true)}>
-            Assign a grant upstream
+            Give roles in Zitadel
           </Button>
         }
       />
 
       <div className="row-divider px-5 py-3 text-[13.5px] leading-[1.55] text-muted">
-        Everything below is what the identity provider holds for this person.{" "}
+        Everything below is what Zitadel holds for this person.{" "}
         <Link href={`/users/${userId}`} className="font-semibold text-accent-text">
           Syndra&rsquo;s explanation of the same access →
         </Link>
@@ -160,12 +175,12 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
         error={grants.error}
         isEmpty={rows.length === 0}
         onRetry={() => grants.refetch()}
-        errorTitle="Couldn't read this person's grants from the identity provider. Syndra itself is fine."
-        skeleton={<RowSkeleton rows={3} avatar={false} label="Reading grants" />}
+        errorTitle="Couldn't read this person's roles from Zitadel. Syndra itself is fine."
+        skeleton={<RowSkeleton rows={3} avatar={false} label="Reading roles" />}
         empty={
           <EmptyState
-            title="No grants upstream."
-            guidance="The identity provider holds nothing for this account."
+            title="No roles in Zitadel."
+            guidance="Zitadel has given this person no roles."
           />
         }
       >
@@ -196,21 +211,16 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
               <Button
                 size="sm"
                 variant="danger"
-                isPending={remove.isPending}
-                onClick={async () => {
-                  try {
-                    await remove.mutateAsync({ userId, grantId: grant.id });
-                    setOutcome({
-                      kind: "applied",
-                      message: "Grant removed in Zitadel",
-                      detail: "Syndra has no record of this change beyond the audit line.",
-                    });
-                  } catch (error) {
-                    setOutcome(outcomeFromError(error));
-                  }
+                onClick={() => {
+                  setAcknowledged(false);
+                  setRevoking({
+                    grantId: grant.id,
+                    roleKeys: grant.roleKeys,
+                    projectId: grant.projectId,
+                  });
                 }}
               >
-                Remove
+                Revoke roles
               </Button>
             </span>
           </div>
@@ -218,6 +228,66 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
       </ListStates>
 
       {outcome && <ActionOutcome outcome={outcome} className="mx-5 mb-4" />}
+
+      {revoking && (
+        <Modal
+          open
+          onClose={() => setRevoking(null)}
+          busy={remove.isPending}
+          size="sm"
+          labelledBy="revoke-grant-title"
+        >
+          <ModalHeader
+            title={`Revoke ${revoking.roleKeys.length === 1 ? "this role" : "these roles"} from ${name} in Zitadel?`}
+            titleId="revoke-grant-title"
+            lede="Revoking ends their access. It happens the moment you press the button, with no preview, and Syndra keeps no record of why."
+          />
+          <div className="flex flex-col gap-3.5 px-6">
+            <div className="text-[14.5px]">
+              <ProjectName id={revoking.projectId} fallback={revoking.projectId} />{" "}
+              {revoking.roleKeys.map((key) => (
+                <Mono key={key} className="mr-1.5 text-muted">
+                  {key}
+                </Mono>
+              ))}
+            </div>
+            <AcknowledgeCount
+              checked={acknowledged}
+              onChange={setAcknowledged}
+              count={revoking.roleKeys.length}
+              noun="roles"
+              verb="revokes"
+              consequence={`${name} loses these roles in Zitadel at once. Anything Syndra believes it gave them may be given back within about a minute, and the change will show up under Unexplained access.`}
+            />
+          </div>
+          <ModalFooter>
+            <Button
+              variant="dangerConfirm"
+              disabled={!acknowledged}
+              isPending={remove.isPending}
+              onClick={async () => {
+                try {
+                  await remove.mutateAsync({ userId, grantId: revoking.grantId });
+                  setOutcome({
+                    kind: "applied",
+                    message: "Roles revoked in Zitadel",
+                    detail: AUDIT_ONLY,
+                  });
+                  setRevoking(null);
+                } catch (error) {
+                  setOutcome(outcomeFromError(error));
+                  setRevoking(null);
+                }
+              }}
+            >
+              {revoking.roleKeys.length === 1
+                ? "Revoke this role in Zitadel"
+                : `Revoke these ${revoking.roleKeys.length} roles in Zitadel`}
+            </Button>
+            <Button onClick={() => setRevoking(null)}>Keep the roles</Button>
+          </ModalFooter>
+        </Modal>
+      )}
 
       {assigning && <AssignDialog userId={userId} onClose={() => setAssigning(false)} />}
       {editing && (
@@ -244,8 +314,8 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
   return (
     <Modal open onClose={onClose} busy={assign.isPending} size="sm">
       <ModalHeader
-        title="Assign a grant upstream"
-        lede="This creates the grant in the identity provider directly."
+        title="Give roles in Zitadel"
+        lede="This gives the roles in Zitadel directly, skipping Syndra."
       />
       <div className="flex flex-col gap-3.5 px-6">
         <div>
@@ -264,13 +334,17 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
           </Select>
         </div>
         <div>
-          <FieldLabel htmlFor="assign-roles">Role keys, comma separated</FieldLabel>
+          <FieldLabel htmlFor="assign-roles">Role keys</FieldLabel>
           <Input
             id="assign-roles"
             value={keys}
             onChange={(event) => setKeys(event.target.value)}
             placeholder="trained, maintainer"
           />
+          <FieldHint>
+            The short name other systems see, e.g. trained. Pick from the list below, comma
+            separated.
+          </FieldHint>
           {roles.data && (
             <p className="mt-1.5 text-[12.5px] text-faint">
               Available: {roles.data.items.map((role) => role.key).join(", ") || "none"}
@@ -278,7 +352,7 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
           )}
         </div>
         <DirectWriteWarning
-          what="Syndra will see this as access it did not cause."
+          what="Syndra will see this as access it did not give."
           acknowledged={acknowledged}
           onAcknowledge={setAcknowledged}
         />
@@ -295,8 +369,8 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
               await assign.mutateAsync({ userId, projectId, roleKeys: parsed });
               setOutcome({
                 kind: "applied",
-                message: "Grant assigned in Zitadel",
-                detail: "Syndra has no record of this change beyond the audit line.",
+                message: "Roles given in Zitadel",
+                detail: AUDIT_ONLY,
               });
               onClose();
             } catch (error) {
@@ -304,7 +378,7 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
             }
           }}
         >
-          Assign upstream
+          Give roles in Zitadel
         </Button>
         <Button onClick={onClose}>Cancel</Button>
       </ModalFooter>
@@ -334,20 +408,21 @@ function EditRolesDialog({
   return (
     <Modal open onClose={onClose} busy={update.isPending} size="sm">
       <ModalHeader
-        title="Change the roles on this grant"
-        lede="The new set replaces the old one entirely — anything you leave out is removed."
+        title="Replace this person's roles in Zitadel"
+        lede="The new set replaces the old one entirely — any role you leave out is revoked."
       />
       <div className="flex flex-col gap-3.5 px-6">
         <div>
-          <FieldLabel htmlFor="edit-roles">Role keys, comma separated</FieldLabel>
+          <FieldLabel htmlFor="edit-roles">Role keys</FieldLabel>
           <Input
             id="edit-roles"
             value={keys}
             onChange={(event) => setKeys(event.target.value)}
           />
+          <FieldHint>The short name other systems see, e.g. trained, comma separated.</FieldHint>
         </div>
         <DirectWriteWarning
-          what="Replacing a role set upstream can silently remove access Syndra thinks it granted."
+          what="Replacing the roles here can quietly revoke access Syndra believes it gave."
           acknowledged={acknowledged}
           onAcknowledge={setAcknowledged}
         />
@@ -364,8 +439,8 @@ function EditRolesDialog({
               await update.mutateAsync({ userId, grantId: grant.grantId, roleKeys: parsed });
               setOutcome({
                 kind: "applied",
-                message: "Grant updated in Zitadel",
-                detail: "Syndra has no record of this change beyond the audit line.",
+                message: "Roles replaced in Zitadel",
+                detail: AUDIT_ONLY,
               });
               onClose();
             } catch (error) {
@@ -373,7 +448,7 @@ function EditRolesDialog({
             }
           }}
         >
-          Replace roles upstream
+          Replace roles in Zitadel
         </Button>
         <Button onClick={onClose}>Cancel</Button>
       </ModalFooter>

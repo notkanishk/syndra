@@ -14,6 +14,7 @@ import { actedOn, describeAction, groupByDay, machineName } from "@/lib/audit-vo
 import { formatClock, formatList, formatShortDate } from "@/lib/format";
 import { useAuditEntries, type AuditEntry } from "@/lib/queries/useAudit";
 import { useTargets } from "@/lib/queries/useTargets";
+import { targetLabel } from "@/lib/nav";
 import { useTargetActivity, type TargetActivityEvent } from "@/lib/queries/useTargetActivity";
 
 const PAGE = 50;
@@ -163,7 +164,7 @@ function TargetActivityCard({
             guidance={
               uncovered.length > 0
                 ? "Some shares were not auditing this account, so this is not the same as nothing having happened — see below."
-                : "The target's audit log has nothing for this account."
+                : `${targetLabel(target)} has no activity for this account.`
             }
           />
         }

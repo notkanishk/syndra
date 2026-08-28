@@ -36,8 +36,9 @@ import { useIsTouch } from "@/lib/useViewport";
  */
 
 /** Held here, not composed, because it is a statement about what the system does. */
-const SESSION_SENTENCE =
-  "Sessions already established end when they next reconnect — this target has no way to close one.";
+function sessionSentence(name: string): string {
+  return `If they are connected right now, they stay connected until they disconnect — ${name} cannot end a session. Their next connection is refused.`;
+}
 
 export function TakeAwayDialog({
   target,
@@ -59,13 +60,18 @@ export function TakeAwayDialog({
   const [result, setResult] = useState<RevocationResult | null>(null);
 
   const armed = confirm.armed && reason.trim() !== "" && !revoke.isPending;
+  const name = targetLabel(target);
 
   if (result) {
     return (
       <Modal open onClose={onClose} size="md" labelledBy="takeaway-result">
         <ModalHeader
           titleId="takeaway-result"
-          title={result.status === "revoked" ? "Access taken away" : "Half of it went through"}
+          title={
+            result.status === "revoked"
+              ? "Access revoked"
+              : "Partly done — one step is still outstanding"
+          }
           lede={result.detail}
         />
         {result.disclosure && (
@@ -95,16 +101,26 @@ export function TakeAwayDialog({
     <Modal open onClose={revoke.isPending ? () => {} : onClose} busy={revoke.isPending} size="md" labelledBy="takeaway-title">
       <ModalHeader
         titleId="takeaway-title"
-        title={`Take ${subjectName}'s access away on ${targetLabel(target)}`}
-        lede={`New connections are refused and their credential is replaced. They keep every role they hold — this holds what the roles reach, on this target only.`}
+        title={`Revoke ${subjectName}'s access on ${name}`}
+        lede={`Revoke (end their access): ${subjectName} can no longer sign in to ${name}. They keep every role they hold — only what those roles give them on ${name} is put on hold.`}
       />
 
       <div className="grid gap-4 px-6">
+        <div className="grid gap-1.5 text-[13.5px] text-muted">
+          <p className="font-semibold text-ink">What happens</p>
+          <ul className="list-disc pl-5">
+            <li>Their storage password on {name} is replaced now.</li>
+            <li>New connections to {name} are refused.</li>
+            <li>Their roles stay as they are. Only what those roles give them on {name} is on hold, until somebody lifts it.</li>
+          </ul>
+          <p>To pause without replacing the password, use Put on hold instead.</p>
+        </div>
+
         {/* Amber, and above the form rather than beside the button: it is what
-            the operator needs to know BEFORE deciding, not a caveat attached to
+            the reader needs to know BEFORE deciding, not a caveat attached to
             the decision. */}
         <p className="rounded-inner border border-warn-line bg-warn-soft px-4 py-3 text-[13.5px] text-warn-text">
-          {SESSION_SENTENCE}
+          {sessionSentence(name)}
         </p>
 
         <div>
@@ -122,8 +138,7 @@ export function TakeAwayDialog({
             autoFocus={!touch}
           />
           <FieldHint>
-            Shown to them on their own page, and on every surface where they still
-            appear as held.
+            Shown to them on their own page, and wherever their access shows as on hold.
           </FieldHint>
         </div>
 
@@ -136,8 +151,8 @@ export function TakeAwayDialog({
             onChange={(e) => setReviewDate(e.target.value)}
           />
           <FieldHint>
-            A hold does not lapse on its own — it stays until somebody lifts it. This is
-            the date it starts asking. Left empty, one is set for you.
+            The hold stays until somebody lifts it. From this date Syndra reminds you to
+            look at it again. Leave it empty and Syndra picks a date.
           </FieldHint>
         </div>
 
@@ -151,13 +166,15 @@ export function TakeAwayDialog({
 
         {revoke.error && (
           <p className="text-[13.5px] text-danger-text">
-            {revoke.error instanceof Error ? revoke.error.message : "That could not be applied."}
+            {revoke.error instanceof Error
+              ? revoke.error.message
+              : "That did not go through. Nothing was changed."}
           </p>
         )}
       </div>
 
       <ModalFooter
-        note="The hold is recorded here and reaches the target when the queue is resumed. The credential is replaced now."
+        note={`The storage password is replaced now. The hold is recorded now and reaches ${name} when someone sends it from Pending changes.`}
       >
         <Button
           variant="dangerConfirm"
@@ -172,8 +189,7 @@ export function TakeAwayDialog({
             )
           }
         >
-          {/* What it does, not what it means. The queue is the honest verb. */}
-          {revoke.isPending ? "Queueing…" : "Queue the revocation"}
+          {revoke.isPending ? "Revoking…" : `Revoke access for ${subjectName}`}
         </Button>
         <Button variant="ghost" onClick={onClose} disabled={revoke.isPending}>
           Cancel

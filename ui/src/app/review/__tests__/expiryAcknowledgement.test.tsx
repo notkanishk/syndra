@@ -93,7 +93,7 @@ function enterSelect() {
  */
 function clickBulkExtend() {
   const bar = screen.getByRole("region", { name: "Selection" });
-  fireEvent.click(within(bar).getByRole("button", { name: "Rehearse an extension" }));
+  fireEvent.click(within(bar).getByRole("button", { name: "Preview an extension" }));
 }
 
 describe("Expiring access — bulk extend scope", () => {
@@ -107,7 +107,7 @@ describe("Expiring access — bulk extend scope", () => {
     renderPage();
     enterSelect();
 
-    const checkboxes = screen.getAllByLabelText("Select this expiring grant");
+    const checkboxes = screen.getAllByLabelText(/^Select .+, ending /);
     fireEvent.click(checkboxes[0]);
     clickBulkExtend();
 
@@ -122,7 +122,7 @@ describe("Expiring access — bulk extend scope", () => {
     renderPage();
     enterSelect();
 
-    for (const box of screen.getAllByLabelText("Select this expiring grant")) {
+    for (const box of screen.getAllByLabelText(/^Select .+, ending /)) {
       fireEvent.click(box);
     }
     clickBulkExtend();
@@ -147,7 +147,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
   it("states the reopen rule in the dialog", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
-    expect(document.body.textContent).toMatch(/extends or re-grants/i);
+    expect(document.body.textContent).toMatch(/extends it or gives it again/i);
     expect(document.body.textContent).toMatch(/comes back/i);
   });
 
@@ -159,7 +159,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
     fireEvent.change(screen.getByLabelText("Why (optional)"), {
       target: { value: "  Cohort ends  " },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Record it" }));
+    fireEvent.click(screen.getByRole("button", { name: "Record the decision" }));
 
     await waitFor(() =>
       expect(state.acknowledge).toHaveBeenCalledWith({
@@ -173,7 +173,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
   it("does not require a note", async () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
-    fireEvent.click(screen.getByRole("button", { name: "Record it" }));
+    fireEvent.click(screen.getByRole("button", { name: "Record the decision" }));
     await waitFor(() => expect(state.acknowledge).toHaveBeenCalled());
     expect(state.acknowledge.mock.calls[0][0].note).toBe("");
   });
@@ -202,14 +202,14 @@ describe("Expiring access — acknowledgement (C4)", () => {
       }),
     ];
     renderPage();
-    expect(document.body.textContent).toMatch(/Acknowledged · 1 grant that will lapse/);
-    expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+    expect(document.body.textContent).toMatch(/Let lapse · 1 role/);
+    expect(screen.getByRole("button", { name: "Undo letting it lapse" })).toBeTruthy();
   });
 
   it("takes an acknowledgement back", async () => {
     state.rows = [grant({ acknowledged: { by: "priya", at: "2026-08-04T09:00:00Z" } })];
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Undo letting it lapse" }));
     await waitFor(() => expect(state.clear).toHaveBeenCalledWith("g1"));
   });
 
@@ -217,7 +217,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
   it("keeps Extend available on an acknowledged row", () => {
     state.rows = [grant({ acknowledged: { by: "priya", at: "2026-08-04T09:00:00Z" } })];
     renderPage();
-    expect(screen.getByRole("button", { name: "Extend" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Extend 90 days" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Let it lapse" })).toBeNull();
   });
 
@@ -241,7 +241,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
     ];
     renderPage();
     enterSelect();
-    expect(screen.getAllByLabelText("Select this expiring grant")).toHaveLength(1);
+    expect(screen.getAllByLabelText(/^Select .+, ending /)).toHaveLength(1);
   });
 
   // A stale page is the reopen rule arriving early. The server's own message says to reload, and
@@ -252,10 +252,10 @@ describe("Expiring access — acknowledgement (C4)", () => {
       .mockRejectedValue(new Error("This grant's expiry changed since you loaded the page."));
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
-    fireEvent.click(screen.getByRole("button", { name: "Record it" }));
+    fireEvent.click(screen.getByRole("button", { name: "Record the decision" }));
 
     await waitFor(() => expect(state.acknowledge).toHaveBeenCalled());
-    expect(screen.getByRole("button", { name: "Record it" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Record the decision" })).toBeTruthy();
   });
 });
 
@@ -272,7 +272,7 @@ describe("the expiry queue gates on people, not on grants", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     fireEvent.click(
-      screen.getByRole("checkbox", { name: new RegExp(`Select these ${rows.length} grant`) }),
+      screen.getByRole("checkbox", { name: new RegExp(`Select these ${rows.length} role`) }),
     );
   }
 
@@ -286,19 +286,19 @@ describe("the expiry queue gates on people, not on grants", () => {
   it("lets six grants through when they belong to three people", () => {
     selectAll(pairs(6));
 
-    expect(screen.queryByText(/is the most that can run at once/)).toBeNull();
-    expect(screen.getByRole("button", { name: "Rehearse an extension" })).toBeTruthy();
+    expect(screen.queryByText(/you can change at most/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Preview an extension" })).toBeTruthy();
   });
 
   it("refuses five grants held by five people, and says which number it refuses on", () => {
     selectAll(Array.from({ length: 5 }, (_, at) => grant({ id: `g${at}`, user_id: `u${at}` })));
 
     expect(
-      screen.getByText(/they cover 5 people, and 4 is the most that can run at once/),
+      screen.getByText(/they cover 5 people, and you can change at most 4 people at once/),
     ).toBeTruthy();
     // The grant count stays on screen: the operator ticked grants and has to
     // recognise what they ticked.
-    expect(screen.getByText(/5 grants selected/)).toBeTruthy();
+    expect(screen.getByText(/5 roles selected/)).toBeTruthy();
   });
 
   // Narrowing takes whole people. Dropping a person's later grants would
@@ -312,7 +312,7 @@ describe("the expiry queue gates on people, not on grants", () => {
     );
 
     // Four people at two grants each — eight, not four.
-    expect(screen.getByText(/8 grants selected/)).toBeTruthy();
-    expect(screen.queryByText(/is the most that can run at once/)).toBeNull();
+    expect(screen.getByText(/8 roles selected/)).toBeTruthy();
+    expect(screen.queryByText(/you can change at most/)).toBeNull();
   });
 });

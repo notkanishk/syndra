@@ -131,6 +131,8 @@ None of these are code. All need a live instance and a human.
 
 ## 3. Spec & docs debt
 
+- **Copy follows the writing guide.** `openspec/changes/plain-language-copy/design.md` is the contract for every UI string; `plain-language.test.ts` checks the word list. Three open items live in its tasks.md §6: a person picker for adopting an account, filtering Zitadel grants by resolved name, and GiB vs GB.
+
 **Fixed 2026-07-30:** `openspec/specs/` was empty — every spec lived as an unpromoted delta under `changes/*/specs/`, so OpenLore skipped its spec index entirely and `check_spec_drift` / `search_specs` / `orient`'s `specDomains` all returned nothing. Five changes are now archived and seven capabilities consolidated (`access-governance`, `automation-policies`, `backend-api-testing`, `contract-quality`, `operational-readiness`, `production-security-boundary`, `user-management`). Spec index builds: 46 sections.
 
 **Still blocked — six changes are complete but cannot be archived.** They have no `specs/` directory at all, so there is no delta for `openspec archive` to merge. Their requirements were never written down anywhere:

@@ -32,13 +32,13 @@ const noun: [string, string] = ["person", "people"];
 
 describe("the apply toast", () => {
   it("stays a plain confirmation when everything landed", () => {
-    expect(resultMessage(plan({ succeeded: 12 }), noun)).toBe("12 people updated.");
+    expect(resultMessage(plan({ succeeded: 12 }), noun)).toBe("Applied to 12 people.");
     expect(resultTone(plan({ succeeded: 12 }))).toBe("success");
   });
 
   it("names rows that never reached Zitadel instead of counting them as updated", () => {
     const p = plan({ succeeded: 0, queued: 12 });
-    expect(resultMessage(p, noun)).toBe("0 applied, 12 recorded but not yet in Zitadel.");
+    expect(resultMessage(p, noun)).toBe("Applied to 0 people. 12 people are waiting to be sent to Zitadel.");
     // A warning, not an error: nothing was lost and the outbox will re-drive it.
     expect(resultTone(p)).toBe("warning");
   });
@@ -46,13 +46,13 @@ describe("the apply toast", () => {
   it("keeps the three populations apart in one sentence", () => {
     const p = plan({ succeeded: 5, queued: 4, failed: 3 });
     expect(resultMessage(p, noun)).toBe(
-      "5 applied, 4 recorded but not yet in Zitadel, 3 didn't go through.",
+      "Applied to 5 people. 4 people are waiting to be sent to Zitadel. 3 people failed.",
     );
     // A real failure outranks a queued row.
     expect(resultTone(p)).toBe("error");
   });
 
   it("says person, not people, for one", () => {
-    expect(resultMessage(plan({ succeeded: 1 }), noun)).toBe("1 person updated.");
+    expect(resultMessage(plan({ succeeded: 1 }), noun)).toBe("Applied to 1 person.");
   });
 });

@@ -41,6 +41,7 @@ export function ChimeToggle() {
         type="button"
         role="switch"
         aria-checked={enabled}
+        aria-label="Sound on new unexplained access"
         onClick={() => {
           setChimeEnabled(!enabled);
           setEnabled(!enabled);

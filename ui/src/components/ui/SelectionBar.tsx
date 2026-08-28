@@ -103,8 +103,7 @@ export function SelectionBar({
         {overCeiling ? (
           <span className="text-warn-text">
             {" "}
-            · {coverage}
-            {ceiling} is the most that can run at once.
+            · {coverage}you can change at most {ceiling} {gatedNoun[1]} at once.
           </span>
         ) : (
           <>
@@ -120,7 +119,7 @@ export function SelectionBar({
               onClick={onSelectVisibleOnly}
               className="font-semibold text-accent-text underline-offset-2 hover:underline"
             >
-              select only the {visibleCount} shown
+              select only the {visibleCount} {noun[1]} shown
             </button>
           </>
         ) : null}
@@ -131,8 +130,7 @@ export function SelectionBar({
       <div className="flex flex-wrap items-center gap-2">
         {overCeiling && onTakeCeiling ? (
           <SelectionAction onClick={onTakeCeiling}>
-            Select the first {ceilingNoun ? `${ceiling} ${gatedNoun[1]}` : ceiling} in the order
-            shown
+            Select the first {ceiling} {gatedNoun[1]} in the order shown
           </SelectionAction>
         ) : (
           children
@@ -142,7 +140,7 @@ export function SelectionBar({
           onClick={onClear}
           className="min-h-[44px] rounded-pill px-3 text-[13px] font-semibold text-muted motion-tint hover:text-ink desktop:min-h-0 desktop:py-1.5"
         >
-          Clear
+          Clear the selection
         </button>
       </div>
     </div>
@@ -296,7 +294,7 @@ export function SelectAllRow({
         <span className="text-[14px] font-semibold">{label}</span>
         {wider ? (
           <span className="text-[12.5px] text-faint">
-            {total} {total === 1 ? noun[0] : noun[1]} match no filter.
+            {total} {total === 1 ? noun[0] : noun[1]} in all.
           </span>
         ) : null}
       </span>

@@ -11,28 +11,28 @@ describe("describeDrain", () => {
   it("celebrates only a clean pass", () => {
     const outcome = describeDrain(result({ applied: 12 }));
     expect(outcome.tone).toBe("success");
-    expect(outcome.message).toBe("12 applied.");
+    expect(outcome.message).toBe("12 sent.");
   });
 
-  // The regression this exists for: a pass that requeued eight writes used to
-  // report "0 applied, 0 failed" and read as an idle queue.
+  // The regression this exists for: a pass that requeued eight changes used to
+  // report "0 sent, 0 failed" and read as an idle queue.
   it("never reports a requeue as success", () => {
     const outcome = describeDrain(result({ requeued: 8 }));
     expect(outcome.tone).toBe("warning");
-    expect(outcome.message).toContain("8 still queued");
-    expect(outcome.message).toContain("resume again");
+    expect(outcome.message).toContain("8 waiting to be sent");
+    expect(outcome.message).toContain("send again");
   });
 
-  it("says a decided-but-unrecorded write needs another pass", () => {
+  it("says a decided-but-unrecorded change needs another pass", () => {
     const outcome = describeDrain(result({ applied: 3, errored: 1 }));
     expect(outcome.tone).toBe("warning");
-    expect(outcome.message).toBe("3 applied · 1 not recorded — resume again.");
-    expect(outcome.detail).toMatch(/couldn't record/);
+    expect(outcome.message).toBe("3 sent · 1 not recorded — send again.");
+    expect(outcome.detail).toMatch(/could not record/);
   });
 
   it("reports every non-zero count, in a fixed order", () => {
     const outcome = describeDrain(result({ applied: 1, failed: 2, requeued: 3, errored: 4 }));
-    expect(outcome.message).toBe("1 applied · 2 failed · 3 still queued · 4 not recorded — resume again.");
+    expect(outcome.message).toBe("1 sent · 2 failed · 3 waiting to be sent · 4 not recorded — send again.");
   });
 
   it("does not celebrate a terminal failure", () => {
@@ -50,8 +50,18 @@ describe("describeDrain", () => {
       result({ halted: true, reason: "max_retries_exceeded", applied: 4 }),
     );
     expect(exhausted.tone).toBe("error");
-    expect(exhausted.message).toContain("4 applied");
-    expect(exhausted.message).toMatch(/out of retries/);
+    expect(exhausted.message).toContain("4 sent");
+    expect(exhausted.message).toMatch(/given up/);
+  });
+
+  // Given up is the one outcome sending again cannot fix, so the sentence has
+  // to say what does — and never use the mechanism's words for it.
+  it("tells the reader what to do about a change that was given up on", () => {
+    const outcome = describeDrain(result({ applied: 2, failed: 1, exhausted: 1 }));
+    expect(outcome.tone).toBe("error");
+    expect(outcome.message).toBe("2 sent · 1 failed. Syndra has given up on one change.");
+    expect(outcome.detail).toMatch(/from the person's page/);
+    expect(outcome.detail).not.toMatch(/resum|drain|retries/i);
   });
 
   it("says so when there was nothing to do", () => {
@@ -61,13 +71,13 @@ describe("describeDrain", () => {
 });
 
 /**
- * A drain runs one pass per registered target and the passes fail
- * independently. The summary has to survive that: "halted" beside "9 applied"
- * is now an ordinary result, and an operator told "nothing was sent" when nine
- * writes landed has been told the wrong half.
+ * A send runs one pass per connected system and the passes fail
+ * independently. The summary has to survive that: "halted" beside "9 sent" is
+ * now an ordinary result, and an operator told "nothing was sent" when nine
+ * changes landed has been told the wrong half.
  */
-describe("a drain with more than one target", () => {
-  it("names which target did not run rather than calling the whole pass a failure", () => {
+describe("a send with more than one connected system", () => {
+  it("names which system was skipped, by its name, rather than calling the whole pass a failure", () => {
     const out = describeDrain(
       result({
         applied: 9,
@@ -81,12 +91,12 @@ describe("a drain with more than one target", () => {
       }),
     );
 
-    expect(out.message).toContain("9 applied");
-    expect(out.message).toContain("zitadel did not run");
+    expect(out.message).toContain("9 sent");
+    expect(out.message).toContain("Zitadel was skipped");
     // Not an error: most of the work went through, and the part that did not is
-    // named and still queued.
+    // named and still waiting.
     expect(out.tone).toBe("warning");
-    expect(out.detail).toMatch(/stay queued/i);
+    expect(out.detail).toMatch(/waiting to be sent/i);
   });
 
   it("says nothing was sent when the only pass that could run did not", () => {
@@ -102,9 +112,9 @@ describe("a drain with more than one target", () => {
     );
 
     expect(out.tone).toBe("error");
-    expect(out.message).toMatch(/truenas is unreachable/i);
+    expect(out.message).toMatch(/TrueNAS is not answering/);
     // The pre-flight is the point: an outage costs one probe, not a retry
     // budget per row.
-    expect(out.detail).toMatch(/no write spent a retry/i);
+    expect(out.detail).toMatch(/nothing counts against the retry limit/i);
   });
 });

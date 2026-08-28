@@ -54,7 +54,7 @@ describe("source-specific removal", () => {
   it("says they will STILL HOLD it when another source survives", () => {
     open({ sources: [direct, bundle], grantId: "g_88" });
     // Two sources → the menu names one removal per source, never a guess.
-    fireEvent.click(screen.getByText("Remove direct access"));
+    fireEvent.click(screen.getByText("Revoke direct access"));
 
     expect(screen.getByText(/will still hold this role/i)).toBeInTheDocument();
     expect(screen.getByText(/via Lab Tech/i)).toBeInTheDocument();
@@ -64,9 +64,9 @@ describe("source-specific removal", () => {
     // Reachable by design so the copy can be reviewed; the button carries its
     // reason in text rather than only in a title attribute.
     open({ sources: [direct], grantId: undefined });
-    const confirm = screen.getByRole("button", { name: "Remove access" });
+    const confirm = screen.getByRole("button", { name: "Revoke access" });
     expect(confirm).toBeDisabled();
-    expect(screen.getByText(/no direct grant row to remove/i)).toBeInTheDocument();
+    expect(screen.getByText(/no direct access to revoke/i)).toBeInTheDocument();
   });
 
   it("offers no removal at all for an automatic source", () => {
@@ -94,7 +94,7 @@ describe("source-specific removal", () => {
     open({ sources: [direct, bundle, mapping], grantId: "g_88" });
 
     expect(screen.getByText(/holds Laser Lab \/ trained 3 ways/i)).toBeInTheDocument();
-    expect(screen.getByText("Remove direct access")).toBeInTheDocument();
+    expect(screen.getByText("Revoke direct access")).toBeInTheDocument();
     expect(screen.getByText("Remove bundle assignment")).toBeInTheDocument();
     expect(screen.getByText("Open the rule")).toBeInTheDocument();
   });
@@ -103,7 +103,7 @@ describe("source-specific removal", () => {
     removeDirect.mockClear();
     open({ sources: [direct], grantId: "g_88" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove access" }));
+    fireEvent.click(screen.getByRole("button", { name: "Revoke access" }));
     expect(removeDirect).toHaveBeenCalledWith({ userId: "u_2f81", grantId: "g_88" });
   });
 });

@@ -99,7 +99,7 @@ describe("BulkDialog", () => {
     // The only affirmative control on the first step is Rehearse. There is no
     // path from a selection straight to a write, for any operation.
     expect(screen.queryByRole("button", { name: /^Apply/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Rehearse" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Preview the change" })).toBeInTheDocument();
     expect(api.applied).toHaveLength(0);
   });
 
@@ -107,14 +107,14 @@ describe("BulkDialog", () => {
     open();
     // Every row of a bulk write lands in the audit log; an unexplained one is
     // a change nobody can account for later.
-    expect(screen.getByRole("button", { name: "Rehearse" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Preview the change" })).toBeDisabled();
   });
 
   async function rehearse() {
     fireEvent.change(screen.getByLabelText("Project"), { target: { value: "pLaser" } });
     fireEvent.change(screen.getByLabelText("Role"), { target: { value: "trained" } });
     fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "New cohort" } });
-    fireEvent.click(screen.getByRole("button", { name: "Rehearse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview the change" }));
     await screen.findByText("Ada Lovelace");
   }
 
@@ -135,7 +135,7 @@ describe("BulkDialog", () => {
     await rehearse();
     // 3 selected, 1 actionable. Offering "Apply to 3" would be a lie.
     expect(screen.getByRole("button", { name: "Apply to 1 person" })).toBeInTheDocument();
-    expect(screen.getByText(/1 already in that state · 1 refused/)).toBeInTheDocument();
+    expect(screen.getByText(/No change for 1 · 1 refused/)).toBeInTheDocument();
   });
 
   it("applies the request it rehearsed, citing the approval that rehearsal became", async () => {
@@ -177,7 +177,7 @@ describe("BulkDialog", () => {
     open();
     await rehearse();
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(screen.getByRole("button", { name: "Rehearse" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Preview the change" })).toBeInTheDocument();
     expect(screen.getByLabelText("Reason")).toHaveValue("New cohort");
   });
 });

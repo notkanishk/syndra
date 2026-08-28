@@ -70,7 +70,7 @@ describe("the bulk confirmation-mode verbs report their result", () => {
     state.bulk.mockRejectedValue(new ApiError(403, { error: "FORBIDDEN", message: "Not allowed" }));
     selectTheRule();
 
-    fireEvent.click(screen.getByRole("button", { name: /fire immediately/ }));
+    fireEvent.click(screen.getByRole("button", { name: /apply at once/ }));
 
     const report = await screen.findByRole("alert");
     expect(report.textContent).toContain("Refused");
@@ -81,11 +81,11 @@ describe("the bulk confirmation-mode verbs report their result", () => {
     state.bulk.mockResolvedValue(undefined);
     selectTheRule();
 
-    fireEvent.click(screen.getByRole("button", { name: /queue for confirmation/ }));
+    fireEvent.click(screen.getByRole("button", { name: /wait under Pending changes/ }));
 
     await waitFor(() =>
       expect(screen.getByRole("status").textContent).toContain(
-        "1 rule now queue for confirmation",
+        "1 rule now waits under Pending changes",
       ),
     );
     expect(screen.getByRole("status").textContent).toContain("Applied");

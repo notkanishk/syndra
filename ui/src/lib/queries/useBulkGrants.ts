@@ -171,7 +171,7 @@ export function useApplyBulk() {
 export function describeBulkOp(op: BulkOp): string {
   switch (op) {
     case "assign_role":
-      return "Grant a role";
+      return "Give a role";
     case "remove_role":
       return "Remove a role";
     case "assign_bundle":
@@ -185,8 +185,8 @@ export function describeBulkOp(op: BulkOp): string {
     case "edit_mapping":
       return "Change what a role reaches";
     case "delete_mapping":
-      return "Stop a role reaching that";
+      return "Stop a role reaching a system";
     case "rollback_mappings":
-      return "Roll back a mapping set";
+      return "Undo a set of mappings";
   }
 }

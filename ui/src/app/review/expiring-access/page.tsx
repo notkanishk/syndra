@@ -97,7 +97,7 @@ export default function ExpiringAccessPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Expiring access"
-        meta="Direct grants inside the next 30 days, soonest first. The sweep removes each one on its date whether or not you visit this page."
+        lede="Direct access (access somebody gave by hand) that ends in the next 30 days, soonest first. Syndra ends each one on its date whether or not you visit this page."
         actions={
           undecided.length > 0 ? (
             <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
@@ -122,7 +122,7 @@ export default function ExpiringAccessPage() {
           <SelectAllRow
             inScope={undecided.length}
             total={rows.length}
-            noun={["grant", "grants"]}
+            noun={["role", "roles"]}
             allSelected={selection.allSelected}
             {...selection.headerCheckboxProps}
           />
@@ -139,7 +139,7 @@ export default function ExpiringAccessPage() {
           empty={
             <EmptyState
               title="Nothing expires in the next 30 days."
-              guidance="Direct grants appear here a month before their expiry date."
+              guidance="Direct access appears here a month before it ends."
               resolved
             />
           }
@@ -162,7 +162,7 @@ export default function ExpiringAccessPage() {
               rows are acknowledged ones looks identical to a queue nobody has touched. */}
           {undecided.length === 0 && acknowledged.length > 0 && (
             <div className="row-divider px-5 py-3.5 text-[14px] text-muted">
-              Nothing here is waiting on a decision. Every grant expiring in the next 30 days has
+              Nothing here is waiting on a decision. Every role that ends in the next 30 days has
               been looked at.
             </div>
           )}
@@ -171,8 +171,8 @@ export default function ExpiringAccessPage() {
             <>
               <div className="row-divider bg-tint-1 px-5 py-2.5">
                 <span className="type-label">
-                  Acknowledged · {acknowledged.length}{" "}
-                  {acknowledged.length === 1 ? "grant" : "grants"} that will lapse
+                  Let lapse · {acknowledged.length}{" "}
+                  {acknowledged.length === 1 ? "role" : "roles"}
                 </span>
               </div>
               {acknowledged.map((grant) => (
@@ -193,7 +193,7 @@ export default function ExpiringAccessPage() {
 
       <SelectionBar
         count={selecting ? selection.count : 0}
-        noun={["grant", "grants"]}
+        noun={["role", "roles"]}
         composition={
           selectedUsers.length > 0
             ? `${selectedUsers.length} ${selectedUsers.length === 1 ? "person" : "people"}`
@@ -226,7 +226,7 @@ export default function ExpiringAccessPage() {
       >
         {/* Tapping this opens a plan, it does not extend anything. */}
         <SelectionAction onClick={() => setExtending(true)}>
-          Rehearse an extension
+          Preview an extension
         </SelectionAction>
       </SelectionBar>
 
@@ -252,15 +252,15 @@ export default function ExpiringAccessPage() {
           </h2>
           <p className="max-w-[60ch] text-[14px] leading-[1.55] text-muted">
             It records that you read the row and decided. It changes nothing about the access — the
-            grant already lapses on its date, and it still will. What changes is that the queue
+            access already ends on its date, and it still will. What changes is that the queue
             stops asking your colleagues a question you have answered, with your name on the
             answer.
           </p>
         </div>
         <div className="card min-w-[320px] flex-1 px-5 py-4">
-          <h2 className="type-card-title mb-2">When it comes back</h2>
+          <h2 className="type-card-title mb-2">When a row comes back</h2>
           <p className="max-w-[60ch] text-[14px] leading-[1.55] text-muted">
-            An acknowledgement is about one date. If somebody extends or re-grants the access, the
+            An acknowledgement is about one date. If somebody extends the access or gives it again, the
             date you agreed to no longer exists, so the row returns as undecided and asks again —
             you have not signed off on the new date. Nothing else clears it, and there is no timer.
           </p>
@@ -314,7 +314,7 @@ function ExpiringRow({
               already on the row: who acknowledged it, and when. */}
           {!ack && (
             <RowCheckbox
-              label="Select this expiring grant"
+              label={`Select ${grant.role_key}, ending ${formatShortDate(grant.expires_at)}`}
               {...selection.checkboxProps(grant.id)}
             />
           )}
@@ -350,7 +350,7 @@ function ExpiringRow({
           </span>
         ) : (
           <span className="text-[14px] text-muted tablet:truncate">
-            No action — expires {formatShortDate(grant.expires_at)}
+            Undecided — ends {formatShortDate(grant.expires_at)}
           </span>
         )}
       </div>
@@ -360,7 +360,7 @@ function ExpiringRow({
           soonest ? "text-warn-text" : "text-muted"
         }`}
       >
-        {remaining === null ? "—" : remaining <= 0 ? "expires today" : `${remaining} days left`}
+        {remaining === null ? "—" : remaining <= 0 ? "ends today" : `${remaining} days left`}
         <span className="tablet:hidden" />
       </div>
 
@@ -382,14 +382,14 @@ function ExpiringRow({
               setOutcome({
                 kind: "applied",
                 message: `Extended by ${EXTEND_DAYS} days`,
-                detail: "It leaves this queue on the next read.",
+                detail: "It leaves this list when the page next refreshes.",
               });
             } catch (error) {
               setOutcome(outcomeFromError(error));
             }
           }}
         >
-          Extend
+          Extend {EXTEND_DAYS} days
         </Button>
 
         {ack ? (
@@ -402,15 +402,15 @@ function ExpiringRow({
                 await clearAck.mutateAsync(grant.id);
                 setOutcome({
                   kind: "applied",
-                  message: "Back in the queue",
-                  detail: "Undecided again, and asking.",
+                  message: "Back in the undecided list",
+                  detail: "The list asks about it again.",
                 });
               } catch (error) {
                 setOutcome(outcomeFromError(error));
               }
             }}
           >
-            Undo
+            Undo letting it lapse
           </Button>
         ) : (
           <Button variant="ghost" size="sm" onClick={onLetLapse}>
@@ -467,7 +467,7 @@ function LetItLapseDialog({
             </li>
             <li>The queue stops asking, and shows your name against the decision.</li>
             <li>
-              If somebody extends or re-grants it, this stops applying and the row comes back — you
+              If somebody extends it or gives it again, this stops applying and the row comes back — you
               have not signed off on a date that did not exist yet.
             </li>
           </ul>
@@ -507,7 +507,7 @@ function LetItLapseDialog({
               });
               setOutcome({
                 kind: "applied",
-                message: "Recorded",
+                message: "Recorded — it will lapse on its date",
                 detail:
                   "Nothing about the access changed — it still lapses on its date. What changed is that the queue stops asking your colleagues a question you have answered.",
               });
@@ -520,7 +520,7 @@ function LetItLapseDialog({
             }
           }}
         >
-          Record it
+          Record the decision
         </Button>
         <Button variant="ghost" onClick={onClose} disabled={acknowledge.isPending}>
           Cancel

@@ -59,7 +59,7 @@ export function ConvergeEntitlements({
     <>
       <RehearsalDialog
         title={`Bring accounts in line on ${targetLabel(target)}`}
-        lede={`Reads what ${label} should have on ${targetLabel(target)} and what they have, and queues the difference. Nothing reaches the target until somebody resumes the queue.`}
+        lede={`Compares what ${label} should have on ${targetLabel(target)} with what they have, and records the differences as changes waiting to be sent. Nothing reaches ${targetLabel(target)} until somebody sends them from Pending changes.`}
         noun={["account", "accounts"]}
         onRehearse={async (acknowledgeScope) => {
           const result = await rehearse.mutateAsync({ subjectIds, acknowledgeScope });
@@ -109,7 +109,7 @@ function PlanProvenance({ plan }: { plan: EntitlementPlan }) {
           edge. */}
       <div className="settle-in pointer-events-auto rounded-pill border border-line bg-surface-1 px-4 py-2 shadow-popover">
         <ReadFreshness
-          subject="This plan's view of the target"
+          subject="What this preview is based on"
           state={{
             readAt: plan.state_read_at,
             current: !plan.provisional,

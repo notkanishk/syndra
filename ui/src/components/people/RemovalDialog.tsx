@@ -128,7 +128,7 @@ export function RemovalDialog({
 }
 
 function actionName(kind: SourceKind): string {
-  if (kind === "direct") return "Remove direct access";
+  if (kind === "direct") return "Revoke direct access";
   if (kind === "bundle") return "Remove bundle assignment";
   return "Open the rule";
 }
@@ -161,7 +161,7 @@ function DirectDialog({
     <Modal open onClose={onClose} busy={remove.isPending} size="sm" labelledBy="removal-title">
       <ModalHeader
         chip={<SourceChip kind="direct" />}
-        title={`Remove direct access to ${roleLabel}?`}
+        title={`Revoke direct access to ${roleLabel}?`}
         titleId="removal-title"
         lede={`Granted directly to ${subject}.`}
       />
@@ -184,7 +184,7 @@ function DirectDialog({
               </strong>
               <br />
               <span className="text-[14px] text-muted">
-                No bundle and no rule gives it to them. Access ends at the next cache compile.
+                No bundle and no rule gives it to them. Their access ends within about a minute.
               </span>
             </>
           )}
@@ -195,7 +195,7 @@ function DirectDialog({
       <ModalFooter
         note={
           blocked
-            ? "Blocked · this role has no direct grant row to remove. Only a direct source can be removed here."
+            ? "Refused · this role was not given directly, so there is no direct access to revoke. Only direct access can be revoked here."
             : undefined
         }
       >
@@ -227,7 +227,7 @@ function DirectDialog({
             }
           }}
         >
-          Remove access
+          Revoke access
         </Button>
         <Button onClick={onClose}>Cancel</Button>
       </ModalFooter>
@@ -301,7 +301,7 @@ function BundleDialog({
                 kind: "queued",
                 message: `${bundleName} removed from ${subject}`,
                 detail:
-                  "Roles it supplied are withdrawn on the next drain, except any another source still grants.",
+                  "The roles it supplied are revoked once you send Pending changes, except any that another source still gives.",
               });
             } catch (error) {
               setOutcome(outcomeFromError(error));
@@ -354,7 +354,7 @@ function AutomaticDialog({
           </div>
         </div>
         <p className="text-[14px] leading-[1.55] text-muted">
-          To take this away from {subject} alone, remove their{" "}
+          To revoke this from {subject} alone, remove their{" "}
           <span className="text-ink">{input ?? "input role"}</span> — that is the input the rule
           reads.
         </p>

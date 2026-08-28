@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Relative } from "@/components/ui/Time";
+import { targetLabel } from "@/lib/nav";
 import {
   useMergeFindings,
   useResolveMergeFinding,
@@ -37,13 +38,14 @@ export function MergeFindings({ target }: { target: string }) {
   const [deciding, setDeciding] = useState<string | null>(null);
 
   const rows = findings.data ?? [];
+  const name = targetLabel(target);
 
   return (
     <Card>
       <CardHeader
         title="Waiting on a decision"
         count={rows.length}
-        note="Differences the reconciliation found and is not entitled to resolve."
+        note={`Differences between Syndra and ${name} that Syndra will not settle on its own.`}
       />
       <ListStates
         isLoading={findings.isLoading}
@@ -54,7 +56,7 @@ export function MergeFindings({ target }: { target: string }) {
         empty={
           <EmptyState
             title="Nothing disputed"
-            guidance="Every managed account on this target matches what Syndra decided, or differs in a way the sweep could account for."
+            guidance={`Every account Syndra manages on ${name} matches what Syndra expects, or differs in a way Syndra could explain.`}
           />
         }
       >
@@ -70,7 +72,7 @@ export function MergeFindings({ target }: { target: string }) {
                 </span>
               </CardRow>
               <div className="px-5 pb-3 text-[13.5px] text-muted">
-                {describe(f)}
+                {describe(f, name)}
               </div>
               {f.decision === "unbound" ? (
                 // Decided as unbound and still standing means the unbind did not
@@ -80,8 +82,8 @@ export function MergeFindings({ target }: { target: string }) {
                 // recoverable half-write into a wedge.
                 <CardRow className="flex-wrap">
                   <span className="text-[13px] text-warn-text">
-                    The target may already have released this account and Syndra&rsquo;s records
-                    were not updated. Nothing on the target changes if you press again.
+                    {name} may already have let go of this account while Syndra&rsquo;s records
+                    were not updated. Pressing again changes nothing on {name}.
                   </span>
                   <span className="flex-1" />
                   <Button
@@ -96,7 +98,7 @@ export function MergeFindings({ target }: { target: string }) {
                       })
                     }
                   >
-                    Finish unbinding
+                    Finish: stop managing it
                   </Button>
                 </CardRow>
               ) : f.decision ? (
@@ -106,13 +108,14 @@ export function MergeFindings({ target }: { target: string }) {
                 // difference is over while it is still on the target.
                 <CardRow>
                   <span className="text-[13px] text-faint">
-                    {decisionLabel(f.decision)} by <UserName id={f.decided_by ?? ""} /> ·
-                    waiting for the target to agree
+                    {decisionLabel(f.decision, name)} by <UserName id={f.decided_by ?? ""} /> ·
+                    waiting for {name} to match
                   </span>
                 </CardRow>
               ) : deciding === f.id ? (
                 <DecisionForm
                   finding={f}
+                  name={name}
                   pending={resolve.isPending}
                   error={resolve.error}
                   onCancel={() => setDeciding(null)}
@@ -143,15 +146,16 @@ export function MergeFindings({ target }: { target: string }) {
  * the target's, not this component's, and a renderer that knows what a `group`
  * looks like is a second definition of the entitlement schema.
  */
-function describe(f: MergeFinding): string {
+function describe(f: MergeFinding, name: string): string {
   const was = show(f.base);
+  const its = f.field ? `Its ${f.field}` : "It";
   switch (f.outcome) {
     case "deleted_upstream":
-      return "The account this binding names is no longer on the target. Provisioning it again recreates what somebody deleted; unbinding leaves the target alone and stops Syndra managing it.";
+      return `This account is no longer on ${name} — somebody deleted it there. Creating it again brings back what they deleted; stopping management leaves ${name} alone and Syndra forgets the account.`;
     case "theirs_only":
-      return `It was ${was} when Syndra last saw it, and is ${show(f.theirs)} now. Syndra did not change it, so somebody changed it on the target.`;
+      return `${its} was ${was} when Syndra last saw it, and is ${show(f.theirs)} now. Syndra did not change it, so somebody changed it on ${name}.`;
     case "conflict":
-      return `It was ${was} when Syndra last saw it. Syndra now wants ${show(f.ours)} and the target has ${show(f.theirs)} — both moved, differently.`;
+      return `${its} was ${was} when Syndra last saw it. Syndra now wants ${show(f.ours)} and ${name} has ${show(f.theirs)} — both moved, differently.`;
   }
 }
 
@@ -170,14 +174,14 @@ function describe(f: MergeFinding): string {
  * `merge-vocabulary.test.ts` fails when the backend grows a resolution this
  * has not been taught.
  */
-function decisionLabel(decision: string): string {
+function decisionLabel(decision: string, name: string): string {
   switch (decision) {
     case "keep_ours":
-      return "Keeping Syndra's";
+      return "Keeping Syndra's value";
     case "take_theirs":
-      return "Taking the target's";
+      return `Using ${name}'s value`;
     case "reprovisioned":
-      return "Provisioning it again";
+      return "Creating it again";
     case "unbound":
       return "No longer managing it";
     case "agreed":
@@ -189,6 +193,7 @@ function decisionLabel(decision: string): string {
 
 function show(value: unknown): string {
   if (value === undefined || value === null) return "unrecorded";
+  if (typeof value === "string") return value;
   return JSON.stringify(value);
 }
 
@@ -203,12 +208,14 @@ function show(value: unknown): string {
  */
 function DecisionForm({
   finding,
+  name,
   pending,
   error,
   onResolve,
   onCancel,
 }: {
   finding: MergeFinding;
+  name: string;
   pending: boolean;
   error: unknown;
   onResolve: (input: ResolveFindingInput) => void;
@@ -239,7 +246,7 @@ function DecisionForm({
             onResolve({ id: finding.id, resolution: pick, reason });
           }}
         >
-          {gone ? "Provision it again" : "Keep Syndra's"}
+          {gone ? "Create it again" : "Keep Syndra's value"}
         </Button>
         {(gone || finding.adoptable) && (
           <Button
@@ -263,7 +270,7 @@ function DecisionForm({
               });
             }}
           >
-            {gone ? "Stop managing it" : "Take the target's"}
+            {gone ? "Stop managing it" : `Use ${name}'s value`}
           </Button>
         )}
         <span className="flex-1" />
@@ -291,7 +298,7 @@ function DecisionForm({
         </div>
       )}
       {alreadyDecided ? (
-        <AlreadyDecided taken={alreadyDecided} picked={resolution} />
+        <AlreadyDecided taken={alreadyDecided} picked={resolution} name={name} />
       ) : (
         Boolean(error) && (
           // The refusals are the useful half. Adopting a group value has nowhere
@@ -300,7 +307,9 @@ function DecisionForm({
           // full rather than replaced with "could not resolve", which would leave
           // an operator pressing a button that never works.
           <span className="text-[13.5px] text-warn-text">
-            {error instanceof Error ? error.message : "That decision could not be carried out."}
+            {error instanceof Error
+              ? error.message
+              : "That decision did not go through. Nothing was changed."}
           </span>
         )
       )}
@@ -360,9 +369,11 @@ function decidedElsewhere(error: unknown): DecidedElsewhere | null {
 function AlreadyDecided({
   taken,
   picked,
+  name,
 }: {
   taken: DecidedElsewhere;
   picked: string | null;
+  name: string;
 }) {
   const agree = picked !== null && picked === taken.decision;
 
@@ -380,7 +391,7 @@ function AlreadyDecided({
       </p>
 
       <p className="text-[13.5px] text-muted">
-        They chose <span className="font-semibold text-ink">{decisionLabel(taken.decision)}</span>
+        They chose <span className="font-semibold text-ink">{decisionLabel(taken.decision, name)}</span>
         {taken.decision_reason ? (
           <>
             {" "}
@@ -395,24 +406,22 @@ function AlreadyDecided({
           {agree ? (
             <>
               You had picked{" "}
-              <span className="font-semibold text-ink">{decisionLabel(picked)}</span> too, so
-              there is nothing to disagree about.
+              <span className="font-semibold text-ink">{decisionLabel(picked, name)}</span> too,
+              so there is nothing to disagree about.
             </>
           ) : (
             <>
               You had picked{" "}
-              <span className="font-semibold text-ink">{decisionLabel(picked)}</span>. A finding
-              takes one decision because the answers are opposites: keeping Syndra&rsquo;s value
-              and taking the target&rsquo;s cannot both be queued without one of them releasing
-              an account the other is re-provisioning.
+              <span className="font-semibold text-ink">{decisionLabel(picked, name)}</span>. Only
+              one decision can stand, because the two answers undo each other.
             </>
           )}
         </p>
       )}
 
       <p className="text-[13px] text-faint">
-        The finding has not gone anywhere. It stays here as decided-and-waiting until a later
-        pass reads the account and finds the two sides agree.
+        The finding has not gone anywhere. It stays here as decided-and-waiting until Syndra
+        next checks the account and finds {name} matches.
       </p>
     </div>
   );

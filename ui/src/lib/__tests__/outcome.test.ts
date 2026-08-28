@@ -20,7 +20,7 @@ describe("the outcome vocabulary", () => {
   it("never lets queued wear the tone of applied", () => {
     expect(OUTCOME_TONE.queued).not.toBe(OUTCOME_TONE.applied);
     expect(OUTCOME_TONE.queued).toContain("warn");
-    expect(OUTCOME_LABEL.queued).toBe("Queued");
+    expect(OUTCOME_LABEL.queued).toBe("Waiting to be sent");
   });
 
   // Past tense for results, future tense for plans. A plan says what would
@@ -70,10 +70,10 @@ describe("an error becomes an outcome", () => {
 
   it("says the two things an operator already knows in the product's words", () => {
     expect(outcomeFromError(new ApiError(403, { message: "nope" })).message).toBe(
-      "You don't have access to this.",
+      "You don't have permission to do this.",
     );
     expect(outcomeFromError(new ApiError(404, { message: "nope" })).message).toBe(
-      "It no longer exists.",
+      "That item no longer exists — someone may have removed it.",
     );
   });
 

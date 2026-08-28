@@ -1,3 +1,4 @@
+import { humanizeKey } from "@/lib/format";
 import type { UserListEntry } from "@/lib/queries/useUsers";
 
 /**
@@ -35,11 +36,11 @@ export const ATTENTION_VALUES: readonly Attention[] = [
 ];
 
 export const ATTENTION_LABELS: Record<Attention, string> = {
-  expiring: "Access expiring",
+  expiring: "Expiring access",
   unexplained: "Unexplained access",
   requests: "Open requests",
   "no-access": "No access yet",
-  departed: "Departed, still holding roles",
+  departed: "Departed, still has access",
 };
 
 export interface PeopleFilters {
@@ -180,8 +181,9 @@ export function applyFilters(
 export function describeFilters(filters: PeopleFilters, projectName?: string): string {
   const parts: string[] = [];
   if (filters.q) parts.push(`matching “${filters.q}”`);
-  if (filters.project) parts.push(`in ${projectName || "one project"}`);
-  if (filters.role) parts.push(`holding ${filters.role}`);
+  if (filters.project) parts.push(`in ${projectName || "the selected project"}`);
+  // A key is not a word; the humanised form is the fallback prose already uses.
+  if (filters.role) parts.push(`holding ${humanizeKey(filters.role)}`);
   if (filters.bundle) {
     parts.push(
       filters.version

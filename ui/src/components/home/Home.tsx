@@ -188,7 +188,7 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
         ...prev,
         [id]: {
           kind: "applied",
-          message: status === "approved" ? `Approved for ${who}` : `Denied for ${who}`,
+          message: status === "approved" ? `Approved for ${who}` : `Declined for ${who}`,
         },
       }));
     } catch (error) {
@@ -238,7 +238,7 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
               Approve
             </Button>
             <Button size="sm" onClick={() => act(entry.id, "rejected", entry.requester_id)}>
-              Deny
+              Decline
             </Button>
           </div>
 
@@ -343,8 +343,8 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
       <CardHeader title="Pending changes" count={count} />
       <CardRow>
         <div className="flex-1 text-[14.5px]">
-          {count} Zitadel {count === 1 ? "write" : "writes"} queued
-          <span className="text-faint"> — waiting for confirmation</span>
+          {count} {count === 1 ? "change" : "changes"} waiting to be sent to Zitadel
+          <span className="text-faint"> — nothing there has changed yet</span>
         </div>
         <Button
           variant="outline"
@@ -360,7 +360,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
             }
           }}
         >
-          Resume now
+          Send {count === 1 ? "it" : "them"} now
         </Button>
       </CardRow>
 
@@ -400,7 +400,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
 function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
   return (
     <Card>
-      <CardHeader title="Targets Syndra can't vouch for" count={targets.length} tone="danger" />
+      <CardHeader title="Systems Syndra could not check" count={targets.length} tone="danger" />
       <div className="contents arrive-list">
         {targets.map((t, i) => (
           <CardRow key={t.target} first={i === 0} className="flex-wrap">
@@ -414,7 +414,7 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
               {t.reason && <div className="mt-1 text-[13px] text-faint">{t.reason}</div>}
           </div>
           <ButtonLink href={`/system/targets/${t.target}`} size="sm">
-            Open target
+            Open {targetLabel(t.target)}
           </ButtonLink>
         </CardRow>
       ))}
@@ -454,7 +454,7 @@ function MergeFindingsWaiting({ count }: { count: number }) {
         </div>
         {rows.map((row) => (
           <ButtonLink key={row.target} href={`/system/targets/${row.target}`} size="sm">
-            {rows.length === 1 ? "Open target" : `Open ${targetLabel(row.target)}`}
+            {`Open ${targetLabel(row.target)}`}
           </ButtonLink>
         ))}
       </CardRow>
@@ -471,7 +471,7 @@ function UnexplainedAccess({ count }: { count: number }) {
           {count} {count === 1 ? "grant" : "grants"} Syndra can&rsquo;t explain
         </div>
         <ButtonLink href="/governance/drift" size="sm">
-          Open triage
+          Review them
         </ButtonLink>
       </CardRow>
     </Card>
