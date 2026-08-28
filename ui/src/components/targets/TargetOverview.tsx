@@ -843,10 +843,23 @@ function Capabilities({ registered }: { registered: TargetSummary }) {
 function LogFinding({ anchor }: { anchor: LogAnchor }) {
   const [resolving, setResolving] = useState(false);
   const name = targetLabel(anchor.target);
+  // Read from the two counts, not from the verdict.
+  //
+  // `head_rewritten` has TWO producers in ClassifyLogHead: the same number of
+  // records hashing to something else, and records having GROWN while the head
+  // stayed put (db/log_anchor.go:75-84). This said "the number of entries is
+  // the same" for both, so the second case — new entries that do not chain onto
+  // anything Syndra verified, which is the more alarming one — was reported as
+  // its opposite. The counts are both on screen anyway; they cannot disagree
+  // with themselves.
+  const seen = anchor.records;
+  const reported = anchor.violation_records ?? 0;
   const what =
-    anchor.violation_reason === "records_decreased"
+    reported < seen
       ? "Entries that existed are gone."
-      : "The number of entries is the same, but their contents changed.";
+      : reported > seen
+        ? "Entries were added, but the log still ends where it did — the new ones do not follow on from anything Syndra has verified."
+        : "The number of entries is the same, but their contents changed.";
   return (
     <div className="rounded-inner border border-danger-line bg-danger-soft px-4 py-3">
       <p className="text-[13.5px] font-semibold text-danger-text">
@@ -862,8 +875,9 @@ function LogFinding({ anchor }: { anchor: LogAnchor }) {
         the Syndra server.
       </p>
       <p className="mt-1 text-[13px] text-faint">
-        This stays until somebody resolves it. Syndra keeps its own note of how long the log
-        was, and that note is the only thing that can notice entries disappearing.
+        This stays until somebody resolves it. Syndra&rsquo;s <Term name="logAnchor">log anchor</Term>{" "}
+        is the only thing that can notice entries disappearing, and resolving replaces it with a
+        new <Term name="baseline">baseline</Term>.
       </p>
       <details className="mt-1 text-[13px] text-faint">
         <summary className="cursor-pointer">Technical detail</summary>

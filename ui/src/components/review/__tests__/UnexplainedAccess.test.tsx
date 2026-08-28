@@ -273,7 +273,14 @@ describe("Unexplained access — triage", () => {
     renderTriage();
 
     expect(screen.queryByText("zg_4f19c8")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { expanded: false }));
+    // The row toggle. `{ expanded: false }` alone stopped being unique when
+    // the page lede gained a <Term>, whose definition popover is also a
+    // collapsed disclosure — and which always describes itself, where a row
+    // toggle never does.
+    const rowToggle = screen
+      .getAllByRole("button", { expanded: false })
+      .find((button) => !button.hasAttribute("aria-describedby"));
+    fireEvent.click(rowToggle!);
     expect(screen.getByText("zg_4f19c8")).toBeInTheDocument();
   });
 });

@@ -149,6 +149,36 @@ cascade lands partly ("8 went through and 2 failed").
 The defect was never the behaviour. It was a sentence describing behaviour
 nobody had built.
 
+## 12. The vocabulary pass, finished
+
+- [x] 12.1 Every inline gloss of something the audience already knows is gone —
+  nine of them, eight of which expanded "Zitadel" into "the service everyone
+  signs in through" in the middle of a sentence. The word carries its own
+  definition now.
+- [x] 12.2 A definition still belongs where the page's whole subject is that
+  thing: the Bundles lede saying what a bundle is, the Access map legend, and
+  the Projects lede disambiguating a Zitadel project from what "project" means
+  in a makerspace. Those are kept deliberately — the rule was never "explain
+  nothing", it was "do not explain the same thing on every screen".
+- [x] 12.3 `merge finding`, `baseline` and `log anchor` were the three coinages
+  still unused after the pass stopped. They are back on the target screens, each
+  marked up once.
+- [x] 12.4 **`head_rewritten` was told backwards.** `ClassifyLogHead` returns it
+  for two different things (`db/log_anchor.go:75-84`): the same record count
+  hashing differently, and records having *grown* while the head stayed put. The
+  card said "the number of entries is the same" for both, so entries appended
+  that chain onto nothing Syndra verified — the more alarming case, on the one
+  screen whose job is noticing tampering — was described as its opposite. The
+  sentence now follows the two counts, which are already on screen and cannot
+  disagree with themselves. Covered by `LogAnchorVerdict.test.tsx`, all three
+  branches, mutation-checked.
+- [x] 12.5 A `<Term>` puts its definition in the surrounding paragraph's
+  `textContent`, so a sentence containing one is never contiguous — two tests
+  matched across it and broke. That is a property of the markup, not a fault,
+  and it is written on the primitive so the next person meets it as a note
+  rather than a puzzle. The definition is deliberately not `aria-hidden`: it is
+  what `aria-describedby` resolves to.
+
 ## 6. Open
 
 - [ ] 6.1 A person picker for adopting an account (the field is labelled *Person* with a hint saying where the id is found; a staffer still has to paste an id).
