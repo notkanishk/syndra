@@ -65,10 +65,25 @@ export function UpstreamShell({
  */
 export function DirectWriteWarning({
   what,
+  traced = false,
   acknowledged,
   onAcknowledge,
 }: {
   what: string;
+  /**
+   * True where this surface's writes go through Syndra's own path — the
+   * ledger, the audit row and the outbox in one transaction — rather than
+   * straight out to Zitadel.
+   *
+   * The single warning used to say "Syndra keeps no record of them" on every
+   * screen under `/zitadel`. That stopped being true for grants when the
+   * handlers moved onto `EnqueueDirectGrantPropagation`, and a false warning
+   * is worse than none: it teaches an operator to distrust a path that is
+   * actually the traced one, and to distrust the warning itself where it is
+   * still real. It remains real for project and role edits, which do go
+   * straight out.
+   */
+  traced?: boolean;
   /**
    * Supply both to gate the action on a tick, which every write on these
    * screens does. These are the least undoable actions in the product — no
@@ -81,11 +96,25 @@ export function DirectWriteWarning({
 }) {
   return (
     <div className="danger-note px-4 py-3 text-[13.5px] leading-[1.55] text-muted">
-      <strong className="font-semibold text-danger-text">
-        Changes here go straight to Zitadel, and Syndra keeps no record of them.
-      </strong>{" "}
-      {what} Anything you change may be overwritten within about a minute, and will show up under
-      Unexplained access. Do this inside Syndra instead unless there is genuinely no way to.
+      {traced ? (
+        <>
+          <strong className="font-semibold text-warn-text">
+            This writes to Zitadel through Syndra’s record.
+          </strong>{" "}
+          {what} The grant, an audit line and the queued change are written together, so it is
+          explained afterwards. It reaches Zitadel when Pending changes is sent — revocations go
+          on their own, every few minutes.
+        </>
+      ) : (
+        <>
+          <strong className="font-semibold text-danger-text">
+            Changes here go straight to Zitadel, and Syndra keeps no record of them.
+          </strong>{" "}
+          {what} The next drift sweep — every six hours — lists what you changed under Drift with
+          nobody’s name on it, for somebody to resolve by hand. Do this inside Syndra instead
+          unless there is genuinely no way to.
+        </>
+      )}
       {onAcknowledge ? (
         // The sentence names what is *missing*, not a quantity. Everywhere
         // else the tick counts what changes; here the count is beside the

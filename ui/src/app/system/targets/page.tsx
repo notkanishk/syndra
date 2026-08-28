@@ -6,6 +6,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono, STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Card, CardColumns, CardRow } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Term } from "@/components/ui/Term";
 import { targetLabel } from "@/lib/nav";
 import { useTargets, type TargetSummary } from "@/lib/queries/useTargets";
 
@@ -31,7 +32,14 @@ export default function ConnectedSystemsPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Connected systems"
-        lede="The systems Syndra creates and manages accounts on — today, TrueNAS, the network storage server. Each one is joined to Syndra by an add-on, a small program that connects Syndra to the system. Open a system to see whether it is answering, who has an account there, and anything waiting on you."
+        lede={
+          <>
+            The systems Syndra creates and manages accounts on — today,{" "}
+            <Term name="truenas">TrueNAS</Term>. Each one is joined to Syndra by an add-on, a small
+            program that connects Syndra to the system. Open a system to see whether it is
+            answering, who has an account there, and anything waiting on you.
+          </>
+        }
         meta={
           rows.length > 0
             ? `${rows.length} ${rows.length === 1 ? "system" : "systems"} connected`

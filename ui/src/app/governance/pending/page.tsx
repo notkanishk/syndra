@@ -73,8 +73,8 @@ export default function PendingChangesPage() {
 
       <p className="max-w-[80ch] text-[14px] leading-[1.55] text-muted">
         Sending delivers every change below to the system it is for, in order, and each
-        person&rsquo;s access changes as theirs arrives. Revocations also send themselves within
-        about a minute; everything else waits for you.
+        person&rsquo;s access changes as theirs arrives. Revocations also send on their own,
+        every few minutes; everything else waits for you.
       </p>
 
       {outcome && <ActionOutcome outcome={outcome} />}
