@@ -132,7 +132,7 @@ export default function AutomaticRulesPage() {
           {selecting && <span className="w-11 shrink-0 desktop:w-[18px]" />}
           <span className="w-[110px]">Rule</span>
           <span className="flex-1">If … then</span>
-          <span className="w-[130px] text-right">Hold the first role</span>
+          <span className="w-[130px] text-right">Given by this rule</span>
           <span className="w-[210px] text-right">When it applies</span>
         </CardColumns>
 
@@ -196,7 +196,7 @@ export default function AutomaticRulesPage() {
                 <span className="text-[15px] tablet:w-[130px] tablet:text-right">
                   {rule.holder_count ?? 0}
                   <span className="text-[13px] text-faint tablet:hidden">
-                    {(rule.holder_count ?? 0) === 1 ? " holds" : " hold"} the first role
+                    {(rule.holder_count ?? 0) === 1 ? " person has" : " people have"} the second role from this rule
                   </span>
                 </span>
 
@@ -344,7 +344,12 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
       (role) => role.project_id === sourceProject && role.role_key === sourceRole,
     )?.assigned_user_count;
     if (holders) {
-      const who = `${holders} ${holders === 1 ? "person already holds" : "people already hold"} the first role`;
+      // "directly" is not decoration. `assigned_user_count` is
+      // COUNT(DISTINCT user_id) FROM direct_role_grants — bundle holders and
+      // rule-produced holders are not in it. Saying "N people hold this" over
+      // that number under-counts silently, and the sentence it feeds is read
+      // immediately before a Save.
+      const who = `${holders} ${holders === 1 ? "person already holds" : "people already hold"} the first role directly`;
       notes.push(
         mode === "auto"
           ? `${who}, so saving gives them ${targetRoleName} at once.`
@@ -509,7 +514,10 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
                 ))}
               </ul>
             ) : (
-              <p className="text-muted">Nobody holds the first role yet, so saving changes nothing today.</p>
+              <p className="text-muted">
+                Nobody holds the first role directly. Anybody who holds it through a bundle or
+                another rule is not counted here, so this may still reach people.
+              </p>
             )}
           </div>
         )}
@@ -644,9 +652,9 @@ function DeleteRuleConfirm({
             <li>The rule stops giving {label} to anybody.</li>
             <li>
               {holders === 0
-                ? "Nobody holds the first role, so nothing is revoked."
-                : `${holders} ${holders === 1 ? "person holds" : "people hold"} the first role. ` +
-                  `Their ${label} is revoked unless a bundle or a direct grant also gives it.`}
+                ? "This rule is giving the second role to nobody today, so deleting it revokes nothing."
+                : `${holders} ${holders === 1 ? "person has" : "people have"} ${label} from this rule. ` +
+                  `It is revoked for them unless a bundle or a direct grant also gives it.`}
             </li>
             <li>
               {rule.confirmation_mode === "auto"
