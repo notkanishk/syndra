@@ -72,7 +72,7 @@ describe("every count in the Today headline has somewhere to go", () => {
 
     expect(await screen.findByText("Waiting on a decision")).toBeTruthy();
     expect(screen.getByText(/2 differences the reconciliation found/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Open target/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /^Open / })).toBeTruthy();
   });
 
   // Basic's headline does not count findings, so Basic must not show the block:

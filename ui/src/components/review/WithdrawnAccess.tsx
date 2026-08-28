@@ -10,21 +10,22 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
 import { request } from "@/lib/api-client";
+import { shortId } from "@/lib/audit-vocabulary";
 import { targetLabel } from "@/lib/nav";
 
 /**
- * Review › Withdrawn access (9.9, 9.10).
+ * Review › Unfinished revocations (9.9, 9.10).
  *
  * Beside Unexplained access, never inside it, because they are different
- * questions with different answers. Drift is access that appeared and cannot be
- * explained; this is access somebody decided to take away that is still there.
+ * questions with different answers. Unexplained access appeared and cannot be
+ * explained; this is access somebody revoked that is still there.
  *
  * The two populations render differently on purpose:
  *
- *   queued — draining, and the only content of the signal is how long it has
- *            been. Nothing is wrong yet.
- *   spent  — terminal. Nothing will dispatch it again, so waiting produces
- *            nothing and somebody has to act.
+ *   queued — still being sent, and the only content of the signal is how long
+ *            it has been. Nothing is wrong yet.
+ *   spent  — given up. Nothing will send it again, so waiting produces nothing
+ *            and somebody has to act.
  *
  * Merged into one count, a healthy queue of five-minute-old rows hides a
  * revocation that failed permanently three days ago.
@@ -46,7 +47,7 @@ interface UnconfirmedRevocation {
   cascade_id?: string;
 }
 
-interface Payload {
+interface Listing {
   revocations: UnconfirmedRevocation[];
   summary: { queued: number; spent: number; oldest_age_seconds: number };
   escalated: boolean;
@@ -55,7 +56,7 @@ interface Payload {
 export function WithdrawnAccess() {
   const query = useQuery({
     queryKey: ["governance", "unconfirmed-revocations"],
-    queryFn: () => request<Payload>("/governance/unconfirmed-revocations"),
+    queryFn: () => request<Listing>("/governance/unconfirmed-revocations"),
     refetchInterval: 60_000,
   });
 
@@ -66,44 +67,48 @@ export function WithdrawnAccess() {
   return (
     <>
       <PageHeader
-        title="Withdrawn access"
-        meta="Access somebody decided to take away that has not gone away yet."
+        title="Unfinished revocations"
+        lede="Access somebody revoked (ended) that has not gone away yet. Revocations still on the way clear themselves; the ones Syndra has given up on do not, and those people still have the access."
       />
       <ListStates
         isLoading={query.isLoading}
         error={query.error}
         isEmpty={rows.length === 0}
         onRetry={() => query.refetch()}
-        errorTitle="The withdrawal queue could not be read"
+        errorTitle="Couldn't load unfinished revocations."
         empty={
           <EmptyState
             title="Nothing outstanding"
-            guidance="Every revocation has reached its target."
+            guidance="Every revocation has reached the system it was sent to."
           />
         }
       >
         {/* Both buckets always, in this order, whatever either one holds.
-            They used to render only when non-empty, so a revocation going
-            terminal INSERTED a red card above the queue somebody was reading —
-            the list moved under them because the data changed, which is the one
-            thing the structure is not allowed to do. A bucket at zero is also
-            the answer to a real question: "is anything stuck?" reads better as
-            a hollow zero than as a card that is not there. */}
+            They used to render only when non-empty, so a revocation being
+            given up on INSERTED a red card above the queue somebody was
+            reading — the list moved under them because the data changed,
+            which is the one thing the structure is not allowed to do. A
+            bucket at zero is also the answer to a real question: "is anything
+            stuck?" reads better as a hollow zero than as a card that is not
+            there. */}
         <div className="grid gap-4">
           <Bucket
-            title="Not going to happen"
+            title="Given up"
             tone="danger"
-            note="Terminal. Nothing will dispatch these again."
-            empty="Nothing has given up. Every withdrawal still has a way to reach its target."
+            note="Syndra tried its limit and stopped. This person still has the access: revoke it again from their page, or end it in the connected system by hand."
+            empty="Nothing has been given up on. Every revocation still has a way through."
             rows={spent}
           />
           <Bucket
-            title="Still draining"
+            title="Still on the way"
             tone="accent"
-            note="Queued and being retried. How long they have waited is the signal."
-            empty="Nothing is waiting. Every withdrawal has either landed or given up."
+            note="Waiting to be sent, and Syndra tries again by itself. The only thing to watch is how long one has waited."
+            empty="Nothing is waiting. Every revocation has either gone through or been given up on."
             rows={queued}
           />
+          <p className="text-[13px] text-faint">
+            A c_ handle links to the edit that set the revocation off, in Change history.
+          </p>
         </div>
       </ListStates>
     </>
@@ -114,7 +119,7 @@ export function WithdrawnAccess() {
  * One of the two buckets, present at any count.
  *
  * The empty sentence is not decoration: on this page the interesting fact is
- * often which bucket is empty, and "no terminal failures" is a different
+ * often which bucket is empty, and "nothing given up on" is a different
  * statement from "this section is not on the page today".
  */
 function Bucket({
@@ -156,7 +161,7 @@ function Row({ row }: { row: UnconfirmedRevocation }) {
           {row.role_keys.length > 0 && <> · {row.role_keys.join(", ")}</>}
         </span>
         <span className="text-faint">
-          decided <Relative iso={row.created_at} />
+          revoked <Relative iso={row.created_at} />
         </span>
         <span className="flex-1" />
         {row.cascade_id && (
@@ -165,16 +170,17 @@ function Row({ row }: { row: UnconfirmedRevocation }) {
           // the change that caused it is a mystery.
           <Link
             href={`/operations/cascades?cascade=${encodeURIComponent(row.cascade_id)}`}
+            aria-label="See the edit that set off this revocation, in Change history"
             className="text-[13px] font-semibold text-accent-text"
           >
-            <Mono>{row.cascade_id.slice(0, 8)}</Mono>
+            <Mono>{shortId(row.cascade_id, "c")}</Mono>
           </Link>
         )}
       </div>
       {row.last_error && (
-        // The reason, not a status. A terminal row an operator can see and not
+        // The reason, not a status. A given-up row an operator can see and not
         // act on is the whole difference between a finding and a mystery.
-        <p className="text-muted">{row.last_error}</p>
+        <p className="text-muted">Last error: {row.last_error}</p>
       )}
     </li>
   );

@@ -18,7 +18,7 @@ describe("LoginDoor", () => {
   it("offers exactly one action, and it is a real link", () => {
     render(<LoginDoor mode="oidc" identities={[]} failure={null} />);
 
-    const action = screen.getByRole("link", { name: /sign in with zitadel/i });
+    const action = screen.getByRole("link", { name: /sign in with your makerspace account/i });
     expect(action).toHaveAttribute("href", "/auth/zitadel");
 
     // No email, no password, no "or continue with", no sign-up, no reset —
@@ -29,12 +29,12 @@ describe("LoginDoor", () => {
 
   it("never shows a message the page is not showing", () => {
     render(<LoginDoor mode="oidc" identities={[]} failure={null} />);
-    expect(screen.queryByText(/handing you to zitadel/i)).toBeNull();
+    expect(screen.queryByText(/taking you to the sign-in page/i)).toBeNull();
   });
 
   it("opens the door and hands off without blocking the navigation", () => {
     render(<LoginDoor mode="oidc" identities={[]} failure={null} />);
-    const action = screen.getByRole("link", { name: /sign in with zitadel/i });
+    const action = screen.getByRole("link", { name: /sign in with your makerspace account/i });
 
     // The click must reach the browser: the animation is cover for the
     // redirect's latency, not a gate in front of it.
@@ -42,7 +42,7 @@ describe("LoginDoor", () => {
     expect(clicked).toBe(true);
 
     expect(stage()).toHaveAttribute("data-scene", "opening");
-    expect(screen.getByText(/handing you to zitadel/i)).toBeInTheDocument();
+    expect(screen.getByText(/taking you to the sign-in page/i)).toBeInTheDocument();
   });
 
   it("leaves the page alone when the click is a new-tab click", () => {
@@ -65,7 +65,7 @@ describe("LoginDoor", () => {
     window.history.replaceState(null, "", "/login?error=misconfigured");
     render(<LoginDoor mode="oidc" identities={[]} failure={loginFailure("misconfigured")} />);
 
-    fireEvent.click(screen.getByRole("link", { name: /try again/i }));
+    fireEvent.click(screen.getByRole("link", { name: /back to sign in/i }));
 
     expect(stage()).toHaveAttribute("data-scene", "idle");
     expect(screen.queryByText(/didn't answer/i)).toBeNull();
@@ -78,7 +78,7 @@ describe("LoginDoor", () => {
     // Not reachable — not merely invisible — until the door opens.
     expect(screen.queryByRole("button", { name: /alice rivera/i })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /choose an identity/i }));
+    fireEvent.click(screen.getByRole("button", { name: /sign in as a test person/i }));
 
     const alice = screen.getByRole("button", { name: /alice rivera/i });
     expect(alice.closest("form")).toHaveAttribute("action", "/auth/login");

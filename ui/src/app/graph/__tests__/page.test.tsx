@@ -51,26 +51,26 @@ describe("Access map", () => {
     expect(screen.getByRole("button", { name: /Metal Shop/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Lab Tech/ })).toBeInTheDocument();
 
-    // And nothing is focused yet: there is no "feeds in" column at the root.
-    expect(screen.queryByText("Feeds in")).not.toBeInTheDocument();
+    // And nothing is focused yet: there is no "What gives this" column at the root.
+    expect(screen.queryByText("What gives this")).not.toBeInTheDocument();
   });
 
   it("focuses a node when one is picked from the overview", () => {
     renderMap();
     fireEvent.click(screen.getByRole("button", { name: /Laser Lab/ }));
 
-    expect(screen.getByText("Feeds in")).toBeInTheDocument();
-    expect(screen.getByText("Feeds out")).toBeInTheDocument();
+    expect(screen.getByText("What gives this")).toBeInTheDocument();
+    expect(screen.getByText("What this gives")).toBeInTheDocument();
   });
 
   it("offers a way back to the root from a focused node", () => {
     renderMap();
     fireEvent.click(screen.getByRole("button", { name: /Laser Lab/ }));
-    fireEvent.click(screen.getByRole("button", { name: "All nodes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Everything" }));
 
     // Back at the overview: the focused-node columns are gone and the other
     // projects are pickable again.
-    expect(screen.queryByText("Feeds in")).not.toBeInTheDocument();
+    expect(screen.queryByText("What gives this")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Metal Shop/ })).toBeInTheDocument();
   });
 
@@ -86,6 +86,6 @@ describe("Access map", () => {
   it("says nothing is drawable rather than showing a blank panel", () => {
     topology.data = { nodes: [], edges: [] };
     renderMap();
-    expect(screen.getByText("Nothing to draw yet.")).toBeInTheDocument();
+    expect(screen.getByText("Nothing to show yet.")).toBeInTheDocument();
   });
 });

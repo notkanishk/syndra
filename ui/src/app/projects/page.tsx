@@ -37,9 +37,10 @@ export default function ProjectsPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Projects"
+        lede="A project is a machine or area with its own set of roles — the Laser Cutter, the Studio. Each app checks a person's roles against one project. Open one to see its roles and who holds them."
         meta={
           rows.length > 0
-            ? `${rows.length} ${rows.length === 1 ? "boundary" : "boundaries"} · ${servedCount} apps served`
+            ? `${rows.length} ${rows.length === 1 ? "project" : "projects"} · ${servedCount} apps served`
             : undefined
         }
       />
@@ -62,7 +63,7 @@ export default function ProjectsPage() {
           empty={
             <EmptyState
               title="No projects yet."
-              guidance="A project appears here once it exists in the identity provider."
+              guidance="A project appears here once it exists in Zitadel (the service everyone signs in through)."
             />
           }
         >

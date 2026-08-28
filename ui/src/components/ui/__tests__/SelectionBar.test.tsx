@@ -32,7 +32,7 @@ describe("the selection bar over its ceiling", () => {
   it("states the number selected and the number that can run, not one or the other", () => {
     const bar = overflowing();
     expect(within(bar).getByText(/640 people/)).toBeTruthy();
-    expect(within(bar).getByText(/500 is the most that can run at once/)).toBeTruthy();
+    expect(within(bar).getByText(/you can change at most 500 people at once/)).toBeTruthy();
   });
 
   // The two easy wrong answers: run the first 500 and report success for a
@@ -42,7 +42,7 @@ describe("the selection bar over its ceiling", () => {
     const bar = overflowing();
     expect(within(bar).queryByRole("button", { name: /Rehearse removing a role/ })).toBeNull();
     const narrow = within(bar).getByRole("button", {
-      name: /Select the first 500 in the order shown/,
+      name: /Select the first 500 people in the order shown/,
     });
     expect(narrow).toBeEnabled();
   });
@@ -74,7 +74,7 @@ describe("the selection bar over its ceiling", () => {
     );
     const bar = screen.getByRole("region", { name: "Selection" });
     expect(within(bar).getByRole("button", { name: "Rehearse removing a role" })).toBeTruthy();
-    expect(within(bar).queryByText(/most that can run/)).toBeNull();
+    expect(within(bar).queryByText(/at most 500/)).toBeNull();
   });
 });
 
@@ -92,7 +92,7 @@ describe("select-all states both numbers", () => {
       />,
     );
     expect(screen.getByText("Select these 12 people")).toBeTruthy();
-    expect(screen.getByText(/340 people match no filter/)).toBeTruthy();
+    expect(screen.getByText(/340 people in all/)).toBeTruthy();
   });
 
   // Both numbers have to reach a screen reader, not just the eye — which is
@@ -111,7 +111,7 @@ describe("select-all states both numbers", () => {
       />,
     );
     expect(
-      screen.getByRole("checkbox", { name: /Select these 12 people.*340 people match no filter/ }),
+      screen.getByRole("checkbox", { name: /Select these 12 people.*340 people in all/ }),
     ).toBeTruthy();
   });
 
@@ -132,7 +132,7 @@ describe("select-all states both numbers", () => {
       />,
     );
     expect(screen.getByText("Clear the selection")).toBeTruthy();
-    expect(screen.queryByText(/match no filter/)).toBeNull();
+    expect(screen.queryByText(/in all/)).toBeNull();
   });
 
   it("says nothing about a wider set when the filter is not narrowing anything", () => {
@@ -147,7 +147,7 @@ describe("select-all states both numbers", () => {
         onChange={() => {}}
       />,
     );
-    expect(screen.queryByText(/match no filter/)).toBeNull();
+    expect(screen.queryByText(/in all/)).toBeNull();
   });
 });
 
@@ -194,14 +194,14 @@ describe("a ceiling that counts something other than the selection", () => {
 
   it("lets a selection past the ceiling through when it covers few enough people", () => {
     const region = bar(600, 300);
-    expect(within(region).queryByText(/is the most that can run at once/)).toBeNull();
+    expect(within(region).queryByText(/you can change at most/)).toBeNull();
     expect(within(region).getByRole("button", { name: "Rehearse an extension" })).toBeTruthy();
   });
 
   it("refuses on the capped unit, and says which number it is refusing on", () => {
     const region = bar(540, 520);
     expect(
-      within(region).getByText(/they cover 520 people, and 500 is the most that can run at once/),
+      within(region).getByText(/they cover 520 people, and you can change at most 500 people at once/),
     ).toBeTruthy();
     // The selection count is still stated: the operator ticked grants and has
     // to recognise what they ticked.
@@ -225,6 +225,6 @@ describe("a ceiling that counts something other than the selection", () => {
     );
     const region = screen.getByRole("region", { name: "Selection" });
     expect(within(region).queryByText(/they cover/)).toBeNull();
-    expect(within(region).getByText(/500 is the most that can run at once/)).toBeTruthy();
+    expect(within(region).getByText(/you can change at most 500 people at once/)).toBeTruthy();
   });
 });

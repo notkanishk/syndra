@@ -14,7 +14,7 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      aria-label={`Switch to ${next} theme`}
+      aria-label={`Switch to ${next} appearance`}
       // A 32px ring inside a 44px box until desktop. The ring is the drawing;
       // the box is what a thumb on a tablet has to hit.
       className="flex h-11 w-11 items-center justify-center text-muted motion-tint hover:text-ink desktop:h-8 desktop:w-8"

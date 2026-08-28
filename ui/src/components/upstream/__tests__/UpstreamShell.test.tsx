@@ -17,7 +17,7 @@ describe("a write that goes straight to the provider", () => {
       <DirectWriteWarning what="Anything." acknowledged={false} onAcknowledge={() => {}} />,
     );
     expect(
-      screen.getByText(/writes to Zitadel now, with no plan and no record in Syndra/),
+      screen.getByText(/changes Zitadel now, with no preview and no record in Syndra/),
     ).toBeTruthy();
   });
 
@@ -46,6 +46,6 @@ describe("the standing line on an upstream console", () => {
         <p>rows</p>
       </UpstreamShell>,
     );
-    expect(screen.getByText("Changes here go straight to Zitadel.")).toBeTruthy();
+    expect(screen.getByText(/Changes here go straight to Zitadel \(the service everyone signs in through\), and Syndra keeps no record of them\./)).toBeTruthy();
   });
 });

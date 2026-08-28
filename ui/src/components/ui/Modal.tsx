@@ -216,7 +216,7 @@ function SheetGrabber({ busy, onClose }: { busy: boolean; onClose: () => void })
     return (
       <div className="flex flex-none flex-col items-center gap-1.5 pb-1 pt-3 tablet:hidden">
         <span aria-hidden className="h-1 w-[38px] rounded-pill bg-accent/40" />
-        <span className="text-[12.5px] text-faint">Working — this can&apos;t be closed yet.</span>
+        <span className="text-[12.5px] text-faint">Applying your change — this sheet can&apos;t be closed until it finishes.</span>
       </div>
     );
   }
@@ -229,7 +229,7 @@ function SheetGrabber({ busy, onClose }: { busy: boolean; onClose: () => void })
       // control, and two controls answering to one name makes "the dialog is
       // finished" and "the sheet has a handle" indistinguishable to anything
       // querying by accessible name — a screen reader included.
-      aria-label="Dismiss"
+      aria-label="Close this sheet"
       // Out of the tab order deliberately. It is a redundant affordance — Esc
       // dismisses, the scrim dismisses, and every sheet carries a named
       // control in its footer — and as the panel's first focusable element it

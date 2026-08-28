@@ -34,7 +34,7 @@ export function UpstreamShell({
           // thumb reaches for first.
           className="inline-flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent-text motion-tint hover:brightness-110"
         >
-          ← Identity provider
+          <span aria-hidden="true">← </span>Zitadel
         </Link>
         <h1 className="mt-2 type-page-title">{title}</h1>
         {/* A standing line, not only per-action ceremony. A warning that
@@ -43,12 +43,13 @@ export function UpstreamShell({
             title tells them where they are before they decide anything. Those
             are two different jobs and both are wanted. */}
         <p className="mt-1.5 text-[13.5px] font-semibold text-warn-text">
-          Changes here go straight to Zitadel.
+          Changes here go straight to Zitadel (the service everyone signs in through), and Syndra
+          keeps no record of them.
         </p>
         <p className="mt-2 max-w-[80ch] text-[14.5px] leading-[1.55] text-muted">
           {lede}{" "}
           <Link href={syndraHref} className="font-semibold text-accent-text">
-            {syndraLabel} →
+            {syndraLabel} <span aria-hidden="true">→</span>
           </Link>
         </p>
       </div>
@@ -80,10 +81,11 @@ export function DirectWriteWarning({
 }) {
   return (
     <div className="danger-note px-4 py-3 text-[13.5px] leading-[1.55] text-muted">
-      <strong className="font-semibold text-danger-text">This writes straight to the provider.</strong>{" "}
-      {what} Syndra records nothing: no ledger row, no audit entry, no cascade. The next cache
-      compile may overwrite it, and the drift sweep will report it as unexplained access. Use the
-      equivalent action inside Syndra unless that is genuinely not an option.
+      <strong className="font-semibold text-danger-text">
+        Changes here go straight to Zitadel, and Syndra keeps no record of them.
+      </strong>{" "}
+      {what} Anything you change may be overwritten within about a minute, and will show up under
+      Unexplained access. Do this inside Syndra instead unless there is genuinely no way to.
       {onAcknowledge ? (
         // The sentence names what is *missing*, not a quantity. Everywhere
         // else the tick counts what changes; here the count is beside the
@@ -97,7 +99,7 @@ export function DirectWriteWarning({
               onChange={(event) => onAcknowledge(event.target.checked)}
             />
           </span>
-          <span>I understand this writes to Zitadel now, with no plan and no record in Syndra.</span>
+          <span>I understand this changes Zitadel now, with no preview and no record in Syndra.</span>
         </label>
       ) : null}
     </div>

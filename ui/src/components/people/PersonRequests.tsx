@@ -68,7 +68,7 @@ export function PersonRequests({
         ...prev,
         [id]: {
           kind: "applied",
-          message: status === "approved" ? `Approved for ${name}` : `Denied for ${name}`,
+          message: status === "approved" ? `Approved for ${name}` : `Declined for ${name}`,
         },
       }));
     } catch (error) {
@@ -175,7 +175,7 @@ function RequestRow({
               Approve
             </Button>
             <Button size="sm" isPending={isPending} onClick={() => onDecide(entry.id, "rejected")}>
-              Deny
+              Decline
             </Button>
           </>
         ) : (

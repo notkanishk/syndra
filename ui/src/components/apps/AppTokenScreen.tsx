@@ -46,14 +46,14 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
   if (apps.isLoading) {
     return (
       <Card>
-        <RowSkeleton rows={4} avatar={false} label="Loading application" />
+        <RowSkeleton rows={4} avatar={false} label="Loading app" />
       </Card>
     );
   }
   if (apps.error) {
     return (
       <ErrorState
-        title="Couldn't load this application."
+        title="Couldn't load this app."
         error={apps.error}
         onRetry={() => apps.refetch()}
       />
@@ -62,8 +62,8 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
   if (!app) {
     return (
       <ErrorState
-        title="That application doesn't exist."
-        error={new Error("It may have been removed from the identity provider.")}
+        title="That app doesn't exist."
+        error={new Error("It may have been removed in Zitadel (the service everyone signs in through).")}
       />
     );
   }
@@ -72,9 +72,10 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
     <div className="flex flex-col gap-[22px]">
       <PageHeader
         title={app.application.name}
+        lede={`When someone signs in to ${app.application.name}, Zitadel (the service everyone signs in through) hands it a token — a short list of facts about that person, including their roles. Token format sets what goes in the token; Preview token shows exactly what ${app.application.name} would receive for a given person.`}
         meta={
           <span className="flex flex-wrap items-center gap-2 text-[14px] text-faint">
-            {app.application.consumer} · reads <ProjectName id={app.application.project_id} /> ·{" "}
+            uses roles from <ProjectName id={app.application.project_id} /> · id{" "}
             <Mono>{app.application.id}</Mono>
           </span>
         }
@@ -101,6 +102,7 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
             applicationId={applicationId}
             applicationName={app.application.name}
             projectId={app.application.project_id}
+            projectName={shape.data?.project_name}
             behindEdits={editing}
           />
         </div>

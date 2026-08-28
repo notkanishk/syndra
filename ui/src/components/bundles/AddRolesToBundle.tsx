@@ -134,13 +134,13 @@ export function AddRolesToBundle({
         // nobody's access did. Reporting this as `applied` is the misreading
         // the removal panel used to invite, in the opposite direction.
         kind: "no_change",
-        message: `${added} ${added === 1 ? "role" : "roles"} added to ${name}'s working copy`,
+        message: `${added} ${added === 1 ? "role" : "roles"} added to the ${name} draft`,
         detail:
           holders > 0
             ? `Nobody has them yet. Publish a version to decide whether the ${holders} ${
                 holders === 1 ? "person" : "people"
               } holding ${name} get them.`
-            : "Publish a version to make them real.",
+            : "Publish a version to give them to people.",
       });
     }
   }
@@ -152,10 +152,10 @@ export function AddRolesToBundle({
         titleId="add-roles-title"
         lede={
           holders > 0
-            ? `Picking here changes the working copy only. The ${holders} ${
+            ? `Roles you tick go into the draft. The ${holders} ${
                 holders === 1 ? "person" : "people"
-              } already holding ${name} keep exactly what they have until you publish a version and move them onto it.`
-            : "Picking here changes the working copy. Publish a version to make it real."
+              } who hold ${name} keep exactly what they have until you publish a version and move them onto it.`
+            : "Roles you tick go into the draft. Publish a version to give them to people."
         }
       />
 
@@ -171,8 +171,8 @@ export function AddRolesToBundle({
       <div className="mt-3 max-h-[46vh] overflow-y-auto px-6">
         {groups.length === 0 ? (
           <p className="py-6 text-[14px] text-muted">
-            No role matches “{query}”. It may exist only in the identity provider — the catalogue
-            lists what Syndra created plus what the directory reports.
+            No role matches “{query}”. A role created directly in Zitadel (the service everyone
+            signs in through) may not be listed here yet — check there, or create it in Syndra.
           </p>
         ) : (
           groups.map((group) => (
@@ -217,7 +217,8 @@ export function AddRolesToBundle({
         // "something went wrong" leaves the operator unable to tell which of
         // the six landed.
         <div className="danger-note mx-6 mt-3 px-4 py-3 text-[14px] leading-[1.5]">
-          {failure} The roles still ticked were not added — press Add again to resume.
+          {failure} The roles still ticked were not added — press Add {chosen.length}{" "}
+          {chosen.length === 1 ? "role" : "roles"} again to add the rest.
         </div>
       )}
 

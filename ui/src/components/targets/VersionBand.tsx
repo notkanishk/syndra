@@ -53,7 +53,7 @@ export function VersionBand({ target, history }: { target: string; history?: Map
           tone: "warn",
           title: `Version ${current}, plus ${count(changes.length, "edit")} nobody has published`,
         }
-      : { tone: "healthy", title: `Working copy matches version ${current}` };
+      : { tone: "healthy", title: `The live mappings match version ${current}` };
 
   const newest = versions[0];
 
@@ -72,13 +72,13 @@ export function VersionBand({ target, history }: { target: string; history?: Map
             {nothingPublished ? (
               <>
                 No version exists yet, so there is nothing to roll back to and nothing to
-                compare the working copy against.
+                compare the live mappings against.
               </>
             ) : pending ? (
               <>
-                The rows below are the working copy and they are what Syndra converges
-                against. Version {current} is what a rollback would return you to, and it
-                does not contain {changes.length === 1 ? "this edit" : "these"}.
+                The mappings below are what Syndra uses right now. Version {current} is what
+                a rollback would restore, and it does not include{" "}
+                {changes.length === 1 ? "this edit" : "these edits"}.
               </>
             ) : (
               <>
@@ -110,7 +110,7 @@ export function VersionBand({ target, history }: { target: string; history?: Map
             isPending={publish.isPending}
             reason={
               pending && !note.trim()
-                ? "Say why this set is the one to keep. It is what the next operator reads."
+                ? "Say why this set is the one to keep. It is what the next person to roll back reads."
                 : undefined
             }
             onClick={() => publish.mutate(note, { onSuccess: () => setNote("") })}
@@ -125,7 +125,7 @@ export function VersionBand({ target, history }: { target: string; history?: Map
           <p className="mb-2.5 text-[13px] text-faint">
             {nothingPublished
               ? "Not yet in any version"
-              : `The ${changes.length === 1 ? "one" : word(changes.length)} · what a rollback to version ${current} would undo`}
+              : `${changes.length === 1 ? "This one edit" : `These ${word(changes.length)} edits`} · what a rollback to version ${current} would undo`}
           </p>
           <div className="grid gap-1.5">
             {changes.map((change) => (
@@ -137,14 +137,13 @@ export function VersionBand({ target, history }: { target: string; history?: Map
               has taught them that unpublished means not yet in effect, and here
               it is exactly backwards. */}
           <p className="mt-3 max-w-[78ch] text-[13.5px] leading-[1.55] text-muted">
-            Each of these landed through its own rehearsal, so each one has already been
-            approved once.{" "}
+            Each of these edits was previewed and applied when it was made — it is already in
+            effect.{" "}
             <strong className="font-semibold text-ink">
-              Publishing does not re-apply them — they are already what Syndra converges
-              against.
+              Publishing applies nothing again.
             </strong>{" "}
-            Publishing records this set as version {current + 1} so that a later rollback
-            has something to return to.
+            It saves this set as version {current + 1} so that a later rollback has something
+            to return to.
           </p>
 
           <div className="mt-3 max-w-[46rem]">
@@ -155,8 +154,7 @@ export function VersionBand({ target, history }: { target: string; history?: Map
               onChange={(event) => setNote(event.target.value)}
             />
             <p className="mt-[7px] text-[13px] text-faint">
-              A note is required to publish and never to edit: the note explains a set, and
-              an edit is explained by its rehearsal.
+              A note is required: it is the only record of why this set was right.
             </p>
           </div>
         </div>
@@ -230,7 +228,7 @@ function ChangeRow({ change }: { change: MappingChange }) {
           // Said, not left blank.
           <>Nothing records who removed it · </>
         )}
-        {count(change.holders, "person", "people")}
+        {count(change.holders, "person affected", "people affected")}
       </span>
     </div>
   );

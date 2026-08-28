@@ -72,11 +72,10 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
           }}
         >
           <h1 style={{ margin: 0, fontSize: "20px", lineHeight: 1.2, fontWeight: 600 }}>
-            Syndra stopped before it could draw anything.
+            Syndra could not start.
           </h1>
           <p style={{ margin: "8px 0 0", fontSize: "14.5px", lineHeight: 1.55, color: "rgba(243,245,239,.6)" }}>
-            This failed while starting the application, not while writing anything. Nothing was
-            changed.
+            This failed while starting Syndra, not while saving anything. Nothing was changed.
           </p>
 
           {error.digest ? (
@@ -90,7 +89,12 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
                 userSelect: "all",
               }}
             >
-              Error id {error.digest}
+              Reference {error.digest}
+            </p>
+          ) : null}
+          {error.digest ? (
+            <p style={{ margin: "4px 0 0", fontSize: "12.5px", color: "rgba(243,245,239,.6)" }}>
+              Quote this if you ask for help.
             </p>
           ) : null}
 
@@ -115,7 +119,7 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
               textDecoration: "none",
             }}
           >
-            Reload from the start
+            Go to the home page
           </a>
         </div>
       </body>

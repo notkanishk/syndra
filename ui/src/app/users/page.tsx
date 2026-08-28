@@ -162,6 +162,7 @@ export default function PeoplePage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="People"
+        lede="Everyone Syndra knows, and what each can use. Open a person to see and change their access; select several to change them together."
         meta={
           all.length > 0
             ? `${all.length} ${all.length === 1 ? "account" : "accounts"}${
@@ -284,7 +285,7 @@ export default function PeoplePage() {
               guidance={
                 hasAnyFilter(filters)
                   ? "Try a shorter search, part of an email address, or a role key."
-                  : "People appear here once they exist in the identity provider."
+                  : "People appear here once they exist in Zitadel (the service everyone signs in through)."
               }
               action={
                 hasAnyFilter(filters)
@@ -354,19 +355,19 @@ export default function PeoplePage() {
               and the label that hides that is the label an operator taps
               expecting to be asked. */}
           <SelectionAction onClick={() => setBulkOp("assign_role")}>
-            Rehearse a role grant
+            Give a role
           </SelectionAction>
           <SelectionAction onClick={() => setBulkOp("assign_bundle")}>
-            Rehearse adding a bundle
+            Add to a bundle
           </SelectionAction>
           <SelectionAction onClick={() => setBulkOp("extend")}>
-            Rehearse extending what expires
+            Extend what expires
           </SelectionAction>
           <SelectionAction tone="danger" onClick={() => setBulkOp("remove_bundle")}>
-            Rehearse removing a bundle
+            Remove from a bundle
           </SelectionAction>
           <SelectionAction tone="danger" onClick={() => setBulkOp("remove_role")}>
-            Rehearse removing a role
+            Revoke a role
           </SelectionAction>
         </SelectionBar>
       )}

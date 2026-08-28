@@ -74,12 +74,15 @@ export default function AuditPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Audit"
+        lede={
+          scopedUser
+            ? "Everything this person did, and everything done to them, searched across the whole log rather than only what is loaded."
+            : "What people did in Syndra, newest first. The filters narrow what is loaded."
+        }
         meta={
           scopedUser
-            ? "Everything this person did, and everything done to them. Filtered at the source, so nothing is missing from the window."
-            : `Every mutation Syndra made, and who asked for it. ${all.length} loaded${
-                entries.hasNextPage ? ", more further back" : " — that is the whole log"
-              } · the filters below narrow what is loaded.`
+            ? undefined
+            : `${all.length} loaded${entries.hasNextPage ? ", more further back" : " — the whole log"}`
         }
         actions={
           <>
@@ -96,12 +99,12 @@ export default function AuditPage() {
             <Input
               value={actor}
               onChange={(event) => setActor(event.target.value)}
-              placeholder="Any actor"
-              aria-label="Filter by actor"
+              placeholder="Search names or actions"
+              aria-label="Search the loaded entries"
               className="w-[220px]"
             />
             <Button onClick={() => downloadCsv(rows, resolver)} disabled={rows.length === 0}>
-              Export CSV
+              Export what is shown (CSV)
             </Button>
           </>
         }
@@ -114,16 +117,21 @@ export default function AuditPage() {
           onClear={() => router.replace("/audit", { scroll: false })}
           clearLabel="Show the whole audit log"
         >
-          Scoped to <UserName id={scopedUser} />
+          Showing only <UserName id={scopedUser} />
         </FilterChip>
       )}
+
+      <p className="text-[13px] text-faint">
+        Follow-on: a c_ handle links to what an edit set off, in Change history. R_ names an
+        automatic rule, b_ a bundle.
+      </p>
 
       <Card>
         <CardColumns>
           <span className="w-[110px]">When</span>
           <span className="w-[150px]">Who</span>
           <span className="flex-1">What they did</span>
-          <span className="w-[80px] text-right">Trace</span>
+          <span className="w-[80px] text-right">Follow-on</span>
         </CardColumns>
 
         <ListStates
@@ -145,7 +153,7 @@ export default function AuditPage() {
                   ? entries.hasNextPage
                     ? "These filters search what is loaded. Load more to search further back."
                     : "The whole log is loaded — nothing in it matches."
-                  : "Grants, revokes and policy changes are written here as they happen."
+                  : "Access given, access revoked, and rule changes are written here as they happen."
               }
               action={
                 entries.hasNextPage

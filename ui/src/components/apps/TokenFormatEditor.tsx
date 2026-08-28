@@ -7,7 +7,7 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { FieldLabel, Input } from "@/components/ui/Input";
+import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { Segmented, Select } from "@/components/ui/Select";
 import { RowSkeleton, ErrorState } from "@/components/states";
@@ -88,8 +88,8 @@ export function TokenFormatEditor({
       <div className="px-[22px] pb-4 pt-5">
         <h2 className="type-card-title">Token format</h2>
         <p className="mt-1 text-[14px] leading-[1.5] text-faint">
-          What this app receives, and in what shape. Saving changes real tokens — the next one
-          issued carries it.
+          What {applicationName} is told about a person when they sign in, and how it is laid
+          out. A change takes effect the next time someone signs in.
         </p>
       </div>
 
@@ -112,8 +112,8 @@ export function TokenFormatEditor({
           profile={shape.data.default}
           scopeNote={
             siblingCount > 0
-              ? `Changing this changes what all ${siblingCount + 1} apps reading ${shape.data.project_name} receive.`
-              : `Changing this changes what every app reading ${shape.data.project_name} receives.`
+              ? `Shared by all ${siblingCount + 1} apps on ${shape.data.project_name} — a change here changes what every one of them receives.`
+              : `Shared by every app on ${shape.data.project_name}. ${applicationName} is the only one today.`
           }
           onSave={saveProjectDefault.mutateAsync}
           onDirtyChange={onDirtyChange}
@@ -125,6 +125,7 @@ export function TokenFormatEditor({
           projectId={projectId}
           applicationId={applicationId}
           applicationName={applicationName}
+          projectName={shape.data.project_name}
           override={override}
           fallback={shape.data.default}
         />
@@ -139,6 +140,7 @@ function AppOverrideForm({
   projectId,
   applicationId,
   applicationName,
+  projectName,
   override,
   fallback,
   onDirtyChange,
@@ -146,6 +148,7 @@ function AppOverrideForm({
   projectId: string;
   applicationId: string;
   applicationName: string;
+  projectName: string;
   override?: ClaimProfile;
   fallback: ClaimProfile;
   onDirtyChange?: (dirty: boolean) => void;
@@ -162,9 +165,10 @@ function AppOverrideForm({
             {applicationName} uses the project default.
           </div>
           <p className="mt-1.5 max-w-[52ch] text-[13.5px] leading-[1.55] text-muted">
-            Give it its own claim key when it needs a different name or shape from its siblings.
-            The token will then carry both keys — this one, and the project default the other apps
-            read.
+            Give {applicationName} its own claim (one field inside the token) when it needs a
+            different name or layout from the other apps on {projectName}. Anyone signing in to any
+            of these apps will then receive both claims — this app&rsquo;s, and the project default
+            the others use.
           </p>
           <Button
             className="mt-3"
@@ -182,7 +186,7 @@ function AppOverrideForm({
                 setOverrideOutcome({
                   kind: "applied",
                   message: `${applicationName} now has its own claim`,
-                  detail: "Its siblings keep the project default.",
+                  detail: `The other apps on ${projectName} keep the project default.`,
                 });
               } catch (error) {
                 setOverrideOutcome(outcomeFromError(error));
@@ -201,7 +205,7 @@ function AppOverrideForm({
   return (
     <ProfileForm
       profile={override}
-      scopeNote={`Only ${applicationName} reads this key. Its siblings keep the project default.`}
+      scopeNote={`Only ${applicationName} reads this claim. The other apps on ${projectName} keep the project default.`}
       onSave={(body) => save.mutateAsync({ applicationId, ...body })}
       onDirtyChange={onDirtyChange}
       onDelete={async () => {
@@ -209,6 +213,7 @@ function AppOverrideForm({
         setOverrideOutcome({
           kind: "applied",
           message: `${applicationName} is back on the project default`,
+          detail: "Its own claim was deleted. From the next sign-in it receives the project default.",
         });
       }}
     />
@@ -272,7 +277,7 @@ function ProfileForm({
       setOutcome({
         kind: "applied",
         message: "Token format saved",
-        detail: "The next token this app issues carries it. Tokens already out keep their shape.",
+        detail: "It takes effect the next time someone signs in. Anyone already signed in keeps the old format until then.",
       });
     } catch (error) {
       // The backend rejects duplicate keys and malformed names; surfacing its
@@ -289,6 +294,10 @@ function ProfileForm({
 
       <div className="rounded-block bg-tint-1 px-4 py-3.5">
         <FieldLabel htmlFor="claim-name">Roles claim</FieldLabel>
+        <FieldHint>
+          The claim (one field inside the token) the app reads roles from. It must match the name
+          the app&rsquo;s developer configured.
+        </FieldHint>
         <div className="flex flex-wrap items-center gap-2.5">
           <Input
             id="claim-name"
@@ -299,7 +308,7 @@ function ProfileForm({
             placeholder="syndra.laser.roles"
           />
           <Segmented<ClaimFormat>
-            label="Claim format"
+            label="Sent as"
             size="sm"
             value={format}
             onChange={setFormat}
@@ -328,14 +337,14 @@ function ProfileForm({
             }
             className="text-[13px] font-semibold text-accent-text"
           >
-            Add a claim +
+            Add a claim
           </button>
         </div>
 
         {extras.length === 0 ? (
           <p className="text-[13.5px] text-faint">
-            Just the roles. Add a claim when an app needs the person&rsquo;s email or team without
-            asking for another scope.
+            Only the roles are sent. Add a claim when the app also needs the person&rsquo;s email
+            or team.
           </p>
         ) : (
           <div className="flex flex-col gap-2">
@@ -344,7 +353,7 @@ function ProfileForm({
                 <Input
                   value={extra.key}
                   spellCheck={false}
-                  aria-label="Claim key"
+                  aria-label="Claim name"
                   placeholder="syndra.laser.email"
                   onChange={(event) =>
                     setExtras((prev) => replace(prev, index, { ...extra, key: event.target.value }))
@@ -352,7 +361,7 @@ function ProfileForm({
                   className="min-w-[200px] flex-1 font-mono text-[13.5px]"
                 />
                 <Select
-                  aria-label="Claim source"
+                  aria-label="Where the value comes from"
                   value={extra.kind === "static" ? "__static" : extra.value}
                   onChange={(event) =>
                     setExtras((prev) =>
@@ -372,7 +381,7 @@ function ProfileForm({
                       {attribute}
                     </option>
                   ))}
-                  <option value="__static">a fixed value…</option>
+                  <option value="__static">the same value for everyone…</option>
                 </Select>
                 {extra.kind === "static" && (
                   <Input
@@ -417,7 +426,7 @@ function ProfileForm({
               setExtras(toExtras(profile));
             }}
           >
-            Discard
+            Discard changes
           </Button>
         )}
         {onDelete && (
@@ -429,6 +438,12 @@ function ProfileForm({
           </>
         )}
       </div>
+      {onDelete && (
+        <p className="text-[13px] text-faint">
+          Using the project default deletes this app&rsquo;s own claim. From the next sign-in it
+          receives what the other apps on the project receive.
+        </p>
+      )}
     </div>
   );
 }
@@ -465,7 +480,7 @@ function TokenKeyInventory({
 
   return (
     <div className="row-divider px-[22px] py-4">
-      <div className="mb-2.5 type-label">A token for this project carries</div>
+      <div className="mb-2.5 type-label">Claims in this project&rsquo;s token</div>
       <div className="flex flex-col gap-1.5">
         {shape.emitted_keys.map((entry) => (
           <div key={`${entry.key}-${entry.owner_label}`} className="flex items-center gap-2.5">
@@ -485,7 +500,11 @@ function TokenKeyInventory({
             </span>
             <span className="flex-1" />
             <span className="text-[12.5px] text-faint">
-              {mine.has(entry.key) ? "read by this app" : entry.owner_label}
+              {mine.has(entry.key)
+                ? "used by this app"
+                : entry.application_id
+                  ? `used by ${entry.owner_label}`
+                  : "project default, used by the other apps"}
             </span>
           </div>
         ))}
@@ -495,9 +514,9 @@ function TokenKeyInventory({
         <div className="warn-note mt-3 px-4 py-3 text-[13.5px] text-warn-text">
           {conflicts.map((conflict) => (
             <div key={conflict.claim_key}>
-              <Mono>{conflict.claim_key}</Mono> is claimed twice — {conflict.owner} and{" "}
-              {conflict.other}. A token holds one value per name, so one of them is reading the
-              other&rsquo;s roles.
+              <Mono>{conflict.claim_key}</Mono> is used by both {conflict.owner} and{" "}
+              {conflict.other}. A token carries one value per name, so one of these apps is reading
+              the other&rsquo;s roles. Give one of them a different claim name.
             </div>
           ))}
         </div>

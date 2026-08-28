@@ -46,17 +46,21 @@ export function BundleVersions({ bundleId, name }: { bundleId: string; name: str
         count={rows.length}
         note={
           behind.length > 0
-            ? `${behind.length} ${behind.length === 1 ? "person is" : "people are"} on an older one`
-            : "Everybody is on the latest"
+            ? `${behind.length} ${behind.length === 1 ? "person is" : "people are"} on an older version`
+            : "Everybody is on the latest version"
         }
         action={
           behind.length > 0 && latest ? (
             <Button size="sm" onClick={() => setMoving(latest)}>
-              Catch everyone up
+              Move everyone to v{latest.version}
             </Button>
           ) : undefined
         }
       />
+      <p className="row-divider px-5 pb-3.5 text-[13.5px] leading-[1.5] text-muted">
+        Each person holds a specific version of {name}. Publishing a new version does not move them
+        unless you choose to.
+      </p>
 
       <ListStates
         isLoading={versions.isLoading}
@@ -84,12 +88,12 @@ export function BundleVersions({ bundleId, name }: { bundleId: string; name: str
                 // meaningless, and the empty ones are just history.
                 <Badge tone="warn">
                   {version.holder_count} {version.holder_count === 1 ? "person" : "people"} still
-                  here
+                  on this version
                 </Badge>
               ) : null}
               <span className="flex-1" />
               <span className="text-[13px] text-faint">
-                {version.published_by === "system" ? "System" : <UserName id={version.published_by} />}
+                {version.published_by === "system" ? "Syndra (automatic)" : <UserName id={version.published_by} />}
                 {" · "}
                 <Relative iso={version.published_at} />
               </span>
@@ -103,7 +107,7 @@ export function BundleVersions({ bundleId, name }: { bundleId: string; name: str
 
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] text-muted">
               {(version.roles ?? []).length === 0 ? (
-                <span className="text-faint">Granted nothing.</span>
+                <span className="text-faint">Contained no roles.</span>
               ) : (
                 (version.roles ?? []).map((role) => (
                   <RoleRef
@@ -118,7 +122,7 @@ export function BundleVersions({ bundleId, name }: { bundleId: string; name: str
             {version.holder_count > 0 && index > 0 && (
               <div className="mt-2.5">
                 <Button size="sm" onClick={() => setMoving(rows[0])}>
-                  Move these {version.holder_count} to v{rows[0].version}
+                  Move these {version.holder_count} {version.holder_count === 1 ? "person" : "people"} to v{rows[0].version}
                 </Button>
               </div>
             )}
@@ -219,7 +223,7 @@ function MoveHoldersDialog({
   return (
     <RehearsalDialog
       title={`Move to ${name} v${target.version}`}
-      lede={`${userIds.length} ${userIds.length === 1 ? "person" : "people"} would be repinned. Their access changes to whatever v${target.version} contains.`}
+      lede={`${userIds.length} ${userIds.length === 1 ? "person" : "people"} would move to v${target.version}. Their access changes to whatever v${target.version} contains — anything only their current version gave them is revoked (their access to it ends).`}
       noun={["person", "people"]}
       destructive
       onRehearse={() => rehearse.mutateAsync({ version_id: target.id, user_ids: userIds })}

@@ -184,7 +184,7 @@ describe("the target rows", () => {
     expect(labels).toContain("UniFi Access");
     // And the identity provider stays first: switching views appends, and so
     // does registering a target. Nothing already there moves.
-    expect(labels[0]).toBe("Identity provider");
+    expect(labels[0]).toBe("Zitadel");
   });
 
   it("has no row for the bridge that no longer exists", () => {
@@ -205,7 +205,7 @@ describe("the target rows", () => {
     const system = targetNav([]).find((e) => e.kind === "group" && e.label === "System");
     const labels = system?.kind === "group" ? system.children.map((c) => c.label) : [];
 
-    expect(labels).toEqual(["Identity provider", "Connected systems", "Event activity"]);
+    expect(labels).toEqual(["Zitadel", "Connected systems", "Zitadel events"]);
     // Static, so it is the same array — nothing is derived to produce it.
     expect(targetNav([])).toBe(ADVANCED_NAV);
   });

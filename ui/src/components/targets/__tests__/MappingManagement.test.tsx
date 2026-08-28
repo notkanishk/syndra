@@ -137,7 +137,7 @@ describe("what roles reach a target", () => {
     fireEvent.change(screen.getByRole("textbox", { name: /new value/i }), {
       target: { value: "lab_x" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
 
     await waitFor(() => expect(state.rehearsals.length).toBeGreaterThan(0));
     // The blast radius is a backend refusal, not a checkbox drawn upfront: the
@@ -216,7 +216,7 @@ describe("version history", () => {
     // because no endpoint could tell it how many people the set moved. One can,
     // so the ceremony is the plan and the count is people.
     expect(screen.getByRole("dialog", { name: /Roll back to version 1/i })).toBeTruthy();
-    expect(screen.getByText(/it does not merge one/)).toBeTruthy();
+    expect(screen.getByText(/any changed one is put back/)).toBeTruthy();
     // And the thing an operator would otherwise not think to check: a rollback
     // reaches the people it takes a mapping AWAY from, not only those it gives
     // one to.
@@ -243,12 +243,12 @@ describe("changing what a role reaches · the consequence no count implies", () 
     fireEvent.change(screen.getByRole("textbox", { name: /new value/i }), {
       target: { value: "lab_x" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
 
     // On the REVIEW step, beside the plan — it is part of what is being
     // approved, not a caveat about the form that composed it.
-    await waitFor(() => expect(screen.getByText(/stay owned by it/)).toBeTruthy());
-    expect(screen.getByText(/re-owns them on TrueNAS/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/stay with that group/)).toBeTruthy());
+    expect(screen.getByText(/owner on TrueNAS/)).toBeTruthy();
     // The group it is leaving, named — "the old group" is not something an
     // operator can check against the NAS.
     expect(screen.getByText("lab_makers")).toBeTruthy();
@@ -276,12 +276,12 @@ describe("a value the target could not be asked about", () => {
     fireEvent.change(screen.getByRole("textbox", { name: /new value/i }), {
       target: { value: "archive-write" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
 
-    await waitFor(() => expect(screen.getByText(/could not be asked whether/)).toBeTruthy());
-    expect(screen.getByText(/make an outage look like your mistake/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/could not be reached, so/)).toBeTruthy());
+    expect(screen.getByText(/an outage does not look like your mistake/)).toBeTruthy();
     // And it says where the consequence lands instead of here.
-    expect(screen.getByText(/queued change that will not settle/)).toBeTruthy();
+    expect(screen.getByText(/waits in Pending changes until somebody fixes it/)).toBeTruthy();
   });
 
   it("says nothing of the sort when the target answered", async () => {
@@ -292,10 +292,10 @@ describe("a value the target could not be asked about", () => {
     fireEvent.change(screen.getByRole("textbox", { name: /new value/i }), {
       target: { value: "archive-write" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
 
-    await waitFor(() => expect(screen.getByText(/stay owned by it/)).toBeTruthy());
-    expect(screen.queryByText(/could not be asked whether/)).toBeNull();
+    await waitFor(() => expect(screen.getByText(/stay with that group/)).toBeTruthy());
+    expect(screen.queryByText(/could not be reached, so/)).toBeNull();
   });
 });
 

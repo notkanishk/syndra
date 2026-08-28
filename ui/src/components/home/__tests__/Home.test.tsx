@@ -83,7 +83,7 @@ describe("the home queue and a target nobody can read", () => {
     // would otherwise sit above one.
     // Both the headline and the calm empty row say it; neither may.
     expect(screen.queryAllByText(/Nothing needs you/i)).toHaveLength(0);
-    expect(screen.getByText(/can't vouch for/i)).toBeTruthy();
+    expect(screen.getByText(/could not check/i)).toBeTruthy();
     // The reason travels: "unreachable" and "answered and refused" send an
     // operator to different machines.
     expect(screen.getByText(/connection refused/)).toBeTruthy();
@@ -92,6 +92,6 @@ describe("the home queue and a target nobody can read", () => {
   it("says nothing needs you when every target has been read", () => {
     renderHome();
     expect(screen.queryAllByText(/Nothing needs you/i).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/can't vouch for/i)).toBeNull();
+    expect(screen.queryByText(/could not check/i)).toBeNull();
   });
 });

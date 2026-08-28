@@ -78,7 +78,7 @@ describe("differences waiting on a decision", () => {
 
     // The base, in the sentence, not behind a disclosure.
     expect(screen.getByText(/was true when Syndra last saw it/i)).toBeTruthy();
-    expect(screen.getByText(/somebody changed it on the target/i)).toBeTruthy();
+    expect(screen.getByText(/somebody changed it on TrueNAS/i)).toBeTruthy();
   });
 
   // The three kinds want different actions, so they must not render as one
@@ -95,9 +95,9 @@ describe("differences waiting on a decision", () => {
     state.resolved = [];
     renderFindings();
 
-    expect(screen.getByText(/no longer on the target/i)).toBeTruthy();
+    expect(screen.getByText(/no longer on TrueNAS/i)).toBeTruthy();
     fireEvent.click(screen.getByText("Decide"));
-    expect(screen.getByText("Provision it again")).toBeTruthy();
+    expect(screen.getByText("Create it again")).toBeTruthy();
     expect(screen.getByText("Stop managing it")).toBeTruthy();
   });
 
@@ -109,13 +109,13 @@ describe("differences waiting on a decision", () => {
     renderFindings();
 
     fireEvent.click(screen.getByText("Decide"));
-    const keep = screen.getByText("Keep Syndra's") as HTMLButtonElement;
+    const keep = screen.getByText("Keep Syndra's value") as HTMLButtonElement;
     expect(keep.disabled).toBe(true);
 
     fireEvent.change(screen.getByLabelText("Why"), {
       target: { value: "the suspension was a mistake" },
     });
-    fireEvent.click(screen.getByText("Keep Syndra's"));
+    fireEvent.click(screen.getByText("Keep Syndra's value"));
     expect(state.resolved).toHaveLength(1);
     expect(state.resolved[0].resolution).toBe("keep_ours");
     expect(state.resolved[0].reason).toBe("the suspension was a mistake");
@@ -130,7 +130,7 @@ describe("differences waiting on a decision", () => {
 
     fireEvent.click(screen.getByText("Decide"));
     fireEvent.change(screen.getByLabelText("Why"), { target: { value: "incident review" } });
-    fireEvent.click(screen.getByText("Take the target's"));
+    fireEvent.click(screen.getByText("Use TrueNAS's value"));
 
     expect(state.resolved[0].resolution).toBe("take_theirs");
     expect(state.resolved[0].review_date).toBeTruthy();
@@ -156,7 +156,7 @@ describe("differences waiting on a decision", () => {
     renderFindings();
 
     fireEvent.click(screen.getByText("Decide"));
-    expect(screen.queryByText("Take the target's")).toBeNull();
+    expect(screen.queryByText("Use TrueNAS's value")).toBeNull();
     // And the alternative, with the mapping and how far editing it reaches.
     expect(screen.getByText(/every holder of that role/i)).toBeTruthy();
     expect(screen.getByText(/3 people hold that role/i)).toBeTruthy();
@@ -170,7 +170,7 @@ describe("differences waiting on a decision", () => {
     renderFindings();
 
     fireEvent.click(screen.getByText("Decide"));
-    expect(screen.getByText("Take the target's")).toBeTruthy();
+    expect(screen.getByText("Use TrueNAS's value")).toBeTruthy();
   });
 
   // A decided finding is still standing: the convergence is queued and the
@@ -184,7 +184,7 @@ describe("differences waiting on a decision", () => {
     state.error = null;
     renderFindings();
 
-    expect(screen.getByText(/waiting for the target to agree/i)).toBeTruthy();
+    expect(screen.getByText(/waiting for TrueNAS to match/i)).toBeTruthy();
     expect(screen.queryByText("Decide")).toBeNull();
   });
 });
@@ -206,8 +206,8 @@ it("offers to finish an unbind that did not complete", () => {
   state.error = null;
   renderFindings();
 
-  expect(screen.getByText(/may already have released this account/i)).toBeTruthy();
-  fireEvent.click(screen.getByText("Finish unbinding"));
+  expect(screen.getByText(/may already have let go of this account/i)).toBeTruthy();
+  fireEvent.click(screen.getByText("Finish: stop managing it"));
   expect(state.resolved).toHaveLength(1);
   expect(state.resolved[0].resolution).toBe("unbound");
 });

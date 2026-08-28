@@ -50,6 +50,7 @@ export function DormantAccounts({ target }: { target: string }) {
   const [result, setResult] = useState<SweepResult | null>(null);
 
   const accounts = dormant.data?.accounts ?? [];
+  const name = targetLabel(target);
   const safe = accounts.filter((a) => !a.subject_still_member);
   const lockouts = accounts.filter((a) => a.subject_still_member);
   const chosen = safe.filter((a) => selected.has(a.account));
@@ -67,9 +68,9 @@ export function DormantAccounts({ target }: { target: string }) {
   return (
     <Card>
       <CardHeader
-        title="Lost their reason"
+        title="No longer needed"
         count={accounts.length}
-        note="No active role grants any of these"
+        note="Accounts Syndra created that no active role needs any more"
       />
 
       {dormant.data && (
@@ -92,11 +93,11 @@ export function DormantAccounts({ target }: { target: string }) {
         error={dormant.error}
         isEmpty={accounts.length === 0}
         onRetry={() => dormant.refetch()}
-        errorTitle="The dormant list could not be read"
+        errorTitle="This list could not be read"
         empty={
           <EmptyState
-            title="Nothing dormant"
-            guidance={`Every account on ${targetLabel(target)} belongs to somebody a role still reaches.`}
+            title="Nothing to tidy"
+            guidance={`Every account Syndra created on ${name} is still backed by a role.`}
           />
         }
       >
@@ -127,8 +128,8 @@ export function DormantAccounts({ target }: { target: string }) {
           {lockouts.length > 0 && (
             <>
               <GroupHeading
-                title="Still a member, and nothing reaches here"
-                blurb="Not housekeeping. Removing one of these locks the person out rather than tidying up — give them a role that grants it, or take the access away deliberately."
+                title="Still a member, but no role gives them access here"
+                blurb="Not housekeeping. Removing one of these locks the person out rather than tidying up — give them a role that is mapped here, or revoke their access deliberately from the list above."
               />
               {lockouts.map((account) => (
                 // Dashed and unselectable, and the reason is in the row. The
@@ -154,7 +155,7 @@ export function DormantAccounts({ target }: { target: string }) {
         </>
       </ListStates>
 
-      {result && <SweepOutcomes result={result} onDismiss={() => setResult(null)} />}
+      {result && <SweepOutcomes result={result} name={name} onDismiss={() => setResult(null)} />}
 
       {chosen.length > 0 && (
         <div className="grid gap-3 border-t border-line px-5 py-4">
@@ -166,11 +167,11 @@ export function DormantAccounts({ target }: { target: string }) {
             count={chosen.length}
             noun="accounts"
             verb="removes"
-            consequence={filesSentence(chosen)}
+            consequence={filesSentence(chosen, name)}
           />
           <div>
             <FieldLabel htmlFor="sweep-credential">
-              A credential that may delete accounts
+              A {name} API key that is allowed to delete accounts
             </FieldLabel>
             <Input
               id="sweep-credential"
@@ -183,9 +184,9 @@ export function DormantAccounts({ target }: { target: string }) {
               {/* Why the operator is being asked at all, said once. It is the
                   reason a compromise of the add-on cannot destroy anybody's
                   files, and without the explanation it reads as friction. */}
-              The add-on holds none of its own — its session can read and write
-              accounts and cannot remove one. This is used for these removals and kept
-              nowhere.
+              Syndra&rsquo;s own {name} API key can create and edit accounts but, on purpose,
+              not delete them. Paste a key that can. It is used for this removal only and never
+              stored.
             </FieldHint>
           </div>
           <div className="flex gap-2">
@@ -224,13 +225,15 @@ export function DormantAccounts({ target }: { target: string }) {
             {/* Not queued, and said plainly, because everything else on these
                 screens is. A purge is a one-shot operation: it cannot be
                 rehearsed against a queue an operator could still inspect. */}
-            This one does not queue. Each account is checked again as it goes, and one
-            that has stopped being dormant since you read this list is refused rather
-            than removed.
+            This happens at once, not from Pending changes. Each account is checked again as
+            it goes; one that has gained a role since you loaded this list is skipped, not
+            removed.
           </p>
           {remove.error && (
             <p className="text-[13.5px] text-danger-text">
-              {remove.error instanceof Error ? remove.error.message : "That could not be applied."}
+              {remove.error instanceof Error
+                ? remove.error.message
+                : "That did not go through. Nothing was changed."}
             </p>
           )}
         </div>
@@ -247,13 +250,13 @@ export function DormantAccounts({ target }: { target: string }) {
  * the one part of this ceremony that is not true — and it is the part the whole
  * ceremony is about.
  */
-function filesSentence(chosen: DormantAccount[]): string {
+function filesSentence(chosen: DormantAccount[], name: string): string {
   const known = chosen.filter((a) => typeof a.bytes_held === "number");
   if (known.length === chosen.length && known.length > 0) {
     const total = known.reduce((sum, a) => sum + (a.bytes_held ?? 0), 0);
     return `${formatBytes(total)} of their files goes with the accounts.`;
   }
-  return "Their home directories and everything in them go with the accounts. Syndra cannot see how much that is on this target.";
+  return `Their home directories and everything in them go with the accounts. Syndra cannot see how much that is on ${name}.`;
 }
 
 function GroupHeading({ title, blurb }: { title: string; blurb: string }) {
@@ -276,7 +279,7 @@ function AccountLine({ account }: { account: DormantAccount }) {
       )}
       <span className="flex-1" />
       <span className="text-[13px] text-faint">
-        last seen <Relative iso={account.last_seen_at} />
+        last signed in <Relative iso={account.last_seen_at} />
       </span>
     </>
   );
@@ -290,8 +293,21 @@ function AccountLine({ account }: { account: DormantAccount }) {
  * — so it is named rather than folded into a failure count somebody would click
  * again.
  */
-function SweepOutcomes({ result, onDismiss }: { result: SweepResult; onDismiss: () => void }) {
+function SweepOutcomes({
+  result,
+  name,
+  onDismiss,
+}: {
+  result: SweepResult;
+  name: string;
+  onDismiss: () => void;
+}) {
   const unresolved = result.outcomes.filter((o) => o.outcome !== "removed");
+  const fallback: Record<string, string> = {
+    refused: "refused — it gained a role since you loaded this list, so it was left alone",
+    unreached: `${name} did not answer, so it was not removed`,
+    indeterminate: `not confirmed — check ${name} before trying again`,
+  };
   return (
     <div role="status" className="grid gap-2 border-t border-line px-5 py-4 text-[13.5px]">
       <p className={result.removed > 0 ? "text-muted" : "text-warn-text"}>
@@ -300,12 +316,12 @@ function SweepOutcomes({ result, onDismiss }: { result: SweepResult; onDismiss: 
       {unresolved.map((outcome) => (
         <p key={outcome.account} className="text-warn-text">
           <Mono>{outcome.account}</Mono> —{" "}
-          {outcome.detail ?? outcome.outcome}
+          {outcome.detail ?? fallback[outcome.outcome] ?? "recorded"}
         </p>
       ))}
       <div>
         <Button variant="ghost" size="sm" onClick={onDismiss}>
-          Dismiss
+          Dismiss this result
         </Button>
       </div>
     </div>

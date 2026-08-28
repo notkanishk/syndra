@@ -74,19 +74,19 @@ describe("a hold in force", () => {
     // The same pill the member reads on their own page — one object, one word
     // for it, so an operator and a member on the phone are discussing the same
     // thing.
-    expect(screen.getByText("Withheld")).toBeInTheDocument();
-    const row = screen.getByText(/held by op_7/i).closest("li");
+    expect(screen.getByText("On hold")).toBeInTheDocument();
+    const row = screen.getByText(/put on hold by op_7/i).closest("li");
     expect(row).not.toBeNull();
     expect(row).toHaveTextContent("safety review");
     expect(row).toHaveTextContent("truenas");
     // The trap, said out loud: holding the role is not holding the access.
-    expect(screen.getByText(/still hold a role that maps to it/i)).toBeInTheDocument();
+    expect(screen.getByText(/still hold the role that normally gives this/i)).toBeInTheDocument();
   });
 
   it("says nothing when every allowance has ended", () => {
     state.allowances = [band({ in_force: false, ended: "2026-02-01T00:00:00Z", ended_by: "op_7" })];
     renderPerson();
 
-    expect(screen.queryByText("Withheld")).not.toBeInTheDocument();
+    expect(screen.queryByText("On hold")).not.toBeInTheDocument();
   });
 });

@@ -28,6 +28,9 @@ import {
  *  - `block` is a sheet or panel becoming its result, with room for the
  *    request id and the sentence that follows a refusal.
  */
+/** What the "Waiting to be sent" pill means, for a reader who only meets the pill. */
+const QUEUED_GLOSS = "Recorded in Syndra, not yet sent. See Pending changes.";
+
 export function ActionOutcome({
   outcome,
   placement = "block",
@@ -51,6 +54,7 @@ export function ActionOutcome({
           className={`rounded-pill px-2.5 py-1 text-[12.5px] font-semibold ${OUTCOME_TONE[outcome.kind]}`}
         >
           {OUTCOME_LABEL[outcome.kind]}
+          {outcome.kind === "queued" && <span className="sr-only">. {QUEUED_GLOSS}</span>}
         </span>
         <span className="text-[13px] text-muted">{sentence(outcome.message)}</span>
       </span>
@@ -71,6 +75,7 @@ export function ActionOutcome({
           className={`rounded-pill px-2.5 py-1 text-[12.5px] font-semibold ${OUTCOME_TONE[outcome.kind]}`}
         >
           {OUTCOME_LABEL[outcome.kind]}
+          {outcome.kind === "queued" && <span className="sr-only">. {QUEUED_GLOSS}</span>}
         </span>
       </div>
 
@@ -89,7 +94,7 @@ export function ActionOutcome({
       {outcome.requestId && (
         <div className="flex flex-col gap-1.5">
           <span className="type-label">Quote this if you ask for help</span>
-          <CopyableValue value={outcome.requestId} label="Request id" />
+          <CopyableValue value={outcome.requestId} label="Reference" />
         </div>
       )}
     </div>

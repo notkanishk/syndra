@@ -61,12 +61,14 @@ export function TargetOverview({ target }: { target: string }) {
   const waiting =
     (findings.data?.length ?? 0) + anchorFinding + conflicts.length;
   const waitingKnown = !findings.isLoading && !health.isLoading;
+  const name = targetLabel(target);
 
   return (
     <div className="grid gap-5">
       <PageHeader
-        title={targetLabel(target)}
-        meta={registered ? authLabel(registered.auth_mode) : undefined}
+        title={name}
+        lede={`Whether Syndra can reach ${name} (the network storage server) and what it says about itself, who has an account there, and anything waiting on you. Syndra creates an account on ${name} for every person whose role is mapped to a group there, checks it every six hours, and asks you when it finds something it should not decide alone.`}
+        meta={registered ? authLabel(registered.auth_mode, name) : undefined}
       />
 
       <TargetLede target={target} health={health.data} waiting={waiting} known={waitingKnown} />
@@ -92,7 +94,7 @@ export function TargetOverview({ target }: { target: string }) {
         <Region
           id="answering"
           title="Is it answering"
-          lede="Two machines, side by side, never merged into one word — and the state somebody put this one in, which changes what the readings above it mean."
+          lede={`Whether Syndra can reach ${name}, what ${name} says about itself, and whether somebody has paused changes to it.`}
         >
           <div className="grid gap-4 desktop:grid-cols-2">
             <Health
@@ -122,7 +124,7 @@ export function TargetOverview({ target }: { target: string }) {
           id="waiting"
           title="Waiting on a person"
           count={waitingKnown ? waiting : null}
-          lede="Differences reconciliation will not resolve on its own, a change record edited after it was queued, and two of Syndra's own records disagreeing about who owns an account. None of these is a status. Each is a piece of work waiting on a human, and this region keeps its seat at zero."
+          lede={`Things Syndra found and will not settle by itself: an account that differs from what Syndra expects, a change log on ${name} that was altered, or two records disagreeing about whose account it is. Each needs a decision from you.`}
         >
           {health.data?.log_anchor?.violation_reason && (
             <LogFinding anchor={health.data.log_anchor} />
@@ -143,9 +145,8 @@ export function TargetOverview({ target }: { target: string }) {
             take the roster away from the only sentence that explains it. */}
         <Region
           id="people"
-          eyebrow="The second subject on this page"
           title="People and their access here"
-          lede="Three populations, and never one count: the accounts Syndra manages, the accounts it did not create, and the accounts it created and no longer has a reason for. Each one means something different and each takes a different action."
+          lede="Three separate lists: accounts Syndra manages, accounts it did not create, and accounts it created that no role needs any more. Each takes a different action."
         >
           <MappingCensus target={target} />
           <PeopleOnTarget target={target} />
@@ -158,8 +159,8 @@ export function TargetOverview({ target }: { target: string }) {
             and reconciliation is the thing that calls them on a schedule. */}
         <Region
           id="runs"
-          title="What runs here"
-          lede="What the add-on can perform, and the thing that calls it."
+          title="What Syndra can do here"
+          lede={`What Syndra is able to do on ${name}, and the scheduled check that keeps accounts in step.`}
         >
           {registered && <Capabilities registered={registered} />}
           <ReconcileControl target={target} />
@@ -196,6 +197,7 @@ export function TargetOverview({ target }: { target: string }) {
 function SystemHealth({ target }: { target: string }) {
   const report = useTargetSystemHealth(target);
   const data = report.data;
+  const name = targetLabel(target);
 
   // Nothing at all while it is still being asked. Four calls to the target take
   // a moment, and a card that flashes "no alerts" before the answer arrives has
@@ -213,18 +215,18 @@ function SystemHealth({ target }: { target: string }) {
   return (
     <Card>
       <CardHeader
-        title="What the target reports"
+        title={`What ${name} reports about itself`}
         note={
           data.system?.hostname
             ? `${data.system.hostname}${data.system.version ? ` · ${data.system.version}` : ""}`
-            : "Read from the target itself, not from Syndra's record"
+            : `Read from ${name} just now, not from Syndra's records`
         }
       />
       <div className="flex flex-col gap-2.5 px-5 pb-5">
         {!data.readable && (
           <Reading tone="warn" label="Could not be asked">
-            The target did not answer its own health reads, so this is not a report that
-            nothing is wrong.{data.detail ? ` ${data.detail}` : ""}
+            {name} did not answer its own health reads, so this is not a report that nothing
+            is wrong.{data.detail ? ` ${data.detail}` : ""}
           </Reading>
         )}
 
@@ -233,7 +235,7 @@ function SystemHealth({ target }: { target: string }) {
         {degraded.length > 0 && (
           <Reading tone="warn" label="Partly read">
             {degraded.join(", ")} could not be read. Whatever those would have said is
-            missing from this card rather than absent from the target.
+            missing from this card, not absent from {name}.
           </Reading>
         )}
 
@@ -251,7 +253,7 @@ function SystemHealth({ target }: { target: string }) {
           <Reading
             key={pool.name}
             tone={!pool.healthy ? "danger" : pool.warning ? "warn" : "healthy"}
-            label={pool.name}
+            label={`Storage pool ${pool.name}`}
           >
             {pool.status}
             {pool.size_bytes > 0 && (
@@ -266,9 +268,11 @@ function SystemHealth({ target }: { target: string }) {
         {services
           .filter((s) => s.state !== "RUNNING")
           .map((s) => (
-            <Reading key={s.service} tone="danger" label={`${s.service} is not running`}>
-              Accounts Syndra provisions here reach nothing while it is stopped
-              {s.enable ? ", and it is set to start on boot — so it stopped on its own." : ", and it is not set to start on boot."}
+            <Reading key={s.service} tone="danger" label={`${serviceName(s.service)} is not running`}>
+              Nobody can open their shares while it is stopped
+              {s.enable
+                ? `, and it is set to start on boot — so it stopped by itself. Check ${name}.`
+                : ", and it is not set to start on boot."}
             </Reading>
           ))}
 
@@ -284,6 +288,13 @@ function SystemHealth({ target }: { target: string }) {
       </div>
     </Card>
   );
+}
+
+/** The sharing services by what they do, not by their process name. */
+function serviceName(service: string): string {
+  if (service === "cifs") return "File sharing (SMB)";
+  if (service === "nfs") return "NFS sharing";
+  return service;
 }
 
 function alertLabel(level: string): string {
@@ -328,18 +339,19 @@ function ReconcileControl({ target }: { target: string }) {
   // press must stay on screen, which is what marking the row released removed.
   const [unfinished, setUnfinished] = useState<Record<string, string>>({});
   const result = run.data;
+  const name = targetLabel(target);
 
   return (
     <Card>
       <CardHeader
-        title="Reconciliation"
-        note="Reads the target and queues what is already owed. Queueing is not applying."
+        title="Check for differences"
+        note={`Compares ${name} with what Syndra expects and records any fixes as changes waiting to be sent. Nothing is applied until somebody sends them from Pending changes.`}
       />
       <CardRow>
         <div className="flex-1 text-[14.5px] text-muted">
           {result
-            ? `${result.bound} managed · ${result.queued} queued · ${result.stale?.length ?? 0} pointing at nothing`
-            : "The scheduled sweep runs every six hours."}
+            ? `${result.bound} accounts managed · ${result.queued} fixes waiting to be sent · ${result.stale?.length ?? 0} accounts missing from ${name}`
+            : "Syndra checks by itself every six hours."}
         </div>
         <Button
           variant="outline"
@@ -347,14 +359,16 @@ function ReconcileControl({ target }: { target: string }) {
           isPending={run.isPending}
           onClick={() => run.mutate()}
         >
-          Reconcile now
+          Check now
         </Button>
       </CardRow>
 
       {run.error && (
         <CardRow>
           <span className="text-[13.5px] text-danger-text">
-            {run.error instanceof Error ? run.error.message : "The pass did not complete."}
+            {run.error instanceof Error
+              ? run.error.message
+              : "The check did not complete. Nothing was changed."}
           </span>
         </CardRow>
       )}
@@ -363,7 +377,7 @@ function ReconcileControl({ target }: { target: string }) {
         // A pass that concluded nothing must not read as a clean one.
         <CardRow>
           <span className="text-[13.5px] text-warn-text">
-            Nothing was concluded: {result.reason || "the target could not be read for itself"}.
+            Nothing was concluded: {result.reason || `${name} could not be read`}.
           </span>
         </CardRow>
       )}
@@ -372,18 +386,20 @@ function ReconcileControl({ target }: { target: string }) {
         <>
           <CardRow>
             <span className="text-[14px] font-semibold text-warn-text">
-              {result!.stale!.length} binding{result!.stale!.length === 1 ? "" : "s"} point at an
-              account that is no longer on the target
+              {result!.stale!.length === 1
+                ? "One person is"
+                : `${result!.stale!.length} people are`}{" "}
+              recorded as owning an account that is no longer on {name}
             </span>
           </CardRow>
           {result!.stale!.map((b) => (
             <CardRow key={b.subject_id} className="flex-wrap">
               <Mono>{b.username}</Mono>
-              {b.uid ? <span className="text-[13px] text-faint">uid {b.uid}</span> : null}
+              {b.uid ? <span className="text-[13px] text-faint">id {b.uid}</span> : null}
               <span className="flex-1" />
               {released.includes(b.subject_id) ? (
                 <span className="text-[13px] text-faint">
-                  Released. Nothing on the target was changed.
+                  Stopped tracking it. Nothing on {name} was changed.
                 </span>
               ) : confirming === b.subject_id ? (
                 <>
@@ -392,9 +408,9 @@ function ReconcileControl({ target }: { target: string }) {
                       reading it as "delete" is the one misreading this row can
                       afford least, given the account it names is already gone. */}
                   <span className="text-[13px] text-muted">
-                    Syndra stops managing <Mono>{b.username}</Mono>.
-                    Nothing is deleted, and the binding can be made again by adopting the
-                    account if it comes back.
+                    Syndra stops managing <Mono>{b.username}</Mono>. Nothing is deleted, and
+                    it can be tracked again by assigning the account to a person if it comes
+                    back.
                   </span>
                   <Button
                     variant="outline"
@@ -416,13 +432,13 @@ function ReconcileControl({ target }: { target: string }) {
                             [b.subject_id]:
                               res.warning ||
                               res.detail ||
-                              "The release was not confirmed. Nothing was changed here.",
+                              `${name} did not confirm. Nothing was changed here.`,
                           }));
                         },
                       })
                     }
                   >
-                    Forget it
+                    Stop tracking {b.username}
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>
                     Cancel
@@ -436,15 +452,15 @@ function ReconcileControl({ target }: { target: string }) {
               ) : (
                 <>
                   <span className="text-[13px] text-faint">
-                    Not converged. Re-provisioning would recreate a deleted account, so this
-                    is yours to decide.
+                    Not fixed by itself: recreating it would bring back an account somebody
+                    deleted, so this is yours to decide.
                   </span>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setConfirming(b.subject_id)}
                   >
-                    Forget this binding
+                    Stop tracking this account
                   </Button>
                 </>
               )}
@@ -455,7 +471,7 @@ function ReconcileControl({ target }: { target: string }) {
               <span className="text-[13.5px] text-danger-text">
                 {release.error instanceof Error
                   ? release.error.message
-                  : "The binding was not released."}
+                  : "Could not stop tracking it. Nothing was changed."}
               </span>
             </CardRow>
           )}
@@ -474,10 +490,10 @@ function ReconcileControl({ target }: { target: string }) {
  * register — but it is spelled out rather than left to a fallback, because the
  * one thing this line must never do is read as reassurance when it is not.
  */
-function authLabel(mode: string): string {
-  if (mode === "derived") return "Authenticated by a key derived from this deployment's secret";
-  if (mode === "none") return "NOT AUTHENTICATED — no transport secret configured";
-  return `Authenticated by ${mode}`;
+function authLabel(mode: string, name: string): string {
+  if (mode === "derived") return `Connection to ${name} signed with this deployment's key`;
+  if (mode === "none") return `Connection to ${name} NOT secured — no key configured`;
+  return `Connection to ${name} secured by ${mode}`;
 }
 
 function Health({
@@ -494,9 +510,10 @@ function Health({
   /** How many Syndra-side findings are waiting in the region below. */
   needsAPerson: number;
 }) {
+  const name = targetLabel(target);
   return (
     <Card>
-      <CardHeader title="Syndra&rsquo;s reach" />
+      <CardHeader title="Can Syndra reach it" />
       <div className="grid gap-3 px-5 pb-5">
         {isLoading && !health && <p className="text-[14px] text-faint">Reading…</p>}
 
@@ -513,8 +530,8 @@ function Health({
         {needsAPerson > 0 && (
           <p className="text-[13.5px] font-semibold text-danger-text">
             {needsAPerson === 1
-              ? "One thing below needs a person before this card can be trusted."
-              : `${needsAPerson} things below need a person before this card can be trusted.`}
+              ? "One item under Waiting on a person needs a decision before this card can be trusted."
+              : `${needsAPerson} items under Waiting on a person need a decision before this card can be trusted.`}
           </p>
         )}
 
@@ -523,44 +540,46 @@ function Health({
             reads "not answering" first goes to the NAS — which is the wrong
             machine, and the one that takes longest to rule out. */}
         {transportError && (
-          <Reading tone="danger" label="Transport secret unreadable">
-            Syndra cannot read this target&apos;s transport secret, so no call to it can be
-            authenticated. This is a fault on <strong className="font-semibold">this</strong>{" "}
-            host, not on the target: {transportError}
+          <Reading tone="danger" label="Connection key missing">
+            Syndra cannot read the key it uses to talk to {name}, so it cannot make any
+            request. This is a problem on{" "}
+            <strong className="font-semibold">the Syndra server</strong>, not on {name}:{" "}
+            {transportError}
           </Reading>
         )}
 
         {health && !health.reachable && (
           <Reading tone="danger" label="Not answering">
-            {health.detail || `${targetLabel(target)} did not answer.`} The add-on is the
-            thing to look at.
+            {health.detail || `${name} did not answer.`} The program that connects Syndra to{" "}
+            {name}, on the Syndra server, is the thing to look at.
           </Reading>
         )}
 
         {health?.circuit_open && (
-          <Reading tone="danger" label="Backed off">
-            Syndra is refusing its own calls after repeated failures.{" "}
-            <strong className="font-semibold">This is not the target being down</strong> — it
-            clears on its own, and the machine to look at is this one.
+          <Reading tone="danger" label="Paused after failures">
+            Syndra has stopped trying to reach {name} for a while after repeated failures, and
+            will try again by itself.{" "}
+            <strong className="font-semibold">This does not mean {name} is down</strong> — look
+            at the Syndra server.
           </Reading>
         )}
 
         {health?.reachable && health.lifecycle && health.lifecycle !== "active" && (
           // Accent, never amber. Somebody chose this, and the same choice is
           // accent on the withdrawn-access queue for the same reason.
-          <Reading tone="accent" label={health.lifecycle === "draining" ? "Draining" : "Read-only"}>
-            Set deliberately{health.lifecycle_note ? `: ${health.lifecycle_note}` : ""}.{" "}
+          <Reading tone="accent" label={health.lifecycle === "draining" ? "Finishing up" : "Read-only"}>
+            Set on purpose{health.lifecycle_note ? `: ${health.lifecycle_note}` : ""}.{" "}
             {health.lifecycle === "draining"
               ? "New changes are refused and the ones already sent are being allowed to finish."
-              : "Every change is refused immediately. Reads keep working."}
+              : "Every change is refused at once. Reads keep working."}
           </Reading>
         )}
 
         {health?.in_flight !== undefined && health.in_flight > 0 && (
-          <Reading tone="warn" label="Still settling">
-            {health.in_flight} call{health.in_flight === 1 ? "" : "s"} issued before the drain{" "}
-            {health.in_flight === 1 ? "has" : "have"} not come back. This is what to wait for
-            before pulling a credential out from under one.
+          <Reading tone="warn" label="Still finishing">
+            {health.in_flight} change{health.in_flight === 1 ? "" : "s"} sent before the pause{" "}
+            {health.in_flight === 1 ? "has" : "have"} not completed. Wait for this to reach
+            zero before changing the {name} API key.
           </Reading>
         )}
 
@@ -570,10 +589,12 @@ function Health({
             sends an operator to the NAS. `none` is an operator's deliberate
             choice and says nothing here. */}
         {health?.reachable && health.key_expiry === "unrecorded" && (
-          <Reading tone="warn" label="Key expiry not recorded">
-            Syndra does not know when this target&rsquo;s API key expires. If it has an
-            expiry, set <Mono>TRUENAS_API_KEY_EXPIRES_AT</Mono> so this warns before it
-            fails; if it has none, set it to <Mono>never</Mono> to say so.
+          <Reading tone="warn" label="API key expiry not recorded">
+            Syndra does not know when the {name} API key (a password for a program rather
+            than a person) expires. For whoever runs the Syndra server: if it has an expiry,
+            set <Mono>TRUENAS_API_KEY_EXPIRES_AT</Mono> in the deployment&rsquo;s{" "}
+            <Mono>.env</Mono> so Syndra warns before it fails; if it never expires, set it to{" "}
+            <Mono>never</Mono>.
           </Reading>
         )}
 
@@ -594,14 +615,14 @@ function Health({
             ))}{" "}
             {health.unaudited_shares!.length === 1 ? "has" : "have"} auditing disabled, so a
             member&rsquo;s activity report comes back empty whether or not they used it.
-            Enable it per share on the target: Shares → SMB → Edit → Advanced.
+            Enable it per share in {name}: Shares → SMB → Edit → Advanced.
           </Reading>
         )}
 
         {health?.reachable && health.version_tested === false && (
-          <Reading tone="warn" label="Untested release">
-            {health.version_note || "This release has not been tested against."} Reads keep
-            working; changes are refused.
+          <Reading tone="warn" label={`Untested ${name} version`}>
+            {health.version_note || `This version of ${name} has not been tested with Syndra.`}{" "}
+            Reads keep working; changes are refused.
           </Reading>
         )}
 
@@ -622,13 +643,13 @@ function Health({
             </Line>
           )}
           {health?.key_expires_at && (
-            <Line label="Credential expires">
+            <Line label="API key expires">
               <Relative iso={health.key_expires_at} />
             </Line>
           )}
           {health?.log_head && (
-            <Line label="Change record">
-              {health.log_records ?? 0} records ·{" "}
+            <Line label="Change log">
+              {health.log_records ?? 0} entries ·{" "}
               <span className="font-mono text-[12.5px] text-faint">
                 {health.log_head.slice(0, 12)}
               </span>
@@ -638,7 +659,7 @@ function Health({
 
         {health?.snapshot_taken_at && (
           <ReadFreshness
-            subject="During an outage this target's state"
+            subject={`${name}'s last known state`}
             state={{ readAt: health.snapshot_taken_at, current: health.reachable }}
           />
         )}
@@ -671,9 +692,11 @@ function TargetLede({
     ? `Reading ${name}.`
     : !health.reachable
       ? `${name} is not answering.`
-      : health.lifecycle && health.lifecycle !== "active"
-        ? `${name} is ${health.lifecycle.replace("_", " ")} — somebody set that on purpose.`
-        : `${health.product_version ?? name}, answering and accepting changes.`;
+      : health.lifecycle === "draining"
+        ? `${name} is finishing up (refusing new changes while the ones already sent finish) — somebody set that on purpose.`
+        : health.lifecycle && health.lifecycle !== "active"
+          ? `${name} is read-only (refusing every change) — somebody set that on purpose.`
+          : `${name}${health.product_version ? ` ${health.product_version}` : ""}, answering and accepting changes.`;
 
   return (
     <p className="max-w-[86ch] text-[15px] leading-[1.6] text-muted">
@@ -706,11 +729,11 @@ function RegionIndex({ waiting }: { waiting: number | null }) {
     { id: "answering", label: "Is it answering" },
     { id: "waiting", label: "Waiting on a person", count: waiting },
     { id: "people", label: "People and their access here" },
-    { id: "runs", label: "What runs here" },
+    { id: "runs", label: "What Syndra can do here" },
   ];
 
   return (
-    <nav aria-label="Regions of this page" className="desktop:hidden">
+    <nav aria-label="Sections of this page" className="desktop:hidden">
       <Card>
         {regions.map((region, i) => (
           <a
@@ -732,25 +755,39 @@ function RegionIndex({ waiting }: { waiting: number | null }) {
 /**
  * What the add-on can perform, read from its manifest.
  */
+/** What each operation means, for the ids the connection is known to report. */
+const OPERATION_LABEL: Record<string, string> = {
+  "account.provision": "create an account for a person",
+  "account.converge": "bring an account in line with the person's roles",
+  "account.release": "stop managing an account",
+  "account.adopt": "assign an existing account to a person",
+  "account.purge": "delete accounts",
+  "account.list": "read the list of accounts",
+  "health.get": "read the system's own health report",
+};
+
 function Capabilities({ registered }: { registered: TargetSummary }) {
+  const name = targetLabel(registered.target);
   return (
     <Card>
       <CardHeader
         title="What it can do"
-        note="Read from the add-on's manifest, never from a list here"
+        note={`As reported by the connection to ${name}`}
       />
       {!registered.callable ? (
         <div className="px-5 pb-5">
           <p className="text-[14px] text-muted">
-            Registered, and it has not published a capability manifest yet. Registration is a
-            deployment fact; what it can do is a runtime one, and nothing is offered until it
-            answers.
+            Configured, but {name} has not answered yet. Until it does, Syndra does not know
+            what it can do here.
           </p>
         </div>
       ) : (
         registered.operations.map((op, i) => (
           <CardRow key={op.id} first={i === 0} className="flex-wrap">
             <span className="font-mono text-[13.5px]">{op.id}</span>
+            {OPERATION_LABEL[op.id] && (
+              <span className="text-[13.5px] text-muted">{OPERATION_LABEL[op.id]}</span>
+            )}
             <span className="text-[13px] text-faint">{op.scope}</span>
             {/* Board §21 draws this beside `account.adopt` and `account.purge`,
                 and the page had been dropping it — the manifest says which
@@ -789,26 +826,44 @@ function Capabilities({ registered }: { registered: TargetSummary }) {
  */
 function LogFinding({ anchor }: { anchor: LogAnchor }) {
   const [resolving, setResolving] = useState(false);
+  const name = targetLabel(anchor.target);
   const what =
     anchor.violation_reason === "records_decreased"
-      ? "Records that existed are gone."
-      : "The same number of records now hash to something else.";
+      ? "Entries that existed are gone."
+      : "The number of entries is the same, but their contents changed.";
   return (
     <div className="rounded-inner border border-danger-line bg-danger-soft px-4 py-3">
       <p className="text-[13.5px] font-semibold text-danger-text">
-        This target&rsquo;s change record has been edited
+        The change log on {name} has been altered
       </p>
       <p className="mt-1 text-[13.5px] text-muted">
-        {what} Syndra last saw {anchor.records} record{anchor.records === 1 ? "" : "s"} ending{" "}
-        <Mono>{anchor.head.slice(0, 12)}</Mono>, anchored{" "}
-        <Relative iso={anchor.anchored_at} />; the target reported {anchor.violation_records ?? 0}{" "}
+        {what} Syndra last saw {anchor.records} {anchor.records === 1 ? "entry" : "entries"}{" "}
+        <Relative iso={anchor.anchored_at} />; {name} reported {anchor.violation_records ?? 0}{" "}
         <Relative iso={anchor.violation_at} />.
       </p>
-      <p className="mt-1 text-[13px] text-faint">
-        The anchor has not moved and will not, so this stays until somebody resolves it. A
-        chain verifies its own contents and cannot notice its own truncation — this is the
-        only thing that can.
+      <p className="mt-1 text-[13.5px] font-semibold text-danger-text">
+        If you do not know why the log changed, do not resolve this — ask the person who runs
+        the Syndra server.
       </p>
+      <p className="mt-1 text-[13px] text-faint">
+        This stays until somebody resolves it. Syndra keeps its own note of how long the log
+        was, and that note is the only thing that can notice entries disappearing.
+      </p>
+      <details className="mt-1 text-[13px] text-faint">
+        <summary className="cursor-pointer">Technical detail</summary>
+        <p className="mt-1">
+          Syndra&rsquo;s note: {anchor.records} {anchor.records === 1 ? "entry" : "entries"}{" "}
+          ending <Mono>{anchor.head.slice(0, 12)}</Mono>, made{" "}
+          <Relative iso={anchor.anchored_at} />. {name} reported{" "}
+          {anchor.violation_records ?? 0}{" "}
+          {anchor.violation_head ? (
+            <>
+              ending <Mono>{anchor.violation_head.slice(0, 12)}</Mono>{" "}
+            </>
+          ) : null}
+          <Relative iso={anchor.violation_at} />.
+        </p>
+      </details>
       <div className="mt-3">
         <Button variant="outline" size="sm" onClick={() => setResolving(true)}>
           Resolve this finding
@@ -852,11 +907,11 @@ function BindingConflictFinding({
         <UserName id={conflict.converged_subject_id} fallback={conflict.converged_subject_id} /> was
         applied to this account, and Syndra records it as belonging to{" "}
         <UserName id={conflict.bound_subject_id} fallback={conflict.bound_subject_id} />. The change
-        landed on the target — what could not be recorded is whose account it is.
+        reached {targetLabel(target)} — what could not be recorded is whose account it is.
       </p>
       <p className="mt-1 text-[13px] text-faint">
-        Noticed <Relative iso={conflict.detected_at} />. Nothing else will resolve this: a
-        convergence for either person acts on whichever record it reads.
+        Noticed <Relative iso={conflict.detected_at} />. Nothing else will resolve this: any
+        automatic fix for either person would act on whichever record it happens to read.
       </p>
       <div className="mt-3">
         <Button variant="outline" size="sm" onClick={() => setDeciding(true)}>
@@ -896,6 +951,7 @@ function ResolveConflictDialog({
   const [note, setNote] = useState("");
   const confirmation = useTypedConfirmation(conflict.username);
   const ready = owner !== "" && note.trim() !== "" && confirmation.armed && !resolve.isPending;
+  const name = targetLabel(target);
 
   return (
     <Modal
@@ -914,8 +970,8 @@ function ResolveConflictDialog({
         <fieldset className="grid gap-2">
           <legend className="mb-1 text-[14px]">The account belongs to</legend>
           {[
-            { id: conflict.bound_subject_id, why: "Syndra's own binding says so." },
-            { id: conflict.converged_subject_id, why: "Their change was applied to it." },
+            { id: conflict.bound_subject_id, why: "Syndra's ownership record says so." },
+            { id: conflict.converged_subject_id, why: "Their account changes were applied to it." },
           ].map((claimant) => (
             <label
               key={claimant.id}
@@ -940,11 +996,11 @@ function ResolveConflictDialog({
 
         <div className="rounded-inner border border-danger-line bg-danger-soft px-4 py-3">
           <p className="text-[13.5px] text-danger-text">
-            The other person stops holding this account in Syndra, immediately and without
-            being told. Their data on the target is untouched — this changes who Syndra says
-            it belongs to, which is what every later revocation, sweep and convergence acts
-            on. A convergence is queued for both of them, because the change that caused
-            this overwrote one person&rsquo;s entitlements with the other&rsquo;s.
+            The other person stops holding this account in Syndra, at once and without being
+            told. Their data on {name} is untouched — this changes who Syndra says it belongs
+            to, which is what every later action on it goes by. Account fixes for both people
+            are recorded as changes waiting to be sent, because the change that caused this
+            gave one person the other&rsquo;s settings.
           </p>
         </div>
 
@@ -970,11 +1026,13 @@ function ResolveConflictDialog({
         />
         {resolve.error && (
           <p className="text-[13.5px] text-danger-text">
-            {resolve.error instanceof Error ? resolve.error.message : "That could not be applied."}
+            {resolve.error instanceof Error
+              ? resolve.error.message
+              : "That did not go through. Nothing was changed."}
           </p>
         )}
       </div>
-      <ModalFooter note="A convergence is queued for both people. The account keeps what the change that caused this wrote to it until that drains.">
+      <ModalFooter note="Fixes for both people wait in Pending changes. Until they are sent, the account keeps the settings the wrong change gave it.">
         <Button
           variant="dangerConfirm"
           disabled={!ready}
@@ -1022,14 +1080,15 @@ function ResolveFindingDialog({
       <ModalHeader
         titleId="resolve-finding-title"
         title="Resolve this finding"
-        lede={`Syndra will adopt the log ${targetLabel(target)} is reporting now as the new baseline.`}
+        lede={`Syndra will accept the log as ${targetLabel(target)} reports it now, and compare against that from here on.`}
       />
       <div className="grid gap-4 px-6">
         <div className="rounded-inner border border-danger-line bg-danger-soft px-4 py-3">
           <p className="text-[13.5px] text-danger-text">
             The records that went missing stay missing, and Syndra stops being able to tell
-            you they did. Do this when you know why the log changed — a rebuilt add-on, a
-            replaced volume — and not to clear a warning.
+            you they did. Do this when you know why the log changed — a rebuilt Syndra server,
+            a replaced volume — and not to clear a warning. If you do not know, ask the person
+            who runs the Syndra server first.
           </p>
         </div>
         <div>
@@ -1042,24 +1101,25 @@ function ResolveFindingDialog({
           />
           <FieldHint>
             Kept with the resolution. &ldquo;We replaced the volume&rdquo; and &ldquo;we do
-            not know&rdquo; leave the anchor in the same state and are completely different
-            facts.
+            not know&rdquo; look the same to Syndra and are completely different facts.
           </FieldHint>
         </div>
         <ConfirmByTyping
           expected={target}
           value={confirmation.typed}
           onChange={confirmation.setTyped}
-          noun="target"
+          noun="system name"
           disabled={resolve.isPending}
         />
         {resolve.error && (
           <p className="text-[13.5px] text-danger-text">
-            {resolve.error instanceof Error ? resolve.error.message : "That could not be applied."}
+            {resolve.error instanceof Error
+              ? resolve.error.message
+              : "That did not go through. Nothing was changed."}
           </p>
         )}
       </div>
-      <ModalFooter note="The anchor moves to the reported head and starts comparing again from there.">
+      <ModalFooter note="Syndra takes the log as it is now and compares against that from here on.">
         <Button
           variant="dangerConfirm"
           disabled={!ready}
@@ -1070,7 +1130,7 @@ function ResolveFindingDialog({
             )
           }
         >
-          {resolve.isPending ? "Resolving…" : "Adopt this log as the baseline"}
+          {resolve.isPending ? "Resolving…" : "Accept this log and start over"}
         </Button>
         <Button variant="ghost" onClick={onClose} disabled={resolve.isPending}>
           Cancel
@@ -1132,16 +1192,16 @@ function MappingCensus({ target }: { target: string }) {
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <p className="text-[14.5px]">
             {mappings.isLoading ? (
-              <span className="text-faint">Reading what reaches this target…</span>
+              <span className="text-faint">Reading which roles are mapped to {targetLabel(target)}…</span>
             ) : rows.length === 0 ? (
               <>
-                <strong className="font-semibold">No role reaches {targetLabel(target)}</strong>,
-                so no role grants anything on it.
+                <strong className="font-semibold">No role is mapped to {targetLabel(target)}</strong>,
+                so no role gives anything on it.
               </>
             ) : (
               <>
                 <strong className="font-semibold">
-                  {rows.length === 1 ? "One role mapping reaches" : `${rows.length} role mappings reach`}{" "}
+                  {rows.length === 1 ? "One role is mapped to" : `${rows.length} roles are mapped to`}{" "}
                   {targetLabel(target)}.
                 </strong>{" "}
                 {/* M6 states how many people hold those roles here. The number
@@ -1155,9 +1215,8 @@ function MappingCensus({ target }: { target: string }) {
             )}
           </p>
           <p className="max-w-[78ch] text-[13.5px] leading-[1.55] text-muted">
-            Editing one moves access for everybody holding that role, so the mappings and
-            their published versions live on their own screen — a fact with that reach has
-            no room to breathe in a table row.
+            Editing one changes access for everybody holding that role. Mappings and their
+            published versions have their own screen.
           </p>
         </div>
         <ButtonLink href={`/system/targets/${target}/mappings`} size="sm" className="shrink-0">
@@ -1196,13 +1255,14 @@ function Inventory({ target }: { target: string }) {
     truncated: inventory.data?.truncated,
   };
   const tooOldToAdopt = !inventory.data || blocksIrreversibleAction(read);
+  const name = targetLabel(target);
 
   return (
     <Card>
       <CardHeader
         title="Not created by Syndra"
         count={inventory.data?.unmanaged?.length}
-        note="Reported, never triaged. These are not drift."
+        note={`Accounts on ${name} that Syndra did not make — root, service accounts, anything made by hand. Syndra leaves them alone unless you assign one to a person.`}
       />
       <div className="px-5 pb-2">
         <ReadFreshness
@@ -1220,8 +1280,8 @@ function Inventory({ target }: { target: string }) {
         errorTitle="The account list could not be read"
         empty={
           <EmptyState
-            title="Nothing unmanaged"
-            guidance="Every account on this target belongs to somebody Syndra provisioned."
+            title="Nothing outside Syndra"
+            guidance={`Every account on ${name} was created by Syndra.`}
           />
         }
       >
@@ -1253,13 +1313,13 @@ function Inventory({ target }: { target: string }) {
                     }
                   />
                 ) : result?.username === account.username ? (
-                  <AdoptionOutcome result={result.result} onDismiss={() => setResult(null)} />
+                  <AdoptionOutcome result={result.result} name={name} onDismiss={() => setResult(null)} />
                 ) : null
               }
             >
               <span className="font-mono text-[13.5px]">{account.username}</span>
               {account.uid !== undefined && (
-                <span className="text-[13px] text-faint">uid {account.uid}</span>
+                <span className="text-[13px] text-faint">id {account.uid}</span>
               )}
               <span className="flex-1" />
               {account.self ? (
@@ -1270,18 +1330,18 @@ function Inventory({ target }: { target: string }) {
                 // Syndra reaches this target with. The add-on refuses both; this
                 // says so before anybody meets the refusal.
                 <span className="text-[13px] text-faint">
-                  Syndra&rsquo;s own account on this target — not adoptable
+                  Syndra&rsquo;s own account on {name} — cannot be assigned to anyone
                 </span>
               ) : tooOldToAdopt ? (
                 // The reason as text, never a tooltip. A disabled control whose
                 // reason lives in a `title` is a control nobody can find out
                 // about on a keyboard or a phone.
                 <span className="text-[13px] text-faint">
-                  Adoption needs a current read of this list
+                  Refresh the list above first — it is too old to act on
                 </span>
               ) : (
                 <Button variant="outline" size="sm" onClick={() => setAdopting(account.username)}>
-                  Adopt
+                  Assign to a person
                 </Button>
               )}
             </CardRow>
@@ -1343,21 +1403,17 @@ function AdoptPanel({
         gives the data back.
       </p>
       <p className="text-[13.5px] text-faint">
-        Syndra writes nothing to the account itself. At the next convergence it adds whatever
-        that person&rsquo;s roles entitle them to, on top of what is already there.
+        Syndra changes nothing in the account now. The next time it brings accounts in line,
+        it adds whatever the person&rsquo;s roles give them, on top of what is already there.
       </p>
       <div>
-        <FieldLabel htmlFor={fieldId}>Adopt it for</FieldLabel>
-        <Input
-          id={fieldId}
-          placeholder="Subject id"
-          value={subjectId}
-          onChange={(e) => setSubjectId(e.target.value)}
-        />
+        <FieldLabel htmlFor={fieldId}>Person</FieldLabel>
+        <Input id={fieldId} value={subjectId} onChange={(e) => setSubjectId(e.target.value)} />
         {/* The hint is outside the label on purpose: inside it, every control's
             accessible name becomes its title plus a paragraph. */}
         <FieldHint>
-          The Syndra subject id of the person this account belongs to.
+          Their Syndra ID — the long code at the end of the address when you open their page
+          under People.
         </FieldHint>
       </div>
       <ConfirmByTyping
@@ -1379,7 +1435,7 @@ function AdoptPanel({
           isPending={pending}
           disabled={!subjectId || !confirm.armed || pending}
         >
-          {pending ? "Adopting…" : `Adopt ${username} for this person`}
+          {pending ? "Assigning…" : `Assign ${username} to this person`}
         </Button>
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
@@ -1387,7 +1443,9 @@ function AdoptPanel({
       </div>
       {Boolean(error) && (
         <p className="text-[13.5px] text-danger-text">
-          {error instanceof Error ? error.message : "That could not be applied."}
+          {error instanceof Error
+            ? error.message
+            : "That did not go through. Nothing was changed."}
         </p>
       )}
     </form>
@@ -1401,7 +1459,15 @@ function AdoptPanel({
  * recorded here, and the operator must look before trying again. Rendering it as
  * success is what this screen used to do.
  */
-function AdoptionOutcome({ result, onDismiss }: { result: AdoptionResult; onDismiss: () => void }) {
+function AdoptionOutcome({
+  result,
+  name,
+  onDismiss,
+}: {
+  result: AdoptionResult;
+  name: string;
+  onDismiss: () => void;
+}) {
   const unconfirmed = result.status !== "adopted";
   return (
     <div
@@ -1410,11 +1476,14 @@ function AdoptionOutcome({ result, onDismiss }: { result: AdoptionResult; onDism
         unconfirmed ? "text-warn-text" : "text-muted"
       }`}
     >
-      <span>{result.detail ?? (unconfirmed ? "The target did not confirm it." : "Adopted.")}</span>
+      <span>
+        {result.detail ??
+          (unconfirmed ? `${name} did not confirm it. Nothing was recorded.` : "Assigned.")}
+      </span>
       {result.warning && <span className="text-warn-text">{result.warning}</span>}
       <span className="flex-1" />
       <Button variant="ghost" size="sm" onClick={onDismiss}>
-        Dismiss
+        Dismiss this result
       </Button>
     </div>
   );
@@ -1429,25 +1498,32 @@ function AdoptionOutcome({ result, onDismiss }: { result: AdoptionResult; onDism
  * credential rotation. The reason is mandatory because the person who reads it is
  * not the person who set it.
  */
+/** The lifecycle states in the words the buttons use, so a note and a button never disagree. */
+function stateLabel(state: string): string {
+  if (state === "draining") return "finishing up";
+  if (state === "read_only") return "read-only";
+  return state;
+}
+
 function LifecycleControl({ target, health }: { target: string; health: TargetHealth | undefined }) {
   const set = useSetLifecycle(target);
   const [reason, setReason] = useState("");
   const current = health?.lifecycle ?? "active";
+  const name = targetLabel(target);
 
   const STATES: Array<{ id: string; label: string; blurb: string }> = [
     { id: "active", label: "Active", blurb: "Accept changes normally." },
     {
       id: "draining",
-      label: "Draining",
-      blurb:
-        "Refuse new changes, let the ones already sent finish. This is what makes a credential rotation safe.",
+      label: "Finishing up",
+      blurb: `Refuse new changes, let the ones already sent finish. This is the safe state for changing the ${name} API key.`,
     },
-    { id: "read_only", label: "Read-only", blurb: "Refuse every change immediately." },
+    { id: "read_only", label: "Read-only", blurb: "Refuse every change at once." },
   ];
 
   return (
     <Card>
-      <CardHeader title="Maintenance" note={`Currently ${current.replace("_", " ")}`} />
+      <CardHeader title="Maintenance" note={`Currently ${stateLabel(current)}`} />
       <div className="grid gap-3 px-5 pb-5">
         <dl className="grid gap-1.5 text-[13.5px]">
           {STATES.map((state) => (
@@ -1464,12 +1540,10 @@ function LifecycleControl({ target, health }: { target: string; health: TargetHe
           ))}
         </dl>
         <p className="text-[13px] text-faint">Reads keep working in all three.</p>
-        <Input
-          aria-label="Reason"
-          placeholder="Why — this is what the next operator reads"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        />
+        <Input aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+        <p className="-mt-1.5 text-[13px] text-faint">
+          Why — this is what the next person to open this page reads.
+        </p>
         <div className="flex flex-wrap gap-2">
           {STATES.map((state) => (
             <Button
@@ -1504,20 +1578,17 @@ function LifecycleControl({ target, health }: { target: string; health: TargetHe
         {set.error && (
           <div className="grid gap-2 rounded-inner border border-warn-line bg-warn-soft px-4 py-3">
             <p className="text-[13.5px] font-semibold text-warn-text">
-              That did not take. {targetLabel(target)} did not answer the request.
+              That did not go through. {name} did not answer the request.
             </p>
             <p className="text-[13.5px] text-muted">
               <span className="font-semibold text-ink">
-                The state is still {current.replace("_", " ")}
+                The state is still {stateLabel(current)}
               </span>{" "}
               — the one above, unchanged. Nothing about the attempt is recorded as a state,
               and this message is its only trace.
             </p>
             <p className="text-[13px] text-faint">
-              This attempt does not count towards Syndra backing off. Telling a target to stop
-              is deliberately exempt, because a refusal here means{" "}
-              <em>we could not tell it</em> and never <em>it stopped answering</em> — and the
-              reading above has to keep meaning only the second thing.
+              This does not affect the &ldquo;Paused after failures&rdquo; reading above.
             </p>
             {reason && (
               <p className="text-[13px] text-muted">

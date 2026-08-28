@@ -27,12 +27,15 @@ import { useTokenSimulator } from "@/lib/queries/useApplications";
 export function TokenPreview({
   applicationId,
   applicationName,
-  projectId,
+  projectName,
   behindEdits = false,
 }: {
   applicationId: string;
   applicationName: string;
+  /** Accepted for the route's sake; the preview names the project, never its id. */
   projectId: string;
+  /** Shown in place of the id; the id alone means nothing to a reader. */
+  projectName?: string;
   /**
    * True while the editor beside this holds unsaved changes.
    *
@@ -66,6 +69,7 @@ export function TokenPreview({
   const keys = Object.keys(claims).sort();
 
   const previewName = users.data?.find((u) => u.id === userId)?.name ?? "";
+  const project = projectName || "this project";
   const payload = JSON.stringify(claims, null, 2);
   const emptyKeys = keys.filter((key) => isEmptyValue(claims[key]));
 
@@ -75,7 +79,7 @@ export function TokenPreview({
         <h2 className="type-card-title">Preview token</h2>
         <p className="mt-1 text-[14px] leading-[1.5] text-faint">
           {behindEdits
-            ? `The shape ${applicationName} receives now — not the one being edited.`
+            ? `The format ${applicationName} receives now — not the one being edited.`
             : `Exactly what ${applicationName} would receive right now.`}
         </p>
       </div>
@@ -103,20 +107,20 @@ export function TokenPreview({
           isPending={simulation.isFetching}
           onClick={() => simulation.refetch()}
         >
-          Run
+          Run preview
         </Button>
       </div>
 
       {behindEdits && (
         <div className="mx-[22px] mb-3 border-t border-dashed border-warn-line pt-3 text-[13.5px] leading-[1.5] text-warn-text">
-          Behind your edits. Save the shape to preview it — this is what the app receives until
-          then.
+          You have unsaved changes in Token format. This preview shows the saved format; save to
+          preview your changes.
         </div>
       )}
 
       <div className="flex-1 px-[22px] pb-5">
         {simulation.isLoading ? (
-          <RowSkeleton rows={3} avatar={false} label="Running the simulation" />
+          <RowSkeleton rows={3} avatar={false} label="Running the preview" />
         ) : simulation.error ? (
           <ErrorState
             title="Couldn't run the preview."
@@ -133,16 +137,15 @@ export function TokenPreview({
               so the sentence rules that out in its own words. */}
           {!simulation.isFetching && simulation.data && keys.length === 0 && (
             <p className="mb-3 max-w-[60ch] text-[14px] leading-[1.5] text-muted">
-              {applicationName} would issue a token with no roles for{" "}
-              {previewName || "this person"}. That is not an error: nothing they hold is in
-              this app&rsquo;s project.
+              {previewName || "This person"} would sign in to {applicationName} with no roles.
+              That is not an error: none of the roles they hold belong to {project}.
             </p>
           )}
           <div className="rounded-inner border border-line bg-surface-0 px-[18px] py-4 font-mono text-[13px] leading-[1.85]">
-            <div className="text-ink/35">{"// effective_role_keys → claims"}</div>
+            <div className="text-ink/35">{`// what ${applicationName} receives`}</div>
             {keys.length === 0 && (
               <div className="text-ink/70">
-                {"{}"} <span className="text-ink/35">{"// this project grants them nothing"}</span>
+                {"{}"} <span className="text-ink/35">{`// they hold no role in ${project}`}</span>
               </div>
             )}
             {keys.map((key, index) => (
@@ -162,16 +165,16 @@ export function TokenPreview({
               <div className="mt-3 text-ink/35">
                 {emptyKeys.map((key) => (
                   <div key={key}>
-                    {`// ${key} is empty — they hold no role in ${projectId}.`}
+                    {`// ${key} is empty — they hold no role in ${project}.`}
                   </div>
                 ))}
               </div>
             )}
             {keys.length > 0 && owned.size < keys.length && (
               <div className="text-ink/35">
-                {`// Keys this app doesn't read are carried because a token is issued`}
+                {`// Claims for other apps on ${project} are included too — every app on a`}
                 <br />
-                {`// per project, not per app. Each app reads its own key.`}
+                {`// project receives the same token and reads its own claim.`}
               </div>
             )}
           </div>
@@ -180,7 +183,7 @@ export function TokenPreview({
 
         {showRaw && simulation.data && (
           <div className="mt-3 rounded-inner border border-line bg-surface-0 px-[18px] py-3.5">
-            <div className="mb-1.5 type-label">Raw roles</div>
+            <div className="mb-1.5 type-label">Roles before formatting</div>
             <div className="flex flex-wrap gap-1.5">
               {(simulation.data.raw_roles ?? []).length === 0 ? (
                 <span className="text-[13.5px] text-faint">None in this project.</span>
@@ -225,10 +228,10 @@ export function TokenPreview({
               setTimeout(() => setCopied(false), 900);
             }}
           >
-            {copied ? (canCopy ? "Copied" : "Selected") : canCopy ? "Copy payload" : "Select payload"}
+            {copied ? (canCopy ? "Copied" : "Selected") : canCopy ? "Copy preview" : "Select preview"}
           </Button>
           <Button size="sm" onClick={() => setShowRaw((value) => !value)}>
-            {showRaw ? "Hide raw roles" : "Show raw roles"}
+            {showRaw ? "Hide the role list" : "Show the role list"}
           </Button>
         </div>
       </div>

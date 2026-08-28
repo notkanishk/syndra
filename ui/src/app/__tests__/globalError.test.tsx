@@ -24,7 +24,7 @@ describe("the last-resort boundary", () => {
   it("says nothing was changed, because nothing had started", () => {
     renderBoundary();
 
-    expect(screen.getByRole("heading").textContent).toMatch(/stopped before it could draw/);
+    expect(screen.getByRole("heading").textContent).toMatch(/could not start/);
     expect(screen.getByText(/Nothing was\s+changed/)).toBeTruthy();
   });
 
@@ -35,7 +35,7 @@ describe("the last-resort boundary", () => {
 
   it("omits the id line rather than printing an empty one", () => {
     renderBoundary();
-    expect(screen.queryByText(/Error id/)).toBeNull();
+    expect(screen.queryByText(/Reference/)).toBeNull();
   });
 
   // A full document load, not a soft navigation: if what threw was the layout
@@ -43,7 +43,7 @@ describe("the last-resort boundary", () => {
   it("offers a way out that does not re-enter the broken tree", () => {
     renderBoundary();
 
-    const out = screen.getByRole("link", { name: "Reload from the start" });
+    const out = screen.getByRole("link", { name: "Go to the home page" });
     expect(out.getAttribute("href")).toBe("/");
     // Not a Next Link: a plain anchor is what forces the document load.
     expect(out.tagName).toBe("A");
@@ -51,7 +51,7 @@ describe("the last-resort boundary", () => {
 
   it("clears the touch floor on the only control it has", () => {
     renderBoundary();
-    expect(screen.getByRole("link", { name: "Reload from the start" }).style.minHeight).toBe(
+    expect(screen.getByRole("link", { name: "Go to the home page" }).style.minHeight).toBe(
       "44px",
     );
   });

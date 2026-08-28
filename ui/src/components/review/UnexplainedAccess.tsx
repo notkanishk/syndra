@@ -153,12 +153,13 @@ export function UnexplainedAccess() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Unexplained access"
+        lede="Access that exists in Zitadel (the service everyone signs in through) that nothing in Syndra gave. Until you resolve a row, the person keeps that access."
         meta={
           items.length > 0
             ? `${items.length} ${items.length === 1 ? "item" : "items"}${
                 filtered ? " matching these filters" : ""
               }${oldest ? ` · oldest found ${formatRelative(oldest)}` : ""}`
-            : "Access that exists in the identity provider which Syndra cannot explain."
+            : undefined
         }
         actions={
           <>
@@ -181,8 +182,8 @@ export function UnexplainedAccess() {
               onChange={setSource}
               options={[
                 { value: "", label: "Any source" },
-                { value: "webhook", label: "Caught live" },
-                { value: "reconciliation_sweep", label: "Found by sweep" },
+                { value: "webhook", label: "Caught as it happened" },
+                { value: "reconciliation_sweep", label: "Found by the scheduled check" },
               ]}
             />
             <Button
@@ -196,15 +197,15 @@ export function UnexplainedAccess() {
                   // acted on what it found.
                   setScanOutcome({
                     kind: "no_change",
-                    message: "Compared again",
-                    detail: "The queue below is what the comparison found just now.",
+                    message: "Checked again",
+                    detail: "The list below is what the check found just now.",
                   });
                 } catch (error) {
                   setScanOutcome(outcomeFromError(error));
                 }
               }}
             >
-              Compare again
+              Check Zitadel again
             </Button>
           </>
         }
@@ -223,12 +224,12 @@ export function UnexplainedAccess() {
               value: "triage" as const,
               label: (
                 <>
-                  Triage queue{" "}
+                  Needs a decision{" "}
                   <span className="font-semibold text-danger-text">{items.length}</span>
                 </>
               ),
             },
-            { value: "reconciliation" as const, label: "Reconciliation" },
+            { value: "reconciliation" as const, label: "Side by side" },
           ]}
         />
         {tab === "triage" && items.length > 0 && (
@@ -241,6 +242,10 @@ export function UnexplainedAccess() {
 
       {tab === "triage" ? (
         <>
+          <p className="max-w-[92ch] text-[13.5px] leading-[1.5] text-muted">
+            Adopt — keep it and let Syndra track it. Revoke — end it. Owned elsewhere — another
+            system manages it; Syndra stops asking.
+          </p>
           <Card>
             <CardColumns>
               {selecting && <span className="w-11 shrink-0 desktop:w-[18px]" />}
@@ -266,7 +271,7 @@ export function UnexplainedAccess() {
               error={drift.error}
               isEmpty={items.length === 0}
               onRetry={() => drift.refetch()}
-              errorTitle="Couldn't load the triage queue."
+              errorTitle="Couldn't load unexplained access."
               skeleton={<RowSkeleton rows={5} label="Loading unexplained access" />}
               empty={
                 // "Nothing here" and "nothing here that matches" are different
@@ -275,7 +280,7 @@ export function UnexplainedAccess() {
                 filtered ? (
                   <EmptyState
                     title="Nothing unexplained matches those filters."
-                    guidance="There may still be items under another project, or from the other detection source."
+                    guidance="There may still be items under another project, or found the other way."
                     action={{
                       label: "Clear filters",
                       onClick: () => {
@@ -287,7 +292,7 @@ export function UnexplainedAccess() {
                 ) : (
                   <EmptyState
                     title="Everything is explained."
-                    guidance="Every grant in the identity provider traces back to something Syndra did."
+                    guidance="Every piece of access in Zitadel traces back to something Syndra did."
                     resolved
                   />
                 )
@@ -354,10 +359,10 @@ export function UnexplainedAccess() {
             <span className="text-[13px] text-faint">Revoking is one row at a time.</span>
             {/* Both open a plan; neither resolves anything on tap. */}
             <SelectionAction onClick={() => setBulkOp("adopt")}>
-              Review adopting these
+              Preview adopting these
             </SelectionAction>
             <SelectionAction onClick={() => setBulkOp("external")}>
-              Review marking these owned elsewhere
+              Preview marking these owned elsewhere
             </SelectionAction>
           </SelectionBar>
 
@@ -375,11 +380,11 @@ export function UnexplainedAccess() {
             </span>
             <p className="max-w-[92ch] text-[14px] leading-[1.55] text-muted">
               <strong className="font-semibold text-ink">
-                Bulk adopt and bulk mark-as-external exist; bulk revoke does not.
+                You can adopt several rows at once, or mark several as owned elsewhere. Revoking
+                is always one row at a time.
               </strong>{" "}
-              Adopting is reversible bookkeeping. Revoking removes real access from real machines,
-              and reading twelve consequences at once is not something anyone actually does — so
-              revoke stays one row, one dialog, one decision.
+              Revoking ends real access on real machines, and each revocation deserves its own
+              look.
             </p>
           </div>
         </>
@@ -438,7 +443,7 @@ function TriageRow({
       >
         {selecting && (
           <RowCheckbox
-            label="Select this unexplained grant"
+            label={`Select the ${role} row`}
             {...selection.checkboxProps(item.id)}
           />
         )}
@@ -504,7 +509,7 @@ function TriageRow({
             onClick={onSelectSimilar}
             className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted underline-offset-2 motion-tint hover:text-accent-text hover:underline desktop:min-h-6"
           >
-            Select similar
+            Select similar rows
           </button>
         </div>
       </div>
@@ -523,7 +528,7 @@ function RiskPill({ item }: { item: DriftTriageItem }) {
   // it. On one that has none, "not in catalogue" would be true of every row and
   // informative about none.
   if (item.role_catalogue_applies && !item.role_in_catalogue) {
-    return <Badge className="mt-1">Role not in catalogue</Badge>;
+    return <Badge className="mt-1">Role unknown to Syndra</Badge>;
   }
   if ((item.role_group ?? "").toLowerCase().includes("safety")) {
     return (
@@ -549,27 +554,26 @@ function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
       <div>
         <div className="type-label mb-1.5">If you revoke</div>
         <p className="text-[13.5px] leading-[1.55] text-muted">
-          The grant is removed in the identity provider. Whoever holds it loses this role at the
-          next cache compile — usually within a minute.
+          The access is removed from Zitadel. The person loses this role within about a minute.
         </p>
       </div>
       <div>
         <div className="type-label mb-1.5">If you adopt</div>
         <p className="text-[13.5px] leading-[1.55] text-muted">
-          Syndra records the grant, you become the granter of record, and it stops appearing here.
-          Nothing changes upstream.
+          Syndra records this as access you gave, and the row stops appearing here. The
+          person&rsquo;s access does not change.
         </p>
       </div>
       <div>
         <div className="type-label mb-1.5">Evidence</div>
         <dl className="type-mono grid grid-cols-[84px_1fr] gap-x-3 gap-y-1 text-[12.5px] text-muted">
-          <dt className="text-faint">grant_id</dt>
+          <dt className="text-faint">Zitadel id</dt>
           <dd className="truncate">{item.zitadel_grant_id || "—"}</dd>
-          <dt className="text-faint">created</dt>
+          <dt className="text-faint">Created</dt>
           <dd>{item.upstream_created_at ? formatLongDate(item.upstream_created_at) : "unknown"}</dd>
-          <dt className="text-faint">actor</dt>
+          <dt className="text-faint">Made by</dt>
           <dd className="truncate">{item.upstream_actor || "unknown"}</dd>
-          <dt className="text-faint">last_seen</dt>
+          <dt className="text-faint">Last seen</dt>
           <dd>{item.last_seen_at ? formatLongDate(item.last_seen_at) : "—"}</dd>
         </dl>
       </div>
@@ -601,19 +605,19 @@ function ResolutionDialog({
   const copy = {
     attribute: {
       title: "Adopt this access in Syndra?",
-      lede: "Syndra takes ownership of it. The access stays exactly as it is; from now on Syndra explains it and manages its lifecycle.",
+      lede: "Syndra takes ownership of it. The access stays exactly as it is; from now on Syndra explains it and can extend, expire or revoke it like any other access.",
       confirm: "Adopt in Syndra",
       variant: "accent" as const,
     },
     external: {
       title: "Is this owned by another system?",
-      lede: "The access stays and stops being flagged. Use this when a known integration legitimately manages it — not to quiet something you haven't identified.",
-      confirm: "Owned elsewhere",
+      lede: "The access stays and stops being listed here. Use this when a known system legitimately manages it, not to quiet something you have not identified.",
+      confirm: "Mark as owned elsewhere",
       variant: "accent" as const,
     },
     revoke: {
-      title: "Take this access away?",
-      lede: "This removes the grant in the identity provider AND records the decision in Syndra, so the sweep won't surface it again.",
+      title: "Revoke this access?",
+      lede: "This revokes the access in Zitadel (ends it there) and records your decision in Syndra, so the next check will not list it again.",
       confirm: "Revoke access",
       variant: "dangerConfirm" as const,
     },
@@ -635,12 +639,12 @@ function ResolutionDialog({
               </strong>
               <br />
               <span className="text-[14px] text-muted">
-                Access stops at the next cache compile — usually within a minute.
+                Access stops within about a minute.
               </span>
             </div>
             <p className="text-[13.5px] leading-[1.55] text-muted">
-              If an integration re-creates the grant upstream, it reappears here tomorrow with a
-              new evidence line.
+              If another system adds this access back, it shows up here again after the next
+              check.
             </p>
             {item.other_items_for_user > 0 && (
               <p className="text-[13.5px] leading-[1.55] text-muted">
@@ -649,8 +653,8 @@ function ResolutionDialog({
                   {item.other_items_for_user} more{" "}
                   {item.other_items_for_user === 1 ? "item" : "items"}
                 </strong>{" "}
-                in this queue. One stray grant is a mistake; several is an offboarding that never
-                ran.
+                in this list. One stray role is a mistake; several is a leaver whose access was
+                never ended.
               </p>
             )}
           </>
@@ -680,9 +684,9 @@ function ResolutionDialog({
                       kind: "queued",
                       message: "Revocation recorded",
                       detail:
-                        "It reaches the target on the next drain. Until then the access is still there.",
+                        "Waiting to be sent to Zitadel; revocations send themselves within about a minute. Until then the person still has the access.",
                     }
-                  : { kind: "applied", message: "Resolved" },
+                  : { kind: "applied", message: "Resolved. It will not be listed again." },
               );
             } catch (error) {
               setOutcome(outcomeFromError(error));
@@ -738,7 +742,7 @@ function WhoMadeIt({ item }: { item: DriftTriageItem }) {
     );
   }
   if (origin.isLoading) {
-    return <p className="mt-1 text-[12.5px] text-faint">Asking the identity provider…</p>;
+    return <p className="mt-1 text-[12.5px] text-faint">Asking Zitadel…</p>;
   }
 
   const data = origin.data;
@@ -749,7 +753,7 @@ function WhoMadeIt({ item }: { item: DriftTriageItem }) {
   if (origin.isError || !data || !data.readable) {
     return (
       <p className="mt-1 text-[12.5px] text-warn-text">
-        Could not ask the identity provider, so this is not a finding that nobody made it.
+        Zitadel could not be asked. Somebody may still have made this; it is just not known who.
         {data?.detail ? ` ${data.detail}` : ""}
       </p>
     );
@@ -757,14 +761,14 @@ function WhoMadeIt({ item }: { item: DriftTriageItem }) {
   if (!data.recorded) {
     return (
       <p className="mt-1 text-[12.5px] text-faint">
-        The identity provider&rsquo;s event log does not go back to when this was made.
+        Zitadel&rsquo;s event log does not go back to when this was made.
       </p>
     );
   }
   if (!data.attributed) {
     return (
       <p className="mt-1 text-[12.5px] text-faint">
-        The identity provider recorded the change and not who made it.
+        Zitadel recorded the change and not who made it.
       </p>
     );
   }
@@ -803,42 +807,42 @@ function explainDrift(item: DriftTriageItem): string {
       const who = p.granted_by ? ` by ${p.granted_by}` : "";
       const why = p.reason ? ` — ${p.reason}` : "";
       const held = p.last_observed_at
-        ? ` The identity provider was still holding it on ${formatLongDate(p.last_observed_at)}.`
+        ? ` Zitadel was still holding it on ${formatLongDate(p.last_observed_at)}.`
         : "";
       const removedBy = item.upstream_actor ? ` Removed by ${item.upstream_actor}.` : "";
       return `Granted${who}${why}. Syndra applied it on ${formatLongDate(
         p.applied_at,
-      )} and the identity provider accepted it.${held} It is not there now, so somebody removed it.${removedBy}`;
+      )} and Zitadel accepted it.${held} It is not there now, so somebody removed it.${removedBy}`;
     }
     if (p?.last_observed_at) {
       const who = p.granted_by ? ` by ${p.granted_by}` : "";
       const when = p.granted_at ? ` on ${formatLongDate(p.granted_at)}` : "";
       const why = p.reason ? ` — ${p.reason}` : "";
       const removedBy = item.upstream_actor ? ` Removed by ${item.upstream_actor}.` : "";
-      return `Granted${who}${when}${why}. The identity provider was still holding it on ${formatLongDate(
+      return `Granted${who}${when}${why}. Zitadel was still holding it on ${formatLongDate(
         p.last_observed_at,
       )} and does not now, so somebody removed it there.${removedBy}`;
     }
     if (p?.granted_at) {
       return `Granted${p.granted_by ? ` by ${p.granted_by}` : ""} on ${formatLongDate(
         p.granted_at,
-      )}. The identity provider has never been seen holding it, so this is most likely a write that never landed.`;
+      )}. Zitadel has never been seen holding it, so the change most likely never went through. Check Pending changes.`;
     }
-    return "Syndra expects this grant but the identity provider doesn't have it, and there is no record of it ever being held there.";
+    return "Syndra expects this access but Zitadel does not have it, and there is no record of it ever being held there.";
   }
   const when = item.upstream_created_at ? ` on ${formatLongDate(item.upstream_created_at)}` : "";
   const who = item.upstream_actor ? ` by ${item.upstream_actor}` : "";
   if (when || who) {
-    return `Created in the identity provider${when}${who}. No direct grant, no bundle and no rule produces it.`;
+    return `Created in Zitadel${when}${who}. Nothing in Syndra — no direct access, no bundle, no automatic rule — gives it.`;
   }
-  return "Found in the identity provider by the reconciliation sweep, which compares grant lists and can't see who made the change. No direct grant, no bundle and no rule produces it.";
+  return "Found by the scheduled check, which compares lists and cannot see who made the change. Nothing in Syndra — no direct access, no bundle, no automatic rule — gives it.";
 }
 
 function describeHolder(item: DriftTriageItem): string {
   if (item.user_is_service_account) return "Service account";
   const status = (item.user_status ?? "").toLowerCase();
   if (status === "departed" || status === "alumni" || status === "inactive") return "No longer active";
-  return item.user_status || "Member";
+  return "Member";
 }
 
 /**
@@ -860,14 +864,14 @@ function Reconciliation() {
     <div className="flex flex-col gap-[18px]">
       {data?.truncated && (
         <div className="warn-note px-5 py-3.5 text-[14px] text-warn-text">
-          This comparison stopped early at the safety cap, so it is incomplete. Treat an empty
+          This comparison stopped early because the list was too long, so it is incomplete. Treat an empty
           section as &ldquo;nothing found so far&rdquo;, not as &ldquo;nothing exists&rdquo;.
         </div>
       )}
 
       <Card>
         <CardHeader
-          title="Syndra ↔ identity provider"
+          title="Syndra compared with Zitadel"
           note={
             data?.generated_at ? (
               <>
@@ -881,21 +885,21 @@ function Reconciliation() {
           error={diff.error}
           isEmpty={empty}
           onRetry={() => diff.refetch()}
-          errorTitle="Couldn't compare with the identity provider."
+          errorTitle="Couldn't compare with Zitadel."
           skeleton={<RowSkeleton rows={4} avatar={false} label="Comparing" />}
           empty={
             <EmptyState
               title="The two sides agree."
-              guidance="Every grant Syndra expects exists upstream, and nothing upstream is unaccounted for."
+              guidance="Everything Syndra gave exists in Zitadel, and nothing there is unaccounted for."
               resolved
             />
           }
         >
           <DiffSection
-            label="Extra upstream"
-            hint="These exist in the identity provider with nothing in Syndra explaining them."
+            label="In Zitadel but not in Syndra"
+            hint="These exist in Zitadel with nothing in Syndra explaining them."
             tone="danger"
-            action={{ label: "See in triage →", href: "?" }}
+            action={{ label: "Open Needs a decision", href: "?" }}
             rows={(data?.only_in_zitadel ?? []).map((row) => ({
               userId: row.user_id,
               projectId: row.project_id,
@@ -903,10 +907,10 @@ function Reconciliation() {
             }))}
           />
           <DiffSection
-            label="Missing downstream"
-            hint="Syndra expects these and the identity provider doesn't have them — a write that never landed."
+            label="In Syndra but not in Zitadel"
+            hint="Syndra gave these and Zitadel does not have them — the change never went through."
             tone="warn"
-            action={{ label: "Re-push →", href: "/governance/pending" }}
+            action={{ label: "Open Pending changes", href: "/governance/pending" }}
             rows={(data?.only_in_syndra ?? []).map((row) => ({
               userId: row.user_id,
               projectId: row.project_id,
@@ -915,12 +919,13 @@ function Reconciliation() {
           />
           <DiffSection
             label="Different on both sides"
-            hint="Same person and project, different role sets."
+            hint="Same person and project, different roles. Each row says which side has them."
             tone="warn"
             rows={(data?.drift ?? []).map((row) => ({
               userId: row.user_id,
               projectId: row.project_id,
               roles: row.only_in_zitadel.length > 0 ? row.only_in_zitadel : row.only_in_syndra,
+              side: row.only_in_zitadel.length > 0 ? "only in Zitadel" : "only in Syndra",
             }))}
           />
 
@@ -951,7 +956,7 @@ function DiffSection({
   hint: string;
   tone: "danger" | "warn";
   action?: { label: string; href: string };
-  rows: Array<{ userId: string; projectId: string; roles: string[] }>;
+  rows: Array<{ userId: string; projectId: string; roles: string[]; side?: string }>;
 }) {
   if (rows.length === 0) return null;
   return (
@@ -985,6 +990,7 @@ function DiffSection({
             <ProjectName id={row.projectId} />
           </span>
           <span className="min-w-0 flex-1 truncate">
+            {row.side && <span className="mr-2 text-[13px] text-faint">{row.side}:</span>}
             {row.roles.map((key) => (
               <Mono key={key} className="mr-2 text-muted">
                 {key}
@@ -1025,7 +1031,7 @@ function BulkResolutionDialog({
   const applyExternal = useBulkMarkExternalDrift();
 
   const adoptBody = { ids, source: "external_backfill" as const };
-  const externalBody = { ids, reason: "Marked in bulk from triage" };
+  const externalBody = { ids, reason: "Marked as owned elsewhere in bulk from Unexplained access" };
 
   return (
     <RehearsalDialog

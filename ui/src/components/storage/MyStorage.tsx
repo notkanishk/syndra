@@ -1,6 +1,7 @@
 "use client";
 
 import { formatBytes } from "@/lib/format";
+import Link from "next/link";
 import { useState } from "react";
 
 import { Mono } from "@/components/ui/Badge";
@@ -46,7 +47,7 @@ export function MyStorage() {
     <>
       <PageHeader
         title="Network storage"
-        meta="Shared storage for makerspace work. Your access follows the roles you hold."
+        lede="Shared storage for makerspace work. This page shows which shares you can open and how to connect; your access follows the roles you hold."
       />
       <ListStates
         isLoading={targets.isLoading}
@@ -56,8 +57,8 @@ export function MyStorage() {
         errorTitle="Your storage access could not be read"
         empty={
           <EmptyState
-            title="No storage systems"
-            guidance="This deployment does not run any shared storage."
+            title="No shared storage"
+            guidance="This makerspace has no shared storage connected to Syndra."
           />
         }
       >
@@ -82,7 +83,7 @@ export function MyStorage() {
  * `reached` of -1 is the inert form: nothing lit, nothing promised.
  */
 function Spine({ reached }: { reached: -1 | 0 | 1 | 2 }) {
-  const steps = ["A role reaches it", "Your account is created", "You set a password"];
+  const steps = ["A role gives you access", "Your account is created", "You set a password"];
   return (
     <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px]">
       {steps.map((step, i) => (
@@ -116,8 +117,12 @@ function TargetPanel({ view }: { view: MyTargetView }) {
         <div className="grid gap-3 px-5 pb-5">
           <Spine reached={-1} />
           <p className="text-[14px] text-muted">
-            None of your roles reaches {label}, so there is no account to set up. Access
-            here comes with a role — ask for the role and this follows on its own.
+            None of your roles gives you access to {label}, so there is no account to set up.
+            Access comes with a role — ask for one from{" "}
+            <Link href="/requests" className="text-accent-text underline">
+              Requests
+            </Link>{" "}
+            and this follows on its own.
           </p>
           {held.length > 0 && <Withheld items={held} />}
         </div>
@@ -142,11 +147,11 @@ function TargetPanel({ view }: { view: MyTargetView }) {
           <p className="text-[13px] text-faint">
             {view.recorded_at ? (
               <>
-                Recorded <Relative iso={view.recorded_at} /> · waits on a person, not a
-                timer
+                Recorded <Relative iso={view.recorded_at} /> · waiting for makerspace staff
+                to send it, not on a timer
               </>
             ) : (
-              <>Waits on a person, not a timer</>
+              <>Waiting for makerspace staff to send it, not on a timer</>
             )}
           </p>
           {/* Design C3, and the one place the pause sits INSIDE the state card
@@ -174,7 +179,7 @@ function TargetPanel({ view }: { view: MyTargetView }) {
 
         {view.resources && Object.keys(view.resources).length > 0 && (
           <div className="grid gap-1.5">
-            <p className="text-[13px] text-label">You can reach</p>
+            <p className="text-[13px] text-label">Your shares</p>
             <ul className="grid gap-1 text-[14px] text-muted">
               {Object.entries(view.resources).map(([field, values]) => (
                 <li key={field}>{values.join(", ")}</li>
@@ -228,9 +233,9 @@ function NotYetUsable({ view }: { view: MyTargetView }) {
           </>
         ) : (
           <>
-            <strong className="font-semibold">Your account is on hold.</strong> It exists, and
-            the system is not accepting it right now. Setting a password will not change that;
-            an operator has to.
+            <strong className="font-semibold">Your account is paused.</strong> It exists, and{" "}
+            {targetLabel(view.target)} is not accepting it right now. Setting a password will
+            not change that; makerspace staff have to.
           </>
         )}
       </p>
@@ -336,8 +341,8 @@ function CredentialForm({ view }: { view: MyTargetView }) {
             Your old storage password no longer works
           </p>
           <p className="mt-1 text-[13.5px] text-muted">
-            You set one before this system changed, and it went with the system it was
-            for. Set a new one below — nothing else about your access changed.
+            {targetLabel(view.target)} was rebuilt since you set it, and passwords did not
+            carry over. Set a new one below — nothing else about your access changed.
           </p>
         </div>
       )}
@@ -370,7 +375,7 @@ function CredentialForm({ view }: { view: MyTargetView }) {
           {set.isPending
             ? "Setting…"
             : paused
-              ? "Save it for when changes resume"
+              ? "Save it for when changes start again"
               : "Set password"}
         </Button>
       </div>
@@ -384,7 +389,9 @@ function CredentialForm({ view }: { view: MyTargetView }) {
       )}
       {set.error && (
         <p className="text-[13.5px] text-danger-text">
-          {set.error instanceof Error ? set.error.message : "That could not be applied."}
+          {set.error instanceof Error
+            ? set.error.message
+            : "That did not go through. Nothing was changed."}
         </p>
       )}
     </form>
@@ -442,7 +449,7 @@ function ConnectionInstructions({ view }: { view: MyTargetView }) {
         // Named as excluded, never silently dropped.
         <p className="text-[13px] text-warn-text">
           {held.map((item) => item.value).join(", ")}{" "}
-          {held.length === 1 ? "is" : "are"} not in this list on purpose — see the hold above.
+          {held.length === 1 ? "is" : "are"} not in this list on purpose — see the notice above.
         </p>
       )}
     </div>
@@ -501,7 +508,7 @@ function Paused({
     <div className="grid gap-2 rounded-inner border border-warn-line bg-warn-soft px-4 py-3">
       <p className="text-[14px] font-semibold text-warn-text">
         {creating
-          ? "Right now it is waiting on us, not on a queue"
+          ? "Right now it is waiting on makerspace staff, not on your account"
           : draining
             ? "Changes to this account are paused for a few minutes"
             : `Changes to this account are paused while we work on ${label}`}
@@ -514,7 +521,7 @@ function Paused({
             <span className="font-semibold text-ink">deliberately stopped</span> making
             changes to accounts on it — which includes creating yours. The server itself is
             working normally; this is a pause we chose, not a fault. Your account will be
-            created as soon as changes resume. It is first in line and nothing has been lost
+            created as soon as changes start again. It is first in line and nothing has been lost
             or missed.
           </>
         ) : (
@@ -547,14 +554,14 @@ function Paused({
           <span className="font-semibold text-ink">
             If you need {creating ? "it" : "the new password to work"} today
           </span>
-          , ask whoever runs the makerspace — they can see this pause and how long they expect
-          it to last, and we would rather you asked a person than waited on a page.
+          , ask makerspace staff — they can see this pause and how long they expect it to
+          last, and we would rather you asked a person than waited on a page.
         </p>
       )}
 
       {!creating && (
         <p className="text-[13px] text-faint">
-          You can set a new password now and we will apply it as soon as changes resume. Your
+          You can set a new password now and we will apply it as soon as changes start again. Your
           current password keeps working until then, and you do not need to come back and do
           it again. Nothing else on this page is affected — your access, your share and your
           folder are unchanged.

@@ -49,11 +49,12 @@ export function AddMappingDialog({ target, onClose }: { target: string; onClose:
   );
 
   const ready = Boolean(projectId && roleKey && field.trim() && value.trim());
+  const name = targetLabel(target);
 
   return (
     <RehearsalDialog
-      title={`Add a mapping to ${targetLabel(target)}`}
-      lede={`Everybody holding the role gets an account on ${targetLabel(target)} with this value, at the next convergence. Nothing is written until the plan below is applied.`}
+      title={`Add a mapping to ${name}`}
+      lede={`Everybody holding the role gets an account on ${name} in this group the next time Syndra brings accounts in line. Nothing changes until you preview the list below and apply it.`}
       noun={["person", "people"]}
       ready={ready}
       definitionLabel="Save mapping"
@@ -78,6 +79,9 @@ export function AddMappingDialog({ target, onClose }: { target: string; onClose:
               ))}
             </Select>
           </label>
+          <span className="-mt-1.5 text-[13px] text-faint">
+            The machine or area the role belongs to — the Laser Cutter, the Studio.
+          </span>
 
           <label className="grid gap-1.5 text-[14px]">
             <span>Role</span>
@@ -98,23 +102,22 @@ export function AddMappingDialog({ target, onClose }: { target: string; onClose:
             // Not an empty dropdown. A project with no roles cannot confer
             // anything, and saying so is the answer to why the list is empty.
             <span className="-mt-1.5 text-[13px] text-faint">
-              This project has no roles, so nothing in it can be granted — and there is
-              nothing here for a mapping to hang off.
+              This project has no roles yet, so there is nothing to map.
             </span>
           )}
 
           <div className="grid gap-1.5 text-[14px]">
             <label className="grid gap-1.5">
-              <span>Field</span>
+              <span>Account setting</span>
               <Input value={field} onChange={(e) => setField(e.target.value)} />
             </label>
             {/* Outside the label, deliberately. Inside it the hint becomes part
                 of the control's accessible name, so a screen reader announces
                 the whole paragraph where the field's name should be. */}
             <span className="text-[13px] text-faint">
-              What the role sets on {targetLabel(target)}. Checked against the add-on&rsquo;s
-              own schema — a field it does not declare is refused here, with the ones it does
-              named.
+              Which account setting this role controls on {name} — normally{" "}
+              <span className="type-mono">group</span>. Anything {name} does not support is
+              refused, and the supported ones are named.
             </span>
           </div>
 
@@ -124,8 +127,8 @@ export function AddMappingDialog({ target, onClose }: { target: string; onClose:
               <Input value={value} onChange={(e) => setValue(e.target.value)} />
             </label>
             <span className="text-[13px] text-faint">
-              Checked against {targetLabel(target)} before anything is planned — a value it
-              does not recognise is refused here rather than at apply.
+              Checked against {name} before you go further — a group that does not exist
+              there is refused now, not later.
             </span>
           </div>
         </div>
@@ -134,13 +137,12 @@ export function AddMappingDialog({ target, onClose }: { target: string; onClose:
         rehearsed?.value_checked === false ? (
           <>
             <span className="font-semibold">
-              {targetLabel(target)} could not be asked whether{" "}
-              <span className="type-mono">{value}</span> exists,
+              {name} could not be reached, so <span className="type-mono">{value}</span> was
+              not checked.
             </span>{" "}
-            so the value was not checked and the mapping is allowed through — refusing it
-            while a target is unreachable would make an outage look like your mistake. If the
-            value turns out not to exist, the convergence that applies this mapping fails,
-            and it arrives as a queued change that will not settle.
+            The mapping is allowed through so an outage does not look like your mistake. If{" "}
+            <span className="type-mono">{value}</span> does not exist, the change fails when it
+            reaches {name} and waits in Pending changes until somebody fixes it.
           </>
         ) : undefined
       }
@@ -202,15 +204,12 @@ export function AddMappingDialog({ target, onClose }: { target: string; onClose:
 export function RefusedFields({ target }: { target: string }) {
   return (
     <div className="grid gap-1.5 rounded-inner border border-line px-4 py-3">
-      <p className="text-[13.5px] font-semibold">
-        Two fields Syndra will not map, and it is not an omission
-      </p>
+      <p className="text-[13.5px] font-semibold">Two settings you cannot map, on purpose</p>
       <p className="text-[13.5px] leading-[1.55] text-muted">
         <span className="type-mono">enabled</span> and{" "}
-        <span className="type-mono">smb_enabled</span> follow from whether somebody is
-        entitled to {targetLabel(target)} at all. Mapping them would let a role switch an
-        account off while the entitlement that created it still stood, so the API refuses
-        them.
+        <span className="type-mono">smb_enabled</span> follow from whether the person has any
+        access to {targetLabel(target)} at all. If a role could set them, one role could switch
+        an account off while another still gave that person access — so Syndra refuses them.
       </p>
     </div>
   );

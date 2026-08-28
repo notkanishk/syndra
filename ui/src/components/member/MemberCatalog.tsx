@@ -51,7 +51,7 @@ export function MemberCatalog({ heldByProject }: { heldByProject: Map<string, Se
       <div className="flex items-baseline gap-3">
         <h2 className="type-section-title">What else is here</h2>
         <span className="text-[13.5px] text-faint">
-          Everything the makerspace offers. Ask for anything you need — a lab manager decides.
+          Everything the makerspace offers. Ask for anything you need — makerspace staff decide.
         </span>
       </div>
 

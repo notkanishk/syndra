@@ -66,32 +66,32 @@ function Health() {
   return (
     <div className="grid gap-3 tablet:grid-cols-2 desktop:grid-cols-4">
       <HealthCell
-        label="Identity provider"
+        label="Zitadel"
         value={reachable ? "Reachable" : "Unreachable"}
         tone={reachable ? "calm" : "danger"}
         href="/system"
-        note={reachable ? "Writes are landing" : "Writes stay queued — nothing is lost"}
+        note={reachable ? "Changes are getting through" : "Changes wait here — nothing is lost"}
       />
       <HealthCell
-        label="Queued writes"
+        label="Waiting to be sent"
         value={String(queued)}
         tone={queued > 0 ? "accent" : "calm"}
         href="/operations"
-        note={queued > 0 ? "Waiting for a drain" : "Nothing buffered"}
+        note={queued > 0 ? "Waiting for you to send them" : "Nothing waiting"}
       />
       <HealthCell
         label="Unexplained access"
         value={String(unexplained)}
         tone={unexplained > 0 ? "danger" : "calm"}
         href="/governance/drift"
-        note={unexplained > 0 ? "Out-of-band changes to triage" : "Everything is accounted for"}
+        note={unexplained > 0 ? "Access Syndra did not give — review it" : "Everything is accounted for"}
       />
       <HealthCell
         label="Expiring inside the window"
         value={String(summary.data?.expiring_grants.length ?? 0)}
         tone={(summary.data?.expiring_grants.length ?? 0) > 0 ? "warn" : "calm"}
         href="/review/expiring-access"
-        note="Direct grants with a deadline"
+        note="Direct access with an end date"
       />
     </div>
   );

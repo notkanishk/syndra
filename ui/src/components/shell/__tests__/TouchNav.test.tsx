@@ -31,7 +31,7 @@ function renderNav() {
 }
 
 function tabLabels(): string[] {
-  return within(screen.getByRole("navigation", { name: "Primary" }))
+  return within(screen.getByRole("navigation", { name: "Main navigation" }))
     .getAllByRole("link")
     .map((link) => link.textContent?.replace(/\d+$/, "").replace(/Needs attention/, "").trim() ?? "");
 }
@@ -113,7 +113,7 @@ describe("Advanced does not get a tab bar", () => {
     renderNav();
     fireEvent.click(screen.getByRole("button", { name: /Go to|Home/ }));
 
-    const sheet = screen.getByRole("dialog", { name: "Go to" });
+    const sheet = screen.getByRole("dialog", { name: "Go to a page" });
     expect(within(sheet).getByRole("link", { name: /Bundles/ })).toBeTruthy();
 
     fireEvent.click(within(sheet).getByRole("link", { name: /Bundles/ }));
@@ -124,10 +124,10 @@ describe("Advanced does not get a tab bar", () => {
     pathname.value = "/governance/drift";
     renderNav();
     fireEvent.click(screen.getByRole("button", { name: /Review/ }));
-    const sheet = screen.getByRole("dialog", { name: "Go to" });
+    const sheet = screen.getByRole("dialog", { name: "Go to a page" });
 
     // Review is where we are, so its children are listed.
-    expect(within(sheet).getByRole("link", { name: /Withdrawn access/ })).toBeTruthy();
+    expect(within(sheet).getByRole("link", { name: /Unfinished revocations/ })).toBeTruthy();
     // Automation is not, so it is one row rather than five.
     expect(within(sheet).queryByRole("link", { name: /Change history/ })).toBeNull();
   });
@@ -137,7 +137,7 @@ describe("Advanced does not get a tab bar", () => {
     indicators.data = { drift: 0 } as Indicators;
     renderNav();
     fireEvent.click(screen.getByRole("button", { name: /Review/ }));
-    const sheet = screen.getByRole("dialog", { name: "Go to" });
+    const sheet = screen.getByRole("dialog", { name: "Go to a page" });
     const row = within(sheet).getByRole("link", { name: /Unexplained access/ });
     expect(within(row).getByText("0"), "a hollow zero, not a vanished row").toBeTruthy();
   });
@@ -177,7 +177,7 @@ describe("the sheet is one level of history", () => {
 
   function openSheet() {
     fireEvent.click(screen.getByRole("button", { name: /Go to|Home/ }));
-    return screen.getByRole("dialog", { name: "Go to" });
+    return screen.getByRole("dialog", { name: "Go to a page" });
   }
 
   it("pushes one entry however often the indicator poll re-renders", () => {
@@ -200,7 +200,7 @@ describe("the sheet is one level of history", () => {
     renderPolling();
     const sheet = openSheet();
 
-    fireEvent.click(within(sheet).getByRole("button", { name: "Dismiss" }));
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close this sheet" }));
 
     expect(back, "closing directly would leave a dead entry behind").toHaveBeenCalledTimes(1);
   });
@@ -250,13 +250,13 @@ describe("the sheet's grabber", () => {
 
   function openSheet() {
     fireEvent.click(screen.getByRole("button", { name: /Go to|Home/ }));
-    return screen.getByRole("dialog", { name: "Go to" });
+    return screen.getByRole("dialog", { name: "Go to a page" });
   }
 
   it("does not take the focus the sheet gives on open", () => {
     renderNav();
     const sheet = openSheet();
-    const grabber = within(sheet).getByRole("button", { name: "Dismiss" });
+    const grabber = within(sheet).getByRole("button", { name: "Close this sheet" });
 
     expect(grabber.tabIndex).toBe(-1);
     expect(document.activeElement).not.toBe(grabber);
@@ -266,7 +266,7 @@ describe("the sheet's grabber", () => {
     renderNav();
     const sheet = openSheet();
 
-    expect(within(sheet).getByRole("button", { name: "Dismiss" }).className).toContain("h-11");
+    expect(within(sheet).getByRole("button", { name: "Close this sheet" }).className).toContain("h-11");
   });
 
   // Modal's grabber answers to the same word. Two sheets whose handles have
@@ -276,6 +276,6 @@ describe("the sheet's grabber", () => {
     const sheet = openSheet();
 
     expect(within(sheet).queryByRole("button", { name: "Close" })).toBeNull();
-    expect(within(sheet).getByRole("button", { name: "Dismiss" })).toBeTruthy();
+    expect(within(sheet).getByRole("button", { name: "Close this sheet" })).toBeTruthy();
   });
 });

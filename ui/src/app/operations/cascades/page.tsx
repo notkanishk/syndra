@@ -8,15 +8,16 @@ import { Badge, Mono } from "@/components/ui/Badge";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProjectName, UserName } from "@/components/names";
+import { shortId } from "@/lib/audit-vocabulary";
 import { useCascadeGroups, type CascadeGroupRow } from "@/lib/queries/useConfirmationMode";
 import { Relative } from "@/components/ui/Time";
 
 /**
  * S4 · Automation › Change history.
  *
- * One entry per cascade, newest first — not one row per write. Each entry is a
- * sentence about consequence rather than a diff, and "8 applied", "2 waiting",
- * "no writes" is the whole vocabulary. Cascades whose writes have not landed
+ * One entry per cascade, newest first — not one row per change. Each entry is a
+ * sentence about consequence rather than a diff, and "8 sent", "2 waiting",
+ * "no changes" is the whole vocabulary. Cascades whose changes have not landed
  * are shown too: a half-applied cascade is the thing that creates unexplained
  * access, and hiding it until it settles is how it goes unnoticed.
  */
@@ -32,19 +33,23 @@ export default function ChangeHistoryPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Change history"
-        meta={
+        lede={
           asked
-            ? "One cascade, followed from the audit entry that caused it."
-            : "What a bundle or rule change actually did downstream — one entry per cascade, newest first."
+            ? "One edit, followed from the audit entry that recorded it, and what it changed for people."
+            : "What each edit to a bundle (a set of roles given together) or an automatic rule then changed for people in Zitadel (the service everyone signs in through), newest first. Audit records who did what; this page records what those edits set off."
         }
         actions={
           asked ? (
             <Link href="/operations/cascades" className="text-[13.5px] font-semibold text-accent-text">
-              Show all changes
+              Show every edit
             </Link>
           ) : undefined
         }
       />
+
+      <p className="text-[13px] text-faint">
+        Handles: c_ is one edit&rsquo;s set of changes, R_ an automatic rule, b_ a bundle.
+      </p>
 
       <ListStates
         isLoading={cascades.isLoading}
@@ -60,17 +65,17 @@ export default function ChangeHistoryPage() {
         empty={
           <Card>
             {asked ? (
-              // Not "nothing has cascaded yet" — something did, or there would be no audit row
-              // pointing here. The writes it produced are no longer in the queue, and saying that
+              // Not "no edits yet" — something did happen, or there would be no audit row
+              // pointing here. The changes it produced are no longer in the queue, and saying that
               // plainly is the difference between a page that looks broken and one that answers.
               <EmptyState
-                title="That cascade is no longer in the queue."
-                guidance="The writes it produced have been carried out and cleared. The audit entry that brought you here is still the record of what happened."
+                title="That edit has finished."
+                guidance="Every change it produced has gone through and been cleared. The audit entry that brought you here is still the record of what happened."
               />
             ) : (
               <EmptyState
-                title="Nothing has cascaded yet."
-                guidance="Editing a bundle or a rule writes its downstream effect here."
+                title="No edits yet."
+                guidance="When a bundle or an automatic rule is edited, what it changed for people appears here."
               />
             )}
           </Card>
@@ -124,7 +129,8 @@ function CascadeCard({ group, newest }: { group: CascadeGroupRow; newest: boolea
         )}
         {first?.source_ref && (
           <span className="text-faint">
-            from <Mono>{shortId(first.source_ref, sourcePrefix(group.source))}</Mono>
+            from {group.source === "rule" ? "rule" : "bundle"}{" "}
+            <Mono>{shortId(first.source_ref, group.source === "rule" ? "R" : "b")}</Mono>
           </span>
         )}
       </div>
@@ -133,9 +139,9 @@ function CascadeCard({ group, newest }: { group: CascadeGroupRow; newest: boolea
 }
 
 /**
- * Three words, and only three. Amber when writes are still waiting, accent when
- * everything landed, neutral when a cascade produced no writes at all — which
- * is a real and reassuring outcome, not an empty state.
+ * Three words, and only three. Amber when changes are still waiting, accent
+ * when everything went through, neutral when an edit produced no changes at
+ * all — which is a real and reassuring outcome, not an empty state.
  */
 function StatePill({ group }: { group: CascadeGroupRow }) {
   if (group.failed > 0) {
@@ -146,16 +152,12 @@ function StatePill({ group }: { group: CascadeGroupRow }) {
     );
   }
   if (group.waiting > 0) {
-    return (
-      <Badge tone="warn">
-        {group.waiting} {group.waiting === 1 ? "write" : "writes"} waiting
-      </Badge>
-    );
+    return <Badge tone="warn">{group.waiting} waiting to be sent</Badge>;
   }
   if (group.applied > 0) {
-    return <Badge tone="accent">{group.applied} applied</Badge>;
+    return <Badge tone="accent">{group.applied} sent</Badge>;
   }
-  return <Badge>no writes</Badge>;
+  return <Badge>no changes</Badge>;
 }
 
 function titleFor(group: CascadeGroupRow): string {
@@ -163,32 +165,23 @@ function titleFor(group: CascadeGroupRow): string {
     group.user_ids.length === 1
       ? "one person"
       : `${group.user_ids.length} people`;
-  if (group.source === "rule") return `A rule fired for ${people}`;
-  if (group.source === "bundle") return `A bundle change reached ${people}`;
-  return `A lifecycle change reached ${people}`;
+  if (group.source === "rule") return `An automatic rule applied to ${people}`;
+  if (group.source === "bundle") return `A bundle edit reached ${people}`;
+  return `Somebody's status changed, affecting ${people}`;
 }
 
 function consequenceFor(group: CascadeGroupRow): string {
   const total = group.applied + group.waiting + group.failed;
-  const writes = `${total} ${total === 1 ? "write" : "writes"}`;
+  const needed = total === 1 ? "1 change was needed" : `${total} changes were needed`;
 
   if (group.failed > 0) {
-    return `${writes} were produced; ${group.failed} failed on the way to the identity provider and ${group.applied} landed. The failed ones stay in the queue.`;
+    return `${needed}. ${group.applied} went through and ${group.failed} failed on the way to Zitadel. The failed ones are still waiting under Pending changes.`;
   }
   if (group.waiting > 0 && group.applied > 0) {
-    return `${writes} were produced. ${group.applied} landed and ${group.waiting} are still queued — this cascade is half-applied, which is exactly the state that produces access nobody can explain later.`;
+    return `${needed}. ${group.applied} went through and ${group.waiting} are still waiting to be sent. Until they all go through, some people have access that does not match the edit — send them from Pending changes.`;
   }
   if (group.waiting > 0) {
-    return `${writes} were produced and none have reached the identity provider yet. Nothing has changed for anybody so far.`;
+    return `${needed}, and none have reached Zitadel yet. Nothing has changed for anybody so far. Send them from Pending changes.`;
   }
-  return `${writes} were produced and all of them landed. Nothing further is pending from this change.`;
-}
-
-function sourcePrefix(source: string): string {
-  return source === "rule" ? "R" : "b";
-}
-
-function shortId(id: string | undefined, prefix: string): string {
-  if (!id) return "—";
-  return `${prefix}_${id.replace(/-/g, "").slice(0, 4)}`;
+  return `${needed}, and all of them went through. Nothing further is waiting from this edit.`;
 }

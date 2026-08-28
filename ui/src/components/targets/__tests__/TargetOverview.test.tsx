@@ -117,10 +117,10 @@ describe("one target's page", () => {
     };
     renderTarget();
 
-    expect(screen.getByText(/not adoptable/i)).toBeTruthy();
+    expect(screen.getByText(/cannot be assigned to anyone/i)).toBeTruthy();
     // The ordinary account beside it is still adoptable, so the guard is not
     // just hiding the whole list.
-    expect(screen.getAllByRole("button", { name: /adopt/i }).length).toBe(1);
+    expect(screen.getAllByRole("button", { name: /assign to a person/i }).length).toBe(1);
   });
 
   it("warns when the key's expiry is unrecorded, and stays quiet when there is none", () => {
@@ -178,7 +178,7 @@ describe("one target's page", () => {
     };
     renderTarget();
 
-    expect(screen.getByText(/point at an account that is no longer/i)).toBeTruthy();
+    expect(screen.getByText(/recorded as owning an account that is no longer/i)).toBeTruthy();
     expect(screen.getByText("alice")).toBeTruthy();
     expect(screen.getByText(/yours to decide/i)).toBeTruthy();
   });
@@ -199,15 +199,15 @@ describe("one target's page", () => {
     };
     renderTarget();
 
-    fireEvent.click(screen.getByText("Forget this binding"));
+    fireEvent.click(screen.getByText("Stop tracking this account"));
     expect(state.released).toEqual([]);
     expect(screen.getByText(/Nothing is deleted/i)).toBeTruthy();
 
-    fireEvent.click(screen.getByText("Forget it"));
+    fireEvent.click(screen.getByText("Stop tracking alice"));
     expect(state.released).toEqual(["s1"]);
     // The row it acted on must stop saying it is unresolved. The reconcile
     // result is a mutation's answer, so nothing refetches it.
-    expect(screen.getByText(/Released\. Nothing on the target was changed/i)).toBeTruthy();
+    expect(screen.getByText(/Stopped tracking it\. Nothing on TrueNAS was changed/i)).toBeTruthy();
     expect(screen.queryByText(/yours to decide/i)).toBeNull();
   });
 
@@ -230,12 +230,12 @@ describe("one target's page", () => {
     };
     renderTarget();
 
-    fireEvent.click(screen.getByText("Forget this binding"));
-    fireEvent.click(screen.getByText("Forget it"));
+    fireEvent.click(screen.getByText("Stop tracking this account"));
+    fireEvent.click(screen.getByText("Stop tracking alice"));
 
-    expect(screen.queryByText(/Released\. Nothing on the target was changed/i)).toBeNull();
+    expect(screen.queryByText(/Stopped tracking it\. Nothing on TrueNAS was changed/i)).toBeNull();
     expect(screen.getByText(/did not confirm the release/i)).toBeTruthy();
-    expect(screen.getByText("Forget it")).toBeTruthy();
+    expect(screen.getByText("Stop tracking alice")).toBeTruthy();
   });
 
   // The split case. The add-on let go, Syndra's copy did not, and the answer
@@ -257,12 +257,12 @@ describe("one target's page", () => {
     };
     renderTarget();
 
-    fireEvent.click(screen.getByText("Forget this binding"));
-    fireEvent.click(screen.getByText("Forget it"));
+    fireEvent.click(screen.getByText("Stop tracking this account"));
+    fireEvent.click(screen.getByText("Stop tracking alice"));
 
-    expect(screen.queryByText(/Released\. Nothing on the target was changed/i)).toBeNull();
+    expect(screen.queryByText(/Stopped tracking it\. Nothing on TrueNAS was changed/i)).toBeNull();
     expect(screen.getByText(/Press release again to repair it/i)).toBeTruthy();
-    expect(screen.getByText("Forget it")).toBeTruthy();
+    expect(screen.getByText("Stop tracking alice")).toBeTruthy();
   });
 
   it("says a transport secret that stopped loading is a fault on THIS host", () => {
@@ -281,7 +281,7 @@ describe("one target's page", () => {
     state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
     renderTarget();
 
-    expect(screen.getByText(/Transport secret unreadable/i)).toBeTruthy();
+    expect(screen.getByText(/Connection key missing/i)).toBeTruthy();
     // The path, because "no secret configured" and "the mount is missing" are
     // the same symptom and different fixes.
     expect(screen.getByText(/run\/secrets\/addon\/truenas\.key/)).toBeTruthy();
@@ -293,7 +293,7 @@ describe("one target's page", () => {
     state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
     renderTarget();
 
-    expect(screen.queryByText(/Transport secret unreadable/i)).toBeNull();
+    expect(screen.queryByText(/Connection key missing/i)).toBeNull();
   });
 
   it("renders the operations the manifest offers, and nothing else", () => {
@@ -345,7 +345,7 @@ describe("one target's page", () => {
     state.roster = [{ ...summary([]), callable: false }];
     renderTarget();
 
-    expect(screen.getByText(/has not published a capability manifest/i)).toBeInTheDocument();
+    expect(screen.getByText(/has not answered yet/i)).toBeInTheDocument();
   });
 
   it("distinguishes a maintenance window from an outage", () => {
@@ -359,7 +359,7 @@ describe("one target's page", () => {
 
     // A state somebody chose reads as a decision, not a fault: the reason they
     // gave is on screen, and nothing on the page calls it an outage.
-    expect(screen.getByText(/Set deliberately: rotating the API key/)).toBeInTheDocument();
+    expect(screen.getByText(/Set on purpose: rotating the API key/)).toBeInTheDocument();
     expect(screen.queryByText(/did not answer/i)).toBeNull();
     expect(screen.queryByText(/Not answering/)).toBeNull();
   });
@@ -369,7 +369,7 @@ describe("one target's page", () => {
     state.health = { reachable: true, lifecycle: "active", circuit_open: true };
     renderTarget();
 
-    expect(screen.getByText(/refusing its own calls/i)).toBeInTheDocument();
+    expect(screen.getByText(/stopped trying to reach TrueNAS/i)).toBeInTheDocument();
   });
 
   it("labels a stale inventory with its age and refuses adoption from it", () => {
@@ -388,8 +388,8 @@ describe("one target's page", () => {
     // operator can act on — and the affordance is GONE rather than disabled
     // with a tooltip, with its reason as text beside the row.
     expect(screen.getByText(/last state seen/i)).toBeInTheDocument();
-    expect(screen.getByText(/Adoption needs a current read/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Adopt" })).toBeNull();
+    expect(screen.getByText(/Refresh the list above first/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Assign to a person" })).toBeNull();
   });
 
   // 1.19 — the inventory is reported, never triaged. Nothing on this page calls
@@ -406,7 +406,7 @@ describe("one target's page", () => {
     renderTarget();
 
     expect(screen.getByText("root")).toBeInTheDocument();
-    expect(screen.getByText(/These are not drift/i)).toBeInTheDocument();
+    expect(screen.getByText(/Syndra leaves them alone/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /revoke/i })).toBeNull();
   });
 });
@@ -447,21 +447,21 @@ describe("resolving a log finding", () => {
 
     expect(screen.getByText(/stops being able to tell you they did/i)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /adopt this log as the baseline/i }),
+      screen.getByRole("button", { name: /accept this log and start over/i }),
     ).toBeDisabled();
   });
 
   it("takes rung 3 and an explanation, and cites the head that was read", () => {
     renderWithFinding();
     fireEvent.click(screen.getByRole("button", { name: /resolve this finding/i }));
-    const confirm = screen.getByRole("button", { name: /adopt this log as the baseline/i });
+    const confirm = screen.getByRole("button", { name: /accept this log and start over/i });
 
     fireEvent.change(screen.getByLabelText(/Why the log changed/), {
       target: { value: "we replaced the volume" },
     });
     expect(confirm).toBeDisabled();
 
-    fireEvent.change(screen.getByRole("textbox", { name: /type the target/i }), {
+    fireEvent.change(screen.getByRole("textbox", { name: /type the system name/i }), {
       target: { value: "truenas" },
     });
     expect(confirm).toBeEnabled();
@@ -513,7 +513,7 @@ describe("a disputed account", () => {
     expect(screen.getByText(/Two records disagree about who owns/)).toBeInTheDocument();
     // The change LANDED. Every other terminal failure on that path means it did
     // not, and an operator reading this as "it did not go through" retries it.
-    expect(screen.getByText(/The change landed on the target/)).toBeInTheDocument();
+    expect(screen.getByText(/The change reached TrueNAS/)).toBeInTheDocument();
   });
 
   it("offers the two claimants and no third, and takes rung 3", () => {
@@ -551,7 +551,7 @@ describe("a disputed account", () => {
     // conflict overwrote one person's entitlements with the other's, so a
     // convergence is queued for both — and until it drains the account still
     // holds what that change wrote.
-    expect(screen.getByText(/queued for both people/)).toBeInTheDocument();
+    expect(screen.getByText(/Fixes for both people wait in Pending changes/)).toBeInTheDocument();
   });
 });
 
@@ -629,7 +629,7 @@ describe("what roles reach here · the census and its handoff", () => {
     renderTarget();
 
     expect(
-      screen.getByText(/Editing one moves access for everybody holding that role/),
+      screen.getByText(/Editing one changes access for everybody holding that role/),
     ).toBeTruthy();
   });
 });
@@ -662,7 +662,7 @@ describe("adopting an account", () => {
     state.health = { reachable: true, lifecycle: "active" };
     state.inventory = twoAccounts;
     renderTarget();
-    fireEvent.click(screen.getAllByRole("button", { name: "Adopt" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Assign to a person" })[0]);
   }
 
   // It used to render after the whole list: click Adopt on the first account
@@ -671,7 +671,7 @@ describe("adopting an account", () => {
   it("opens under the account it is about, not at the foot of the list", () => {
     openAdoptForSai();
 
-    const owner = screen.getByLabelText("Adopt it for").closest("form")!.parentElement!
+    const owner = screen.getByLabelText("Person").closest("form")!.parentElement!
       .parentElement!;
     expect(owner.textContent).toContain("sai");
     expect(owner.textContent, "the form is not attached to another account").not.toContain("kabir");
@@ -682,7 +682,7 @@ describe("adopting an account", () => {
   it("does not dress a grant as a destruction", () => {
     openAdoptForSai();
 
-    const submit = screen.getByRole("button", { name: /Adopt sai for this person/ });
+    const submit = screen.getByRole("button", { name: /Assign sai to this person/ });
     expect(submit.className, "dangerConfirm is reserved for removing access").not.toContain(
       "bg-danger",
     );
@@ -699,11 +699,11 @@ describe("adopting an account", () => {
     openAdoptForSai();
 
     // A visible label, not a placeholder that disappears the moment you type.
-    expect(screen.getByLabelText("Adopt it for")).toBeInTheDocument();
+    expect(screen.getByLabelText("Person")).toBeInTheDocument();
     expect(screen.getByText(/becomes the account of the person named below/)).toBeInTheDocument();
     expect(screen.getByText(/is theirs from that moment/)).toBeInTheDocument();
     // What stays: Syndra writes nothing to the account itself.
-    expect(screen.getByText(/writes nothing to the account itself/)).toBeInTheDocument();
+    expect(screen.getByText(/changes nothing in the account now/)).toBeInTheDocument();
     // And the target is named IN THE SENTENCE, because "its shares" is not a
     // thing an operator can go and check against anything.
     expect(
@@ -714,9 +714,9 @@ describe("adopting an account", () => {
   it("reports the outcome under the account it happened to", () => {
     openAdoptForSai();
 
-    fireEvent.change(screen.getByLabelText("Adopt it for"), { target: { value: "s-99" } });
+    fireEvent.change(screen.getByLabelText("Person"), { target: { value: "s-99" } });
     fireEvent.change(screen.getByLabelText(/Type the account name/), { target: { value: "sai" } });
-    fireEvent.click(screen.getByRole("button", { name: /Adopt sai for this person/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Assign sai to this person/ }));
 
     expect(state.adopted).toEqual([{ username: "sai", subjectId: "s-99" }]);
     const outcome = screen.getByText(/bound to that person/).closest("[role=status]")!;

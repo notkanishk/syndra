@@ -103,8 +103,8 @@ describe("PersonAccess — Zitadel grant id in Advanced (C9a)", () => {
   it("says a missing grant is missing, and points at where that gets triaged", () => {
     state.grants = [];
     renderPerson(true);
-    expect(document.body.textContent).toMatch(/Zitadel grant · none/);
-    expect(document.body.textContent).toMatch(/Reconciliation/);
+    expect(document.body.textContent).toMatch(/Not in Zitadel/);
+    expect(document.body.textContent).toMatch(/Side by side/);
   });
 
   it("distinguishes an unreadable Zitadel from an absent grant", () => {

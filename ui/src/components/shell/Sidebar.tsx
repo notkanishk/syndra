@@ -51,12 +51,15 @@ export default function Sidebar() {
         <SyndraMark />
         <span className="font-display text-[18px] font-semibold tracking-[-0.01em]">Syndra</span>
         <span className="flex-1" />
-        <span className="rounded-pill border border-line-strong px-2 py-0.5 text-[12.5px] text-faint">
+        <span
+          title={`${viewLabel} view`}
+          className="rounded-pill border border-line-strong px-2 py-0.5 text-[12.5px] text-faint"
+        >
           {viewLabel}
         </span>
       </div>
 
-      <nav className="flex flex-col gap-[3px]" aria-label="Primary">
+      <nav className="flex flex-col gap-[3px]" aria-label="Main navigation">
         {entries.map((entry) =>
           entry.kind === "leaf" ? (
             <NavRow

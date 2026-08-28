@@ -32,7 +32,7 @@ function renderRail() {
 }
 
 function railOrder(): string[] {
-  return within(screen.getByRole("navigation", { name: "Primary" }))
+  return within(screen.getByRole("navigation", { name: "Main navigation" }))
     .getAllByRole("link")
     .map((link) => link.textContent?.replace(/\d+$/, "").trim() ?? "");
 }

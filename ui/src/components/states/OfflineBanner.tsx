@@ -35,11 +35,11 @@ export function OfflineBanner() {
         className="mt-[3px] h-2.5 w-2.5 flex-none rounded-pill border border-muted"
       />
       <div>
-        <div className="text-[14.5px] font-semibold">No network.</div>
+        <div className="text-[14.5px] font-semibold">No network connection.</div>
         <p className="mt-1 max-w-[70ch] text-[14px] leading-[1.55] text-muted">
-          What&rsquo;s on screen is what already arrived, and it was true when it arrived.
-          Nothing can be changed until the connection is back — anything you try is refused
-          before it is sent, so nothing lands twice.
+          What you see is the last thing Syndra loaded, and it may be out of date. You cannot
+          make changes until the connection is back. Anything you try is stopped before it is
+          sent, so nothing is sent twice.
         </p>
       </div>
     </div>

@@ -156,11 +156,11 @@ describe("what the target reports", () => {
     };
     renderTarget();
 
-    expect(screen.getByText(/cifs is not running/)).toBeInTheDocument();
-    expect(screen.getByText(/reach nothing while it is stopped/)).toBeInTheDocument();
+    expect(screen.getByText(/File sharing \(SMB\) is not running/)).toBeInTheDocument();
+    expect(screen.getByText(/Nobody can open their shares while it is stopped/)).toBeInTheDocument();
     // Set to start on boot and not running means it stopped by itself, which
     // is a different problem from somebody having turned it off.
-    expect(screen.getByText(/it stopped on its own/)).toBeInTheDocument();
+    expect(screen.getByText(/it stopped by itself/)).toBeInTheDocument();
   });
 
   it("says so plainly when the target reported nothing wrong", () => {

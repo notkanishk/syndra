@@ -42,7 +42,11 @@ export function AcknowledgeCount({
   onChange,
   count,
   noun,
-  /** What actually happens to them, if "changes" is not precise enough. */
+  /**
+   * What actually happens to them, if "changes" is not precise enough. A
+   * phrase reads best: "revokes access for" gives "I understand this revokes
+   * access for 12 people."
+   */
   verb = "changes",
   /** The irreversible part, when it is not the count. Named after the sentence. */
   consequence,
@@ -118,8 +122,8 @@ export function ConfirmByTyping({
   if (short) {
     return (
       <p className="rounded-inner border border-line-strong bg-surface-0 px-4 py-3 text-[14px] leading-[1.55] text-muted">
-        Turn your phone upright to confirm this. It needs the sentence above, the name typed,
-        and the button — and they do not fit beside a keyboard.
+        Turn your phone upright to confirm this. The warning, the name field and the button do
+        not all fit beside a keyboard sideways.
       </p>
     );
   }
@@ -127,7 +131,8 @@ export function ConfirmByTyping({
   return (
     <div className="grid gap-1.5">
       <label htmlFor={id} className="text-[13.5px] text-muted">
-        Type the {noun} <span className="font-mono text-ink">{expected}</span> to confirm
+        Type the {noun} <span className="font-mono text-ink">{expected}</span> to confirm. The
+        button below unlocks when it matches.
       </label>
       <Input
         id={id}

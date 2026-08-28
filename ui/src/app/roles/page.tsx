@@ -65,7 +65,7 @@ export default function RolesPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Roles"
-        meta="across every project"
+        lede="Every role in every project — one named kind of access each. Open a role to see who holds it."
         actions={
           <>
             <Select
@@ -160,13 +160,13 @@ export default function RolesPage() {
                     ? "Every role is referenced by something."
                     : "No roles match those filters."
                 }
-                guidance="Clear a filter, or check the identity provider for roles Syndra didn't create."
+                guidance="Clear a filter, or check Zitadel for roles Syndra didn't create."
                 action={{ label: "Clear filters", onClick: clearFilters }}
               />
             ) : (
               <EmptyState
                 title="No roles yet."
-                guidance="Create one here, or check the identity provider for roles Syndra didn't create."
+                guidance="Create one here, or check Zitadel for roles Syndra didn't create."
                 action={{ label: "Create a role", onClick: () => setCreating(true) }}
               />
             )

@@ -43,21 +43,21 @@ export default function UpstreamGrantsPage() {
 
   return (
     <UpstreamShell
-      title="Grants"
-      lede="The complete grant inventory the identity provider holds, Syndra-caused or not."
+      title="Roles held"
+      lede="Every role Zitadel has given to anyone, whether Syndra gave it or not."
       syndraHref="/governance/drift?tab=reconciliation"
       syndraLabel="See where the two sides disagree"
     >
       {grants.data?.truncated && (
         <div className="warn-note px-5 py-3.5 text-[14px] text-warn-text">
-          This listing stopped at the safety cap, so it is incomplete. Treat an absence here as
-          &ldquo;not loaded&rdquo;, never as &ldquo;does not exist&rdquo;.
+          Zitadel holds more than this page loads at once, so the list is incomplete. If something
+          is missing here, it may just not have loaded.
         </div>
       )}
 
       <Card>
         <CardHeader
-          title="All grants upstream"
+          title="Every role Zitadel has given"
           count={grants.data?.total ?? rows.length}
           action={
             <Input
@@ -66,8 +66,8 @@ export default function UpstreamGrantsPage() {
                 setQuery(event.target.value);
                 setLimit(PAGE);
               }}
-              placeholder="Filter by person, project or role"
-              aria-label="Filter grants"
+              placeholder="Role key or id"
+              aria-label="Filter roles held by role key or id"
               className="w-[280px]"
             />
           }
@@ -77,7 +77,7 @@ export default function UpstreamGrantsPage() {
           <span className="w-[230px]">Person</span>
           <span className="w-[200px]">Project</span>
           <span className="flex-1">Roles</span>
-          <span className="w-[190px] text-right">Grant id</span>
+          <span className="w-[190px] text-right">ID in Zitadel</span>
         </CardColumns>
 
         <ListStates
@@ -85,15 +85,15 @@ export default function UpstreamGrantsPage() {
           error={grants.error}
           isEmpty={rows.length === 0}
           onRetry={() => grants.refetch()}
-          errorTitle="Couldn't read grants from the identity provider. Syndra itself is fine."
-          skeleton={<RowSkeleton rows={8} avatar={false} label="Reading grants" />}
+          errorTitle="Couldn't read roles held from Zitadel. Syndra itself is fine."
+          skeleton={<RowSkeleton rows={8} avatar={false} label="Reading roles held" />}
           empty={
             <EmptyState
-              title={search ? "Nothing matches that." : "No grants upstream."}
+              title={search ? "Nothing matches that." : "Nobody holds any roles in Zitadel."}
               guidance={
                 search
-                  ? "Try a project name or a role key."
-                  : "The identity provider holds no grants at all."
+                  ? "Try a role key, such as trained, or an id. Names are not searched here."
+                  : "Zitadel has given no roles to anyone."
               }
             />
           }
@@ -119,7 +119,9 @@ export default function UpstreamGrantsPage() {
 
           {rows.length > visible.length && (
             <div className="row-divider flex items-center gap-4 px-5 py-3">
-              <span className="text-[13.5px] text-faint">{rows.length - visible.length} more</span>
+              <span className="text-[13.5px] text-faint">
+                {rows.length - visible.length} more of {rows.length}
+              </span>
               {/* The fourth copy of this pill. Three were found and replaced
                   by `one-control-surface`; this one was outside the sweep and
                   had already lost the touch floor. */}

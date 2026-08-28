@@ -58,12 +58,13 @@ export function MappingManagement({ target }: { target: string }) {
   const mappings = useMappings(target);
   const [editing, setEditing] = useState<RoleMapping | null>(null);
   const [deleting, setDeleting] = useState<RoleMapping | null>(null);
+  const name = targetLabel(target);
 
   return (
     <>
       <Card>
         <CardHeader
-          title="What roles reach here"
+          title="Which roles are mapped here"
           count={mappings.data?.length}
           note="Editing one moves access for everybody holding that role"
           action={<AddMappingButton target={target} first={(mappings.data ?? []).length === 0} />}
@@ -76,8 +77,8 @@ export function MappingManagement({ target }: { target: string }) {
           errorTitle="The mappings could not be read"
           empty={
             <EmptyState
-              title={`No role reaches ${targetLabel(target)}, so no role grants anything on it`}
-              guidance={`What is missing is the sentence that says which role should get an account here — until one exists, nobody is provisioned. Pick a role and the value it should reach, and the rehearsal will say how many people that is before anything is queued. An add-on registered and unmapped is the ordinary state between starting its container and deciding who it is for; it is not an error.`}
+              title={`No role is mapped to ${name} yet`}
+              guidance={`Nobody gets an account on ${name} until a role is mapped to a ${name} group. Pick a role and the group it should get; Syndra shows how many people that affects before anything changes. A newly connected system with no mappings is normal, not an error.`}
             />
           }
         >
@@ -152,7 +153,7 @@ function MappingRow({
       <ConvergeButton
         target={mapping.target}
         subjectIds={cohort}
-        label={`everybody holding ${mapping.role_key}`}
+        label={`everybody holding the role ${mapping.role_key}`}
         disabled={cohort.length === 0}
         disabledReason="Nobody holds this role"
       />
@@ -199,9 +200,9 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
 
   return (
     <RehearsalDialog
-      title="Change what this role reaches"
+      title="Change what this role gives"
       definitionLabel="Save the change"
-      lede={`${mapping.role_key} currently confers ${mapping.field} = ${mapping.value} on ${targetLabel(mapping.target)}. Everybody holding the role moves with it.`}
+      lede={`The role ${mapping.role_key} currently gives ${mapping.field} = ${mapping.value} on ${targetLabel(mapping.target)}. Change it and everybody holding the role is moved too.`}
       noun={["person", "people"]}
       ready={value.trim() !== "" && value !== mapping.value}
       compose={
@@ -217,8 +218,8 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
             autoFocus={!touch}
           />
           <FieldHint>
-            Checked against {targetLabel(mapping.target)} before anything is planned — a
-            value it does not recognise is refused here rather than at apply.
+            Checked against {targetLabel(mapping.target)} before you go further — a group
+            that does not exist there is refused now, not later.
           </FieldHint>
         </div>
       }
@@ -232,20 +233,20 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
       // that passed. Amber and not red, because nothing is wrong.
       consequence={
         <>
-          Files owned by <span className="type-mono">{mapping.value}</span> stay owned by it.
-          Everybody moving loses access to those files unless somebody re-owns them on{" "}
-          {targetLabel(mapping.target)}.
+          Files owned by group <span className="type-mono">{mapping.value}</span> stay with
+          that group. People moved to the new group lose access to those files unless somebody
+          changes the files&rsquo; owner on {targetLabel(mapping.target)}.
           {rehearsed?.value_checked === false && (
             <>
               {" "}
               <span className="font-semibold">
-                {targetLabel(mapping.target)} could not be asked whether{" "}
-                <span className="type-mono">{value}</span> exists,
+                {targetLabel(mapping.target)} could not be reached, so{" "}
+                <span className="type-mono">{value}</span> was not checked.
               </span>{" "}
-              so the value was not checked and the edit is allowed through — refusing it
-              while a target is unreachable would make an outage look like your mistake. If
-              the value turns out not to exist, the convergence that applies this mapping
-              fails, and it arrives as a queued change that will not settle.
+              The change is allowed through so an outage does not look like your mistake. If{" "}
+              <span className="type-mono">{value}</span> does not exist, the change fails when
+              it reaches {targetLabel(mapping.target)} and waits in Pending changes until
+              somebody fixes it.
             </>
           )}
         </>
@@ -269,9 +270,9 @@ function DeleteMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClo
 
   return (
     <RehearsalDialog
-      title="Stop this role reaching that"
+      title="Remove this mapping"
       definitionLabel="Remove the mapping"
-      lede={`${mapping.role_key} will no longer confer ${mapping.field} = ${mapping.value} on ${targetLabel(mapping.target)}. They keep the role and lose what it reached.`}
+      lede={`The role ${mapping.role_key} will no longer give ${mapping.field} = ${mapping.value} on ${targetLabel(mapping.target)}. Everybody holding the role keeps the role and loses that group.`}
       noun={["person", "people"]}
       // Destructive, because it takes access away — but still rung 2: the
       // cohort is a role's holders rather than a person somebody named, and the
@@ -332,8 +333,8 @@ function VersionHistory({ target }: { target: string }) {
           version is for. */}
       <div className="px-5 pb-4">
         <p className="text-[13.5px] text-muted">
-          A version is a snapshot of what roles reach here, so a later change can be rolled
-          back to it. The note is the only record of why this set was the right one — it is
+          A version is a snapshot of which roles are mapped here, so a later change can be
+          rolled back to it. The note is the only record of why this set was the right one — it is
           what somebody reads when they are deciding whether to come back.
         </p>
       </div>
@@ -411,7 +412,7 @@ function VersionRow({
         {version.note || <span className="text-faint">No reason recorded.</span>}
       </p>
       <p className="mt-1 text-[13px] text-faint">
-        {version.entries.length} binding{version.entries.length === 1 ? "" : "s"}
+        {version.entries.length} mapping{version.entries.length === 1 ? "" : "s"}
         {version.entries.length > 0 && (
           <>
             {" · "}
@@ -431,16 +432,16 @@ function VersionRow({
       {rehearsing && (
         <RehearsalDialog
           title={`Roll back to version ${version.version}`}
-          lede={`This replaces what roles reach ${targetLabel(target)} with the ${
+          lede={`This replaces the mappings on ${targetLabel(target)} with the ${
             version.entries.length
-          } binding${version.entries.length === 1 ? "" : "s"} in version ${version.version}.`}
+          } mapping${version.entries.length === 1 ? "" : "s"} in version ${version.version}.`}
           noun={["person", "people"]}
           definitionLabel={`Roll back to version ${version.version}`}
           consequence={
             <>
-              Anything added since version {version.version} is removed — a rollback restores
-              a set, it does not merge one. The people it moves include everybody who loses a
-              mapping, not only those who gain one.
+              Any mapping added since version {version.version} is removed and any changed one
+              is put back. Everybody who loses a mapping is affected, not only those who gain
+              one.
             </>
           }
           onRehearse={async (acknowledgeScope) => {
@@ -454,11 +455,10 @@ function VersionRow({
                 onSuccess: (result) => {
                   setOutcome({
                     kind: "queued",
-                    message: `Rolled back to version ${version.version} — ${
+                    message: `Rolled back to version ${version.version} — account changes for ${
                       result.queued_convergences
-                    } ${result.queued_convergences === 1 ? "person is" : "people are"} queued for convergence`,
-                    detail:
-                      "Nothing has reached the target yet — resume the queue on Pending changes.",
+                    } ${result.queued_convergences === 1 ? "person are" : "people are"} waiting to be sent`,
+                    detail: `Nothing has reached ${targetLabel(target)} yet — send them from Pending changes.`,
                   });
                   // The plan the dialog showed is the one being reported back,
                   // with every row now queued — `asPlan` carries the outcomes
