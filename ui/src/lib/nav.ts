@@ -133,7 +133,7 @@ export const ADVANCED_NAV: NavEntry[] = [
     // The LLDAP bridge's row. Gone with the bridge: it named a service that no
     // longer exists, and a nav entry for a deleted subsystem is worse than a
     // missing one — an operator clicks it before they read anything.
-    leaf("Zitadel events", "/operations"),
+    leaf("Incoming events", "/operations"),
   ]),
 ];
 

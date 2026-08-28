@@ -44,7 +44,7 @@ every member.
 
 Structure, colour, motion, routes, the backend, any contract. Nav labels
 change in three places (Identity provider → Zitadel; Withdrawn access →
-Unfinished revocations; Event activity → Zitadel events) and nowhere in
+Unfinished revocations; Event activity → Incoming events) and nowhere in
 order, grouping or href.
 
 ## Decisions taken with the owner
