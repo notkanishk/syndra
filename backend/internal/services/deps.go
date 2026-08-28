@@ -8,7 +8,6 @@ import (
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
-	"syndra/internal/zitadel"
 )
 
 // Injectable function vars — tests swap these to exercise services without a
@@ -50,9 +49,9 @@ var (
 		return n
 	}
 
-	svcZitadelReachable = func(ctx context.Context) bool {
-		return zitadel.MgmtClient != nil
-	}
+	// A real question, memoised. See zitadel_probe.go for why the obvious
+	// `MgmtClient != nil` was the wrong one.
+	svcZitadelReachable = zitadelAnswering
 
 	// Drift summary (B2): pending-triage count + a top-N preview for the
 	// dashboard callout. svcGetTopDrift reuses GetDriftItems' default
@@ -143,7 +142,7 @@ var (
 	svcDbDeleteRole               = db.DeleteRole
 	svcDbGetAllLocalRoles         = db.GetAllLocalRoles
 	svcDbGetRoleUsageCounts       = db.GetRoleUsageCounts
-	svcDbGetAssignedUserCounts    = db.GetAssignedUserCounts
+	svcDbGetAssignedUserCounts    = db.GetEffectiveUserCounts
 	svcDbGetAllReferencedRoleKeys = db.GetAllReferencedRoleKeys
 
 	// Claim shaping (token format + per-application overrides).

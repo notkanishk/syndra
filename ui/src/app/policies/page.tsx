@@ -349,7 +349,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
       // rule-produced holders are not in it. Saying "N people hold this" over
       // that number under-counts silently, and the sentence it feeds is read
       // immediately before a Save.
-      const who = `${holders} ${holders === 1 ? "person already holds" : "people already hold"} the first role directly`;
+      const who = `${holders} ${holders === 1 ? "person already holds" : "people already hold"} the first role`;
       notes.push(
         mode === "auto"
           ? `${who}, so saving gives them ${targetRoleName} at once.`
@@ -515,8 +515,8 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
               </ul>
             ) : (
               <p className="text-muted">
-                Nobody holds the first role directly. Anybody who holds it through a bundle or
-                another rule is not counted here, so this may still reach people.
+                Nobody holds the first role, directly or through a bundle. Somebody given it by
+                another rule is not counted here, so this could still reach people.
               </p>
             )}
           </div>
