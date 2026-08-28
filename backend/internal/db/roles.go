@@ -168,29 +168,57 @@ func GetRoleUsageCounts(ctx context.Context) (map[string]RoleUsage, error) {
 	return usage, nil
 }
 
-// GetAssignedUserCounts returns the count of distinct users per (projectID, roleKey)
-// from direct_role_grants. The key is "projectID:roleKey".
-func GetAssignedUserCounts(ctx context.Context) (map[string]int, error) {
+// GetEffectiveUserCounts counts the distinct people who hold each role either
+// directly or through a bundle, per (projectID, roleKey), keyed "projectID:roleKey".
+//
+// It replaces a count of `direct_role_grants` alone, which was rendered under a
+// column headed "Members", so a role forty people held through a bundle
+// displayed 0. The same number fed the rule editor, which printed
+// "Nobody holds the first role yet, so saving changes nothing today" directly
+// above a Save that would have reached all forty. A count is a claim, and that
+// one was false in the direction that reassures.
+//
+// The bundle half joins through `uba.version_id`, the version each person is
+// PINNED to — the same join `GetUserBundleRolesGrouped` uses per person. Taking
+// the bundle's working copy instead would count roles nobody holds yet.
+//
+// What this still does not count is roles produced by a mapping rule. Rules
+// chain — a rule's output can be another rule's input — and resolving them is an
+// iterative forward pass (`cache.CompileUserCache`). A SQL twin of that would be
+// a second definition of "holds", and the day the two disagree neither is
+// trustworthy. So the gap is named in the copy that uses this number rather than
+// closed with a guess.
+func GetEffectiveUserCounts(ctx context.Context) (map[string]int, error) {
 	query := `
 		SELECT zitadel_project_id, zitadel_role_key, COUNT(DISTINCT user_id)
-		FROM direct_role_grants
-		WHERE (expires_at IS NULL OR expires_at > NOW())
+		FROM (
+			SELECT zitadel_project_id, zitadel_role_key, user_id
+			FROM direct_role_grants
+			WHERE (expires_at IS NULL OR expires_at > NOW())
+			UNION
+			SELECT r.zitadel_project_id, r.zitadel_role_key, uba.user_id
+			FROM user_bundle_assignments uba
+			JOIN bundle_version_roles r ON r.version_id = uba.version_id
+		) held
 		GROUP BY zitadel_project_id, zitadel_role_key`
 
 	rows, err := querier(ctx).Query(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("query assigned user counts: %w", err)
+		return nil, fmt.Errorf("query effective user counts: %w", err)
 	}
 	defer rows.Close()
 
 	counts := make(map[string]int)
 	for rows.Next() {
-		var pid, rk string
+		var projectID, roleKey string
 		var count int
-		if err := rows.Scan(&pid, &rk, &count); err != nil {
-			return nil, err
+		if err := rows.Scan(&projectID, &roleKey, &count); err != nil {
+			return nil, fmt.Errorf("scan effective user count: %w", err)
 		}
-		counts[pid+":"+rk] = count
+		counts[projectID+":"+roleKey] = count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate effective user counts: %w", err)
 	}
 	return counts, nil
 }

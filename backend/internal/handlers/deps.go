@@ -57,7 +57,7 @@ var (
 	dbGetBundlesForUser     = db.GetBundlesForUser
 	dbSetWelcomeBundle      = db.SetWelcomeBundle
 	dbGetBundleHolderCounts = db.GetBundleHolderCounts
-	dbGetAssignedUserCounts = db.GetAssignedUserCounts
+	dbGetAssignedUserCounts = db.GetEffectiveUserCounts
 
 	// Lookup handler injectable var (single-role accessor, used for UID→name resolution).
 	dbGetRole = db.GetRole

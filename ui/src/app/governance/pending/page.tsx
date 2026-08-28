@@ -149,7 +149,14 @@ export default function PendingChangesPage() {
                   </span>
 
                   <span className="truncate text-[13px] tablet:w-[160px] tablet:shrink-0">
-                    <Mono className="text-accent-text">{shortId(row.source_ref, "R")}</Mono>{" "}
+                    {/* The prefix comes from the row's own source. It was
+                        hardcoded to "R", so every bundle cascade printed a
+                        rule's handle while the legend below explained that
+                        R_ meant a rule — the legend was right and the rows
+                        were lying to it. */}
+                    <Mono className="text-accent-text">
+                      {shortId(row.source_ref, row.source === "bundle" ? "b" : "R")}
+                    </Mono>{" "}
                     <Mono className="text-faint">{shortId(row.cascade_id, "c")}</Mono>
                   </span>
 

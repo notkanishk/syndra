@@ -142,7 +142,7 @@ export default function RolesPage() {
           <span className="flex-1">Role</span>
           <span className="w-[130px]">Group</span>
           <span className="w-[150px]">Used by</span>
-          <span className="w-[80px] text-right">Direct</span>
+          <span className="w-[80px] text-right">Holders</span>
         </CardColumns>
 
         <ListStates
@@ -210,7 +210,7 @@ export default function RolesPage() {
               <span className="text-[15px] tablet:w-[80px] tablet:text-right">
                 {role.assigned_user_count}
                 <span className="text-[13px] text-faint tablet:hidden">
-                  {role.assigned_user_count === 1 ? " direct" : " direct"}
+                  {role.assigned_user_count === 1 ? " holder" : " holders"}
                 </span>
               </span>
             </Link>
