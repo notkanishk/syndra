@@ -92,7 +92,14 @@ const NEVER: Array<[RegExp, string]> = [
  * Argued exceptions. Path prefix → the patterns allowed there, each with its
  * reason. A pattern listed here is permitted in that file and nowhere else.
  */
-const ARGUED: Record<string, Array<[RegExp, string]>> = {};
+const ARGUED: Record<string, Array<[RegExp, string]>> = {
+  "components/login/": [
+    [
+      /\boperators?\b/i,
+      "Names a TEST identity's role in the development sign-in list (`mode === \"demo\"`), which no member or staff member ever reaches — the deployed door has one button and no identity list. It labels the audience a developer is about to impersonate, and 'Staff' would be the wrong word for that: the thing being picked is the operator view.",
+    ],
+  ],
+};
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -249,7 +256,15 @@ function copyOf(source: string): Snippet[] {
   }
   // A URL path is not prose, however many interpolations it carries.
   for (const { line, text } of strings) {
-    if (text.includes(" ") && !/^\s*[\/^?&]|^https?:|\w=/.test(text)) push(line, text);
+    // A one-word literal is read too, when it is capitalised like a label.
+    // Banned words live in exactly that shape — a badge, a filter option, a
+    // column header — and the space rule alone could see none of them:
+    // `{approved ? "Approved" : "Denied"}` sat in Requests through this
+    // guard's own release. Lowercase single words stay out, because that is
+    // what code strings look like (`"admin"`, `"oidc"`, a query key).
+    const isLabel = /^[A-Z][a-z]+$/.test(text);
+    const isProse = text.includes(" ") && !/^\s*[\/^?&]|^https?:|\w=/.test(text);
+    if (isLabel || isProse) push(line, text);
   }
   return out;
 }
