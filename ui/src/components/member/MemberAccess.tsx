@@ -133,8 +133,13 @@ export function MemberAccess({ session }: { session: SessionUser }) {
         unbuilt, see System > Hardware sync), so the card asked members to set a credential that
         does nothing and then had to spend a paragraph admitting it.
 
-        <ShadowCredential/> and its backend are intact and tested; restoring it is re-adding the
-        line. Do that when the bridge can actually read it, and not before.
+        <ShadowCredential/> is intact and tested. ITS BACKEND IS NOT: the set endpoint it calls,
+        PUT /users/{uid}/shadow-credential, was deleted (backend internal/handlers/vault.go says
+        so where it stood), and setting a credential now goes per target through
+        POST /me/targets/{target}/credential — which Network storage already uses. So restoring
+        this card is NOT re-adding the line: re-add it as written and every member who sets a
+        password gets a 404 on a form that promises "it will work on the workshop machines".
+        Point it at the per-target route first, or lift the working panel out of MyStorage.
       */}
     </div>
   );

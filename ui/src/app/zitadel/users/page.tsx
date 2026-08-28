@@ -257,7 +257,7 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
               count={revoking.roleKeys.length}
               noun="roles"
               verb="revokes"
-              consequence={`${name} loses these roles in Zitadel at once. Anything Syndra believes it gave them may be given back within about a minute, and the change will show up under Unexplained access.`}
+              consequence={`${name} loses these roles once the change reaches Zitadel — revocations send on their own, every few minutes. Syndra records the revocation as its own, so it is explained afterwards.`}
             />
           </div>
           <ModalFooter>
@@ -352,7 +352,8 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
           )}
         </div>
         <DirectWriteWarning
-          what="Syndra will see this as access it did not give."
+          traced
+          what="Syndra records this grant as its own, so it is explained afterwards rather than surfacing under Drift."
           acknowledged={acknowledged}
           onAcknowledge={setAcknowledged}
         />
@@ -422,7 +423,8 @@ function EditRolesDialog({
           <FieldHint>The short name other systems see, e.g. trained, comma separated.</FieldHint>
         </div>
         <DirectWriteWarning
-          what="Replacing the roles here can quietly revoke access Syndra believes it gave."
+          traced
+          what="Replacing the roles revokes any this person holds that you leave out."
           acknowledged={acknowledged}
           onAcknowledge={setAcknowledged}
         />

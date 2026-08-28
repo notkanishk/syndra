@@ -1,5 +1,6 @@
 "use client";
 
+import { Term } from "@/components/ui/Term";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -51,7 +52,12 @@ export default function IdentityProviderPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Zitadel"
-        lede="Zitadel is the service everyone signs in through. It decides whether you are who you say you are; Syndra decides what that gets you, and keeps the record of why. This page shows whether Syndra can reach Zitadel. Nothing here changes anyone's access."
+        lede={
+          <>
+            Whether Syndra can reach <Term name="zitadel">Zitadel</Term>, and what it holds
+            right now. Nothing on this page changes anyone’s access.
+          </>
+        }
         meta={health.data?.domain ? <Mono>{health.data.domain}</Mono> : undefined}
       />
 
@@ -421,12 +427,12 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
               Do not use these unless nothing else will do.
             </div>
             <p className="mt-1 max-w-[86ch] text-[14px] leading-[1.55] text-muted">
-              Changes made here skip Syndra entirely, so Syndra keeps no record of why they
-              happened beyond one line in Audit. Three things follow. Syndra may undo the change
-              within about a minute. It will list the change under Unexplained access, with
-              nobody&rsquo;s name on it. And it will not appear in Change history. Do the same
-              thing inside Syndra instead where you can: give access from a person&rsquo;s page,
-              remove it from the role&rsquo;s member list, or edit roles under Access.
+              Editing a project or a role here writes straight to Zitadel, so Syndra records nothing
+              beyond one line in Audit. Two things follow. The next drift sweep — every six hours —
+              lists what you changed under Drift, with nobody&rsquo;s name on it, for somebody to
+              resolve by hand. And it will not appear in Change history. Do the same thing inside
+              Syndra instead where you can: give access from a person&rsquo;s page, remove it from
+              the role&rsquo;s member list, or edit roles under Access.
             </p>
           </div>
 

@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { GLOSSARY } from "@/lib/glossary";
+
 /**
  * The writing guide, checked rather than trusted.
  *
@@ -29,60 +31,56 @@ import { describe, expect, it } from "vitest";
 const SRC = join(import.meta.dirname, "../../..");
 
 /**
- * Words that never appear on screen (design.md §6, "Words that never appear
- * on screen"), as patterns. Each names the mechanism the reader is not
- * supposed to need; the plain replacement is beside it in the guide.
+ * What is still refused, now that the vocabulary has come back.
+ *
+ * This list used to ban the field's own words — grant, provision, reconcile,
+ * cascade, drift — on the theory that a plainer paraphrase was kinder. It was
+ * not: the people who run Syndra run a university makerspace, know what an
+ * identity provider is, and can name every product in their rack. Replacing
+ * their vocabulary with a longer approximation of it cost them precision and
+ * told them they had been assumed incapable of the short word.
+ *
+ * So the terms are back, carrying their definitions (see `lib/glossary.ts`),
+ * and only two things are refused here:
+ *
+ *   1. A SECOND NAME for something that already has one. Not a difficulty
+ *      problem — a consistency one. "The provider", "upstream" and "the
+ *      directory" are all Zitadel, and a reader meeting three names counts
+ *      three systems.
+ *   2. NOISE — the developer talking to themselves on somebody else's screen.
  */
 const NEVER: Array<[RegExp, string]> = [
-  [/\bdrain(s|ed|ing)?\b/i, "send"],
-  [/\bresum(e|es|ed|ing)\b/i, "send"],
-  [/\boutbox\b/i, "Pending changes"],
-  [/\bledger\b/i, "record"],
-  [/\bcascad(e|es|ed|ing)\b/i, "the changes this sets off"],
-  [/\bpropagat/i, "send"],
-  [/\breconcil/i, "check"],
-  [/\bconverg/i, "bring accounts in line"],
-  [/\bsweep(s|ing)?\b/i, "check"],
-  [/\bdrift\b/i, "unexplained access"],
-  [/\brehears/i, "preview"],
-  [/\bupstream\b/i, "in Zitadel"],
-  [/\bdownstream\b/i, "from Syndra"],
+  // One name per thing.
   [/identity provider/i, "Zitadel"],
   [/\bIdP\b/, "Zitadel"],
   [/\bthe provider\b/i, "Zitadel"],
   [/\bthe directory\b/i, "Zitadel"],
+  [/\bupstream\b/i, "in Zitadel"],
+  [/\bdownstream\b/i, "from Syndra"],
+  [/\btargets?\b/i, "the system's name, via targetLabel"],
+  [/\busers?\b/i, "person / people"],
   [/\bsubject id\b/i, "person"],
   [/\bprincipal\b/i, "person"],
-  [/\bentitlement/i, "access"],
-  [/cache compile/i, "within about a minute"],
-  [/\bhydrat/i, "load"],
+  [/\blab manager/i, "makerspace staff"],
+  [/\bsteward/i, "makerspace staff"],
+  [/whoever runs the makerspace/i, "makerspace staff"],
+  [/\brehears/i, "preview"],
+  [/\bden(y|ied|ies)\b/i, "decline"],
+  [/\bwithdraw\w* (their |this |the )?access\b/i, "revoke"],
+  [/\btak(e|es|en|ing) (it |this |them |that |the access |their access |access )?away\b/i, "revoke"],
+
+  // Noise.
   [/\bpayload\b/i, "details"],
   [/\bmutation/i, "change"],
   [/\bidempot/i, "—"],
   [/\bfixture/i, "sample data"],
   [/\bseeder\b/i, "sample data"],
-  [/\bmanifest\b/i, "—"],
+  [/\bhydrat/i, "load"],
   [/\btruncated\b/i, "cut short"],
   [/\bdegraded\b/i, "could not be read"],
-  [/\btriage/i, "review"],
-  [/\bbinding(s)?\b/i, "mapping / account"],
-  [/\bhops?\b/i, "step"],
+  [/\bmanifest\b/i, "—"],
   [/\bnodes?\b/i, "item"],
-  [/\btargets?\b/i, "the system's name"],
-  [/\b(a|the|this|new|stale) plan\b/i, "preview"],
-  [/\bfir(e|es|ed|ing)\b/i, "applies"],
-  [/\bqueued\b/i, "waiting to be sent"],
-  [/\boperators?\b/i, "makerspace staff"],
-  [/\bsteward/i, "makerspace staff"],
-  [/\blab manager/i, "makerspace staff"],
-  [/whoever runs the makerspace/i, "makerspace staff"],
-  [/\busers?\b/i, "person / people"],
-  [/\bdirect grants?\b/i, "direct access"],
-  [/\b(expir\w+|standalone) grants?\b/i, "access"],
-  [/\bwithdraw\w* (their |this |the )?access\b/i, "revoke"],
-  [/\bremov\w* (their |this |the |direct |all )?access\b/i, "revoke"],
-  [/\btak(e|es|en|ing) (it |this |them |that |the access |their access |access )?away\b/i, "revoke"],
-  [/\bden(y|ied|ies)\b/i, "decline"],
+  [/\bhops?\b/i, "step"],
   [/\bplease\b/i, "—"],
   [/\bsorry\b/i, "—"],
   [/\boops\b/i, "—"],
@@ -93,11 +91,13 @@ const NEVER: Array<[RegExp, string]> = [
  * reason. A pattern listed here is permitted in that file and nowhere else.
  */
 const ARGUED: Record<string, Array<[RegExp, string]>> = {
-  "components/login/": [
-    [
-      /\boperators?\b/i,
-      "Names a TEST identity's role in the development sign-in list (`mode === \"demo\"`), which no member or staff member ever reaches — the deployed door has one button and no identity list. It labels the audience a developer is about to impersonate, and 'Staff' would be the wrong word for that: the thing being picked is the operator view.",
-    ],
+  // The one file whose whole job is explaining these words. A definition of
+  // Zitadel that may not say "identity provider" is not a definition.
+  "lib/glossary.ts": [
+    [/identity provider/i, "The glossary defines the terms; this is the definition."],
+    [/\btargets?\b/i, "Defines what a connected system is, in the words a reader arrives with."],
+    [/\busers?\b/i, "Defines terms whose own wording is about users of an app."],
+    [/\btruncated\b/i, "A log anchor exists to detect a truncated log; that is the word for what happened to it."],
   ],
 };
 
@@ -223,6 +223,20 @@ function tokenize(source: string): { code: string; strings: Snippet[] } {
   return { code: code.join(""), strings };
 }
 
+/**
+ * True when a literal is a class list rather than a sentence.
+ *
+ * Prose almost never hyphenates half its words; a Tailwind class list almost
+ * always does. Without this, `items-baseline gap-3` was read as a page using
+ * the word "baseline" — a design token accused of being unexplained jargon.
+ */
+function looksLikeClasses(text: string): boolean {
+  const tokens = text.trim().split(/\s+/);
+  if (tokens.length < 2) return false;
+  const hyphenated = tokens.filter((t) => /[-:]/.test(t)).length;
+  return hyphenated / tokens.length >= 0.5;
+}
+
 /** True when a `>`…`<` fragment is code that happened to sit between two angle brackets. */
 function looksLikeCode(text: string): boolean {
   return (
@@ -264,7 +278,7 @@ function copyOf(source: string): Snippet[] {
     // what code strings look like (`"admin"`, `"oidc"`, a query key).
     const isLabel = /^[A-Z][a-z]+$/.test(text);
     const isProse = text.includes(" ") && !/^\s*[\/^?&]|^https?:|\w=/.test(text);
-    if (isLabel || isProse) push(line, text);
+    if ((isLabel || isProse) && !looksLikeClasses(text)) push(line, text);
   }
   return out;
 }
@@ -342,6 +356,40 @@ describe("plain language", () => {
       }
     }
     expect(offenders, "read out of context, the label must still say what it does").toEqual([]);
+  });
+
+  /**
+   * The words nobody can know without being told.
+   *
+   * A product's own invented vocabulary is not jargon a reader can look up in
+   * the field — cascade, outbox, merge finding and log anchor mean what THIS
+   * codebase decided they mean. Using one without its definition reachable on
+   * the same screen leaves the reader exactly where the paraphrase-everything
+   * era left them, only shorter.
+   *
+   * Products and standard terms are deliberately NOT required to be marked
+   * up: an operator knows what TrueNAS and a role key are, and a dotted
+   * underline under every one of them is a page that fidgets.
+   */
+  it("puts a definition within reach of every word it invented", () => {
+    const invented = (Object.entries(GLOSSARY) as Array<[string, { title: string; mustDefine?: boolean }]>)
+      .filter(([, entry]) => entry.mustDefine === true)
+      .map(([, entry]) => ({
+        title: entry.title,
+        pattern: new RegExp(`\\b${entry.title.toLowerCase()}s?\\b`, "i"),
+      }));
+
+    const offenders: string[] = [];
+    for (const { path, source } of sources()) {
+      if (path.startsWith("lib/glossary") || path.startsWith("components/ui/Term")) continue;
+      if (/\bTerm\b/.test(source)) continue; // the page defines something
+      const used = new Set<string>();
+      for (const { text } of copyOf(source)) {
+        for (const { title, pattern } of invented) if (pattern.test(text)) used.add(title);
+      }
+      if (used.size > 0) offenders.push(`${path} — uses ${[...used].join(", ")} and defines none`);
+    }
+    expect(offenders, "wrap the first use in <Term>, or say it another way").toEqual([]);
   });
 
   it("carries no argued exception whose file is gone", () => {

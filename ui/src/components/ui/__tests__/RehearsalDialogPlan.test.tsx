@@ -302,7 +302,7 @@ describe("queued rows say what happens next", () => {
       outcomes: [],
       summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 1 },
     });
-    expect(note).toMatch(/sends it on its own/i);
+    expect(note).toMatch(/sends revocations on their own/i);
     expect(note).toMatch(/the person still has the access/i);
   });
 

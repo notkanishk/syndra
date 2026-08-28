@@ -55,7 +55,7 @@ export function ShadowCredential({ userId }: { userId: string }) {
         <CardHeader title="Workshop password" note="Unavailable" tone="warn" />
         <p className="px-5 py-4 text-[14px] leading-[1.55] text-muted">
           This section couldn&rsquo;t load. Your access is unaffected — the list above is what
-          matters, and it is complete. Mention it to a lab manager if it stays this way.
+          matters, and it is complete. Mention it to makerspace staff if it stays this way.
         </p>
       </Card>
     );
@@ -84,7 +84,7 @@ export function ShadowCredential({ userId }: { userId: string }) {
               <>
                 Set{changedAt ? " " : ""}
                 {changedAt ? <Relative iso={changedAt} /> : null}. Nobody can read it back —
-                not a lab manager, and not this page. If you&rsquo;ve forgotten it, set a new one.
+                not makerspace staff, and not this page. If you&rsquo;ve forgotten it, set a new one.
               </>
             ) : (
               "You haven't set one. Nothing needs it from you right now."

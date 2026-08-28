@@ -184,7 +184,7 @@ function DirectDialog({
               </strong>
               <br />
               <span className="text-[14px] text-muted">
-                No bundle and no rule gives it to them. Their access ends within about a minute.
+                No bundle and no rule gives it to them. Their access ends once the change reaches Zitadel — revocations send on their own, every few minutes.
               </span>
             </>
           )}

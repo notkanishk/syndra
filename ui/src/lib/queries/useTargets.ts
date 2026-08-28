@@ -440,6 +440,15 @@ export interface TargetReconcileResult {
   queued: number;
   current: boolean;
   truncated?: boolean;
+  /**
+   * The pass stopped before concluding anything (`halt()` in the add-on
+   * reconciler), and every count beside it is a zero that was never measured.
+   *
+   * This field was missing from the type, so the card read `0 accounts managed
+   * · 0 fixes waiting` off a pass that had reached the target and given up —
+   * three confident zeroes where the honest answer was "no idea".
+   */
+  halted?: boolean;
   reason?: string;
   unmanaged?: Array<{ username: string; uid: number }>;
   /** Bindings whose account is no longer on the target. Never converged — the

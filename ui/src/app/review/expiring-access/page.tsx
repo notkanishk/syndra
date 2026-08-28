@@ -97,7 +97,7 @@ export default function ExpiringAccessPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Expiring access"
-        lede="Direct access (access somebody gave by hand) that ends in the next 30 days, soonest first. Syndra ends each one on its date whether or not you visit this page."
+        lede="Direct grants that end in the next 30 days, soonest first. Syndra ends each one on its date whether or not you visit this page."
         actions={
           undecided.length > 0 ? (
             <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
@@ -139,7 +139,7 @@ export default function ExpiringAccessPage() {
           empty={
             <EmptyState
               title="Nothing expires in the next 30 days."
-              guidance="Direct access appears here a month before it ends."
+              guidance="Direct grants appear here a month before they end."
               resolved
             />
           }

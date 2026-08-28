@@ -58,7 +58,7 @@ export function ConvergeEntitlements({
   return (
     <>
       <RehearsalDialog
-        title={`Bring accounts in line on ${targetLabel(target)}`}
+        title={`Reconcile accounts on ${targetLabel(target)}`}
         lede={`Compares what ${label} should have on ${targetLabel(target)} with what they have, and records the differences as changes waiting to be sent. Nothing reaches ${targetLabel(target)} until somebody sends them from Pending changes.`}
         noun={["account", "accounts"]}
         onRehearse={async (acknowledgeScope) => {
@@ -225,7 +225,7 @@ export function ConvergeButton({
   return (
     <>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        Bring accounts in line
+        Reconcile accounts
       </Button>
       {open && (
         <ConvergeEntitlements

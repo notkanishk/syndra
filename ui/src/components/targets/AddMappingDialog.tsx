@@ -54,7 +54,7 @@ export function AddMappingDialog({ target, onClose }: { target: string; onClose:
   return (
     <RehearsalDialog
       title={`Add a mapping to ${name}`}
-      lede={`Everybody holding the role gets an account on ${name} in this group the next time Syndra brings accounts in line. Nothing changes until you preview the list below and apply it.`}
+      lede={`Everybody holding the role gets an account on ${name} in this group the next time Syndra reconciles. Nothing changes until you preview the list below and apply it.`}
       noun={["person", "people"]}
       ready={ready}
       definitionLabel="Save mapping"

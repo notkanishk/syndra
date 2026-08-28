@@ -59,7 +59,7 @@ export function CreateRoleDialog({
       <ModalHeader
         title="New role"
         titleId="new-role-title"
-        lede="Created in Syndra and in Zitadel (the service everyone signs in through) at the same time. If Zitadel refuses it, nothing is created in either place."
+        lede="Created in Syndra and in Zitadel at the same time. If Zitadel refuses it, nothing is created in either place."
       />
 
       <div className="flex flex-col gap-3.5 px-6">

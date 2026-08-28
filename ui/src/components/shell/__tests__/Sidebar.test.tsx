@@ -90,7 +90,7 @@ describe("the rail's stable structure", () => {
     view.audience = "advanced";
     renderRail();
 
-    const drift = screen.getByRole("link", { name: /Unexplained access/ });
+    const drift = screen.getByRole("link", { name: /Drift/ });
     expect(drift).toBeInTheDocument();
     expect(drift.textContent).toContain("0");
   });
@@ -105,7 +105,7 @@ describe("the rail's stable structure", () => {
     renderRail();
     const advanced = railOrder();
     expect(advanced.slice(0, basic.length)).toEqual(basic);
-    expect(advanced).toContain("Unexplained access");
+    expect(advanced).toContain("Drift");
   });
 
   it("shows a member three destinations and never the operator rows", () => {
