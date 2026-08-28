@@ -14,11 +14,11 @@ describe("requestOutcome", () => {
     expect(requestOutcome("withdrawn").member).not.toBe(requestOutcome("rejected").member);
   });
 
-  // A queue and somebody's own list are read by different people for different reasons: "Denied"
+  // A queue and somebody's own list are read by different people for different reasons: "Declined"
   // is what an operator recorded, "Not approved" is what happened to you.
   it("says the same fact in each register", () => {
     expect(requestOutcome("rejected")).toMatchObject({
-      operator: "Denied",
+      operator: "Declined",
       member: "Not approved",
     });
     expect(requestOutcome("pending")).toMatchObject({ operator: "Open", member: "Waiting" });
