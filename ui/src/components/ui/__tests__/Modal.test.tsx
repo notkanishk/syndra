@@ -130,7 +130,7 @@ describe("Modal", () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(screen.getByRole("button", { name: "First" })).toHaveFocus();
-    expect(screen.getByRole("button", { name: "Dismiss" }).tabIndex).toBe(-1);
+    expect(screen.getByRole("button", { name: "Close this sheet" }).tabIndex).toBe(-1);
   });
 
   // A rehearsal's done step carries a named "Close". Two controls answering to
@@ -153,8 +153,8 @@ describe("Modal", () => {
     );
     // Silently ignoring a drag or a tap reads as a frozen app, and the
     // operator's next move is to reload the page mid-mutation.
-    expect(screen.getByText("Working — this can't be closed yet.")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();
+    expect(screen.getByText("Applying your change — this sheet can't be closed until it finishes.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Close this sheet" })).toBeNull();
   });
 
   it("keeps the footer in reach when the panel scrolls", () => {

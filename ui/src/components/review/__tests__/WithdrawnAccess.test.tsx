@@ -49,12 +49,12 @@ async function renderPage() {
       <WithdrawnAccess />
     </QueryClientProvider>,
   );
-  await screen.findByText("Still draining");
+  await screen.findByText("Still on the way");
 }
 
 function headings() {
   return screen
-    .getAllByText(/Not going to happen|Still draining/)
+    .getAllByText(/Given up|Still on the way/)
     .map((el) => el.textContent!.trim());
 }
 
@@ -65,11 +65,11 @@ describe("what has not gone away yet", () => {
 
     // The empty one is present, and says what its emptiness means — which is
     // the good news on this page, not the absence of news.
-    expect(screen.getByText("Not going to happen")).toBeInTheDocument();
-    expect(screen.getByText(/Nothing has given up/)).toBeInTheDocument();
+    expect(screen.getByText("Given up")).toBeInTheDocument();
+    expect(screen.getByText(/Nothing has been given up on/)).toBeInTheDocument();
     expect(headings(), "terminal first, always").toEqual([
-      "Not going to happen",
-      "Still draining",
+      "Given up",
+      "Still on the way",
     ]);
   });
 
@@ -78,7 +78,7 @@ describe("what has not gone away yet", () => {
     await renderPage();
 
     // Same order, same seats: the queue an operator was reading has not moved.
-    expect(headings()).toEqual(["Not going to happen", "Still draining"]);
-    expect(screen.queryByText(/Nothing has given up/)).toBeNull();
+    expect(headings()).toEqual(["Given up", "Still on the way"]);
+    expect(screen.queryByText(/Nothing has been given up on/)).toBeNull();
   });
 });

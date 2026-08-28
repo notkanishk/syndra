@@ -239,7 +239,7 @@ describe("People index — bulk mode", () => {
     // ...and says so, with a way back to just the visible page: selecting 60
     // when you meant 50 is dozens of people's access.
     expect(await screen.findByText(/All 60 people selected/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /select only the 50 shown/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /select only the 50 people shown/ })).toBeInTheDocument();
   });
 
   // The name is the largest thing in a row and the obvious place a thumb

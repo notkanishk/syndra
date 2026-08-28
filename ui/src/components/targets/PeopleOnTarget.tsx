@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
+import { targetLabel } from "@/lib/nav";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetInventory, type BoundAccount } from "@/lib/queries/useTargets";
 
@@ -29,6 +30,7 @@ import { useTargetInventory, type BoundAccount } from "@/lib/queries/useTargets"
 export function PeopleOnTarget({ target }: { target: string }) {
   const inventory = useTargetInventory(target);
   const accounts = inventory.data?.accounts ?? [];
+  const name = targetLabel(target);
 
   return (
     <Card>
@@ -36,9 +38,9 @@ export function PeopleOnTarget({ target }: { target: string }) {
         // "Bound", not "People with an account here". The region heading above says
         // whose accounts these are; repeating it in every card title spends the
         // width on a sentence the reader has already read.
-        title="Bound"
+        title="Have an account here"
         count={inventory.data?.bound}
-        note="Pause what a role grants, or take the access away"
+        note="Put what a role gives them on hold, or revoke it (end their access)"
       />
       <ListStates
         isLoading={inventory.isLoading}
@@ -49,7 +51,7 @@ export function PeopleOnTarget({ target }: { target: string }) {
         empty={
           <EmptyState
             title="Nobody yet"
-            guidance="No role reaches this target, or the changes that would create accounts have not been drained."
+            guidance={`No role is mapped to ${name} yet, or the changes that would create accounts are still waiting to be sent from Pending changes.`}
           />
         }
       >
@@ -88,19 +90,19 @@ function PersonRow({
         </span>
         <span className="font-mono text-[13.5px] text-muted">{account.username}</span>
         {account.account_uid !== undefined && (
-          <span className="text-[13px] text-faint">uid {account.account_uid}</span>
+          <span className="text-[13px] text-faint">id {account.account_uid}</span>
         )}
         <span className="text-[13px] text-faint">
-          since <Relative iso={account.bound_at} />
+          account since <Relative iso={account.bound_at} />
         </span>
         <span className="flex-1" />
         {/* Pause it, or end it. The two answers to one question, in that order:
             the reversible one first. */}
         <Button variant="outline" size="sm" onClick={() => setDialog("hold")}>
-          Hold
+          Put on hold
         </Button>
         <Button variant="danger" size="sm" onClick={() => setDialog("takeaway")}>
-          Take away
+          Revoke
         </Button>
       </CardRow>
 
@@ -120,7 +122,7 @@ function PersonRow({
           // true for Ada".
           field="enabled"
           value="true"
-          label="access to this target"
+          label={`access to ${targetLabel(target)}`}
           onClose={() => setDialog(null)}
         />
       )}

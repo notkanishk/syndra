@@ -29,9 +29,9 @@ export type IndicatorKey =
  * Pending changes are work (accent), Expiring access is a deadline (warn),
  * Unexplained access is something that already went wrong (danger).
  *
- * Withdrawn access is danger too, and for a sharper reason than drift: drift is
- * access that appeared without an explanation, and this is access somebody
- * decided to take away that is still there.
+ * Unfinished revocations is danger too, and for a sharper reason than drift:
+ * drift is access that appeared without an explanation, and this is access
+ * somebody revoked that is still there.
  */
 export type BadgeTone = "accent" | "warn" | "danger";
 
@@ -98,7 +98,7 @@ export const ADVANCED_NAV: NavEntry[] = [
   ]),
   group("Review", [
     leaf("Unexplained access", "/governance/drift", { indicator: "drift", tone: "danger" }),
-    leaf("Withdrawn access", "/governance/unconfirmed-revocations", {
+    leaf("Unfinished revocations", "/governance/unconfirmed-revocations", {
       indicator: "unconfirmed_revocations",
       tone: "danger",
     }),
@@ -114,7 +114,7 @@ export const ADVANCED_NAV: NavEntry[] = [
     leaf("Audit", "/audit"),
   ]),
   group("System", [
-    leaf("Identity provider", "/zitadel"),
+    leaf("Zitadel", "/zitadel"),
     // The target plane's own row, present on every deployment INCLUDING one
     // that has registered no add-on at all.
     //
@@ -133,7 +133,7 @@ export const ADVANCED_NAV: NavEntry[] = [
     // The LLDAP bridge's row. Gone with the bridge: it named a service that no
     // longer exists, and a nav entry for a deleted subsystem is worse than a
     // missing one — an operator clicks it before they read anything.
-    leaf("Event activity", "/operations"),
+    leaf("Zitadel events", "/operations"),
   ]),
 ];
 
@@ -156,7 +156,7 @@ export function targetNav(targets: string[]): NavEntry[] {
   return ADVANCED_NAV.map((entry) => {
     if (entry.kind !== "group" || entry.label !== "System") return entry;
     return group("System", [
-      // Identity provider, then Connected systems — the two static rows — and
+      // Zitadel, then Connected systems — the two static rows — and
       // each registered target under the index it belongs to.
       ...entry.children.slice(0, 2),
       ...targets.map((target) =>

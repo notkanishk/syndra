@@ -24,7 +24,7 @@ export class ApiError extends Error {
 
   constructor(status: number, body: ApiErrorBody | string) {
     const parsed: ApiErrorBody = typeof body === "string" ? { message: body } : body;
-    super(parsed.message ?? `Request failed with status ${status}`);
+    super(parsed.message ?? "Syndra's server had a problem and gave no reason.");
     this.name = "ApiError";
     this.status = status;
     this.code = parsed.error ?? "UNKNOWN_ERROR";

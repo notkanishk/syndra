@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
  * Review › Holds due.
  *
  * Its own destination beside Expiring access rather than a section inside it.
- * The two queues read the same way and mean opposite things: an expiring grant
+ * The two queues read the same way and mean opposite things: expiring access
  * lapses if nobody acts, and a hold stays in force. Sitting them in one list
  * would put "do nothing and access ends" next to "do nothing and access stays
  * blocked", under one heading, for an operator working down it with one mental
@@ -18,7 +18,7 @@ export default function HoldsDuePage() {
     <>
       <PageHeader
         title="Holds due"
-        meta="Access somebody withheld on purpose, past the date they said they would look at it again."
+        lede="Holds (a block on someone's access, with a date to look at it again) whose review date has passed. Doing nothing keeps the access blocked."
       />
       <HoldsDueForReview />
     </>

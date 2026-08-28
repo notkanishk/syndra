@@ -9,7 +9,7 @@ import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { FieldLabel, Input } from "@/components/ui/Input";
+import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import {
   useUpstreamCreateRole,
@@ -19,6 +19,10 @@ import {
   useUpstreamUpdateRole,
   type UpstreamProjectRole,
 } from "@/lib/queries/useUpstream";
+
+/** What is recorded when a change goes straight to Zitadel: one line, and no explanation. */
+const AUDIT_ONLY =
+  "Syndra recorded one line in Audit and nothing else; it will not explain this change anywhere.";
 
 /**
  * Projects and their roles, as the identity provider holds them.
@@ -39,7 +43,7 @@ export default function UpstreamProjectsPage() {
   return (
     <UpstreamShell
       title="Projects and their roles"
-      lede="Read live from the identity provider, including roles Syndra never created."
+      lede="Read live from Zitadel, including roles Syndra never created."
       syndraHref="/projects"
       syndraLabel="See the same projects as Syndra understands them"
     >
@@ -51,12 +55,12 @@ export default function UpstreamProjectsPage() {
             error={projects.error}
             isEmpty={rows.length === 0}
             onRetry={() => projects.refetch()}
-            errorTitle="Couldn't read projects from the identity provider. Syndra itself is fine."
+            errorTitle="Couldn't read projects from Zitadel. Syndra itself is fine."
             skeleton={<RowSkeleton rows={5} avatar={false} label="Reading projects" />}
             empty={
               <EmptyState
-                title="No projects upstream."
-                guidance="Either none exist, or the service account cannot see them."
+                title="Zitadel has no projects."
+                guidance="Either there are none, or the account Syndra uses to read Zitadel is not allowed to see them."
               />
             }
           >
@@ -84,7 +88,7 @@ export default function UpstreamProjectsPage() {
             action={
               activeId ? (
                 <Button size="sm" variant="danger" onClick={() => setEditing("new")}>
-                  New role upstream
+                  New role in Zitadel
                 </Button>
               ) : undefined
             }
@@ -93,7 +97,7 @@ export default function UpstreamProjectsPage() {
           <CardColumns>
             <span className="flex-1">Role</span>
             <span className="w-[160px]">Group</span>
-            <span className="w-[160px] text-right">Change</span>
+            <span className="w-[160px]" />
           </CardColumns>
 
           <ListStates
@@ -101,12 +105,12 @@ export default function UpstreamProjectsPage() {
             error={roles.error}
             isEmpty={(roles.data?.items ?? []).length === 0}
             onRetry={() => roles.refetch()}
-            errorTitle="Couldn't read this project's roles from the identity provider. Syndra itself is fine."
+            errorTitle="Couldn't read this project's roles from Zitadel. Syndra itself is fine."
             skeleton={<RowSkeleton rows={4} avatar={false} label="Reading roles" />}
             empty={
               <EmptyState
-                title="This project has no roles upstream."
-                guidance="Create one here, or — preferably — create it in Syndra so it is tracked."
+                title="This project has no roles in Zitadel."
+                guidance="Create one here, or — better — create it in Syndra under Access › Roles, so Syndra keeps track of it."
               />
             }
           >
@@ -155,10 +159,15 @@ function RoleRow({
         </span>
         <span className="w-[160px] truncate text-[13.5px] text-muted">{role.group || "—"}</span>
         <span className="flex w-[160px] justify-end gap-2">
-          <Button size="sm" onClick={onEdit}>
+          <Button size="sm" onClick={onEdit} aria-label={`Edit ${role.displayName || role.key}`}>
             Edit
           </Button>
-          <Button size="sm" variant="danger" onClick={() => setConfirming(true)}>
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={() => setConfirming(true)}
+            aria-label={`Delete ${role.displayName || role.key}`}
+          >
             Delete
           </Button>
         </span>
@@ -167,12 +176,12 @@ function RoleRow({
       {confirming && (
         <Modal open onClose={() => setConfirming(false)} busy={remove.isPending} size="sm">
           <ModalHeader
-            title={`Delete ${role.displayName || role.key} upstream?`}
-            lede="The role disappears from the identity provider, and everybody currently holding it loses it."
+            title={`Delete ${role.displayName || role.key} in Zitadel?`}
+            lede="The role disappears from Zitadel, and everybody who holds it loses it at once."
           />
           <div className="px-6">
             <DirectWriteWarning
-              what="Deleting a role removes it for every holder at once."
+              what="Deleting a role revokes it (ends access) for everyone who holds it, the moment you press the button."
               acknowledged={acknowledged}
               onAcknowledge={setAcknowledged}
             />
@@ -193,14 +202,14 @@ function RoleRow({
                   setOutcome({
                     kind: "applied",
                     message: `${role.key} deleted in Zitadel`,
-                    detail: "Syndra has no record of this change beyond the audit line.",
+                    detail: AUDIT_ONLY,
                   });
                 } catch (error) {
                   setOutcome(outcomeFromError(error));
                 }
               }}
             >
-              Delete role
+              Delete role in Zitadel
             </Button>
             <Button onClick={() => setConfirming(false)}>Cancel</Button>
           </ModalFooter>
@@ -232,8 +241,8 @@ function RoleDialog({
   return (
     <Modal open onClose={onClose} busy={busy} size="sm">
       <ModalHeader
-        title={role ? `Edit ${role.key} upstream` : "New role upstream"}
-        lede="Roles created here are not tracked by Syndra until somebody adopts them."
+        title={role ? `Edit ${role.key} in Zitadel` : "New role in Zitadel"}
+        lede="Syndra will not know about this role until someone adds it under Access › Roles."
       />
       <div className="flex flex-col gap-3.5 px-6">
         <div>
@@ -245,6 +254,7 @@ function RoleDialog({
             onChange={(event) => setKey(event.target.value)}
             placeholder="trained"
           />
+          <FieldHint>The short name other systems see, e.g. trained. Lowercase, no spaces.</FieldHint>
         </div>
         <div>
           <FieldLabel htmlFor="upstream-role-name">Display name</FieldLabel>
@@ -252,7 +262,7 @@ function RoleDialog({
             id="upstream-role-name"
             value={displayName}
             onChange={(event) => setDisplayName(event.target.value)}
-            placeholder="Trained operator"
+            placeholder="Trained on the laser cutter"
           />
         </div>
         <div>
@@ -263,6 +273,7 @@ function RoleDialog({
             onChange={(event) => setGroup(event.target.value)}
             placeholder="Safety-gated"
           />
+          <FieldHint>Optional. A label Zitadel uses to group related roles; Syndra ignores it.</FieldHint>
         </div>
         <DirectWriteWarning
           what="Creating or renaming a role here happens outside Syndra's record."
@@ -289,14 +300,14 @@ function RoleDialog({
                 setOutcome({
                   kind: "applied",
                   message: `${role.key} updated in Zitadel`,
-                  detail: "Syndra has no record of this change beyond the audit line.",
+                  detail: AUDIT_ONLY,
                 });
               } else {
                 await create.mutateAsync({ projectId, key: key.trim(), displayName, group });
                 setOutcome({
                   kind: "applied",
                   message: `${key.trim()} created in Zitadel`,
-                  detail: "Syndra has no record of this change beyond the audit line.",
+                  detail: AUDIT_ONLY,
                 });
               }
             } catch (error) {
@@ -304,7 +315,7 @@ function RoleDialog({
             }
           }}
         >
-          {role ? "Save upstream" : "Create upstream"}
+          {role ? "Save in Zitadel" : "Create in Zitadel"}
         </Button>
         <Button onClick={onClose}>{outcome?.kind === "applied" ? "Done" : "Cancel"}</Button>
       </ModalFooter>

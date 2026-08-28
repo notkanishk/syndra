@@ -77,7 +77,7 @@ describe("a decision somebody else already took", () => {
     // Split across elements, so read the rendered text rather than one node.
     const text = document.body.textContent ?? "";
     expect(text).toContain("renumbered by hand during the migration");
-    expect(text).toMatch(/Taking the target.s/);
+    expect(text).toMatch(/Using TrueNAS.s value/);
   });
 
   // The API's own sentence is raw material: a UUID beside a snake_case

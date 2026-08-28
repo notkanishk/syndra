@@ -91,8 +91,8 @@ export function AccountSheet({ session }: { session: SessionUser }) {
               onClick={() => void installer.install()}
               className="flex min-h-[44px] items-center justify-between rounded-inner border border-line px-4 text-[14.5px] motion-press"
             >
-              <span>Install on this phone</span>
-              <span className="text-muted">Adds an icon</span>
+              <span>Install as an app</span>
+              <span className="text-muted">Adds a home-screen icon</span>
             </button>
           )}
         </div>
@@ -109,8 +109,8 @@ export function AccountSheet({ session }: { session: SessionUser }) {
             </button>
           </form>
           <p className="mt-2.5 text-[12.5px] leading-[1.5] text-faint">
-            Signing out clears where you were on every tab. Sessions last weeks, so this is
-            rarely worth doing by accident.
+            Signing out signs you out in every open tab. You stay signed in for weeks otherwise,
+            so there is no need to do this at the end of each visit.
           </p>
         </div>
       </Modal>

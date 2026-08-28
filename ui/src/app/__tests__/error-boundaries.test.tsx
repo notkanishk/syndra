@@ -35,7 +35,7 @@ describe("the render-error boundary", () => {
 
   it("offers the way out", () => {
     renderError();
-    expect(screen.getByRole("link", { name: /Go to the start/ }).getAttribute("href")).toBe("/");
+    expect(screen.getByRole("link", { name: /Go to the home page/ }).getAttribute("href")).toBe("/");
   });
 
   // The digest is the only handle that survives into production, where the
@@ -46,7 +46,7 @@ describe("the render-error boundary", () => {
 
     vi.restoreAllMocks();
     renderError();
-    expect(screen.queryAllByText(/Error id/)).toHaveLength(1);
+    expect(screen.queryAllByText(/Reference/)).toHaveLength(1);
   });
 });
 
@@ -56,6 +56,6 @@ describe("the not-found boundary", () => {
   it("says the address is wrong, not that something was removed", () => {
     render(<NotFound />);
     expect(screen.getByText(/nothing at this address/i)).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Go to the start/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Go to the home page/ })).toBeTruthy();
   });
 });

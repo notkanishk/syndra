@@ -108,7 +108,7 @@ describe("converging a cohort", () => {
 
     const body = document.body.textContent ?? "";
     expect(body).not.toMatch(/\bdone\b/i);
-    expect(body).toMatch(/queued/i);
+    expect(body).toMatch(/waiting to be sent/i);
   });
 
   // Labelled with the AGE, not merely with the word: "computed against
@@ -122,7 +122,7 @@ describe("converging a cohort", () => {
     renderConverge();
 
     await waitFor(() => expect(screen.getByText(/last state seen/i)).toBeInTheDocument());
-    expect(screen.getByText(/14m ago/)).toBeInTheDocument();
+    expect(screen.getByText(/14 min ago/)).toBeInTheDocument();
   });
 
   // Unlike adoption, a provisional plan is still applicable: applying joins a

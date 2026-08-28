@@ -44,6 +44,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       <PageHeader
         eyebrow="Projects"
         title={project?.project.name ?? id}
+        lede="The roles this project offers, the apps that check them, and who holds each."
         meta={
           <span className="flex flex-wrap items-center gap-2">
             <span>
@@ -94,7 +95,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           empty={
             <EmptyState
               title="No roles listed in this project."
-              guidance="Create one here, or check the identity provider — roles created directly there may not be listed yet."
+              guidance="Create one here, or check Zitadel — roles created directly there may not be listed yet."
               action={{ label: "Create a role", onClick: () => setCreating(true) }}
             />
           }

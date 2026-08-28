@@ -66,7 +66,7 @@ describe("connected systems", () => {
 
   it("does not claim a count it does not have", () => {
     render(<ConnectedSystemsPage />);
-    expect(screen.queryByText(/registered$/)).toBeNull();
+    expect(screen.queryByText(/connected$/)).toBeNull();
   });
 
   it("lists a registered target and what it can do", () => {
@@ -74,8 +74,8 @@ describe("connected systems", () => {
     render(<ConnectedSystemsPage />);
 
     expect(screen.getByText("TrueNAS")).toBeTruthy();
-    expect(screen.getByText("1 add-on registered")).toBeTruthy();
-    expect(screen.getByText("answering")).toBeTruthy();
+    expect(screen.getByText("1 system connected")).toBeTruthy();
+    expect(screen.getByText("Answering")).toBeTruthy();
     expect(screen.getByText("2")).toBeTruthy();
   });
 
@@ -86,7 +86,7 @@ describe("connected systems", () => {
     state.targets = [target({ callable: false, operations: [] })];
     render(<ConnectedSystemsPage />);
 
-    expect(screen.getByText("no manifest read yet")).toBeTruthy();
+    expect(screen.getByText("Not answered yet")).toBeTruthy();
     expect(screen.queryByText("0")).toBeNull();
     expect(screen.getByText("—")).toBeTruthy();
   });
@@ -97,16 +97,16 @@ describe("connected systems", () => {
     state.targets = [target({ transport_status: "error", transport_error: "no such file" })];
     render(<ConnectedSystemsPage />);
 
-    expect(screen.getByText("transport failed")).toBeTruthy();
-    expect(screen.queryByText("answering")).toBeNull();
+    expect(screen.getByText("Cannot connect")).toBeTruthy();
+    expect(screen.queryByText("Answering")).toBeNull();
   });
 
   it("reports a suspended breaker as its own state, not as health", () => {
     state.targets = [target({ circuit_open: true })];
     render(<ConnectedSystemsPage />);
 
-    expect(screen.getByText("calls suspended")).toBeTruthy();
-    expect(screen.queryByText("answering")).toBeNull();
+    expect(screen.getByText("Paused after failures")).toBeTruthy();
+    expect(screen.queryByText("Answering")).toBeNull();
   });
 });
 
@@ -127,20 +127,20 @@ describe("the tone a reading wears", () => {
     state.targets = [target({ callable: false, operations: [] })];
     render(<ConnectedSystemsPage />);
 
-    expect(toneOf("no manifest read yet")).toBe("muted");
+    expect(toneOf("Not answered yet")).toBe("muted");
   });
 
   it("keeps amber for the reading that is a real fault on this host", () => {
     state.targets = [target({ transport_status: "error", transport_error: "no such file" })];
     render(<ConnectedSystemsPage />);
 
-    expect(toneOf("transport failed")).toBe("danger-text");
+    expect(toneOf("Cannot connect")).toBe("danger-text");
   });
 
   it("keeps amber for a breaker somebody has to act on", () => {
     state.targets = [target({ circuit_open: true })];
     render(<ConnectedSystemsPage />);
 
-    expect(toneOf("calls suspended")).toBe("warn-text");
+    expect(toneOf("Paused after failures")).toBe("warn-text");
   });
 });

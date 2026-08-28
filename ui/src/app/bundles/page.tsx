@@ -60,7 +60,7 @@ export default function BundlesPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Bundles"
-        meta="A named set of roles handed out as one unit."
+        lede="A bundle is a set of roles given together. Put a person in a bundle and they hold every role in it; publish a new version and you choose whether they move."
         actions={
           <Button variant="accent" onClick={() => setCreating(true)}>
             New bundle
@@ -334,7 +334,7 @@ function BundleWorkspace({
             <div className="text-[14.5px] font-semibold">Retire this bundle</div>
             <p className="mt-0.5 text-[13px] text-muted">
               {holders === 0
-                ? "Nobody holds it, so nothing is taken away."
+                ? "Nobody holds it, so nothing is revoked."
                 : `The ${holders} ${holders === 1 ? "person" : "people"} holding it lose whatever only this bundle gave them.`}
             </p>
           </div>
@@ -551,8 +551,8 @@ function DeleteBundleDialog({
             {holders > 0 && (
               <li>
                 Each holder loses whichever of its {roleCount}{" "}
-                {roleCount === 1 ? "role" : "roles"} nothing else gives them — a rule or a direct
-                grant for the same role keeps it.
+                {roleCount === 1 ? "role" : "roles"} nothing else gives them — a rule or direct
+                access to the same role keeps it.
               </li>
             )}
             {isWelcome && (
@@ -598,8 +598,8 @@ function DeleteBundleDialog({
                         auto ? "applied" : "waiting"
                       }`,
                       detail: auto
-                        ? `Its withdrawals went with it.${orphaned}`
-                        : `They sit under Pending changes until somebody resumes the queue.${orphaned}`,
+                        ? `The revocations it set off went with it.${orphaned}`
+                        : `The revocations it set off wait under Pending changes until you send them.${orphaned}`,
                     },
               );
             } catch (error) {

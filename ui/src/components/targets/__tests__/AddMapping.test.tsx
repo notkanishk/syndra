@@ -78,7 +78,7 @@ function compose() {
 describe("adding a mapping", () => {
   it("rehearses before it writes anything", async () => {
     compose();
-    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
 
     await waitFor(() => expect(state.rehearsals.length).toBe(1));
     expect(state.rehearsals[0].input).toMatchObject({
@@ -95,7 +95,7 @@ describe("adding a mapping", () => {
 
   it("applies the plan it was shown, citing it", async () => {
     compose();
-    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
     fireEvent.click(await screen.findByRole("button", { name: /^Apply/ }));
 
     await waitFor(() => expect(state.created.length).toBe(1));
@@ -119,7 +119,7 @@ describe("adding a mapping", () => {
 
     expect((screen.getByLabelText("Role") as HTMLSelectElement).value).toBe("");
     // And the form knows it is incomplete again.
-    expect(screen.getByRole("button", { name: /rehearse/i }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: /preview/i }).hasAttribute("disabled")).toBe(true);
   });
 
   // Not an empty dropdown. A project with no roles cannot confer anything, and
@@ -133,7 +133,7 @@ describe("adding a mapping", () => {
 
   it("will not rehearse until it has all four", () => {
     render(<AddMappingDialog target="truenas" onClose={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /rehearse/i }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: /preview/i }).hasAttribute("disabled")).toBe(true);
   });
 
   // The same honesty the edit path has: a check that could not run must not
@@ -141,10 +141,10 @@ describe("adding a mapping", () => {
   it("says when the value could not be checked", async () => {
     state.rehearsed = { ...(state.rehearsed as MappingRehearsal), value_checked: false };
     compose();
-    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
 
     await waitFor(() =>
-      expect(document.body.textContent).toMatch(/could not be asked whether/),
+      expect(document.body.textContent).toMatch(/could not be reached, so/),
     );
   });
 });
@@ -176,7 +176,7 @@ describe("a mapping on a role nobody holds", () => {
 
   it("can be saved, without an approval it was never given", async () => {
     compose();
-    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
 
     const save = await screen.findByRole("button", { name: "Save mapping" });
     expect(save.hasAttribute("disabled")).toBe(false);
@@ -193,7 +193,7 @@ describe("a mapping on a role nobody holds", () => {
   // operator came here for.
   it("does not tell the operator there is nothing to apply", async () => {
     compose();
-    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
     await screen.findByRole("button", { name: "Save mapping" });
 
     expect(screen.queryByRole("button", { name: /Nothing to apply/ })).toBeNull();
@@ -204,10 +204,10 @@ describe("a mapping on a role nobody holds", () => {
   // is the failure this distinction exists to prevent.
   it("says it reaches nobody, not that its rows failed to arrive", async () => {
     compose();
-    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
     await screen.findByRole("button", { name: "Save mapping" });
 
-    expect(document.body.textContent).toMatch(/This reaches nobody/);
+    expect(document.body.textContent).toMatch(/Nobody holds this role yet/);
     expect(document.body.textContent).not.toMatch(/came back without its rows/);
   });
 
@@ -221,7 +221,7 @@ describe("a mapping on a role nobody holds", () => {
       summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     } as unknown as MappingRehearsal;
     compose();
-    fireEvent.click(screen.getByRole("button", { name: /rehearse/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
 
     const apply = await screen.findByRole("button", { name: /^Apply/ });
     expect(apply.hasAttribute("disabled")).toBe(true);

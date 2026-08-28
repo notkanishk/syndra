@@ -32,8 +32,8 @@ describe("a value somebody has to transport", () => {
     withClipboard(writeText);
     render(<CopyableValue value="smb://fileserver-01/studio" label="Share path" />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Copy" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Copied" })).toBeTruthy());
+    fireEvent.click(await screen.findByRole("button", { name: "Copy share path" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Copied share path" })).toBeTruthy());
     expect(writeText).toHaveBeenCalledWith("smb://fileserver-01/studio");
   });
 
@@ -44,8 +44,8 @@ describe("a value somebody has to transport", () => {
     withoutClipboard();
     render(<CopyableValue value="smb://fileserver-01/studio" label="Share path" />);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Select" })).toBeTruthy());
-    expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Select share path" })).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /^Copy/ })).toBeNull();
   });
 
   it("puts the value under the platform's own copy gesture when tapped", async () => {
@@ -62,11 +62,11 @@ describe("a value somebody has to transport", () => {
     } as unknown as Selection);
 
     render(<CopyableValue value="req_9c14e" label="Request id" />);
-    fireEvent.click(await screen.findByRole("button", { name: "Select" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Select request id" }));
 
     expect(selectNodeContents).toHaveBeenCalled();
     expect(addRange).toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Selected" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Selected request id" })).toBeTruthy();
     vi.restoreAllMocks();
   });
 
@@ -77,7 +77,7 @@ describe("a value somebody has to transport", () => {
     withClipboard(vi.fn().mockRejectedValue(new Error("denied")));
     render(<CopyableValue value="tok_4c9e2f10" label="Token" />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Copy" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Copy token" }));
     await waitFor(() => expect(screen.getByRole("button", { name: /Select/ })).toBeTruthy());
   });
 

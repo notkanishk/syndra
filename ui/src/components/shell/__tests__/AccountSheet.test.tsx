@@ -35,7 +35,7 @@ describe("the account sheet", () => {
 
   it("says what signing out costs, before it is tapped", () => {
     open();
-    expect(screen.getByText(/clears where you were on every tab/i)).toBeTruthy();
+    expect(screen.getByText(/signs you out in every open tab/i)).toBeTruthy();
   });
 
   // It is a POST, not a link: a session ends through a form the server

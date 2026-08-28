@@ -85,7 +85,7 @@ describe("PersonActivity", () => {
   it("says who acted when the person was acted upon", () => {
     audit.data = [entry({ actor_id: "op", target_id: "u1" })];
     renderIn(<PersonActivity userId="u1" name="Ada" />);
-    expect(screen.getByText("Granted direct access")).toBeInTheDocument();
+    expect(screen.getByText("Gave direct access")).toBeInTheDocument();
     // The person did not do this — the row must not imply they did.
     expect(screen.getByText(/by/)).toBeInTheDocument();
     expect(screen.getByText("Sam Patel")).toBeInTheDocument();
@@ -137,7 +137,7 @@ describe("PersonRequests", () => {
     requests.data = [request()];
     renderIn(<PersonRequests userId="u1" name="Ada" isOperator />);
     expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Deny" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Decline" })).toBeInTheDocument();
   });
 
   it("shows a member the outcome but never the decision buttons", () => {

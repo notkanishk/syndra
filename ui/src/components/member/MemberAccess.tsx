@@ -80,7 +80,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
               it can do instead of who to find. */}
           <EmptyState
             title="You don't have access to anything yet."
-            guidance="Nobody has given you access. If there's a machine or a space you need, ask for it here and a lab manager decides — everything the makerspace offers is listed below."
+            guidance="Nobody has given you access. If there's a machine or a space you need, ask for it here and makerspace staff decide — everything the makerspace offers is listed below."
             action={{ label: "Ask for access", href: "/requests" }}
           />
         </Card>
@@ -117,7 +117,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
               {expiringRole ?? "One of your permissions"} runs out on{" "}
               {formatShortDate(expiringGrant.expires_at)}.
             </strong>{" "}
-            If you still need it, ask and a lab manager will extend it.
+            If you still need it, ask and makerspace staff can extend it.
           </div>
           <ButtonLink href="/requests" variant="accent">
             Request an extension

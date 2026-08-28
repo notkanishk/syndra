@@ -44,9 +44,10 @@ export default function AppsPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Apps"
+        lede="An app is something people sign in to — the booking site, the badge reader. Each one is told a person's roles from one project. Open an app when it is not seeing the roles it should."
         meta={
           rows.length > 0
-            ? `${rows.length} ${rows.length === 1 ? "app receives" : "apps receive"} a token and read roles out of it`
+            ? `${rows.length} ${rows.length === 1 ? "app" : "apps"}`
             : undefined
         }
       />
@@ -90,8 +91,8 @@ export default function AppsPage() {
           empty={
             <EmptyState
               title="No applications registered."
-              guidance="Add an OIDC client, API or SAML app in the identity provider and it appears here."
-              action={{ label: "Open the identity provider", href: "/zitadel" }}
+              guidance="Add an app in Zitadel (the service everyone signs in through) and it appears here."
+              action={{ label: "Open Zitadel", href: "/zitadel" }}
             />
           }
         >

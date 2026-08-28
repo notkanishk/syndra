@@ -74,7 +74,7 @@ describe("an account that exists and will not let them in", () => {
     ];
     renderStorage();
 
-    expect(screen.getByText(/on hold/i)).toBeTruthy();
+    expect(screen.getByText(/account is paused/i)).toBeTruthy();
     expect(screen.queryByText(/not switched on yet/i)).toBeNull();
   });
 
@@ -88,7 +88,7 @@ describe("an account that exists and will not let them in", () => {
     renderStorage();
 
     expect(screen.queryByText(/not switched on yet/i)).toBeNull();
-    expect(screen.queryByText(/on hold/i)).toBeNull();
+    expect(screen.queryByText(/account is paused/i)).toBeNull();
   });
 });
 
@@ -161,7 +161,7 @@ describe("a member's storage view", () => {
     renderStorage();
 
     expect(screen.queryByLabelText(/password/i)).toBeNull();
-    expect(screen.getByText(/none of your roles reaches/i)).toBeInTheDocument();
+    expect(screen.getByText(/none of your roles gives you access/i)).toBeInTheDocument();
     // And no connection instructions: an account name that does not exist is
     // worse than no instructions at all.
     expect(screen.queryByText("ada")).toBeNull();

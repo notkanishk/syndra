@@ -45,12 +45,12 @@ export function PlanReview({ plan }: { plan: BulkPlan | null }) {
       <div className="max-h-[46vh] overflow-y-auto rounded-inner border border-line-strong">
         {missing ? (
           <p className="px-4 py-3 text-[13.5px] text-faint">
-            This plan came back without its rows. The summary below is what it reported.
+            The list of people did not load. The totals under the buttons are all that came back.
           </p>
         ) : outcomes.length === 0 ? (
           <p className="px-4 py-3 text-[13.5px] text-muted">
-            This reaches nobody. Nothing on the target changes, and nothing is queued —
-            what changes is what the role will confer once somebody holds it.
+            Nobody holds this role yet, so nobody&apos;s access changes today. This only changes
+            what the role gives to people who hold it later.
           </p>
         ) : (
           outcomes.map((outcome) => <PlanRow key={outcome.user_id} outcome={outcome} />)
@@ -68,7 +68,7 @@ function PlanRow({ outcome }: { outcome: BulkOutcome }) {
     <div className="row-divider flex items-start gap-4 px-4 py-3">
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[14.5px] font-semibold">
-          {outcome.name || outcome.email || "Unknown account"}
+          {outcome.name || outcome.email || "Name not available"}
         </span>
         <span className="block text-[13px] text-muted">
           {outcome.detail}
@@ -92,12 +92,12 @@ function PlanRow({ outcome }: { outcome: BulkOutcome }) {
  * rows already in the target state and the rows that were refused. Both are
  * counts an operator would otherwise discover only by reading the whole table.
  */
-export function planNote(plan: BulkPlan): string {
+export function planNote(plan: BulkPlan, noun: [string, string] = ["person", "people"]): string {
   const parts: string[] = [];
-  if (plan.summary.no_change > 0) parts.push(`${plan.summary.no_change} already in that state`);
+  if (plan.summary.no_change > 0) parts.push(`No change for ${plan.summary.no_change}`);
   if (plan.summary.blocked > 0) parts.push(`${plan.summary.blocked} refused`);
-  if (parts.length === 0) return "Every selected row will change.";
-  return `${parts.join(" · ")} — untouched by this.`;
+  if (parts.length === 0) return `Every selected ${noun[0]} will change.`;
+  return `${parts.join(" · ")} — Syndra leaves those as they are.`;
 }
 
 /** "Apply to 4 people" / "Nothing to apply". The button's own label states its scope. */
@@ -108,7 +108,7 @@ export function applyLabel(plan: BulkPlan, noun: [string, string]): string {
   // the screen inventing a number and the screen lying about one, on the
   // control where it can least afford to. The action stays available, because a
   // backend that renamed a field should not block work; only the claim goes.
-  if (typeof n !== "number") return "Apply this plan";
+  if (typeof n !== "number") return "Apply the change";
   if (n === 0) return "Nothing to apply";
   return `Apply to ${n} ${n === 1 ? noun[0] : noun[1]}`;
 }

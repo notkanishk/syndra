@@ -1,3 +1,4 @@
+import { targetLabel } from "@/lib/nav";
 import type { AuditEntry } from "@/lib/queries/useAudit";
 
 /**
@@ -15,14 +16,16 @@ import type { AuditEntry } from "@/lib/queries/useAudit";
  * matters.
  */
 export const AUDIT_ACTIONS: Record<string, { verb: string; destructive?: boolean }> = {
-  "direct_grant.upserted": { verb: "Granted direct access" },
-  "direct_grant.replaced": { verb: "Replaced a direct grant" },
+  "direct_grant.upserted": { verb: "Gave direct access" },
+  "direct_grant.replaced": { verb: "Replaced somebody's direct access" },
   "direct_grant.revoked": { verb: "Revoked direct access", destructive: true },
-  "direct_grant.removed": { verb: "Removed direct access", destructive: true },
-  "direct_grant.revoked_by_expiry": { verb: "Removed an expired grant", destructive: true },
+  // The record itself was deleted by hand, as opposed to a revoke that a rule,
+  // an expiry or a review set off.
+  "direct_grant.removed": { verb: "Revoked direct access by hand", destructive: true },
+  "direct_grant.revoked_by_expiry": { verb: "Ended access on its expiry date", destructive: true },
   "bundle.created": { verb: "Created a bundle" },
-  "bundle.assigned": { verb: "Assigned a bundle" },
-  "bundle.unassigned": { verb: "Removed a bundle assignment", destructive: true },
+  "bundle.assigned": { verb: "Gave somebody a bundle" },
+  "bundle.unassigned": { verb: "Removed somebody from a bundle", destructive: true },
   "bundle.role_added": { verb: "Added a role to a bundle" },
   "bundle.role_removed": { verb: "Removed a role from a bundle", destructive: true },
   "bundle.welcome_set": { verb: "Set the default bundle for new members" },
@@ -35,10 +38,10 @@ export const AUDIT_ACTIONS: Record<string, { verb: string; destructive?: boolean
   "bundle.deleted": { verb: "Retired a bundle", destructive: true },
   "bundle.version_published": { verb: "Published a bundle version" },
   "bundle.holder_moved": { verb: "Moved somebody to a different bundle version" },
-  welcome_bundle_assigned: { verb: "Assigned the default bundle to a new member" },
+  welcome_bundle_assigned: { verb: "Gave a new member the default bundle" },
   "mapping_rule.created": { verb: "Created an automatic rule" },
   "mapping_rule.updated": { verb: "Changed an automatic rule" },
-  "mapping_rule.deleted": { verb: "Removed an automatic rule", destructive: true },
+  "mapping_rule.deleted": { verb: "Deleted an automatic rule", destructive: true },
   "role.created": { verb: "Created a role" },
   "access_request.created": { verb: "Asked for access" },
   "access_request.approved": { verb: "Approved a request" },
@@ -46,18 +49,38 @@ export const AUDIT_ACTIONS: Record<string, { verb: string; destructive?: boolean
   // Not destructive, and deliberately not phrased as a refusal — the person who filed it took it
   // back. `requestOutcome` keeps the same distinction on the request screens.
   "access_request.withdrawn": { verb: "Withdrew their request" },
-  // Not destructive: the grant was already going to lapse. What was recorded is that somebody
+  // Not destructive: the access was already going to lapse. What was recorded is that somebody
   // looked, which is the opposite of something being taken away unnoticed.
-  "grant_expiry.acknowledged": { verb: "Recorded that an expiry should be left to lapse" },
-  "grant_expiry.acknowledgement_cleared": { verb: "Put an expiring grant back in the queue" },
+  "grant_expiry.acknowledged": { verb: "Recorded that expiring access should be left to lapse" },
+  "grant_expiry.acknowledgement_cleared": { verb: "Put expiring access back in the undecided list" },
   "claim_profile.updated": { verb: "Changed a project's token format" },
   "app_claim_override.updated": { verb: "Changed an app's token format" },
   "app_claim_override.deleted": { verb: "Removed an app's token override" },
 };
 
+/**
+ * The two families the backend builds by concatenation, with the connected
+ * system's name in the middle: a change to somebody's account on TrueNAS
+ * recorded and waiting to be sent, and a hold that lifted itself on its date.
+ * Neither can be a static key above, so they are matched by shape.
+ */
+const ACCOUNT_CHANGE = /^entitlement\.([a-z0-9_-]+)\.enqueued$/;
+const HOLD_LAPSED = /^allowance\.([a-z0-9_-]+)\.lapsed$/;
+
 export function describeAction(action: string): { verb: string; destructive: boolean } {
   const known = AUDIT_ACTIONS[action];
   if (known) return { verb: known.verb, destructive: Boolean(known.destructive) };
+  const account = action.match(ACCOUNT_CHANGE);
+  if (account) {
+    return {
+      verb: `Recorded a change to their ${targetLabel(account[1])} account, waiting to be sent`,
+      destructive: false,
+    };
+  }
+  const lapsed = action.match(HOLD_LAPSED);
+  if (lapsed) {
+    return { verb: `A hold on ${targetLabel(lapsed[1])} lifted itself on its date`, destructive: false };
+  }
   return { verb: action, destructive: /revoke|delete|remove/i.test(action) };
 }
 
@@ -93,8 +116,14 @@ export type AuditTrace =
 
 const LEADING_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
-/** Same short-id vocabulary as Change history: c_ for a cascade, R_ a rule, b_ a bundle. */
-function shortId(id: string, prefix: string): string {
+/**
+ * "c_8841" from a uuid — short enough to compare across screens by eye, and the
+ * one vocabulary every screen uses: c_ for one edit's set of changes, R_ an
+ * automatic rule, b_ a bundle. Every page that shows a handle also carries a
+ * one-line legend saying so.
+ */
+export function shortId(id: string | undefined, prefix: string): string {
+  if (!id) return "—";
   return `${prefix}_${id.replace(/-/g, "").slice(0, 4)}`;
 }
 
@@ -113,11 +142,13 @@ export function traceFor(entry: AuditEntry): AuditTrace {
   const id = entry.resource_id?.match(LEADING_UUID)?.[0];
   if (!id) return { kind: "none" };
 
+  // The caption says what kind of thing the handle names. The full uuid used
+  // to sit here, and meant nothing to the people reading it.
   if (entry.action.startsWith("mapping_rule.")) {
-    return { kind: "object", label: shortId(id, "R"), title: `Rule ${id}` };
+    return { kind: "object", label: shortId(id, "R"), title: "Rule" };
   }
   if (entry.action.startsWith("bundle.")) {
-    return { kind: "object", label: shortId(id, "b"), title: `Bundle ${id}` };
+    return { kind: "object", label: shortId(id, "b"), title: "Bundle" };
   }
   return { kind: "none" };
 }

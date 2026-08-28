@@ -59,7 +59,7 @@ export function CreateRoleDialog({
       <ModalHeader
         title="New role"
         titleId="new-role-title"
-        lede="Created in Syndra and in the identity provider together — if the provider refuses, nothing is left behind here."
+        lede="Created in Syndra and in Zitadel (the service everyone signs in through) at the same time. If Zitadel refuses it, nothing is created in either place."
       />
 
       <div className="flex flex-col gap-3.5 px-6">
@@ -86,6 +86,10 @@ export function CreateRoleDialog({
                 ))}
               </Select>
             )}
+            <FieldHint>
+              A machine or area with its own set of roles — the Laser Cutter, the Studio. Apps
+              check a person&rsquo;s roles against one project.
+            </FieldHint>
           </div>
           <div>
             <FieldLabel htmlFor="role-key">Role key</FieldLabel>
@@ -100,7 +104,7 @@ export function CreateRoleDialog({
                 ? "Letters, numbers, dashes and underscores only."
                 : duplicate
                   ? "That key already exists in this project."
-                  : "This is what appears in a token. It cannot be changed later."}
+                  : "The short name other systems see for this role. It cannot be changed later."}
             </FieldHint>
           </div>
         </div>
@@ -111,12 +115,12 @@ export function CreateRoleDialog({
             id="role-name"
             value={displayName}
             onChange={(event) => setDisplayName(event.target.value)}
-            placeholder="Trained operator"
+            placeholder="Laser trained"
           />
         </div>
 
         <div>
-          <FieldLabel htmlFor="role-description">What can somebody with it do?</FieldLabel>
+          <FieldLabel htmlFor="role-description">What can somebody with this role do?</FieldLabel>
           <Input
             id="role-description"
             value={description}
@@ -125,7 +129,7 @@ export function CreateRoleDialog({
           />
           <FieldHint>
             Shown in full wherever this role is listed. &ldquo;Can cut unsupervised&rdquo; versus
-            &ldquo;may enter and watch&rdquo; is the entire decision an operator makes.
+            &ldquo;may enter and watch&rdquo; is the whole decision you make when you give it to someone.
           </FieldHint>
         </div>
 
@@ -138,6 +142,7 @@ export function CreateRoleDialog({
               onChange={(event) => setGroup(event.target.value)}
               placeholder="Safety-gated"
             />
+            <FieldHint>Optional. Roles in the same group can be filtered together on the Roles page.</FieldHint>
           </div>
           <div>
             <FieldLabel htmlFor="role-clone">Clone from</FieldLabel>
@@ -191,7 +196,7 @@ export function CreateRoleDialog({
               setOutcome({
                 kind: "applied",
                 message: `${roleLabel(project, roleKey, displayName)} created`,
-                detail: "Nobody holds it yet, and nothing is checking it until somebody does.",
+                detail: "Nobody holds it yet. Give it to someone from People, or add it to a bundle.",
               });
             } catch (error) {
               setOutcome(outcomeFromError(error));

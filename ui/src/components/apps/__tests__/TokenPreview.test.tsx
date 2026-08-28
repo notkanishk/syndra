@@ -59,7 +59,7 @@ describe("a preview that would issue no roles", () => {
   it("says so in a sentence, naming the app and the person", async () => {
     renderPreview();
     expect(
-      await screen.findByText(/Badge Reader would issue a token with no roles for Meera Anand/),
+      await screen.findByText(/Meera Anand would sign in to Badge Reader with no roles/),
     ).toBeTruthy();
   });
 
@@ -90,9 +90,9 @@ describe("a preview that would issue no roles", () => {
 describe("a preview standing behind unsaved edits", () => {
   it("says which shape it is showing", async () => {
     renderPreview(true);
-    expect(await screen.findByText(/Behind your edits/)).toBeTruthy();
+    expect(await screen.findByText(/unsaved changes in Token format/)).toBeTruthy();
     expect(
-      screen.getByText(/The shape Badge Reader receives now — not the one being edited/),
+      screen.getByText(/This preview shows the saved format/),
     ).toBeTruthy();
   });
 
@@ -101,6 +101,6 @@ describe("a preview standing behind unsaved edits", () => {
     expect(
       await screen.findByText(/Exactly what Badge Reader would receive right now/),
     ).toBeTruthy();
-    expect(screen.queryByText(/Behind your edits/)).toBeNull();
+    expect(screen.queryByText(/unsaved changes in Token format/)).toBeNull();
   });
 });

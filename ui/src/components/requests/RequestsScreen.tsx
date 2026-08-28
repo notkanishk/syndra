@@ -139,6 +139,7 @@ function OperatorQueue() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Requests"
+        lede="What members have asked for. Approve gives them the access for the time they asked, starting now; decline closes it, and they may ask again."
         actions={
           <>
           {openRows.length > 0 && (
@@ -253,7 +254,7 @@ function OperatorQueue() {
                     Approve
                   </Button>
                   <Button size="sm" onClick={() => act(entry, "rejected")}>
-                    Deny
+                    Decline
                   </Button>
                 </div>
               ) : (
@@ -351,7 +352,7 @@ function MemberRequests({ userId }: { userId: string }) {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Requests"
-        meta="Ask for access, and see what happened to what you asked for."
+        lede="Ask for access, and see what happened to what you asked for. Makerspace staff decide; the answer appears here."
         actions={
           <Button variant="accent" onClick={() => setOpen(true)}>
             Ask for access
@@ -371,7 +372,7 @@ function MemberRequests({ userId }: { userId: string }) {
           empty={
             <EmptyState
               title="You haven't asked for anything yet."
-              guidance="If there's a machine you need and can't use, ask here and a lab manager will decide."
+              guidance="If there's a machine you need and can't use, ask here and makerspace staff will decide."
               action={{ label: "Ask for access", onClick: () => setOpen(true) }}
             />
           }
@@ -477,7 +478,7 @@ function RequestDialog({
       <ModalHeader
         title="Ask for access"
         titleId="request-title"
-        lede="Say what you need and why. A lab manager decides — you'll see the answer here."
+        lede="Say what you need and why. Makerspace staff decide — you'll see the answer here."
       />
       <div className="flex flex-col gap-3.5 px-6">
         <div>
@@ -524,7 +525,7 @@ function RequestDialog({
           {projectId && projectRoles.length === 0 ? (
             <FieldHint>
               Nothing is defined here yet, so there is nothing to ask for. Pick another place, or
-              ask a lab manager to set this one up.
+              ask makerspace staff to set this one up.
             </FieldHint>
           ) : (
             <FieldHint>
@@ -641,7 +642,7 @@ function BulkDecisionDialog({
 
   return (
     <RehearsalDialog
-      title={status === "approved" ? "Approve requests" : "Deny requests"}
+      title={status === "approved" ? "Approve requests" : "Decline requests"}
       lede=""
       noun={["request", "requests"]}
       destructive={false}

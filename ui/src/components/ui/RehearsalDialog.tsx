@@ -43,15 +43,17 @@ import type { BulkPlan } from "@/lib/queries/useBulkGrants";
  * "12 people updated" after a bulk removal that never left the outbox tells an
  * operator a door is locked while it is open.
  */
-export function resultMessage(plan: BulkPlan, noun: [string, string]): string {
+export function resultMessage(
+  plan: BulkPlan,
+  noun: [string, string],
+  system: string = "Zitadel",
+): string {
   const { succeeded, failed, queued } = plan.summary;
-  const parts = [`${succeeded} applied`];
-  if (queued > 0) parts.push(`${queued} recorded but not yet in Zitadel`);
-  if (failed > 0) parts.push(`${failed} didn't go through`);
-  if (parts.length === 1) {
-    return `${succeeded} ${succeeded === 1 ? noun[0] : noun[1]} updated.`;
-  }
-  return `${parts.join(", ")}.`;
+  const of = (n: number) => `${n} ${n === 1 ? noun[0] : noun[1]}`;
+  const parts = [`Applied to ${of(succeeded)}.`];
+  if (queued > 0) parts.push(`${of(queued)} ${queued === 1 ? "is" : "are"} waiting to be sent to ${system}.`);
+  if (failed > 0) parts.push(`${of(failed)} failed.`);
+  return parts.join(" ");
 }
 
 /**
@@ -64,12 +66,12 @@ export function resultMessage(plan: BulkPlan, noun: [string, string]): string {
  * never have to know which rule applied — so the copy says what will happen
  * rather than naming the rule that decided it.
  */
-export function queuedNote(plan: BulkPlan): string | undefined {
+export function queuedNote(plan: BulkPlan, system: string = "Zitadel"): string | undefined {
   if (plan.summary.queued === 0) return undefined;
-  const withdrawal = plan.op === "remove_role" || plan.op === "remove_bundle";
-  return withdrawal
-    ? "Recorded here and not yet in Zitadel. Withdrawals send themselves — this one leaves within a few minutes, and the access holds until it does."
-    : "Recorded here and not yet in Zitadel. Anything that gives access waits for someone to resume the queue on Pending changes.";
+  const revocation = plan.op === "remove_role" || plan.op === "remove_bundle";
+  return revocation
+    ? `Recorded in Syndra and waiting to be sent to ${system}. Syndra sends it on its own within a few minutes; until then the person still has the access.`
+    : `Recorded in Syndra and waiting to be sent to ${system}. Nothing has changed there yet; send it from Pending changes.`;
 }
 
 /** An error only when something actually failed; queued rows are a warning. */
@@ -134,6 +136,12 @@ interface RehearsalDialogProps {
    */
   consequence?: React.ReactNode;
   /**
+   * The system the change is sent to, by name, for the result copy. Zitadel
+   * unless the surface says otherwise (pass `targetLabel(...)` on a connected
+   * system's own screens).
+   */
+  system?: string;
+  /**
    * Computes the plan. Takes the scope acknowledgement rather than reading it
    * from the caller, so a surface cannot acknowledge on the operator's behalf.
    */
@@ -156,20 +164,20 @@ interface RehearsalDialogProps {
  * this is a branch.
  */
 const STALE_PLAN_CODES = new Map<string, string>([
-  ["PLAN_STALE", "The state this was rehearsed against has changed."],
-  ["PLAN_EXPIRED", "This approval sat long enough to expire, so it was not used."],
-  ["PLAN_NOT_FOUND", "This approval is no longer on file, so it was not used."],
+  ["PLAN_STALE", "Things changed after this preview was made."],
+  ["PLAN_EXPIRED", "This preview is too old to use."],
+  ["PLAN_NOT_FOUND", "This preview is no longer available."],
   [
     "PLAN_ALREADY_APPLIED",
-    "This approval was already applied once. Nothing was applied a second time — the plan below is current state, so it may well show nothing left to do.",
+    "This change was already applied once, so it was not applied again. The preview below shows the current state, and may show nothing left to do.",
   ],
-  ["PLAN_REQUEST_MISMATCH", "The request no longer matches the one this was approved for."],
+  ["PLAN_REQUEST_MISMATCH", "This preview was for a different request."],
   // The sixth. Its absence meant a plan cited on the wrong surface fell through
   // to a bare error with no recovery, which is the one path §8 exists to close.
-  ["PLAN_NOT_CITABLE_HERE", "This approval belongs to a different surface and cannot be applied here."],
+  ["PLAN_NOT_CITABLE_HERE", "This preview was made on a different screen and cannot be used here."],
   // A re-plan is issued to the CURRENT operator, so it resolves this refusal
   // rather than merely reporting it — the same recovery as every code above.
-  ["PLAN_NOT_YOURS", "That approval was somebody else's, so it was not used."],
+  ["PLAN_NOT_YOURS", "This preview was made by someone else, so it was not used."],
 ]);
 
 /**
@@ -182,9 +190,13 @@ const STALE_PLAN_CODES = new Map<string, string>([
  */
 function staleHeadline(code: string): string {
   return code === "PLAN_ALREADY_APPLIED"
-    ? "Nothing was applied twice. This is a new plan."
-    : "Nothing was applied. This is a new plan.";
+    ? "Nothing was applied a second time. This is a fresh preview."
+    : "Nothing was applied. This is a fresh preview.";
 }
+
+/** §5: every dialog that previews before applying opens with the same sentence. */
+const PREVIEW_LEDE =
+  "Syndra first shows exactly what would change, person by person. Nothing changes until you press Apply.";
 
 function stalePlanError(error: unknown): ApiError | null {
   return error instanceof ApiError && STALE_PLAN_CODES.has(error.code) ? error : null;
@@ -215,6 +227,7 @@ export function RehearsalDialog({
   destructive = false,
   definitionLabel,
   consequence,
+  system = "Zitadel",
   onRehearse,
   onApply,
   onClose,
@@ -316,8 +329,8 @@ export function RehearsalDialog({
       // removed itself after four seconds.
       setOutcome({
         kind: resultKind(result),
-        message: resultMessage(result, noun),
-        detail: queuedNote(result),
+        message: resultMessage(result, noun, system),
+        detail: queuedNote(result, system),
       });
     } catch (error) {
       const stale = stalePlanError(error);
@@ -344,8 +357,8 @@ export function RehearsalDialog({
       } catch {
         setOutcome({
           kind: "failed",
-          message: "Couldn't re-plan against current state",
-          detail: "Close and try again — nothing was applied.",
+          message: "Syndra couldn't redo the preview",
+          detail: "Close and try again.",
         });
       }
     } finally {
@@ -373,10 +386,10 @@ export function RehearsalDialog({
           step === "compose"
             ? lede
             : step === "scope"
-              ? "This is bigger than the usual change. Nothing has been computed yet."
+              ? "This change is larger than usual. Nothing has been checked or changed yet."
               : step === "review"
-                ? "Rehearsed against live state. Nothing has changed yet."
-                : "Done. This is what happened."
+                ? PREVIEW_LEDE
+                : "Finished. Here is what happened."
         }
       />
 
@@ -389,12 +402,12 @@ export function RehearsalDialog({
               cannot mistake it for a form they filled in wrong — and one who
               never crosses it never learns the step exists. */}
           <p role="status" className="text-[13.5px] leading-[1.55] text-muted">
-            The plan moves{" "}
+            This change reaches{" "}
             <strong className="font-semibold text-ink">
               {scope?.affected} {noun[1]}
             </strong>
-            , and anything above {scope?.limit} is refused until somebody says the number out
-            loud. Confirming computes the plan — it still writes nothing.
+            . A change to more than {scope?.limit} {noun[1]} needs you to confirm the number
+            first. Confirming shows the preview; nothing changes yet.
           </p>
           {/* Rung 2, and the product's own primitive for it. This step used to
               be a warn panel and a button carrying the count, which is a rung
@@ -408,7 +421,7 @@ export function RehearsalDialog({
             onChange={setScopeAcknowledged}
             count={Number(scope?.affected ?? 0)}
             noun={noun[1]}
-            verb="moves"
+            verb="changes access for"
             disabled={busy}
           />
         </div>
@@ -424,15 +437,15 @@ export function RehearsalDialog({
             >
               <p className="font-medium">{staleHeadline(stalePlan.code)}</p>
               <p className="mt-1">
-                {STALE_PLAN_CODES.get(stalePlan.code)} Below is the plan against current state —
-                review it again before applying.
+                {STALE_PLAN_CODES.get(stalePlan.code)} The preview below is against the current
+                state. Read it again before you apply.
               </p>
               {stalePlan.subjects.length > 0 && (
                 <p className="mt-1">
                   {stalePlan.subjects.length === 1
-                    ? "This row moved"
-                    : `${stalePlan.subjects.length} rows moved`}{" "}
-                  since you approved: {movedLabels(stalePlan.subjects, plan).join(", ")}.
+                    ? "Changed"
+                    : `${stalePlan.subjects.length} ${noun[1]} changed`}{" "}
+                  since you last looked: {movedLabels(stalePlan.subjects, plan).join(", ")}.
                 </p>
               )}
             </div>
@@ -454,9 +467,9 @@ export function RehearsalDialog({
       <ModalFooter
         note={
           step === "review" && plan
-            ? planNote(plan)
+            ? planNote(plan, noun)
             : step === "compose"
-              ? "The next step shows exactly what would change, row by row. It writes nothing."
+              ? PREVIEW_LEDE
               : undefined
         }
       >
@@ -468,9 +481,9 @@ export function RehearsalDialog({
               disabled={!ready}
               onClick={() => void rehearse(false).catch(() => {})}
             >
-              Rehearse
+              Preview the change
             </Button>
-            <Button disabled={busy} onClick={onClose}>
+            <Button disabled={busy} reason={busy ? "Wait for the preview to finish." : undefined} onClick={onClose}>
               Cancel
             </Button>
           </>
@@ -487,7 +500,7 @@ export function RehearsalDialog({
               disabled={!scopeAcknowledged}
               onClick={() => void rehearse(true).catch(() => {})}
             >
-              Plan for {scope?.affected} {noun[1]}
+              Preview the change for {scope?.affected} {noun[1]}
             </Button>
             <Button disabled={busy} onClick={compose ? () => setStep("compose") : onClose}>
               {compose ? "Back" : "Cancel"}
@@ -504,7 +517,7 @@ export function RehearsalDialog({
               onClick={() => void applyPlan()}
             >
               {!plan
-                ? "Rehearsing…"
+                ? "Previewing…"
                 : isDefinitionApply
                   ? definitionLabel
                   : applyLabel(plan, noun)}
@@ -519,7 +532,7 @@ export function RehearsalDialog({
                 Back
               </Button>
             ) : (
-              <Button disabled={busy} onClick={onClose}>
+              <Button disabled={busy} reason={busy ? "Wait for the change to finish." : undefined} onClick={onClose}>
                 Cancel
               </Button>
             )}

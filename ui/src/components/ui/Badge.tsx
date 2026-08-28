@@ -130,7 +130,7 @@ export function StatusDot({ tone, className = "" }: { tone: StatusTone; classNam
 export function CountChip({ n }: { n: number | null | undefined }) {
   if (n === null || n === undefined) {
     return (
-      <Badge hollow aria-label="not read">
+      <Badge hollow aria-label="count could not be read">
         <span aria-hidden>—</span>
       </Badge>
     );
