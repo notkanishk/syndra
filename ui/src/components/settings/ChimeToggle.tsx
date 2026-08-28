@@ -8,7 +8,7 @@ import { CHIME_FIRST_PLAY_EVENT, isChimeEnabled, setChimeEnabled } from "@/lib/d
 import { useReducedMotion } from "@/lib/useViewport";
 
 /**
- * The unexplained-access chime.
+ * The drift chime.
  *
  * It used to live in the sidebar footer, next to an org-wide policy control —
  * a browser preference and a policy sitting in the same box is how somebody
@@ -41,7 +41,7 @@ export function ChimeToggle() {
         type="button"
         role="switch"
         aria-checked={enabled}
-        aria-label="Sound on new unexplained access"
+        aria-label="Sound on new drift"
         onClick={() => {
           setChimeEnabled(!enabled);
           setEnabled(!enabled);

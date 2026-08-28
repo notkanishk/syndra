@@ -27,7 +27,7 @@ export type IndicatorKey =
 /**
  * Badge tone follows the semantic palette and nothing else: Requests and
  * Pending changes are work (accent), Expiring access is a deadline (warn),
- * Unexplained access is something that already went wrong (danger).
+ * Drift is something that already went wrong (danger).
  *
  * Unfinished revocations is danger too, and for a sharper reason than drift:
  * drift is access that appeared without an explanation, and this is access
@@ -97,7 +97,7 @@ export const ADVANCED_NAV: NavEntry[] = [
     leaf("Settings", "/automation/settings"),
   ]),
   group("Review", [
-    leaf("Unexplained access", "/governance/drift", { indicator: "drift", tone: "danger" }),
+    leaf("Drift", "/governance/drift", { indicator: "drift", tone: "danger" }),
     leaf("Unfinished revocations", "/governance/unconfirmed-revocations", {
       indicator: "unconfirmed_revocations",
       tone: "danger",

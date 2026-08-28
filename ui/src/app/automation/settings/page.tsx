@@ -8,6 +8,7 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Segmented } from "@/components/ui/Select";
+import { Term } from "@/components/ui/Term";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import {
   useGlobalConfirmationDefault,
@@ -34,7 +35,13 @@ export default function AutomationSettingsPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Automation settings"
-        lede="How automatic rules (if someone holds one role they also get another, with nobody clicking) behave when they are created from now on. A rule's changes either wait in Pending changes until someone sends them, or reach Zitadel (the service everyone signs in through) at once."
+        lede={
+          <>
+            How <Term name="automaticRule">automatic rules</Term> behave when they are created
+            from now on. A rule&rsquo;s changes either wait in Pending changes until someone sends
+            them, or reach Zitadel at once.
+          </>
+        }
       />
 
       <Card>

@@ -89,7 +89,7 @@ describe("deleting an automatic rule", () => {
     expect(document.body.textContent).toMatch(/12 people hold the first role/);
     // And that holding it elsewhere keeps it — the backend works this out per person, so the
     // dialog must not promise a precise loss.
-    expect(document.body.textContent).toMatch(/unless they also hold it through a bundle/);
+    expect(document.body.textContent).toMatch(/unless a bundle or a direct grant also gives it/);
   });
 
   // A queued rule's revokes queue too. Saying "applied" here would have an operator believe a
@@ -114,7 +114,7 @@ describe("deleting an automatic rule", () => {
     openTheRule();
     fireEvent.click(screen.getByRole("button", { name: "Delete rule" }));
 
-    expect(document.body.textContent).toMatch(/nobody's access is revoked/i);
+    expect(document.body.textContent).toMatch(/nothing is revoked/i);
   });
 
   it("backs out to the editor rather than closing everything", () => {

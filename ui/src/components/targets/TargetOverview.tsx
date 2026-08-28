@@ -16,6 +16,7 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { blocksIrreversibleAction, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
+import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
 import { formatBytes } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
@@ -67,7 +68,7 @@ export function TargetOverview({ target }: { target: string }) {
     <div className="grid gap-5">
       <PageHeader
         title={name}
-        lede={`Whether Syndra can reach ${name} (the network storage server) and what it says about itself, who has an account there, and anything waiting on you. Syndra creates an account on ${name} for every person whose role is mapped to a group there, checks it every six hours, and asks you when it finds something it should not decide alone.`}
+        lede={`Whether Syndra can reach ${name} and what it says about itself, who has an account there, and anything waiting on you. Syndra provisions an account on ${name} for every person whose role is mapped to a group there, reconciles it every six hours, and asks you when it finds something it should not decide alone.`}
         meta={registered ? authLabel(registered.auth_mode, name) : undefined}
       />
 

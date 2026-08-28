@@ -63,7 +63,7 @@ export default function ProjectsPage() {
           empty={
             <EmptyState
               title="No projects yet."
-              guidance="A project appears here once it exists in Zitadel (the service everyone signs in through)."
+              guidance="A project appears here once it exists in Zitadel."
             />
           }
         >

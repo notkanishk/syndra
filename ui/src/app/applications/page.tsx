@@ -91,7 +91,7 @@ export default function AppsPage() {
           empty={
             <EmptyState
               title="No applications registered."
-              guidance="Add an app in Zitadel (the service everyone signs in through) and it appears here."
+              guidance="Add an app in Zitadel and it appears here."
               action={{ label: "Open Zitadel", href: "/zitadel" }}
             />
           }

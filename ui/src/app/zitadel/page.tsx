@@ -1,5 +1,6 @@
 "use client";
 
+import { Term } from "@/components/ui/Term";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -51,7 +52,12 @@ export default function IdentityProviderPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Zitadel"
-        lede="Zitadel is the service everyone signs in through. It decides whether you are who you say you are; Syndra decides what that gets you, and keeps the record of why. This page shows whether Syndra can reach Zitadel. Nothing here changes anyone's access."
+        lede={
+          <>
+            Whether Syndra can reach <Term name="zitadel">Zitadel</Term>, and what it holds
+            right now. Nothing on this page changes anyone’s access.
+          </>
+        }
         meta={health.data?.domain ? <Mono>{health.data.domain}</Mono> : undefined}
       />
 
