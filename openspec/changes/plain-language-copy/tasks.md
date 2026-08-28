@@ -41,6 +41,18 @@
 - [x] 5.2 Mutation-checked: an injected banned word fails it; a removed lede fails it; the clean tree passes.
 - [x] 5.3 `one-control-surface` `ARGUED` map updated for the renamed adopt-log button.
 
+## 7. The login door, restored
+
+- [x] 7.1 `LoginDoor.tsx` reverted to its pre-sweep wording by the owner's decision. The door is authored copy with its own voice (Syn, who keeps the door) and is not swept with the rest of the product: "Sign in with Zitadel", "Handing you to Zitadel", "Powered by Zitadel", the Syn line.
+- [x] 7.2 `lib/login-error.ts` was NOT part of that revert. Its sentences render only on a failed sign-in, not on the door, and they keep the swept wording ("ask makerspace staff") — a member who cannot get in is the last person who should meet a word for staff that appears nowhere else.
+- [x] 7.3 One argued exception, in `ARGUED`: `Operator` in `LoginDoor.tsx` labels a test identity in the development sign-in list, which renders only when `mode === "demo"`. A deployed door runs `oidc`, shows one button and no identity list, so no member or staff member can reach the word.
+
+## 8. A hole the revert exposed
+
+- [x] 8.1 The guard could not see one-word string literals, so every banned word that lives as a bare label — a badge, a filter option, a column header — passed it. `{next === "approved" ? "Approved" : "Denied"}` sat in Requests through the guard's own release, along with two more `Denied` labels beside it.
+- [x] 8.2 Found by mutation-checking an exception rather than trusting it: the argued entry for `Operator` passed with the word still in the file, which is only possible if the guard never read it. An exception that is never exercised is a permission granted to nobody, and it says the rule is being kept when it is not.
+- [x] 8.3 A capitalised one-word literal is now read as a label. Lowercase single words stay out — that is the shape of a code string (`"admin"`, `"oidc"`, a query key). Three real `Denied` labels fixed; mutation-checked with a planted label.
+
 ## 6. Open
 
 - [ ] 6.1 A person picker for adopting an account (the field is labelled *Person* with a hint saying where the id is found; a staffer still has to paste an id).
