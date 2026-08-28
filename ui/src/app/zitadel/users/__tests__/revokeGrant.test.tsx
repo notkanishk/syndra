@@ -40,7 +40,7 @@ describe("revoking a person's roles in Zitadel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Revoke roles" }));
 
     expect(state.remove).not.toHaveBeenCalled();
-    expect(document.body.textContent).toMatch(/Priya loses these roles in Zitadel at once/);
+    expect(document.body.textContent).toMatch(/Priya loses these roles once the change reaches Zitadel/);
     const confirm = screen.getByRole("button", { name: "Revoke this role in Zitadel" });
     expect(confirm).toBeDisabled();
 

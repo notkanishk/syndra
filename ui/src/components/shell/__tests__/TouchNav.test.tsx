@@ -138,7 +138,7 @@ describe("Advanced does not get a tab bar", () => {
     renderNav();
     fireEvent.click(screen.getByRole("button", { name: /Review/ }));
     const sheet = screen.getByRole("dialog", { name: "Go to a page" });
-    const row = within(sheet).getByRole("link", { name: /Unexplained access/ });
+    const row = within(sheet).getByRole("link", { name: /Drift/ });
     expect(within(row).getByText("0"), "a hollow zero, not a vanished row").toBeTruthy();
   });
 });
