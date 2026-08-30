@@ -148,7 +148,7 @@ function TargetActivityCard({
       <div className="row-divider flex flex-wrap items-baseline gap-2 px-5 py-3">
         <span className="text-[14.5px] font-semibold">On {target}</span>
         <span className="text-[13px] text-muted">
-          Read from the target&rsquo;s own audit log, not from Syndra&rsquo;s record.
+          Read from {target}&rsquo;s own audit log, not from Syndra&rsquo;s record.
         </span>
       </div>
 
@@ -179,7 +179,7 @@ function TargetActivityCard({
           opposite answers. */}
       {data && !data.readable && (
         <div className="border-t border-line px-5 py-3 text-[13px] text-warn-text">
-          The target&rsquo;s audit log could not be read, so this is not a claim that nothing
+          {target}&rsquo;s audit log could not be read, so this is not a claim that nothing
           happened.{data.detail ? ` ${data.detail}` : ""}
         </div>
       )}

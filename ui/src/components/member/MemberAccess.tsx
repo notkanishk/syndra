@@ -80,7 +80,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
               it can do instead of who to find. */}
           <EmptyState
             title="You don't have access to anything yet."
-            guidance="Nobody has given you access. If there's a machine or a space you need, ask for it here and makerspace staff decide — everything the makerspace offers is listed below."
+            guidance="Nobody has given you access. If there's a machine or a space you need, ask for it here and makerspace staff will decide — everything the makerspace offers is listed below."
             action={{ label: "Ask for access", href: "/requests" }}
           />
         </Card>

@@ -530,7 +530,7 @@ function RequestDialog({
           ) : (
             <FieldHint>
               Can&rsquo;t find it? Pick the closest one and describe what you actually need in
-              Why — a lab manager reads that before deciding.
+              Why — makerspace staff read that before deciding.
             </FieldHint>
           )}
         </div>
