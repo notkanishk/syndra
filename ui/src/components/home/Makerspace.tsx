@@ -80,7 +80,7 @@ function Health() {
         note={queued > 0 ? "Waiting for you to send them" : "Nothing waiting"}
       />
       <HealthCell
-        label="Unexplained access"
+        label="Drift"
         value={String(unexplained)}
         tone={unexplained > 0 ? "danger" : "calm"}
         href="/governance/drift"

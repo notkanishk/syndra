@@ -128,10 +128,13 @@ export default function RolesPage() {
         </span>
         <div className="text-[14px] leading-[1.55] text-ink/[.78]">
           <strong className="font-semibold text-ink">This list may be partial.</strong> It covers
-          roles Syndra created and roles the directory reports; anything created directly in the
-          identity provider on a project Syndra cannot read is not here.{" "}
-          <Link href="/zitadel/projects" className="font-semibold text-accent-text">
-            Check a project&rsquo;s roles upstream →
+          roles Syndra created and roles Zitadel reports. A role created straight in Zitadel, on a
+          project Syndra cannot read, is not here.{" "}
+          <Link
+            href="/zitadel/projects"
+            className="inline-flex min-h-[44px] items-center font-semibold text-accent-text desktop:min-h-0"
+          >
+            Check a project&rsquo;s roles in Zitadel →
           </Link>
         </div>
       </div>

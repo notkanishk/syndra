@@ -285,3 +285,34 @@ function braced(source: string, open: number): string {
   }
   return source.slice(open);
 }
+
+/**
+ * A bare `<Link>` that is somebody's action, sitting below the touch floor.
+ *
+ * The pill guard above catches hand-rolled controls that at least LOOK like
+ * controls. This catches the other shape: an `<a>` styled only as text, whose
+ * words are plainly an action — "Ask for this →", "Open X →". The member
+ * catalogue had sixteen of them at 21px tall on a phone, and they were the
+ * only thing a member visits that page to press.
+ *
+ * Matched on the arrow, because that is what the product uses to mark a link
+ * that acts rather than a link that merely references.
+ */
+describe("a link that acts is big enough to press", () => {
+  it("gives every arrow link the touch floor", () => {
+    const offenders = relevant().flatMap(({ path, source }) => {
+      const found: string[] = [];
+      for (const m of source.matchAll(/<Link\b/g)) {
+        const tag = tagAt(source, m.index);
+        const close = source.indexOf("</Link>", m.index);
+        const body = close < 0 ? "" : source.slice(m.index, close);
+        if (!/→/.test(body)) continue;
+        if (/min-h-\[44px\]|min-h-11|\bPILL\b/.test(tag)) continue;
+        const line = source.slice(0, m.index).split("\n").length;
+        found.push(`${path}:${line}`);
+      }
+      return found;
+    });
+    expect(offenders, "an action link needs min-h-[44px] through the tablet range").toEqual([]);
+  });
+});

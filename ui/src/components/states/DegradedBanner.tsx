@@ -123,7 +123,7 @@ export function DegradedBanner() {
                 caption="Run this on the server that hosts Syndra. It prints what it would delete and stops. Add APPLY=1 to delete."
                 steps={[
                   "Only sample data is deleted. Real people, real projects and every decision you made stay exactly as they are.",
-                  "Zitadel is not changed. Anything left over there is reported under Unexplained access at the next check.",
+                  "Zitadel is not changed. Anything left over there is reported under Drift at the next check.",
                   "For a blank slate instead — no bundles, no rules, no history — use make reset-all-data APPLY=1.",
                 ]}
               />

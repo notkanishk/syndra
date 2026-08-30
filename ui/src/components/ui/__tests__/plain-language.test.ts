@@ -239,9 +239,22 @@ function looksLikeClasses(text: string): boolean {
 
 /** True when a `>`…`<` fragment is code that happened to sit between two angle brackets. */
 function looksLikeCode(text: string): boolean {
+  // A semicolon is NOT a code signal. This product's voice is full of them —
+  // "roles the directory reports; anything created directly in the identity
+  // provider ... is not here" sat on the Roles page with three banned terms in
+  // one sentence, invisible to this guard, because the sentence was punctuated
+  // like English. Nor is a bare `=`, which shows up in prose as "=" rarely but
+  // in JSX attributes constantly — those are already stripped as code by the
+  // tokenizer before this runs.
+  const t = text.trim();
+  // `<PeopleOnTarget target={…}` leaves " target=" between a `>` and a `{`.
+  // An attribute name is not a sentence.
+  if (/\w=$/.test(t)) return true;
+  // A URL path shown as documentation, with its braces HTML-escaped.
+  if (/^\/[\w/&#;{}-]*$/.test(t)) return true;
   return (
-    /[;=`]|\b(import|const|let|var|return|export|function|interface|type|class|new|await)\b/.test(text) ||
-    /[a-z]\.[a-z]{2,}|\s\?\s|\?\?|\?\.|^\s*[,:;)\]]/.test(text)
+    /\b(import|const|let|var|return|export|function|interface|type|class|new|await)\b/.test(t) ||
+    /=>|`|[a-z]\.[a-z]{2,}\(|\?\?|\?\.|[!=]==|^\s*[,:;)\]]/.test(t)
   );
 }
 
