@@ -136,7 +136,7 @@ export default function AutomationSettingsPage() {
           <div className="min-w-[280px] flex-1">
             <div className="text-[14.5px] font-semibold">Sound on new unexplained access</div>
             <p className="mt-1 text-[13.5px] text-muted">
-              Plays once whenever the Unexplained access count goes up while this tab is open.
+              Plays once whenever the Drift count goes up while this tab is open.
               Saved in this browser only — it does not follow you to another browser or affect
               anyone else.
             </p>

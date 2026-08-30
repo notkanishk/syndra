@@ -1,5 +1,6 @@
 "use client";
 
+import { Term } from "@/components/ui/Term";
 import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
@@ -728,7 +729,7 @@ function RemovalImpact({
               className="mt-[6px] h-2.5 w-2.5 flex-none rounded-pill border border-dashed border-ink/40"
             />
             <span className="text-muted">
-              They would also lose <RoleRef projectId={rule.target_project} roleKey={rule.target_role} /> by cascade — this role is that rule&rsquo;s input.
+              They would also lose <RoleRef projectId={rule.target_project} roleKey={rule.target_role} /> by <Term name="cascade">cascade</Term> — this role is that rule&rsquo;s input.
             </span>
           </li>
         ))}

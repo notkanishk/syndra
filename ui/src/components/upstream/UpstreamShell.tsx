@@ -49,7 +49,10 @@ export function UpstreamShell({
         </p>
         <p className="mt-2 max-w-[80ch] text-[14.5px] leading-[1.55] text-muted">
           {lede}{" "}
-          <Link href={syndraHref} className="font-semibold text-accent-text">
+          <Link
+            href={syndraHref}
+            className="inline-flex min-h-[44px] items-center font-semibold text-accent-text desktop:min-h-0"
+          >
             {syndraLabel} <span aria-hidden="true">→</span>
           </Link>
         </p>

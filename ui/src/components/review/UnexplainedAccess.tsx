@@ -153,11 +153,11 @@ export function UnexplainedAccess() {
   return (
     <div className="flex flex-col gap-[18px]">
       <PageHeader
-        title="Unexplained access"
+        title="Drift"
         lede={
           <>
-            <Term name="drift">Drift</Term> — access that exists in Zitadel that nothing in Syndra
-            gave. Until you resolve a row, the person keeps that access.
+            Access that exists in Zitadel that nothing in Syndra gave —{" "}
+            <Term name="drift">drift</Term>. Until you resolve a row, the person keeps that access.
           </>
         }
         meta={
