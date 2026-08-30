@@ -68,7 +68,7 @@ export function WithdrawnAccess() {
     <>
       <PageHeader
         title="Unfinished revocations"
-        lede="Access somebody revoked (ended) that has not gone away yet. Revocations still on the way clear themselves; the ones Syndra has given up on do not, and those people still have the access."
+        lede="Access somebody revoked that has not gone away yet. Revocations still on the way clear themselves; the ones Syndra has given up on do not, and those people still have the access."
       />
       <ListStates
         isLoading={query.isLoading}

@@ -386,7 +386,7 @@ function ZitadelGrantId({
   if (!id) {
     return (
       <span className="text-[13px] text-faint">
-        Not in Zitadel — see Unexplained access › Side by side
+        Not in Zitadel — see Drift › Side by side
       </span>
     );
   }

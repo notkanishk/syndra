@@ -94,7 +94,7 @@ export function MemberCatalog({ heldByProject }: { heldByProject: Map<string, Se
                         href={`/requests?project=${encodeURIComponent(
                           project.id,
                         )}&role=${encodeURIComponent(role.key)}`}
-                        className="shrink-0 text-[13.5px] font-semibold text-accent-text"
+                        className="inline-flex min-h-[44px] shrink-0 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-0"
                       >
                         Ask for this →
                       </Link>

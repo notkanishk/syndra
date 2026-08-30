@@ -165,7 +165,10 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
 
       <div className="row-divider px-5 py-3 text-[13.5px] leading-[1.55] text-muted">
         Everything below is what Zitadel holds for this person.{" "}
-        <Link href={`/users/${userId}`} className="font-semibold text-accent-text">
+        <Link
+          href={`/users/${userId}`}
+          className="inline-flex min-h-[44px] items-center font-semibold text-accent-text desktop:min-h-0"
+        >
           Syndra&rsquo;s explanation of the same access →
         </Link>
       </div>

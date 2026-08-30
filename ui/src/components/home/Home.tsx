@@ -377,7 +377,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
         // A disabled action states its reason in the row, not on hover: hover
         // doesn't exist on touch and doesn't survive a screenshot.
         <div className="border-t border-dashed border-warn-line bg-warn-soft px-[18px] py-3 text-[13.5px] text-warn-text">
-          Disabled — identity provider unreachable. Writes stay queued; nothing is lost.
+          Disabled — Zitadel is not answering. Changes wait here, in order, and nothing is lost.
         </div>
       )}
     </Card>
@@ -465,7 +465,7 @@ function MergeFindingsWaiting({ count }: { count: number }) {
 function UnexplainedAccess({ count }: { count: number }) {
   return (
     <Card>
-      <CardHeader title="Unexplained access" count={count} tone="danger" />
+      <CardHeader title="Drift" count={count} tone="danger" />
       <CardRow>
         <div className="flex-1 text-[14.5px]">
           {count} {count === 1 ? "grant" : "grants"} Syndra can&rsquo;t explain
