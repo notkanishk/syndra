@@ -201,6 +201,9 @@ export function useCreateGrant(userId: string) {
       qc.invalidateQueries({ queryKey: ["review", "expiring-grants"] });
       // Home counts what is expiring, so its queue is wrong by one until this lands too.
       qc.invalidateQueries({ queryKey: ["governance"] });
+      // Same as useAssignBundle: a grant made in manual mode is queued, not
+      // applied, so the pending list is missing a row without this.
+      qc.invalidateQueries({ queryKey: ["propagations"] });
     },
   });
 }

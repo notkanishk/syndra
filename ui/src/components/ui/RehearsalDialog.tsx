@@ -591,7 +591,11 @@ export function RehearsalDialog({
             >
               Preview the change for {scope?.affected} {noun[1]}
             </Button>
-            <Button disabled={busy} onClick={compose ? () => setStep("compose") : onClose}>
+            <Button
+              disabled={busy}
+              reason={busy ? "Wait for the preview to finish." : undefined}
+              onClick={compose ? () => setStep("compose") : onClose}
+            >
               {compose ? "Back" : "Cancel"}
             </Button>
           </>
@@ -609,8 +613,13 @@ export function RehearsalDialog({
               reason={!busy ? applyBlocked : undefined}
               onClick={() => void applyPlan()}
             >
+              {/* "Previewing…" used to occupy this label while the initial
+                  rehearsal was in flight — a status word standing in for the
+                  `isPending` dot `Button` already renders for exactly this.
+                  The label now stays the action; `isPending={busy}` above is
+                  what says "still working". */}
               {!plan
-                ? "Previewing…"
+                ? "Apply the change"
                 : isDefinitionApply
                   ? definitionLabel
                   : applyLabel(plan, noun)}
@@ -621,7 +630,11 @@ export function RehearsalDialog({
               what it did, which is the one thing the operator still needs.
             */}
             {compose ? (
-              <Button disabled={busy} onClick={() => setStep("compose")}>
+              <Button
+                disabled={busy}
+                reason={busy ? "Wait for the change to finish." : undefined}
+                onClick={() => setStep("compose")}
+              >
                 Back
               </Button>
             ) : (

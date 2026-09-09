@@ -110,9 +110,14 @@ describe("dormant accounts", () => {
     fireEvent.change(screen.getByLabelText(/API key that is allowed to delete/i), {
       target: { value: "k" },
     });
-    expect(remove).toBeEnabled();
+    // Re-queried: the button drops its "check the box"/"paste a key" reason
+    // the instant it becomes pressable, and Button.tsx renders that as a
+    // different element (bare `<button>` instead of a `<span>` wrapping one),
+    // which replaces the DOM node rather than just its attributes.
+    const armed = screen.getByRole("button", { name: /remove 1 account/i });
+    expect(armed).toBeEnabled();
 
-    fireEvent.click(remove);
+    fireEvent.click(armed);
     expect(state.swept).toHaveLength(1);
     expect(state.swept[0].accounts).toEqual(["former-member"]);
     expect(state.swept[0].elevatedKey.take()).toBe("k");

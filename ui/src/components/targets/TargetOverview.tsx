@@ -1091,9 +1091,21 @@ function ResolveConflictDialog({
         <Button
           variant="dangerConfirm"
           disabled={!ready}
+          isPending={resolve.isPending}
+          reason={
+            !ready && !resolve.isPending
+              ? owner === ""
+                ? "Choose who the account belongs to."
+                : note.trim() === ""
+                  ? "Say how you know — this becomes the record."
+                  : !confirmation.armed
+                    ? `Type ${conflict.username} to confirm.`
+                    : undefined
+              : undefined
+          }
           onClick={() => resolve.mutate({ id: conflict.id, owner, note }, { onSuccess: onClose })}
         >
-          {resolve.isPending ? "Recording…" : "Record the owner"}
+          Record the owner
         </Button>
         <Button variant="ghost" onClick={onClose} disabled={resolve.isPending}>
           Cancel
@@ -1175,9 +1187,22 @@ function ResolveFindingDialog({
         )}
       </div>
       <ModalFooter note="Syndra takes the log as it is now and compares against that from here on.">
+        {/* Not `dangerConfirm`: irreversible, but it takes nothing from
+            anybody — the rule this file states itself further down, at the
+            account-assignment button. */}
         <Button
-          variant="dangerConfirm"
+          variant="accent"
           disabled={!ready}
+          isPending={resolve.isPending}
+          reason={
+            !ready && !resolve.isPending
+              ? note.trim() === ""
+                ? "Say why the log changed — this is kept with the resolution."
+                : !confirmation.armed
+                  ? `Type ${target} to confirm.`
+                  : undefined
+              : undefined
+          }
           onClick={() =>
             resolve.mutate(
               { head: anchor.violation_head ?? "", note },
@@ -1185,7 +1210,7 @@ function ResolveFindingDialog({
             )
           }
         >
-          {resolve.isPending ? "Resolving…" : "Accept this log and start over"}
+          Accept this log and start over
         </Button>
         <Button variant="ghost" onClick={onClose} disabled={resolve.isPending}>
           Cancel
@@ -1489,8 +1514,15 @@ function AdoptPanel({
           variant="accent"
           isPending={pending}
           disabled={!subjectId || !confirm.armed || pending}
+          reason={
+            !pending && !subjectId
+              ? "Enter the person's Syndra ID."
+              : !pending && !confirm.armed
+                ? `Type ${username} to confirm.`
+                : undefined
+          }
         >
-          {pending ? "Assigning…" : `Assign ${username} to this person`}
+          {`Assign ${username} to this person`}
         </Button>
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
@@ -1610,12 +1642,12 @@ function LifecycleControl({ target, health }: { target: string; health: TargetHe
               variant="outline"
               size="sm"
               disabled={!reason || set.isPending || state.id === current}
-              // Only on the first of the three, so the sentence appears once
-              // under the row rather than three times. Without it, a target
-              // cannot be put read-only during an incident and the screen never
-              // says the Reason field is what is stopping it.
+              // Every non-current button, not just the first: "Finishing up"
+              // and "Read-only" went dark from the same missing-reason cause
+              // with nothing said, and the label already covers the
+              // state.id === current case ("Already active").
               reason={
-                !reason && state.id === STATES[0]?.id
+                state.id !== current && !reason
                   ? "Say why first — the reason is recorded against the change."
                   : undefined
               }

@@ -233,6 +233,9 @@ export function useDeleteBundle() {
       qc.invalidateQueries({ queryKey: KEYS.list });
       qc.invalidateQueries({ queryKey: ["users"] });
       qc.invalidateQueries({ queryKey: ["governance"] });
+      // The cascade revokes from every holder, and each revoke is queued, so
+      // the pending list gains a row per holder that this alone would miss.
+      qc.invalidateQueries({ queryKey: ["propagations"] });
     },
   });
 }

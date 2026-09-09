@@ -169,8 +169,50 @@ describe("BulkDialog", () => {
     });
     open();
     await rehearse();
-    const button = screen.getByRole("button", { name: "Nothing to apply" });
+    const button = screen.getByRole("button", { name: "Apply to 0 people" });
     expect(button).toBeDisabled();
+  });
+
+  // RehearsalDialog's `notReadyReason` is rendered under the disabled Preview
+  // button, but BulkDialog never passed one — `ready={false}` on its own greys
+  // the only control on screen and says nothing about which of five gaps is
+  // open. Each is checked with the others satisfied, so the visible reason
+  // names the one gap actually left.
+  describe("says which of the five gaps is open", () => {
+    it("no project chosen", () => {
+      open();
+      fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "New cohort" } });
+      // Exact text: the select's own "Choose a project…" option is a substring
+      // match away from the reason under the button.
+      expect(screen.getByText("Choose a project.")).toBeInTheDocument();
+    });
+
+    it("no role chosen", () => {
+      open();
+      fireEvent.change(screen.getByLabelText("Project"), { target: { value: "pLaser" } });
+      fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "New cohort" } });
+      expect(screen.getByText("Choose a role.")).toBeInTheDocument();
+    });
+
+    it("no bundle chosen", () => {
+      open("assign_bundle");
+      fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "New cohort" } });
+      expect(screen.getByText("Choose a bundle.")).toBeInTheDocument();
+    });
+
+    it("extend duration is zero", () => {
+      open("extend");
+      fireEvent.change(screen.getByLabelText("Extend by (days)"), { target: { value: "0" } });
+      fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "New cohort" } });
+      expect(screen.getByText(/Enter how many days to extend by/)).toBeInTheDocument();
+    });
+
+    it("reason left blank", () => {
+      open();
+      fireEvent.change(screen.getByLabelText("Project"), { target: { value: "pLaser" } });
+      fireEvent.change(screen.getByLabelText("Role"), { target: { value: "trained" } });
+      expect(screen.getByText(/Say why/)).toBeInTheDocument();
+    });
   });
 
   it("lets an operator go back and change the target without losing the dialog", async () => {

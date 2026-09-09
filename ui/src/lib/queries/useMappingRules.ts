@@ -58,6 +58,12 @@ export function useCreateMappingRule() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.list });
+      // The backend enqueues one outbox row per current holder of the source
+      // role in this same transaction, so the pending count, the governance
+      // summary, and the People list's derived access are all stale without this.
+      qc.invalidateQueries({ queryKey: ["propagations"] });
+      qc.invalidateQueries({ queryKey: ["governance"] });
+      qc.invalidateQueries({ queryKey: ["users"] });
     },
   });
 }
@@ -76,6 +82,10 @@ export function useUpdateMappingRule() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.list });
       qc.invalidateQueries({ queryKey: ["users"] });
+      // Same closure diff its sibling delete commits: somebody's effective
+      // access just changed, and the writes are queued, not yet applied.
+      qc.invalidateQueries({ queryKey: ["governance"] });
+      qc.invalidateQueries({ queryKey: ["propagations"] });
     },
   });
 }

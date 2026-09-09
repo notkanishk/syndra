@@ -193,6 +193,15 @@ export function DormantAccounts({ target }: { target: string }) {
             <Button
               variant="dangerConfirm"
               disabled={!acknowledged || !elevatedKey || remove.isPending}
+              reason={
+                !remove.isPending
+                  ? !acknowledged
+                    ? "Check the box above to confirm you understand what this removes."
+                    : !elevatedKey
+                      ? `Paste a ${name} API key that is allowed to delete accounts.`
+                      : undefined
+                  : undefined
+              }
               onClick={() =>
                 remove.mutate(
                   { accounts: chosen.map((a) => a.account), elevatedKey: oneShot(elevatedKey) },

@@ -305,7 +305,10 @@ function OperatorQueue() {
         <SelectionAction onClick={() => setBulkStatus("approved")}>
           Review approving these
         </SelectionAction>
-        <SelectionAction tone="danger" onClick={() => setBulkStatus("rejected")}>
+        {/* Not `danger`: declining a pending request takes nothing away —
+            nobody has the access yet. The per-row Decline above (default
+            variant) already gets this right; the bulk twin did not. */}
+        <SelectionAction onClick={() => setBulkStatus("rejected")}>
           Review denying these
         </SelectionAction>
       </SelectionBar>
@@ -340,6 +343,33 @@ function MemberRequests({ userId }: { userId: string }) {
   const [open, setOpen] = useState(Boolean(linkedProject));
   // A member's own rows report their own withdrawals, in the row.
   const [outcomes, setOutcomes] = useState<Record<string, ActionResult | null>>({});
+  // Same idiom as OperatorQueue.act(): marked synchronously, before the await,
+  // because `withdraw.isPending` clears the moment the request settles and
+  // ["requests"] has not refetched yet — a second tap in that window withdrew
+  // an already-withdrawn request.
+  const [resolved, setResolved] = useState<Set<string>>(new Set());
+
+  async function withdrawOne(entry: AccessRequest) {
+    setResolved((prev) => new Set(prev).add(entry.id));
+    try {
+      await withdraw.mutateAsync(entry.id);
+      setOutcomes((prev) => ({
+        ...prev,
+        [entry.id]: {
+          kind: "applied",
+          message: "You withdrew this",
+          detail: "Nobody will be asked to decide it.",
+        },
+      }));
+    } catch (error) {
+      setResolved((prev) => {
+        const copy = new Set(prev);
+        copy.delete(entry.id);
+        return copy;
+      });
+      setOutcomes((prev) => ({ ...prev, [entry.id]: outcomeFromError(error) }));
+    }
+  }
 
   function closeDialog() {
     setOpen(false);
@@ -399,26 +429,12 @@ function MemberRequests({ userId }: { userId: string }) {
                 and nobody else's access moves — it takes an ask out of somebody's queue, which
                 is the one thing here a member is entitled to do without being asked twice.
               */}
-              {entry.status === "pending" && (
+              {entry.status === "pending" && !resolved.has(entry.id) && (
                 <Button
                   size="sm"
                   variant="ghost"
                   disabled={withdraw.isPending}
-                  onClick={async () => {
-                    try {
-                      await withdraw.mutateAsync(entry.id);
-                      setOutcomes((prev) => ({
-                        ...prev,
-                        [entry.id]: {
-                          kind: "applied",
-                          message: "You withdrew this",
-                          detail: "Nobody will be asked to decide it.",
-                        },
-                      }));
-                    } catch (error) {
-                      setOutcomes((prev) => ({ ...prev, [entry.id]: outcomeFromError(error) }));
-                    }
-                  }}
+                  onClick={() => withdrawOne(entry)}
                 >
                   Withdraw
                 </Button>
@@ -591,6 +607,7 @@ function RequestDialog({
         <Button
           variant="accent"
           disabled={!projectId || !roleKey}
+          reason={!projectId || !roleKey ? "Choose a project and a role." : undefined}
           isPending={create.isPending}
           onClick={async () => {
             try {

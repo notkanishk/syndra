@@ -109,9 +109,11 @@ export function VersionBand({ target, history }: { target: string; history?: Map
             disabled={!pending || !note.trim() || publish.isPending}
             isPending={publish.isPending}
             reason={
-              pending && !note.trim()
-                ? "Say why this set is the one to keep. It is what the next person to roll back reads."
-                : undefined
+              !pending
+                ? "Nothing to publish. This lights up once there's an unpublished edit to save."
+                : !note.trim()
+                  ? "Say why this set is the one to keep. It is what the next person to roll back reads."
+                  : undefined
             }
             onClick={() => publish.mutate(note, { onSuccess: () => setNote("") })}
           >

@@ -393,7 +393,7 @@ describe("applying a change that reaches nobody", () => {
     onRehearse = vi.fn().mockResolvedValue(empty());
     open();
 
-    const apply = await screen.findByRole("button", { name: /Nothing to apply/ });
+    const apply = await screen.findByRole("button", { name: /Apply to 0/ });
     expect(apply).toBeDisabled();
   });
 
@@ -407,6 +407,28 @@ describe("applying a change that reaches nobody", () => {
     fireEvent.click(save);
     // Applied without an approval, because none was issued.
     await waitFor(() => expect(vi.mocked(onApply)).toHaveBeenCalledWith(""));
+  });
+
+  // planNote's empty-`parts` shape used to be read as one thing — "every
+  // selected row will change" — when it actually covers two opposite plans.
+  // A plan that reaches nobody has to say so, not the other one.
+  it("does not caption a plan that reaches nobody as everyone changing", async () => {
+    onRehearse = vi.fn().mockResolvedValue(empty());
+    open();
+
+    await screen.findByRole("button", { name: /^Apply/ });
+    expect(screen.queryByText(/Every selected person will change/)).toBeNull();
+    expect(screen.getByText(/reaches nobody/)).toBeInTheDocument();
+  });
+
+  // The button's own label states its scope, so it stays an action even at
+  // zero — the disabled `reason` is what explains why it can't be pressed.
+  it("keeps the apply label an action at a zero count", async () => {
+    onRehearse = vi.fn().mockResolvedValue(empty());
+    open();
+
+    expect(await screen.findByRole("button", { name: "Apply to 0 people" })).toBeDisabled();
+    expect(screen.queryByText("Nothing to apply")).toBeNull();
   });
 
   /**
@@ -488,7 +510,7 @@ describe("applying a change that reaches nobody", () => {
       );
       open({ definitionLabel: "Save mapping" });
 
-      expect(await screen.findByRole("button", { name: /Nothing to apply/ })).toBeDisabled();
+      expect(await screen.findByRole("button", { name: /Apply to 0/ })).toBeDisabled();
       expect(screen.getByText(/came back incomplete/)).toBeInTheDocument();
     });
 
@@ -497,7 +519,7 @@ describe("applying a change that reaches nobody", () => {
       onRehearse = vi.fn().mockResolvedValue(shaped({ outcomes: undefined }));
       open({ definitionLabel: "Save mapping" });
 
-      expect(await screen.findByRole("button", { name: /Nothing to apply/ })).toBeDisabled();
+      expect(await screen.findByRole("button", { name: /Apply to 0/ })).toBeDisabled();
       expect(screen.getByText(/The list of people did not load/)).toBeInTheDocument();
     });
   });
@@ -537,7 +559,7 @@ describe("applying a change that reaches nobody", () => {
       onRehearse = vi.fn().mockResolvedValue(empty());
       open();
 
-      await screen.findByRole("button", { name: /Nothing to apply/ });
+      await screen.findByRole("button", { name: /Apply to 0/ });
       expect(screen.getByText(/Nothing here would change/)).toBeInTheDocument();
     });
 
