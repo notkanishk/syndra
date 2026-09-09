@@ -23,7 +23,23 @@ import { PLAN_EFFECT_LABEL, PLAN_EFFECT_TONE } from "@/lib/outcome";
 // result in two vocabularies. `queued` keeps the warning tone rather than the
 // accent one — recorded here, not yet at the target.
 
-export function PlanReview({ plan }: { plan: BulkPlan | null }) {
+export function PlanReview({
+  plan,
+  noun = ["person", "people"],
+}: {
+  plan: BulkPlan | null;
+  /**
+   * What this plan's rows ARE, in the caller's own vocabulary.
+   *
+   * `RehearsalDialog` is driven with `["account", "accounts"]` by entitlement
+   * convergence, `["item", "items"]` by drift triage and `["request",
+   * "requests"]` by the requests screen — and it never passed any of that down
+   * here, so a short payload on the requests screen reported a missing list of
+   * *people*. The default is the common case rather than a guess: most surfaces
+   * really do act on people.
+   */
+  noun?: [string, string];
+}) {
   if (!plan) return null;
 
   // `?? []`, as everywhere else that reads a list off a payload. A plan with no
@@ -45,13 +61,11 @@ export function PlanReview({ plan }: { plan: BulkPlan | null }) {
       <div className="max-h-[46vh] overflow-y-auto rounded-inner border border-line-strong">
         {missing ? (
           <p className="px-4 py-3 text-[13.5px] text-faint">
-            The list of people did not load. The totals under the buttons are all that came back.
+            The list of {noun[1]} did not load. The totals under the buttons are all that came
+            back.
           </p>
         ) : outcomes.length === 0 ? (
-          <p className="px-4 py-3 text-[13.5px] text-muted">
-            Nobody holds this {emptySubject(plan.op)} yet, so nobody&apos;s access changes today.
-            This only changes what the {emptySubject(plan.op)} gives to people who hold it later.
-          </p>
+          <p className="px-4 py-3 text-[13.5px] text-muted">{emptyNote(plan.op)}</p>
         ) : (
           outcomes.map((outcome) => <PlanRow key={outcome.user_id} outcome={outcome} />)
         )}
@@ -97,8 +111,45 @@ function PlanRow({ outcome }: { outcome: BulkOutcome }) {
  * says what it is, and a prop would be a second place for a caller to get it
  * wrong.
  */
-function emptySubject(op: BulkPlan["op"]): string {
-  return op === "publish_bundle_version" || op === "move_bundle_holders" ? "bundle" : "role";
+/**
+ * The whole empty-cohort sentence, from the plan's own op.
+ *
+ * It said "this role" to everybody, which was right while only the mapping
+ * surfaces reached it and wrong the moment bundle publishing did — a bundle
+ * screen has no role on it.
+ *
+ * The mapping surfaces genuinely do say "role", and that is worth stating
+ * because the obvious correction gets it backwards: a mapping is not something
+ * anybody HOLDS. It hangs off a (project, role) pair and describes what that
+ * role reaches, so the population who feel it are the people holding the role.
+ * "Nobody holds this mapping yet" is the wrong sentence, and a test caught it.
+ *
+ * A rollback is the one that needs its own words. It restores a whole target's
+ * SET of mappings across several roles, so no singular noun fits the template
+ * at all.
+ *
+ * Exhaustive over the union rather than defaulted, because the first cut WAS
+ * defaulted and rollback fell through it. A switch makes the next op added to
+ * the union fail the typecheck instead of quietly inheriting somebody else's
+ * sentence.
+ */
+function emptyNote(op: BulkPlan["op"]): string {
+  switch (op) {
+    case "publish_bundle_version":
+    case "move_bundle_holders":
+    case "assign_bundle":
+    case "remove_bundle":
+      return "Nobody holds this bundle yet, so nobody's access changes today. This only changes what the bundle gives to people who hold it later.";
+    case "rollback_mappings":
+      return "None of the roles in this version reach anybody yet, so nobody's access changes today. This only changes what they will reach for people who hold them later.";
+    case "assign_role":
+    case "remove_role":
+    case "extend":
+    case "create_mapping":
+    case "edit_mapping":
+    case "delete_mapping":
+      return "Nobody holds this role yet, so nobody's access changes today. This only changes what the role gives to people who hold it later.";
+  }
 }
 
 /**

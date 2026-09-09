@@ -61,6 +61,10 @@ export function PublishVersionDialog({
   // asked: publishing is unambiguous and the compose step is just the note.
   const decided = holders === 0 ? true : migrate !== null;
   const willMigrate = holders === 0 ? false : migrate === true;
+  // One phrase, used by the field label, the radiogroup's accessible name and
+  // the not-ready reason. Written out once because it was written out three
+  // times and only one of them agreed with itself for a single holder.
+  const holdersPhrase = `The ${holders} who already ${holders === 1 ? "holds" : "hold"} it`;
 
   return (
     <RehearsalDialog
@@ -119,10 +123,10 @@ export function PublishVersionDialog({
 
           {holders > 0 && (
             <div>
-              <FieldLabel>The {holders} who already hold it</FieldLabel>
+              <FieldLabel>{holdersPhrase}</FieldLabel>
               <div
                 role="radiogroup"
-                aria-label={`The ${holders} who already hold it`}
+                aria-label={holdersPhrase}
                 className="mt-1.5 flex flex-col gap-2"
               >
                 <Choice

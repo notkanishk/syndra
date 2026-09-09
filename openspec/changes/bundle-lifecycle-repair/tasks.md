@@ -159,6 +159,46 @@ Asked for after the deployment walk: are any of these defects repeated?
   always presents it; only a caller with none falls through to the definition
   path. Test covers it.
 
+## 9. The UI classes, swept ✅
+
+The same four defects the deployment walk found, looked for everywhere else.
+
+- [x] 9.1 **`PlanReview` reported a missing list of "people"** to every caller,
+  including the screens driven with `["account", "accounts"]`,
+  `["item", "items"]` and `["request", "requests"]` — one branch above the
+  sentence I had just fixed. It now takes the noun the dialog already knows.
+- [x] 9.2 **The empty-cohort sentence fell through to "role"** for
+  `rollback_mappings`, which restores a whole target's set across several roles.
+  Now exhaustive over the op union, so the next op added fails the typecheck
+  rather than inheriting somebody else's sentence.
+
+  The obvious correction was wrong and a test caught it: a mapping is not
+  something anybody HOLDS — it hangs off a (project, role) pair and describes
+  what that role reaches — so the mapping surfaces genuinely do say "role".
+- [x] 9.3 **`queuedNote` named the wrong drain rule for `delete_mapping`.**
+  Deleting a mapping only takes access away, so its rows drain on the background
+  runner; the operator was told to go and send them from Pending changes, a
+  queue that would empty on its own before they arrived. `rollback_mappings` is
+  deliberately left out — it restores a set, so it both grants and revokes, and
+  the safe direction is the copy that sends somebody to look.
+- [x] 9.4 **Four more plural/verb disagreements**, all of the shape I shipped:
+  "the 1 person who hold X keep exactly what they have", "the 1 person already
+  holding it come along", "the 1 person holding it lose whatever…", and "The 1
+  who already hold it" as both a field label and a radiogroup's accessible name.
+  The publish dialog's phrase is written once now and used in all three places.
+- [x] 9.5 **`DeleteBundleDialog` was destroyed by its own mutation.** The page
+  looked the open bundle up in the live list on every render, and the delete
+  invalidates that list — so the deleted row vanished and the workspace owning
+  the dialog either unmounted or remounted on a different bundle. The dialog
+  stays open on purpose to report how many revocations were queued, and the
+  previous commit here had added a comment saying that clearing the selection
+  early throws away an outcome nobody has read. The refetch was doing it anyway
+  and Done was unreachable. Same class as 7.2, one component over. Test fails
+  without the fix.
+- [x] 9.6 Not taken, recorded in NEXT.md §4b: seven more disabled controls that
+  give no reason (the four where an operator gets genuinely stuck are fixed),
+  and the pre-existing button remount when a `reason` clears.
+
 ## 6. Follow-ups
 
 - [ ] 6.1 `bundle-versioning` §6.1–6.3 remain open and untouched here (estate-wide catch-up, stale counts on Today, hand-picked `MoveHolders` subsets)

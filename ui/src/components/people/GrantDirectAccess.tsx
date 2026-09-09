@@ -216,6 +216,16 @@ export function GrantDirectAccess({
             <Button
               variant="accent"
               disabled={!ready}
+              // The date case is the invisible one: pick "until a date", leave
+              // the field empty, and the only acting button dies with nothing
+              // said.
+              reason={
+                !ready
+                  ? !projectId || !roleKey
+                    ? "Choose a project and a role."
+                    : "Pick the date the access should end."
+                  : undefined
+              }
               isPending={grant.isPending}
               onClick={async () => {
                 setOutcome(null);

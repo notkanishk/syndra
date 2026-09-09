@@ -71,6 +71,31 @@ export function resultMessage(
 }
 
 /**
+ * The operations whose queued rows drain themselves.
+ *
+ * The backend's rule is on the OUTBOX ROW — `op_type = 'revoke' OR
+ * withdraws_only` — and this set is the client's honest reading of which plans
+ * produce only such rows.
+ *
+ * `delete_mapping` was missing, and that is a wrong instruction rather than a
+ * missing one: deleting a mapping only takes access away, so its rows drain on
+ * the background runner, and the operator was told to go and send them from
+ * Pending changes — a queue that would empty on its own before they arrived.
+ *
+ * `rollback_mappings` is deliberately NOT here. A rollback restores a SET, so
+ * it both grants and revokes, and neither sentence is true of the whole plan.
+ * It keeps the "go and send it" copy because that is the safe direction: the
+ * codebase's own rule is that under-claiming sends somebody to a queue that
+ * turns out to be empty, while over-claiming tells them a door is locked when
+ * it is open.
+ */
+const REVOKING_OPS: ReadonlySet<BulkPlan["op"]> = new Set<BulkPlan["op"]>([
+  "remove_role",
+  "remove_bundle",
+  "delete_mapping",
+]);
+
+/**
  * What happens to the queued rows, without making the operator know the rule.
  *
  * Two rules drain this queue and they are not symmetric: a withdrawal leaves on
@@ -82,7 +107,7 @@ export function resultMessage(
  */
 export function queuedNote(plan: BulkPlan, system: string = "Zitadel"): string | undefined {
   if (plan.summary.queued === 0) return undefined;
-  const revocation = plan.op === "remove_role" || plan.op === "remove_bundle";
+  const revocation = REVOKING_OPS.has(plan.op);
   return revocation
     ? `Recorded in Syndra and waiting to be sent to ${system}. Syndra sends revocations on their own, every few minutes; until then the person still has the access.`
     : `Recorded in Syndra and waiting to be sent to ${system}. Nothing has changed there yet; send it from Pending changes.`;
@@ -509,7 +534,11 @@ export function RehearsalDialog({
               )}
             </div>
           )}
-          <PlanReview plan={plan} />
+          {/* The noun goes down with the plan. This dialog already knows what
+              its rows are — accounts, items, requests — and not passing it on
+              meant the plan itself reported a missing list of "people" on
+              screens that act on none. */}
+          <PlanReview plan={plan} noun={noun} />
           {consequence && (
             <div className="px-6">
               <p className="text-[13.5px] leading-[1.55] text-warn-text">{consequence}</p>
