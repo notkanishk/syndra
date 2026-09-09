@@ -38,6 +38,8 @@ const (
 	planSurfaceBulkDecision  = "requests.bulk_decision"
 	planSurfaceDriftAdopt    = "drift.bulk_attribute"
 	planSurfaceDriftExternal = "drift.bulk_mark_external"
+	planSurfaceBundlePublish = "bundles.publish"
+	planSurfaceBundleMove    = "bundles.move_holders"
 )
 
 // ErrPlanStale is the apply's refusal when the world moved under an approval.
