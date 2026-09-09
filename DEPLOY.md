@@ -832,6 +832,110 @@ the target's health response.
 | NAS auth fails right after it worked once | The key was presented over plaintext and TrueNAS revoked it. Mint a new one and fix the scheme. |
 | NAS auth fails repeatedly, then stops responding | TrueNAS locks out for ten minutes after 20 failed authentications in 60 seconds. Wait it out; the add-on's own breaker is what keeps a retry loop from renewing it. |
 
+#### Putting TrueNAS into day-to-day use
+
+Bring-up proves three connections. This is the fourth thing and it is not a
+connection: what a role *means* on the NAS, and who holds it.
+
+The order below is dictated by the API key. Its only write role is
+`ACCOUNT_WRITE` — accounts and their group membership, and nothing else. It
+cannot create a group, a dataset, a share or an ACL, and `READONLY_ADMIN` does
+not widen that. So everything a member's access rests on except the account
+itself is made **by hand on the NAS first**, and Syndra then puts people into
+it. A mapping written before its group exists is refused at the write, which is
+the good failure; a share whose ACL never names the group succeeds everywhere
+and gives the member an account that opens nothing.
+
+**1 — On the NAS.** `Credentials`, then `Datasets`, then `Shares`.
+
+| Object | Value | Why |
+|---|---|---|
+| Group | e.g. `makerspace`, **Samba Authentication on** | A group without it has no SID, and an SMB share ACL cannot name what has no SID. Sudo off; nothing in it runs commands. |
+| Dataset | e.g. `main/makerspace`, SMB preset | Its own dataset, so quota and snapshots are answerable about members rather than about everything. |
+| SMB share | that dataset, **named exactly as the group**, audit **enabled** | The name is not cosmetic — see the note below. Auditing is what makes a person's Activity tab answer: `activity.get` reports which shares were *not* recording the account it is asked about, so a share left unaudited is a silent gap rather than an error. |
+| ACL | the group, with the access members should have | The one thing Syndra can neither set nor check. |
+
+> **Why the share and the group carry one name.** A member's mount
+> instructions are built from what their entitlements *resolve to*, and on this
+> target that is a list of group names — rendered as
+> `smb://<share host>/<value>`. So the string a member is handed is true only
+> where a group's name is also a share's name. Diverge them and the page prints
+> a path that does not exist, confidently, with nothing in Syndra able to
+> notice. One name per shared folder is the arrangement the product describes;
+> if a deployment ever needs the two to differ, the member page needs a share
+> name of its own first.
+
+Leave every existing object alone. Accounts Syndra did not create are reported
+as unmanaged and never triaged — that is the design, not an omission — and the
+one operation that would change it is adoption, which is deliberate and
+operator-driven.
+
+**2 — In Zitadel, through Syndra.** `Access > Roles`, on the project that
+should carry it. Made here rather than in Zitadel's own console for the reason
+the whole product exists: the backend is the mutation authority, and a role
+created on the far side arrives as drift.
+
+The role key is what the mapping binds to, so it is worth choosing once —
+`storage.member` reads the same in a claim, a mapping and an audit row.
+
+**3 — In Syndra: the mapping.** `System > TrueNAS`, the card headed *Which
+roles are mapped here*.
+
+| Field | Value |
+|---|---|
+| Role | the project and role key from (2) |
+| Field | `group` |
+| Value | the group name from (1), exactly — which is also the share name |
+
+The value is resolved against the NAS as you write it: an unknown group is
+refused with the names it does know. `enabled` and `smb_enabled` are not
+offered and cannot be mapped — they are lifecycle fields the resolver computes
+from whether the person holds any mapped role at all, and a mapping naming one
+would fight the derived state on every resolution.
+
+Creating the mapping queues a convergence for everyone already holding that
+role. On a first setup that is nobody, which is why this order costs nothing.
+
+**4 — One person.** `People > (them) > grant the role`, then
+`Automation > Pending changes > Send`.
+
+Propagation is operator-triggered by design: the grant writes a ledger row, an
+audit row and an outbox row in one transaction and answers `pending`. Nothing
+reaches the NAS until somebody sends it. (Revocations are the exception — they
+drain on a timer, because access that should be gone should not wait for an
+operator to be at a desk.)
+
+What the drain does, in this order: derives the account name from the person's
+email localpart — `ada.lovelace@example.edu` becomes `ada.lovelace` — creates
+the account with `password_disabled` and `smb: false`, and puts it in the
+mapped group. SMB is deliberately *not* requested here: TrueNAS refuses the
+pair outright, and it is turned on by the same call that sets the first
+password. That call is the member's.
+
+**5 — The member finishes it.** They sign in and open `Network storage`, which
+tells them their account name, that it has no password yet, and how to reach
+the share. They set a password there — twelve characters, upper, lower, digit
+and symbol, checked in the backend before the value leaves the process — and
+that single call sets it, enables SMB, and is the moment the account becomes
+usable.
+
+Until they do, the account exists and authenticates nothing. That is the
+correct resting state, not a half-finished one: Syndra never invents a
+credential, so there is no window in which an account has a password nobody
+asked for.
+
+**What to expect on the target page afterwards.** One binding, `bound=1`, and
+the unmanaged count unchanged. A reconcile pass should conclude `current` with
+nothing queued — if it queues something immediately after a successful drain,
+the mapping and the account disagree, and the pass will say about what.
+
+> **Two names, one collision.** The account name comes from the email
+> localpart, so a member whose localpart matches an account already on the NAS
+> gets a name with a short deterministic suffix rather than somebody else's
+> account. It is a backstop that should never fire on a single Workspace
+> domain — and it fires by binding conflict, which halts and reports, if the
+> existing account is unmanaged.
+
 #### Rotating an add-on transport secret
 
 The two ends cannot move atomically. Calls fail to authenticate for a bounded

@@ -152,6 +152,19 @@ None of these are code. All need a live instance and a human.
 - **A failing disk on the NAS** — one uncorrectable error on `sde`, standing since 2026-07-06. Surfaced on the target page now that `health.get` has a caller (34.8), which is how it was found. Not a Syndra problem; it is the first thing that surface was built to show.
 - **~~The live deployment has no add-on at all~~ Done, 2026-08-26.** The public name reaches a reverse proxy that forwards to a separate application host; `/opt/syndra` there is now current `main` and carries the add-on. `ADDON_TARGETS=truenas`, `ADDON_TRUENAS_BASE_URL`, the `TRUENAS_*` block and `COMPOSE_PROFILES=truenas` are in its `.env` (backed up first); the NAS key is mounted from `secrets/truenas-addon/api.key` at 0640 root:65532 rather than passed in the environment, and the transport secret was minted by `truenas-addon-secret` on first start. The add-on read `TrueNAS-25.10.5` at startup, the backend registered it with a matching pinned key, `smoke-test-addon.sh truenas` passes legs 1 and 2, and a reconcile reported `bound=0 queued=0 unmanaged=2 halted=false`.
 
+- **The production add-on is deployed, healthy, and has never been used.** Verified 2026-09-08 against `192.168.4.12`: schema `45 | not dirty`, target registered with the pinned key matching, `TrueNAS-25.10.5` answering, the key's privilege set confirmed read-only apart from `ACCOUNT_WRITE`. What is empty is the content — `target_role_mappings` 0 rows, `target_account_bindings` 0 rows, and no non-`admin` role granted anywhere in the directory. So no member can be provisioned yet, and nothing is wrong: the add-on has no instruction to carry out. The step from here is not deployment but meaning — a group and share on the NAS, a role, a mapping, one person — written down as *Putting TrueNAS into day-to-day use* in `DEPLOY.md`.
+
+  **And one coupling nothing enforces.** A member's mount instructions are
+  built from the values their entitlements resolve to — group names on this
+  target — and rendered as `smb://<share host>/<value>`
+  (`ui/src/components/storage/MyStorage.tsx`, `ConnectionInstructions`). The
+  string is therefore true only where a group's name is also a share's name.
+  The deployment can satisfy that by naming them alike, and `DEPLOY.md` now
+  says to; the honest fix is a share name of its own in the manifest, so the
+  page stops inferring one object's name from another's.
+
+  Two things to settle while doing it. **`TRUENAS_VERIFY_TLS=false`** on production, because `drive.makerspace.tools` is a direct DNS record and the NAS serves its own `CN=localhost` certificate: the API key is handed to whatever answers for that address. It is LAN-only and the risk is bounded, but the fix is a real certificate on the NAS rather than a permanent exception. And the add-on's **start-up version probe failed** on the last restart (`no route to host` — the NAS was still coming up), which is non-fatal by design since every call re-probes, but it means the last `[STARTUP]` line in the log says the opposite of the current state and should not be read as one.
+
   Two things worth carrying forward. First, **the production and dev deployments now point at the same NAS** (`drive.makerspace.tools`) — two backends reconciling one target, which is fine only while neither has anything bound. Second, the log anchor is empty on a fresh add-on (`the target reported no chain head`, non-fatal) and stays that way until the first mutation.
 
   **What it still has NOT exercised:** nothing is bound on the production target, so its classifier, findings and resolutions have not run against real state there. The dev deployment has done that (see above); production has not.

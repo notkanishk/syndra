@@ -673,10 +673,35 @@ function Health({
           )}
         </dl>
 
-        {health?.snapshot_taken_at && (
+        {/* The add-on's MIRROR, and only while it is what a read would be
+            served FROM.
+
+            `snapshot_taken_at` dates the copy in the add-on's own store, which
+            is rewritten by a subjects read — a reconcile — and by nothing else.
+            It is not the age of anything on this card. Rendered unconditionally
+            it produced a contradiction two lines tall: "answering · last
+            answered just now", then "last known state was read 4 hours ago —
+            too old to act on", on a target that was answering perfectly and
+            simply had not been reconciled since breakfast.
+
+            Both sentences were true and the pairing was not. `STALE_AFTER_MS`
+            is ten minutes because that is the adoption gate — too old to BIND
+            an identity on — and nothing on this card binds anything, so the
+            threshold was answering a question nobody had asked. Worse, with no
+            `onRefresh` the strip printed "reload the page to read it again",
+            and a reload re-reads `/health`, which cannot move this timestamp.
+            An instruction that does nothing is the one thing every reading on
+            this page is forbidden to be.
+
+            So: only when the target is NOT answering, which is exactly when the
+            mirror becomes the thing being shown — and `current: false`, because
+            it is a copy whatever its age. That is the `provisional` reading this
+            component was built for, and it says the true sentence: this is the
+            last state seen, and here is how old it is. */}
+        {health && !health.reachable && (
           <ReadFreshness
             subject={`${name}'s last known state`}
-            state={{ readAt: health.snapshot_taken_at, current: health.reachable }}
+            state={{ readAt: health.snapshot_taken_at, current: false }}
           />
         )}
       </div>
