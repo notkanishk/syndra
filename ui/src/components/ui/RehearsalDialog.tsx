@@ -289,7 +289,8 @@ export function RehearsalDialog({
   // while the summary says it counted people. Neither can be reviewed, so
   // neither can be approved — and the safe reading of one of those has always
   // been the ordinary path.
-  const incoherent = plan !== null && (rows === null || (rows.length === 0 && plan.summary.total > 0));
+  const incoherent =
+    plan !== null && (rows === null || (rows.length === 0 && plan.summary.total > 0));
   // Whether the backend issued an approval, and therefore whether the apply has
   // to cite one. Derived from ROWS, exactly as `issuePlan` is: it records every
   // rehearsed subject and returns without an id only when there were none.
@@ -298,7 +299,7 @@ export function RehearsalDialog({
   const citationRequired = (rows?.length ?? 0) > 0;
   // No row will act. Not the same as reaching nobody: forty rows that all
   // resolve to `no_change` reach forty people and change nothing for them.
-  const nothingWillAct = Boolean(plan) && plan.summary.apply === 0;
+  const nothingWillAct = plan !== null && plan.summary.apply === 0;
   const isDefinitionApply = Boolean(definitionLabel) && nothingWillAct && !incoherent;
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
