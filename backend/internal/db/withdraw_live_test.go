@@ -110,16 +110,39 @@ func TestAnInFlightDeliveryIsNeverCancelled(t *testing.T) {
 // revoke takes it back.
 func TestARevokeSurvivesWhenTheGrantWasDeliveredBefore(t *testing.T) {
 	ctx := liveDB(t)
+	// Applied and never taken back: the grant is live in Zitadel right now.
 	seedOutbox(t, ctx, "add", "applied", "u1", "p1", "bundle", "b1", []string{"community"})
 	pending := seedOutbox(t, ctx, "add", "pending", "u1", "p1", "bundle", "b1", []string{"community"})
 
 	if owed := runWithdraw(t, ctx, revokeParams("u1", "p1", "community", "bundle", "b1")); !owed {
-		t.Fatal("the revoke was dropped although this grant had already been delivered once")
+		t.Fatal("the revoke was dropped although this grant is still standing in Zitadel")
 	}
 	// The undelivered re-delivery is still cancelled: dispatching it after the
 	// revoke would re-create what the revoke just removed.
 	if status, _ := statusOf(t, ctx, pending); status != "superseded" {
 		t.Fatalf("the queued re-delivery is still %q and would run after the revoke", status)
+	}
+}
+
+// The sequence the operator actually had, and the one the first version of
+// this rule got wrong: granted, revoked, granted again, all before the second
+// grant was ever sent.
+//
+// `EXISTS(applied add)` is true throughout — there are two of them in the
+// history — so the revoke was queued every time, and the six annihilating rows
+// came straight back with only the wording changed. What decides it is which
+// of the two came LAST.
+func TestARevokeIsDroppedWhenAnEarlierGrantWasAlreadyTakenBack(t *testing.T) {
+	ctx := liveDB(t)
+	seedOutbox(t, ctx, "add", "applied", "u1", "p1", "bundle", "b1", []string{"community"})
+	seedOutbox(t, ctx, "revoke", "applied", "u1", "p1", "bundle", "b1", []string{"community"})
+	pending := seedOutbox(t, ctx, "add", "pending", "u1", "p1", "bundle", "b1", []string{"community"})
+
+	if owed := runWithdraw(t, ctx, revokeParams("u1", "p1", "community", "bundle", "b1")); owed {
+		t.Fatal("a revoke was queued for a grant that an earlier revocation had already taken back")
+	}
+	if status, _ := statusOf(t, ctx, pending); status != "superseded" {
+		t.Fatalf("the queued re-delivery is still %q", status)
 	}
 }
 
