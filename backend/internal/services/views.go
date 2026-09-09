@@ -309,11 +309,12 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 		bucket := projectBuckets[role.ProjectID]
 		if bucket == nil {
 			bucket = &models.ProjectAccessView{
-				ProjectID:         role.ProjectID,
-				ProjectName:       role.ProjectName,
-				SourceRoles:       []models.EffectiveRole{},
-				DerivedRoles:      []models.EffectiveRole{},
-				EffectiveRoleKeys: []string{},
+				ProjectID:           role.ProjectID,
+				ProjectName:         role.ProjectName,
+				ProjectNameResolved: role.ProjectNameResolved,
+				SourceRoles:         []models.EffectiveRole{},
+				DerivedRoles:        []models.EffectiveRole{},
+				EffectiveRoleKeys:   []string{},
 			}
 			projectBuckets[role.ProjectID] = bucket
 		}
@@ -1083,15 +1084,24 @@ func upsertRole(ctx context.Context, roleMap map[roleKey]*models.EffectiveRole, 
 	if current == nil {
 		// Best-effort project name — never block lineage resolution on a
 		// directory lookup failure. Fall back to the raw project ID.
+		//
+		// directory.Default.ProjectName itself returns the id with a nil
+		// error on an unresolved lookup (deliberately, so audit rows and
+		// topology placeholders never collapse to empty) — so a real error
+		// and a silent miss both surface here the same way: the returned
+		// name equals the id we asked about. That equality IS the "did this
+		// resolve" signal, since a real project name colliding with its own
+		// platform id is not a case this system needs to handle.
 		projectName := key.projectID
 		if name, err := directory.Default.ProjectName(ctx, key.projectID); err == nil {
 			projectName = name
 		}
 		current = &models.EffectiveRole{
-			ProjectID:   key.projectID,
-			ProjectName: projectName,
-			RoleKey:     key.roleKey,
-			IsSource:    isSource,
+			ProjectID:           key.projectID,
+			ProjectName:         projectName,
+			ProjectNameResolved: projectName != key.projectID,
+			RoleKey:             key.roleKey,
+			IsSource:            isSource,
 		}
 		roleMap[key] = current
 	}

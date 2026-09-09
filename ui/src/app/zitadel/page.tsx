@@ -107,12 +107,20 @@ export default function IdentityProviderPage() {
         />
         <StatCard
           label="Connection"
-          value={health.data?.mode === "live" ? "Connected" : "Not connected"}
-          tone={health.data?.mode === "live" ? "neutral" : "warn"}
+          // `mode` alone used to decide this, and `mode` is "live" for BOTH a
+          // healthy connection and a live one that just failed to answer —
+          // so a real outage read as "Connected" here while the sentence
+          // above it said "Unreachable". `live` and `notConfigured` are the
+          // same two facts the banner already computed; reusing them is what
+          // keeps this card from disagreeing with it.
+          value={live ? "Connected" : notConfigured ? "Not connected" : "Unreachable"}
+          tone={live ? "neutral" : "warn"}
           detail={
-            health.data?.mode === "live"
+            live
               ? "Syndra can read and change access in Zitadel."
-              : "Syndra is not set up to talk to Zitadel, so decisions made here change nobody's real access."
+              : notConfigured
+                ? "Syndra is not set up to talk to Zitadel, so decisions made here change nobody's real access."
+                : "Syndra is set up to talk to Zitadel, but the last attempt to reach it failed. Decisions made here wait until it answers again."
           }
         />
       </div>

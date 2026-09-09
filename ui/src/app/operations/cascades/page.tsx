@@ -59,6 +59,19 @@ export default function ChangeHistoryPage() {
         Handles: c_ is one edit&rsquo;s set of changes, R_ an automatic rule, b_ a bundle.
       </p>
 
+      {/* This list is bundle/rule/lifecycle cascades only — a single-user direct
+          grant never appears here even though it shows up in the audit feed,
+          so a short window with mostly direct grants renders as one lonely
+          row here. Without this line that reads as "almost nothing happened"
+          rather than "most of the period wasn't a cascade at all". */}
+      {!asked && (
+        <p className="text-[13px] text-faint">
+          Cascades only — a bundle edit, an automatic rule, or someone&rsquo;s status changing.
+          Direct, one-person grants don&rsquo;t appear here even though they&rsquo;re in the audit
+          feed. Shows up to the 50 most recent.
+        </p>
+      )}
+
       <ListStates
         isLoading={cascades.isLoading}
         error={cascades.error}

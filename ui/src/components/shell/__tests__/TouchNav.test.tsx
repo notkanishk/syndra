@@ -105,7 +105,7 @@ describe("Advanced does not get a tab bar", () => {
   it("counts places needing attention, not items outstanding", () => {
     indicators.data = { drift: 3, expiring_grants: 11, holds_due: 3 } as Indicators;
     renderNav();
-    expect(screen.getByText("1 place needs attention")).toBeTruthy();
+    expect(screen.getByText("1 place elsewhere needs a look")).toBeTruthy();
     expect(screen.queryByText(/17/)).toBeNull();
   });
 

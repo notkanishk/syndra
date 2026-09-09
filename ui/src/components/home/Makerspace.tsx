@@ -69,14 +69,22 @@ function Health() {
         label="Zitadel"
         value={reachable ? "Reachable" : "Unreachable"}
         tone={reachable ? "calm" : "danger"}
-        href="/system"
+        // `/system` is not a route — there is no page at that path, only
+        // `/system/targets`. This tile is about Zitadel, and Zitadel has a page.
+        href="/zitadel"
         note={reachable ? "Changes are getting through" : "Changes wait here — nothing is lost"}
       />
       <HealthCell
         label="Waiting to be sent"
         value={String(queued)}
         tone={queued > 0 ? "accent" : "calm"}
-        href="/operations"
+        // Pending changes, not Incoming events. `/operations` is the feed of
+        // what arrived FROM Zitadel; this tile counts what Syndra is waiting to
+        // send TO it. The two were one page before the rename, and this link
+        // was left pointing at the half that kept the old path — so the
+        // dashboard offered a count and then opened a screen that does not
+        // contain it.
+        href="/governance/pending"
         note={queued > 0 ? "Waiting for you to send them" : "Nothing waiting"}
       />
       <HealthCell

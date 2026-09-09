@@ -85,7 +85,10 @@ export default function UpstreamGrantsPage() {
           error={grants.error}
           isEmpty={rows.length === 0}
           onRetry={() => grants.refetch()}
-          errorTitle="Couldn't read roles held from Zitadel. Syndra itself is fine."
+          // Not "Syndra itself is fine" — the commonest cause here is Zitadel
+          // never having been configured at all, which IS a Syndra-side gap.
+          // The detail line below names which one it is.
+          errorTitle="Couldn't read roles held from Zitadel."
           skeleton={<RowSkeleton rows={8} avatar={false} label="Reading roles held" />}
           empty={
             <EmptyState

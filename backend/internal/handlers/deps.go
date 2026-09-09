@@ -191,7 +191,12 @@ var (
 
 	// Each closure checks MgmtClient at call time (not definition time) so the
 	// nil guard in discovery handlers and these closures are defense-in-depth.
-	errNoClient = fmt.Errorf("zitadel client not initialized")
+	//
+	// Worded for the operator reading it, not the developer debugging it: this
+	// is the same "Management client is nil" fact /zitadel/health calls
+	// "disabled", and it used to reach /zitadel/projects and /zitadel/users as
+	// the bare Go error text, verbatim.
+	errNoClient = fmt.Errorf("Zitadel is not set up — Syndra has no connection configured to it")
 
 	zitadelListUsers = func(ctx context.Context, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
 		if zitadel.MgmtClient == nil {

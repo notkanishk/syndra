@@ -55,7 +55,10 @@ export default function UpstreamProjectsPage() {
             error={projects.error}
             isEmpty={rows.length === 0}
             onRetry={() => projects.refetch()}
-            errorTitle="Couldn't read projects from Zitadel. Syndra itself is fine."
+            // Not "Syndra itself is fine" — the commonest cause here is Zitadel
+            // never having been configured at all, which IS a Syndra-side gap.
+            // The detail line below names which one it is.
+            errorTitle="Couldn't read projects from Zitadel."
             skeleton={<RowSkeleton rows={5} avatar={false} label="Reading projects" />}
             empty={
               <EmptyState
@@ -107,7 +110,7 @@ export default function UpstreamProjectsPage() {
             error={roles.error}
             isEmpty={(roles.data?.items ?? []).length === 0}
             onRetry={() => roles.refetch()}
-            errorTitle="Couldn't read this project's roles from Zitadel. Syndra itself is fine."
+            errorTitle="Couldn't read this project's roles from Zitadel."
             skeleton={<RowSkeleton rows={4} avatar={false} label="Reading roles" />}
             empty={
               <EmptyState

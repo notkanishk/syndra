@@ -48,11 +48,16 @@ export function MemberCatalog({ heldByProject }: { heldByProject: Map<string, Se
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-baseline gap-3">
+      {/* Stacked, like the page's own header above it — not a row. A row here
+          split the heading and its caption into two flex items that shrank
+          to fit side by side instead of the caption wrapping under a
+          full-width heading, so "What else is here" sat in its own narrow
+          column with the rest of the row empty. */}
+      <div>
         <h2 className="type-section-title">What else is here</h2>
-        <span className="text-[13.5px] text-faint">
+        <p className="mt-1 text-[13.5px] text-faint">
           Everything the makerspace offers. Ask for anything you need — makerspace staff decide.
-        </span>
+        </p>
       </div>
 
       <div className="flex flex-wrap gap-[18px]">
