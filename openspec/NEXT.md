@@ -85,9 +85,17 @@ findings are about classes of defect rather than about bundles.
 
   **The class:** a surface can join the rehearsal contract in the UI without
   joining the plan gate in the backend, and the failure is silent — a disabled
-  button, not an error. Both are now in `plan_gate.go`'s surface list, which is
-  the only place to read for "who participates". Worth a sweep if a new
-  rehearsed surface appears.
+  button, not an error.
+
+  **Why it recurred, found by auditing afterwards:** the surface list was split
+  across three files — six constants in `plan_gate.go`, four in
+  `mapping_plan.go`, one in `entitlements.go`. So "which surfaces participate"
+  could not be answered by reading one place, and reading `plan_gate.go` alone
+  gave a confident wrong answer that omitted five surfaces *including
+  `mappings.rollback`, the first instance of this very defect*. An auditor
+  starting where the mechanism lives would have missed the precedent. All
+  eleven now live in `plan_gate.go`, which says why. A full audit of all eleven
+  (2026-09-09) found the other nine coherent.
 - ~~**The assign panel previewed the working copy**~~ — **fixed.** An assignment
   pins the published version, so it promised roles the apply would not grant.
   This is the **fifth** instance of working-copy-vs-published confusion

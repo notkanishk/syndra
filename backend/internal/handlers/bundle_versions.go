@@ -200,6 +200,23 @@ func claimPublishPlan(
 	if err != nil {
 		return err
 	}
+	// An approval that was OFFERED gets spent, whatever the cohort has done
+	// since. Checking emptiness first looked equivalent and was not: a publish
+	// rehearsed against fourteen holders, all of whom are unassigned before the
+	// apply, would take the no-citation path — leaving the approval unspent and
+	// citable until it expired, and publishing without verifying the version
+	// contents the operator had reviewed. It could not move the wrong person,
+	// because there is nobody left to move; it could still publish a different
+	// version from the one that was approved.
+	//
+	// So a caller holding a citation always presents it, and only a caller with
+	// none falls through to the definition path below.
+	if strings.TrimSpace(planID) != "" {
+		_, err := claimPlan(r.Context(), surface, actor, live.RequestFingerprint, planID,
+			func() map[string]services.BulkOutcome { return indexOutcomes(live.Outcomes) })
+		return err
+	}
+
 	// Nobody holds it, so the rehearsal approved nobody and there is nothing to
 	// verify. Publishing is still an act — it cuts the version future
 	// assignments will pin — and it takes the same path a mapping definition
@@ -207,13 +224,8 @@ func claimPublishPlan(
 	if len(live.Outcomes) == 0 {
 		return nil
 	}
-	if strings.TrimSpace(planID) == "" {
-		return errPlanCitationMissing
-	}
+	return errPlanCitationMissing
 
-	_, err = claimPlan(r.Context(), surface, actor, live.RequestFingerprint, planID,
-		func() map[string]services.BulkOutcome { return indexOutcomes(live.Outcomes) })
-	return err
 }
 
 // MoveHoldersRequest repins named holders onto one version.

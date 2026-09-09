@@ -25,10 +25,8 @@ import (
 // resume the drain, exactly as Zitadel grants do, and the response says queued
 // rather than applied for that reason.
 
-// planSurfaceEntitlements is where these approvals are citable, and nowhere
-// else. A plan issued here names subjects whose "outcome" is a convergence; the
-// same ids on the bulk-grant endpoint mean a role assignment.
-const planSurfaceEntitlements = "entitlements.converge"
+// planSurfaceEntitlements — where these approvals are citable, and nowhere
+// else — is declared with every other surface in plan_gate.go.
 
 type entitlementRehearseRequest struct {
 	SubjectIDs       []string `json:"subject_ids"`

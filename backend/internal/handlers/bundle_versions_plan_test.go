@@ -155,6 +155,52 @@ func TestPublishApply_ABundleNobodyHoldsNeedsNoCitation(t *testing.T) {
 	}
 }
 
+// A citation that was offered gets verified, even if the cohort emptied out.
+//
+// Checking emptiness first looked equivalent and was not: a publish rehearsed
+// against holders who are all unassigned before the apply took the no-citation
+// path, leaving the approval unspent and citable until it expired, and
+// publishing without checking the version contents the operator had reviewed.
+// It could not move the wrong person — there is nobody left to move — but it
+// could publish a version other than the approved one.
+func TestPublishApply_ACitationIsVerifiedEvenAfterTheCohortEmpties(t *testing.T) {
+	stubPlanStore(t)
+	stubPublishRehearsal(t, services.BulkPlan{
+		Op: "publish_bundle_version",
+		Outcomes: []services.BulkOutcome{
+			{UserID: "u1", Effect: services.EffectApply, Fingerprint: "fp-u1"},
+		},
+		RequestFingerprint: "with-one-holder",
+	}, services.DraftDiff{})
+
+	rehearse := httptest.NewRecorder()
+	handlePublishBundleVersion(rehearse, publishRequest(`{"note":"","migrate":true}`, false))
+	var issued struct{ Plan services.BulkPlan }
+	if err := json.NewDecoder(rehearse.Body).Decode(&issued); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	// Everybody is unassigned, AND the working copy moved — so the version
+	// about to be published is not the one that was approved.
+	stubPublishRehearsal(t, services.BulkPlan{
+		Op:                 "publish_bundle_version",
+		Outcomes:           []services.BulkOutcome{},
+		RequestFingerprint: "nobody-and-different-contents",
+	}, services.DraftDiff{})
+	ran := stubPublishApply(t)
+
+	rr := httptest.NewRecorder()
+	handlePublishBundleVersion(rr, publishRequest(
+		`{"note":"","migrate":true,"plan_id":"`+issued.Plan.PlanID+`"}`, true))
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected the citation to be checked and refused, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if *ran {
+		t.Fatal("published a version the approval did not describe")
+	}
+}
+
 // A holder whose reviewed delta moved invalidates the approval. Somebody
 // gaining the role from a direct grant between the review and the apply turns
 // "LOSES laser" into "no change", and the operator approved the first.

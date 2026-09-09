@@ -124,6 +124,41 @@ than only asserting its parts.
   pluralising the noun and not the verb. Test covers the one-holder case, which
   is the common case in a makerspace this size.
 
+## 8. Sweep for the same classes elsewhere ✅
+
+Asked for after the deployment walk: are any of these defects repeated?
+
+- [x] 8.1 **Shadowed outer variable — none elsewhere.** Checked three ways:
+  x/tools' shadow analyzer (validated against a reconstruction of the real
+  bug), a broader AST pass covering what that analyzer misses (a shadowed
+  *named result* returned by a bare `return` is NOT reported by it), and manual
+  inspection of every callback site of the wrapper kind. Only `err` shadows
+  remain, which are idiomatic.
+- [x] 8.2 **A guard for it**, `repoguard.TestAClosureDoesNotShadowWhatItsCallerReads`.
+  Narrowed to the dangerous shape — a non-error function-scope value or named
+  result re-declared inside a closure — because the off-the-shelf analyzer
+  reports forty idiomatic `err` shadows alongside, which is why nobody runs it.
+  Zero findings as the tree stands; fails on the real defect when it is put
+  back, which is the only evidence a guard is worth having.
+- [x] 8.3 **All eleven plan-gated surfaces audited** — every rehearsal issues an
+  approval and every apply claims one. No surface is a dead end and none has a
+  decorative approval.
+- [x] 8.4 **Why it recurred: the surface list lived in three files.** Six
+  constants in `plan_gate.go`, four in `mapping_plan.go`, one in
+  `entitlements.go` — so reading the file where the mechanism lives gave a
+  confident wrong answer omitting five surfaces, `mappings.rollback` among them,
+  which was the first instance of this defect. Consolidated into `plan_gate.go`
+  with the reason recorded there. This is the actual root cause of the
+  recurrence, and it was organisational rather than logical.
+- [x] 8.5 **`claimPublishPlan` checked emptiness before the citation.** A publish
+  rehearsed against holders who were all unassigned before the apply took the
+  no-citation path: the approval went unspent and citable until expiry, and the
+  publish proceeded without checking the version contents the operator had
+  reviewed. It could not move the wrong person — nobody is left — but it could
+  publish a version other than the approved one. A caller holding a citation now
+  always presents it; only a caller with none falls through to the definition
+  path. Test covers it.
+
 ## 6. Follow-ups
 
 - [ ] 6.1 `bundle-versioning` §6.1–6.3 remain open and untouched here (estate-wide catch-up, stale counts on Today, hand-picked `MoveHolders` subsets)
