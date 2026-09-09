@@ -3,6 +3,7 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import type { CascadeOutcome } from "@/lib/types";
 
 export interface BundleRow {
   id: string;
@@ -290,11 +291,18 @@ export function useRemoveBundle(userId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (bundleId: string) =>
-      request(`/users/${userId}/bundles/${bundleId}`, { method: "DELETE" }),
+      request<CascadeOutcome>(`/users/${userId}/bundles/${bundleId}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["users", "access", userId] });
       qc.invalidateQueries({ queryKey: ["users", "list"] });
       qc.invalidateQueries({ queryKey: ["bundles"] });
+      // What waits under Pending changes just moved, in either direction: a
+      // removal queues revocations, or — when the assignment had never been
+      // sent — withdraws the deliveries that were still queued. Neither was
+      // invalidated here, so the nav count and that screen went on showing the
+      // state from before the edit until something else happened to refetch.
+      qc.invalidateQueries({ queryKey: ["governance"] });
+      qc.invalidateQueries({ queryKey: ["propagations"] });
     },
   });
 }

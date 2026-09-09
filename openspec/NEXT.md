@@ -152,7 +152,7 @@ None of these are code. All need a live instance and a human.
 - **A failing disk on the NAS** — one uncorrectable error on `sde`, standing since 2026-07-06. Surfaced on the target page now that `health.get` has a caller (34.8), which is how it was found. Not a Syndra problem; it is the first thing that surface was built to show.
 - **~~The live deployment has no add-on at all~~ Done, 2026-08-26.** The public name reaches a reverse proxy that forwards to a separate application host; `/opt/syndra` there is now current `main` and carries the add-on. `ADDON_TARGETS=truenas`, `ADDON_TRUENAS_BASE_URL`, the `TRUENAS_*` block and `COMPOSE_PROFILES=truenas` are in its `.env` (backed up first); the NAS key is mounted from `secrets/truenas-addon/api.key` at 0640 root:65532 rather than passed in the environment, and the transport secret was minted by `truenas-addon-secret` on first start. The add-on read `TrueNAS-25.10.5` at startup, the backend registered it with a matching pinned key, `smoke-test-addon.sh truenas` passes legs 1 and 2, and a reconcile reported `bound=0 queued=0 unmanaged=2 halted=false`.
 
-- **The production add-on is deployed, healthy, and has never been used.** Verified 2026-09-08 against `192.168.4.12`: schema `45 | not dirty`, target registered with the pinned key matching, `TrueNAS-25.10.5` answering, the key's privilege set confirmed read-only apart from `ACCOUNT_WRITE`. What is empty is the content — `target_role_mappings` 0 rows, `target_account_bindings` 0 rows, and no non-`admin` role granted anywhere in the directory. So no member can be provisioned yet, and nothing is wrong: the add-on has no instruction to carry out. The step from here is not deployment but meaning — a group and share on the NAS, a role, a mapping, one person — written down as *Putting TrueNAS into day-to-day use* in `DEPLOY.md`.
+- **The production add-on is deployed, healthy, and has never been used.** Verified 2026-09-08 against the production application host: schema `45 | not dirty`, target registered with the pinned key matching, `TrueNAS-25.10.5` answering, the key's privilege set confirmed read-only apart from `ACCOUNT_WRITE`. What is empty is the content — `target_role_mappings` 0 rows, `target_account_bindings` 0 rows, and no non-`admin` role granted anywhere in the directory. So no member can be provisioned yet, and nothing is wrong: the add-on has no instruction to carry out. The step from here is not deployment but meaning — a group and share on the NAS, a role, a mapping, one person — written down as *Putting TrueNAS into day-to-day use* in `DEPLOY.md`.
 
   **And one coupling nothing enforces.** A member's mount instructions are
   built from the values their entitlements resolve to — group names on this
@@ -341,7 +341,9 @@ Compose service block (§32.3).
 
 ## 4b. Test infrastructure debt
 
-- **`internal/db` has no live-database harness.** Every assertion in that package is a migration-coherence or SQL-text guard, so anything that only manifests as an interleaving of two transactions is asserted structurally rather than executed. Three review findings in a row bottomed out here: apply-vs-deregistration, enqueue-vs-deregistration, and disable-during-dispatch. The fixes are in and guarded by source-level checks; what is missing is a test that actually runs them.
+- **~~`internal/db` has no live-database harness.~~ Half done, 2026-09-09.** The harness exists (`livedb_test.go`): it skips unless `SYNDRA_TEST_DATABASE_URL` is set, migrates that database and truncates between cases, so `go test ./...` stays green without a Postgres. It was written because the withdrawal rule decides whether a revoke is owed, and a source-level guard proves only that something is called — the seven cases in `withdraw_live_test.go` are mutation-checked against a real database. What is still owed is the list below: nothing yet uses it for the INTERLEAVINGS, which is what the original entry was about. Run it against a throwaway database — a scratch one on the development LXC's own Postgres does the job.
+
+  Previous entry:  Every assertion in that package is a migration-coherence or SQL-text guard, so anything that only manifests as an interleaving of two transactions is asserted structurally rather than executed. Three review findings in a row bottomed out here: apply-vs-deregistration, enqueue-vs-deregistration, and disable-during-dispatch. The fixes are in and guarded by source-level checks; what is missing is a test that actually runs them.
 
   `golang-migrate` is already a dependency, so the harness is small: connect to a `SYNDRA_TEST_DATABASE_URL`, migrate up once, skip every live test when the variable is unset so `go test ./...` stays green without a database. What it needs is a throwaway Postgres — there is none on the development machine (no Docker, no `psql`), which is why this is debt rather than done.
 
@@ -397,22 +399,19 @@ Deliberately NOT consolidated: the five outbox direction predicates
 more). They look duplicated and are not — each answers a different question and
 states its reason. Left alone on purpose.
 
-- **The person page reports bundle access before it has been delivered.** Found
-  while investigating the drift report on 2026-09-09. `collectUserRoles`
-  (`services/views.go`) builds a person's effective access from their bundle
-  assignments and pinned-version roles, and consults nothing about whether the
-  projection actually reached the target. So between assigning a manual-mode
-  bundle and confirming Pending changes — 12:50:45 to 12:55:28 in the case that
-  prompted this — the person page said the holder had three roles that had not
-  been sent anywhere. The dashboard has a pending-propagation count
-  (`views.go:687`); the per-person view has nothing.
+- **~~The person page reports bundle access before it has been delivered.~~
+  Done, 2026-09-09.** The marker exists and it is per SOURCE, not per role: a
+  role delivered directly and queued by a bundle is one the person genuinely
+  has. Fed from the outbox, which holds a row exactly while Syndra still owes
+  the change — no new bookkeeping, and no dependence on the six-hour drift
+  sweep, which is far too old to date a grant made a minute ago.
 
-  It is defensible as "this page shows Syndra's records, delivery lives in
-  Pending changes", and it is exactly the shape of claim the codebase treats as
-  cardinal elsewhere ("12 people updated" about rows still in the outbox). The
-  operator who reported it read the page as confirmation that the work was
-  done. Wants a per-role marker fed by the outbox, which is a change to what
-  that view means and so is the owner's call, not a sweep-up.
+  The report also turned up the larger half. Removing an assignment whose
+  grants had never been sent QUEUED THEIR OPPOSITE: three adds and three
+  revokes for the same three roles, netting to nothing, with three phantom
+  entries under Unfinished revocations describing access nobody ever received.
+  A revoke now cancels the undelivered delivery it answers instead — see
+  `changes/undelivered-is-not-delivered`.
 
 - **Disabled controls that still give no reason.** `Button` renders a visible
   `reason` under a blocked control and `Button.tsx` states the rule, but nothing

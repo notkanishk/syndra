@@ -131,6 +131,9 @@ var (
 	svcDeleteExpiredDirectGrantAndEnqueue = db.DeleteExpiredDirectGrantAndEnqueue
 	svcInTxLockingAccess                  = db.InTxLockingAccess
 	svcGetActiveMappingRules              = db.GetActiveMappingRules
+	// What this person has been given and Syndra has not yet sent. Read on the
+	// access view so a recorded change is never rendered as a delivered one.
+	svcPendingDeliveries = db.PendingDeliveriesForUser
 	// Queued revocations are decisions already taken; every effective-access
 	// read subtracts them so a delta cannot be computed from a ledger row that
 	// is on its way out.

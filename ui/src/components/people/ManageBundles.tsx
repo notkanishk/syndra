@@ -84,20 +84,32 @@ export function ManageBundles({
 
   async function apply() {
     try {
+      // What is WAITING afterwards, summed from the backend rather than
+      // assumed from the number of boxes ticked. The two are different every
+      // time a change leaves nothing to send: a removal whose delivery had
+      // never gone out withdraws the queued rows instead of queueing their
+      // opposite, and a change that reaches nobody's effective access queues
+      // nothing either. Both used to be reported as "the changes wait under
+      // Pending changes until you send them" — an instruction to go and
+      // confirm an empty screen.
+      let waiting = 0;
       for (const id of changes) {
-        if (assignedIds.has(id)) await remove.mutateAsync(id);
-        else await assign.mutateAsync(id);
+        const result = assignedIds.has(id)
+          ? await remove.mutateAsync(id)
+          : await assign.mutateAsync(id);
+        waiting += result?.cascade?.enqueued ?? 0;
       }
-      // Queued, not applied: a bundle assignment reaches a target through the
-      // drain, and `summary.succeeded` is always zero precisely so a client
-      // cannot report otherwise.
+      const recorded =
+        changes.length === 1 ? "One bundle change recorded" : `${changes.length} bundle changes recorded`;
       setOutcome({
         kind: "queued",
-        message:
-          changes.length === 1
-            ? "One bundle change recorded"
-            : `${changes.length} bundle changes recorded`,
-        detail: "Nothing has reached Zitadel or a connected system yet. The changes wait under Pending changes until you send them.",
+        message: recorded,
+        detail:
+          waiting > 0
+            ? `Nothing has reached Zitadel or a connected system yet. ${
+                waiting === 1 ? "One change waits" : `${waiting} changes wait`
+              } under Pending changes until you send them.`
+            : "Nothing is waiting to be sent: this left no change for Zitadel or a connected system to carry out. Pending changes is unaffected.",
       });
       setStaged(new Set());
     } catch (error) {

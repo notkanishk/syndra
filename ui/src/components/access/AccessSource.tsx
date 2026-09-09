@@ -35,6 +35,14 @@ export interface RoleReason {
   bundle_name?: string;
   trigger_project?: string;
   trigger_role?: string;
+  /**
+   * Recorded, not yet sent: this source's grant is still in the outbox.
+   *
+   * A fact about DELIVERY, never about the record. Syndra's tables say the
+   * person holds the role — that is what an assignment means — and this says
+   * nothing has carried it to Zitadel yet.
+   */
+  queued?: boolean;
 }
 
 const ORDER: Record<SourceKind, number> = { direct: 0, bundle: 1, mapping: 2 };
@@ -122,6 +130,32 @@ export function SourceChip({ kind }: { kind: SourceKind }) {
  * strongest as a full chip and collapse the rest behind a count of the same
  * height. Never a wall of chips.
  */
+/**
+ * True when NOTHING that gives this role has been sent yet.
+ *
+ * Deliberately "every", not "some". A role held twice — delivered directly and
+ * queued by a bundle — is one the person genuinely has, and marking that row as
+ * waiting would be as wrong in the other direction. The row is only untrue when
+ * every source of it is still in the queue.
+ */
+export function nothingSentYet(reasons: RoleReason[] | undefined | null): boolean {
+  const ordered = orderedSources(reasons);
+  return ordered.length > 0 && ordered.every((reason) => reason.queued === true);
+}
+
+/**
+ * The marker itself, one wording everywhere.
+ *
+ * Amber rather than red: nobody has made a mistake, and a change waiting for
+ * the confirmation the deployment asked for is the system working. What it must
+ * not do is read as delivered.
+ */
+export function NotSentYet({ className = "" }: { className?: string }) {
+  return (
+    <span className={`font-semibold text-warn-text ${className}`}>Waiting to be sent</span>
+  );
+}
+
 export function AccessSourceList({
   reasons,
   showQualifier = true,
