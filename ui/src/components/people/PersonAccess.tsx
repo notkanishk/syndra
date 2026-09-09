@@ -346,7 +346,22 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
             open={grantOpen}
             onClose={() => setGrantOpen(false)}
           />
-          <RemovalDialog removal={removal} onClose={() => setRemoval(null)} />
+          {/*
+            `userId` and `userName` are load-bearing, not decoration.
+            RemovalDialog resolves the person as `removal.userId ?? userId`, and
+            this page passed NEITHER — so `person` was undefined, every removal
+            button was disabled, and the bundle dialog rendered its fallback
+            title ("...from this person"). The only way into the removal flow
+            for a role, on the page an operator actually uses, could not be
+            pressed. The role page has always passed it, which is why the flow
+            looked fine there.
+          */}
+          <RemovalDialog
+            removal={removal}
+            userId={userId}
+            userName={user?.name}
+            onClose={() => setRemoval(null)}
+          />
         </>
       )}
     </div>
