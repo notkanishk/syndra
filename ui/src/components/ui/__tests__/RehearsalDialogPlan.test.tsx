@@ -410,26 +410,35 @@ describe("applying a change that reaches nobody", () => {
   });
 
   /**
-   * "Reaches nobody" is three conditions, and `apply === 0` is only one of
-   * them.
+   * What the definition label is gated on, and what it is NOT.
    *
-   * A plan can count forty people and change nothing for any of them: forty
-   * rows, every one `no_change`, an apply count of zero. That is not a
-   * definition — it reaches forty people — and reading it as one would put the
-   * definition label on it, submit it with no citation, and meet a backend
-   * refusal the label had just promised would not happen.
+   * The gate used to be "the plan reaches nobody", guarding against a plan of
+   * forty unmoved people taking the label, submitting with no citation, and
+   * meeting a backend refusal the label had just promised would not happen.
    *
-   * The backend is not fooled either way; it rechecks holders and refuses a
-   * missing citation. What is at stake is the UI telling an operator the wrong
-   * thing about what they are doing, and then being contradicted.
+   * The citation is no longer derived from the verdicts. It is derived from
+   * whether the plan HAS rows, which is exactly what the backend derives it
+   * from — `issuePlan` records every rehearsed subject and returns without an
+   * id only when there were none. So the hazard is closed at its cause, and the
+   * gate can be what it should always have been: does any row ACT.
+   *
+   * That correction matters because "no row acts" is a real state on surfaces
+   * where the act is not the rows. Publishing a bundle version while leaving
+   * its current holders alone moves nobody and is a documented, deliberate
+   * answer; a mapping whose forty subjects all hold the target role from
+   * somewhere else changes nothing for any of them and is still a definition
+   * being saved. Both were unreachable.
+   *
+   * What remains refused is a plan this dialog cannot read.
    */
-  describe("what counts as reaching nobody", () => {
+  describe("what counts as an apply that moves nobody", () => {
     const shaped = (over: Record<string, unknown>): BulkPlan =>
       ({ ...empty(), ...over }) as unknown as BulkPlan;
 
-    it("does not read forty unchanged people as a definition", async () => {
+    it("offers the definition label for forty people nothing happens to", async () => {
       onRehearse = vi.fn().mockResolvedValue(
         shaped({
+          plan_id: "plan_1",
           outcomes: Array.from({ length: 40 }, (_, i) => ({
             user_id: `u${i}`,
             effect: "no_change",
@@ -440,8 +449,32 @@ describe("applying a change that reaches nobody", () => {
       );
       open({ definitionLabel: "Save mapping" });
 
-      expect(await screen.findByRole("button", { name: /Nothing to apply/ })).toBeDisabled();
-      expect(screen.queryByRole("button", { name: "Save mapping" })).toBeNull();
+      const save = await screen.findByRole("button", { name: "Save mapping" });
+      expect(save).toBeEnabled();
+
+      // And it cites the approval, because the plan carries one. This is the
+      // half the old narrow gate existed to protect, now protected by the rule
+      // rather than by refusing the operation.
+      fireEvent.click(save);
+      await waitFor(() => expect(vi.mocked(onApply)).toHaveBeenCalledWith("plan_1"));
+    });
+
+    // A plan carrying rows but no approval is refused, whatever its verdicts
+    // say and whatever the surface calls itself.
+    it("still refuses rows that arrived without an approval", async () => {
+      onRehearse = vi.fn().mockResolvedValue(
+        shaped({
+          plan_id: undefined,
+          outcomes: [{ user_id: "u1", effect: "no_change", detail: "already has it" }],
+          summary: { total: 1, apply: 0, no_change: 1, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
+        }),
+      );
+      open({ definitionLabel: "Save mapping" });
+
+      const save = await screen.findByRole("button", { name: "Save mapping" });
+      expect(save).toBeDisabled();
+      expect(screen.getByText(/did not come back with an approval/)).toBeInTheDocument();
+      expect(vi.mocked(onApply)).not.toHaveBeenCalled();
     });
 
     // An empty list with a non-zero total is a plan this dialog does not
@@ -456,6 +489,7 @@ describe("applying a change that reaches nobody", () => {
       open({ definitionLabel: "Save mapping" });
 
       expect(await screen.findByRole("button", { name: /Nothing to apply/ })).toBeDisabled();
+      expect(screen.getByText(/came back incomplete/)).toBeInTheDocument();
     });
 
     // An absent array is a payload that arrived short, not an empty cohort.
@@ -469,7 +503,7 @@ describe("applying a change that reaches nobody", () => {
   });
 
   // The relaxation is exact. A surface that can define is still a surface that
-  // must cite an approval the moment its change reaches somebody.
+  // must cite an approval the moment its plan carries rows.
   it("does not relax the citation once the change reaches somebody", async () => {
     onRehearse = vi
       .fn()
@@ -479,5 +513,41 @@ describe("applying a change that reaches nobody", () => {
     const apply = await screen.findByRole("button", { name: /^Apply/ });
     expect(apply).toBeDisabled();
     expect(vi.mocked(onApply)).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A disabled control states its reason in visible copy. `Button` has rendered
+   * one under the control since the touch work, and this dialog — the surface
+   * where an operator has just read a page of consequences and is looking for
+   * the control that acts on them — passed none. Every route to a greyed-out
+   * Apply left them guessing.
+   */
+  describe("a disabled Apply says why", () => {
+    it("names the missing approval", async () => {
+      onRehearse = vi
+        .fn()
+        .mockResolvedValue({ ...plan(), plan_id: undefined } as unknown as BulkPlan);
+      open();
+
+      await screen.findByRole("button", { name: /^Apply/ });
+      expect(screen.getByText(/did not come back with an approval/)).toBeInTheDocument();
+    });
+
+    it("says so when nothing would change", async () => {
+      onRehearse = vi.fn().mockResolvedValue(empty());
+      open();
+
+      await screen.findByRole("button", { name: /Nothing to apply/ });
+      expect(screen.getByText(/Nothing here would change/)).toBeInTheDocument();
+    });
+
+    it("says nothing when Apply is available", async () => {
+      onRehearse = vi.fn().mockResolvedValue(plan());
+      open();
+
+      await screen.findByRole("button", { name: /^Apply/ });
+      expect(screen.queryByText(/did not come back with an approval/)).toBeNull();
+      expect(screen.queryByText(/Nothing here would change/)).toBeNull();
+    });
   });
 });

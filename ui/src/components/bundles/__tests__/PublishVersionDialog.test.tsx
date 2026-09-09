@@ -97,4 +97,112 @@ describe("PublishVersionDialog", () => {
     await waitFor(() => expect(state.rehearse).toHaveBeenCalled());
     expect(state.rehearse.mock.calls[0][0]).toMatchObject({ migrate: false });
   });
+
+  // The unanswered question is above the fold and the disabled button is below
+  // it, so "greyed out for no visible reason" was the whole experience.
+  it("says what is missing while the migrate question is unanswered", () => {
+    render(
+      <PublishVersionDialog bundleId="b1" name="Lab Tech" draft={draft()} onClose={vi.fn()} />,
+    );
+
+    expect(screen.getByRole("button", { name: "Preview the change" })).toBeDisabled();
+    expect(screen.getByText(/Choose what happens to the 14 people/)).toBeInTheDocument();
+  });
+
+  /**
+   * The two publishes that could be previewed and never applied.
+   *
+   * Both move nobody, and the dialog read "moves nobody" as "there is nothing
+   * to do" — which is right for a bulk grant and wrong for the only screen that
+   * can cut a version.
+   */
+  describe("a publish that moves nobody is still a publish", () => {
+    it("can be applied when nothing holds the bundle", async () => {
+      render(
+        <PublishVersionDialog
+          bundleId="b1"
+          name="Lab Tech"
+          draft={draft({ holder_count: 0 })}
+          onClose={vi.fn()}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Preview the change" }));
+
+      const publish = await screen.findByRole("button", { name: "Publish v3" });
+      expect(publish).toBeEnabled();
+
+      fireEvent.click(publish);
+      await waitFor(() => expect(state.apply).toHaveBeenCalled());
+      expect(state.apply.mock.calls[0][0]).toMatchObject({ migrate: false });
+    });
+
+    it("can be applied when the holders are deliberately left behind", async () => {
+      // Fourteen holders, all staying: every row is no_change, so the apply
+      // count is zero and the plan still carries an approval for fourteen
+      // people.
+      state.rehearse = vi.fn().mockResolvedValue({
+        plan: {
+          ...emptyPlan,
+          plan_id: "plan_1",
+          outcomes: Array.from({ length: 14 }, (_, i) => ({
+            user_id: `u${i}`,
+            name: `Holder ${i}`,
+            email: `h${i}@example.edu`,
+            effect: "no_change",
+            detail: "stays on v2",
+          })),
+          summary: { total: 14, apply: 0, no_change: 14, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
+        },
+        draft: draft(),
+      });
+
+      render(
+        <PublishVersionDialog bundleId="b1" name="Lab Tech" draft={draft()} onClose={vi.fn()} />,
+      );
+      fireEvent.click(screen.getByText("Leave them on the version they are on"));
+      fireEvent.click(screen.getByRole("button", { name: "Preview the change" }));
+
+      const publish = await screen.findByRole("button", { name: "Publish v3" });
+      expect(publish).toBeEnabled();
+
+      fireEvent.click(publish);
+      // And it cites the approval the rehearsal issued.
+      await waitFor(() => expect(state.apply).toHaveBeenCalled());
+      expect(state.apply.mock.calls[0][0]).toMatchObject({ migrate: false, plan_id: "plan_1" });
+    });
+  });
+
+  // The failure as reported: a publish that moves fourteen people came back
+  // with no approval, so Apply could never be pressed. It now carries one, and
+  // the apply sends it.
+  it("cites the approval when the holders are moving", async () => {
+    state.rehearse = vi.fn().mockResolvedValue({
+      plan: {
+        ...emptyPlan,
+        plan_id: "plan_7",
+        outcomes: [
+          {
+            user_id: "u1",
+            name: "Ada",
+            email: "ada@example.edu",
+            effect: "apply",
+            detail: "v2 → v3, gains trained",
+          },
+        ],
+        summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
+      },
+      draft: draft(),
+    });
+
+    render(<PublishVersionDialog bundleId="b1" name="Lab Tech" draft={draft()} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByText("Move everyone to v3"));
+    fireEvent.click(screen.getByRole("button", { name: "Preview the change" }));
+
+    const apply = await screen.findByRole("button", { name: /^Apply/ });
+    expect(apply).toBeEnabled();
+
+    fireEvent.click(apply);
+    await waitFor(() => expect(state.apply).toHaveBeenCalled());
+    expect(state.apply.mock.calls[0][0]).toMatchObject({ migrate: true, plan_id: "plan_7" });
+  });
 });

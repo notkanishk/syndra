@@ -226,8 +226,21 @@ function MoveHoldersDialog({
       lede={`${userIds.length} ${userIds.length === 1 ? "person" : "people"} would move to v${target.version}. Their access changes to whatever v${target.version} contains — anything only their current version gave them is revoked (their access to it ends).`}
       noun={["person", "people"]}
       destructive
-      onRehearse={() => rehearse.mutateAsync({ version_id: target.id, user_ids: userIds })}
-      onApply={() => apply.mutateAsync({ version_id: target.id, user_ids: userIds })}
+      // A move whose rows all resolve to "no change to their access" still
+      // moves the PIN, which is what clears the stale-holder count this screen
+      // leads with. Catching everybody up is the act; nobody gaining or losing
+      // a role is a good outcome of it, not a reason to refuse it.
+      definitionLabel={`Move ${userIds.length} ${userIds.length === 1 ? "person" : "people"} to v${target.version}`}
+      onRehearse={(acknowledgeScope) =>
+        rehearse.mutateAsync({
+          version_id: target.id,
+          user_ids: userIds,
+          acknowledge_scope: acknowledgeScope,
+        })
+      }
+      onApply={(planId) =>
+        apply.mutateAsync({ version_id: target.id, user_ids: userIds, plan_id: planId || undefined })
+      }
       onClose={onClose}
     />
   );
