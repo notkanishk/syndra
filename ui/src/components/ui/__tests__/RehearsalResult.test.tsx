@@ -56,3 +56,37 @@ describe("the apply toast", () => {
     expect(resultMessage(plan({ succeeded: 1 }), noun)).toBe("Applied to 1 person.");
   });
 });
+
+/**
+ * Applying something that reaches nobody.
+ *
+ * "Applied to 0 people." is true and reads as a failure. It is what an operator
+ * got after publishing a bundle version nothing holds yet, or saving a mapping
+ * before anybody has the role — both of which are the act succeeding. Found in
+ * a browser on the dev deployment, on a result step no operator could reach
+ * until publishing became appliable at all.
+ */
+describe("an apply that reached nobody", () => {
+  it("reports the act rather than a headcount of nought", () => {
+    const p = plan({});
+    expect(resultMessage(p, noun)).toBe(
+      "Done. Nobody's access changed, because nobody holds it yet.",
+    );
+    expect(resultTone(p)).toBe("success");
+  });
+
+  it("does not swallow the counts when people are waiting in the outbox", () => {
+    // Same `succeeded: 0`, and emphatically not the same situation: twelve
+    // people are recorded and not yet in Zitadel, which is the split the
+    // queued population exists to keep visible.
+    const p = plan({ total: 12, queued: 12 });
+    expect(resultMessage(p, noun)).toBe(
+      "Applied to 0 people. 12 people are waiting to be sent to Zitadel.",
+    );
+  });
+
+  it("does not swallow the counts when people failed", () => {
+    const p = plan({ total: 3, failed: 3 });
+    expect(resultMessage(p, noun)).toBe("Applied to 0 people. 3 people failed.");
+  });
+});

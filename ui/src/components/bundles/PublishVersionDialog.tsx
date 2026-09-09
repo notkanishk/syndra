@@ -28,7 +28,7 @@ import {
 export function PublishVersionDialog({
   bundleId,
   name,
-  draft,
+  draft: live,
   onClose,
 }: {
   bundleId: string;
@@ -38,6 +38,20 @@ export function PublishVersionDialog({
 }) {
   const rehearse = useRehearsePublish(bundleId);
   const apply = useApplyPublish(bundleId);
+
+  /**
+   * The draft this dialog opened on, held still.
+   *
+   * A successful publish invalidates the draft query, so the prop this dialog
+   * renders from moves the moment the write lands — and every version number on
+   * screen moves with it. The result step then reported "Publish Lab Tech v3"
+   * for the publish that had just created v2: the one step whose job is to say
+   * what happened, naming something that did not.
+   *
+   * Nothing else edits a bundle while this modal is open, so freezing costs
+   * nothing and the dialog stays about the version it is publishing.
+   */
+  const [draft] = useState(live);
 
   const [note, setNote] = useState("");
   const [migrate, setMigrate] = useState<boolean | null>(null);

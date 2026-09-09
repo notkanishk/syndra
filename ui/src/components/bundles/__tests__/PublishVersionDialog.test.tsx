@@ -172,6 +172,40 @@ describe("PublishVersionDialog", () => {
     });
   });
 
+  /**
+   * The version on screen must be the version being published.
+   *
+   * A successful publish invalidates the draft query, so the `draft` prop moves
+   * the moment the write lands and every version number rendered from it moves
+   * with it. The result step reported "Publish Lab Tech v4" for the publish
+   * that had just created v3 — the one step whose job is to say what happened,
+   * naming something that did not.
+   *
+   * Found in a browser on the dev deployment. No operator could reach the
+   * result step before publishing was appliable, so no guard had ever had the
+   * chance to see it.
+   */
+  it("keeps naming the version it published after the draft moves on", async () => {
+    const { rerender } = render(
+      <PublishVersionDialog bundleId="b1" name="Lab Tech" draft={draft()} onClose={vi.fn()} />,
+    );
+    expect(screen.getByText("Publish Lab Tech v3")).toBeInTheDocument();
+
+    // What the parent does on success: the draft refetches and next_version
+    // becomes the version AFTER the one just published.
+    rerender(
+      <PublishVersionDialog
+        bundleId="b1"
+        name="Lab Tech"
+        draft={draft({ latest_version: 3, next_version: 4, added: [] })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Publish Lab Tech v3")).toBeInTheDocument();
+    expect(screen.queryByText("Publish Lab Tech v4")).toBeNull();
+  });
+
   // The failure as reported: a publish that moves fourteen people came back
   // with no approval, so Apply could never be pressed. It now carries one, and
   // the apply sends it.
