@@ -49,8 +49,8 @@ export function PlanReview({ plan }: { plan: BulkPlan | null }) {
           </p>
         ) : outcomes.length === 0 ? (
           <p className="px-4 py-3 text-[13.5px] text-muted">
-            Nobody holds this role yet, so nobody&apos;s access changes today. This only changes
-            what the role gives to people who hold it later.
+            Nobody holds this {emptySubject(plan.op)} yet, so nobody&apos;s access changes today.
+            This only changes what the {emptySubject(plan.op)} gives to people who hold it later.
           </p>
         ) : (
           outcomes.map((outcome) => <PlanRow key={outcome.user_id} outcome={outcome} />)
@@ -85,6 +85,20 @@ function PlanRow({ outcome }: { outcome: BulkOutcome }) {
       </span>
     </div>
   );
+}
+
+/**
+ * What the empty-cohort sentence is ABOUT, from the plan's own op.
+ *
+ * The sentence said "this role" to everybody, which was true while only the
+ * mapping surfaces could reach it. Publishing a bundle version nothing holds
+ * yet reaches it too, and told the operator about a role on a screen that has
+ * no role on it. Read from `op` rather than taken as a prop: the plan already
+ * says what it is, and a prop would be a second place for a caller to get it
+ * wrong.
+ */
+function emptySubject(op: BulkPlan["op"]): string {
+  return op === "publish_bundle_version" || op === "move_bundle_holders" ? "bundle" : "role";
 }
 
 /**

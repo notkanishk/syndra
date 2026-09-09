@@ -50,6 +50,20 @@ export function resultMessage(
 ): string {
   const { succeeded, failed, queued } = plan.summary;
   const of = (n: number) => `${n} ${n === 1 ? noun[0] : noun[1]}`;
+  // A plan that reached NOBODY, applied. "Applied to 0 people." is true and
+  // reads as a failure — it is the sentence an operator gets after publishing a
+  // version nothing holds yet, or saving a mapping before anybody has the role,
+  // and both of those are the act succeeding.
+  //
+  // Every count zero, which is the only shape that means "this reached
+  // nobody". Guarding on `total` alone is not enough — a plan of twelve people
+  // all sitting in the outbox has `succeeded: 0` and MUST keep its counts,
+  // since that split is the whole reason `queued` is not folded into
+  // `succeeded`. Requiring all four to be nought cannot be confused with any
+  // of the populations having members.
+  if (plan.summary.total === 0 && succeeded === 0 && failed === 0 && queued === 0) {
+    return `Done. Nobody's access changed, because nobody holds it yet.`;
+  }
   const parts = [`Applied to ${of(succeeded)}.`];
   if (queued > 0) parts.push(`${of(queued)} ${queued === 1 ? "is" : "are"} waiting to be sent to ${system}.`);
   if (failed > 0) parts.push(`${of(failed)} failed.`);
