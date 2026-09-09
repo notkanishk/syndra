@@ -334,6 +334,56 @@ Compose service block (§32.3).
 
   Also blocked on it: the live-row half of 2.18 (a plan persists and expires), 2.20 (a fingerprint mismatch mutates nothing), 2.22 (scan plan rows for a submitted secret), 1.11's real interleavings, and 1.21/2.46's — a concurrent apply for one subject genuinely serializing, the settled state equalling the higher version, and a grant overtaken by a later revoke actually terminating `superseded` rather than being asserted to.
 
+### Duplicated-judgement audit — 2026-09-09
+
+After the drift incident, a full sweep for the shape that caused it: two pieces
+of code answering the same semantic question, written separately, one of them
+never taught about a new source. Five were fixed in `bundle-lifecycle-repair`
+(see §7–9 there). What that audit found and left:
+
+- **Untraced rule propagation is worse than "untraced".** Already recorded below
+  as a dormant trap, and the audit found the sharper half:
+  `zitadel.EnforceMappingRules` is single-hop where `collectUserRoles` is a
+  fixpoint, so on a chain `A→B→C` it grants B and never C — while the compiled
+  token carries C. The token and Zitadel disagree, and the drift sweep does not
+  conclude absence for rule-derived roles, so nothing raises it. Fixing the
+  trace and fixing the arity are the same change: enqueue the closure delta
+  rather than walking rules by hand.
+
+- **Three closures over "what does this user effectively hold", and one of them
+  fails open.** `collectUserRoles` (views), `userBaseHoldings`+`effectiveClosure`
+  (cascade) and `CompileUserCache` (cache) agree on rules (all fixpoint) and on
+  bundles (all through the pinned version). Two real divergences remain:
+  *queued revocations* are subtracted by the cascade and by neither of the other
+  two, so mid-revocation the cascade says gone, `UserExpectsRole` says expected
+  and the token still carries it; and `cache/deps.go`'s `bundleRolesFor` LOGS
+  AND RETURNS NIL on a read error, so a transient database blip compiles a token
+  with the person's bundle roles missing and caches it for 24h. The other two
+  return the error. That one is a wrong-access bug waiting on a bad minute.
+
+- **"Who holds this role" has three implementations that disagree by design.**
+  `GetEffectiveUserCounts` (no rules), `MappingHolders` (rules, one hop),
+  `collectUserRoles` (fixpoint). `roles.go` names the gap honestly, but the
+  number feeds the rule editor's "Nobody holds the first role yet, so saving
+  changes nothing today" — printed above a Save that reaches the rule-derived
+  cohort. The role-members page and the role-catalog count will show different
+  numbers for the same role.
+
+- **Four hand-written copies of the allowance in-force predicate**
+  (`db/allowances.go`) agree character-for-character today. Pure latent trap:
+  add a column and the enforcement read and the screen read start disagreeing
+  about whether a suspension is active. `unconfirmedRevocationPredicate` shows
+  the right shape — a named `const` both readers share.
+
+- **Two `fetchAllZitadelGrants`** (sweep and reconciliation) with independently
+  declared page sizes and caps, each commented as mirroring the other.
+  Divergence produces a truncation flag on one surface and not the other.
+
+Deliberately NOT consolidated: the five outbox direction predicates
+(`revoke OR withdraws_only`, `revoke, replace OR withdraws_only`, and three
+more). They look duplicated and are not — each answers a different question and
+states its reason. Left alone on purpose.
+
 - **The person page reports bundle access before it has been delivered.** Found
   while investigating the drift report on 2026-09-09. `collectUserRoles`
   (`services/views.go`) builds a person's effective access from their bundle

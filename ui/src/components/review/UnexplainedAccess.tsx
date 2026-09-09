@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { isDeparted } from "@/lib/people-filters";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Badge, Mono } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
@@ -844,10 +845,13 @@ function explainDrift(item: DriftTriageItem): string {
   return "Found by the scheduled check, which compares lists and cannot see who made the change. Nothing in Syndra — no direct access, no bundle, no automatic rule — gives it.";
 }
 
+// The third copy of "is this person gone", now the shared one. It was missing
+// `deactivated`, `locked` and `deleted`, so an account the people index and the
+// bulk guard both called departed read as "Member" here — on the row where
+// whether somebody is a leaver is the entire basis of the triage decision.
 function describeHolder(item: DriftTriageItem): string {
   if (item.user_is_service_account) return "Service account";
-  const status = (item.user_status ?? "").toLowerCase();
-  if (status === "departed" || status === "alumni" || status === "inactive") return "No longer active";
+  if (isDeparted(item.user_status)) return "No longer active";
   return "Member";
 }
 

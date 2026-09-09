@@ -131,3 +131,13 @@ func IsExcluded(exclusions []models.ExternalGrantExclusion, target, userID, proj
 	}
 	return false
 }
+
+// Wire the coverage check the revocation path needs.
+//
+// `zitadel` cannot call into `services` — it is imported BY services — so the
+// answer is handed over rather than reached for. In init rather than from
+// main, because a revocation that silently skips its safety check because
+// somebody forgot a wiring line is the failure this is here to prevent.
+func init() {
+	zitadel.StillExpected = UserExpectsRole
+}

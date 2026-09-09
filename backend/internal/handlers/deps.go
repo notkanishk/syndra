@@ -167,7 +167,9 @@ var (
 	// Errors from these MUST propagate as 500s, not degrade to an empty set —
 	// an empty set would misclassify rule-derived/excluded grants as drift.
 	svcGetActiveMappingRulesRecon = db.GetActiveMappingRules
-	svcGetExclusions              = db.GetExclusions
+	// The third detector's bundle inventory. See filterExplained.
+	svcAllBundleDerivedGrantsRecon = db.GetAllBundleDerivedGrants
+	svcGetExclusions               = db.GetExclusions
 
 	// Shadow Password Vault injectable vars.
 	svcRecordCredentialSet     = services.RecordCredentialSet
