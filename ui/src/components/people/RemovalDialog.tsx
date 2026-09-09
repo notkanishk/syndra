@@ -49,8 +49,18 @@ export function RemovalDialog({
 }: {
   removal: Removal | null;
   onClose: () => void;
-  userId?: string;
-  userName?: string;
+  /**
+   * Who this is about. REQUIRED, and deliberately `string | undefined` rather
+   * than optional: a caller must state the person even when it has none,
+   * because the alternative is what happened — `PersonAccess` simply never
+   * passed it, so every removal button on the person page was disabled and the
+   * dialog titled itself "…from this person" for the whole life of the feature.
+   *
+   * An optional prop is silent when omitted. This one is load-bearing, so the
+   * typecheck asks for it and the next call site cannot forget it the same way.
+   */
+  userId: string | undefined;
+  userName: string | undefined;
 }) {
   const [chosen, setChosen] = useState<SourceKind | null>(null);
 
@@ -194,9 +204,17 @@ function DirectDialog({
 
       <ModalFooter
         note={
-          blocked
-            ? "Refused · this role was not given directly, so there is no direct access to revoke. Only direct access can be revoked here."
-            : undefined
+          // Two causes, and they were reported as one. "This role was not given
+          // directly" is true when the grant id is missing; it is a fabrication
+          // when the real problem is that the caller passed no person, which is
+          // what the person page did for the whole life of this dialog. A note
+          // that blames the data for a wiring fault sends an operator to check
+          // the wrong thing.
+          !userId
+            ? "Refused · Syndra could not tell which person this is. Reload the page."
+            : blocked
+              ? "Refused · this role was not given directly, so there is no direct access to revoke. Only direct access can be revoked here."
+              : undefined
         }
       >
         <Button
@@ -294,6 +312,18 @@ function BundleDialog({
           variant="dangerConfirm"
           isPending={removeBundle.isPending}
           disabled={!userId || !source.bundle_id}
+          // It was disabled in silence, which is how a dead removal flow went
+          // unnoticed: the cause was upstream (the person page passed no
+          // userId) and the button said nothing at all. Now it names which
+          // half is missing, so the next time this happens it is a bug report
+          // rather than a shrug.
+          reason={
+            !userId
+              ? "Syndra could not tell which person this is, so it will not remove a bundle from them. Reload the page."
+              : !source.bundle_id
+                ? "Syndra could not tell which bundle gives this role. Manage bundles can remove it by name."
+                : undefined
+          }
           onClick={async () => {
             try {
               await removeBundle.mutateAsync(source.bundle_id!);

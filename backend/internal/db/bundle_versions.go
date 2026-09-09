@@ -385,3 +385,57 @@ func MoveHoldersAndEnqueue(
 	}
 	return ids, nil
 }
+
+// BundleDerivedGrant is one (person, project, role) a bundle assignment
+// accounts for, resolved through the version that person is PINNED to.
+type BundleDerivedGrant struct {
+	UserID    string
+	ProjectID string
+	RoleKey   string
+}
+
+// GetAllBundleDerivedGrants returns every (person, project, role) that a bundle
+// assignment explains, across the whole deployment, in one read.
+//
+// This exists for the drift sweep, and the reason is worth stating. The sweep
+// classifies a live Zitadel grant as drift when Syndra has no intent behind it,
+// and it was checking three sources: direct grants, mapping rules, exclusions.
+// Bundles were not among them — so every role a bundle projected into Zitadel
+// was reported as unexplained drift, permanently, and re-affirmed on every
+// tick. The webhook's own drift check never had this hole: it goes through
+// services.UserExpectsRole, which is documented as "direct grant, bundle, or
+// mapping rule". The two detectors disagreed about what Syndra expects.
+//
+// Resolved through `a.version_id` — the holder's pin — and NOT through
+// `bundle_roles`. The working copy is what the next version will contain;
+// reading it here would explain away a live grant on the strength of an
+// unpublished edit, which is the same confusion that put an operator's
+// unpublished roles into an assignment preview.
+//
+// One query rather than per-user, because the sweep runs over every grant in
+// the deployment and N round trips inside that loop is how a five-second sweep
+// becomes a five-minute one.
+func GetAllBundleDerivedGrants(ctx context.Context) ([]BundleDerivedGrant, error) {
+	rows, err := querier(ctx).Query(ctx, `
+		SELECT a.user_id, r.zitadel_project_id, r.zitadel_role_key
+		FROM user_bundle_assignments a
+		JOIN bundle_version_roles r ON r.version_id = a.version_id
+		ORDER BY a.user_id, r.zitadel_project_id, r.zitadel_role_key`)
+	if err != nil {
+		return nil, fmt.Errorf("all bundle-derived grants: %w", err)
+	}
+	defer rows.Close()
+
+	var out []BundleDerivedGrant
+	for rows.Next() {
+		var g BundleDerivedGrant
+		if err := rows.Scan(&g.UserID, &g.ProjectID, &g.RoleKey); err != nil {
+			return nil, fmt.Errorf("scan bundle-derived grant: %w", err)
+		}
+		out = append(out, g)
+	}
+	// Surfaced rather than swallowed: a partly-read inventory would explain
+	// fewer grants than Syndra actually intends, and the sweep would raise the
+	// remainder as drift. Same rule GetAllDirectGrants follows.
+	return out, rows.Err()
+}

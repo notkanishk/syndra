@@ -8,6 +8,7 @@ import (
 	"log"
 
 	"syndra/internal/db"
+	"syndra/internal/models"
 	"syndra/internal/services"
 	"syndra/internal/zitadel"
 )
@@ -20,10 +21,15 @@ type DriftResult struct {
 	// it looked at one target.
 	Target string `json:"target"`
 
-	ZitadelGrants     int  `json:"zitadel_grants"`
-	DriftItemsCreated int  `json:"drift_items_created"` // target_only, deduped
-	ReEnqueued        int  `json:"re_enqueued"`         // syndra_only replays
-	Truncated         bool `json:"truncated"`
+	ZitadelGrants     int `json:"zitadel_grants"`
+	DriftItemsCreated int `json:"drift_items_created"` // target_only, deduped
+	// DriftItemsRetracted counts findings this pass CLOSED because Syndra turned
+	// out to account for them after all. Reported separately from created: a
+	// sweep that raises three and retracts three has not been quiet, it has
+	// changed its mind, and an operator watching the queue deserves to see which.
+	DriftItemsRetracted int  `json:"drift_items_retracted,omitempty"`
+	ReEnqueued          int  `json:"re_enqueued"` // syndra_only replays
+	Truncated           bool `json:"truncated"`
 	// WriteFailures counts findings this pass reached and could not write down.
 	// Each one is logged and skipped so a single bad row cannot cost the rest
 	// of the sweep — but a pass that lost a finding has not reconciled the
@@ -118,6 +124,18 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	if err != nil {
 		return DriftResult{}, fmt.Errorf("drift sweep: load exclusions: %w", err)
 	}
+	// Aborts like the reads above rather than degrading to an empty set, and
+	// for the same reason: an empty set here explains nothing, so every role a
+	// bundle projects would be raised as drift — which is precisely the defect
+	// this read was added to fix.
+	bundled, err := svcAllBundleDerivedGrants(ctx)
+	if err != nil {
+		return DriftResult{}, fmt.Errorf("drift sweep: load bundle-derived grants: %w", err)
+	}
+	bundleSet := make(map[services.HolderKey]bool, len(bundled))
+	for _, g := range bundled {
+		bundleSet[services.HolderKey{UserID: g.UserID, ProjectID: g.ProjectID, RoleKey: g.RoleKey}] = true
+	}
 	holder := buildHolderSet(direct, zit)
 
 	res := DriftResult{Target: target, ZitadelGrants: len(zit), Truncated: truncated}
@@ -127,14 +145,8 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	for _, g := range zit {
 		for _, rk := range g.RoleKeys {
 			k := services.HolderKey{UserID: g.UserID, ProjectID: g.ProjectID, RoleKey: rk}
-			if directSet[k] {
-				continue // Syndra has a direct intent for this — not drift
-			}
-			if expectedViaRule(holder, rules, g.UserID, g.ProjectID, rk) {
-				continue // expected_via_rule — not drift
-			}
-			if isExcluded(exclusions, target, g.UserID, g.ProjectID, rk) {
-				continue // marked external on THIS target — silently filtered
+			if explained(k, directSet, bundleSet, holder, rules, exclusions, target) {
+				continue // Syndra accounts for this grant — not drift
 			}
 			if _, inserted, err := upsertDriftItem(ctx, target, g.UserID, g.ProjectID,
 				[]string{rk}, g.ID, "reconciliation_sweep", db.DriftTargetOnly); err != nil {
@@ -145,6 +157,21 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 			}
 		}
 	}
+
+	// --- retraction: findings this sweep can now account for ---
+	//
+	// The loop above stops CREATING false findings. It cannot clear the ones
+	// already written, and those do not age out: a `pending_triage` row sits
+	// there until somebody resolves it, and the only resolution the UI offers
+	// for an unexplained grant is Adopt — which writes a direct-grant row. On a
+	// finding a bundle already explains that is actively harmful, because the
+	// redundant grant means removing the bundle stops revoking anything.
+	//
+	// So the sweep retracts what it can explain. Same `explained` judgement as
+	// above, so a finding cannot be raised and retracted on alternating ticks.
+	// Only `target_only` on THIS target: a `syndra_only` finding is the opposite
+	// claim and is not this pass's business.
+	res.DriftItemsRetracted = retractExplained(ctx, target, directSet, bundleSet, holder, rules, exclusions)
 
 	// --- syndra_only: direct grants Syndra expects but Zitadel lacks → re-enqueue ---
 	//
@@ -486,4 +513,117 @@ func recordObservedGrants(ctx context.Context, target string, zit []zitadel.User
 			res.WriteFailures++
 		}
 	}
+}
+
+// explained reports whether Syndra accounts for a live target grant.
+//
+// One function, because the sweep asks the question twice — once to decide
+// whether a grant is drift, and once to decide whether a finding it already
+// raised has since been accounted for. Two copies would drift apart, and the
+// failure mode of that is a sweep that raises a finding on one tick and
+// retracts it on the next, for ever.
+//
+// The four sources are Syndra's whole vocabulary for "we meant this":
+//
+//	direct   — a direct grant in the ledger
+//	bundle   — a bundle assignment, through the holder's PINNED version
+//	rule     — an active mapping rule the person qualifies for
+//	excluded — an operator said this one is legitimately external
+//
+// `bundle` was missing, and its absence was less a gap in coverage than a
+// disagreement: the webhook's drift check goes through
+// services.UserExpectsRole, which has always counted bundles. The two
+// detectors held different opinions about the same grant, and the sweep's was
+// the one that got written down.
+func explained(
+	k services.HolderKey,
+	directSet, bundleSet map[services.HolderKey]bool,
+	holder map[services.HolderKey]bool,
+	rules []models.MappingRule,
+	exclusions []models.ExternalGrantExclusion,
+	target string,
+) bool {
+	switch {
+	case directSet[k]:
+		return true
+	case bundleSet[k]:
+		return true
+	case expectedViaRule(holder, rules, k.UserID, k.ProjectID, k.RoleKey):
+		return true
+	case isExcluded(exclusions, target, k.UserID, k.ProjectID, k.RoleKey):
+		return true
+	}
+	return false
+}
+
+// retractExplained closes pending target_only findings that Syndra now accounts
+// for, and returns how many it closed.
+//
+// Failures are logged and counted rather than aborting the sweep. A retraction
+// that does not happen leaves a stale finding on screen, which is the state
+// before this pass existed; aborting would instead discard the sweep's other
+// conclusions, which is worse. `ErrDriftNotPending` is not a failure at all —
+// somebody triaged the row while this ran, and their decision stands.
+func retractExplained(
+	ctx context.Context,
+	target string,
+	directSet, bundleSet, holder map[services.HolderKey]bool,
+	rules []models.MappingRule,
+	exclusions []models.ExternalGrantExclusion,
+) int {
+	pending, err := svcPendingDriftItems(ctx, target)
+	if err != nil {
+		log.Printf("[DRIFT] retraction skipped: could not read pending findings: %v", err)
+		return 0
+	}
+
+	retracted := 0
+	for _, item := range pending {
+		if item.Target != target || item.DriftType != db.DriftTargetOnly {
+			continue
+		}
+		// Every role on the row has to be accounted for. A row naming two
+		// roles where only one is explained is still a finding about the
+		// other, and half-retracting it would erase the half nobody has
+		// looked at.
+		all := len(item.RoleKeys) > 0
+		for _, rk := range item.RoleKeys {
+			k := services.HolderKey{UserID: item.UserID, ProjectID: item.ProjectID, RoleKey: rk}
+			if !explained(k, directSet, bundleSet, holder, rules, exclusions, target) {
+				all = false
+				break
+			}
+		}
+		if !all {
+			continue
+		}
+		if err := retractExplainedDrift(ctx, item.ID, target, describeExplanation(
+			services.HolderKey{UserID: item.UserID, ProjectID: item.ProjectID, RoleKey: item.RoleKeys[0]},
+			directSet, bundleSet)); err != nil {
+			if errors.Is(err, db.ErrDriftNotPending) {
+				continue // triaged by a human between the read and the write
+			}
+			log.Printf("[DRIFT] retraction failed for finding %s: %v", item.ID, err)
+			continue
+		}
+		retracted++
+	}
+	if retracted > 0 {
+		log.Printf("[DRIFT] retracted %d finding(s) on %s that Syndra now accounts for", retracted, target)
+	}
+	return retracted
+}
+
+// describeExplanation names what accounts for a grant, for the retraction
+// record. Vague on purpose where it has to be: the rule and exclusion cases are
+// derived rather than looked up per row, so this reports the source it can name
+// and does not guess at the one it cannot.
+func describeExplanation(k services.HolderKey, directSet, bundleSet map[services.HolderKey]bool) string {
+	switch {
+	case directSet[k]:
+		return "a direct grant in Syndra's ledger"
+	case bundleSet[k]:
+		return "a bundle assignment, through the version this person is pinned to"
+	}
+	return "an active mapping rule, or an operator marking it external"
 }

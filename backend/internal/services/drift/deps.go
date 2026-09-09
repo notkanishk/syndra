@@ -28,11 +28,27 @@ var (
 	svcAllDirectGrants = func(ctx context.Context) ([]models.DirectGrant, error) {
 		return db.GetAllDirectGrants(ctx, false) // active grants only — expired grants are not expected in Zitadel
 	}
-	svcGetActiveMappingRules = db.GetActiveMappingRules
-	svcGetExclusions         = func(ctx context.Context, target string) ([]models.ExternalGrantExclusion, error) {
+	// What the bundles account for, deployment-wide, resolved through each
+	// holder's PINNED version. Without this the sweep had no way to know a
+	// bundle explains a live grant, and reported every projected bundle role as
+	// drift for ever. See db.GetAllBundleDerivedGrants.
+	svcAllBundleDerivedGrants = db.GetAllBundleDerivedGrants
+	svcGetActiveMappingRules  = db.GetActiveMappingRules
+	svcGetExclusions          = func(ctx context.Context, target string) ([]models.ExternalGrantExclusion, error) {
 		return db.GetExclusions(ctx, target)
 	}
 	upsertDriftItem = db.UpsertDriftItem // (ctx,target,user,project,roleKeys,grantID,source,type) (id,inserted,err)
+
+	// The retraction half. A finding the sweep raised because it could not see
+	// Syndra's intent has to be closable by the sweep once it can — otherwise
+	// the only exit is the operator's Adopt button, which writes a redundant
+	// direct grant and quietly breaks bundle removal.
+	svcPendingDriftItems = func(ctx context.Context, target string) ([]models.DriftItem, error) {
+		// Empty Status defaults to pending_triage, and the target narrows the
+		// read to the system this sweep actually looked at.
+		return db.GetDriftItems(ctx, db.DriftFilter{Target: target})
+	}
+	retractExplainedDrift = db.RetractExplainedDrift
 
 	// The merge base, written by the Zitadel sweep from its own complete read
 	// and forgotten when a user holds nothing. Seams, because the assertions
