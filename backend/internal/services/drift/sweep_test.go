@@ -26,7 +26,7 @@ func stubSweep(t *testing.T) {
 	// bundles say so.
 	t.Cleanup(swap(&svcAllBundleDerivedGrants, func(context.Context) ([]db.BundleDerivedGrant, error) { return nil, nil }))
 	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) { return nil, nil }))
-	t.Cleanup(swap(&retractExplainedDrift, func(context.Context, string, string, string) error { return nil }))
+	t.Cleanup(swap(&retractExplainedDrift, func(context.Context, string, string, string, string) error { return nil }))
 	t.Cleanup(swap(&svcGetExclusions, func(context.Context, string) ([]models.ExternalGrantExclusion, error) { return nil, nil }))
 	t.Cleanup(swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
 		return &zitadel.SearchResult[zitadel.UserGrant]{}, nil

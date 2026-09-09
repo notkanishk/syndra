@@ -153,7 +153,7 @@ func TestSweep_RetractsAFindingItCanNowExplain(t *testing.T) {
 	}))
 
 	var retracted []string
-	t.Cleanup(swap(&retractExplainedDrift, func(_ context.Context, id, _, because string) error {
+	t.Cleanup(swap(&retractExplainedDrift, func(_ context.Context, id, _, _, because string) error {
 		retracted = append(retracted, id+" because "+because)
 		return nil
 	}))
@@ -183,7 +183,7 @@ func TestSweep_LeavesAFindingItCannotExplain(t *testing.T) {
 	}))
 
 	retracted := 0
-	t.Cleanup(swap(&retractExplainedDrift, func(context.Context, string, string, string) error {
+	t.Cleanup(swap(&retractExplainedDrift, func(context.Context, string, string, string, string) error {
 		retracted++
 		return nil
 	}))
@@ -213,7 +213,7 @@ func TestSweep_DoesNotRetractAPartlyExplainedFinding(t *testing.T) {
 	}))
 
 	retracted := 0
-	t.Cleanup(swap(&retractExplainedDrift, func(context.Context, string, string, string) error {
+	t.Cleanup(swap(&retractExplainedDrift, func(context.Context, string, string, string, string) error {
 		retracted++
 		return nil
 	}))
@@ -223,5 +223,77 @@ func TestSweep_DoesNotRetractAPartlyExplainedFinding(t *testing.T) {
 	}
 	if retracted != 0 {
 		t.Fatal("a finding was retracted while one of its roles was still unexplained")
+	}
+}
+
+// A finding an operator's EXCLUSION accounts for must not be closed as
+// Syndra's own.
+//
+// `attributed` means Syndra owns this access. An exclusion means the opposite:
+// the operator said the grant belongs to somebody else and Syndra should stop
+// asking. Closing it as attributed would write a claim of ownership over access
+// that has been explicitly disclaimed — onto the governance record, which is
+// the one place that has to read back as what actually happened.
+func TestSweep_RetractsAnExcludedFindingAsExternalNotAsOwned(t *testing.T) {
+	stubSweep(t)
+
+	t.Cleanup(swap(&svcGetExclusions, func(context.Context, string) ([]models.ExternalGrantExclusion, error) {
+		return []models.ExternalGrantExclusion{{
+			Target: db.TargetZitadel, UserID: "shikha", ProjectID: "p-admin", RoleKey: "admin-staff",
+		}}, nil
+	}))
+	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) {
+		return []models.DriftItem{{
+			ID: "d-external", Target: db.TargetZitadel, DriftType: db.DriftTargetOnly,
+			UserID: "shikha", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"},
+		}}, nil
+	}))
+
+	var gotStatus string
+	t.Cleanup(swap(&retractExplainedDrift, func(_ context.Context, _, _, status, _ string) error {
+		gotStatus = status
+		return nil
+	}))
+
+	if _, err := Sweep(context.Background()); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if gotStatus != db.DriftMarkedExternal {
+		t.Fatalf("an excluded finding must close as %q, got %q", db.DriftMarkedExternal, gotStatus)
+	}
+}
+
+// A row explained by two DIFFERENT sources has no single honest status, so it
+// is left for a human rather than closed under whichever came first.
+func TestSweep_LeavesAFindingWithMixedExplanations(t *testing.T) {
+	stubSweep(t)
+
+	t.Cleanup(swap(&svcAllBundleDerivedGrants, func(context.Context) ([]db.BundleDerivedGrant, error) {
+		return []db.BundleDerivedGrant{bundleHolderGrant("shikha", "p-admin", "by-bundle")}, nil
+	}))
+	t.Cleanup(swap(&svcGetExclusions, func(context.Context, string) ([]models.ExternalGrantExclusion, error) {
+		return []models.ExternalGrantExclusion{{
+			Target: db.TargetZitadel, UserID: "shikha", ProjectID: "p-admin", RoleKey: "by-exclusion",
+		}}, nil
+	}))
+	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) {
+		return []models.DriftItem{{
+			ID: "d-mixed-source", Target: db.TargetZitadel, DriftType: db.DriftTargetOnly,
+			UserID: "shikha", ProjectID: "p-admin",
+			RoleKeys: []string{"by-bundle", "by-exclusion"},
+		}}, nil
+	}))
+
+	retracted := 0
+	t.Cleanup(swap(&retractExplainedDrift, func(context.Context, string, string, string, string) error {
+		retracted++
+		return nil
+	}))
+
+	if _, err := Sweep(context.Background()); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if retracted != 0 {
+		t.Fatal("a finding explained two different ways was closed under one of them")
 	}
 }

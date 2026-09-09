@@ -21,6 +21,12 @@ import (
 const (
 	DriftTargetOnly = "target_only"
 	DriftSyndraOnly = "syndra_only"
+
+	// The resolutions, named rather than spelled out at each call site. The
+	// status column is constrained to exactly these plus pending_triage.
+	DriftAttributed     = "attributed"
+	DriftRevoked        = "revoked"
+	DriftMarkedExternal = "marked_external"
 )
 
 // DriftFilter narrows a drift listing. Empty fields are ignored.
@@ -226,7 +232,14 @@ var (
 // If the explanation later disappears the grant becomes unexplained again and
 // the next sweep raises a fresh finding, so this cannot bury anything
 // permanently.
-func RetractExplainedDrift(ctx context.Context, driftID, target, becauseOf string) error {
+func RetractExplainedDrift(ctx context.Context, driftID, target, status, becauseOf string) error {
+	if status != DriftAttributed && status != DriftMarkedExternal {
+		// A retraction may close a finding two ways and no others. Anything
+		// else is a caller reaching for a status this path has no business
+		// writing — `revoked` above all, which would assert that access was
+		// taken away when nothing here removes anything.
+		return fmt.Errorf("retracting a finding cannot record status %q", status)
+	}
 	payload, err := json.Marshal(map[string]string{
 		"retracted_because": becauseOf,
 		"retracted_by":      "reconciliation_sweep",
@@ -242,7 +255,7 @@ func RetractExplainedDrift(ctx context.Context, driftID, target, becauseOf strin
 	if owned {
 		defer tx.Rollback(ctx) // no-op after Commit
 	}
-	if _, err := claimDriftTx(ctx, tx, driftID, target, "attributed", "system", string(payload)); err != nil {
+	if _, err := claimDriftTx(ctx, tx, driftID, target, status, "system", string(payload)); err != nil {
 		return err
 	}
 	if owned {
