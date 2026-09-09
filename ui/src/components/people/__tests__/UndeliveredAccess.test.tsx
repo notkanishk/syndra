@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { RemovalDialog } from "@/components/people/RemovalDialog";
@@ -17,8 +17,19 @@ import { RemovalDialog } from "@/components/people/RemovalDialog";
  * The operator who hit it read the page as confirmation the work was done.
  */
 
+const removed = vi.hoisted(() => ({
+  calls: 0,
+  enqueued: 0,
+}));
+
 vi.mock("@/lib/queries/useBundles", () => ({
-  useRemoveBundle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRemoveBundle: () => ({
+    mutateAsync: vi.fn(async () => {
+      removed.calls += 1;
+      return { cascade: { enqueued: removed.enqueued, mode: "manual" } };
+    }),
+    isPending: false,
+  }),
 }));
 vi.mock("@/lib/queries/useRoleMembers", () => ({
   useRemoveDirectGrant: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -115,5 +126,80 @@ describe("revoking a direct grant that was never sent", () => {
     );
 
     expect(screen.getByText(/will lose this role/i)).toBeInTheDocument();
+  });
+});
+
+describe("the action, once it has run", () => {
+  it("names withdrawal rather than removal while nothing has been sent", () => {
+    render(
+      <RemovalDialog
+        removal={bundleSource(true)}
+        userId="shikha"
+        userName="Shikha Yadav"
+        onClose={vi.fn()}
+      />,
+    );
+
+    const act = screen.getByRole("button", { name: /Withdraw the queued change/ });
+    // Red is a promise about consequence, and this one takes nothing away.
+    expect(act.className).not.toMatch(/danger/);
+    expect(screen.queryByRole("button", { name: "Remove bundle" })).toBeNull();
+  });
+
+  it("cannot be pressed a second time", async () => {
+    removed.calls = 0;
+    removed.enqueued = 0;
+    render(
+      <RemovalDialog
+        removal={bundleSource(true)}
+        userId="shikha"
+        userName="Shikha Yadav"
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Withdraw the queued change/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument());
+
+    // The dialog stays open to report what happened, and a destructive
+    // confirm left armed inside it queues another cascade on the next click —
+    // which is what a person does when the dialog does not close.
+    expect(screen.queryByRole("button", { name: /Withdraw the queued change/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
+    expect(removed.calls).toBe(1);
+  });
+
+  it("reports the queue it actually left behind", async () => {
+    removed.calls = 0;
+    removed.enqueued = 0;
+    render(
+      <RemovalDialog
+        removal={bundleSource(true)}
+        userId="shikha"
+        userName="Shikha Yadav"
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Withdraw the queued change/ }));
+    await waitFor(() => expect(screen.getByText(/were withdrawn/i)).toBeInTheDocument());
+    // The sentence that contradicted the dialog one centimetre above it.
+    expect(screen.queryByText(/are revoked once you send/i)).toBeNull();
+  });
+
+  it("still says what a delivered removal queued", async () => {
+    removed.calls = 0;
+    removed.enqueued = 3;
+    render(
+      <RemovalDialog
+        removal={bundleSource(false)}
+        userId="shikha"
+        userName="Shikha Yadav"
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove bundle" }));
+    await waitFor(() => expect(screen.getByText(/are revoked once you send/i)).toBeInTheDocument());
   });
 });
