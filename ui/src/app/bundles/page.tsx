@@ -28,6 +28,7 @@ import {
   useSetWelcomeBundle,
   useUpdateBundle,
   type BundleRoleRow,
+  type BundleRow,
 } from "@/lib/queries/useBundles";
 import { useMappingRules } from "@/lib/queries/useMappingRules";
 
@@ -56,7 +57,28 @@ export default function BundlesPage() {
 
   const rows = bundles.data ?? [];
   const activeId = selected ?? rows[0]?.id ?? null;
-  const active = rows.find((bundle) => bundle.id === activeId);
+  const live = rows.find((bundle) => bundle.id === activeId) ?? null;
+
+  /**
+   * The last bundle we actually saw, so the workspace outlives its own delete.
+   *
+   * Reading `rows.find(...)` straight into render was the bug. Deleting a
+   * bundle invalidates the list, so the instant the refetch lands the deleted
+   * row is gone: either the lookup returns undefined and the workspace
+   * unmounts, or `activeId` falls through to `rows[0]` and the `key` remount
+   * lands on a DIFFERENT bundle. Both destroy `DeleteBundleDialog` mid-report —
+   * and that dialog deliberately stays open to say how many revocations were
+   * queued. The previous commit here added a comment explaining that clearing
+   * the selection early throws away an outcome the operator has not read; the
+   * list refetch was doing it anyway, and the dialog's "Done" could never be
+   * reached.
+   *
+   * So the row is remembered, and only `onDeleted` — which the dialog calls
+   * from its own Done button — lets go of it.
+   */
+  const [remembered, setRemembered] = useState<BundleRow | null>(null);
+  if (live && live.id !== remembered?.id) setRemembered(live);
+  const active = live ?? remembered;
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -135,9 +157,15 @@ export default function BundlesPage() {
             isWelcome={active.is_welcome ?? false}
             holders={active.holder_count ?? 0}
             welcomeName={rows.find((bundle) => bundle.is_welcome)?.name}
-            // The deleted bundle is still `selected` until this clears it, and the list would
-            // otherwise fall back to showing the first bundle under the old id's heading.
-            onDeleted={() => setSelected(null)}
+            // Called from the dialog's own Done button, once the operator has
+            // read what the delete did. Both halves matter: the selection has
+            // to clear so the list does not show the first bundle under the old
+            // id's heading, and the remembered row has to go with it or the
+            // workspace would keep rendering a bundle that no longer exists.
+            onDeleted={() => {
+              setSelected(null);
+              setRemembered(null);
+            }}
           />
         ) : null}
       </div>
@@ -199,7 +227,8 @@ function BundleWorkspace({
         <div className="row-divider px-5 py-3 text-[13.5px] leading-[1.55] text-muted">
           Editing here changes what the NEXT version will grant. Nobody&rsquo;s access moves until
           you publish, and publishing asks whether the {holders}{" "}
-          {holders === 1 ? "person" : "people"} already holding it come along.
+          {holders === 1 ? "person already holding it comes" : "people already holding it come"}{" "}
+          along.
         </div>
 
         {/*
@@ -337,7 +366,9 @@ function BundleWorkspace({
             <p className="mt-0.5 text-[13px] text-muted">
               {holders === 0
                 ? "Nobody holds it, so nothing is revoked."
-                : `The ${holders} ${holders === 1 ? "person" : "people"} holding it lose whatever only this bundle gave them.`}
+                : `The ${holders} ${
+                    holders === 1 ? "person holding it loses" : "people holding it lose"
+                  } whatever only this bundle gave them.`}
             </p>
           </div>
           <Button variant="danger" onClick={() => setDeleting(true)}>

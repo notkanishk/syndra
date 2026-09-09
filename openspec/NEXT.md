@@ -334,6 +334,37 @@ Compose service block (§32.3).
 
   Also blocked on it: the live-row half of 2.18 (a plan persists and expires), 2.20 (a fingerprint mismatch mutates nothing), 2.22 (scan plan rows for a submitted secret), 1.11's real interleavings, and 1.21/2.46's — a concurrent apply for one subject genuinely serializing, the settled state equalling the higher version, and a grant overtaken by a later revoke actually terminating `superseded` rather than being asserted to.
 
+- **Disabled controls that still give no reason.** `Button` renders a visible
+  `reason` under a blocked control and `Button.tsx` states the rule, but nothing
+  enforces it. A sweep on 2026-09-09 fixed the four where an operator gets
+  genuinely stuck — the maintenance-state buttons on a target (blocked by an
+  unmarked Reason field, *during an incident*), `HoldDialog`,
+  `GrantDirectAccess` (the "until a date" preset silently requires a date) and
+  `TakeAwayDialog`. Still silent, in rough order of how stuck they leave you:
+
+  - `TargetOverview.tsx:1068` "Record the owner" and `:1155` "Accept this log
+    and start over" — both also require their free-text note on top of the
+    typed confirmation, and only the typing ceremony explains itself
+  - `policies/page.tsx:572` "Check rule" — greyed while the footer says "Check
+    the rule before you can save it", so the instruction points at a dead control
+  - `TokenFormatEditor.tsx:418` "Save token format" — also needs a claim name
+  - `UnexplainedAccess.tsx:500` "Adopt" (dead for service accounts),
+    `zitadel/projects/page.tsx:253` (role key immutable while editing, unstated),
+    `audit/page.tsx:106` (export on an empty table)
+
+  A `repoguard`-style check is plausible but not obvious: plenty of disabled
+  states are self-evident from the control's own label ("No changes", "On",
+  "Already active"), so a blanket rule would be mostly false positives.
+
+- **Carrying a `reason` remounts the button.** `Button` wraps itself in a
+  `<span>` to render the reason beneath, so a control whose reason clears goes
+  from wrapped to bare and React replaces the DOM node — losing focus for
+  anyone who tabbed to it before filling the field in. Pre-existing and shipped
+  (`RenameBundleDialog` has toggled `reason` since the touch work); it surfaced
+  as two tests holding a stale node. Fixing it means either always wrapping,
+  which shifts layout wherever buttons sit in a flex row, or rendering the
+  reason as a sibling the caller places. Not worth doing under a deploy.
+
 - **`ui/` has no typecheck in its gate.** `bun run build` typechecks the app and
   skips `src/**/__tests__`, and `tsc --noEmit -p tsconfig.json` currently fails
   there with real errors: two fixtures missing required fields (`holds_due` on

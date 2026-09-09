@@ -107,7 +107,7 @@ export function AddRolesToBundle({
           holders > 0
             ? `Nobody has them yet. Publish a version to decide whether the ${holders} ${
                 holders === 1 ? "person" : "people"
-              } holding ${name} get them.`
+              } holding ${name} ${holders === 1 ? "gets" : "get"} them.`
             : "Publish a version to give them to people.",
       });
     }
@@ -121,8 +121,8 @@ export function AddRolesToBundle({
         lede={
           holders > 0
             ? `Roles you tick go into the draft. The ${holders} ${
-                holders === 1 ? "person" : "people"
-              } who hold ${name} keep exactly what they have until you publish a version and move them onto it.`
+                holders === 1 ? "person who holds" : "people who hold"
+              } ${name} keep${holders === 1 ? "s" : ""} exactly what they have until you publish a version and move them onto it.`
             : "Roles you tick go into the draft. Publish a version to give them to people."
         }
       />

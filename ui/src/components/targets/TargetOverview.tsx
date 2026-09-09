@@ -1585,6 +1585,15 @@ function LifecycleControl({ target, health }: { target: string; health: TargetHe
               variant="outline"
               size="sm"
               disabled={!reason || set.isPending || state.id === current}
+              // Only on the first of the three, so the sentence appears once
+              // under the row rather than three times. Without it, a target
+              // cannot be put read-only during an incident and the screen never
+              // says the Reason field is what is stopping it.
+              reason={
+                !reason && state.id === STATES[0]?.id
+                  ? "Say why first — the reason is recorded against the change."
+                  : undefined
+              }
               onClick={() =>
                 set.mutate({ state: state.id, reason }, { onSuccess: () => setReason("") })
               }
