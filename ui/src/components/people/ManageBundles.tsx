@@ -118,6 +118,9 @@ export function ManageBundles({
   }
 
   const busy = assign.isPending || remove.isPending;
+  const staging = changes.length;
+  // Recorded, and nothing new ticked since. The modal has nothing left to do.
+  const done = outcome?.kind === "queued" && staging === 0;
 
   return (
     <Modal open onClose={onClose} busy={busy} size="md" labelledBy="manage-bundles-title">
@@ -240,6 +243,15 @@ export function ManageBundles({
 
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
+      {/* The footer follows the state of the work, because the work has three
+          states and this used to describe only the middle one.
+
+          "Queues for confirmation" sat permanently in the corner — true while
+          something is staged, and a claim about a button that cannot be pressed
+          both before anything is ticked and after the change has been recorded.
+          Beside it the primary read "No changes": a status wearing a button's
+          clothes, disabled, giving no reason, and still first in the tab order
+          while the only live control was the secondary one next to it. */}
       <ModalFooter
         note={
           changes.length > 1
@@ -247,14 +259,44 @@ export function ManageBundles({
             : undefined
         }
       >
-        <Button variant="accent" disabled={changes.length === 0} isPending={busy} onClick={apply}>
-          {changes.length === 0
-            ? "No changes"
-            : `Apply ${changes.length} ${changes.length === 1 ? "change" : "changes"}`}
-        </Button>
-        <Button onClick={onClose}>{outcome?.kind === "queued" ? "Done" : "Cancel"}</Button>
+        {done ? (
+          // The work is recorded and the outcome above says so. The next action
+          // is to leave, so it stops being the quiet button in the corner.
+          <Button variant="accent" onClick={onClose}>
+            Done
+          </Button>
+        ) : (
+          <>
+            <Button
+              variant="accent"
+              disabled={staging === 0}
+              isPending={busy}
+              onClick={apply}
+              // Never a bare disabled control. The label stays an ACTION at
+              // every count — a button labelled with its own emptiness reads
+              // as broken rather than as waiting for you.
+              reason={
+                staging === 0
+                  ? outcome?.kind === "queued"
+                    ? "Recorded. Tick another bundle to make a further change."
+                    : "Tick a bundle above to add or remove it."
+                  : undefined
+              }
+            >
+              {staging === 0
+                ? "Apply changes"
+                : `Apply ${staging} ${staging === 1 ? "change" : "changes"}`}
+            </Button>
+            <Button onClick={onClose}>Cancel</Button>
+          </>
+        )}
         <span className="flex-1" />
-        <span className="text-[13px] text-faint">Queues for confirmation</span>
+        {staging > 0 && (
+          // Only where it is true: this button records the change and sends
+          // nothing. With nothing staged it was describing an act that was not
+          // on offer.
+          <span className="text-[13px] text-faint">Queues for confirmation</span>
+        )}
       </ModalFooter>
     </Modal>
   );

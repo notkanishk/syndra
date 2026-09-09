@@ -40,10 +40,18 @@ const withdrawnReason = "withdrawn before it was sent: the change that queued it
 //     therefore still has to be undone;
 //   - it came from the SAME source that is now being taken away, so a grant
 //     delivered by some other route is never spared by a bundle's removal;
-//   - and no add for this triple has ever reached `applied`, which is the
-//     record of Syndra having actually sent it.
+//   - and no delivery of this triple is still STANDING — the last `applied`
+//     row for it is not an add.
 //
 // Any of those failing leaves today's behaviour untouched.
+//
+// That last condition was first written as "no add for this triple has ever
+// reached `applied`", which is a different question and the wrong one. A role
+// granted in the morning and revoked at lunch has an applied add in its
+// history and nothing in force, so the rule kept queueing a revocation for a
+// grant that had already been taken back — and the operator who reported the
+// original defect watched the same six rows appear again with only the wording
+// changed. What matters is which of the two came last.
 //
 // Single-role rows only. `deltaParams` writes one role per row, so every
 // cascade revoke qualifies; a multi-role row belongs to a direct grant that
@@ -83,19 +91,24 @@ func withdrawUndelivered(ctx context.Context, tx pgx.Tx, target string, p Enqueu
 		return true, nil
 	}
 
-	// Delivered once already? Then the cancelled row was a re-delivery — a
-	// bundle version bump, a re-grant — and the earlier one still stands in
-	// Zitadel with nothing but this revoke to take it back.
-	const everApplied = `
-		SELECT EXISTS (
-			SELECT 1 FROM propagation_outbox
-			 WHERE target = $1 AND user_id = $2 AND project_id = $3
-			   AND role_keys @> $4::text[]
-			   AND op_type IN ('add','replace') AND status = 'applied')`
-	var applied bool
-	if err := tx.QueryRow(ctx, everApplied, target, p.UserID, p.ProjectID, p.RoleKeys).
-		Scan(&applied); err != nil {
+	// Is a delivery still standing? Only the LAST applied row decides: an add
+	// after the last revoke means the grant is live in Zitadel and this revoke
+	// is the only thing that takes it back. A revoke after the last add means
+	// it is already gone, and the row just cancelled was a re-delivery that
+	// never went out — so there is nothing left to undo.
+	//
+	// `MAX ... FILTER`, not `EXISTS`: existence is what the first version of
+	// this asked, and existence cannot tell an order.
+	const standing = `
+		SELECT COALESCE(MAX(intent_seq) FILTER (WHERE op_type IN ('add','replace')), 0)
+		     > COALESCE(MAX(intent_seq) FILTER (WHERE op_type = 'revoke'), 0)
+		  FROM propagation_outbox
+		 WHERE target = $1 AND user_id = $2 AND project_id = $3
+		   AND role_keys @> $4::text[] AND status = 'applied'`
+	var live bool
+	if err := tx.QueryRow(ctx, standing, target, p.UserID, p.ProjectID, p.RoleKeys).
+		Scan(&live); err != nil {
 		return false, fmt.Errorf("withdraw queued delivery: %w", err)
 	}
-	return applied, nil
+	return live, nil
 }

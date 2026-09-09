@@ -257,37 +257,44 @@ function DirectDialog({
                 : undefined
         }
       >
-        <Button
-          variant="dangerConfirm"
-          disabled={blocked}
-          isPending={remove.isPending}
-          onClick={async () => {
-            try {
-              const result = await remove.mutateAsync({
-                userId: userId!,
-                grantId: removal.grantId!,
-              });
-              // The residual outcome, from the backend that computed it. A
-              // role this person also holds through a bundle or a rule
-              // survives the removal, and which ones those are is a closure
-              // diff the server does — the UI must not hold a second opinion
-              // about somebody's access.
-              const retained = result?.retained_roles ?? [];
-              setOutcome({
-                kind: "applied",
-                message: `Direct access to ${roleLabel} removed`,
-                detail: retained.length
-                  ? `They still hold ${retained.join(", ")}, from a bundle or a rule.`
-                  : "Nothing else was supplying it, so the access is gone.",
-              });
-            } catch (error) {
-              setOutcome(outcomeFromError(error));
-            }
-          }}
-        >
-          Revoke access
+        {/* Same rule as the bundle dialog: an action that has run is not an
+            action any more, and leaving it armed lets a second click revoke
+            again. */}
+        {!outcome && (
+          <Button
+            variant={source?.queued ? "accent" : "dangerConfirm"}
+            disabled={blocked}
+            isPending={remove.isPending}
+            onClick={async () => {
+              try {
+                const result = await remove.mutateAsync({
+                  userId: userId!,
+                  grantId: removal.grantId!,
+                });
+                // The residual outcome, from the backend that computed it. A
+                // role this person also holds through a bundle or a rule
+                // survives the removal, and which ones those are is a closure
+                // diff the server does — the UI must not hold a second opinion
+                // about somebody's access.
+                const retained = result?.retained_roles ?? [];
+                setOutcome({
+                  kind: "applied",
+                  message: `Direct access to ${roleLabel} removed`,
+                  detail: retained.length
+                    ? `They still hold ${retained.join(", ")}, from a bundle or a rule.`
+                    : "Nothing else was supplying it, so the access is gone.",
+                });
+              } catch (error) {
+                setOutcome(outcomeFromError(error));
+              }
+            }}
+          >
+            {source?.queued ? "Withdraw the queued grant" : "Revoke access"}
+          </Button>
+        )}
+        <Button variant={outcome ? "accent" : "outline"} onClick={onClose}>
+          {outcome ? "Done" : "Cancel"}
         </Button>
-        <Button onClick={onClose}>Cancel</Button>
       </ModalFooter>
     </Modal>
   );
@@ -375,39 +382,60 @@ function BundleDialog({
             : "Every other role this bundle carries is removed too. Manage bundles shows the full list before you commit."
         }
       >
-        <Button
-          variant="dangerConfirm"
-          isPending={removeBundle.isPending}
-          disabled={!userId || !source.bundle_id}
+        {/* Gone once it has run. A destructive confirm that stays armed after
+            it succeeded fires again on the next click — which is what a person
+            does when the dialog does not close, and each press queued another
+            cascade. What remains is the one action still true: leave. */}
+        {outcome?.kind !== "queued" && (
+          <Button
+            // Red is a promise about consequence. Withdrawing a delivery that
+            // never went out takes nothing from anybody, and dressing it as
+            // destruction contradicts the sentence directly above it.
+            variant={source.queued ? "accent" : "dangerConfirm"}
+            isPending={removeBundle.isPending}
+            disabled={!userId || !source.bundle_id}
           // It was disabled in silence, which is how a dead removal flow went
           // unnoticed: the cause was upstream (the person page passed no
           // userId) and the button said nothing at all. Now it names which
           // half is missing, so the next time this happens it is a bug report
           // rather than a shrug.
-          reason={
-            !userId
-              ? "Syndra could not tell which person this is, so it will not remove a bundle from them. Reload the page."
-              : !source.bundle_id
-                ? "Syndra could not tell which bundle gives this role. Manage bundles can remove it by name."
-                : undefined
-          }
-          onClick={async () => {
-            try {
-              await removeBundle.mutateAsync(source.bundle_id!);
-              setOutcome({
-                kind: "queued",
-                message: `${bundleName} removed from ${subject}`,
-                detail:
-                  "The roles it supplied are revoked once you send Pending changes, except any that another source still gives.",
-              });
-            } catch (error) {
-              setOutcome(outcomeFromError(error));
+            reason={
+              !userId
+                ? "Syndra could not tell which person this is, so it will not remove a bundle from them. Reload the page."
+                : !source.bundle_id
+                  ? "Syndra could not tell which bundle gives this role. Manage bundles can remove it by name."
+                  : undefined
             }
-          }}
+            onClick={async () => {
+              try {
+                const result = await removeBundle.mutateAsync(source.bundle_id!);
+                setOutcome({
+                  kind: "queued",
+                  message: `${bundleName} removed from ${subject}`,
+                  // What actually happened, rather than one sentence for both
+                  // outcomes. The dialog above had just said nothing would be
+                  // taken back, and this then said the roles are revoked when
+                  // you send: two opposite accounts of one click, a centimetre
+                  // apart.
+                  detail:
+                    (result?.cascade?.enqueued ?? 0) === 0
+                      ? "The grants it queued were withdrawn. Nothing is waiting under Pending changes, because nothing had been sent."
+                      : "The roles it supplied are revoked once you send Pending changes, except any that another source still gives.",
+                });
+              } catch (error) {
+                setOutcome(outcomeFromError(error));
+              }
+            }}
+          >
+            {source.queued ? "Withdraw the queued change" : "Remove bundle"}
+          </Button>
+        )}
+        <Button
+          variant={outcome?.kind === "queued" ? "accent" : "outline"}
+          onClick={onClose}
         >
-          Remove bundle
+          {outcome?.kind === "queued" ? "Done" : "Cancel"}
         </Button>
-        <Button onClick={onClose}>Cancel</Button>
       </ModalFooter>
     </Modal>
   );
