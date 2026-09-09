@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import type { CascadeOutcome } from "@/lib/types";
 
 // Shapes mirror the backend `users.go` handler responses. Kept narrow to what
 // the Users page renders; widen if more fields are needed.
@@ -155,7 +156,7 @@ export function useAssignBundle(userId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (bundleId: string) => {
-      return await request(`/users/${userId}/bundles`, {
+      return await request<CascadeOutcome>(`/users/${userId}/bundles`, {
         method: "POST",
         body: { bundle_id: bundleId },
       });
@@ -163,6 +164,11 @@ export function useAssignBundle(userId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.access(userId) });
       qc.invalidateQueries({ queryKey: ["users", "list"] });
+      // An assignment in manual mode puts rows under Pending changes. Not
+      // invalidating them left the nav count and that screen a step behind the
+      // edit that had just been made from this very screen.
+      qc.invalidateQueries({ queryKey: ["governance"] });
+      qc.invalidateQueries({ queryKey: ["propagations"] });
     },
   });
 }

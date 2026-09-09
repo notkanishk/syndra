@@ -149,6 +149,16 @@ func enqueueCascadeRows(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, p
 
 	ids := make([]string, 0, len(params))
 	for _, p := range params {
+		// Countermand before compensate. A revoke answering a delivery that is
+		// still in this queue cancels it instead of queueing its opposite —
+		// see withdrawUndelivered for why that is narrower than it sounds.
+		owed, err := withdrawUndelivered(ctx, tx, "zitadel", p)
+		if err != nil {
+			return nil, err
+		}
+		if !owed {
+			continue
+		}
 		if p.OpType == "revoke" && p.ZitadelGrantID == "" {
 			if idx, err := GetGrantIndexByUserProject(ctx, p.UserID, p.ProjectID); err == nil {
 				p.ZitadelGrantID = idx.GrantID

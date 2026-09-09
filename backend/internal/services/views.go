@@ -296,6 +296,14 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 		return models.UserAccessView{}, err
 	}
 
+	// Here and not inside collectUserRoles. Delivery is a fact this VIEW owes
+	// its reader; the drift detector and the entitlement resolver call the same
+	// collector and want Syndra's records exactly as recorded — and neither
+	// should pay a per-user query for a marker it never renders.
+	if err := markQueuedDeliveries(ctx, userID, roleMap); err != nil {
+		return models.UserAccessView{}, err
+	}
+
 	projectBuckets := make(map[string]*models.ProjectAccessView)
 	for _, role := range roleMap {
 		bucket := projectBuckets[role.ProjectID]
@@ -1010,6 +1018,64 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 	}
 
 	return roleMap, bundles, nil
+}
+
+// markQueuedDeliveries flags the sources whose grant has not been sent yet.
+//
+// Every table read above answers "what has this person been given", and none
+// of them answers "has it been delivered". Those are different questions
+// between the moment a manual-mode change is recorded and the moment somebody
+// confirms it under Pending changes — a window of minutes or days — and for
+// that window the page claimed the second while knowing only the first.
+//
+// Matched per SOURCE rather than per role, because a role can be held twice:
+// delivered by a direct grant and queued by a bundle, in which case the person
+// has it and one of the two reasons is still owed. A per-role flag would have
+// to pick one of those to be wrong about.
+//
+// A rule-derived reason carries no rule id — the derivation names the trigger,
+// not the rule row — so those match on source alone. That is exact whenever a
+// role is derived by one rule, and the failure mode of the rest is a marker
+// that appears while a sibling derivation is queued, which overstates the wait
+// rather than the delivery.
+func markQueuedDeliveries(ctx context.Context, userID string, roleMap map[roleKey]*models.EffectiveRole) error {
+	pending, err := svcPendingDeliveries(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+
+	type deliveryKey struct{ projectID, roleKey, source, sourceRef string }
+	queued := make(map[deliveryKey]bool, len(pending))
+	for _, d := range pending {
+		queued[deliveryKey{d.ProjectID, d.RoleKey, d.Source, d.SourceRef}] = true
+		queued[deliveryKey{d.ProjectID, d.RoleKey, d.Source, ""}] = true
+	}
+
+	for key, role := range roleMap {
+		if role == nil {
+			continue
+		}
+		for i, reason := range role.Reasons {
+			var source, ref string
+			switch reason.Kind {
+			case "direct":
+				source = "direct"
+			case "bundle":
+				source, ref = "bundle", reason.BundleID
+			case "mapping":
+				source = "rule"
+			default:
+				continue
+			}
+			if queued[deliveryKey{key.projectID, key.roleKey, source, ref}] {
+				role.Reasons[i].Queued = true
+			}
+		}
+	}
+	return nil
 }
 
 func upsertRole(ctx context.Context, roleMap map[roleKey]*models.EffectiveRole, key roleKey, isSource bool, reason models.RoleReason) bool {

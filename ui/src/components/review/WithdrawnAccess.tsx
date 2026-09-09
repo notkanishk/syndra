@@ -141,7 +141,11 @@ function Bucket({
       {rows.length === 0 ? (
         <p className="px-5 pb-4 text-[13.5px] text-faint">{empty}</p>
       ) : (
-        <ul className="grid gap-3 text-sm">
+        // Padded like every other card body. Without it the rows ran to the
+        // card's edges — a name against the left border, the c_ handle clipped
+        // by the right. The empty state one line above carried the padding, so
+        // the bug appeared only once the list had something in it.
+        <ul className="grid gap-3 px-5 pb-5 text-sm">
           {rows.map((row) => (
             <Row key={row.id} row={row} />
           ))}
