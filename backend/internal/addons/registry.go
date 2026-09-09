@@ -443,6 +443,28 @@ func RefreshAll(ctx context.Context) error {
 	return nil
 }
 
+// PendingManifests names the registered targets that have never served one.
+//
+// The backend and its add-ons start together, so the first manifest read
+// frequently reaches a listener that is not up yet — a `connection refused`
+// two seconds into a deploy. Nothing was wrong and nothing retried: the next
+// attempt was a full refresh interval away, and for that whole window the
+// deployment reported the add-on as configured-and-silent while the add-on sat
+// answering. Three separate screens said three different things about it,
+// because only one of them re-asked.
+func PendingManifests() []string {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	var pending []string
+	for target, a := range registry {
+		if a.fetchedAt.IsZero() {
+			pending = append(pending, target)
+		}
+	}
+	sort.Strings(pending)
+	return pending
+}
+
 // FetchedAt is when the currently held manifest was accepted. Zero when none
 // has been. The health surface labels a stale answer with its age rather than
 // presenting it as current.
