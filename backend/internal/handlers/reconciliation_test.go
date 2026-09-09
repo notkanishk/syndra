@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/zitadel"
 )
@@ -30,6 +31,7 @@ func withReconciliationDeps(
 	origZitadel := zitadelListAllGrants
 	origRules := svcGetActiveMappingRulesRecon
 	origExclusions := svcGetExclusions
+	origBundled := svcAllBundleDerivedGrantsRecon
 
 	svcAllDirectGrants = func(_ context.Context) ([]models.DirectGrant, error) {
 		return syndra, nil
@@ -40,6 +42,11 @@ func withReconciliationDeps(
 		return nil, nil
 	}
 	svcGetExclusions = func(_ context.Context, _ string) ([]models.ExternalGrantExclusion, error) {
+		return nil, nil
+	}
+	// And no bundles, so a test that says nothing about them keeps describing
+	// the world it was written about.
+	svcAllBundleDerivedGrantsRecon = func(_ context.Context) ([]db.BundleDerivedGrant, error) {
 		return nil, nil
 	}
 	// Pagination-aware stub: slices the master list by the requested offset
@@ -70,6 +77,7 @@ func withReconciliationDeps(
 		zitadelListAllGrants = origZitadel
 		svcGetActiveMappingRulesRecon = origRules
 		svcGetExclusions = origExclusions
+		svcAllBundleDerivedGrantsRecon = origBundled
 	})
 }
 

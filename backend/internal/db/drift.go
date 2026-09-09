@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -20,6 +21,12 @@ import (
 const (
 	DriftTargetOnly = "target_only"
 	DriftSyndraOnly = "syndra_only"
+
+	// The resolutions, named rather than spelled out at each call site. The
+	// status column is constrained to exactly these plus pending_triage.
+	DriftAttributed     = "attributed"
+	DriftRevoked        = "revoked"
+	DriftMarkedExternal = "marked_external"
 )
 
 // DriftFilter narrows a drift listing. Empty fields are ignored.
@@ -199,6 +206,65 @@ var (
 	// action has no reach into the system holding the access.
 	ErrDriftTargetUnsupported = errors.New("drift item is on a target this resolution cannot act on")
 )
+
+// RetractExplainedDrift closes a finding the sweep can now account for.
+//
+// It resolves to `attributed`, which is the honest word — Syndra does now own
+// this grant — and writes NO ledger row and NO outbox row, which is what makes
+// it different from AttributeDriftTx. The distinction is the whole point.
+//
+// AttributeDriftTx is the operator adopting a grant: Syndra had no intent, the
+// operator decides it should have one, so a direct-grant row is written to
+// carry it. Retraction is the opposite situation. The intent already exists —
+// a bundle, a rule, a direct grant — and the finding was raised because the
+// sweep could not see it. Writing a ledger row here would invent a SECOND
+// source for access that already has one, and that has a consequence an
+// operator would not predict: with a redundant direct grant in place, removing
+// the bundle revokes nothing, because "another source still gives it". They
+// would take a bundle away and the person would keep the access.
+//
+// Which is exactly the trap this function exists to remove. Before it, the only
+// way to clear a bundle-explained finding was the Adopt button, and Adopt
+// writes that ledger row.
+//
+// `resolved_by` is the sweep, not a person, and the payload names what accounts
+// for the grant — so a resolved finding can still be read back and argued with.
+// If the explanation later disappears the grant becomes unexplained again and
+// the next sweep raises a fresh finding, so this cannot bury anything
+// permanently.
+func RetractExplainedDrift(ctx context.Context, driftID, target, status, becauseOf string) error {
+	if status != DriftAttributed && status != DriftMarkedExternal {
+		// A retraction may close a finding two ways and no others. Anything
+		// else is a caller reaching for a status this path has no business
+		// writing — `revoked` above all, which would assert that access was
+		// taken away when nothing here removes anything.
+		return fmt.Errorf("retracting a finding cannot record status %q", status)
+	}
+	payload, err := json.Marshal(map[string]string{
+		"retracted_because": becauseOf,
+		"retracted_by":      "reconciliation_sweep",
+	})
+	if err != nil {
+		return fmt.Errorf("retraction payload: %w", err)
+	}
+
+	tx, owned, err := beginOrJoin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin retract tx: %w", err)
+	}
+	if owned {
+		defer tx.Rollback(ctx) // no-op after Commit
+	}
+	if _, err := claimDriftTx(ctx, tx, driftID, target, status, "system", string(payload)); err != nil {
+		return err
+	}
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit retract tx: %w", err)
+		}
+	}
+	return nil
+}
 
 // AttributeDriftTx claims a pending drift (→attributed) and writes the
 // attribution's ledger + audit rows in ONE tx. p.PayloadJSON doubles as the

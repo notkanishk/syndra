@@ -7,6 +7,59 @@ import (
 	"syndra/internal/zitadel"
 )
 
+// IntentSource names one way Syndra can account for a live grant on a target.
+//
+// This vocabulary exists because it was implicit, and being implicit cost a
+// production incident. Two pieces of code answer "does Syndra expect this
+// grant?" — UserExpectsRole for the webhook, and the reconciliation sweep's own
+// classification — and they were written separately. When bundles became a
+// source of intent, one learned about them and the other did not. The sweep
+// reported every bundle-derived role in Zitadel as unexplained drift, for ever,
+// and re-affirmed it on every tick; the operator's only way to clear such a
+// finding wrote a redundant direct grant that then stopped bundle removal from
+// revoking anything.
+//
+// Nothing about that was subtle. It happened because there was no single place
+// that said "these are the sources, and every detector must handle all of
+// them", so a new source could be added to one reader and forgotten in the
+// other with nothing to notice.
+//
+// THE RULE: every detector that decides whether Syndra accounts for a grant
+// MUST handle every member of AllIntentSources, and must do so in a `switch`
+// with no `default` — so adding a member here breaks the build or the test of
+// each detector that has not been taught about it. That is the entire point of
+// declaring it. See:
+//
+//	services.UserExpectsRole              (webhook)
+//	services/drift.explained              (reconciliation sweep)
+//
+// and their exhaustiveness tests.
+type IntentSource string
+
+const (
+	// IntentDirectGrant — a row in direct_role_grants.
+	IntentDirectGrant IntentSource = "direct_grant"
+	// IntentBundle — a bundle assignment, resolved through the version the
+	// holder is PINNED to. Never the working copy: an unpublished edit is not
+	// something anybody holds.
+	IntentBundle IntentSource = "bundle"
+	// IntentMappingRule — an active mapping rule whose source the person holds.
+	IntentMappingRule IntentSource = "mapping_rule"
+	// IntentExclusion — an operator said this tuple is legitimately external on
+	// this target. Not an intent to grant, but it does account for the grant,
+	// and a detector that ignores it raises a finding somebody already answered.
+	IntentExclusion IntentSource = "exclusion"
+)
+
+// AllIntentSources is the closed vocabulary. Adding to it is a deliberate act
+// that every detector has to answer for.
+var AllIntentSources = []IntentSource{
+	IntentDirectGrant,
+	IntentBundle,
+	IntentMappingRule,
+	IntentExclusion,
+}
+
 // HolderKey is one (user, project, role) tuple a user actually holds — union of
 // Syndra direct grants and live Zitadel grants. It is the input to rule
 // derivation: a mapping rule's target is "expected" only for users who hold the
@@ -77,4 +130,14 @@ func IsExcluded(exclusions []models.ExternalGrantExclusion, target, userID, proj
 		}
 	}
 	return false
+}
+
+// Wire the coverage check the revocation path needs.
+//
+// `zitadel` cannot call into `services` — it is imported BY services — so the
+// answer is handed over rather than reached for. In init rather than from
+// main, because a revocation that silently skips its safety check because
+// somebody forgot a wiring line is the failure this is here to prevent.
+func init() {
+	zitadel.StillExpected = UserExpectsRole
 }

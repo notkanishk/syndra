@@ -123,9 +123,34 @@ export function hasAnyFilter(filters: PeopleFilters): boolean {
   );
 }
 
+/**
+ * Whether an account is one that is no longer usable.
+ *
+ * THE ONE COPY. It was one of three — this, the backend's `isDepartedStatus`,
+ * and a hand-rolled `describeHolder` on the drift-triage row — and all three
+ * agreed with each other while all three were wrong the same way. The directory
+ * emits `active | inactive | initial | locked | deleted`, so "departed",
+ * "alumni" and "deactivated" were unreachable and the two states that most
+ * plainly mean gone, `locked` and `deleted`, were caught by none of them.
+ *
+ * `initial` is deliberately not here: invited and not yet signed in is a person
+ * arriving, not one who has left.
+ *
+ * The unreachable words stay. A directory that is not Zitadel may speak them,
+ * and the fault was never that the list was too long.
+ */
 export function isDeparted(status: string | undefined): boolean {
-  const value = (status ?? "").toLowerCase();
-  return value === "departed" || value === "inactive" || value === "alumni" || value === "deactivated";
+  switch ((status ?? "").toLowerCase().trim()) {
+    case "departed":
+    case "alumni":
+    case "deactivated":
+    case "inactive":
+    case "locked":
+    case "deleted":
+      return true;
+    default:
+      return false;
+  }
 }
 
 function matchesAttention(entry: UserListEntry, attention: Attention): boolean {

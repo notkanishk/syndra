@@ -583,9 +583,27 @@ func pluralGrants(n int) string {
 	return fmt.Sprintf("%d grants", n)
 }
 
+// isDepartedStatus reports whether an account is one a bulk grant must refuse.
+//
+// The list used to be "departed", "inactive", "alumni", "deactivated" — four
+// words, of which the live directory emits exactly ONE. `normalizeUserState`
+// (internal/directory/zitadel.go) produces `active | inactive | initial |
+// locked | deleted`, so three of the four were unreachable branches and the two
+// that mattered most were absent: a LOCKED or DELETED Zitadel account passed
+// this guard, and could be handed a role in bulk.
+//
+// The unreachable words are kept rather than tidied away. They cost nothing,
+// and a directory that is not Zitadel — or a fixture, or a future one — may
+// well speak them; removing them would narrow the guard to today's producer.
+// What was wrong was never that the list was too long.
 func isDepartedStatus(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
 	case "departed", "inactive", "alumni", "deactivated":
+		return true
+	// What Zitadel actually emits for an account that is no longer usable.
+	// `initial` is deliberately NOT here: it means invited and not yet signed
+	// in, which is a person arriving rather than one who has gone.
+	case "locked", "deleted":
 		return true
 	}
 	return false
