@@ -118,3 +118,22 @@ export interface UserAccessView {
   projects: ProjectAccessView[];
   cleanup_hints: string[];
 }
+
+/**
+ * What a cascade did, as the backend reports it.
+ *
+ * `enqueued` is what is now WAITING, and it is the only number a surface may
+ * turn into a sentence about Pending changes. It is not a count of what
+ * changed: a removal that withdraws deliveries which had never been sent
+ * changes a person's record and leaves nothing waiting at all, and reporting
+ * that as "the changes wait under Pending changes until you send them" tells
+ * an operator to go and confirm an empty screen.
+ */
+export interface CascadeOutcome {
+  message?: string;
+  cascade?: {
+    enqueued: number;
+    mode: string;
+    no_op?: boolean;
+  };
+}

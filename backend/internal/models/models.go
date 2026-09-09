@@ -181,6 +181,15 @@ type RoleReason struct {
 	BundleName     string `json:"bundle_name,omitempty"`
 	TriggerProject string `json:"trigger_project,omitempty"`
 	TriggerRole    string `json:"trigger_role,omitempty"`
+	// Queued says this source has been recorded and not yet sent: the change
+	// is in the outbox, waiting for somebody to confirm it under Pending
+	// changes.
+	//
+	// It is a fact about DELIVERY, not about the record. Syndra's own tables
+	// say this person holds the role — that is what an assignment means — and
+	// the page that shows it may not present a recorded intent and a delivered
+	// grant as the same thing. A source with this set gives them nothing yet.
+	Queued bool `json:"queued,omitempty"`
 }
 
 type EffectiveRole struct {

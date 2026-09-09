@@ -145,6 +145,7 @@ export function RemovalDialog({
   return (
     <DirectDialog
       removal={removal}
+      source={source}
       subject={subject}
       userId={person}
       others={others}
@@ -165,12 +166,15 @@ function actionName(kind: SourceKind): string {
  */
 function DirectDialog({
   removal,
+  source,
   subject,
   userId,
   others,
   onClose,
 }: {
   removal: Removal;
+  /** The source being removed — carries whether its grant has been sent. */
+  source: RoleReason | undefined;
   subject: string;
   userId?: string;
   others: RoleReason[];
@@ -205,6 +209,20 @@ function DirectDialog({
               <br />
               <span className="text-[14px] text-muted">
                 It also comes from {describeOthers(others)}, so nothing changes at the door today.
+              </span>
+            </>
+          ) : source?.queued ? (
+            // Never delivered, so there is nothing at the door to close. Saying
+            // "they will lose this role" here would describe an effect this
+            // grant never had — and the removal does not queue a revocation,
+            // it withdraws the delivery that was still waiting.
+            <>
+              <strong className="font-semibold text-ink">
+                Nothing to take back.
+              </strong>
+              <br />
+              <span className="text-[14px] text-muted">
+                This grant is still waiting to be sent, so {subject} never received it. Removing it withdraws the queued change; nothing reaches Zitadel.
               </span>
             </>
           ) : (
@@ -304,16 +322,37 @@ function BundleDialog({
         chip={<SourceChip kind="bundle" />}
         title={`Remove the ${bundleName} bundle from ${subject}?`}
         titleId="removal-title"
-        lede={`Everything ${bundleName} carries goes with it, except what another source also gives them.`}
+        lede={
+          source.queued
+            ? `${bundleName} is still waiting to be sent, so nothing it carries has reached ${subject} yet.`
+            : `Everything ${bundleName} carries goes with it, except what another source also gives them.`
+        }
       />
       <div className="flex flex-col gap-2 px-6">
-        <div className="text-[12.5px] font-semibold uppercase tracking-[0.1em] text-danger-text">
-          They will lose
+        {/* "They will lose" is a claim about an effect, and this bundle has not
+            had one yet. The assignment was recorded and never sent, so removing
+            it withdraws the queued delivery rather than queueing its opposite —
+            which is also what the backend now does, instead of enqueueing a
+            revocation for access nobody ever received. */}
+        <div
+          className={`text-[12.5px] font-semibold uppercase tracking-[0.1em] ${
+            source.queued ? "text-label" : "text-danger-text"
+          }`}
+        >
+          {source.queued ? "Nothing to take back" : "They will lose"}
         </div>
-        <div className="rounded-nav bg-danger-soft px-3.5 py-2.5 text-[14px]">
+        <div
+          className={`rounded-nav px-3.5 py-2.5 text-[14px] ${
+            source.queued ? "bg-tint-1" : "bg-danger-soft"
+          }`}
+        >
           {removal.projectName} / <Mono>{removal.roleKey}</Mono>
-          {others.length === 0 && (
-            <span className="text-[13px] text-muted"> — no other source gives it</span>
+          {source.queued ? (
+            <span className="text-[13px] text-muted"> — recorded, never sent</span>
+          ) : (
+            others.length === 0 && (
+              <span className="text-[13px] text-muted"> — no other source gives it</span>
+            )
           )}
         </div>
 
@@ -329,7 +368,13 @@ function BundleDialog({
       </div>
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
-      <ModalFooter note="Every other role this bundle carries is removed too. Manage bundles shows the full list before you commit.">
+      <ModalFooter
+        note={
+          source.queued
+            ? "Every other role this bundle carries is withdrawn too, and none of them had been sent. Pending changes will be empty afterwards, not full of reversals."
+            : "Every other role this bundle carries is removed too. Manage bundles shows the full list before you commit."
+        }
+      >
         <Button
           variant="dangerConfirm"
           isPending={removeBundle.isPending}
