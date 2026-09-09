@@ -12,6 +12,7 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AddRolesToBundle } from "@/components/bundles/AddRolesToBundle";
+import { RolePicker, splitRoleId } from "@/components/bundles/RolePicker";
 import { BundleVersions } from "@/components/bundles/BundleVersions";
 import { PublishVersionDialog } from "@/components/bundles/PublishVersionDialog";
 import { RoleRef as RoleRefInline } from "@/components/names";
@@ -27,6 +28,7 @@ import {
   useSetWelcomeBundle,
   useUpdateBundle,
   type BundleRoleRow,
+  type BundleRow,
 } from "@/lib/queries/useBundles";
 import { useMappingRules } from "@/lib/queries/useMappingRules";
 
@@ -55,7 +57,28 @@ export default function BundlesPage() {
 
   const rows = bundles.data ?? [];
   const activeId = selected ?? rows[0]?.id ?? null;
-  const active = rows.find((bundle) => bundle.id === activeId);
+  const live = rows.find((bundle) => bundle.id === activeId) ?? null;
+
+  /**
+   * The last bundle we actually saw, so the workspace outlives its own delete.
+   *
+   * Reading `rows.find(...)` straight into render was the bug. Deleting a
+   * bundle invalidates the list, so the instant the refetch lands the deleted
+   * row is gone: either the lookup returns undefined and the workspace
+   * unmounts, or `activeId` falls through to `rows[0]` and the `key` remount
+   * lands on a DIFFERENT bundle. Both destroy `DeleteBundleDialog` mid-report —
+   * and that dialog deliberately stays open to say how many revocations were
+   * queued. The previous commit here added a comment explaining that clearing
+   * the selection early throws away an outcome the operator has not read; the
+   * list refetch was doing it anyway, and the dialog's "Done" could never be
+   * reached.
+   *
+   * So the row is remembered, and only `onDeleted` — which the dialog calls
+   * from its own Done button — lets go of it.
+   */
+  const [remembered, setRemembered] = useState<BundleRow | null>(null);
+  if (live && live.id !== remembered?.id) setRemembered(live);
+  const active = live ?? remembered;
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -134,9 +157,15 @@ export default function BundlesPage() {
             isWelcome={active.is_welcome ?? false}
             holders={active.holder_count ?? 0}
             welcomeName={rows.find((bundle) => bundle.is_welcome)?.name}
-            // The deleted bundle is still `selected` until this clears it, and the list would
-            // otherwise fall back to showing the first bundle under the old id's heading.
-            onDeleted={() => setSelected(null)}
+            // Called from the dialog's own Done button, once the operator has
+            // read what the delete did. Both halves matter: the selection has
+            // to clear so the list does not show the first bundle under the old
+            // id's heading, and the remembered row has to go with it or the
+            // workspace would keep rendering a bundle that no longer exists.
+            onDeleted={() => {
+              setSelected(null);
+              setRemembered(null);
+            }}
           />
         ) : null}
       </div>
@@ -198,7 +227,8 @@ function BundleWorkspace({
         <div className="row-divider px-5 py-3 text-[13.5px] leading-[1.55] text-muted">
           Editing here changes what the NEXT version will grant. Nobody&rsquo;s access moves until
           you publish, and publishing asks whether the {holders}{" "}
-          {holders === 1 ? "person" : "people"} already holding it come along.
+          {holders === 1 ? "person already holding it comes" : "people already holding it come"}{" "}
+          along.
         </div>
 
         {/*
@@ -336,7 +366,9 @@ function BundleWorkspace({
             <p className="mt-0.5 text-[13px] text-muted">
               {holders === 0
                 ? "Nobody holds it, so nothing is revoked."
-                : `The ${holders} ${holders === 1 ? "person" : "people"} holding it lose whatever only this bundle gave them.`}
+                : `The ${holders} ${
+                    holders === 1 ? "person holding it loses" : "people holding it lose"
+                  } whatever only this bundle gave them.`}
             </p>
           </div>
           <Button variant="danger" onClick={() => setDeleting(true)}>
@@ -805,20 +837,43 @@ function HoldersPanel({
   );
 }
 
+/**
+ * Creating a bundle, with the roles it is for.
+ *
+ * The roles are asked for here rather than added afterwards, and that is the
+ * correction. A bundle is a set of roles handed out as one unit; creating one
+ * empty published an empty v1, so assigning it granted nothing, and the roles
+ * the operator then added were reported back to them as "2 unpublished
+ * changes" against a version that had never described anything. There was no
+ * point in that sequence where the screen was telling the truth about a bundle
+ * the operator considered finished.
+ *
+ * So a bundle is born as the thing it was described as: name, purpose, and the
+ * roles that go in v1.
+ */
 function CreateBundleDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const create = useCreateBundle();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
 
   if (!open) return null;
 
+  const trimmed = name.trim();
+  const chosen = Array.from(selected);
+  const blocked = !trimmed
+    ? "A bundle needs a name."
+    : chosen.length === 0
+      ? "Pick at least one role. A bundle that grants nothing has nothing to hand out, and its first version would describe nothing."
+      : undefined;
+
   return (
-    <Modal open onClose={onClose} busy={create.isPending} size="sm" labelledBy="new-bundle-title">
+    <Modal open onClose={onClose} busy={create.isPending} size="md" labelledBy="new-bundle-title">
       <ModalHeader
         title="New bundle"
         titleId="new-bundle-title"
-        lede="Name it after the person it describes, not the roles inside it."
+        lede="Name it after the person it describes, not the roles inside it. What you tick becomes its first version, so assigning it works straight away."
       />
       <div className="flex flex-col gap-3.5 px-6">
         <div>
@@ -839,31 +894,59 @@ function CreateBundleDialog({ open, onClose }: { open: boolean; onClose: () => v
             placeholder="Student staff who run the fabrication lab"
           />
         </div>
+        <div>
+          <FieldLabel id="new-bundle-roles">What it grants</FieldLabel>
+          <RolePicker
+            labelledBy="new-bundle-roles"
+            selected={selected}
+            disabled={create.isPending}
+            onToggle={(id) =>
+              setSelected((prev) => {
+                const next = new Set(prev);
+                if (!next.delete(id)) next.add(id);
+                return next;
+              })
+            }
+          />
+        </div>
       </div>
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter>
         <Button
           variant="accent"
-          disabled={!name.trim()}
+          disabled={Boolean(blocked)}
+          reason={blocked}
           isPending={create.isPending}
           onClick={async () => {
             try {
-              await create.mutateAsync({ name: name.trim(), description });
+              await create.mutateAsync({
+                name: trimmed,
+                description,
+                roles: chosen.map((id) => {
+                  const [project_id, role_key] = splitRoleId(id);
+                  return { project_id, role_key };
+                }),
+              });
               setOutcome({
                 kind: "applied",
-                message: `${name} created`,
-                detail: "It carries no roles yet, so holding it grants nothing.",
+                message: `${trimmed} created`,
+                detail: `Its first version carries ${chosen.length} ${
+                  chosen.length === 1 ? "role" : "roles"
+                }, so it can be assigned now. Nobody holds it yet.`,
               });
               setName("");
               setDescription("");
+              setSelected(new Set());
               onClose();
             } catch (error) {
               setOutcome(outcomeFromError(error));
             }
           }}
         >
-          Create bundle
+          {chosen.length === 0
+            ? "Create bundle"
+            : `Create with ${chosen.length} ${chosen.length === 1 ? "role" : "roles"}`}
         </Button>
         <Button onClick={onClose}>Cancel</Button>
       </ModalFooter>

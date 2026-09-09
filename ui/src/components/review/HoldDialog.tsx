@@ -165,6 +165,13 @@ export function HoldDialog({
         <Button
           variant="accent"
           disabled={!ready}
+          reason={
+            !ready
+              ? !reason.trim()
+                ? "Say why this is on hold — it is recorded against the hold."
+                : "Choose the date the hold should be looked at again."
+              : undefined
+          }
           onClick={() =>
             create.mutate(
               {

@@ -35,16 +35,8 @@ import (
 // through the same system-minted approval a cascade uses, so a mapping edit that
 // commits without its convergences is not a state this can reach.
 
-const (
-	planSurfaceMappingEdit   = "mappings.edit"
-	planSurfaceMappingDelete = "mappings.delete"
-	// A rollback is not a change to one mapping. It restores a SET, so its plan
-	// is issued against the target and the version rather than against a row.
-	planSurfaceMappingRollback = "mappings.rollback"
-	// Creating a mapping is an access change like any other, and was the one
-	// that skipped the ceremony.
-	planSurfaceMappingCreate = "mappings.create"
-)
+// The four mapping surfaces are declared with every other surface in
+// plan_gate.go, and that file says why they all live in one list.
 
 type mappingPlanRequest struct {
 	// Value is the new value, for an edit. Absent for a delete.

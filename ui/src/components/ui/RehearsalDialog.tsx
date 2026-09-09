@@ -50,11 +50,50 @@ export function resultMessage(
 ): string {
   const { succeeded, failed, queued } = plan.summary;
   const of = (n: number) => `${n} ${n === 1 ? noun[0] : noun[1]}`;
+  // A plan that reached NOBODY, applied. "Applied to 0 people." is true and
+  // reads as a failure — it is the sentence an operator gets after publishing a
+  // version nothing holds yet, or saving a mapping before anybody has the role,
+  // and both of those are the act succeeding.
+  //
+  // Every count zero, which is the only shape that means "this reached
+  // nobody". Guarding on `total` alone is not enough — a plan of twelve people
+  // all sitting in the outbox has `succeeded: 0` and MUST keep its counts,
+  // since that split is the whole reason `queued` is not folded into
+  // `succeeded`. Requiring all four to be nought cannot be confused with any
+  // of the populations having members.
+  if (plan.summary.total === 0 && succeeded === 0 && failed === 0 && queued === 0) {
+    return `Done. Nobody's access changed, because nobody holds it yet.`;
+  }
   const parts = [`Applied to ${of(succeeded)}.`];
   if (queued > 0) parts.push(`${of(queued)} ${queued === 1 ? "is" : "are"} waiting to be sent to ${system}.`);
   if (failed > 0) parts.push(`${of(failed)} failed.`);
   return parts.join(" ");
 }
+
+/**
+ * The operations whose queued rows drain themselves.
+ *
+ * The backend's rule is on the OUTBOX ROW — `op_type = 'revoke' OR
+ * withdraws_only` — and this set is the client's honest reading of which plans
+ * produce only such rows.
+ *
+ * `delete_mapping` was missing, and that is a wrong instruction rather than a
+ * missing one: deleting a mapping only takes access away, so its rows drain on
+ * the background runner, and the operator was told to go and send them from
+ * Pending changes — a queue that would empty on its own before they arrived.
+ *
+ * `rollback_mappings` is deliberately NOT here. A rollback restores a SET, so
+ * it both grants and revokes, and neither sentence is true of the whole plan.
+ * It keeps the "go and send it" copy because that is the safe direction: the
+ * codebase's own rule is that under-claiming sends somebody to a queue that
+ * turns out to be empty, while over-claiming tells them a door is locked when
+ * it is open.
+ */
+const REVOKING_OPS: ReadonlySet<BulkPlan["op"]> = new Set<BulkPlan["op"]>([
+  "remove_role",
+  "remove_bundle",
+  "delete_mapping",
+]);
 
 /**
  * What happens to the queued rows, without making the operator know the rule.
@@ -68,7 +107,7 @@ export function resultMessage(
  */
 export function queuedNote(plan: BulkPlan, system: string = "Zitadel"): string | undefined {
   if (plan.summary.queued === 0) return undefined;
-  const revocation = plan.op === "remove_role" || plan.op === "remove_bundle";
+  const revocation = REVOKING_OPS.has(plan.op);
   return revocation
     ? `Recorded in Syndra and waiting to be sent to ${system}. Syndra sends revocations on their own, every few minutes; until then the person still has the access.`
     : `Recorded in Syndra and waiting to be sent to ${system}. Nothing has changed there yet; send it from Pending changes.`;
@@ -105,24 +144,49 @@ interface RehearsalDialogProps {
   compose?: React.ReactNode;
   /** False while the compose step is incomplete. */
   ready?: boolean;
+  /**
+   * What is still missing from the compose step, in the operator's words.
+   *
+   * `ready={false}` on its own greys out the only button on screen and says
+   * nothing. On a dialog whose compose step is one text field that is a
+   * momentary annoyance; on one that asks a question the operator has to notice
+   * they have not answered, it is a dead end — which is what publishing a
+   * bundle with holders was, because the unanswered question sits above the
+   * fold and the disabled button below it.
+   */
+  notReadyReason?: string;
   /** Solid destructive confirm rather than accent. */
   destructive?: boolean;
   /**
-   * The label for applying a change that reaches NOBODY, on a surface where
-   * that is a real act rather than a no-op.
+   * The label for applying a change that MOVES NOBODY, on a surface where that
+   * is a real act rather than a no-op.
    *
    * Every plan in this dialog used to be assumed to move at least one person,
    * which is right for a bulk grant — a plan for nobody means nobody was
-   * selected — and wrong for the mapping surfaces. A mapping on a role nobody
-   * holds is a definition: it changes what the role WILL confer, the backend
-   * writes it and issues no approval for it because there is nothing to
-   * review, and the dialog then refused to let it be saved. Defining before
-   * assigning is the ordinary order, and it was the one order this dialog
-   * could not express.
+   * selected — and wrong for two other kinds of surface:
    *
-   * The relaxation is exact. It applies only when the cohort is empty; the
-   * moment a plan reaches somebody, the approval is required again and this
-   * prop does nothing. Absent, the dialog behaves as it always has.
+   *   A mapping on a role nobody holds is a definition. It changes what the
+   *   role WILL confer, and the dialog refused to let it be saved. Defining
+   *   before assigning is the ordinary order, and it was the one order this
+   *   dialog could not express.
+   *
+   *   Publishing a bundle version is an act on the BUNDLE. Two legitimate
+   *   publishes move nobody: one where nothing holds the bundle yet, and one
+   *   where the operator answers "leave them on the version they are on" —
+   *   which the product documents as a deliberate answer rather than a
+   *   deferral. Both left Apply disabled, on the only screen that can cut a
+   *   version.
+   *
+   * So the gate is "no row will act", not "there are no rows". The hazard the
+   * narrower gate was guarding against — taking this label, submitting with no
+   * citation, and meeting a backend refusal the label had just promised would
+   * not happen — is closed by `citationRequired` below, which is derived from
+   * whether the plan HAS rows rather than from whether any of them act. That
+   * mirrors the backend exactly: it issues an approval when the rehearsal had
+   * subjects, whatever those subjects' verdicts were.
+   *
+   * Absent, a plan that moves nobody cannot be applied, which is right for
+   * every surface that selects the people it acts on.
    */
   definitionLabel?: string;
   /**
@@ -224,6 +288,7 @@ export function RehearsalDialog({
   noun,
   compose,
   ready = true,
+  notReadyReason,
   destructive = false,
   definitionLabel,
   consequence,
@@ -255,25 +320,48 @@ export function RehearsalDialog({
   /** Set when the backend refuses to approve a change of this size unasked. */
   const [scope, setScope] = useState<{ affected: string; limit: string } | null>(null);
   const [scopeAcknowledged, setScopeAcknowledged] = useState(false);
-  // Only when the plan genuinely reaches NOBODY, and the surface says that is
-  // still an act. A plan that reaches somebody takes the ordinary path whatever
-  // this dialog was told.
-  //
-  // "Reaches nobody" is three conditions, not one. `apply === 0` alone is the
-  // tempting version and it is wrong: a plan carrying forty rows that all
-  // resolve to `no_change` has an apply count of zero and is not a definition —
-  // it reaches forty people and changes nothing for them. That would take the
-  // definition label, submit with no citation, and meet a backend refusal the
-  // label had just promised would not happen.
-  //
-  // So: the rows must have ARRIVED (an absent array is a payload that came
-  // short, not an empty cohort), there must be none of them, and the plan must
-  // say it counted nobody. Any two without the third is a plan this dialog does
-  // not understand, and the safe reading of one of those is the ordinary path.
-  const reachesNobody =
-    Array.isArray(plan?.outcomes) && plan.outcomes.length === 0 && plan.summary.total === 0;
-  const isDefinitionApply = Boolean(definitionLabel) && reachesNobody;
+  // An absent `outcomes` array is a payload that came short, not an empty
+  // cohort, and the two must not be read the same way: one is a plan this
+  // dialog does not understand.
+  const rows = Array.isArray(plan?.outcomes) ? plan.outcomes : null;
+  // A plan this dialog does not understand: no rows arrived, or none are listed
+  // while the summary says it counted people. Neither can be reviewed, so
+  // neither can be approved — and the safe reading of one of those has always
+  // been the ordinary path.
+  const incoherent =
+    plan !== null && (rows === null || (rows.length === 0 && plan.summary.total > 0));
+  // Whether the backend issued an approval, and therefore whether the apply has
+  // to cite one. Derived from ROWS, exactly as `issuePlan` is: it records every
+  // rehearsed subject and returns without an id only when there were none.
+  // Deriving it from the verdicts instead is what would let a plan reaching
+  // forty unmoved people submit with no citation.
+  const citationRequired = (rows?.length ?? 0) > 0;
+  // No row will act. Not the same as reaching nobody: forty rows that all
+  // resolve to `no_change` reach forty people and change nothing for them.
+  const nothingWillAct = plan !== null && plan.summary.apply === 0;
+  const isDefinitionApply = Boolean(definitionLabel) && nothingWillAct && !incoherent;
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+
+  /**
+   * Why Apply cannot be pressed, or undefined when it can.
+   *
+   * One string, and `disabled` is derived from it, so the button's state and
+   * the button's explanation cannot disagree. They did: the guard was three
+   * conditions inline and the explanation was nothing at all — a greyed-out
+   * button with no reason, on the screen where the operator has just read a
+   * page of consequences and is looking for the one control that acts on them.
+   * `Button` has rendered a `reason` under a disabled control since the touch
+   * work; this is the surface that most needed it and never passed one.
+   */
+  const applyBlocked: string | undefined = !plan
+    ? "Waiting for the preview."
+    : incoherent
+      ? "This preview came back incomplete, so there is nothing to approve. Close this and try again."
+      : citationRequired && !plan.plan_id
+        ? "This preview did not come back with an approval, so it cannot be applied. Close this and try again."
+        : nothingWillAct && !definitionLabel
+          ? "Nothing here would change, so there is nothing to apply."
+          : undefined;
 
   /**
    * Rehearse. A blast-radius refusal is not a failure — it is the backend
@@ -313,11 +401,7 @@ export function RehearsalDialog({
    * new one is a new decision. So this refreshes and stops.
    */
   async function applyPlan() {
-    if (!plan) return;
-    // A definition apply carries no approval, because the backend issued none:
-    // there was nothing to review. Every other apply still cites one, and the
-    // guard below is what keeps those two apart.
-    if (!plan.plan_id && !isDefinitionApply) return;
+    if (!plan || applyBlocked) return;
     setBusy(true);
     try {
       const result = await onApply(plan.plan_id ?? "");
@@ -450,7 +534,11 @@ export function RehearsalDialog({
               )}
             </div>
           )}
-          <PlanReview plan={plan} />
+          {/* The noun goes down with the plan. This dialog already knows what
+              its rows are — accounts, items, requests — and not passing it on
+              meant the plan itself reported a missing list of "people" on
+              screens that act on none. */}
+          <PlanReview plan={plan} noun={noun} />
           {consequence && (
             <div className="px-6">
               <p className="text-[13.5px] leading-[1.55] text-warn-text">{consequence}</p>
@@ -479,6 +567,7 @@ export function RehearsalDialog({
               variant="accent"
               isPending={busy}
               disabled={!ready}
+              reason={!ready ? notReadyReason : undefined}
               onClick={() => void rehearse(false).catch(() => {})}
             >
               Preview the change
@@ -513,7 +602,11 @@ export function RehearsalDialog({
             <Button
               variant={destructive ? "dangerConfirm" : "accent"}
               isPending={busy}
-              disabled={isDefinitionApply ? busy : !plan?.plan_id || plan.summary.apply === 0}
+              disabled={Boolean(applyBlocked)}
+              // Not while a write is out: "Waiting for the preview." under a
+              // button that is mid-apply describes the wrong thing, and the
+              // pending dot already says what is happening.
+              reason={!busy ? applyBlocked : undefined}
               onClick={() => void applyPlan()}
             >
               {!plan

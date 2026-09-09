@@ -21,6 +21,17 @@ import { useAssignBundle, useUserAccess } from "@/lib/queries/useUsers";
  *
  * Unassigning shows the same preview in reverse and distinguishes roles that
  * will actually be lost from roles retained through another source.
+ *
+ * It reads the PUBLISHED version of each bundle, and that is not a detail. An
+ * assignment pins the latest published version and nothing else — the backend
+ * says so at the read (`db.LatestVersionRoles`: "Not the working copy either.
+ * Reading `bundle_roles` would project unpublished edits to somebody who is not
+ * pinned to them") and a test pins the apply side to it. This panel asked for
+ * the working copy, so it listed every unpublished edit as a role the person
+ * was about to receive, and the apply then granted the published set. An
+ * operator saw the roles they had just added promised here and called
+ * unpublished on the bundle screen, which is two screens disagreeing about the
+ * same fact.
  */
 export function ManageBundles({
   userId,
@@ -46,7 +57,7 @@ export function ManageBundles({
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const allIds = (bundles.data ?? []).map((bundle) => bundle.id);
-  const { byId: bundleRoles } = useBundleRolesByBundle(allIds);
+  const { byId: bundleRoles } = useBundleRolesByBundle(allIds, { published: true });
 
   const selected = useMemo(() => {
     const next = new Set(assignedIds);
@@ -151,7 +162,11 @@ export function ManageBundles({
           </div>
           <div className="flex flex-col gap-[7px] text-[14px]">
             {previewRoles.length === 0 && (
-              <span className="text-faint">This bundle carries no roles yet.</span>
+              <span className="text-faint">
+                {previewBundle.latest_version
+                  ? `v${previewBundle.latest_version} of this bundle carries no roles, so this grants nothing.`
+                  : "This bundle carries no roles yet."}
+              </span>
             )}
             {previewRoles.map((role) => {
               const projectId = role.zitadel_project_id;
@@ -191,6 +206,23 @@ export function ManageBundles({
               );
             })}
           </div>
+
+          {/*
+            Said here, on the screen that would otherwise be contradicted. A
+            bundle with unpublished edits grants its published version, so this
+            list is right and the bundle screen's role list is a different set —
+            and an operator who has just added those roles will read their
+            absence as this panel being stale rather than as the truth about
+            what an assignment pins.
+          */}
+          {previewAdding && (previewBundle.unpublished_changes ?? 0) > 0 && (
+            <p className="mt-3 border-t border-line pt-2.5 text-[13px] leading-[1.5] text-muted">
+              {previewBundle.name} has {previewBundle.unpublished_changes} unpublished{" "}
+              {previewBundle.unpublished_changes === 1 ? "change" : "changes"}. Those are not part
+              of this — an assignment gives v{previewBundle.latest_version}, and publishing is
+              what decides whether the people holding it move.
+            </p>
+          )}
         </div>
       )}
 

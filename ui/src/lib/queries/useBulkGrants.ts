@@ -29,7 +29,11 @@ export type BulkOp =
   | "create_mapping"
   | "edit_mapping"
   | "delete_mapping"
-  | "rollback_mappings";
+  | "rollback_mappings"
+  // The bundle version surfaces, for the same reason: they have spoken this
+  // shape since versioning and were never in the union.
+  | "publish_bundle_version"
+  | "move_bundle_holders";
 
 export interface BulkGrantInput {
   op: BulkOp;
@@ -188,5 +192,9 @@ export function describeBulkOp(op: BulkOp): string {
       return "Stop a role reaching a system";
     case "rollback_mappings":
       return "Undo a set of mappings";
+    case "publish_bundle_version":
+      return "Publish a bundle version";
+    case "move_bundle_holders":
+      return "Move holders between versions";
   }
 }
