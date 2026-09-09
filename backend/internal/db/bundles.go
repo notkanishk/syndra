@@ -13,14 +13,33 @@ import (
 // BUNDLES REPOSITORY
 // -------------------------------------------------------------
 
-// CreateBundle creates a bundle and publishes its empty v1 in one transaction.
+// CreateBundle creates a bundle and publishes its v1, containing the roles it
+// was created with, in one transaction.
 //
-// The empty v1 is deliberate. Every assignment pins a version, so a bundle with
-// no published version could not be assigned at all — and blocking assignment
-// on "publish something first" is a failure mode invented to avoid an
-// uninteresting row in a history. v1 is honest: the bundle existed and granted
-// nothing, which is what the empty-bundle copy has always said.
-func CreateBundle(ctx context.Context, name string, description string, confirmationMode string) (string, error) {
+// v1 at creation is deliberate. Every assignment pins a version, so a bundle
+// with no published version could not be assigned at all — and blocking
+// assignment on "publish something first" is a failure mode invented to avoid
+// an uninteresting row in a history.
+//
+// What was NOT deliberate is v1 being EMPTY. A bundle that grants nothing is
+// not a state anybody wants a bundle to pass through: assigning it hands out
+// nothing, the operator's first edit lands in a working copy they then have to
+// notice and publish, and until they do the screen reports "2 unpublished
+// changes" about the only two roles the bundle has ever had. The caller is
+// required to name at least one role (see handleCreateBundle), so the first
+// published version is already the thing the operator described.
+//
+// The working copy and v1 are written from ONE slice. Publishing diffs the
+// working copy against the latest version, so a v1 that disagreed with
+// `bundle_roles` by even one row would surface as an unpublished change nobody
+// made.
+func CreateBundle(
+	ctx context.Context,
+	name string,
+	description string,
+	confirmationMode string,
+	roles []models.BundleRole,
+) (string, error) {
 	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return "", err
@@ -35,17 +54,52 @@ func CreateBundle(ctx context.Context, name string, description string, confirma
 		name, description, NormalizeConfirmationMode(confirmationMode)).Scan(&id); err != nil {
 		return "", fmt.Errorf("failed to insert bundle: %w", err)
 	}
-	if _, err := tx.Exec(ctx,
+
+	var versionID string
+	if err := tx.QueryRow(ctx,
 		`INSERT INTO bundle_versions (bundle_id, version, note, published_by)
-		 VALUES ($1, 1, 'Created empty.', 'system')`, id); err != nil {
+		 VALUES ($1, 1, $2, 'system') RETURNING id`, id, InitialVersionNote(len(roles))).
+		Scan(&versionID); err != nil {
 		return "", fmt.Errorf("failed to publish initial bundle version: %w", err)
 	}
+
+	for _, role := range roles {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO bundle_roles (bundle_id, zitadel_project_id, zitadel_role_key)
+			 VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+			id, role.ProjectID, role.RoleKey); err != nil {
+			return "", fmt.Errorf("failed to add %s to the new bundle: %w", role.RoleKey, err)
+		}
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO bundle_version_roles (version_id, zitadel_project_id, zitadel_role_key)
+			 VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+			versionID, role.ProjectID, role.RoleKey); err != nil {
+			return "", fmt.Errorf("failed to record %s in the bundle's first version: %w", role.RoleKey, err)
+		}
+	}
+
 	if owned {
 		if err := tx.Commit(ctx); err != nil {
 			return "", err
 		}
 	}
 	return id, nil
+}
+
+// InitialVersionNote is what v1's history entry says.
+//
+// "Created empty." stays reachable: bundles created before the role
+// requirement carry it, and a note records what happened rather than asserting
+// what is allowed now.
+func InitialVersionNote(roles int) string {
+	switch roles {
+	case 0:
+		return "Created empty."
+	case 1:
+		return "Created with 1 role."
+	default:
+		return fmt.Sprintf("Created with %d roles.", roles)
+	}
 }
 
 // UpdateBundle renames a bundle and rewrites its description.

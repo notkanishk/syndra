@@ -22,6 +22,7 @@ func resetBundleDeps(t *testing.T) {
 	origCreate := dbCreateBundle
 	origGetAll := dbGetAllBundles
 	origGetRoles := dbGetRolesForBundle
+	origPublishedRoles := dbLatestVersionRoles
 	origGetUserBundles := dbGetBundlesForUser
 	origSetWelcome := dbSetWelcomeBundle
 	origUpdate := dbUpdateBundle
@@ -36,6 +37,7 @@ func resetBundleDeps(t *testing.T) {
 		dbCreateBundle = origCreate
 		dbGetAllBundles = origGetAll
 		dbGetRolesForBundle = origGetRoles
+		dbLatestVersionRoles = origPublishedRoles
 		dbGetBundlesForUser = origGetUserBundles
 		dbSetWelcomeBundle = origSetWelcome
 		dbUpdateBundle = origUpdate
@@ -129,7 +131,7 @@ func TestHandleCreateBundle_UnknownField(t *testing.T) {
 func TestHandleCreateBundle_HappyPath(t *testing.T) {
 	resetBundleDeps(t)
 
-	dbCreateBundle = func(ctx context.Context, name, description, confirmationMode string) (string, error) {
+	dbCreateBundle = func(ctx context.Context, name, description, confirmationMode string, roles []models.BundleRole) (string, error) {
 		return "bundle-1", nil
 	}
 	auditAction := ""
@@ -138,7 +140,8 @@ func TestHandleCreateBundle_HappyPath(t *testing.T) {
 		return nil
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/bundles", strings.NewReader(`{"name":"Engineering","description":"Eng team bundle"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bundles",
+		strings.NewReader(`{"name":"Engineering","description":"Eng team bundle","roles":[{"project_id":"p1","role_key":"laser"}]}`))
 	rr := httptest.NewRecorder()
 	handleCreateBundle(rr, req)
 
@@ -163,13 +166,14 @@ func TestHandleCreateBundle_ResolvedModeReachesCreate(t *testing.T) {
 	resetBundleDeps(t)
 
 	var gotMode string
-	dbCreateBundle = func(ctx context.Context, name, description, confirmationMode string) (string, error) {
+	dbCreateBundle = func(ctx context.Context, name, description, confirmationMode string, roles []models.BundleRole) (string, error) {
 		gotMode = confirmationMode
 		return "bundle-1", nil
 	}
 	dbInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error { return nil }
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/bundles", strings.NewReader(`{"name":"Engineering","confirmation_mode":"manual"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bundles",
+		strings.NewReader(`{"name":"Engineering","confirmation_mode":"manual","roles":[{"project_id":"p1","role_key":"laser"}]}`))
 	rr := httptest.NewRecorder()
 	handleCreateBundle(rr, req)
 
@@ -178,6 +182,159 @@ func TestHandleCreateBundle_ResolvedModeReachesCreate(t *testing.T) {
 	}
 	if gotMode != "manual" {
 		t.Fatalf("expected resolved mode 'manual' to reach dbCreateBundle, got %q", gotMode)
+	}
+}
+
+// A bundle carrying no roles is not a smaller bundle — it is a thing that
+// cannot do the job it names, and creating one left the operator with a
+// published-but-empty v1 and every role they then added reported as an
+// unpublished change.
+func TestHandleCreateBundle_RefusesABundleWithNoRoles(t *testing.T) {
+	resetBundleDeps(t)
+
+	reached := false
+	dbCreateBundle = func(ctx context.Context, name, description, confirmationMode string, roles []models.BundleRole) (string, error) {
+		reached = true
+		return "bundle-1", nil
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bundles",
+		strings.NewReader(`{"name":"Engineering","description":"Eng"}`))
+	rr := httptest.NewRecorder()
+	handleCreateBundle(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if reached {
+		t.Fatal("the bundle was created anyway — the guard has to run before the write")
+	}
+	var resp map[string]any
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	details, ok := resp["details"].(map[string]any)
+	if !ok || details["roles"] != "at least one" {
+		t.Fatalf("the refusal has to name the roles field, got %v", resp["details"])
+	}
+}
+
+// The roles in the body are what v1 must contain. If they did not reach the
+// write verbatim, the bundle's first published version would describe something
+// the operator did not ask for — which is the whole failure being fixed.
+func TestHandleCreateBundle_RolesReachTheWriteDedupedAndTrimmed(t *testing.T) {
+	resetBundleDeps(t)
+
+	var got []models.BundleRole
+	dbCreateBundle = func(ctx context.Context, name, description, confirmationMode string, roles []models.BundleRole) (string, error) {
+		got = roles
+		return "bundle-1", nil
+	}
+	dbInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error { return nil }
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bundles", strings.NewReader(
+		`{"name":"Engineering","roles":[{"project_id":" p1 ","role_key":" laser "},{"project_id":"p1","role_key":"laser"},{"project_id":"p2","role_key":"cnc"}]}`))
+	rr := httptest.NewRecorder()
+	handleCreateBundle(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+	want := []models.BundleRole{{ProjectID: "p1", RoleKey: "laser"}, {ProjectID: "p2", RoleKey: "cnc"}}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d roles to reach the write, got %d (%v)", len(want), len(got), got)
+	}
+	for i := range want {
+		if got[i].ProjectID != want[i].ProjectID || got[i].RoleKey != want[i].RoleKey {
+			t.Fatalf("role %d: expected %v, got %v", i, want[i], got[i])
+		}
+	}
+}
+
+func TestHandleCreateBundle_RefusesAHalfNamedRole(t *testing.T) {
+	resetBundleDeps(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bundles",
+		strings.NewReader(`{"name":"Engineering","roles":[{"project_id":"p1","role_key":""}]}`))
+	rr := httptest.NewRecorder()
+	handleCreateBundle(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// --- handleGetBundleRoles ---
+
+// The two questions this route answers must not be confused, because one of
+// them is what the bundle grants and the other is what it will grant next. The
+// assign dialog asked the wrong one and listed roles the apply never handed out.
+func TestHandleGetBundleRoles_PublishedReadsTheVersionNotTheWorkingCopy(t *testing.T) {
+	resetBundleDeps(t)
+
+	dbGetRolesForBundle = func(context.Context, string) ([]models.BundleRole, error) {
+		return []models.BundleRole{{ProjectID: "p1", RoleKey: "unpublished-edit"}}, nil
+	}
+	dbLatestVersionRoles = func(context.Context, string) (models.BundleVersion, []models.BundleRole, error) {
+		return models.BundleVersion{Version: 1}, []models.BundleRole{{ProjectID: "p1", RoleKey: "published"}}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bundles/b1/roles?published=true", nil)
+	req.SetPathValue("id", "b1")
+	rr := httptest.NewRecorder()
+	handleGetBundleRoles(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var roles []models.BundleRole
+	if err := json.NewDecoder(rr.Body).Decode(&roles); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(roles) != 1 || roles[0].RoleKey != "published" {
+		t.Fatalf("?published=true must answer from the version, got %v", roles)
+	}
+}
+
+func TestHandleGetBundleRoles_DefaultReadsTheWorkingCopy(t *testing.T) {
+	resetBundleDeps(t)
+
+	dbGetRolesForBundle = func(context.Context, string) ([]models.BundleRole, error) {
+		return []models.BundleRole{{ProjectID: "p1", RoleKey: "working"}}, nil
+	}
+	dbLatestVersionRoles = func(context.Context, string) (models.BundleVersion, []models.BundleRole, error) {
+		t.Fatal("the default must not reach the published version — the editor edits the working copy")
+		return models.BundleVersion{}, nil, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bundles/b1/roles", nil)
+	req.SetPathValue("id", "b1")
+	rr := httptest.NewRecorder()
+	handleGetBundleRoles(rr, req)
+
+	var roles []models.BundleRole
+	if err := json.NewDecoder(rr.Body).Decode(&roles); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(roles) != 1 || roles[0].RoleKey != "working" {
+		t.Fatalf("expected the working copy, got %v", roles)
+	}
+}
+
+// A Go nil slice marshals to JSON `null`, and the clients call `.length` and
+// `.map` on this payload.
+func TestHandleGetBundleRoles_EmptyIsAnArrayNotNull(t *testing.T) {
+	resetBundleDeps(t)
+
+	dbGetRolesForBundle = func(context.Context, string) ([]models.BundleRole, error) { return nil, nil }
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bundles/b1/roles", nil)
+	req.SetPathValue("id", "b1")
+	rr := httptest.NewRecorder()
+	handleGetBundleRoles(rr, req)
+
+	if body := strings.TrimSpace(rr.Body.String()); body != "[]" {
+		t.Fatalf("expected [], got %q", body)
 	}
 }
 
