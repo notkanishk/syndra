@@ -26,7 +26,14 @@ export function useZitadelHealth() {
   return useQuery({
     queryKey: KEYS.health,
     queryFn: async (): Promise<ZitadelHealthResponse> => {
-      return await request<ZitadelHealthResponse>("/zitadel/health");
+      // The backend answers "disabled" (503) and "error" (502) with the same
+      // structured payload as "ok" (200) — the error envelope IS the
+      // diagnostic. Without this, both non-2xx cases threw ApiError instead,
+      // `data` stayed undefined, and the page fell back to one generic
+      // "Syndra's server had a problem and gave no reason" for every failure
+      // — silently skipping the disabled/unreachable copy below, which never
+      // ran against real data.
+      return await request<ZitadelHealthResponse>("/zitadel/health", { preserveErrorBody: true });
     },
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,

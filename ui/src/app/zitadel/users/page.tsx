@@ -84,7 +84,10 @@ export default function UpstreamUsersPage() {
             error={users.error}
             isEmpty={rows.length === 0}
             onRetry={() => users.refetch()}
-            errorTitle="Couldn't read people from Zitadel. Syndra itself is fine."
+            // Not "Syndra itself is fine" — the commonest cause here is Zitadel
+            // never having been configured at all, which IS a Syndra-side gap.
+            // The detail line below names which one it is.
+            errorTitle="Couldn't read people from Zitadel."
             skeleton={<RowSkeleton rows={6} label="Reading people" />}
             empty={
               <EmptyState
@@ -180,7 +183,7 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
         error={grants.error}
         isEmpty={rows.length === 0}
         onRetry={() => grants.refetch()}
-        errorTitle="Couldn't read this person's roles from Zitadel. Syndra itself is fine."
+        errorTitle="Couldn't read this person's roles from Zitadel."
         skeleton={<RowSkeleton rows={3} avatar={false} label="Reading roles" />}
         empty={
           <EmptyState

@@ -1,5 +1,6 @@
 "use client";
 
+import { ResolvedProjectName } from "@/components/names";
 import { MemberCatalog } from "@/components/member/MemberCatalog";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ButtonLink } from "@/components/ui/Button";
@@ -89,7 +90,11 @@ export function MemberAccess({ session }: { session: SessionUser }) {
           {projects.map((project) => (
             <Card key={project.project_id} className="min-w-[420px] flex-1">
               <div className="px-5 py-4 font-display text-[22px] font-semibold">
-                {project.project_name}
+                <ResolvedProjectName
+                  name={project.project_name}
+                  resolved={project.project_name_resolved}
+                  id={project.project_id}
+                />
               </div>
               {[...project.source_roles, ...project.derived_roles].map((role) => (
                 <div

@@ -30,7 +30,13 @@ export function PageHeader({
 }) {
   return (
     <div className={`flex flex-wrap items-end gap-4 ${className}`}>
-      <div className="min-w-0 flex-1">
+      {/* `flex-auto` (basis: auto), not `flex-1` (basis: 0%) — with a 0%
+          basis this block reports zero size to the wrap decision, so `actions`
+          claims the whole line and this text is squeezed into whatever sliver
+          is left, wrapping a two-word name onto two lines with the rest of
+          the row still empty. `flex-auto` lets its real content size count,
+          so `actions` wraps below once the two genuinely don't fit together. */}
+      <div className="min-w-0 flex-auto">
         {eyebrow && <div className="mb-1 text-[13.5px] text-faint">{eyebrow}</div>}
         <h1 className="type-page-title">{title}</h1>
         {meta && <div className="mt-1.5 text-[14.5px] text-muted">{meta}</div>}

@@ -51,6 +51,12 @@ export interface AccessRole {
 export interface UserAccessProject {
   project_id: string;
   project_name: string;
+  /**
+   * False when the directory couldn't name this project and `project_name`
+   * is the raw id standing in for one — the id an operator needs to search,
+   * not a name. Render it labelled, not as the heading.
+   */
+  project_name_resolved: boolean;
   source_roles: AccessRole[];
   derived_roles: AccessRole[];
   effective_role_keys: string[];

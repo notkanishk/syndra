@@ -107,8 +107,14 @@ export function TokenFormatEditor({
       </div>
 
       {scope === "project" ? (
+        // Keyed by project: a bare "project" key survives navigating from one
+        // app's page to another's (Next.js reuses this tree across route
+        // params), so the claim-name input's `useState(profile.claim_name)`
+        // never re-read its initial value — it kept showing the PREVIOUS
+        // project's default, which is how the list and the detail page ended
+        // up disagreeing about the same app's roles claim.
         <ProfileForm
-          key="project"
+          key={`project-${projectId}`}
           profile={shape.data.default}
           scopeNote={
             siblingCount > 0
@@ -120,7 +126,7 @@ export function TokenFormatEditor({
         />
       ) : (
         <AppOverrideForm
-          key="app"
+          key={`app-${applicationId}`}
           onDirtyChange={onDirtyChange}
           projectId={projectId}
           applicationId={applicationId}
@@ -283,6 +289,17 @@ function ProfileForm({
     return () => onDirtyChange?.(false);
   }, [dirty, onDirtyChange]);
 
+  // `onDelete` only exists on the app-override form — an override is always
+  // an explicit choice, so this only ever applies to the project scope.
+  // The backend hands back the same shape whether an operator saved "roles"
+  // + "array" on purpose or nobody has ever touched this project's profile —
+  // there is no field distinguishing the two. Matching the engine's built-in
+  // pair is the closest signal available from here; it is a guess, not a
+  // read of a "configured" flag the API doesn't expose.
+  // ponytail: heuristic, not a real signal. The precise fix is a
+  // `configured` bool on ClaimShape.Default from the backend.
+  const looksUnset = !onDelete && profile.claim_name === "roles" && profile.format_type === "array";
+
   async function save() {
     setSaving(true);
     try {
@@ -320,6 +337,15 @@ function ProfileForm({
           The claim (one field inside the token) the app reads roles from. It must match the name
           the app&rsquo;s developer configured.
         </FieldHint>
+        {looksUnset && (
+          // Nobody may have set this — "roles" here can be the built-in
+          // default as easily as a deliberate choice, and printing it as
+          // plain fact is how a list elsewhere ended up disagreeing with
+          // this screen about the same app's real claim name.
+          <p className="mt-1 text-[13px] text-faint">
+            Nobody has set this yet — Syndra sends the built-in default below.
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2.5">
           <Input
             id="claim-name"
