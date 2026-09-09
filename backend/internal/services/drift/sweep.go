@@ -543,17 +543,62 @@ func explained(
 	exclusions []models.ExternalGrantExclusion,
 	target string,
 ) bool {
+	_, ok := explainedBy(k, directSet, bundleSet, holder, rules, exclusions, target)
+	return ok
+}
+
+// explainedBy is the same judgement, naming the source.
+//
+// The retraction pass needs the source and not just the verdict, because the
+// two are recorded differently and one of them is not Syndra's to claim. A
+// grant an operator marked EXTERNAL is accounted for — but by their decision
+// that it belongs to somebody else. Closing that finding as `attributed` would
+// write down that Syndra owns access it has explicitly disclaimed.
+// `marked_external` is the status that already means what happened.
+func explainedBy(
+	k services.HolderKey,
+	directSet, bundleSet map[services.HolderKey]bool,
+	holder map[services.HolderKey]bool,
+	rules []models.MappingRule,
+	exclusions []models.ExternalGrantExclusion,
+	target string,
+) (services.IntentSource, bool) {
 	switch {
 	case directSet[k]:
-		return true
+		return services.IntentDirectGrant, true
 	case bundleSet[k]:
-		return true
+		return services.IntentBundle, true
 	case expectedViaRule(holder, rules, k.UserID, k.ProjectID, k.RoleKey):
-		return true
+		return services.IntentMappingRule, true
 	case isExcluded(exclusions, target, k.UserID, k.ProjectID, k.RoleKey):
-		return true
+		return services.IntentExclusion, true
 	}
-	return false
+	return "", false
+}
+
+// retractionStatus is the status a retracted finding is closed with. See
+// explainedBy for why it is not always the same one.
+func retractionStatus(source services.IntentSource) string {
+	if source == services.IntentExclusion {
+		return db.DriftMarkedExternal
+	}
+	return db.DriftAttributed
+}
+
+// describeIntent names a source for the retraction record, in the words an
+// operator reading the resolved finding would use.
+func describeIntent(source services.IntentSource) string {
+	switch source {
+	case services.IntentDirectGrant:
+		return "a direct grant in Syndra's ledger"
+	case services.IntentBundle:
+		return "a bundle assignment, through the version this person is pinned to"
+	case services.IntentMappingRule:
+		return "an active mapping rule this person qualifies for"
+	case services.IntentExclusion:
+		return "an operator marking this grant legitimately external on this target"
+	}
+	return "a source Syndra could not name"
 }
 
 // retractExplained closes pending target_only findings that Syndra now accounts
@@ -586,20 +631,26 @@ func retractExplained(
 		// roles where only one is explained is still a finding about the
 		// other, and half-retracting it would erase the half nobody has
 		// looked at.
+		// The sources are collected as well as counted. A row explained partly
+		// by a bundle and partly by an operator's exclusion has no single
+		// honest status, so it is left for a human rather than closed under
+		// whichever source happened to come first.
 		all := len(item.RoleKeys) > 0
+		var source services.IntentSource
 		for _, rk := range item.RoleKeys {
 			k := services.HolderKey{UserID: item.UserID, ProjectID: item.ProjectID, RoleKey: rk}
-			if !explained(k, directSet, bundleSet, holder, rules, exclusions, target) {
+			got, ok := explainedBy(k, directSet, bundleSet, holder, rules, exclusions, target)
+			if !ok || (source != "" && got != source) {
 				all = false
 				break
 			}
+			source = got
 		}
 		if !all {
 			continue
 		}
-		if err := retractExplainedDrift(ctx, item.ID, target, describeExplanation(
-			services.HolderKey{UserID: item.UserID, ProjectID: item.ProjectID, RoleKey: item.RoleKeys[0]},
-			directSet, bundleSet)); err != nil {
+		if err := retractExplainedDrift(ctx, item.ID, target,
+			retractionStatus(source), describeIntent(source)); err != nil {
 			if errors.Is(err, db.ErrDriftNotPending) {
 				continue // triaged by a human between the read and the write
 			}
@@ -612,18 +663,4 @@ func retractExplained(
 		log.Printf("[DRIFT] retracted %d finding(s) on %s that Syndra now accounts for", retracted, target)
 	}
 	return retracted
-}
-
-// describeExplanation names what accounts for a grant, for the retraction
-// record. Vague on purpose where it has to be: the rule and exclusion cases are
-// derived rather than looked up per row, so this reports the source it can name
-// and does not guess at the one it cannot.
-func describeExplanation(k services.HolderKey, directSet, bundleSet map[services.HolderKey]bool) string {
-	switch {
-	case directSet[k]:
-		return "a direct grant in Syndra's ledger"
-	case bundleSet[k]:
-		return "a bundle assignment, through the version this person is pinned to"
-	}
-	return "an active mapping rule, or an operator marking it external"
 }
