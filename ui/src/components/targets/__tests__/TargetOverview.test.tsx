@@ -464,9 +464,14 @@ describe("resolving a log finding", () => {
     fireEvent.change(screen.getByRole("textbox", { name: /type the system name/i }), {
       target: { value: "truenas" },
     });
-    expect(confirm).toBeEnabled();
+    // Re-queried: the button drops its "say why"/"type this" reason the
+    // instant it becomes pressable, and Button.tsx renders that as a
+    // different element (bare `<button>` instead of a `<span>` wrapping one),
+    // which replaces the DOM node rather than just its attributes.
+    const armed = screen.getByRole("button", { name: /accept this log and start over/i });
+    expect(armed).toBeEnabled();
 
-    fireEvent.click(confirm);
+    fireEvent.click(armed);
     // The VIOLATING head, not the anchored one. Adopting "whatever is there
     // now" would swallow a second change made while the dialog was open, which
     // is the event the anchor exists to notice.
@@ -535,9 +540,12 @@ describe("a disputed account", () => {
     fireEvent.change(screen.getByRole("textbox", { name: /type the account/i }), {
       target: { value: "ada" },
     });
-    expect(record).toBeEnabled();
+    // Re-queried for the same reason as the log-finding dialog above: losing
+    // its reason swaps the button's DOM node, not just its `disabled` attribute.
+    const armed = screen.getByRole("button", { name: /record the owner/i });
+    expect(armed).toBeEnabled();
 
-    fireEvent.click(record);
+    fireEvent.click(armed);
     expect(state.ownerDecided).toEqual([
       { id: "c1", owner: "u-bound", note: "checked the home directory with her" },
     ]);

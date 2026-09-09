@@ -157,7 +157,9 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
         count={rows.length}
         note={userStateLabel(state)}
         action={
-          <Button size="sm" variant="danger" onClick={() => setAssigning(true)}>
+          // Granting, not revoking — `danger` here made this indistinguishable
+          // from the "Revoke roles" button on the same row below.
+          <Button size="sm" variant="accent" onClick={() => setAssigning(true)}>
             Give roles in Zitadel
           </Button>
         }
@@ -267,6 +269,11 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
             <Button
               variant="dangerConfirm"
               disabled={!acknowledged}
+              reason={
+                !acknowledged
+                  ? "Check the box above to confirm you understand the consequence."
+                  : undefined
+              }
               isPending={remove.isPending}
               onClick={async () => {
                 try {
@@ -365,8 +372,19 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
 
       <ModalFooter>
         <Button
-          variant="danger"
+          // Granting, not revoking — see the header button above for the same
+          // fix; this is its dialog's submit.
+          variant="accent"
           disabled={!projectId || parsed.length === 0 || !acknowledged}
+          reason={
+            !projectId
+              ? "Choose a project first."
+              : parsed.length === 0
+                ? "Enter at least one role key."
+                : !acknowledged
+                  ? "Check the box above to confirm you understand this skips Syndra."
+                  : undefined
+          }
           isPending={assign.isPending}
           onClick={async () => {
             try {
@@ -438,6 +456,13 @@ function EditRolesDialog({
         <Button
           variant="danger"
           disabled={parsed.length === 0 || !acknowledged}
+          reason={
+            parsed.length === 0
+              ? "Enter at least one role key."
+              : !acknowledged
+                ? "Check the box above to confirm any role left out is revoked."
+                : undefined
+          }
           isPending={update.isPending}
           onClick={async () => {
             try {

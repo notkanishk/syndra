@@ -88,6 +88,10 @@ export function useSweepDormant(target: string) {
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ["targets", target, "dormant"] });
       client.invalidateQueries({ queryKey: ["targets", target, "inventory"] });
+      // Each removal is dispatched, not merely decided, so it is a pending row
+      // until the target confirms it, and the sweep is itself a governance event.
+      client.invalidateQueries({ queryKey: ["propagations"] });
+      client.invalidateQueries({ queryKey: ["governance"] });
     },
   });
 }

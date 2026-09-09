@@ -180,8 +180,12 @@ export function TakeAwayDialog({
           variant="dangerConfirm"
           disabled={!armed}
           reason={
-            !armed && !reason.trim()
-              ? "Say why — the reason is recorded against the withdrawal."
+            !armed && !revoke.isPending
+              ? !reason.trim()
+                ? "Say why — the reason is recorded against the withdrawal."
+                : !confirm.armed
+                  ? `Type ${subjectName} to confirm.`
+                  : undefined
               : undefined
           }
           onClick={() =>

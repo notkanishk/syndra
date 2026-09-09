@@ -443,12 +443,17 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
             <Mono className="w-[190px] shrink-0 truncate text-faint">
               /zitadel/users/&#123;id&#125;/grants
             </Mono>
+            {/* Navigation, not destruction — the risk is already stated in
+                the note above and the dashed danger border around this whole
+                section. `danger` here just made a link that opens a page look
+                like the click that ends someone's access. Matches the "look
+                inside Zitadel" buttons above, which use the default variant. */}
             {reachable ? (
-              <ButtonLink href="/zitadel/users" size="sm" variant="danger">
+              <ButtonLink href="/zitadel/users" size="sm">
                 Open people
               </ButtonLink>
             ) : (
-              <Button size="sm" variant="danger" disabled>
+              <Button size="sm" disabled>
                 Open people
               </Button>
             )}
@@ -462,11 +467,11 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
               /zitadel/projects/&#123;id&#125;/roles
             </Mono>
             {reachable ? (
-              <ButtonLink href="/zitadel/projects" size="sm" variant="danger">
+              <ButtonLink href="/zitadel/projects" size="sm">
                 Open projects
               </ButtonLink>
             ) : (
-              <Button size="sm" variant="danger" disabled>
+              <Button size="sm" disabled>
                 Open projects
               </Button>
             )}

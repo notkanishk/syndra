@@ -81,7 +81,7 @@ export function useApplyEntitlements(target: string) {
       // The rows are queued, so what changed is the pending count — never the
       // target's own state, which the drain has not touched yet.
       client.invalidateQueries({ queryKey: ["governance", "indicators"] });
-      client.invalidateQueries({ queryKey: ["propagation"] });
+      client.invalidateQueries({ queryKey: ["propagations"] });
     },
   });
 }

@@ -22,7 +22,14 @@ describe("<ButtonLink/>", () => {
     const { container: pressed } = render(<Button variant="accent">Go</Button>);
 
     // Same variant, same visual control — only the element differs.
-    expect(linked.firstElementChild?.className).toBe(pressed.firstElementChild?.className);
+    //
+    // Compared on the CONTROL, not on each tree's root. `Button` always wraps
+    // itself now, so that its root does not change shape when a reason appears
+    // and remount the node somebody is typing next to; the root is that
+    // wrapper and has never been the thing this asserts.
+    expect(linked.querySelector("a")?.className).toBe(
+      pressed.querySelector("button")?.className,
+    );
   });
 });
 

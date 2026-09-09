@@ -257,6 +257,19 @@ describe("Expiring access — acknowledgement (C4)", () => {
     await waitFor(() => expect(state.acknowledge).toHaveBeenCalled());
     expect(screen.getByRole("button", { name: "Record the decision" })).toBeTruthy();
   });
+
+  // Nothing called `onClose()` on success, so the dialog stayed open with the
+  // same "Record the decision" button live — a second click recorded the same
+  // acknowledgment again, against a grant that had not moved.
+  it("cannot record the same decision twice", async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Record the decision" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Record the decision" })).toBeNull();
+    expect(state.acknowledge).toHaveBeenCalledTimes(1);
+  });
 });
 
 /**
