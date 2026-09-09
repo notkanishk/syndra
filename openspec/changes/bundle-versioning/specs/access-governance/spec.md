@@ -47,10 +47,15 @@ New assignments MUST pin the latest published version.
 #### Scenario: A bundle with no published version cannot exist
 
 - **WHEN** a bundle is created
-- **THEN** an empty v1 MUST be published in the same transaction
+- **THEN** a v1 MUST be published in the same transaction
 
 Every assignment pins a version, so a bundle with none could not be assigned at
 all.
+
+> **Superseded in part.** This scenario read "an empty v1" and was carried out
+> literally: creation asked for nothing but a name. The v1 requirement stands;
+> the emptiness does not. Creation now requires at least one role — see
+> [`bundle-lifecycle-repair`](../../../bundle-lifecycle-repair/specs/access-governance/spec.md).
 
 ### Requirement: Publishing a version MUST be rehearsed, and MUST ask about existing holders
 

@@ -33,11 +33,42 @@ import (
 // Surfaces. A plan is issued by one screen and citable only there: without
 // this, a drift-triage approval could be spent on the bulk-grant endpoint,
 // where its subject ids mean something entirely different.
+//
+// EVERY surface belongs in this one list. That is not tidiness — it is the
+// reason the same defect landed twice.
+//
+// The list used to live in three files: six here, four in `mapping_plan.go`,
+// one in `entitlements.go`. So "which surfaces participate in the plan gate"
+// could only be answered by knowing to look in all three, and reading this file
+// alone gave a confident wrong answer that omitted five. `mappings.rollback`
+// was the first surface found returning no approval — a rehearsal nothing could
+// spend, so the operation was a dead end on screen — and bundle publish and
+// holder-move were then found with the identical defect months later. An
+// auditor starting here would have missed the first instance entirely.
+//
+// Adding a surface means adding it here. If it feels like it belongs beside its
+// handler instead, the thing to move is the handler's comment, not the constant.
 const (
 	planSurfaceBulkGrants    = "grants.bulk"
 	planSurfaceBulkDecision  = "requests.bulk_decision"
 	planSurfaceDriftAdopt    = "drift.bulk_attribute"
 	planSurfaceDriftExternal = "drift.bulk_mark_external"
+	planSurfaceBundlePublish = "bundles.publish"
+	planSurfaceBundleMove    = "bundles.move_holders"
+
+	planSurfaceMappingEdit   = "mappings.edit"
+	planSurfaceMappingDelete = "mappings.delete"
+	// A rollback is not a change to one mapping. It restores a SET, so its plan
+	// is issued against the target and the version rather than against a row.
+	planSurfaceMappingRollback = "mappings.rollback"
+	// Creating a mapping is an access change like any other, and was the one
+	// that skipped the ceremony.
+	planSurfaceMappingCreate = "mappings.create"
+
+	// Entitlement convergence. A plan issued here names subjects whose
+	// "outcome" is a convergence; the same ids on the bulk-grant endpoint would
+	// mean a role assignment.
+	planSurfaceEntitlements = "entitlements.converge"
 )
 
 // ErrPlanStale is the apply's refusal when the world moved under an approval.

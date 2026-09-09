@@ -40,6 +40,17 @@ export interface CreateBundleInput {
   description: string;
   /** Optional override — omitted falls back to the global default (Task 22). */
   confirmation_mode?: "auto" | "manual";
+  /**
+   * What the bundle's first published version contains. Required, and the
+   * backend refuses without it.
+   *
+   * A bundle carrying no roles is not a smaller bundle — it is a thing that
+   * cannot do the job it names. Creating one empty published an empty v1, so
+   * assigning it granted nothing and every role the operator then added was
+   * reported as an unpublished change against a version that had never
+   * described anything.
+   */
+  roles: AddBundleRoleInput[];
 }
 
 /** No confirmation_mode: that is changed on the index, alongside every other rule and bundle. */
@@ -56,8 +67,34 @@ export interface AddBundleRoleInput {
 const KEYS = {
   list: ["bundles"] as const,
   rolesFor: (id: string) => ["bundles", id, "roles"] as const,
+  /**
+   * What the bundle GRANTS — its latest published version — cached apart from
+   * the working copy. They are different answers to different questions and
+   * sharing one cache entry would make whichever screen asked last correct.
+   */
+  publishedRolesFor: (id: string) => ["bundles", id, "roles", "published"] as const,
   impactFor: (id: string) => ["bundles", id, "impact"] as const,
 };
+
+/**
+ * Which of a bundle's two role sets a caller wants.
+ *
+ * The working copy is what the NEXT version will contain, and it is the honest
+ * answer for the bundle editor. The published version is what the bundle
+ * grants today, and it is the only honest answer for anything previewing an
+ * assignment — an assignment pins the published version and nothing else.
+ */
+export interface RoleSetOptions {
+  published?: boolean;
+}
+
+function rolesPath(bundleId: string, published: boolean): string {
+  return published ? `/bundles/${bundleId}/roles?published=true` : `/bundles/${bundleId}/roles`;
+}
+
+function rolesKey(bundleId: string, published: boolean) {
+  return published ? KEYS.publishedRolesFor(bundleId) : KEYS.rolesFor(bundleId);
+}
 
 /** List all bundles. */
 export function useBundles() {
@@ -70,13 +107,16 @@ export function useBundles() {
   });
 }
 
-/** Fetch the role membership of a single bundle. */
-export function useBundleRoles(bundleId: string | null | undefined) {
+/** Fetch the role membership of a single bundle — working copy by default. */
+export function useBundleRoles(
+  bundleId: string | null | undefined,
+  { published = false }: RoleSetOptions = {},
+) {
   return useQuery({
-    queryKey: bundleId ? KEYS.rolesFor(bundleId) : ["bundles", "noop", "roles"],
+    queryKey: bundleId ? rolesKey(bundleId, published) : ["bundles", "noop", "roles"],
     queryFn: async (): Promise<BundleRoleRow[]> => {
       if (!bundleId) return [];
-      const data = await request<unknown>(`/bundles/${bundleId}/roles`);
+      const data = await request<unknown>(rolesPath(bundleId, published));
       return Array.isArray(data) ? (data as BundleRoleRow[]) : [];
     },
     enabled: !!bundleId,
@@ -100,12 +140,15 @@ export function useBundleImpact(bundleId: string | null | undefined) {
  * needs the role index for every bundle to compute per-role rollups.
  * Each query is cached independently so navigating away and back hits cache.
  */
-export function useBundleRolesByBundle(bundleIds: string[]) {
+export function useBundleRolesByBundle(
+  bundleIds: string[],
+  { published = false }: RoleSetOptions = {},
+) {
   const results = useQueries({
     queries: bundleIds.map((id) => ({
-      queryKey: KEYS.rolesFor(id),
+      queryKey: rolesKey(id, published),
       queryFn: async (): Promise<BundleRoleRow[]> => {
-        const data = await request<unknown>(`/bundles/${id}/roles`);
+        const data = await request<unknown>(rolesPath(id, published));
         return Array.isArray(data) ? (data as BundleRoleRow[]) : [];
       },
     })),

@@ -28,7 +28,7 @@ import {
 export function PublishVersionDialog({
   bundleId,
   name,
-  draft,
+  draft: live,
   onClose,
 }: {
   bundleId: string;
@@ -39,6 +39,20 @@ export function PublishVersionDialog({
   const rehearse = useRehearsePublish(bundleId);
   const apply = useApplyPublish(bundleId);
 
+  /**
+   * The draft this dialog opened on, held still.
+   *
+   * A successful publish invalidates the draft query, so the prop this dialog
+   * renders from moves the moment the write lands — and every version number on
+   * screen moves with it. The result step then reported "Publish Lab Tech v3"
+   * for the publish that had just created v2: the one step whose job is to say
+   * what happened, naming something that did not.
+   *
+   * Nothing else edits a bundle while this modal is open, so freezing costs
+   * nothing and the dialog stays about the version it is publishing.
+   */
+  const [draft] = useState(live);
+
   const [note, setNote] = useState("");
   const [migrate, setMigrate] = useState<boolean | null>(null);
 
@@ -47,6 +61,10 @@ export function PublishVersionDialog({
   // asked: publishing is unambiguous and the compose step is just the note.
   const decided = holders === 0 ? true : migrate !== null;
   const willMigrate = holders === 0 ? false : migrate === true;
+  // One phrase, used by the field label, the radiogroup's accessible name and
+  // the not-ready reason. Written out once because it was written out three
+  // times and only one of them agreed with itself for a single holder.
+  const holdersPhrase = `The ${holders} who already ${holders === 1 ? "holds" : "hold"} it`;
 
   return (
     <RehearsalDialog
@@ -58,6 +76,15 @@ export function PublishVersionDialog({
       }
       noun={["person", "people"]}
       ready={decided}
+      notReadyReason={`Choose what happens to the ${holders} ${
+        holders === 1 ? "person who already holds" : "people who already hold"
+      } it. Both answers are real, so there is no default.`}
+      // Publishing is an act on the BUNDLE. Two publishes move nobody and are
+      // both legitimate — one where nothing holds it yet, and one where the
+      // operator has chosen to leave the current holders where they are — and
+      // without this the only screen that can cut a version left Apply disabled
+      // for both.
+      definitionLabel={`Publish v${draft.next_version}`}
       destructive={willMigrate && draft.removed.length > 0}
       compose={
         <div className="flex flex-col gap-4">
@@ -96,10 +123,10 @@ export function PublishVersionDialog({
 
           {holders > 0 && (
             <div>
-              <FieldLabel>The {holders} who already hold it</FieldLabel>
+              <FieldLabel>{holdersPhrase}</FieldLabel>
               <div
                 role="radiogroup"
-                aria-label={`The ${holders} who already hold it`}
+                aria-label={holdersPhrase}
                 className="mt-1.5 flex flex-col gap-2"
               >
                 <Choice
@@ -133,8 +160,22 @@ export function PublishVersionDialog({
           </div>
         </div>
       }
-      onRehearse={async () => (await rehearse.mutateAsync({ note, migrate: willMigrate })).plan}
-      onApply={async () => (await apply.mutateAsync({ note, migrate: willMigrate })).plan}
+      onRehearse={async (acknowledgeScope) =>
+        (
+          await rehearse.mutateAsync({
+            note,
+            migrate: willMigrate,
+            acknowledge_scope: acknowledgeScope,
+          })
+        ).plan
+      }
+      // The approval, cited. An empty string is what a publish reaching nobody
+      // sends, and the backend accepts it there for the same reason it issued
+      // none: there was no subject to approve.
+      onApply={async (planId) =>
+        (await apply.mutateAsync({ note, migrate: willMigrate, plan_id: planId || undefined }))
+          .plan
+      }
       onClose={onClose}
     />
   );

@@ -122,10 +122,26 @@ type BulkPlan struct {
 	Op string `json:"op"`
 	// PlanID is the approval this rehearsal became. An apply cites it instead
 	// of asking for the diff to be recomputed against a world that moved.
-	PlanID   string        `json:"plan_id,omitempty"`
-	Applied  bool          `json:"applied"`
-	Outcomes []BulkOutcome `json:"outcomes"`
-	Summary  BulkSummary   `json:"summary"`
+	PlanID  string `json:"plan_id,omitempty"`
+	Applied bool   `json:"applied"`
+	// RequestFingerprint binds an approval to the thing it approved, for the
+	// surfaces whose COHORT is derived from the world rather than named in the
+	// request body.
+	//
+	// A bulk grant lists its user ids, so its request fingerprint is computable
+	// from the request and the cohort cannot change under the approval. A bundle
+	// publish cannot: its cohort is whoever holds the bundle, and somebody
+	// joining between the review and the apply would be moved under an approval
+	// that never mentioned them. Per-subject verification does not catch that —
+	// it checks the subjects ON the approval, and a new one is not on it. So the
+	// reviewed cohort goes in here, and a cohort that moved makes the citation a
+	// mismatch rather than a silent widening.
+	//
+	// Not serialised: it is the backend's own record of what it computed, never
+	// something a client sends back.
+	RequestFingerprint string        `json:"-"`
+	Outcomes           []BulkOutcome `json:"outcomes"`
+	Summary            BulkSummary   `json:"summary"`
 }
 
 type BulkSummary struct {

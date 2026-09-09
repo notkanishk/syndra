@@ -179,6 +179,11 @@ export function TakeAwayDialog({
         <Button
           variant="dangerConfirm"
           disabled={!armed}
+          reason={
+            !armed && !reason.trim()
+              ? "Say why — the reason is recorded against the withdrawal."
+              : undefined
+          }
           onClick={() =>
             revoke.mutate(
               {

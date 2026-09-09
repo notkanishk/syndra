@@ -81,21 +81,24 @@ describe("taking access away on a target", () => {
   // depend on which one an operator is doing.
   it("will not fire until the name is typed and a reason given", () => {
     renderTakeAway();
-    const confirm = screen.getByRole("button", { name: /revoke access for Ada Rivera/i });
-    expect(confirm).toBeDisabled();
+    // Re-queried at every step rather than held. `Button` wraps itself in a
+    // span to carry a `reason`, so the button is a DIFFERENT DOM node once the
+    // reason clears — a held reference goes stale and reads as never enabling.
+    const confirm = () => screen.getByRole("button", { name: /revoke access for Ada Rivera/i });
+    expect(confirm()).toBeDisabled();
 
     // Queried by the label, which is now all the label is. The hint used to
     // live inside it, so this field's accessible name was its title plus a
     // paragraph — and this test could only find it by that paragraph.
     fireEvent.change(screen.getByLabelText("Why"), { target: { value: "offboarding" } });
-    expect(confirm).toBeDisabled();
+    expect(confirm()).toBeDisabled();
 
     fireEvent.change(screen.getByRole("textbox", { name: /type the person's name/i }), {
       target: { value: "ada rivera" },
     });
-    expect(confirm).toBeEnabled();
+    expect(confirm()).toBeEnabled();
 
-    fireEvent.click(confirm);
+    fireEvent.click(confirm());
     expect(state.revoked).toHaveLength(1);
     expect(state.revoked[0].reason).toBe("offboarding");
   });
@@ -153,16 +156,18 @@ describe("putting a hold on", () => {
   // backend, so the UI does not offer one.
   it("requires a date and a reason either way", () => {
     renderHold();
-    const confirm = screen.getByRole("button", { name: /hold access to TrueNAS/i });
-    expect(confirm).toBeDisabled();
+    // Re-queried, not held: carrying a `reason` wraps the button in a span, so
+    // it is a different DOM node once the reason clears.
+    const confirm = () => screen.getByRole("button", { name: /hold access to TrueNAS/i });
+    expect(confirm()).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText(/Remind us on/), { target: { value: "2026-12-01" } });
-    expect(confirm).toBeDisabled();
+    expect(confirm()).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText(/shown to Ada Rivera/i), {
       target: { value: "safety review" },
     });
-    expect(confirm).toBeEnabled();
+    expect(confirm()).toBeEnabled();
   });
 
   // "true" is the right thing to send and the wrong thing to say. A dialog

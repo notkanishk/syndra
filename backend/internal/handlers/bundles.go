@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
 type AddRoleToBundleRequest struct {
@@ -19,10 +20,19 @@ type AssignBundleRequest struct {
 	BundleID string `json:"bundle_id"`
 }
 
+// CreateBundleRequest creates a bundle AND its first published version.
+//
+// Roles are required, and that is the change. A bundle is a set of roles handed
+// out as one unit; one carrying no roles is not a smaller version of that, it is
+// a thing that cannot do the job it names. Creating one empty put the operator
+// somewhere with no good exit: assigning it granted nothing, and the roles they
+// then added became "unpublished changes" against a v1 that had never described
+// anything.
 type CreateBundleRequest struct {
-	Name             string `json:"name"`
-	Description      string `json:"description"`
-	ConfirmationMode string `json:"confirmation_mode,omitempty"`
+	Name             string                   `json:"name"`
+	Description      string                   `json:"description"`
+	ConfirmationMode string                   `json:"confirmation_mode,omitempty"`
+	Roles            []AddRoleToBundleRequest `json:"roles"`
 }
 
 // UpdateBundleRequest carries no confirmation_mode: that is changed through
@@ -76,19 +86,28 @@ func handleCreateBundle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
+	problems := map[string]string{}
 	if req.Name == "" {
-		jsonValidationErrorResponse(w, "name is required", map[string]string{"name": "required"})
+		problems["name"] = "required"
+	}
+	roles, roleProblem := normalizeNewBundleRoles(req.Roles)
+	if roleProblem != "" {
+		problems["roles"] = roleProblem
+	}
+	if len(problems) > 0 {
+		jsonValidationErrorResponse(w, "A bundle needs a name and at least one role", problems)
 		return
 	}
 
-	// Creating a bundle triggers no cascade (no members/roles yet) — mode just seeds the row for
-	// future add-role/assign cascades. Inherits the global default unless overridden.
+	// Creating a bundle triggers no cascade — nobody holds it yet, so its roles
+	// reach no member. Mode seeds the row for the future add-role/assign
+	// cascades. Inherits the global default unless overridden.
 	mode, err := resolveConfirmationMode(r.Context(), req.ConfirmationMode)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	id, err := dbCreateBundle(r.Context(), req.Name, req.Description, mode)
+	id, err := dbCreateBundle(r.Context(), req.Name, req.Description, mode, roles)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -100,6 +119,35 @@ func handleCreateBundle(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = dbInsertAuditLog(r.Context(), actor, "-", "bundle.created", id)
 	jsonResponse(w, http.StatusCreated, map[string]string{"id": id})
+}
+
+// normalizeNewBundleRoles validates and de-duplicates the roles a bundle is
+// being created with, returning the problem string for the `roles` field when
+// they will not do.
+//
+// De-duplication rather than refusal: the same role named twice is a client
+// sending the same tick twice, not an operator asking for something
+// contradictory, and both target tables would reject the second row anyway.
+func normalizeNewBundleRoles(in []AddRoleToBundleRequest) ([]models.BundleRole, string) {
+	if len(in) == 0 {
+		return nil, "at least one"
+	}
+	seen := map[string]bool{}
+	out := make([]models.BundleRole, 0, len(in))
+	for _, role := range in {
+		projectID := strings.TrimSpace(role.ProjectID)
+		roleKey := strings.TrimSpace(role.RoleKey)
+		if projectID == "" || roleKey == "" {
+			return nil, "each role needs a project_id and a role_key"
+		}
+		key := projectID + "\x00" + roleKey
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, models.BundleRole{ProjectID: projectID, RoleKey: roleKey})
+	}
+	return out, ""
 }
 
 // handleUpdateBundle renames a bundle and rewrites its description. Nothing else: the roles are
@@ -187,12 +235,44 @@ func handleDeleteBundle(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleGetBundleRoles answers one of two different questions, and the caller
+// has to say which.
+//
+// The default is the WORKING COPY — what the next version will contain. That is
+// what the bundle editor is editing, and it is the honest answer there.
+//
+// `?published=true` is what the bundle GRANTS today: the latest published
+// version. Every surface that previews an assignment must ask for this one,
+// because an assignment pins the published version (db.LatestVersionRoles) and
+// nothing else. The assign dialog asked the default and listed roles the apply
+// would never hand out — it promised an operator the two unpublished roles they
+// had just added, beside a bundle screen calling those same roles unpublished.
 func handleGetBundleRoles(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	roles, err := dbGetRolesForBundle(r.Context(), id)
+	if !trimmedNonEmpty(id) {
+		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
+		return
+	}
+
+	var roles []models.BundleRole
+	var err error
+	if r.URL.Query().Get("published") == "true" {
+		// The version is discarded: the caller asked what the bundle grants, and
+		// LatestVersionRoles reads both in one go precisely so nobody resolves
+		// "latest" twice and pins one version's number to another's roles.
+		_, roles, err = dbLatestVersionRoles(r.Context(), id)
+	} else {
+		roles, err = dbGetRolesForBundle(r.Context(), id)
+	}
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
+	}
+	// Never `null`. A Go nil slice marshals to JSON null, and the clients call
+	// `.length` and `.map` on this — the same boundary that took the bundles
+	// screen down once already.
+	if roles == nil {
+		roles = []models.BundleRole{}
 	}
 	jsonResponse(w, http.StatusOK, roles)
 }

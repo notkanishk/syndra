@@ -22,14 +22,20 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
 export function FieldLabel({
   children,
   htmlFor,
+  // For a field that is a GROUP of controls rather than one input — a role
+  // picker, a set of choices. `htmlFor` cannot point at a div, so the div
+  // points back at this instead.
+  id,
   className = "",
 }: {
   children: React.ReactNode;
   htmlFor?: string;
+  id?: string;
   className?: string;
 }) {
   return (
     <label
+      id={id}
       htmlFor={htmlFor}
       className={`mb-[7px] block text-[12.5px] font-semibold text-faint ${className}`}
     >

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"syndra/internal/db"
@@ -158,6 +159,7 @@ func RehearseBundlePublish(ctx context.Context, req PublishRequest) (BulkPlan, D
 			out.Effect = EffectNoChange
 			out.Detail = fmt.Sprintf("stays on v%d", h.Version)
 			out.Consequence = "Nothing changes for them. The new version applies to new assignments only."
+			out.Fingerprint = Fingerprint("bundle_publish_stay", req.BundleID, h.UserID, strconv.Itoa(h.Version))
 			plan.Outcomes = append(plan.Outcomes, out)
 			continue
 		}
@@ -167,11 +169,104 @@ func RehearseBundlePublish(ctx context.Context, req PublishRequest) (BulkPlan, D
 			return plan, draft, err
 		}
 		out.Effect, out.Detail, out.Consequence = describeMove(h.Version, draft.NextVersion, adds, revokes)
+		// The verdict's own inputs: which version they are on, and what moving
+		// them would actually add and take away. Both can move without the
+		// bundle changing at all — a direct grant or another bundle landing on
+		// this person turns "LOSES laser" into "no change to their access", and
+		// an approval read as the first must not apply as the second.
+		out.Fingerprint = fingerprintHolderMove("bundle_publish_move", req.BundleID, h, adds, revokes)
 		plan.Outcomes = append(plan.Outcomes, out)
 	}
 
 	plan.Summary = SummarizeOutcomes(plan.Outcomes)
+	plan.RequestFingerprint = FingerprintBundlePublish(req.BundleID, req.Migrate, draft.Working, holders)
 	return plan, draft, nil
+}
+
+// FingerprintBundlePublish digests everything a publish was reviewed against
+// that is not specific to one holder: which bundle, whether the holders move,
+// what the new version will contain, and exactly who holds it at which version.
+//
+// The version CONTENTS belong here rather than in the per-holder rows. An edit
+// to the working copy between the review and the apply changes what v_next is,
+// and it can do so without changing any holder's delta — adding a role somebody
+// already holds from a rule moves nobody, and still means the version being
+// published is not the version that was approved.
+//
+// The cohort belongs here for the reason RequestFingerprint exists: a person
+// assigned the bundle after the review is not a subject on the approval, so no
+// amount of per-subject verification will notice them.
+func FingerprintBundlePublish(
+	bundleID string,
+	migrate bool,
+	working []models.BundleRole,
+	holders []models.BundleHolder,
+) string {
+	fields := []string{"bundle_publish", bundleID, "migrate", strconv.FormatBool(migrate), "contains"}
+
+	contents := make([]string, 0, len(working))
+	for _, r := range working {
+		contents = append(contents, r.ProjectID+"\x00"+r.RoleKey)
+	}
+	sort.Strings(contents)
+	fields = append(fields, contents...)
+
+	fields = append(fields, "holders")
+	fields = append(fields, holderFields(holders)...)
+	return Fingerprint(fields...)
+}
+
+// FingerprintMoveHolders digests what a holder move was reviewed against: the
+// bundle, the version being moved onto, what that version contains, and the
+// people named. The named cohort is part of the request here, but the VERSION
+// contents are not — a version is immutable once published, so including them
+// costs nothing and closes the case of a caller citing an approval for one
+// version against another.
+func FingerprintMoveHolders(bundleID, versionID string, target []models.BundleRole, userIDs []string) string {
+	fields := []string{"move_bundle_holders", bundleID, versionID, "contains"}
+
+	contents := make([]string, 0, len(target))
+	for _, r := range target {
+		contents = append(contents, r.ProjectID+"\x00"+r.RoleKey)
+	}
+	sort.Strings(contents)
+	fields = append(fields, contents...)
+
+	ids := append([]string(nil), userIDs...)
+	sort.Strings(ids)
+	fields = append(fields, "subjects")
+	fields = append(fields, ids...)
+	return Fingerprint(fields...)
+}
+
+// holderFields renders the holder set in a read-order-independent way. Who
+// holds the bundle AND which version each of them stands on: somebody moved
+// from v2 to v4 by another operator is a different cohort, not the same one.
+func holderFields(holders []models.BundleHolder) []string {
+	rows := make([]string, 0, len(holders))
+	for _, h := range holders {
+		rows = append(rows, h.UserID+"\x00"+strconv.Itoa(h.Version))
+	}
+	sort.Strings(rows)
+	return rows
+}
+
+// fingerprintHolderMove digests one person's reviewed move.
+func fingerprintHolderMove(kind, bundleID string, h models.BundleHolder, adds, revokes []roleKey) string {
+	fields := []string{kind, bundleID, h.UserID, "from", strconv.Itoa(h.Version), "gains"}
+	fields = append(fields, sortedRoleKeys(adds)...)
+	fields = append(fields, "loses")
+	fields = append(fields, sortedRoleKeys(revokes)...)
+	return Fingerprint(fields...)
+}
+
+func sortedRoleKeys(keys []roleKey) []string {
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, k.projectID+"\x00"+k.roleKey)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // holderDelta is the closure difference for one person if their pin on this
@@ -376,12 +471,18 @@ func RehearseMoveHolders(ctx context.Context, req MoveHoldersRequest) (BulkPlan,
 		if !holds {
 			out.Effect = EffectBlocked
 			out.Detail = "does not hold this bundle"
+			// Blocked rows are recorded and verified like every other row. An
+			// account that did not hold the bundle at review time and holds it
+			// now is exactly the case the block existed for, so the approval
+			// must not carry it through unnoticed.
+			out.Fingerprint = Fingerprint("move_holders_absent", req.BundleID, id)
 			plan.Outcomes = append(plan.Outcomes, out)
 			continue
 		}
 		if h.VersionID == req.VersionID {
 			out.Effect = EffectNoChange
 			out.Detail = fmt.Sprintf("already on v%d", h.Version)
+			out.Fingerprint = fingerprintHolderMove("move_holders_already", req.BundleID, h, nil, nil)
 			plan.Outcomes = append(plan.Outcomes, out)
 			continue
 		}
@@ -393,10 +494,12 @@ func RehearseMoveHolders(ctx context.Context, req MoveHoldersRequest) (BulkPlan,
 		if out.Effect == EffectNoChange {
 			out.Detail = fmt.Sprintf("v%d → v%d, no change to their access", h.Version, targetVersion)
 		}
+		out.Fingerprint = fingerprintHolderMove("move_holders", req.BundleID, h, adds, revokes)
 		plan.Outcomes = append(plan.Outcomes, out)
 	}
 
 	plan.Summary = SummarizeOutcomes(plan.Outcomes)
+	plan.RequestFingerprint = FingerprintMoveHolders(req.BundleID, req.VersionID, target, req.UserIDs)
 	return plan, nil
 }
 
@@ -412,8 +515,21 @@ func MoveHolders(ctx context.Context, actor string, req MoveHoldersRequest) (Bul
 	// decision, and a cascade landing between them makes the plan describe a
 	// world nobody approved.
 	if err := withLockedAccess(ctx, func(ctx context.Context) error {
+		// `=`, not `:=`. `plan` belongs to the enclosing function and is what
+		// gets returned; `plan, err :=` declares a SECOND plan scoped to this
+		// closure, leaves the outer one zero-valued, and hands the caller
+		// `op: "", outcomes: null, summary: all zeroes` after a move that
+		// worked. The move itself was never affected, which is why nothing
+		// caught it — and neither `go vet` nor the compiler objects, because
+		// shadowing is legal and `err` is used.
+		//
+		// Invisible until now for a duller reason: the shared dialog disables
+		// Apply without a plan_id and this endpoint issued none, so no operator
+		// had ever reached the result step to be misinformed by it. Found by
+		// applying a real move on the dev deployment — the holder moved v3 → v4
+		// and the response said nobody had.
 		var err error
-		plan, err := RehearseMoveHolders(ctx, req)
+		plan, err = RehearseMoveHolders(ctx, req)
 		if err != nil {
 			return err
 		}
