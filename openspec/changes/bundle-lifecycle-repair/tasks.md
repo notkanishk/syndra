@@ -45,7 +45,84 @@
 
 - [x] 5.1 `go test ./... && go vet ./...` in `backend/`
 - [x] 5.2 `bun run test && bun run lint && bun run build` in `ui/`
-- [ ] 5.3 **Operator-gated:** create a bundle on the live deployment, publish v2 with holders, move them, and assign it — the sequence that produced this change. Nothing in code blocks it; it blocks declaring it done
+- [x] 5.3 **Walked on the dev deployment, 2026-09-09.** Database dumped first
+  (`backups/pre-bundle-lifecycle-20260909-160520.sql.gz`). The box has no
+  Zitadel, so `SYNDRA_API_KEY` is the operator credential and the outbox stays
+  queued — which is orthogonal to everything here, since all of it is
+  Syndra-side state and the plan gate.
+
+  Through the API, against real Postgres:
+  - creating with no roles → `400` `{"roles":"at least one"}`, no bundle written
+  - creating with two → v1 noted `Created with 2 roles.`, `bundle_version_roles`
+    = 2, `bundle_roles` = 2, and the draft reports **zero** unpublished changes.
+    **This is the pair §4b listed as unproven**, and the defect that made a new
+    bundle report changes nobody had made
+  - a working-copy edit leaves `?published=true` on v1's roles
+  - publishing with no holders: applied with no citation, v2 written
+  - assigning pinned v2 and projected v2's three roles
+  - publishing with a holder: the rehearsal **carries a `plan_id`** and the row
+    reads `v2 → v3, gains admin-staff-x` — the thing that was always absent
+  - applying with no citation → `400 PLAN_REQUIRED`, nothing written
+  - editing the working copy under a live approval → `409
+    PLAN_REQUEST_MISMATCH`, nothing written. The request fingerprint working
+  - applying the citation → v3 written, the holder repinned v2 → v3
+  - publishing while leaving the holder behind → applied, `apply: 0`, holder
+    still on v3
+  - an empty draft with a valid citation → `409 NOTHING_TO_PUBLISH`
+  - moving holders: `plan_id` issued, `400` without it, applied with it
+  - a publish approval cited on the move endpoint → refused
+
+  Through a browser (the demo operator identity, Chrome against `:3001`), the
+  four reported symptoms specifically:
+  - the create dialog carries the role picker; Create is disabled reading
+    "A bundle needs a name.", then "Pick at least one role…", then enables as
+    "Create with 2 roles"
+  - a brand-new bundle shows **no** unpublished-changes strip
+  - `Publish v2` on a bundle nobody holds reaches an **enabled** `Publish v2`
+  - `Preview the change` is disabled *and says why* while the migrate question
+    is unanswered, then enables
+  - a publish reaching a holder reaches an **enabled** `Apply to 1 person`, row
+    `v3 → v4, gains budget_approver`, and applies
+  - the assign panel lists the four **published** roles, not the fifth
+    unpublished one, counts "4 roles", and states "has 1 unpublished change.
+    Those are not part of this — an assignment gives v3…"
+
+  Everything created was removed afterwards and the deployment is back to its
+  prior state: one bundle, no assignments, no orphaned outbox rows, no leftover
+  approvals.
+
+- [x] 5.4 Three defects the browser found that the guards could not — all on the
+  result step, which no operator could reach until publishing was appliable.
+  See §7.
+
+## 7. What the deployment found ✅
+
+Four defects that no test in this repo would have caught, because every one of
+them lives past a step no operator could reach. Making publishing appliable is
+what exposed them — which is the argument for walking a sequence live rather
+than only asserting its parts.
+
+- [x] 7.1 **`MoveHolders` reported nothing it did.** `plan, err :=` inside the
+  locked closure declared a second `plan`, leaving the returned one zero-valued:
+  a move that repinned somebody answered `op: ""`, `outcomes: null`, every count
+  nought, and the result step renders from exactly that. Neither the compiler
+  nor `go vet` objects — shadowing is legal and `err` is used.
+  `PublishBundleVersion` has the same shape and got it right. Regression test
+  fails on the shadow.
+- [x] 7.2 **The publish dialog named the wrong version on the result step.** A
+  successful publish invalidates the draft query, so the `draft` prop moves the
+  instant the write lands: the step reported "Publish … v3" for the publish that
+  had just created v2. The dialog now holds the draft it opened on.
+- [x] 7.3 **"Applied to 0 people."** was the report for publishing a version
+  nothing holds, and for saving a mapping before anybody has the role — true,
+  and reading as a failure, when both are the act succeeding. Now reports the
+  act. Guarded on every count being nought, so twelve people waiting in the
+  outbox keep their counts.
+- [x] 7.4 **The empty-cohort sentence said "this role"** on a bundle screen.
+  Read from the plan's `op` instead, which already knows.
+- [x] 7.5 **"the 1 person who already hold it"** — my own copy, from
+  pluralising the noun and not the verb. Test covers the one-holder case, which
+  is the common case in a makerspace this size.
 
 ## 6. Follow-ups
 
