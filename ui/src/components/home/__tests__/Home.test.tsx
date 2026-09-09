@@ -82,7 +82,7 @@ describe("the home queue and a target nobody can read", () => {
     // The failure this guards is not a missing card — it is the sentence that
     // would otherwise sit above one.
     // Both the headline and the calm empty row say it; neither may.
-    expect(screen.queryAllByText(/Nothing needs you/i)).toHaveLength(0);
+    expect(screen.queryAllByText(/Nothing here needs you/i)).toHaveLength(0);
     expect(screen.getByText(/could not check/i)).toBeTruthy();
     // The reason travels: "unreachable" and "answered and refused" send an
     // operator to different machines.
@@ -91,7 +91,44 @@ describe("the home queue and a target nobody can read", () => {
 
   it("says nothing needs you when every target has been read", () => {
     renderHome();
-    expect(screen.queryAllByText(/Nothing needs you/i).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/Nothing here needs you/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/could not check/i)).toBeNull();
+  });
+});
+
+describe("the headline's count is not the nav's count", () => {
+  beforeEach(() => {
+    state.advanced = true;
+    state.governance.unreconciled_targets = [];
+    state.governance.merge_findings = 0;
+    state.governance.pending_propagation = { count: 0, zitadel_reachable: true };
+  });
+
+  // The collapsed nav button counts PLACES wanting attention, not items — so a
+  // headline reading "8 things need you" beside it must say what IT counts too,
+  // or the two numbers read as one total that disagrees with itself.
+  it("scopes the headline to this page, matching the nav's own disambiguation", () => {
+    state.governance.merge_findings = 3;
+    renderHome();
+    expect(screen.getByText(/Three things here need you\./)).toBeTruthy();
+  });
+});
+
+describe("pending changes says one true thing, once", () => {
+  beforeEach(() => {
+    state.advanced = true;
+    state.governance.unreconciled_targets = [];
+    state.governance.merge_findings = 0;
+  });
+
+  // "Waiting to be sent" and "nothing has changed" used to sit in the same
+  // sentence, each denying the other. The reassurance is about Zitadel, not
+  // the queue: Zitadel hasn't received any of this yet.
+  it("does not say nothing changed right next to a nonzero count", () => {
+    state.governance.pending_propagation = { count: 4, zitadel_reachable: true };
+    renderHome();
+    expect(screen.getByText(/4 changes waiting to be sent to Zitadel/)).toBeTruthy();
+    expect(screen.getByText(/none of it has reached Zitadel yet/)).toBeTruthy();
+    expect(screen.queryByText(/nothing (there )?has changed/i)).toBeNull();
   });
 });

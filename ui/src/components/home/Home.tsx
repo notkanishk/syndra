@@ -52,7 +52,7 @@ import { formatShortDate, formatWeekday, daysUntil } from "@/lib/format";
  * which read "actionable work only — no counts you cannot act on, no charts".
  * That rule was right about the top of the page and wrong about the rest of it:
  * it assumed a non-empty queue, and most days the queue is empty. An operator
- * landing on "Nothing needs you." and nothing else learns nothing about the
+ * landing on "Nothing here needs you." and nothing else learns nothing about the
  * space they run, so they go hunting through the nav — which is the navigation
  * this page exists to prevent. The half of the rule worth keeping is kept, and
  * enforced below: **every number is a link into the thing it counts.** Still no
@@ -80,7 +80,7 @@ export function Home({ session }: { session: SessionUser }) {
 
   // Counted, and that is the whole point of it. An unreadable target produces
   // no drift findings, so a week of silence lands here as blocks === 0 and the
-  // page says "Nothing needs you" — the one sentence that must never be said
+  // page says "Nothing here needs you" — the one sentence that must never be said
   // about a system nobody has been able to look at.
   const blocks = advanced
     ? pending.length +
@@ -131,7 +131,7 @@ export function Home({ session }: { session: SessionUser }) {
               statement of this row is that there is nothing to act on. */}
           <span aria-hidden className="h-2.5 w-2.5 rounded-pill bg-healthy" />
           <span className="text-[14.5px]">
-            <strong className="font-semibold">Nothing needs you.</strong>{" "}
+            <strong className="font-semibold">Nothing here needs you.</strong>{" "}
             <span className="text-muted">
               No open requests, and no access expiring in the next 14 days. Checked <ClockTime />.
             </span>
@@ -344,7 +344,10 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
       <CardRow>
         <div className="flex-1 text-[14.5px]">
           {count} {count === 1 ? "change" : "changes"} waiting to be sent to Zitadel
-          <span className="text-faint"> — nothing there has changed yet</span>
+          {/* Not "nothing has changed" — that flatly denies the count above it.
+              The reassurance is about Zitadel, not the queue: it has not
+              received any of this yet, so there is nothing to undo. */}
+          <span className="text-faint"> — none of it has reached Zitadel yet</span>
         </div>
         <Button
           variant="outline"
@@ -528,11 +531,14 @@ function firstName(session: SessionUser): string {
   return source.trim().split(/\s+/)[0] ?? "";
 }
 
+// "here" is load-bearing: the collapsed nav bar below counts PLACES elsewhere
+// that want a look, and a things-count beside a places-count with no word
+// telling them apart reads as one total that disagrees with itself.
 function workSentence(count: number, loading: boolean): string {
   if (loading) return "Checking.";
-  if (count === 0) return "Nothing needs you.";
-  if (count === 1) return "One thing needs you.";
-  return `${spell(count)} things need you.`;
+  if (count === 0) return "Nothing here needs you.";
+  if (count === 1) return "One thing here needs you.";
+  return `${spell(count)} things here need you.`;
 }
 
 const WORDS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];

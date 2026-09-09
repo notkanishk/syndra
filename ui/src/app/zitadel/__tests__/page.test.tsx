@@ -7,6 +7,7 @@ import IdentityProviderPage from "@/app/zitadel/page";
 
 const rotation = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 const health = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
+const projects = vi.hoisted(() => ({ value: [] as unknown[] }));
 
 // The page reads rotation status through the raw request helper and health
 // through its own hook, so both are stubbed at their respective seams.
@@ -19,7 +20,7 @@ vi.mock("@/lib/queries/useZitadel", () => ({
 }));
 
 vi.mock("@/lib/queries/useProjects", () => ({
-  useProjects: () => ({ data: [], isLoading: false, error: null }),
+  useProjects: () => ({ data: projects.value, isLoading: false, error: null }),
 }));
 
 function renderPage() {
@@ -33,6 +34,7 @@ function renderPage() {
 
 beforeEach(() => {
   health.value = { status: "ok", mode: "live", latency_ms: 21, domain: "auth.example.org" };
+  projects.value = [];
   rotation.value = {
     key_installed: true,
     status: "ok",
@@ -41,6 +43,67 @@ beforeEach(() => {
     last_rotated_at: "2026-07-01T00:00:00Z",
     rotate_command: "make zitadel-actions-rotate-key",
   };
+});
+
+/**
+ * (1) One page, one fact about reachability — not two cards computing it
+ * differently.
+ *
+ * The "Connection" tile used to key off `mode` alone, which reads "live" for
+ * both a healthy connection and a live one whose last call just failed — so a
+ * real outage showed "Connected" here directly under "Unreachable" in the
+ * banner above it. These assert the tile always agrees with the banner's
+ * verdict, for every reachability state the backend can report.
+ */
+describe("Identity provider · one verdict about reachability", () => {
+  it("calls it 'Not connected' everywhere when Zitadel was never set up", async () => {
+    health.value = {
+      status: "disabled",
+      mode: "local-policy-only",
+      error: "Management client not initialized — check ZITADEL_DOMAIN, ZITADEL_MACHINE_KEY_PATH, and backend startup logs",
+    };
+    renderPage();
+    expect(await screen.findAllByText(/Not connected/)).not.toHaveLength(0);
+    expect(screen.queryByText(/^Unreachable/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+  });
+
+  it("calls it 'Unreachable' everywhere when Zitadel is configured but did not answer — never 'Connected'", async () => {
+    health.value = { status: "error", mode: "live", error: "dial tcp: connection refused" };
+    renderPage();
+    expect(await screen.findAllByText(/Unreachable/)).not.toHaveLength(0);
+    expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Not connected/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * (4) The project count names its own source, and stops claiming a live read
+ * it did not make.
+ *
+ * `health.data` used to stay undefined for every non-"ok" status (a separate
+ * bug: the health request threw instead of returning the body), so `live`
+ * was always false and this tile always fell back to Syndra's cached count
+ * — reading as a live Zitadel number even when Zitadel had just answered.
+ */
+describe("Identity provider · projects tile names its source", () => {
+  it("reports Zitadel's own count, live, once the connection is healthy", async () => {
+    health.value = { status: "ok", mode: "live", projects_total: 6 };
+    projects.value = [{ id: "cached-only" }];
+    renderPage();
+    expect(await screen.findByText("6")).toBeInTheDocument();
+    expect(screen.getByText("As Zitadel reported them just now.")).toBeInTheDocument();
+  });
+
+  it("falls back to Syndra's remembered count, and says so, when Zitadel can't be asked", async () => {
+    health.value = { status: "error", mode: "live", error: "dial tcp: connection refused" };
+    projects.value = [{ id: "p1" }, { id: "p2" }, { id: "p3" }];
+    renderPage();
+    expect(await screen.findByText("3")).toBeInTheDocument();
+    expect(
+      screen.getByText("As Syndra last remembered them — Zitadel cannot be asked right now."),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("Identity provider · signing key", () => {

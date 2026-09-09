@@ -192,9 +192,16 @@ function SheetTrigger({
             <span aria-hidden className={`h-[7px] w-[7px] rounded-pill ${DOT_TONE[tone]}`} />
             {/* One string rather than interpolated fragments: the dot is
                 decoration and this sentence is the whole of what a screen
-                reader — or a test — is given. */}
+                reader — or a test — is given.
+
+                "elsewhere" is load-bearing: Home's headline counts items and
+                says "N things need you" on the same screen this bar can sit
+                under, and a places-count beside an items-count reads as two
+                answers to the same question. This one is somewhere else. */}
             <span className="text-[12.5px] font-semibold text-muted">
-              {wanting === 1 ? "1 place needs attention" : `${wanting} places need attention`}
+              {wanting === 1
+                ? "1 place elsewhere needs a look"
+                : `${wanting} places elsewhere need a look`}
             </span>
           </>
         )}

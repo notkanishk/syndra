@@ -339,6 +339,7 @@ function BundleWorkspace({
           </div>
           <Button
             disabled={isWelcome}
+            reason={isWelcome ? `${name} already is — there's nothing to set.` : undefined}
             isPending={setWelcome.isPending}
             onClick={async () => {
               try {

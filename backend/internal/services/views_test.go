@@ -472,6 +472,63 @@ func TestUpsertRoleDeduplicatesReason(t *testing.T) {
 	}
 }
 
+// namedProjectDirectory resolves ProjectName to a real name rather than the
+// snapshot fixture's always-echo-the-id behavior, so a test can exercise the
+// "actually resolved" branch of upsertRole's honesty check.
+type namedProjectDirectory struct {
+	snapshotFixtureDirectory
+	name string
+}
+
+func (d *namedProjectDirectory) ProjectName(context.Context, string) (string, error) {
+	return d.name, nil
+}
+
+// A project id the directory cannot name reads as a fallback, not a name —
+// upsertRole must say so via ProjectNameResolved rather than only handing
+// back a string indistinguishable from a real one.
+func TestUpsertRoleHonestWhenProjectNameUnresolved(t *testing.T) {
+	orig := directory.Default
+	directory.Default = &snapshotFixtureDirectory{}
+	t.Cleanup(func() { directory.Default = orig })
+
+	roleMap := map[roleKey]*models.EffectiveRole{}
+	key := roleKey{projectID: "382075332397630470", roleKey: "admin"}
+	upsertRole(context.Background(), roleMap, key, true, models.RoleReason{Kind: "direct"})
+
+	role := roleMap[key]
+	if role == nil {
+		t.Fatalf("expected role to be inserted")
+	}
+	if role.ProjectName != key.projectID {
+		t.Fatalf("expected fallback name to stay the raw id, got %q", role.ProjectName)
+	}
+	if role.ProjectNameResolved {
+		t.Fatalf("expected ProjectNameResolved=false when the directory only echoed the id back")
+	}
+}
+
+func TestUpsertRoleMarksProjectNameResolved(t *testing.T) {
+	orig := directory.Default
+	directory.Default = &namedProjectDirectory{name: "Laser Lab"}
+	t.Cleanup(func() { directory.Default = orig })
+
+	roleMap := map[roleKey]*models.EffectiveRole{}
+	key := roleKey{projectID: "pLaser", roleKey: "admin"}
+	upsertRole(context.Background(), roleMap, key, true, models.RoleReason{Kind: "direct"})
+
+	role := roleMap[key]
+	if role == nil {
+		t.Fatalf("expected role to be inserted")
+	}
+	if role.ProjectName != "Laser Lab" {
+		t.Fatalf("expected resolved name, got %q", role.ProjectName)
+	}
+	if !role.ProjectNameResolved {
+		t.Fatalf("expected ProjectNameResolved=true when the directory names the project")
+	}
+}
+
 // --- accessSnapshot tests (B3) -------------------------------------------
 //
 // snapshotFixtureDirectory is a Source implementation that returns a fixed
