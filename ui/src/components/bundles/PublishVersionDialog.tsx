@@ -73,8 +73,8 @@ export function PublishVersionDialog({
       noun={["person", "people"]}
       ready={decided}
       notReadyReason={`Choose what happens to the ${holders} ${
-        holders === 1 ? "person" : "people"
-      } who already hold it. Both answers are real, so there is no default.`}
+        holders === 1 ? "person who already holds" : "people who already hold"
+      } it. Both answers are real, so there is no default.`}
       // Publishing is an act on the BUNDLE. Two publishes move nobody and are
       // both legitimate — one where nothing holds it yet, and one where the
       // operator has chosen to leave the current holders where they are — and

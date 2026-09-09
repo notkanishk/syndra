@@ -106,7 +106,26 @@ describe("PublishVersionDialog", () => {
     );
 
     expect(screen.getByRole("button", { name: "Preview the change" })).toBeDisabled();
-    expect(screen.getByText(/Choose what happens to the 14 people/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Choose what happens to the 14 people who already hold it/),
+    ).toBeInTheDocument();
+  });
+
+  // A bundle held by exactly one person is the common case in a makerspace this
+  // size, and "the 1 person who already hold it" is what a browser showed.
+  it("agrees with itself about one holder", () => {
+    render(
+      <PublishVersionDialog
+        bundleId="b1"
+        name="Lab Tech"
+        draft={draft({ holder_count: 1 })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText(/Choose what happens to the 1 person who already holds it/),
+    ).toBeInTheDocument();
   });
 
   /**
