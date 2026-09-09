@@ -829,3 +829,31 @@ func TestAnOperationRefusalNeverTriggersAManifestRead(t *testing.T) {
 		t.Fatalf("a held manifest must never be re-read by a refusal, got %d reads", *calls)
 	}
 }
+
+// The window a restart opens, and the accessor that lets start-up close it.
+//
+// The backend and its add-ons are recreated together, so the one start-up
+// manifest read often reaches a listener that is not up yet. Nothing retried:
+// the next attempt was a full refresh interval away, and for that whole window
+// Connected systems reported the add-on as configured-and-silent — under copy
+// promising it "usually clears by itself within a minute or two", which was the
+// one thing it could not do.
+func TestPendingManifestsNamesWhatHasNotAnswered(t *testing.T) {
+	registerTrueNAS(t)
+	withManifest(t, Manifest{}, errors.New("connection refused"))
+
+	pending := PendingManifests()
+	if len(pending) != 1 || pending[0] != "truenas" {
+		t.Fatalf("a target that has never served a manifest must be named; got %v", pending)
+	}
+
+	// And it stops naming it the moment one is accepted, so the retry that
+	// start-up runs terminates rather than spinning for its whole budget.
+	withManifest(t, Manifest{ContractVersion: ContractVersion}, nil)
+	if err := Refresh(context.Background(), "truenas"); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if pending := PendingManifests(); len(pending) != 0 {
+		t.Fatalf("an accepted manifest must clear the target; got %v", pending)
+	}
+}

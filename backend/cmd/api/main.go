@@ -50,6 +50,39 @@ func requireProductionSigningKeys() {
 // will fail with "no welcome bundle configured" until an operator sets one via
 // PUT /api/v1/bundles/{id}/welcome (May 2026 audit D1 — explicit-only contract,
 // no autopromote on migration).
+// awaitFirstManifests re-reads the add-ons that have not answered yet, quickly
+// at first, until they have.
+//
+// The single start-up read races the add-on's own listener and loses often
+// enough that it is the normal experience of a deploy: both containers are
+// recreated together, the backend asks for /capabilities a second or two
+// before the add-on is listening, and the answer is `connection refused`.
+// Nothing retried. The next attempt was a full refresh interval away — up to
+// fifteen minutes — while Connected systems said "this usually clears by
+// itself within a minute or two", which was the one thing it could not do.
+//
+// Bounded, and it stops at the first success. After this the periodic refresh
+// owns the question; this exists only to close the window a restart opens.
+func awaitFirstManifests(ctx context.Context) {
+	for _, wait := range []time.Duration{2, 3, 5, 10, 15, 30, 45} {
+		if len(addons.PendingManifests()) == 0 {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait * time.Second):
+		}
+		_ = addons.RefreshAll(ctx)
+	}
+	if pending := addons.PendingManifests(); len(pending) > 0 {
+		// Said once, plainly. Past this point the wait is the refresh interval,
+		// and an operator reading the start-up log deserves to know which of
+		// the two they are in.
+		log.Printf("[ADDON] %v has not served a manifest yet; retrying on the refresh interval", pending)
+	}
+}
+
 func warnIfWelcomeBundleMissing(ctx context.Context) {
 	_, err := db.GetWelcomeBundle(ctx)
 	if err == nil {
@@ -204,7 +237,15 @@ func main() {
 			}
 			return nil
 		})
-		go reconcileSched.Start(ctx)
+		// Started once the manifests are in, not immediately. A reconcile
+		// without a manifest cannot do anything but halt, and the halted pass
+		// it records is what Home renders — for the six hours until the next
+		// one, a deployment that came up perfectly reports a system Syndra
+		// could not check.
+		go func(r *periodic.Runner) {
+			awaitFirstManifests(ctx)
+			r.Start(ctx)
+		}(reconcileSched)
 	}
 
 	// Add-on manifest refresh: reads each registered add-on's /capabilities,
@@ -217,6 +258,7 @@ func main() {
 	if len(addons.Registered()) > 0 {
 		addonSched = periodic.New("ADDON", addonRefreshInterval(), 15*time.Minute, addons.RefreshAll)
 		go addonSched.Start(ctx)
+		go awaitFirstManifests(ctx)
 	}
 
 	// Start server in background
