@@ -1,0 +1,54 @@
+> **Status:** bundle-lifecycle-repair — tasks | [< Index](../../INDEX.md) · [Proposal](proposal.md) · [Design](design.md)
+
+# Bundle Lifecycle Repair — tasks
+
+## 1. A bundle is created with its roles ✅
+
+- [x] 1.1 `db.CreateBundle` takes `roles []models.BundleRole` and writes the working copy and v1 from that one slice, in the existing transaction. A v1 disagreeing with `bundle_roles` by one row is an unpublished change nobody made
+- [x] 1.2 `db.InitialVersionNote` — "Created with N roles.", keeping "Created empty." reachable for the bundles that already carry it
+- [x] 1.3 `CreateBundleRequest.Roles`, required; `normalizeNewBundleRoles` trims, de-duplicates on (project_id, role_key), and refuses a half-named role. Validation runs before the write
+- [x] 1.4 The create dialog asks for them. `RolePicker` extracted from `AddRolesToBundle` and shared, rather than a second picker
+- [x] 1.5 `FieldLabel` takes an `id`, so a field that is a group of controls can be labelled by it
+- [x] 1.6 Tests: no roles is a 400 naming `roles` and reaches no write; the roles reach the write trimmed and deduped; a half-named role is refused; `InitialVersionNote` shapes; the dialog refuses with a stated reason and sends what was ticked
+
+## 2. What a bundle grants, as a question a caller can ask ✅
+
+- [x] 2.1 `GET /bundles/{id}/roles?published=true` answers from `db.LatestVersionRoles`; the default still answers the working copy
+- [x] 2.2 Both branches normalise nil to `[]` — the clients call `.length` and `.map` on this payload
+- [x] 2.3 `useBundleRoles(id, {published})` and `useBundleRolesByBundle(ids, {published})`, cached under separate keys so the two questions cannot share an answer
+- [x] 2.4 `ManageBundles` reads the published version for the role count AND the grant preview
+- [x] 2.5 It states when the bundle has unpublished edits that are not part of the assignment, and which version an assignment gives
+- [x] 2.6 Tests: `?published=true` routes to the version and the default to the working copy (the fifth instance of this bug class, guarded at the boundary); empty is `[]` not `null`; the panel asks for the published set, previews it, and names the unpublished remainder
+
+## 3. Publishing and moving holders cite a durable approval ✅
+
+- [x] 3.1 `BulkPlan.RequestFingerprint` (not serialised) — for the surfaces whose cohort is derived from the world rather than named in the body
+- [x] 3.2 `FingerprintBundlePublish` binds the bundle, `migrate`, the version contents and the holder set with each holder's version
+- [x] 3.3 `FingerprintMoveHolders` binds the bundle, the target version, its contents and the named people
+- [x] 3.4 Per-outcome fingerprints on every row both rehearsals emit, blocked and no-change included — a blocked row re-verified is meaningful in its own right
+- [x] 3.5 `planSurfaceBundlePublish` / `planSurfaceBundleMove`; both rehearsals call `issuePlan`, both applies claim it
+- [x] 3.6 A publish whose rehearsal reached nobody issues no approval and needs none — the shape `issueRollbackPlan` already uses
+- [x] 3.7 `acknowledge_scope` on both rehearsals, so the blast-radius ceremony applies here at the same threshold as everywhere else
+- [x] 3.8 Both UI hooks send the citation; both dialogs take it from the plan on screen
+- [x] 3.9 Tests: the rehearsal returns an id; an apply without one writes nothing; a cited apply publishes; a holder whose delta moved is refused; a cohort that grew is `PLAN_REQUEST_MISMATCH` and writes nothing; a publish approval is not citable on the move surface; fingerprint properties (read-order blind, cohort growth, holder version, contents-without-movement, `migrate`)
+
+## 4. A blocked control says why ✅
+
+- [x] 4.1 `applyBlocked` — one string; `disabled` derived from it so state and explanation cannot diverge
+- [x] 4.2 `definitionLabel` gated on "no row will act" rather than "there are no rows"; the citation requirement moved onto whether the plan HAS rows, which is what `issuePlan` derives it from
+- [x] 4.3 An incoherent plan — no `outcomes`, or an empty list with a non-zero total — stays refused, and says so
+- [x] 4.4 `notReadyReason` on the compose step
+- [x] 4.5 `PublishVersionDialog` passes the label, the reason and the citation; `MoveHoldersDialog` likewise — a move whose rows all read "no change to their access" still moves the pin, which is what clears the stale-holder count
+- [x] 4.6 Tests: each blocked route renders its reason and none appears when Apply is available; forty unmoved people take the definition label and cite their approval; rows without an approval stay refused; a publish with no holders and a publish leaving holders behind both reach an enabled Apply
+
+## 5. Verification
+
+- [x] 5.1 `go test ./... && go vet ./...` in `backend/`
+- [x] 5.2 `bun run test && bun run lint && bun run build` in `ui/`
+- [ ] 5.3 **Operator-gated:** create a bundle on the live deployment, publish v2 with holders, move them, and assign it — the sequence that produced this change. Nothing in code blocks it; it blocks declaring it done
+
+## 6. Follow-ups
+
+- [ ] 6.1 `bundle-versioning` §6.1–6.3 remain open and untouched here (estate-wide catch-up, stale counts on Today, hand-picked `MoveHolders` subsets)
+- [ ] 6.2 `definitionLabel` now covers a definition being saved and a version being cut. Rename when something else touches those four mapping call sites
+- [ ] 6.3 The pre-existing `tsc --noEmit` failures in `ui/src/**/__tests__` (missing `holds_due`, missing `unpublished_changes`, `downlevelIteration`) are unrelated to this change and are not covered by `bun run build`, which typechecks only the app. Worth a pass of its own

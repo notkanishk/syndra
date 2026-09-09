@@ -67,6 +67,40 @@ thing to do before this deploys.
 - ~~**Unauthenticated pages fetch authenticated data**~~ — **fixed.** `NameResolverProvider` takes an `enabled` gate fed by the session the root layout already resolves, covering all three of its requests including the per-miss `POST /lookup`; `/login` now issues zero proxy requests and logs nothing. Both `enabled` and `hasSession` default to `true`, so a caller who forgets the prop gets working name resolution rather than blank names.
 - ~~**Ambience toggles**~~ — **shipped on.** Breathing pool and animated grain are CSS `@keyframes` inside `@media (prefers-reduced-motion: no-preference)`, animating the two properties the choreography never touches. Measured 120fps, worst frame 9.3ms.
 
+### Bundle lifecycle — what the live deployment found
+
+Fixed by [`changes/bundle-lifecycle-repair`](changes/bundle-lifecycle-repair/proposal.md) on
+2026-09-09, after an operator tried to create a bundle, put roles in it, publish
+it and assign it. All four steps misbehaved. Recorded here because two of the
+findings are about classes of defect rather than about bundles.
+
+- ~~**A new bundle published an empty v1**~~ — **fixed.** Creation requires at
+  least one role and writes the working copy and v1 from one slice. Bundles
+  already created empty stay valid; the guard is on creation.
+- ~~**Publish and holder-move issued no approval**~~ — **fixed.** They were the
+  last two rehearsed mutations recomputing their own diff at apply time, and the
+  shared dialog disables Apply without a `plan_id`, so **every publish that
+  reached a holder was a dead end on screen.** The identical defect was found
+  and fixed for mapping rollback, whose code says so; these two were missed.
+
+  **The class:** a surface can join the rehearsal contract in the UI without
+  joining the plan gate in the backend, and the failure is silent — a disabled
+  button, not an error. Both are now in `plan_gate.go`'s surface list, which is
+  the only place to read for "who participates". Worth a sweep if a new
+  rehearsed surface appears.
+- ~~**The assign panel previewed the working copy**~~ — **fixed.** An assignment
+  pins the published version, so it promised roles the apply would not grant.
+  This is the **fifth** instance of working-copy-vs-published confusion
+  (`bundle-versioning` §6.1–6.3, §7.1 were the first four). `GET
+  /bundles/{id}/roles` now takes `?published=true` and the handler states which
+  callers must ask which, guarded at the boundary by a test.
+- ~~**Disabled controls gave no reason**~~ — **fixed** on the rehearsal dialog,
+  where `disabled` is now derived from the reason string. `Button` has supported
+  visible `reason` copy since the touch work and states the rule; nothing
+  enforces it. **Not swept:** other disabled controls across the product may
+  still be silent. A `repoguard`-style check is plausible but not obvious —
+  plenty of disabled states are self-evident from the control's own label.
+
 ### Phase 5 — Automation & Governance
 
 - **Service Catalog Abstraction** — the spec'd service→bundle request mapping still falls back to project/role. [`specs/service-catalog`]
@@ -92,6 +126,7 @@ thing to do before this deploys.
 
 None of these are code. All need a live instance and a human.
 
+- **Walk the whole bundle sequence on the live deployment** (`bundle-lifecycle-repair` 5.3) — create a bundle with roles, publish v2 with a holder on it, move the holders, and assign it to somebody. This is the sequence that produced the change, and every fix in it is asserted by unit tests against stubs: the plan store is a fake, the publish write is stubbed, and `internal/db` has no live-database harness (§4b), so the one thing not proven is a real `bundle_roles`/`bundle_version_roles` pair agreeing at creation. Nothing in code blocks this; it blocks calling the change done.
 - **~~Deploy `reconciliation-as-merge`~~ Done, 2026-08-19.** Four migrations (`000041`–`000044`) applied to the dev deployment at `2085e91`; `schema_migrations` reads `44 | not dirty`, database dumped to `/root/syndra/backups/pre-000044-*.sql.gz` first. Backend, UI and the TrueNAS add-on rebuilt — the add-on had to be, because `/subjects` now serves each account's state in entitlement vocabulary and without it every subject classifies as baseless. Target `callable`, eight operations, a live reconcile read the real NAS and concluded `bound 0 · queued 0 · current`, and the NAS is untouched.
 
   **~~What the deployment has NOT exercised: the classifier's own comparison.~~ Done, 2026-08-24.** An account was provisioned through the whole path against the real NAS (rehearse → apply → drain → `user.create`), then changed behind Syndra's back by removing it from its managed group. The sweep classified it `theirs_only` with `base`/`ours`/`theirs` correct, `adoptable: false`, the reason given, and the owning mapping named with its holder count. `keep_ours` recorded the decision and honestly reported `resolved: false` — the finding stays open until a reconciliation sees the target agree — and the next apply restored the group and cleared it. A plan approved before the restore was refused as `PLAN_STALE`, which is the fingerprint gate working. Everything created was removed afterwards and the NAS is byte-for-byte as it was.
@@ -288,6 +323,15 @@ Compose service block (§32.3).
   `golang-migrate` is already a dependency, so the harness is small: connect to a `SYNDRA_TEST_DATABASE_URL`, migrate up once, skip every live test when the variable is unset so `go test ./...` stays green without a database. What it needs is a throwaway Postgres — there is none on the development machine (no Docker, no `psql`), which is why this is debt rather than done.
 
   Also blocked on it: the live-row half of 2.18 (a plan persists and expires), 2.20 (a fingerprint mismatch mutates nothing), 2.22 (scan plan rows for a submitted secret), 1.11's real interleavings, and 1.21/2.46's — a concurrent apply for one subject genuinely serializing, the settled state equalling the higher version, and a grant overtaken by a later revoke actually terminating `superseded` rather than being asserted to.
+
+- **`ui/` has no typecheck in its gate.** `bun run build` typechecks the app and
+  skips `src/**/__tests__`, and `tsc --noEmit -p tsconfig.json` currently fails
+  there with real errors: two fixtures missing required fields (`holds_due` on
+  `Indicators`, `unpublished_changes` on `MappingHistory`), and several
+  `downlevelIteration` complaints from the shared `tsconfig` target. None are
+  caused by a recent change — they accumulated because nothing runs that
+  command. Small to fix; worth doing alongside adding it to the gate, since
+  otherwise it re-accumulates.
 
 ## 4c. Owed operator surfaces
 
