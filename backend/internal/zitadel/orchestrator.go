@@ -157,6 +157,35 @@ func RevokeMappingRules(ctx context.Context, userID, sourceProjectID, sourceRole
 				continue
 			}
 
+			// Does anything else still give them this role? A rule losing its
+			// source says nothing about a bundle or a direct grant that confers
+			// the same thing, and removing it on that basis destroys access
+			// nobody decided to remove — with no ledger row, no outbox row and
+			// no sweep that would notice.
+			//
+			// Unwired or unreadable both SKIP, because the two mistakes are not
+			// equal: a revocation withheld leaves a grant the drift sweep will
+			// raise for a human, and a revocation performed wrongly leaves
+			// nothing at all.
+			if StillExpected == nil {
+				log.Printf("[ZITADEL] Not revoking %s:%s for user %s — cannot check whether another "+
+					"source still gives it (coverage check unwired)",
+					rule.TargetProject, rule.TargetRole, userID)
+				continue
+			}
+			covered, err := StillExpected(ctx, userID, rule.TargetProject, rule.TargetRole)
+			if err != nil {
+				log.Printf("[ZITADEL] Not revoking %s:%s for user %s — could not check whether "+
+					"another source still gives it: %v",
+					rule.TargetProject, rule.TargetRole, userID, err)
+				continue
+			}
+			if covered {
+				log.Printf("[ZITADEL] Keeping %s:%s for user %s — another source still gives it",
+					rule.TargetProject, rule.TargetRole, userID)
+				continue
+			}
+
 			g := ref.grant
 			if len(g.RoleKeys) == 1 {
 				// Only role on the grant — delete the entire grant.

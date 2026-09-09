@@ -105,6 +105,12 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
   const grantsByRole = new Map(
     (grants.data ?? []).map((grant) => [`${grant.project_id}::${grant.role_key}`, grant]),
   );
+  // Whether that map is an ANSWER or just an empty default. This screen gates
+  // its render on the access query alone, so `grants` is still in flight on
+  // every early render and stays empty for ever if it fails — and an empty map
+  // is indistinguishable from "this person has no direct grants" unless the
+  // question is asked separately.
+  const grantsResolved = !grants.isLoading && !grants.error;
   // Only the ones applying now. A lifted or lapsed hold belongs to the history
   // the Review queue keeps, not to what this person can reach.
   const inForce = (access.data.allowances ?? []).filter((a) => a.in_force);
@@ -295,6 +301,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                 projectId={project.project_id}
                 projectName={project.project_name}
                 grantsByRole={grantsByRole}
+                grantsResolved={grantsResolved}
                 advanced={advanced}
                 isOperator={isOperator}
                 onRemove={setRemoval}
@@ -306,6 +313,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                 projectId={project.project_id}
                 projectName={project.project_name}
                 grantsByRole={grantsByRole}
+                grantsResolved={grantsResolved}
                 advanced={advanced}
                 isOperator={isOperator}
                 onRemove={setRemoval}
@@ -346,7 +354,22 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
             open={grantOpen}
             onClose={() => setGrantOpen(false)}
           />
-          <RemovalDialog removal={removal} onClose={() => setRemoval(null)} />
+          {/*
+            `userId` and `userName` are load-bearing, not decoration.
+            RemovalDialog resolves the person as `removal.userId ?? userId`, and
+            this page passed NEITHER — so `person` was undefined, every removal
+            button was disabled, and the bundle dialog rendered its fallback
+            title ("...from this person"). The only way into the removal flow
+            for a role, on the page an operator actually uses, could not be
+            pressed. The role page has always passed it, which is why the flow
+            looked fine there.
+          */}
+          <RemovalDialog
+            removal={removal}
+            userId={userId}
+            userName={user?.name}
+            onClose={() => setRemoval(null)}
+          />
         </>
       )}
     </div>
@@ -403,6 +426,7 @@ function RoleGroup({
   projectId,
   projectName,
   grantsByRole,
+  grantsResolved,
   advanced,
   isOperator,
   onRemove,
@@ -413,6 +437,8 @@ function RoleGroup({
   projectId: string;
   projectName: string;
   grantsByRole: Map<string, { id: string; expires_at?: string | null; granted_by: string }>;
+  /** Whether `grantsByRole` is an answer rather than an empty default. */
+  grantsResolved: boolean;
   advanced: boolean;
   isOperator: boolean;
   onRemove: (removal: Removal) => void;
@@ -473,6 +499,12 @@ function RoleGroup({
                     roleKey: role.role_key,
                     sources,
                     grantId: grant?.id,
+                    // The grant list is a SECOND query, and this screen gates
+                    // its render on the access query only. So `grant` is
+                    // undefined on every early render and for ever if that
+                    // fetch fails — and without this the dialog explained its
+                    // own missing read as a fact about the operator's data.
+                    grantsResolved,
                   })
                 }
                 // 44px of target around a 30px ring: this is the only way into the

@@ -114,22 +114,54 @@ func handleGetReconciliationDiff(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
+	// Bundles, on the same terms as the rules and exclusions above — a failed
+	// read fails the request rather than becoming an empty set.
+	//
+	// This detector is the THIRD to answer "does Syndra account for this
+	// grant?", and the second to have been written without bundles in it. The
+	// first cost a production incident: every projected bundle role reported as
+	// unexplained drift, permanently. Here it is worse-tempered still, because
+	// `syndraGrants` is direct grants only — so a bundle-projected role does not
+	// merely go unexplained, it lands in "In Zitadel but not in Syndra" in
+	// danger tone, on the screen an operator uses to decide what to adopt. And
+	// adopting it writes the redundant direct grant that stops bundle removal
+	// from revoking anything.
+	bundled, err := svcAllBundleDerivedGrantsRecon(ctx)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	bundleSet := make(map[services.HolderKey]bool, len(bundled))
+	for _, g := range bundled {
+		bundleSet[services.HolderKey{UserID: g.UserID, ProjectID: g.ProjectID, RoleKey: g.RoleKey}] = true
+	}
+
 	holder := services.BuildHolderSet(syndraGrants, allZitadel)
-	diff.OnlyInZitadel = filterExplained(diff.OnlyInZitadel, holder, rules, exclusions)
+	// What a bundle gives is held, not merely intended, so rule derivation has
+	// to see it — the same hop the sweep needed.
+	for k := range bundleSet {
+		holder[k] = true
+	}
+	diff.OnlyInZitadel = filterExplained(diff.OnlyInZitadel, holder, bundleSet, rules, exclusions)
 
 	jsonResponse(w, http.StatusOK, diff)
 }
 
-// filterExplained drops (user,project) entries whose every role is now explained
-// by an active mapping rule or an external-grant exclusion — they are no longer
-// pure Zitadel drift. A partially-explained entry keeps only its unexplained roles.
-func filterExplained(in []ReconciliationGrant, holder map[services.HolderKey]bool,
+// filterExplained drops (user,project) entries whose every role Syndra accounts
+// for — they are no longer pure Zitadel drift. A partially-explained entry keeps
+// only its unexplained roles.
+//
+// It must cover every services.IntentSource. The direct-grant arm is implicit
+// and worth naming: `OnlyInZitadel` is computed by diffing against Syndra's
+// direct grants, so anything reaching here is already known not to be one.
+func filterExplained(in []ReconciliationGrant, holder, bundleSet map[services.HolderKey]bool,
 	rules []models.MappingRule, exclusions []models.ExternalGrantExclusion) []ReconciliationGrant {
 	out := make([]ReconciliationGrant, 0, len(in))
 	for _, g := range in {
 		var unexplained []string
 		for _, rk := range g.RoleKeys {
-			if services.ExpectedViaRule(holder, rules, g.UserID, g.ProjectID, rk) ||
+			if bundleSet[services.HolderKey{UserID: g.UserID, ProjectID: g.ProjectID, RoleKey: rk}] ||
+				services.ExpectedViaRule(holder, rules, g.UserID, g.ProjectID, rk) ||
 				services.IsExcluded(exclusions, db.TargetZitadel, g.UserID, g.ProjectID, rk) {
 				continue
 			}
