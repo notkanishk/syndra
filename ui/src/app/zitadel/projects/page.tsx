@@ -87,7 +87,9 @@ export default function UpstreamProjectsPage() {
             count={roles.data?.items.length}
             action={
               activeId ? (
-                <Button size="sm" variant="danger" onClick={() => setEditing("new")}>
+                // Creating a role grants and revokes nothing — same action as
+                // CreateRoleDialog's "Create role", which uses accent.
+                <Button size="sm" variant="accent" onClick={() => setEditing("new")}>
                   New role in Zitadel
                 </Button>
               ) : undefined
@@ -181,7 +183,14 @@ function RoleRow({
           />
           <div className="px-6">
             <DirectWriteWarning
-              what="Deleting a role revokes it (ends access) for everyone who holds it, the moment you press the button."
+              // Unconditional read as still-imminent after the delete has
+              // already run — "the moment you press the button" describes a
+              // click that already happened.
+              what={
+                outcome?.kind === "applied"
+                  ? `${role.key} is deleted. Everyone who held it has already lost it.`
+                  : "Deleting a role revokes it (ends access) for everyone who holds it, the moment you press the button."
+              }
               acknowledged={acknowledged}
               onAcknowledge={setAcknowledged}
             />
@@ -189,29 +198,44 @@ function RoleRow({
           {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter>
-            <Button
-              variant="dangerConfirm"
-              disabled={!acknowledged}
-              isPending={remove.isPending}
-              onClick={async () => {
-                try {
-                  await remove.mutateAsync({ projectId, key: role.key });
-                  // "Applied", and it means it here in a way it does not
-                  // anywhere else in the product: this write went straight to
-                  // Zitadel with no plan, no queue and no ledger row behind it.
-                  setOutcome({
-                    kind: "applied",
-                    message: `${role.key} deleted in Zitadel`,
-                    detail: AUDIT_ONLY,
-                  });
-                } catch (error) {
-                  setOutcome(outcomeFromError(error));
+            {/* Retires on success, same as the sibling RoleDialog's submit in
+                this file — left armed, a second click deleted the same role
+                again. A FAILED attempt keeps the button so there is a retry. */}
+            {outcome?.kind !== "applied" && (
+              <Button
+                variant="dangerConfirm"
+                disabled={!acknowledged}
+                reason={
+                  !acknowledged
+                    ? "Check the box above to confirm you understand the consequence."
+                    : undefined
                 }
-              }}
+                isPending={remove.isPending}
+                onClick={async () => {
+                  try {
+                    await remove.mutateAsync({ projectId, key: role.key });
+                    // "Applied", and it means it here in a way it does not
+                    // anywhere else in the product: this write went straight to
+                    // Zitadel with no plan, no queue and no ledger row behind it.
+                    setOutcome({
+                      kind: "applied",
+                      message: `${role.key} deleted in Zitadel`,
+                      detail: AUDIT_ONLY,
+                    });
+                  } catch (error) {
+                    setOutcome(outcomeFromError(error));
+                  }
+                }}
+              >
+                Delete role in Zitadel
+              </Button>
+            )}
+            <Button
+              variant={outcome?.kind === "applied" ? "accent" : "outline"}
+              onClick={() => setConfirming(false)}
             >
-              Delete role in Zitadel
+              {outcome?.kind === "applied" ? "Done" : "Cancel"}
             </Button>
-            <Button onClick={() => setConfirming(false)}>Cancel</Button>
           </ModalFooter>
         </Modal>
       )}
@@ -290,8 +314,19 @@ function RoleDialog({
 
       <ModalFooter>
         <Button
-          variant="danger"
+          // Saving a display name grants and revokes nothing — same non-
+          // destructive action as "New role in Zitadel" above.
+          variant="accent"
           disabled={!key.trim() || !acknowledged || outcome?.kind === "applied"}
+          reason={
+            !key.trim()
+              ? "Enter a role key first."
+              : !acknowledged
+                ? "Check the box above to confirm you understand this happens outside Syndra's record."
+                : outcome?.kind === "applied"
+                  ? "Already sent to Zitadel — close and reopen to make another change."
+                  : undefined
+          }
           isPending={busy}
           onClick={async () => {
             try {

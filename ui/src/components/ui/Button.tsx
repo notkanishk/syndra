@@ -104,11 +104,24 @@ export function Button({
     </button>
   );
 
-  if (!reason) return button;
+  // ONE render root, whether or not there is a reason.
+  //
+  // Returning the bare button in one case and a wrapped one in the other
+  // changes the element type at this position, so React unmounts the button
+  // and mounts a new one the instant a reason appears or clears — which is
+  // exactly when somebody is typing into the form that control belongs to.
+  // The DOM node they were on is destroyed mid-interaction: keyboard focus is
+  // lost, and any pending press is dropped.
+  //
+  // It surfaced as four tests that had to re-query the button after every
+  // state change, each one working around the remount rather than reporting
+  // it. Now the wrapper is always there and only the sentence comes and goes.
   return (
     <span className="inline-flex flex-col items-start gap-1.5">
       {button}
-      <span className="max-w-[46ch] text-[12.5px] leading-[1.5] text-faint">{reason}</span>
+      {reason && (
+        <span className="max-w-[46ch] text-[12.5px] leading-[1.5] text-faint">{reason}</span>
+      )}
     </span>
   );
 }

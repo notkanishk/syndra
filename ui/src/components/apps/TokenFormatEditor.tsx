@@ -170,31 +170,36 @@ function AppOverrideForm({
             of these apps will then receive both claims — this app&rsquo;s, and the project default
             the others use.
           </p>
-          <Button
-            className="mt-3"
-            variant="accentSoft"
-            isPending={save.isPending}
-            onClick={async () => {
-              try {
-                await save.mutateAsync({
-                  applicationId,
-                  claim_name: `${slug(applicationName)}.roles`,
-                  format_type: fallback.format_type,
-                  attribute_claims: {},
-                  static_claims: {},
-                });
-                setOverrideOutcome({
-                  kind: "applied",
-                  message: `${applicationName} now has its own claim`,
-                  detail: `The other apps on ${projectName} keep the project default.`,
-                });
-              } catch (error) {
-                setOverrideOutcome(outcomeFromError(error));
-              }
-            }}
-          >
-            Give {applicationName} its own claim
-          </Button>
+          {/* Gone once it has run. `save.isPending` clears before the parent's
+              refetch turns `override` truthy, and until it does this branch
+              renders again — a second click would create a second override. */}
+          {overrideOutcome?.kind !== "applied" && (
+            <Button
+              className="mt-3"
+              variant="accentSoft"
+              isPending={save.isPending}
+              onClick={async () => {
+                try {
+                  await save.mutateAsync({
+                    applicationId,
+                    claim_name: `${slug(applicationName)}.roles`,
+                    format_type: fallback.format_type,
+                    attribute_claims: {},
+                    static_claims: {},
+                  });
+                  setOverrideOutcome({
+                    kind: "applied",
+                    message: `${applicationName} now has its own claim`,
+                    detail: `The other apps on ${projectName} keep the project default.`,
+                  });
+                } catch (error) {
+                  setOverrideOutcome(outcomeFromError(error));
+                }
+              }}
+            >
+              Give {applicationName} its own claim
+            </Button>
+          )}
 
           {overrideOutcome && <ActionOutcome outcome={overrideOutcome} className="mt-3" />}
         </div>
@@ -249,11 +254,27 @@ function ProfileForm({
   const [extras, setExtras] = useState<ExtraClaim[]>(() => toExtras(profile));
   const [saving, setSaving] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // What was last written, so "unsaved" can be judged against it rather than
+  // against `profile` — which stays stale until the parent's refetch lands.
+  // Without this, `dirty` stayed true the instant a save succeeded (the local
+  // fields now differ from the still-stale `profile`), the Save button stayed
+  // live, and the success message rendered next to a control that would
+  // resubmit the identical write.
+  const [savedSnapshot, setSavedSnapshot] = useState<{
+    claimName: string;
+    format: ClaimFormat;
+    extras: ExtraClaim[];
+  } | null>(null);
 
+  const baseline = savedSnapshot ?? {
+    claimName: profile.claim_name,
+    format: profile.format_type,
+    extras: toExtras(profile),
+  };
   const dirty =
-    claimName !== profile.claim_name ||
-    format !== profile.format_type ||
-    JSON.stringify(toExtras(profile)) !== JSON.stringify(extras);
+    claimName !== baseline.claimName ||
+    format !== baseline.format ||
+    JSON.stringify(baseline.extras) !== JSON.stringify(extras);
 
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -279,6 +300,7 @@ function ProfileForm({
         message: "Token format saved",
         detail: "It takes effect the next time someone signs in. Anyone already signed in keeps the old format until then.",
       });
+      setSavedSnapshot({ claimName: claimName.trim(), format, extras });
     } catch (error) {
       // The backend rejects duplicate keys and malformed names; surfacing its
       // sentence verbatim is more useful than a generic failure.
@@ -421,9 +443,11 @@ function ProfileForm({
         {dirty && (
           <Button
             onClick={() => {
-              setClaimName(profile.claim_name);
-              setFormat(profile.format_type);
-              setExtras(toExtras(profile));
+              // Back to `baseline`, not `profile` directly — after a save that
+              // has not refetched yet, `profile` is still the pre-save value.
+              setClaimName(baseline.claimName);
+              setFormat(baseline.format);
+              setExtras(baseline.extras);
             }}
           >
             Discard changes

@@ -103,6 +103,9 @@ export function useRemoveDirectGrant() {
       qc.invalidateQueries({ queryKey: ["users", "grants", userId] });
       qc.invalidateQueries({ queryKey: ["roles", "members"] });
       qc.invalidateQueries({ queryKey: ["governance"] });
+      // The Zitadel revoke is queued in the same transaction as the ledger
+      // delete, so it is sitting in the pending list until this invalidates it.
+      qc.invalidateQueries({ queryKey: ["propagations"] });
     },
   });
 }

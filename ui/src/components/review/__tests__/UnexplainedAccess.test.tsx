@@ -35,10 +35,21 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: () => {} }),
 }));
 
+// Controls what the single-item Revoke confirm does, for the "cannot be
+// pressed twice" tests: how many times it actually ran, and whether it fails.
+const revokeCtl = vi.hoisted(() => ({ calls: 0, fails: false }));
+
 vi.mock("@/lib/queries/useDrift", () => ({
   useDriftItems: () => ({ ...drift, isLoading: false, error: null, refetch: () => {} }),
   useAttributeDrift: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useRevokeDrift: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRevokeDrift: () => ({
+    mutateAsync: async () => {
+      revokeCtl.calls += 1;
+      if (revokeCtl.fails) throw new Error("revoke failed");
+      return {};
+    },
+    isPending: false,
+  }),
   useMarkExternalDrift: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRehearseAdoptDrift: () => ({
     mutateAsync: async () => {
@@ -128,6 +139,8 @@ beforeEach(() => {
   };
   bulk.rehearsals = 0;
   bulk.applies = 0;
+  revokeCtl.calls = 0;
+  revokeCtl.fails = false;
 });
 
 describe("Unexplained access — triage", () => {
@@ -347,7 +360,11 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
     selectTwo();
     fireEvent.click(screen.getByRole("button", { name: "Preview adopting these" }));
 
-    expect(await screen.findByRole("button", { name: "Nothing to apply" })).toBeDisabled();
+    // The label stays an ACTION at every count — a button named after its own
+    // emptiness reads as broken rather than as waiting. What it would do to
+    // nobody is said in the reason beside it, not in the label.
+    expect(await screen.findByRole("button", { name: /Apply to 0/ })).toBeDisabled();
+    expect(screen.getByText(/nothing to apply/i)).toBeInTheDocument();
   });
 
   it("reports what actually happened, per row, after applying", async () => {
@@ -551,5 +568,37 @@ describe("who made it", () => {
     ];
     renderTriage();
     expect(screen.queryByRole("button", { name: "Who made it?" })).toBeNull();
+  });
+});
+
+describe("the revoke confirm, once it has run", () => {
+  it("cannot be pressed a second time on the highest-stakes screen", async () => {
+    drift.data = [item({ id: "d1" })];
+    renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke access" }));
+
+    await waitFor(() =>
+      expect(within(dialog).getByRole("button", { name: "Done" })).toBeInTheDocument(),
+    );
+    // Gone, not just relabelled — a second click must have nothing left to hit.
+    expect(within(dialog).queryByRole("button", { name: "Revoke access" })).toBeNull();
+    expect(revokeCtl.calls).toBe(1);
+  });
+
+  it("keeps the confirm button when the revoke fails, so there is a retry", async () => {
+    revokeCtl.fails = true;
+    drift.data = [item({ id: "d1" })];
+    renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke access" }));
+
+    await waitFor(() => expect(within(dialog).getByText(/Nothing was changed/i)).toBeInTheDocument());
+    expect(within(dialog).getByRole("button", { name: "Revoke access" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Done" })).toBeNull();
   });
 });

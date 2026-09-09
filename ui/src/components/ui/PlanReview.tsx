@@ -161,11 +161,20 @@ export function planNote(plan: BulkPlan, noun: [string, string] = ["person", "pe
   const parts: string[] = [];
   if (plan.summary.no_change > 0) parts.push(`No change for ${plan.summary.no_change}`);
   if (plan.summary.blocked > 0) parts.push(`${plan.summary.blocked} refused`);
-  if (parts.length === 0) return `Every selected ${noun[0]} will change.`;
+  // Empty `parts` means no_change and blocked are both zero, and that shape
+  // fits two opposite plans: everybody selected will change (apply > 0), or
+  // the plan reaches nobody at all (apply === 0 too). This used to return the
+  // first sentence for both, so a plan for nobody was captioned "Every
+  // selected person will change" beside a button reading "Nothing to apply".
+  if (parts.length === 0) {
+    return plan.summary.apply === 0
+      ? "This reaches nobody, so there is nothing to apply."
+      : `Every selected ${noun[0]} will change.`;
+  }
   return `${parts.join(" · ")} — Syndra leaves those as they are.`;
 }
 
-/** "Apply to 4 people" / "Nothing to apply". The button's own label states its scope. */
+/** "Apply to 4 people" / "Apply to 0 people". The button's own label states its scope. */
 export function applyLabel(plan: BulkPlan, noun: [string, string]): string {
   const n = plan.summary?.apply;
   // A count that did not arrive is not a count. Rendering it produces "Apply to
@@ -174,6 +183,9 @@ export function applyLabel(plan: BulkPlan, noun: [string, string]): string {
   // control where it can least afford to. The action stays available, because a
   // backend that renamed a field should not block work; only the claim goes.
   if (typeof n !== "number") return "Apply the change";
-  if (n === 0) return "Nothing to apply";
+  // No special case for zero: the label stays an action ("Apply to 0 people")
+  // at every count, because the disabled button already carries its own
+  // `reason` explaining why zero can't be pressed. A label that announces its
+  // own emptiness ("Nothing to apply") reads as the control being broken.
   return `Apply to ${n} ${n === 1 ? noun[0] : noun[1]}`;
 }

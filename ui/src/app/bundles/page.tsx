@@ -9,7 +9,11 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
-import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import {
+  outcomeFromError,
+  statesNothingChanged,
+  type ActionOutcome as Outcome,
+} from "@/lib/outcome";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AddRolesToBundle } from "@/components/bundles/AddRolesToBundle";
 import { RolePicker, splitRoleId } from "@/components/bundles/RolePicker";
@@ -601,7 +605,12 @@ function DeleteBundleDialog({
 
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
-      <ModalFooter note="Emptying the bundle instead leaves it assignable and grants nothing.">
+      <ModalFooter
+        // Static across `gone`, it used to recommend an alternative to a
+        // click that had already happened — "empty it instead" above a
+        // bundle already deleted, with nothing left to empty.
+        note={gone ? undefined : "Emptying the bundle instead leaves it assignable and grants nothing."}
+      >
         {!gone && (
         <Button
           variant="dangerConfirm"
@@ -675,6 +684,15 @@ function DeleteBundleDialog({
  * and the tone with it — amber, because this is consequential and has not
  * happened, rather than red, which is reserved for the click that does it.
  */
+/**
+ * Whether the action ran. A FAILED attempt keeps its button — retiring the
+ * control on any outcome at all would leave a refusal on screen with no way to
+ * try again.
+ */
+function succeeded(outcome: Outcome | null): boolean {
+  return outcome !== null && !statesNothingChanged(outcome.kind);
+}
+
 function RemovalImpact({
   bundleId,
   bundleName,
@@ -770,34 +788,42 @@ function RemovalImpact({
       {outcome && <ActionOutcome outcome={outcome} className="mb-4" />}
 
       <div className="flex flex-wrap items-center gap-2.5">
-        {/* Not `dangerConfirm`. That treatment is for a click that takes
-            access away, and this one edits a draft — dressing it as the
-            destructive act is the same misreading the copy above used to
-            invite. The destructive confirm lives on Publish, where the
-            revocation actually happens. */}
-        <Button
-          isPending={remove.isPending}
-          onClick={async () => {
-            try {
-              await remove.mutateAsync({
-                projectId: role.zitadel_project_id,
-                roleKey: role.zitadel_role_key,
-              });
-              setOutcome({
-                // Nobody's access moved: the working copy did. Same distinction
-                // the add-roles panel makes, in the other direction.
-                kind: "no_change",
-                message: `Dropped from ${bundleName}'s working copy`,
-                detail: "Nobody loses it until you publish a version and move them onto it.",
-              });
-            } catch (error) {
-              setOutcome(outcomeFromError(error));
-            }
-          }}
-        >
-          Drop it from the working copy
+        {/* This panel has no `open`/`onClose` of its own — it stays mounted in
+            the workspace column until `onCancel` clears `pendingRemoval`, and
+            nothing did that on success. Without this wrapper "Drop it" stayed
+            live after it had already dropped, and the next click dropped a
+            role already gone from the draft. Not `dangerConfirm`. That
+            treatment is for a click that takes access away, and this one
+            edits a draft — dressing it as the destructive act is the same
+            misreading the copy above used to invite. The destructive confirm
+            lives on Publish, where the revocation actually happens. */}
+        {!succeeded(outcome) && (
+          <Button
+            isPending={remove.isPending}
+            onClick={async () => {
+              try {
+                await remove.mutateAsync({
+                  projectId: role.zitadel_project_id,
+                  roleKey: role.zitadel_role_key,
+                });
+                setOutcome({
+                  // Nobody's access moved: the working copy did. Same distinction
+                  // the add-roles panel makes, in the other direction.
+                  kind: "no_change",
+                  message: `Dropped from ${bundleName}'s working copy`,
+                  detail: "Nobody loses it until you publish a version and move them onto it.",
+                });
+              } catch (error) {
+                setOutcome(outcomeFromError(error));
+              }
+            }}
+          >
+            Drop it from the working copy
+          </Button>
+        )}
+        <Button variant={succeeded(outcome) ? "accent" : "outline"} onClick={onCancel}>
+          {succeeded(outcome) ? "Done" : "Cancel"}
         </Button>
-        <Button onClick={onCancel}>Cancel</Button>
       </div>
     </div>
   );

@@ -41,11 +41,14 @@ describe("revoking a person's roles in Zitadel", () => {
 
     expect(state.remove).not.toHaveBeenCalled();
     expect(document.body.textContent).toMatch(/Priya loses these roles once the change reaches Zitadel/);
-    const confirm = screen.getByRole("button", { name: "Revoke this role in Zitadel" });
-    expect(confirm).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Revoke this role in Zitadel" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("checkbox", { name: /I understand this revokes 1 role/ }));
-    fireEvent.click(confirm);
+    // Re-query rather than reuse the disabled-state node: a disabled control
+    // now renders its reason as a sibling (Button.tsx wraps in a <span> only
+    // when `reason` is set), so acknowledging swaps the tree and the old
+    // reference goes stale.
+    fireEvent.click(screen.getByRole("button", { name: "Revoke this role in Zitadel" }));
 
     await waitFor(() => expect(state.remove).toHaveBeenCalledWith({ userId: "u1", grantId: "g1" }));
     await waitFor(() => expect(document.body.textContent).toMatch(/Roles revoked in Zitadel/));

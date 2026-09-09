@@ -102,7 +102,10 @@ export function ManageBundles({
       const recorded =
         changes.length === 1 ? "One bundle change recorded" : `${changes.length} bundle changes recorded`;
       setOutcome({
-        kind: "queued",
+        // Amber "waiting" only where something waits. A change that queued
+        // nothing is done, and painting it as pending sends an operator to an
+        // empty Pending changes to look for it.
+        kind: waiting > 0 ? "queued" : "applied",
         message: recorded,
         detail:
           waiting > 0
@@ -120,7 +123,7 @@ export function ManageBundles({
   const busy = assign.isPending || remove.isPending;
   const staging = changes.length;
   // Recorded, and nothing new ticked since. The modal has nothing left to do.
-  const done = outcome?.kind === "queued" && staging === 0;
+  const done = (outcome?.kind === "queued" || outcome?.kind === "applied") && staging === 0;
 
   return (
     <Modal open onClose={onClose} busy={busy} size="md" labelledBy="manage-bundles-title">
@@ -277,7 +280,7 @@ export function ManageBundles({
               // as broken rather than as waiting for you.
               reason={
                 staging === 0
-                  ? outcome?.kind === "queued"
+                  ? outcome
                     ? "Recorded. Tick another bundle to make a further change."
                     : "Tick a bundle above to add or remove it."
                   : undefined

@@ -222,15 +222,36 @@ function TargetPanel({ view }: { view: MyTargetView }) {
 function NotYetUsable({ view }: { view: MyTargetView }) {
   const storage = view.storage;
   if (!storage || storage.usable) return null;
+  // While changes are paused (`Paused` below), setting a password is REFUSED,
+  // not deferred: `draining` and `read_only` reject every new mutation in the
+  // add-on (`addons/truenas/lifecycle.go`), so nothing is held and replayed.
+  //
+  // This banner and the one below it used to disagree — one said the password
+  // activates the account now, the next said changes were paused — and the
+  // first attempt to reconcile them replaced one false sentence with another,
+  // promising that a password set now would apply when changes resume. It
+  // would not; the member would be told the system is not answering. Somebody
+  // told to try is worse off than somebody told to wait, because they read the
+  // refusal as their own mistake and try again.
+  const paused = view.lifecycle === "draining" || view.lifecycle === "read_only";
 
   return (
     <div className="rounded-card border border-warn-line bg-warn-soft px-4 py-3">
       <p className="text-[14px] text-warn-text">
         {storage.needs_password ? (
-          <>
-            <strong className="font-semibold">Your account is ready, but not switched on yet.</strong>{" "}
-            It will refuse you until you set a password below — that is what activates it.
-          </>
+          paused ? (
+            <>
+              <strong className="font-semibold">Your account is ready, but not switched on yet.</strong>{" "}
+              Setting a password is what switches it on, and changes to{" "}
+              {targetLabel(view.target)} are paused right now, so it would be refused. Nothing is
+              wrong with your account — come back once the pause below has lifted.
+            </>
+          ) : (
+            <>
+              <strong className="font-semibold">Your account is ready, but not switched on yet.</strong>{" "}
+              It will refuse you until you set a password below — that is what activates it.
+            </>
+          )
         ) : (
           <>
             <strong className="font-semibold">Your account is paused.</strong> It exists, and{" "}

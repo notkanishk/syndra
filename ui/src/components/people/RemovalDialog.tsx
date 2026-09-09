@@ -15,7 +15,11 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { useRemoveDirectGrant } from "@/lib/queries/useRoleMembers";
 import { useRemoveBundle } from "@/lib/queries/useBundles";
 import { humanizeKey } from "@/lib/format";
-import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import {
+  outcomeFromError,
+  statesNothingChanged,
+  type ActionOutcome as Outcome,
+} from "@/lib/outcome";
 
 /**
  * Source-specific removal.
@@ -154,6 +158,15 @@ export function RemovalDialog({
   );
 }
 
+/**
+ * Whether the action ran. A FAILED attempt keeps its button — retiring the
+ * control on any outcome at all would leave a refusal on screen with no way to
+ * try again.
+ */
+function succeeded(outcome: Outcome | null): boolean {
+  return outcome !== null && !statesNothingChanged(outcome.kind);
+}
+
 function actionName(kind: SourceKind): string {
   if (kind === "direct") return "Revoke direct access";
   if (kind === "bundle") return "Remove bundle assignment";
@@ -260,7 +273,7 @@ function DirectDialog({
         {/* Same rule as the bundle dialog: an action that has run is not an
             action any more, and leaving it armed lets a second click revoke
             again. */}
-        {!outcome && (
+        {!succeeded(outcome) && (
           <Button
             variant={source?.queued ? "accent" : "dangerConfirm"}
             disabled={blocked}
@@ -292,8 +305,8 @@ function DirectDialog({
             {source?.queued ? "Withdraw the queued grant" : "Revoke access"}
           </Button>
         )}
-        <Button variant={outcome ? "accent" : "outline"} onClick={onClose}>
-          {outcome ? "Done" : "Cancel"}
+        <Button variant={succeeded(outcome) ? "accent" : "outline"} onClick={onClose}>
+          {succeeded(outcome) ? "Done" : "Cancel"}
         </Button>
       </ModalFooter>
     </Modal>
@@ -386,7 +399,7 @@ function BundleDialog({
             it succeeded fires again on the next click — which is what a person
             does when the dialog does not close, and each press queued another
             cascade. What remains is the one action still true: leave. */}
-        {outcome?.kind !== "queued" && (
+        {!succeeded(outcome) && (
           <Button
             // Red is a promise about consequence. Withdrawing a delivery that
             // never went out takes nothing from anybody, and dressing it as
@@ -409,8 +422,14 @@ function BundleDialog({
             onClick={async () => {
               try {
                 const result = await removeBundle.mutateAsync(source.bundle_id!);
+                const waiting = result?.cascade?.enqueued ?? 0;
                 setOutcome({
-                  kind: "queued",
+                  // `queued` paints an amber "Waiting to be sent" badge, and a
+                  // withdrawal leaves nothing waiting — the badge sat directly
+                  // above "Nothing is waiting under Pending changes" and
+                  // contradicted it. The record DID change, so this is not
+                  // `no_change` either.
+                  kind: waiting === 0 ? "applied" : "queued",
                   message: `${bundleName} removed from ${subject}`,
                   // What actually happened, rather than one sentence for both
                   // outcomes. The dialog above had just said nothing would be
@@ -418,7 +437,7 @@ function BundleDialog({
                   // you send: two opposite accounts of one click, a centimetre
                   // apart.
                   detail:
-                    (result?.cascade?.enqueued ?? 0) === 0
+                    waiting === 0
                       ? "The grants it queued were withdrawn. Nothing is waiting under Pending changes, because nothing had been sent."
                       : "The roles it supplied are revoked once you send Pending changes, except any that another source still gives.",
                 });
@@ -431,10 +450,10 @@ function BundleDialog({
           </Button>
         )}
         <Button
-          variant={outcome?.kind === "queued" ? "accent" : "outline"}
+          variant={succeeded(outcome) ? "accent" : "outline"}
           onClick={onClose}
         >
-          {outcome?.kind === "queued" ? "Done" : "Cancel"}
+          {succeeded(outcome) ? "Done" : "Cancel"}
         </Button>
       </ModalFooter>
     </Modal>

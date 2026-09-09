@@ -254,7 +254,7 @@ export function useCreateMapping() {
       client.invalidateQueries({ queryKey: ["targets", "mappings"] });
       // The convergences it queued show up as pending changes, the same as
       // every other mapping change.
-      client.invalidateQueries({ queryKey: ["propagation"] });
+      client.invalidateQueries({ queryKey: ["propagations"] });
     },
   });
 }
@@ -267,7 +267,13 @@ export function usePublishMappingVersion(target: string) {
         method: "POST",
         body: { target, note },
       }),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["targets", target, "mapping-versions"] }),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["targets", target, "mapping-versions"] });
+      // A publish replaces the working copy with a new version and queues its
+      // convergences, so the mapping list and the pending count both go stale.
+      client.invalidateQueries({ queryKey: ["targets", "mappings"] });
+      client.invalidateQueries({ queryKey: ["propagations"] });
+    },
   });
 }
 
@@ -311,7 +317,7 @@ export function useRollbackMappingVersion(target: string) {
       client.invalidateQueries({ queryKey: ["targets", "mappings"] });
       // The rollback queues a convergence per affected holder, so what changed
       // for an operator watching is the pending count.
-      client.invalidateQueries({ queryKey: ["propagation"] });
+      client.invalidateQueries({ queryKey: ["propagations"] });
     },
   });
 }

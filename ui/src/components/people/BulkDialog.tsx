@@ -82,6 +82,22 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
     (op !== "extend" || durationDays > 0) &&
     reason.trim().length > 0;
 
+  // `ready` collapses five distinct gaps into one boolean, and RehearsalDialog
+  // greys out its only button on `!ready` alone — this is what says which one,
+  // in the order `ready` checks them, so the operator does not have to scan a
+  // multi-field compose step to find what they left blank.
+  const notReadyReason = !needsRole || projectId
+    ? !needsRole || roleKey
+      ? !needsBundle || bundleId
+        ? op !== "extend" || durationDays > 0
+          ? reason.trim().length > 0
+            ? undefined
+            : "Say why — this lands in the audit log."
+          : "Enter how many days to extend by."
+        : "Choose a bundle."
+      : "Choose a role."
+    : "Choose a project.";
+
   const people = `${userIds.length} ${userIds.length === 1 ? "person" : "people"}`;
 
   return (
@@ -90,6 +106,7 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
       lede={`${people} selected${scope ? ` ${scope}` : ""}. Nothing changes until you've seen what this would do.`}
       noun={["person", "people"]}
       ready={ready}
+      notReadyReason={notReadyReason}
       destructive={op === "remove_role" || op === "remove_bundle"}
       onRehearse={(acknowledgeScope) =>
         rehearse.mutateAsync({ ...input, acknowledge_scope: acknowledgeScope })

@@ -527,12 +527,29 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
 
       <ModalFooter
         note={
-          validated?.ok ? undefined : "Check the rule before you can save it."
+          // Two different unmet conditions used to share one sentence: an
+          // incomplete form was told to "check the rule" while Check itself
+          // sat disabled right below, recommending an action it had just
+          // refused.
+          !complete
+            ? "Fill in every field above, then check the rule."
+            : !validated
+              ? "Check the rule before you can save it."
+              : undefined
         }
       >
         <Button
           variant="accent"
           disabled={!complete || !validated?.ok}
+          reason={
+            !complete
+              ? "Fill in every field above first."
+              : !validated
+                ? "Check the rule before saving it."
+                : !validated.ok
+                  ? "This rule can't be saved as it stands — see above."
+                  : undefined
+          }
           isPending={busy}
           onClick={async () => {
             try {
@@ -570,6 +587,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
         </Button>
         <Button
           disabled={!complete}
+          reason={!complete ? "Fill in every field above first." : undefined}
           isPending={validate.isPending}
           onClick={async () => {
             try {

@@ -29,7 +29,11 @@ import {
 } from "@/lib/queries/useExpiringAccess";
 import { useCreateGrant } from "@/lib/queries/useUsers";
 import { daysUntil, formatShortDate } from "@/lib/format";
-import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import {
+  outcomeFromError,
+  statesNothingChanged,
+  type ActionOutcome as Outcome,
+} from "@/lib/outcome";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 
 /** How long an extension buys. Stated in the row's own result, never implied. */
@@ -431,6 +435,15 @@ function ExpiringRow({
  * that makes the record useful to somebody else, and this is the one place to state plainly that
  * recording a decision is not the same as changing anything.
  */
+/**
+ * Whether the action ran. A FAILED attempt keeps its button — retiring the
+ * control on any outcome at all would leave a refusal on screen with no way to
+ * try again.
+ */
+function succeeded(outcome: Outcome | null): boolean {
+  return outcome !== null && !statesNothingChanged(outcome.kind);
+}
+
 function LetItLapseDialog({
   grant,
   onClose,
@@ -493,37 +506,46 @@ function LetItLapseDialog({
           access, and the dialog exists to say so. */}
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
-      <ModalFooter note="Extend instead if the access should continue.">
+      <ModalFooter note={succeeded(outcome) ? undefined : "Extend instead if the access should continue."}>
+        {/* Nothing closed this on success, so the same "Record the decision"
+            button sat there re-submittable — a second click recorded the same
+            acknowledgment again, against a grant that had not moved. */}
+        {!succeeded(outcome) && (
+          <Button
+            variant="accent"
+            isPending={acknowledge.isPending}
+            onClick={async () => {
+              if (!expiresAt) return;
+              try {
+                await acknowledge.mutateAsync({
+                  grantId: grant.id,
+                  expiresAt,
+                  note: note.trim(),
+                });
+                setOutcome({
+                  kind: "applied",
+                  message: "Recorded — it will lapse on its date",
+                  detail:
+                    "Nothing about the access changed — it still lapses on its date. What changed is that the queue stops asking your colleagues a question you have answered.",
+                });
+              } catch (error) {
+                // A 409 here is the reopen rule arriving early: the grant was
+                // extended while this dialog was open, so the date on screen is
+                // not the date the grant has. The server's message says to
+                // reload, and a refusal is what it should read as.
+                setOutcome(outcomeFromError(error));
+              }
+            }}
+          >
+            Record the decision
+          </Button>
+        )}
         <Button
-          variant="accent"
-          isPending={acknowledge.isPending}
-          onClick={async () => {
-            if (!expiresAt) return;
-            try {
-              await acknowledge.mutateAsync({
-                grantId: grant.id,
-                expiresAt,
-                note: note.trim(),
-              });
-              setOutcome({
-                kind: "applied",
-                message: "Recorded — it will lapse on its date",
-                detail:
-                  "Nothing about the access changed — it still lapses on its date. What changed is that the queue stops asking your colleagues a question you have answered.",
-              });
-            } catch (error) {
-              // A 409 here is the reopen rule arriving early: the grant was
-              // extended while this dialog was open, so the date on screen is
-              // not the date the grant has. The server's message says to
-              // reload, and a refusal is what it should read as.
-              setOutcome(outcomeFromError(error));
-            }
-          }}
+          variant={succeeded(outcome) ? "accent" : "ghost"}
+          onClick={onClose}
+          disabled={acknowledge.isPending}
         >
-          Record the decision
-        </Button>
-        <Button variant="ghost" onClick={onClose} disabled={acknowledge.isPending}>
-          Cancel
+          {succeeded(outcome) ? "Done" : "Cancel"}
         </Button>
       </ModalFooter>
     </Modal>
