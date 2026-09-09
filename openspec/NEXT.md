@@ -334,6 +334,23 @@ Compose service block (§32.3).
 
   Also blocked on it: the live-row half of 2.18 (a plan persists and expires), 2.20 (a fingerprint mismatch mutates nothing), 2.22 (scan plan rows for a submitted secret), 1.11's real interleavings, and 1.21/2.46's — a concurrent apply for one subject genuinely serializing, the settled state equalling the higher version, and a grant overtaken by a later revoke actually terminating `superseded` rather than being asserted to.
 
+- **The person page reports bundle access before it has been delivered.** Found
+  while investigating the drift report on 2026-09-09. `collectUserRoles`
+  (`services/views.go`) builds a person's effective access from their bundle
+  assignments and pinned-version roles, and consults nothing about whether the
+  projection actually reached the target. So between assigning a manual-mode
+  bundle and confirming Pending changes — 12:50:45 to 12:55:28 in the case that
+  prompted this — the person page said the holder had three roles that had not
+  been sent anywhere. The dashboard has a pending-propagation count
+  (`views.go:687`); the per-person view has nothing.
+
+  It is defensible as "this page shows Syndra's records, delivery lives in
+  Pending changes", and it is exactly the shape of claim the codebase treats as
+  cardinal elsewhere ("12 people updated" about rows still in the outbox). The
+  operator who reported it read the page as confirmation that the work was
+  done. Wants a per-role marker fed by the outbox, which is a change to what
+  that view means and so is the owner's call, not a sweep-up.
+
 - **Disabled controls that still give no reason.** `Button` renders a visible
   `reason` under a blocked control and `Button.tsx` states the rule, but nothing
   enforces it. A sweep on 2026-09-09 fixed the four where an operator gets
