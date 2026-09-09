@@ -58,6 +58,15 @@ export function PublishVersionDialog({
       }
       noun={["person", "people"]}
       ready={decided}
+      notReadyReason={`Choose what happens to the ${holders} ${
+        holders === 1 ? "person" : "people"
+      } who already hold it. Both answers are real, so there is no default.`}
+      // Publishing is an act on the BUNDLE. Two publishes move nobody and are
+      // both legitimate — one where nothing holds it yet, and one where the
+      // operator has chosen to leave the current holders where they are — and
+      // without this the only screen that can cut a version left Apply disabled
+      // for both.
+      definitionLabel={`Publish v${draft.next_version}`}
       destructive={willMigrate && draft.removed.length > 0}
       compose={
         <div className="flex flex-col gap-4">
@@ -133,8 +142,22 @@ export function PublishVersionDialog({
           </div>
         </div>
       }
-      onRehearse={async () => (await rehearse.mutateAsync({ note, migrate: willMigrate })).plan}
-      onApply={async () => (await apply.mutateAsync({ note, migrate: willMigrate })).plan}
+      onRehearse={async (acknowledgeScope) =>
+        (
+          await rehearse.mutateAsync({
+            note,
+            migrate: willMigrate,
+            acknowledge_scope: acknowledgeScope,
+          })
+        ).plan
+      }
+      // The approval, cited. An empty string is what a publish reaching nobody
+      // sends, and the backend accepts it there for the same reason it issued
+      // none: there was no subject to approve.
+      onApply={async (planId) =>
+        (await apply.mutateAsync({ note, migrate: willMigrate, plan_id: planId || undefined }))
+          .plan
+      }
       onClose={onClose}
     />
   );

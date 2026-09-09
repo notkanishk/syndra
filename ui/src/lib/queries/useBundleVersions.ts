@@ -110,12 +110,28 @@ interface PublishInput {
   note: string;
   /** Move everyone currently holding the bundle onto the new version. */
   migrate: boolean;
+  /**
+   * Cites the approval the rehearsal issued. Required by the backend whenever
+   * the rehearsal reached anybody, and never composed by hand — it comes from
+   * the plan currently on screen.
+   */
+  plan_id?: string;
+  /**
+   * The operator confirming a holder count above the configured limit. Sent on
+   * the rehearsal only: it unlocks issuing the approval rather than changing
+   * what the approval does.
+   */
+  acknowledge_scope?: boolean;
 }
 
 /**
  * Rehearsing a publish returns the plan AND the draft, because the two answer
  * different halves of the same question: what the version will contain, and
  * what it will do to the fourteen people who hold the old one.
+ *
+ * The plan carries the `plan_id` the apply cites. It did not, once, and the
+ * consequence was not subtle: the shared dialog disables Apply without one, so
+ * every publish that reached anybody was a preview with no next step.
  */
 export function useRehearsePublish(bundleId: string) {
   return useMutation({
@@ -142,6 +158,8 @@ export function useApplyPublish(bundleId: string) {
 interface MoveInput {
   version_id: string;
   user_ids: string[];
+  plan_id?: string;
+  acknowledge_scope?: boolean;
 }
 
 export function useRehearseMoveHolders(bundleId: string) {
