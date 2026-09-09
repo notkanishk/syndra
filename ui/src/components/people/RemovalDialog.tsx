@@ -36,6 +36,22 @@ export interface Removal {
   sources: RoleReason[];
   /** The direct grant id, when one of the sources is direct. */
   grantId?: string;
+  /**
+   * Whether the caller's grant list RESOLVED, as distinct from whether it
+   * contained this role.
+   *
+   * Without it, an absent `grantId` has two causes that want opposite
+   * sentences: the role genuinely is not a direct grant, or the query that
+   * would have said so has not answered yet (or failed). The person page reads
+   * grants from a second query with no loading or error gate, so the second
+   * case is reachable on every load and permanent if that fetch fails — and the
+   * dialog told the operator "this role was not given directly", which is the
+   * screen inventing a fact about their data to explain its own missing read.
+   *
+   * Absent means resolved, so the caller that has its grant ids inline (the
+   * project role page) needs to say nothing.
+   */
+  grantsResolved?: boolean;
   /** Whose access this is. Defaults to the person whose page we're on. */
   userId?: string;
   userName?: string;
@@ -165,6 +181,10 @@ function DirectDialog({
   const retained = others.length > 0;
   const roleLabel = `${removal.projectName} / ${removal.roleKey}`;
 
+  // `grantsResolved === false` is the third state, and the reason this is not
+  // a boolean: "no grant id" and "no answer yet" are different facts and the
+  // operator needs to be told which one they are looking at.
+  const grantListPending = removal.grantsResolved === false;
   const blocked = !removal.grantId || !userId;
 
   return (
@@ -212,9 +232,11 @@ function DirectDialog({
           // the wrong thing.
           !userId
             ? "Refused · Syndra could not tell which person this is. Reload the page."
-            : blocked
-              ? "Refused · this role was not given directly, so there is no direct access to revoke. Only direct access can be revoked here."
-              : undefined
+            : grantListPending
+              ? "Waiting · Syndra is still reading this person's direct grants, so it cannot yet tell whether there is one to revoke."
+              : blocked
+                ? "Refused · this role was not given directly, so there is no direct access to revoke. Only direct access can be revoked here."
+                : undefined
         }
       >
         <Button
@@ -268,7 +290,7 @@ function BundleDialog({
   removal: Removal;
   source: RoleReason;
   subject: string;
-  userId?: string;
+  userId: string | undefined;
   others: RoleReason[];
   onClose: () => void;
 }) {

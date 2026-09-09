@@ -242,7 +242,22 @@ describe("a control states its role in the vocabulary the product already has", 
 });
 
 /** The full text of a JSX tag starting at `at`, balancing braces and strings. */
+/**
+ * The opening tag at `at`, brace- and quote-aware.
+ *
+ * Comments are stripped first, and that is not tidiness. This scanner treats
+ * `'` as a string delimiter, so an apostrophe in a `//` comment INSIDE a tag —
+ * "the operator's data" — opened a quote that never closed. Everything after it
+ * read as one long string, `{`, `}` and `>` stopped counting, and the scan ran
+ * past the end of the button into its children, picking up a `rounded-pill`
+ * from a nested span and reporting the button as an unfloored pill.
+ *
+ * It cost a false positive on a real change, which is the failure mode that
+ * matters most for a guard: one that cries wolf is one the next person turns
+ * off. Prose is not the thing to constrain here — the scanner is.
+ */
 function tagAt(source: string, at: number): string {
+  source = stripLineComments(source);
   let i = source.indexOf(" ", at);
   let depth = 0;
   let quote: string | null = null;
@@ -316,3 +331,17 @@ describe("a link that acts is big enough to press", () => {
     expect(offenders, "an action link needs min-h-[44px] through the tablet range").toEqual([]);
   });
 });
+
+/**
+ * Blanks out `//` comment bodies, preserving every byte position so the offsets
+ * the callers already hold keep pointing at the same code.
+ *
+ * Only lines whose first non-space characters are `//`, so a `https://` inside
+ * a string or className is untouched.
+ */
+function stripLineComments(source: string): string {
+  return source
+    .split("\n")
+    .map((line) => (/^\s*\/\//.test(line) ? " ".repeat(line.length) : line))
+    .join("\n");
+}

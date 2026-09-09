@@ -39,12 +39,23 @@ func resetDeps(t *testing.T) {
 	origTimeNow := timeNow
 	origTokenHTTPClient := tokenHTTPClient
 	origMgmtClient := MgmtClient
+	origStillExpected := StillExpected
 	t.Cleanup(func() {
 		httpDo = origHttpDo
 		timeNow = origTimeNow
 		tokenHTTPClient = origTokenHTTPClient
 		MgmtClient = origMgmtClient
+		StillExpected = origStillExpected
 	})
+
+	// "Nothing else gives this role", stated rather than assumed.
+	//
+	// RevokeMappingRules now refuses to revoke a rule-derived grant while
+	// another source still confers it, and refuses just as firmly when it
+	// cannot tell. Every revocation test therefore has a premise it did not
+	// used to need, and leaving it implicit would mean these tests passed by
+	// accident on the nil hook rather than by exercising the revocation.
+	StillExpected = func(context.Context, string, string, string) (bool, error) { return false, nil }
 }
 
 // mockTransport returns a round-tripper that calls fn for every request.

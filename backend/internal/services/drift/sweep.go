@@ -136,7 +136,18 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	for _, g := range bundled {
 		bundleSet[services.HolderKey{UserID: g.UserID, ProjectID: g.ProjectID, RoleKey: g.RoleKey}] = true
 	}
+	// Bundle-derived roles are part of what the person HOLDS, not only part of
+	// what Syndra intends — and `holder` is what rule derivation is evaluated
+	// against. Without them the fix above stopped one hop short: a bundle gives
+	// S, a rule says S→T, T is live in Zitadel, and S itself is not (its
+	// projection failed, or somebody removed it by hand). `expectedViaRule`
+	// looks for S among the holdings, does not find it, and the sweep raises T
+	// as unexplained — a finding the webhook would never make, because
+	// collectUserRoles seeds its rule fixpoint from bundle roles too.
 	holder := buildHolderSet(direct, zit)
+	for k := range bundleSet {
+		holder[k] = true
+	}
 
 	res := DriftResult{Target: target, ZitadelGrants: len(zit), Truncated: truncated}
 
