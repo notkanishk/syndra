@@ -3,7 +3,14 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import { AccessSourceList, orderedSources, sourceQualifier, type RoleReason } from "@/components/access/AccessSource";
+import {
+  AccessSourceList,
+  NotSentYet,
+  nothingSentYet,
+  orderedSources,
+  sourceQualifier,
+  type RoleReason,
+} from "@/components/access/AccessSource";
 import { GrantDirectAccess } from "@/components/people/GrantDirectAccess";
 import { ManageBundles } from "@/components/people/ManageBundles";
 import { PersonActivity } from "@/components/people/PersonActivity";
@@ -204,11 +211,15 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                   version: bundle.pinned_version ? String(bundle.pinned_version) : "",
                 })}
               >
-                <Chip>
+                {/* `gap`, not a space. Chip is `inline-flex`, so the name and
+                    the version are two flex items and the leading `{" "}`
+                    inside the second one was collapsed away by flex layout —
+                    which is why this rendered as "Ops Adminv1". A space
+                    character cannot survive that boundary; the gap can. */}
+                <Chip className="gap-[5px]">
                   {bundle.name}
                   {bundle.pinned_version ? (
                     <span className="text-faint">
-                      {" "}
                       v{bundle.pinned_version}
                       {bundle.latest_version && bundle.latest_version > bundle.pinned_version
                         ? ` · v${bundle.latest_version} available`
@@ -291,6 +302,15 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                     id={zitadelGrantByProject.get(project.project_id)}
                     loading={upstreamGrants.isLoading}
                     unreachable={Boolean(upstreamGrants.error)}
+                    // Absent because nothing has been sent yet is not absent
+                    // because somebody changed Zitadel behind Syndra's back,
+                    // and only the second is drift. Sending an operator to
+                    // Drift for the first is a wrong turn that ends in an
+                    // empty screen — worse than saying nothing, because they
+                    // conclude the drift report is broken.
+                    unsent={[...project.source_roles, ...project.derived_roles].every((role) =>
+                      nothingSentYet(role.reasons),
+                    )}
                   />
                 )}
               </div>
@@ -389,10 +409,13 @@ function ZitadelGrantId({
   id,
   loading,
   unreachable,
+  unsent,
 }: {
   id: string | undefined;
   loading: boolean;
   unreachable: boolean;
+  /** Every role here is still queued, so Zitadel has not been told yet. */
+  unsent: boolean;
 }) {
   if (loading) return null;
   if (unreachable) {
@@ -409,7 +432,9 @@ function ZitadelGrantId({
   if (!id) {
     return (
       <span className="text-[13px] text-faint">
-        Not in Zitadel — see Drift › Side by side
+        {unsent
+          ? "Not in Zitadel yet — these changes have not been sent"
+          : "Not in Zitadel — see Drift › Side by side"}
       </span>
     );
   }
@@ -457,6 +482,11 @@ function RoleGroup({
         const strongest = sources[0];
         const expires = grant?.expires_at ?? null;
         const remaining = daysUntil(expires);
+        // Nothing that gives this role has left the queue, so the row is a
+        // record of a decision and not a description of their access. It takes
+        // the status slot outright: an expiry date on access that does not
+        // exist yet is answering a question nobody can ask.
+        const waiting = nothingSentYet(role.reasons);
 
         return (
           <div
@@ -474,7 +504,9 @@ function RoleGroup({
             </div>
 
             <span className="shrink-0 text-[13.5px]">
-              {expires ? (
+              {waiting ? (
+                <NotSentYet />
+              ) : expires ? (
                 <span className="font-semibold text-warn-text">
                   Expires {formatShortDate(expires)}
                   {remaining !== null && remaining >= 0 ? ` · ${remaining} days` : ""}

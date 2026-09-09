@@ -138,6 +138,17 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) 
 		return "", nil
 	}
 
+	// The same countermand the cascade path takes, for the same reason: a
+	// direct grant revoked before it was ever sent should leave an empty queue,
+	// not two rows an operator has to approve to arrive back where they were.
+	owed, err := withdrawUndelivered(ctx, tx, "zitadel", p)
+	if err != nil {
+		return "", err
+	}
+	if !owed {
+		return "", nil
+	}
+
 	const insertOutbox = `
 		INSERT INTO propagation_outbox
 			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json, idempotency_key, initiated_by, source, source_ref, target)

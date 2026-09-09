@@ -36,6 +36,12 @@ func resetGovernanceDeps(t *testing.T) {
 	origHoldsDue := svcAllowancesDueForReview
 	t.Cleanup(func() { svcAllowancesDueForReview = origHoldsDue })
 	svcAllowancesDueForReview = func(context.Context) ([]db.Allowance, error) { return nil, nil }
+	// And what has been recorded and not yet sent, same reason again: the
+	// access view marks each source with whether its grant has actually been
+	// delivered, and that read is one more nil pool away.
+	origPending := svcPendingDeliveries
+	t.Cleanup(func() { svcPendingDeliveries = origPending })
+	svcPendingDeliveries = func(context.Context, string) ([]db.PendingDelivery, error) { return nil, nil }
 	// And the merge-finding count, same reason again: the summary counts the
 	// differences a reconciliation was not entitled to resolve, and an unstubbed
 	// count reaches a nil pool.
