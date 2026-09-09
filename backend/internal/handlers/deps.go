@@ -49,11 +49,14 @@ var (
 	// (sub-phase 3, Task 20): the cascade OWNS the source mutation now — see
 	// svcCascadeRoleAdded/svcCascadeBundleAssigned below, which call the atomic
 	// db.AddRoleToBundleAndEnqueue/db.AssignBundleAndEnqueue instead.
-	dbCreateBundle          = db.CreateBundle
-	dbUpdateBundle          = db.UpdateBundle
-	dbGetBundleByID         = db.GetBundleByID
-	dbGetAllBundles         = db.GetAllBundles
-	dbGetRolesForBundle     = db.GetRolesForBundle
+	dbCreateBundle      = db.CreateBundle
+	dbUpdateBundle      = db.UpdateBundle
+	dbGetBundleByID     = db.GetBundleByID
+	dbGetAllBundles     = db.GetAllBundles
+	dbGetRolesForBundle = db.GetRolesForBundle
+	// What the bundle GRANTS, as opposed to what its working copy contains.
+	// Separate dep because they are separate questions — see handleGetBundleRoles.
+	dbLatestVersionRoles    = db.LatestVersionRoles
 	dbGetBundlesForUser     = db.GetBundlesForUser
 	dbSetWelcomeBundle      = db.SetWelcomeBundle
 	dbGetBundleHolderCounts = db.GetBundleHolderCounts
