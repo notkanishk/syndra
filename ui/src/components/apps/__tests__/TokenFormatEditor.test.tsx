@@ -149,6 +149,48 @@ describe("token format editor", () => {
     expect(screen.getByText(/one value per name/i)).toBeInTheDocument();
   });
 
+  it("says nobody has set the project default rather than printing the built-in fallback as fact", () => {
+    renderEditor("app_bookings", {
+      default: {
+        project_id: "pLaser",
+        claim_name: "roles",
+        format_type: "array",
+        attribute_claims: {},
+        static_claims: {},
+      },
+    });
+
+    expect(
+      screen.getByText(/Nobody has set this yet — Syndra sends the built-in default below\./),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing when the project default is an explicit choice", () => {
+    // The fixture's project default is "syndra.laser.roles" — plainly not the
+    // built-in "roles"/"array" pair, so this is somebody's real setting.
+    renderEditor("app_bookings");
+    expect(
+      screen.queryByText(/Nobody has set this yet/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("never calls an app's own override unset — an override is always a choice", () => {
+    renderEditor("app_badge", {
+      overrides: [
+        {
+          project_id: "pLaser",
+          application_id: "app_badge",
+          application_name: "Badge Reader",
+          claim_name: "roles",
+          format_type: "array",
+        },
+      ],
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "Badge Reader only" }));
+
+    expect(screen.queryByText(/Nobody has set this yet/)).not.toBeInTheDocument();
+  });
+
   it("offers an app without an override the project default, and a way off it", () => {
     renderEditor("app_bookings");
     fireEvent.click(screen.getByRole("radio", { name: "Bookings only" }));

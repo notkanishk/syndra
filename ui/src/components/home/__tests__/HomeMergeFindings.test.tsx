@@ -82,13 +82,13 @@ describe("every count in the Today headline has somewhere to go", () => {
     state.findings = 2;
     renderHome();
 
-    expect((await screen.findAllByText(/Nothing needs you/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Nothing here needs you/)).length).toBeGreaterThan(0);
     expect(screen.queryByText("Waiting on a decision")).toBeNull();
   });
 
   it("says nothing when there is nothing disputed", async () => {
     renderHome();
-    expect((await screen.findAllByText(/Nothing needs you/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Nothing here needs you/)).length).toBeGreaterThan(0);
     expect(screen.queryByText("Waiting on a decision")).toBeNull();
   });
 });

@@ -11,6 +11,7 @@ import {
   sourceQualifier,
   type RoleReason,
 } from "@/components/access/AccessSource";
+import { ResolvedProjectName } from "@/components/names";
 import { GrantDirectAccess } from "@/components/people/GrantDirectAccess";
 import { ManageBundles } from "@/components/people/ManageBundles";
 import { PersonActivity } from "@/components/people/PersonActivity";
@@ -292,7 +293,12 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
           {access.data.projects.map((project) => (
             <Card key={project.project_id}>
               <div className="flex flex-wrap items-center gap-3 px-5 py-4">
-                <span className="type-card-title">{project.project_name}</span>
+                <ResolvedProjectName
+                  className="type-card-title"
+                  name={project.project_name}
+                  resolved={project.project_name_resolved}
+                  id={project.project_id}
+                />
                 <span className="text-[13.5px] text-faint">
                   {project.effective_role_keys.length}{" "}
                   {project.effective_role_keys.length === 1 ? "role" : "roles"}

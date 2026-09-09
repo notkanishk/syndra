@@ -193,19 +193,24 @@ type RoleReason struct {
 }
 
 type EffectiveRole struct {
-	ProjectID   string       `json:"project_id"`
-	ProjectName string       `json:"project_name"`
-	RoleKey     string       `json:"role_key"`
-	IsSource    bool         `json:"is_source"`
-	Reasons     []RoleReason `json:"reasons"`
+	ProjectID   string `json:"project_id"`
+	ProjectName string `json:"project_name"`
+	// ProjectNameResolved is false when the directory could not name this
+	// project and ProjectName fell back to the raw id — the UI's cue to say
+	// so instead of presenting the id as if it were the name.
+	ProjectNameResolved bool         `json:"project_name_resolved"`
+	RoleKey             string       `json:"role_key"`
+	IsSource            bool         `json:"is_source"`
+	Reasons             []RoleReason `json:"reasons"`
 }
 
 type ProjectAccessView struct {
-	ProjectID         string          `json:"project_id"`
-	ProjectName       string          `json:"project_name"`
-	SourceRoles       []EffectiveRole `json:"source_roles"`
-	DerivedRoles      []EffectiveRole `json:"derived_roles"`
-	EffectiveRoleKeys []string        `json:"effective_role_keys"`
+	ProjectID           string          `json:"project_id"`
+	ProjectName         string          `json:"project_name"`
+	ProjectNameResolved bool            `json:"project_name_resolved"`
+	SourceRoles         []EffectiveRole `json:"source_roles"`
+	DerivedRoles        []EffectiveRole `json:"derived_roles"`
+	EffectiveRoleKeys   []string        `json:"effective_role_keys"`
 }
 
 // AllowanceBand is the third band beside Source and Derived (design §6).

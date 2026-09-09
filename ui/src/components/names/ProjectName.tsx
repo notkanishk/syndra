@@ -43,3 +43,34 @@ export function ProjectName({ id, fallback = "—", className = "" }: ProjectNam
     </span>
   );
 }
+
+/**
+ * For a project name a server view already resolved (or fell back on) —
+ * a person's access view groups roles under a `project_name` it computed
+ * itself, with a same-request `project_name_resolved` verdict rather than a
+ * client-side lookup. Unresolved renders the same honest way `UserName`
+ * does: the id stays on screen, labelled, never standing alone in the name's
+ * slot — an operator's project heading is the id an unresolved project is
+ * searched by, not a fabricated name.
+ */
+export function ResolvedProjectName({
+  name,
+  resolved,
+  id,
+  className = "",
+}: {
+  name: string;
+  resolved: boolean;
+  id?: string;
+  className?: string;
+}) {
+  if (resolved) {
+    return <span className={className}>{name}</span>;
+  }
+  return (
+    <span className={className}>
+      <span className="text-faint">Unknown project</span>{" "}
+      <span className="type-mono text-faint">{id ?? name}</span>
+    </span>
+  );
+}
