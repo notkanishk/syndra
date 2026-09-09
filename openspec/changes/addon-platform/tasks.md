@@ -1136,3 +1136,42 @@ and the reason a recorded read is now recorded with its TYPES.
   than reported as the nothing it is. Scalars only now
 - [x] 35.9 **A `.pyc` had been tracked** since the recorder landed, with no
   `__pycache__` rule in `.gitignore`. Untracked, and the rule added
+
+## 36. Two true sentences reading as a contradiction
+
+Found by looking at the production target page, not by a test. The
+reachability card said, two lines apart:
+
+> **Serving.** truenas_scale TrueNAS-25.10.5 · answering, tested, and accepting changes.
+> Last answered — just now
+> TrueNAS's last known state was read 4 hours ago — too old to act on — reload the page to read it again
+
+Every clause true. The pairing was not, and the card is the one surface whose
+whole job is to say whether the machine is there.
+
+- [x] 36.1 **`snapshot_taken_at` is not the age of anything on that card.** It
+  dates the copy in the ADD-ON's own bbolt store (`server.go`,
+  `store.GetSnapshot`), which is rewritten by a subjects read — a reconcile —
+  and by nothing else. `last_read_at` beside it is a live `Ping()` taken during
+  the health call. Two different clocks, two different subjects, rendered as one
+  reading under one heading about reachability. Now rendered only when the
+  target is NOT answering, which is precisely when the mirror becomes the thing
+  being shown
+- [x] 36.2 **The threshold belonged to a decision this card does not make.**
+  `STALE_AFTER_MS` is ten minutes because that is the adoption gate — *too old
+  to bind an identity on* (`ReadFreshness.tsx`, `blocksIrreversibleAction`).
+  Nothing on the health card binds anything, so "too old to act on" named an act
+  that was not on offer. `current: false` now, so the mirror reads as
+  `provisional` — a copy at any age — which is the reading the component was
+  built for and the one that states the useful half: what is on screen is real
+  and dated
+- [x] 36.3 **And the way out was false.** With no `onRefresh` the strip prints
+  "reload the page to read it again". A reload re-reads `/health`, which cannot
+  move this timestamp; only a reconcile can. An instruction that does nothing is
+  the failure mode every reading on this page exists to avoid, and it is worse
+  than silence — an operator who follows it concludes the system is broken twice
+- [x] 36.4 Guarded by `MirrorFreshness.test.tsx`: answering plus a four-hour-old
+  mirror raises neither sentence, a quiet target says "this is the last state
+  seen" with its age, and a quiet target with no mirror at all says so rather
+  than implying a copy exists. Both of the first two assertions fail against the
+  old component
