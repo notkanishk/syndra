@@ -121,3 +121,36 @@ describe("a paused target, from the member's side", () => {
     expect(text()).toMatch(/first in line/);
   });
 });
+
+describe("a member who still has no password, while changes are paused", () => {
+  // Two banners used to disagree here: one said setting a password switches
+  // the account on, the next said changes were paused. Reconciling them the
+  // first time replaced one false sentence with another — that a password set
+  // now would apply once changes resume. `draining` and `read_only` REFUSE
+  // every new mutation in the add-on; nothing is held and replayed. Somebody
+  // told to try is worse off than somebody told to wait: they read the refusal
+  // as their own mistake and try again.
+  it("does not promise the password will apply later", () => {
+    state.view = view({
+      lifecycle: "read_only",
+      credential: { set: false },
+      storage: { usable: false, needs_password: true },
+    } as never);
+    render(<MyStorage />);
+
+    expect(text()).toMatch(/would be refused/i);
+    expect(text()).not.toMatch(/until they resume|once changes resume/i);
+  });
+
+  it("still says plainly that a password is what switches it on", () => {
+    state.view = view({
+      lifecycle: "active",
+      credential: { set: false },
+      storage: { usable: false, needs_password: true },
+    } as never);
+    render(<MyStorage />);
+
+    expect(text()).toMatch(/that is what activates it/i);
+    expect(text()).not.toMatch(/would be refused/i);
+  });
+});

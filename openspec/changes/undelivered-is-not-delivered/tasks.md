@@ -65,3 +65,50 @@
 - [x] 4.3 Mutation-checked against the real database. Allowing `in_flight` to
   be cancelled, ignoring the source, and dropping the applied-delivery check
   each fail exactly one case and no others
+
+## 5. The same defects, everywhere else they occur
+
+Found by auditing all 77 mutation call sites rather than waiting for the next
+screenshot. Five failure modes, each one first seen on the person page.
+
+- [x] 5.1 **`["propagation"]` matched nothing.** Three `invalidateQueries` calls
+  used the singular; the real key is `["propagations", "pending"]`. Each carried
+  a comment stating the intent the code failed to achieve — "what changed is the
+  pending count" — so Pending changes never refreshed after a converge apply, a
+  mapping create or a version rollback. Guarded now by a source scan, because
+  the failure is silent and the code reads correct
+- [x] 5.2 Ten further mutations did not invalidate what they changed: a mapping
+  rule that moves dozens of people refreshed only the rule list; drift
+  resolutions left a stale unexplained badge on the People list; deleting a
+  bundle skipped the queue its own single-holder sibling refreshes
+- [x] 5.3 **Ten dialogs stayed armed after they succeeded.** Worst was
+  `UnexplainedAccess`: "Resolved. It will not be listed again." printed above
+  the item's own name with a live red Revoke underneath. Every fix keeps the
+  control after a FAILURE — retiring on any outcome would leave a refusal on
+  screen with no way to try again
+- [x] 5.4 **Two shared components carried a defect twelve times each.**
+  `PlanReview` rendered "Every selected person will change" beside a disabled
+  button reading "Nothing to apply"; `BulkDialog` never passed
+  `notReadyReason`, so five distinct causes of a dead submit all showed as
+  silent grey — the dead end that prop's own doc comment exists to prevent
+- [x] 5.5 About twenty-five disabled controls gave no reason, against
+  `Button.tsx`'s stated rule. The asymmetric ones were the worst: only the
+  first of three lifecycle buttons explained itself, from a condition all three
+  shared
+- [x] 5.6 `danger` red on buttons that GRANT access, beside revoke buttons
+  styled identically. The `/zitadel/*` pages had quietly given the variant a
+  second meaning — "this writes straight to Zitadel" — which is what made the
+  pair unreadable
+- [x] 5.7 **`Button` had two render roots.** A bare `<button>` without a
+  reason, a wrapped one with: the element type at that position changed the
+  moment a reason appeared, so React remounted the control while somebody was
+  typing beside it — focus lost, pending press dropped. Four tests had
+  independently worked around it by re-querying the node and none reported it.
+  It matters more after this sweep, which adds a reason to twenty-five controls
+- [x] 5.8 The member's storage page promised something the add-on refuses.
+  Two banners disagreed about whether a password applies while a target is
+  paused; the first reconciliation replaced one false sentence with another —
+  that it would apply once changes resume. `draining` and `read_only` refuse
+  every new mutation, so nothing is held and replayed. Somebody told to try is
+  worse off than somebody told to wait: they read the refusal as their own
+  mistake

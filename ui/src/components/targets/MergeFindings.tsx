@@ -37,6 +37,10 @@ export function MergeFindings({ target }: { target: string }) {
   const findings = useMergeFindings(target);
   const resolve = useResolveMergeFinding(target);
   const [deciding, setDeciding] = useState<string | null>(null);
+  // The "Finish" button below has no onSuccess and no server field to key off
+  // until the list refetches, so a second click before then re-submits the
+  // same finish. Marked synchronously, same idiom as the request queues.
+  const [finishing, setFinishing] = useState<Set<string>>(new Set());
 
   const rows = findings.data ?? [];
   const name = targetLabel(target);
@@ -95,14 +99,26 @@ export function MergeFindings({ target }: { target: string }) {
                   <Button
                     variant="outline"
                     size="sm"
+                    disabled={finishing.has(f.id)}
                     isPending={resolve.isPending}
-                    onClick={() =>
-                      resolve.mutate({
-                        id: f.id,
-                        resolution: "unbound",
-                        reason: "Finishing an unbind that did not complete",
-                      })
-                    }
+                    onClick={() => {
+                      setFinishing((prev) => new Set(prev).add(f.id));
+                      resolve.mutate(
+                        {
+                          id: f.id,
+                          resolution: "unbound",
+                          reason: "Finishing an unbind that did not complete",
+                        },
+                        {
+                          onError: () =>
+                            setFinishing((prev) => {
+                              const copy = new Set(prev);
+                              copy.delete(f.id);
+                              return copy;
+                            }),
+                        },
+                      )
+                    }}
                   >
                     Finish: stop managing it
                   </Button>
@@ -246,6 +262,7 @@ function DecisionForm({
           variant="outline"
           isPending={pending}
           disabled={!reason.trim()}
+          reason={!reason.trim() ? "Say why — this becomes the record of the decision." : undefined}
           onClick={() => {
             const pick = gone ? "reprovisioned" : "keep_ours";
             setResolution(pick);
@@ -260,6 +277,7 @@ function DecisionForm({
             variant="outline"
             isPending={pending}
             disabled={!reason.trim()}
+            reason={!reason.trim() ? "Say why — this becomes the record of the decision." : undefined}
             onClick={() => {
               const pick = gone ? "unbound" : "take_theirs";
               setResolution(pick);

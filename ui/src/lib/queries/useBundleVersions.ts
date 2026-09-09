@@ -193,6 +193,9 @@ function invalidateBundle(qc: ReturnType<typeof useQueryClient>, bundleId: strin
   qc.invalidateQueries({ queryKey: bundlesQueryKeys.list });
   qc.invalidateQueries({ queryKey: ["users"] });
   qc.invalidateQueries({ queryKey: ["propagations"] });
+  // A version change is a bundle-wide closure diff, the same kind of event the
+  // governance summary tracks everywhere else it happens.
+  qc.invalidateQueries({ queryKey: ["governance"] });
 }
 
 export const bundleVersionKeys = KEYS;

@@ -42,7 +42,11 @@ import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
 import { useReconciliationDiff } from "@/lib/queries/useGrants";
 import { Relative } from "@/components/ui/Time";
 import { formatLongDate, formatRelative } from "@/lib/format";
-import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import {
+  outcomeFromError,
+  statesNothingChanged,
+  type ActionOutcome as Outcome,
+} from "@/lib/outcome";
 
 type Tab = "triage" | "reconciliation";
 type Resolution = "attribute" | "revoke" | "external";
@@ -589,6 +593,15 @@ function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
 }
 
 /**
+ * Whether the action ran. A FAILED attempt keeps its button — retiring the
+ * control on any outcome at all would leave a refusal on screen with no way to
+ * try again.
+ */
+function succeeded(outcome: Outcome | null): boolean {
+  return outcome !== null && !statesNothingChanged(outcome.kind);
+}
+
+/**
  * The three resolutions, each with its consequence stated. Only Revoke takes a
  * solid destructive fill, and only inside this dialog.
  */
@@ -673,36 +686,52 @@ function ResolutionDialog({
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter>
-        <Button
-          variant={copy.variant}
-          isPending={busy}
-          onClick={async () => {
-            try {
-              if (resolution === "attribute") {
-                await attribute.mutateAsync({ id: item.id, body: { source: "external_backfill" } });
-              } else if (resolution === "revoke") {
-                await revoke.mutateAsync({ id: item.id });
-              } else {
-                await external.mutateAsync({ id: item.id, body: {} });
+        {/* This is the highest-stakes revoke in the product, and it stayed
+            armed after it ran: a second click on the same "Revoke access"
+            button revoked an already-revoked grant a second time, on a
+            confirm dialog that never closed to report it. Once the mutation
+            has taken, the only action left true is leaving. */}
+        {!succeeded(outcome) && (
+          <Button
+            variant={copy.variant}
+            isPending={busy}
+            onClick={async () => {
+              try {
+                if (resolution === "attribute") {
+                  await attribute.mutateAsync({ id: item.id, body: { source: "external_backfill" } });
+                } else if (resolution === "revoke") {
+                  await revoke.mutateAsync({ id: item.id });
+                } else {
+                  await external.mutateAsync({ id: item.id, body: {} });
+                }
+                setOutcome(
+                  resolution === "revoke"
+                    ? {
+                        kind: "queued",
+                        message: "Revocation recorded",
+                        detail:
+                          "Waiting to be sent to Zitadel; revocations send on their own, every few minutes. Until then the person still has the access.",
+                      }
+                    : {
+                        kind: "applied",
+                        // Not "will not be listed again" — that renders right
+                        // above this item's own name and role while both are
+                        // still on screen, which makes it false the instant it
+                        // appears. It leaves once this dialog closes.
+                        message: "Resolved. It drops off this list once you close this.",
+                      },
+                );
+              } catch (error) {
+                setOutcome(outcomeFromError(error));
               }
-              setOutcome(
-                resolution === "revoke"
-                  ? {
-                      kind: "queued",
-                      message: "Revocation recorded",
-                      detail:
-                        "Waiting to be sent to Zitadel; revocations send on their own, every few minutes. Until then the person still has the access.",
-                    }
-                  : { kind: "applied", message: "Resolved. It will not be listed again." },
-              );
-            } catch (error) {
-              setOutcome(outcomeFromError(error));
-            }
-          }}
-        >
-          {copy.confirm}
+            }}
+          >
+            {copy.confirm}
+          </Button>
+        )}
+        <Button variant={succeeded(outcome) ? "accent" : "outline"} onClick={onClose}>
+          {succeeded(outcome) ? "Done" : "Cancel"}
         </Button>
-        <Button onClick={onClose}>Cancel</Button>
       </ModalFooter>
     </Modal>
   );

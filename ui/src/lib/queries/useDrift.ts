@@ -105,6 +105,9 @@ function useBulkDriftMutation<B>(path: string, apply: boolean) {
       if (!apply) return;
       qc.invalidateQueries({ queryKey: ["drift"] });
       qc.invalidateQueries({ queryKey: governanceQueryKeys.summary });
+      // Drift status drives the People list's unexplained_count, so a bulk
+      // triage pass leaves that count wrong until this lands too.
+      qc.invalidateQueries({ queryKey: ["users"] });
     },
   });
 }
@@ -142,7 +145,7 @@ export const useBulkMarkExternalDrift = () =>
  * all POST to a per-item endpoint and invalidate both the drift list and the
  * governance summary so the nav badge and dashboard callout update immediately.
  */
-function useDriftMutation<B>(path: (id: string) => string) {
+function useDriftMutation<B>(path: (id: string) => string, extraKeys: readonly (readonly unknown[])[] = []) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, body }: { id: string; body?: B }) =>
@@ -150,6 +153,10 @@ function useDriftMutation<B>(path: (id: string) => string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["drift"] });
       qc.invalidateQueries({ queryKey: governanceQueryKeys.summary });
+      // Drift status drives the People list's unexplained_count, so any triage
+      // action here leaves that count wrong until this lands too.
+      qc.invalidateQueries({ queryKey: ["users"] });
+      for (const queryKey of extraKeys) qc.invalidateQueries({ queryKey });
     },
   });
 }
@@ -159,7 +166,9 @@ export const useAttributeDrift = () =>
     (id) => `/governance/drift/${id}/attribute`,
   );
 export const useRevokeDrift = () =>
-  useDriftMutation<undefined>((id) => `/governance/drift/${id}/revoke`);
+  // The Zitadel revoke this queues is itself a propagation row, so the
+  // pending list is stale too until this invalidates it.
+  useDriftMutation<undefined>((id) => `/governance/drift/${id}/revoke`, [["propagations"]]);
 export const useMarkExternalDrift = () =>
   useDriftMutation<{ reason?: string }>((id) => `/governance/drift/${id}/mark-external`);
 

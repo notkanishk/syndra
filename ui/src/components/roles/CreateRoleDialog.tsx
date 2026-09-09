@@ -172,39 +172,55 @@ export function CreateRoleDialog({
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter>
-        <Button
-          variant="accent"
-          disabled={!projectId || !roleKey || !valid || duplicate}
-          isPending={create.isPending}
-          onClick={async () => {
-            const [cloneProject, cloneRole] = cloneFrom.split(":");
-            const project =
-              all.find((role) => role.project_id === projectId)?.project_name ??
-              projects.data?.find((entry) => entry.project.id === projectId)?.project.name ??
-              projectId;
-            try {
-              await create.mutateAsync({
-                project_id: projectId,
-                role_key: roleKey,
-                display_name: displayName,
-                description,
-                group,
-                clone_from: cloneFrom
-                  ? { project_id: cloneProject, role_key: cloneRole }
-                  : undefined,
-              });
-              setOutcome({
-                kind: "applied",
-                message: `${roleLabel(project, roleKey, displayName)} created`,
-                detail: "Nobody holds it yet. Give it to someone from People, or add it to a bundle.",
-              });
-            } catch (error) {
-              setOutcome(outcomeFromError(error));
+        {/* Gone once it has run. The catalog refetch that would flip `duplicate`
+            to true has not landed the instant this succeeds, so a second click
+            was free to resubmit the identical payload. */}
+        {outcome?.kind !== "applied" && (
+          <Button
+            variant="accent"
+            disabled={!projectId || !roleKey || !valid || duplicate}
+            reason={
+              !projectId
+                ? "Choose a project."
+                : !roleKey
+                  ? "Give it a role key."
+                  : !valid
+                    ? "Letters, numbers, dashes and underscores only."
+                    : duplicate
+                      ? "That key already exists in this project."
+                      : undefined
             }
-          }}
-        >
-          Create role
-        </Button>
+            isPending={create.isPending}
+            onClick={async () => {
+              const [cloneProject, cloneRole] = cloneFrom.split(":");
+              const project =
+                all.find((role) => role.project_id === projectId)?.project_name ??
+                projects.data?.find((entry) => entry.project.id === projectId)?.project.name ??
+                projectId;
+              try {
+                await create.mutateAsync({
+                  project_id: projectId,
+                  role_key: roleKey,
+                  display_name: displayName,
+                  description,
+                  group,
+                  clone_from: cloneFrom
+                    ? { project_id: cloneProject, role_key: cloneRole }
+                    : undefined,
+                });
+                setOutcome({
+                  kind: "applied",
+                  message: `${roleLabel(project, roleKey, displayName)} created`,
+                  detail: "Nobody holds it yet. Give it to someone from People, or add it to a bundle.",
+                });
+              } catch (error) {
+                setOutcome(outcomeFromError(error));
+              }
+            }}
+          >
+            Create role
+          </Button>
+        )}
         <Button onClick={onClose}>{outcome?.kind === "applied" ? "Done" : "Cancel"}</Button>
       </ModalFooter>
     </Modal>
