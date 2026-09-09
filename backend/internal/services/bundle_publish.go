@@ -515,8 +515,21 @@ func MoveHolders(ctx context.Context, actor string, req MoveHoldersRequest) (Bul
 	// decision, and a cascade landing between them makes the plan describe a
 	// world nobody approved.
 	if err := withLockedAccess(ctx, func(ctx context.Context) error {
+		// `=`, not `:=`. `plan` belongs to the enclosing function and is what
+		// gets returned; `plan, err :=` declares a SECOND plan scoped to this
+		// closure, leaves the outer one zero-valued, and hands the caller
+		// `op: "", outcomes: null, summary: all zeroes` after a move that
+		// worked. The move itself was never affected, which is why nothing
+		// caught it — and neither `go vet` nor the compiler objects, because
+		// shadowing is legal and `err` is used.
+		//
+		// Invisible until now for a duller reason: the shared dialog disables
+		// Apply without a plan_id and this endpoint issued none, so no operator
+		// had ever reached the result step to be misinformed by it. Found by
+		// applying a real move on the dev deployment — the holder moved v3 → v4
+		// and the response said nobody had.
 		var err error
-		plan, err := RehearseMoveHolders(ctx, req)
+		plan, err = RehearseMoveHolders(ctx, req)
 		if err != nil {
 			return err
 		}
