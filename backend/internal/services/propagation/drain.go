@@ -389,6 +389,29 @@ func applyRow(ctx context.Context, row models.PendingPropagation) error {
 	if err := rememberPropagation(ctx, row); err != nil {
 		return err
 	}
+	// The precompiled claim envelope this change invalidates.
+	//
+	// Actions v2 serves tokens from a Redis envelope with a 24-hour TTL, and
+	// the ONLY things that cleared it were the three webhook paths and the
+	// expiry sweep. Syndra's own drain — the thing that actually changes what a
+	// person holds — never did. It went unnoticed because a Zitadel-side
+	// `grant_removed` webhook usually arrived a moment later and cleared it as
+	// a side effect, so the gap was covered by an event nobody had made
+	// load-bearing on purpose.
+	//
+	// When those events stopped, revoking a role stopped removing it from newly
+	// issued tokens for up to a day. A cache is a projection of state, so it is
+	// invalidated by whatever changes the state, never by a notification that
+	// the state changed.
+	//
+	// Best-effort and last: it is a cache, and failing to clear it must not
+	// strand a row that has already been applied. A failure is logged loudly
+	// because the window it leaves is measured in hours.
+	if err := invalidateClaims(ctx, row.UserID); err != nil {
+		log.Printf("[PROPAGATION] applied %s but could not clear %s's cached claims: %v "+
+			"— tokens issued before the cache expires may still carry the old roles",
+			row.ID, row.UserID, err)
+	}
 	return markApplied(ctx, row.ID)
 }
 

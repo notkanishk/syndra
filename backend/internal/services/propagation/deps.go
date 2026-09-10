@@ -12,9 +12,11 @@ package propagation
 
 import (
 	"context"
+
 	"errors"
 	"os"
 	"strconv"
+	"syndra/internal/cache"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
@@ -77,6 +79,9 @@ var (
 	// already-exists check (latency optimization only — see alreadyExists):
 	// webhook index first; on miss, ONE live grant list per row (not per role).
 	grantIndexHasRole = db.GrantIndexHasRole
+	// The claim envelope Actions v2 serves. Cleared by the drain, because the
+	// drain is what changed the access it was compiled from.
+	invalidateClaims = cache.InvalidateUser
 	// Syndra's own revocations maintain Syndra's own cache. Left to the
 	// webhooks alone, a revoke Syndra dispatched left the index claiming the
 	// grant still existed.
