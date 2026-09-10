@@ -356,3 +356,102 @@ self-correcting.
   the same guard: reconciliation's own diff, the drift sweep, and the
   webhook's grant-lookup fallback — all pre-existing and out of this pass's
   scope.
+
+---
+
+# The last two readers
+
+**Done, 2026-09-11.** Drift's sweep no longer lists Zitadel at all — it reads
+`db.LatestOrgObservation` + `db.AllObservedGrants` and cites the org
+observation's `observed_at` on every finding (`drift_items.zitadel_observed_at`,
+migration 000049). It refuses `markReconciled` from `ErrNoObservation` or an
+incomplete observation, mapping both onto the existing `db.Unreconciled*`
+vocabulary (`UnreconciledUnreachable`, `UnreconciledTruncated`) rather than a
+new one. It now runs on the observer's own cadence (`observeInterval()`, ~5m)
+instead of a dedicated six-hour schedule, gated by `awaitFirstObservation` so
+it never runs before the first sweep completes. Reconciliation's on-demand
+diff calls `observe.Org` (recording a fresh, shared observation) and reads the
+store back, same as discovery.go's grant-listing routes. See
+`internal/services/drift/sweep.go`, `internal/handlers/reconciliation.go`, and
+task 3.3 in `tasks.md` for the full account, including the owner's addition:
+a sweep-sourced finding now says, at read time, whether attribution is
+unavailable and — separately — whether an event was probably missed.
+
+Drift's sweep and reconciliation's diff used to list Zitadel themselves. The
+question is not whether to tidy them into the observer for consistency. It is
+what each CONCLUDES, and what a wrong conclusion costs.
+
+## What each concludes
+
+**Drift** concludes an ABSENCE: *nothing else here is unexplained*. That is a
+security statement, and the expensive failure is the false negative — somebody
+granted themselves access out of band and no finding was raised. It needs a
+complete answer, and it needs one often.
+
+**Reconciliation** concludes nothing on its own. It is an operator asking
+"show me the two sides right now", usually because they already suspect
+something. Its requirement is not completeness but IMMEDIACY: the answer must be
+of this moment, or the person pressing it is being told about a world that has
+moved.
+
+Both already handle truncation properly — `drift/sweep.go` records
+`UnreconciledTruncated` and says unseen is not absent, and the add-on plane
+carries the same rule. This is not a discipline problem.
+
+## The finding that decides it
+
+Drift pays for a full listing of its own, so it runs on a SIX-HOUR schedule.
+The observation sweep already lists everything every FIVE MINUTES.
+
+Reading the store does not slow drift down. It makes drift roughly free, and
+therefore able to run at the sweep's cadence — so the time an out-of-band grant
+can sit undetected falls from six hours to five minutes, while the deployment
+does LESS work than it does today.
+
+A security control got two orders of magnitude better by having one less pipe.
+That is the argument; consistency is a side effect.
+
+## What each becomes
+
+**Drift reads the store, and cites the observation it read.** A finding stops
+being a claim and becomes evidence: *this is what Zitadel returned at 21:29, in
+a complete read, and Syndra's records do not explain it*. Reproducible — the
+same observation and the same records yield the same findings — where a live
+read can never be re-run to ask what Zitadel said at the moment a finding was
+raised.
+
+**Reconciliation observes, then diffs the store.** On-demand and scheduled stop
+being different mechanisms and become different TRIGGERS for one act, which is
+already what the grant endpoints do.
+
+## The subtlety worth getting right
+
+The store's rows carry their own `observed_at`, because a per-person read
+refreshes one person while everybody else keeps the age of the last sweep. That
+is correct for a row, and it is the wrong number for drift.
+
+Absence of drift can only be as fresh as the last COMPLETE ORG observation. A
+person granted access out of band is not in the store at all until a sweep
+covers them, and no per-row timestamp can express that. So drift states the age
+of `LatestOrgObservation`, never the youngest row it happened to read.
+
+## Where it must refuse to answer
+
+- **No observation yet** — a fresh deployment, or one whose sweep has never
+  finished. `ErrNoObservation` renders as "not checked yet", never as a clean
+  bill.
+- **The last org observation was incomplete** — drift reports what it found and
+  states plainly that it could not check everything. It may never say
+  "everything is accounted for" from a partial answer.
+- **Persistently incomplete**, if the directory outgrows the sweep's cap: drift
+  can then never give a clean bill, and says so permanently. That is the honest
+  outcome, and the pressure it creates is the correct pressure — it argues for
+  raising the cap rather than for quietly concluding less than the data
+  supports.
+
+## What this costs
+
+One scheduled listing removed. Drift's own read disappears; reconciliation
+gains an observation it was making anyway, now recorded and shared rather than
+discarded. The only new expense is drift running more often, which is a database
+diff against a store that is already in memory.

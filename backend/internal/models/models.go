@@ -491,6 +491,21 @@ type DriftItem struct {
 	UpstreamActor     string     `json:"upstream_actor,omitempty"`
 	UpstreamCreatedAt *time.Time `json:"upstream_created_at,omitempty"`
 	LastSeenAt        *time.Time `json:"last_seen_at,omitempty"`
+
+	// ObservedAt cites the org observation this finding was read from — what
+	// Zitadel returned, and when, in the complete-or-not read the sweep
+	// consumed. Nil for a webhook detection, which observed nothing itself.
+	ObservedAt *time.Time `json:"observed_at,omitempty"`
+
+	// AttributionUnavailable and EventPossiblyMissed are DERIVED AT READ TIME
+	// (db.GetDriftItems / db.GetDriftItem), never stored — see the comment on
+	// db.driftItemSelect. The first says Syndra cannot name who made this
+	// change; the second is a separate, narrower claim that the usual way it
+	// would have found out — an event from Zitadel — probably did not arrive.
+	// Say them separately on screen: one is a fact about the evidence, the
+	// other is a fault report about Syndra's own plumbing.
+	AttributionUnavailable bool `json:"attribution_unavailable,omitempty"`
+	EventPossiblyMissed    bool `json:"event_possibly_missed,omitempty"`
 }
 
 // GrantProvenance is where an entitlement came from, and when the target was

@@ -29,13 +29,20 @@ Two operator surfaces — **Pending Propagation** (operator-initiated, buffered,
 
 ### Requirement: Reconciliation MUST be right-sized for the single-LXC makerspace audience and schedulable
 
-The reconciliation sweep MUST page Zitadel grants with a safety cap of 2 000 (down from 10 000), MUST run on a configurable interval (`DRIFT_RECONCILIATION_INTERVAL_HOURS`, default 6) via a scheduler mirroring the grant-expiry scheduler, and MUST also be triggerable on demand by the operator.
+Updated by `one-truth-many-checks` ("The last two readers", 2026-09-11): the reconciliation sweep no longer pages Zitadel itself. It reads `internal/observe`'s store (`db.LatestOrgObservation` + `db.AllObservedGrants`), which is capped at 20 000 rows and refreshed by the periodic observation sweep (`OBSERVE_SWEEP_INTERVAL`, default 5m) — one paged listing shared by every reader instead of a separate one per reader. The drift sweep therefore now runs on that same cadence rather than its own schedule, gated so it never runs before the observer's first pass completes. `DRIFT_RECONCILIATION_INTERVAL_HOURS` (default 6) still governs the add-on reconciliation pass (`ADDON-RECONCILE`), which is a different reader with its own live reads per target. The sweep MUST NOT conclude an absence (and therefore MUST NOT report a clean bill) from an observation that has never completed, or that has not completed at all — `ErrNoObservation` and an incomplete observation both refuse a clean bill. The operator MUST still be able to trigger a fresh check on demand via `[Check Zitadel again]` on `/governance/drift`'s Side-by-side tab, which now calls `observe.Org` (recording a fresh, shared observation) rather than opening a private read of its own.
 
 #### Scenario: Cap and on-demand trigger
 
-- **WHEN** the reconciliation sweep runs against an org whose grant count is within 2 000
-- **THEN** the sweep MUST complete without setting the truncated flag
-- **AND** the operator MUST be able to trigger the sweep on demand via a `[Reconcile now]` action on `/governance/drift`, independent of the scheduled interval
+- **WHEN** the observation behind the reconciliation diff is complete
+- **THEN** the diff MUST NOT set the truncated flag
+- **AND** the operator MUST be able to trigger a fresh observation on demand via `[Check Zitadel again]` on `/governance/drift`, independent of the periodic sweep's own cadence
+
+#### Scenario: Drift never reports a clean bill from an incomplete or absent observation
+
+- **WHEN** the drift sweep runs and `db.LatestOrgObservation` returns `db.ErrNoObservation`, or returns an observation whose `Complete` is false
+- **THEN** the sweep MUST NOT call `markReconciled` (no clean bill)
+- **AND** a never-observed target MUST halt with no findings and record itself unreconciled
+- **AND** an incomplete observation MUST still classify the grants it did see (presence-based findings), but MUST NOT conclude any absence (no `syndra_only` replay) and MUST record the target unreconciled
 
 ### Requirement: Operator diagnostic surface for Zitadel management
 The admin UI MUST provide an operator-facing diagnostic page that exercises the live `/api/v1/zitadel/*` management surface end-to-end without requiring cmdline tooling. The page MUST cover: M2M health probe (key → JWT assertion → token exchange → Management API call), projects and project-role CRUD, users and grants CRUD, and a cross-project grant overview.

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 	"sort"
 	"time"
@@ -11,24 +10,6 @@ import (
 	"syndra/internal/services"
 	"syndra/internal/zitadel"
 )
-
-// reconciliationPageSize is the per-page limit on the Zitadel ListAllGrants
-// pagination loop. 500 is below the documented 1000-row Zitadel cap and gives
-// the loop a reasonable round-trip rhythm for makerspace-scale orgs.
-//
-// `var` (not const) so tests can override to a smaller number when exercising
-// the multi-page path; production callers must not mutate this.
-var reconciliationPageSize = 500
-
-// reconciliationSafetyCap stops the pagination loop after this many grants so
-// a pathologically large org cannot cause an unbounded fetch. Past this point
-// the response sets Truncated=true and the diff is best-effort — only_in_syndra
-// and drift may contain false positives because un-fetched Zitadel pages were
-// not compared. Sized for roughly 20× the largest expected makerspace tenant.
-//
-// `var` (not const) so tests can override to a smaller number; production
-// callers must not mutate this.
-var reconciliationSafetyCap = 2_000 // B2: right-sized for the single-LXC ~200-user makerspace (~10× headroom)
 
 // ReconciliationGrant is one (user, project, role-set) pair on either the
 // Syndra or Zitadel side of the diff. Roles are sorted ascending so equality
@@ -56,11 +37,12 @@ type ReconciliationDrift struct {
 	GrantID       string   `json:"grant_id,omitempty"`
 }
 
-// ReconciliationDiff is the full snapshot. Truncated is set only when the
-// Zitadel side reported more grants than reconciliationSafetyCap can hold; in
-// that case the diff is best-effort and the UI surfaces a warning. When
-// Truncated is false, the diff is authoritative — both buckets and drift
-// reflect the complete state at GeneratedAt.
+// ReconciliationDiff is the full snapshot. Truncated is set whenever the
+// observation behind it did not finish — the operator's own read hit its cap,
+// or Zitadel answered only part of it; in that case the diff is best-effort
+// and the UI surfaces a warning. When Truncated is false, the diff is
+// authoritative — both buckets and drift reflect the complete state at
+// GeneratedAt.
 type ReconciliationDiff struct {
 	OnlyInSyndra  []ReconciliationGrant `json:"only_in_syndra"`
 	OnlyInZitadel []ReconciliationGrant `json:"only_in_zitadel"`
@@ -73,6 +55,14 @@ type ReconciliationDiff struct {
 // difference between Syndra-direct grants and Zitadel-side user grants so
 // operators can spot drift before it widens. No remediation is performed —
 // the surface is visibility-only per the obsidian-clarity-redesign spec.
+//
+// one-truth-many-checks, "The last two readers": the operator pressed a
+// button asking for now, so a FRESH observation is right — this calls
+// observe.Org, which does the paginated Zitadel read and records it, exactly
+// as the periodic sweep and discovery.go's grant-listing routes do. It then
+// diffs whatever the store holds afterwards, so the read this button pays for
+// is shared rather than discarded: the drift sweep's next pass, and anybody
+// else who reads the store meanwhile, see it too.
 //
 // Drift categories:
 //   - only_in_syndra: (user, project) pairs in the Syndra direct-grants table
@@ -92,15 +82,47 @@ func handleGetReconciliationDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allZitadel, truncated, err := fetchAllZitadelGrants(ctx)
+	obs, err := observeOrg(ctx)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
+	observed, err := dbAllObservedGrants(ctx)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	// Nothing came back at all, and the read that just ran is the reason —
+	// not a real, empty org. Rendering this as an ordinary diff would put
+	// every Syndra-side grant into only_in_syndra, which is the false
+	// "somebody lost their access" this whole change exists to prevent.
+	// Nothing was observed AT ALL this request — there is no client to ask.
+	// `observe.Org` answers a zero Observation in local-policy-only mode, and
+	// the store may still hold rows from when there was one. Diffing against
+	// those would present a remembered world as a comparison made just now,
+	// and stamp it `GeneratedAt` the Unix epoch.
+	//
+	// Checked before the emptiness test below, because it is a different fact
+	// with a different answer: there is nothing to compare against, rather
+	// than something that would not answer.
+	if obs.ObservedAt.IsZero() {
+		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_NOT_CONFIGURED",
+			"Syndra has no connection to Zitadel, so there is nothing to compare against.")
+		return
+	}
+	if !obs.Complete && len(observed) == 0 {
+		msg := obs.Error
+		if msg == "" {
+			msg = "Zitadel did not answer"
+		}
+		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", msg)
+		return
+	}
+	allZitadel := services.ObservedToUserGrants(observed)
 
 	diff := computeReconciliationDiff(syndraGrants, allZitadel)
-	diff.Truncated = truncated
-	diff.GeneratedAt = time.Now().UTC()
+	diff.Truncated = !obs.Complete
+	diff.GeneratedAt = obs.ObservedAt
 
 	// A lookup failure here MUST NOT silently become an empty set — that would
 	// misclassify rule-derived / excluded grants as red drift. Fail the request.
@@ -173,40 +195,6 @@ func filterExplained(in []ReconciliationGrant, holder, bundleSet map[services.Ho
 		}
 	}
 	return out
-}
-
-// fetchAllZitadelGrants paginates through Zitadel ListAllGrants until either
-// every grant is fetched or reconciliationSafetyCap is hit. Returns the full
-// slice, a truncated flag (true only when the cap halted iteration), and any
-// transport error from a paged call. Iterating to completion is critical for
-// reconciliation correctness — comparing Syndra's full grant table against
-// only the first Zitadel page produces false positives in only_in_syndra and
-// drift for any grant that lives on a later page.
-func fetchAllZitadelGrants(ctx context.Context) ([]zitadel.UserGrant, bool, error) {
-	var all []zitadel.UserGrant
-	offset := 0
-	for {
-		page, err := zitadelListAllGrants(ctx, zitadel.SearchParams{
-			Limit:  reconciliationPageSize,
-			Offset: offset,
-		})
-		if err != nil {
-			return nil, false, err
-		}
-		all = append(all, page.Items...)
-		// Stop if we've drained the source. Total is the count Zitadel reports;
-		// page.Items.length 0 is also a defensive stop in case a backend
-		// regression returns Total=0 on a non-empty org.
-		if len(all) >= page.Total || len(page.Items) == 0 {
-			return all, false, nil
-		}
-		// Safety cap — bail before the slice grows unbounded on a pathological
-		// directory size. Caller surfaces truncated=true so the UI can warn.
-		if len(all) >= reconciliationSafetyCap {
-			return all, true, nil
-		}
-		offset += len(page.Items)
-	}
 }
 
 // computeReconciliationDiff is the pure comparison core. Extracted so tests

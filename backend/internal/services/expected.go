@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 
+	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/zitadel"
 )
@@ -83,6 +84,21 @@ func BuildHolderSet(direct []models.DirectGrant, zit []zitadel.UserGrant) map[Ho
 		}
 	}
 	return h
+}
+
+// ObservedToUserGrants adapts what the observation store holds to the shape
+// every existing detector (this file, the reconciliation diff) already
+// classifies against. There is one store and one Go type for what it holds
+// (db.ObservedGrant); this is the seam so drift's sweep and reconciliation's
+// diff can keep asking the same question of it that they always asked of a
+// live Zitadel listing, without either one becoming a second definition of
+// what a grant is.
+func ObservedToUserGrants(observed []db.ObservedGrant) []zitadel.UserGrant {
+	out := make([]zitadel.UserGrant, len(observed))
+	for i, g := range observed {
+		out[i] = zitadel.UserGrant{ID: g.GrantID, UserID: g.UserID, ProjectID: g.ProjectID, RoleKeys: g.RoleKeys}
+	}
+	return out
 }
 
 // ExpectedViaRule reports whether (userID, projectID, roleKey) is the target of

@@ -13,13 +13,7 @@ import (
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
-	"syndra/internal/zitadel"
 )
-
-// driftSafetyCap is the same right-sized cap as the on-demand reconciliation
-// endpoint (B2): the sweep pages Zitadel grants and stops here.
-const driftSafetyCap = 2_000
-const zitadelPageSize = 500
 
 // Injectable dependencies. Mirrors the save-swap-restore pattern used across
 // the backend (see services/expiry/deps.go). Tests exercise sweep logic
@@ -37,7 +31,11 @@ var (
 	svcGetExclusions          = func(ctx context.Context, target string) ([]models.ExternalGrantExclusion, error) {
 		return db.GetExclusions(ctx, target)
 	}
-	upsertDriftItem = db.UpsertDriftItem // (ctx,target,user,project,roleKeys,grantID,source,type) (id,inserted,err)
+	// (ctx,target,user,project,roleKeys,grantID,source,type,evidence) (id,inserted,err).
+	// Carries db.DriftEvidence so a finding can cite the observation that
+	// produced it — see the two call sites in sweep.go and driftItemSelect's
+	// doc comment in db/drift.go.
+	upsertDriftItem = db.UpsertDriftItemWithEvidence
 
 	// The retraction half. A finding the sweep raised because it could not see
 	// Syndra's intent has to be closable by the sweep once it can — otherwise
@@ -64,11 +62,13 @@ var (
 	pendingOutboxAddExists = db.PendingOutboxAddExists   // (ctx,target,user,project,role) (bool,err) — dedupes syndra_only replay
 	insertPending          = db.InsertPendingPropagation // re-enqueue path (syndra_only) — Zitadel-shaped by construction
 
-	// Reachability + paginated grant listing. A nil MgmtClient means offline.
-	zitadelReachable     = func(ctx context.Context) bool { return zitadel.MgmtClient != nil }
-	zitadelListAllGrants = func(ctx context.Context, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		return zitadel.MgmtClient.ListAllGrants(ctx, p)
-	}
+	// What the sweep reads instead of Zitadel (one-truth-many-checks, "The last
+	// two readers"). The org observation's own age is what the sweep cites and
+	// what bounds what it may conclude — never a per-row timestamp, because an
+	// out-of-band grant is not in the store at all until a sweep covers it, and
+	// no row can speak for an absence.
+	latestOrgObservation = db.LatestOrgObservation // ErrNoObservation ⇒ "not checked yet"
+	allObservedGrants     = db.AllObservedGrants
 
 	// idempotency-key minting for re-enqueued rows: reuse the outbox's crypto/rand
 	// helper (the repo has NO uuid module). Returns (string, error); the sweep
