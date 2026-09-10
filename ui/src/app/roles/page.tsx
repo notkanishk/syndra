@@ -10,9 +10,10 @@ import { Badge, Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { Select } from "@/components/ui/Select";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
-import { humanizeKey } from "@/lib/format";
+import { confirmedNote, humanizeKey } from "@/lib/format";
 
 /**
  * E2 index · /roles — the cross-project role index, and the landing target for
@@ -54,6 +55,15 @@ export default function RolesPage() {
   );
   const unusedCount = all.filter((role) => role.is_unused).length;
   const filtered = Boolean(project || group || unusedOnly);
+
+  // One basis for the whole page — every row carries an identical copy, so
+  // the freshness is stated here once rather than once per row.
+  const basis = all[0]?.observation;
+  const readState: ReadState = {
+    readAt: basis?.read_at,
+    current: basis ? basis.current : undefined,
+    truncated: basis?.truncated,
+  };
 
   function clearFilters() {
     setProject("");
@@ -139,13 +149,23 @@ export default function RolesPage() {
         </div>
       </div>
 
+      {/*
+        Holders is what Syndra decided, not what Zitadel has confirmed — the
+        "Confirmed" column says how much of that decision the observation
+        store backs up, and this states once, for the whole page, when that
+        confirmation last happened rather than repeating it on every row.
+      */}
+      {all.length > 0 && (
+        <ReadFreshness state={readState} subject="What Zitadel confirmed" className="px-[2px]" />
+      )}
+
       <Card>
         <CardColumns>
           <span className="w-[180px]">Project</span>
           <span className="flex-1">Role</span>
           <span className="w-[130px]">Group</span>
           <span className="w-[150px]">Used by</span>
-          <span className="w-[80px] text-right">Holders</span>
+          <span className="w-[110px] text-right">Holders</span>
         </CardColumns>
 
         <ListStates
@@ -210,10 +230,15 @@ export default function RolesPage() {
                   usedBy(role) || <span className="text-faint">—</span>
                 )}
               </span>
-              <span className="text-[15px] tablet:w-[80px] tablet:text-right">
+              <span className="w-full text-[15px] tablet:w-[110px] tablet:text-right">
                 {role.assigned_user_count}
                 <span className="text-[13px] text-faint tablet:hidden">
                   {role.assigned_user_count === 1 ? " holder" : " holders"}
+                </span>
+                {/* Recorded is what Syndra decided; this is what Zitadel has
+                    confirmed of it — never the same word, never the same line. */}
+                <span className="block text-[12.5px] text-faint">
+                  {confirmedNote(role.assigned_user_count, role.confirmed_user_count)}
                 </span>
               </span>
             </Link>

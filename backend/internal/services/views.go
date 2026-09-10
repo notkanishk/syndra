@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -46,6 +47,15 @@ type accessSnapshot struct {
 	ctx   context.Context
 	users []models.UserProfile
 	roles map[string]userRoles
+
+	// observed is the lazy, memoised twin of roles: what the observation store
+	// (not Syndra's own tables) confirmed for each user, keyed the same way
+	// roleKey is — "projectID:roleKey". Populated by Observed().
+	observed map[string]map[string]bool
+	// basis is the one observation-basis fact for the whole snapshot — see
+	// Basis(). Computed at most once per request, same as everything else here.
+	basis         models.ObservationBasis
+	basisComputed bool
 }
 
 // newAccessSnapshot primes the user list (single directory call) but defers
@@ -56,9 +66,10 @@ func newAccessSnapshot(ctx context.Context) (*accessSnapshot, error) {
 		return nil, err
 	}
 	return &accessSnapshot{
-		ctx:   ctx,
-		users: users,
-		roles: make(map[string]userRoles, len(users)),
+		ctx:      ctx,
+		users:    users,
+		roles:    make(map[string]userRoles, len(users)),
+		observed: make(map[string]map[string]bool, len(users)),
 	}, nil
 }
 
@@ -83,11 +94,51 @@ func (s *accessSnapshot) For(userID string) (map[roleKey]*models.EffectiveRole, 
 // ledger and bundle tables — and they disagreed on screen: a role listed with
 // "4 holders" whose own page said "0 people hold this role".
 func RoleHolderCounts(ctx context.Context) (map[string]int, error) {
+	recorded, _, _, err := RoleHolderFacts(ctx)
+	return recorded, err
+}
+
+// RoleHolderConfirmation is RoleHolderCounts' companion — see
+// accessSnapshot.ConfirmedHolderCounts.
+//
+// ponytail: a second accessSnapshot, not a second counting mechanism — same
+// directory listing, same collectUserRoles per user, so it cannot disagree
+// with RoleHolderCounts about who holds what. Doubles the per-request fan-out
+// at GlobalRoleCatalog's call site; at this deployment's ~200-user scale
+// that's still one cheap listing plus 2N lookups, not worth threading a
+// shared snapshot through the exported seam tests already depend on. Revisit
+// if that scale assumption stops holding.
+func RoleHolderConfirmation(ctx context.Context) (map[string]int, models.ObservationBasis, error) {
+	_, confirmed, basis, err := RoleHolderFacts(ctx)
+	return confirmed, basis, err
+}
+
+// RoleHolderFacts answers both questions from ONE snapshot.
+//
+// How many people a role was GIVEN to, and how many of those Zitadel confirms,
+// are two different facts and a surface needs both — but they are two readings
+// of one pass, not two passes. Asking for them separately built the snapshot
+// twice per request: two directory listings and two walks over every user, for
+// numbers that are by construction derived from the same walk.
+//
+// The snapshot exists precisely to be built once and read many times. Two of
+// them is not a second way to count — neither could disagree with the other —
+// but it is the shape a second way to count would take, and it costs double for
+// nothing.
+func RoleHolderFacts(ctx context.Context) (map[string]int, map[string]int, models.ObservationBasis, error) {
 	snap, err := newAccessSnapshot(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, models.ObservationBasis{}, err
 	}
-	return snap.HolderCounts()
+	recorded, err := snap.HolderCounts()
+	if err != nil {
+		return nil, nil, models.ObservationBasis{}, err
+	}
+	confirmed, basis, err := snap.ConfirmedHolderCounts()
+	if err != nil {
+		return nil, nil, models.ObservationBasis{}, err
+	}
+	return recorded, confirmed, basis, nil
 }
 
 // HolderCounts is how many people hold each role, keyed "project:role".
@@ -127,6 +178,89 @@ func (s *accessSnapshot) HolderCounts() (map[string]int, error) {
 // functions don't re-fetch the directory.
 func (s *accessSnapshot) Users() []models.UserProfile {
 	return s.users
+}
+
+// Observed is the "projectID:roleKey" pairs the observation store confirms
+// for this user — Zitadel's own answer, not Syndra's. Lazy and memoised like
+// For, so a caller already visiting every user for HolderCounts pays one more
+// cheap read per user, not a second pass over the snapshot.
+func (s *accessSnapshot) Observed(userID string) (map[string]bool, error) {
+	if o, ok := s.observed[userID]; ok {
+		return o, nil
+	}
+	grants, err := svcObservedGrantsFor(s.ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	set := make(map[string]bool, len(grants))
+	for _, g := range grants {
+		for _, rk := range g.RoleKeys {
+			set[g.ProjectID+":"+rk] = true
+		}
+	}
+	s.observed[userID] = set
+	return set, nil
+}
+
+// Basis is the one observation-basis fact for this snapshot's counts: whether
+// the org has ever been swept, how long ago, and whether that sweep was
+// complete. db.ErrNoObservation becomes the zero value — ReadAt nil — which is
+// the "not checked yet" case every caller must handle before trusting a
+// confirmed count of zero.
+func (s *accessSnapshot) Basis() (models.ObservationBasis, error) {
+	if s.basisComputed {
+		return s.basis, nil
+	}
+	obs, err := svcLatestOrgObservation(s.ctx)
+	if errors.Is(err, db.ErrNoObservation) {
+		s.basisComputed = true
+		return s.basis, nil
+	}
+	if err != nil {
+		return models.ObservationBasis{}, err
+	}
+	at := obs.ObservedAt
+	s.basis = models.ObservationBasis{
+		ReadAt: &at,
+		// Current is false only when the sweep itself failed. A capped-but-
+		// clean read is still current; Truncated says the cap part on its own.
+		Current:   obs.Error == "",
+		Truncated: !obs.Complete,
+	}
+	s.basisComputed = true
+	return s.basis, nil
+}
+
+// ConfirmedHolderCounts is HolderCounts' companion: of the people HolderCounts
+// says hold each role, how many the observation store also shows holding it —
+// plus the basis that number rests on. Nil counts (not an empty map) when the
+// basis has no ReadAt: nothing has ever been observed, so there is nothing to
+// report as confirmed, and reporting zero would read as a checked absence.
+func (s *accessSnapshot) ConfirmedHolderCounts() (map[string]int, models.ObservationBasis, error) {
+	basis, err := s.Basis()
+	if err != nil {
+		return nil, models.ObservationBasis{}, err
+	}
+	if basis.ReadAt == nil {
+		return nil, basis, nil
+	}
+	counts := make(map[string]int)
+	for _, u := range s.users {
+		roleMap, _, err := s.For(u.ID)
+		if err != nil {
+			return nil, basis, err
+		}
+		observed, err := s.Observed(u.ID)
+		if err != nil {
+			return nil, basis, err
+		}
+		for key := range roleMap {
+			if observed[key.projectID+":"+key.roleKey] {
+				counts[key.projectID+":"+key.roleKey]++
+			}
+		}
+	}
+	return counts, basis, nil
 }
 
 func Catalog(ctx context.Context) (models.CatalogResponse, error) {
@@ -609,9 +743,18 @@ func listProjectsFromSnapshot(snap *accessSnapshot) ([]models.ProjectSummary, er
 		addRoleKey(ref[0], ref[1])
 	}
 
+	// One basis for every project in this response — the observation confirming
+	// membership is an org-wide fact, not a per-project one, so it is fetched
+	// once and carried on every row rather than re-asked per project.
+	basis, err := snap.Basis()
+	if err != nil {
+		return nil, fmt.Errorf("observation basis: %w", err)
+	}
+
 	projectSummaries := make([]models.ProjectSummary, 0, len(projects))
 	for _, project := range projects {
 		memberCount := 0
+		confirmedMemberCount := 0
 		sampleMembers := []string{}
 		for _, user := range snap.Users() {
 			roleMap, _, err := snap.For(user.ID)
@@ -622,6 +765,15 @@ func listProjectsFromSnapshot(snap *accessSnapshot) ([]models.ProjectSummary, er
 				memberCount++
 				if len(sampleMembers) < 3 {
 					sampleMembers = append(sampleMembers, user.Name)
+				}
+				if basis.ReadAt != nil {
+					observed, err := snap.Observed(user.ID)
+					if err != nil {
+						return nil, err
+					}
+					if hasObservedProjectRole(roleMap, observed, project.ID) {
+						confirmedMemberCount++
+					}
 				}
 			}
 		}
@@ -657,7 +809,7 @@ func listProjectsFromSnapshot(snap *accessSnapshot) ([]models.ProjectSummary, er
 		}
 		sort.Strings(roleKeys)
 
-		projectSummaries = append(projectSummaries, models.ProjectSummary{
+		summary := models.ProjectSummary{
 			Project:       project,
 			MemberCount:   memberCount,
 			BundleCount:   bundleCount,
@@ -665,7 +817,13 @@ func listProjectsFromSnapshot(snap *accessSnapshot) ([]models.ProjectSummary, er
 			RuleOutCount:  ruleOutCount,
 			RoleKeys:      roleKeys,
 			SampleMembers: sampleMembers,
-		})
+			Observation:   basis,
+		}
+		if basis.ReadAt != nil {
+			confirmed := confirmedMemberCount
+			summary.ConfirmedMemberCount = &confirmed
+		}
+		projectSummaries = append(projectSummaries, summary)
 	}
 
 	sort.Slice(projectSummaries, func(i, j int) bool {
@@ -1215,6 +1373,18 @@ func upsertRole(ctx context.Context, roleMap map[roleKey]*models.EffectiveRole, 
 func hasProjectRole(roleMap map[roleKey]*models.EffectiveRole, projectID string) bool {
 	for _, role := range roleMap {
 		if role.ProjectID == projectID {
+			return true
+		}
+	}
+	return false
+}
+
+// hasObservedProjectRole is hasProjectRole's confirmed twin: true only when a
+// role this person is recorded as holding in projectID is also present in
+// what the observation store confirmed for them.
+func hasObservedProjectRole(roleMap map[roleKey]*models.EffectiveRole, observed map[string]bool, projectID string) bool {
+	for key, role := range roleMap {
+		if role.ProjectID == projectID && observed[key.projectID+":"+key.roleKey] {
 			return true
 		}
 	}

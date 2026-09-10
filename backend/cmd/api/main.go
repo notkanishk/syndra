@@ -17,6 +17,7 @@ import (
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/handlers"
+	"syndra/internal/observe"
 	"syndra/internal/seed"
 	"syndra/internal/services/drift"
 	"syndra/internal/services/expiry"
@@ -63,6 +64,23 @@ func requireProductionSigningKeys() {
 //
 // Bounded, and it stops at the first success. After this the periodic refresh
 // owns the question; this exists only to close the window a restart opens.
+// observeInterval is how often Zitadel is asked what is true. Overridable
+// because a deployment with a much larger directory pays more for each pass
+// and may want it slower — at the cost of a looser bound on staleness, which
+// is the trade being made and should be made deliberately.
+func observeInterval() time.Duration {
+	v := os.Getenv("OBSERVE_SWEEP_INTERVAL")
+	if v == "" {
+		return 5 * time.Minute
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		log.Printf("[OBSERVE] Invalid OBSERVE_SWEEP_INTERVAL=%q, defaulting to 5m", v)
+		return 5 * time.Minute
+	}
+	return d
+}
+
 func awaitFirstManifests(ctx context.Context) {
 	for _, wait := range []time.Duration{2, 3, 5, 10, 15, 30, 45} {
 		if len(addons.PendingManifests()) == 0 {
@@ -259,6 +277,25 @@ func main() {
 		addonSched = periodic.New("ADDON", addonRefreshInterval(), 15*time.Minute, addons.RefreshAll)
 		go addonSched.Start(ctx)
 		go awaitFirstManifests(ctx)
+	}
+
+	// The observation sweep.
+	//
+	// Its interval is the bound on how stale any surface's answer can be, and
+	// that bound is the number this whole design trades for: five minutes means
+	// a wrong belief about somebody's access cannot outlive five minutes
+	// without a person being able to see how old it is. Before this there was
+	// no bound at all — the store was fed by webhooks that drop Syndra's own
+	// changes, so it could be wrong indefinitely, and was for twenty hours.
+	//
+	// Cheap at this scale: one paged listing of an organisation with a few
+	// hundred grants. It becomes expensive somewhere in the tens of thousands,
+	// which is written down in the design as the point where the answer
+	// changes.
+	var observeSched *periodic.Runner
+	if zitadel.MgmtClient != nil {
+		observeSched = periodic.New("OBSERVE", observeInterval(), 5*time.Minute, observe.Sweep)
+		go observeSched.Start(ctx)
 	}
 
 	// Start server in background

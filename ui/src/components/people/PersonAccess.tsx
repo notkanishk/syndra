@@ -123,11 +123,19 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
   // ask" are different facts, and collapsing them would let an outage render as
   // an absence — the worst reading available, on the screen that decides
   // whether somebody has access.
-  const confirmation: Confirmation = upstreamGrants.error
-    ? "unreachable"
-    : upstreamGrants.isLoading || !isOperator
-      ? "unknown"
-      : "read";
+  //
+  // The endpoint now observes rather than listing Zitadel live (see
+  // internal/observe), so a failed read no longer comes back as an HTTP
+  // error — it comes back 200, with `complete: false` and whatever the store
+  // last held. That is exactly the case this screen must not read as "read":
+  // an incomplete observation is Syndra's own store, possibly stale, and a
+  // role missing from it is not the same fact as Zitadel saying so just now.
+  const confirmation: Confirmation =
+    upstreamGrants.error || upstreamGrants.data?.complete === false
+      ? "unreachable"
+      : upstreamGrants.isLoading || !isOperator
+        ? "unknown"
+        : "read";
 
   if (access.isLoading) {
     return (

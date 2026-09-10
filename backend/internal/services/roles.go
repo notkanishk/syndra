@@ -218,7 +218,11 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load role usage counts: %w", err)
 	}
-	userCounts, err := svcRoleHolderCounts(ctx)
+	// Both facts from ONE pass. What a role was GIVEN to and what Zitadel
+	// confirms of it are different questions and the surface needs both — but
+	// they are two readings of one walk over the directory, not two walks.
+	// Asked separately they built the snapshot twice per request.
+	userCounts, confirmedCounts, basis, err := svcRoleHolderFacts(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("count holders: %w", err)
 	}
@@ -257,6 +261,11 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 			AssignedUserCount: assignedUsers,
 			IsUnused:          usage.BundleCount+usage.RuleCount == 0 && assignedUsers == 0,
 			Source:            entry.source,
+			Observation:       basis,
+		}
+		if confirmedCounts != nil {
+			confirmed := confirmedCounts[key]
+			cr.ConfirmedUserCount = &confirmed
 		}
 		catalog = append(catalog, cr)
 	}

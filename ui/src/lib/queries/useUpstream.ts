@@ -44,6 +44,14 @@ export interface UpstreamGrant {
 interface Page<T> {
   items: T[];
   total: number;
+  /**
+   * When this page was actually observed, and whether that observation was
+   * whole — set only by the two grants endpoints, which read through
+   * `internal/observe` rather than listing Zitadel directly. Absent on every
+   * other paginated endpoint here.
+   */
+  observedAt?: string;
+  complete?: boolean;
 }
 
 const PAGE_SIZE = 500;
@@ -60,8 +68,13 @@ const KEYS = {
 };
 
 async function page<T>(path: string): Promise<Page<T>> {
-  const raw = await request<Partial<Page<T>>>(path);
-  return { items: Array.isArray(raw?.items) ? raw.items : [], total: raw?.total ?? 0 };
+  const raw = await request<Partial<Page<T>> & { observed_at?: string }>(path);
+  return {
+    items: Array.isArray(raw?.items) ? raw.items : [],
+    total: raw?.total ?? 0,
+    observedAt: raw?.observed_at,
+    complete: raw?.complete,
+  };
 }
 
 export function useUpstreamProjects() {
@@ -107,17 +120,28 @@ export function useUpstreamUserGrants(userId: string | null) {
 export function useUpstreamGrants() {
   return useQuery({
     queryKey: KEYS.grants,
-    queryFn: async (): Promise<{ items: UpstreamGrant[]; total: number; truncated: boolean }> => {
+    queryFn: async (): Promise<{
+      items: UpstreamGrant[];
+      total: number;
+      truncated: boolean;
+      observedAt?: string;
+    }> => {
       const all: UpstreamGrant[] = [];
       let offset = 0;
       let total = 0;
       let truncated = false;
+      let observedAt: string | undefined;
       for (;;) {
         const result = await page<UpstreamGrant>(
           `/zitadel/grants?limit=${PAGE_SIZE}&offset=${offset}`,
         );
         total = result.total || all.length + result.items.length;
         all.push(...result.items);
+        observedAt = result.observedAt ?? observedAt;
+        // A page whose own observation stopped short (Zitadel didn't answer,
+        // or the safety cap) makes the WHOLE aggregate incomplete — the same
+        // meaning `truncated` already carries for the aggregate cap below.
+        if (result.complete === false) truncated = true;
         if (result.items.length === 0 || all.length >= total) break;
         if (all.length >= AGGREGATE_CAP) {
           truncated = true;
@@ -125,7 +149,7 @@ export function useUpstreamGrants() {
         }
         offset += result.items.length;
       }
-      return { items: all, total, truncated };
+      return { items: all, total, truncated, observedAt };
     },
     retry: false,
   });

@@ -654,6 +654,15 @@ func setupSnapshotTestFixtures(t *testing.T, numUsers, numApps, numProjects int)
 	svcDbGetAllReferencedRoleKeys = func(context.Context) ([][2]string, error) {
 		return nil, nil
 	}
+	// Nothing has ever been observed by default — the "not checked yet" case,
+	// not zero. Individual tests override these when a case needs a covering
+	// sweep to exist.
+	svcLatestOrgObservation = func(context.Context) (db.Observation, error) {
+		return db.Observation{}, db.ErrNoObservation
+	}
+	svcObservedGrantsFor = func(context.Context, string) ([]db.ObservedGrant, error) {
+		return nil, nil
+	}
 }
 
 func max1(n int) int {

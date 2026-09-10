@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { describeDuration, describeExpiry, humanizeKey, roleLabel } from "@/lib/format";
+import { confirmedNote, describeDuration, describeExpiry, humanizeKey, roleLabel } from "@/lib/format";
 
 describe("roleLabel", () => {
   it("names a role as the pair it is", () => {
@@ -74,5 +74,26 @@ describe("describeDuration", () => {
     expect(describeDuration(0)).toBe("no end date");
     expect(describeDuration(null)).toBe("no end date");
     expect(describeDuration(undefined)).toBe("no end date");
+  });
+});
+
+describe("confirmedNote", () => {
+  // ErrNoObservation must never render as a confirmed zero — "not checked
+  // yet" is a different fact from "checked, and found nobody".
+  it("reads never-observed as not confirmed, not as zero", () => {
+    expect(confirmedNote(4, undefined)).toBe("not confirmed");
+    expect(confirmedNote(0, undefined)).toBe("not confirmed");
+  });
+
+  it("says confirmed, without repeating the number, when the two agree", () => {
+    expect(confirmedNote(4, 4)).toBe("confirmed");
+    expect(confirmedNote(0, 0)).toBe("confirmed");
+  });
+
+  // Recorded and confirmed are two different, both-useful facts — one can be
+  // lower than the other without either being wrong.
+  it("states the confirmed count on its own when it differs from recorded", () => {
+    expect(confirmedNote(4, 2)).toBe("2 confirmed");
+    expect(confirmedNote(2, 0)).toBe("0 confirmed");
   });
 });
