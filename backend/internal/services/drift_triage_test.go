@@ -15,7 +15,7 @@ func withTriageDeps(t *testing.T, items []models.DriftItem, users map[string]mod
 	origDrift := svcGetPendingDriftItems
 	origLocal := svcDbGetAllLocalRoles
 	origUsage := svcDbGetRoleUsageCounts
-	origAssigned := svcDbGetAssignedUserCounts
+	origAssigned := svcRoleHolderCounts
 	origRefs := svcDbGetAllReferencedRoleKeys
 	origFind := directoryFindUser
 	origGrants, origBases, origLanded := svcGetAllDirectGrants, svcMergeBases, svcPropagations
@@ -36,7 +36,7 @@ func withTriageDeps(t *testing.T, items []models.DriftItem, users map[string]mod
 		svcGetPendingDriftItems = origDrift
 		svcDbGetAllLocalRoles = origLocal
 		svcDbGetRoleUsageCounts = origUsage
-		svcDbGetAssignedUserCounts = origAssigned
+		svcRoleHolderCounts = origAssigned
 		svcDbGetAllReferencedRoleKeys = origRefs
 		directoryFindUser = origFind
 	})
@@ -51,7 +51,7 @@ func withTriageDeps(t *testing.T, items []models.DriftItem, users map[string]mod
 	svcDbGetRoleUsageCounts = func(context.Context) (map[string]db.RoleUsage, error) {
 		return map[string]db.RoleUsage{}, nil
 	}
-	svcDbGetAssignedUserCounts = func(context.Context) (map[string]int, error) { return map[string]int{}, nil }
+	svcRoleHolderCounts = func(context.Context) (map[string]int, error) { return map[string]int{}, nil }
 	svcDbGetAllReferencedRoleKeys = func(context.Context) ([][2]string, error) { return nil, nil }
 	directoryFindUser = func(_ context.Context, id string) (models.UserProfile, bool, error) {
 		u, ok := users[id]

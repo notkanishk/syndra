@@ -76,6 +76,53 @@ func (s *accessSnapshot) For(userID string) (map[roleKey]*models.EffectiveRole, 
 	return roleMap, bundles, nil
 }
 
+// RoleHolderCounts is the ONE entry point for "how many people hold this role".
+//
+// Exported so the handlers that need the number take this path rather than
+// growing one of their own. There were two before — this and a UNION over the
+// ledger and bundle tables — and they disagreed on screen: a role listed with
+// "4 holders" whose own page said "0 people hold this role".
+func RoleHolderCounts(ctx context.Context) (map[string]int, error) {
+	snap, err := newAccessSnapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return snap.HolderCounts()
+}
+
+// HolderCounts is how many people hold each role, keyed "project:role".
+//
+// The ONE place a holder count is computed. There used to be a second —
+// `GetEffectiveUserCounts`, a UNION over the ledger and the bundle tables — and
+// the two disagreed in the field: a role listed with "4 holders" on /roles
+// whose own page said "0 people hold this role". Both numbers were arrived at
+// honestly and neither said which question it had answered.
+//
+// They could not agree, because the SQL could not see what this can. It counted
+// ledger rows for people the directory no longer returns, and it resolved no
+// mapping rules at all — its own comment admitted the second. Deriving the
+// count from the same snapshot that answers "who holds this" makes the list and
+// the page the same statement at two resolutions, which is the only arrangement
+// in which they cannot contradict each other.
+//
+// ponytail: one directory listing plus a collectUserRoles per user, memoised
+// for the request. At this deployment's documented ~200-user scale that is the
+// right trade against a count that can be wrong; past it, cache the snapshot
+// across requests rather than reintroducing a second way to count.
+func (s *accessSnapshot) HolderCounts() (map[string]int, error) {
+	counts := make(map[string]int)
+	for _, u := range s.users {
+		roleMap, _, err := s.For(u.ID)
+		if err != nil {
+			return nil, err
+		}
+		for key := range roleMap {
+			counts[key.projectID+":"+key.roleKey]++
+		}
+	}
+	return counts, nil
+}
+
 // Users returns the list primed at construction. Cheap accessor so view
 // functions don't re-fetch the directory.
 func (s *accessSnapshot) Users() []models.UserProfile {
@@ -526,21 +573,50 @@ func listProjectsFromSnapshot(snap *accessSnapshot) ([]models.ProjectSummary, er
 		return nil, err
 	}
 
+	// "Roles" here has to mean what it means on the project detail page: roles
+	// that exist, not roles someone currently holds — the contradiction this
+	// function used to render was "0 roles" beside a detail page listing 3.
+	// This is the same union GlobalRoleCatalog builds (directory-declared,
+	// Syndra-local, and referenced-only roles), assembled from two bulk
+	// queries plus the project list already fetched above — not a second
+	// derivation, and not a query per project.
+	localRoles, err := svcDbGetAllLocalRoles(snap.ctx)
+	if err != nil {
+		return nil, err
+	}
+	referencedRoles, err := svcDbGetAllReferencedRoleKeys(snap.ctx)
+	if err != nil {
+		return nil, err
+	}
+	existingRoleKeys := make(map[string]map[string]bool, len(projects))
+	addRoleKey := func(projectID, roleKey string) {
+		set, ok := existingRoleKeys[projectID]
+		if !ok {
+			set = make(map[string]bool)
+			existingRoleKeys[projectID] = set
+		}
+		set[roleKey] = true
+	}
+	for _, project := range projects {
+		for _, role := range project.Roles {
+			addRoleKey(project.ID, role.Key)
+		}
+	}
+	for _, r := range localRoles {
+		addRoleKey(r.ProjectID, r.RoleKey)
+	}
+	for _, ref := range referencedRoles {
+		addRoleKey(ref[0], ref[1])
+	}
+
 	projectSummaries := make([]models.ProjectSummary, 0, len(projects))
 	for _, project := range projects {
 		memberCount := 0
 		sampleMembers := []string{}
-		activeRoleSet := make(map[string]bool)
 		for _, user := range snap.Users() {
 			roleMap, _, err := snap.For(user.ID)
 			if err != nil {
 				return nil, err
-			}
-			for _, role := range roleMap {
-				if role.ProjectID != project.ID {
-					continue
-				}
-				activeRoleSet[role.RoleKey] = true
 			}
 			if hasProjectRole(roleMap, project.ID) {
 				memberCount++
@@ -575,20 +651,20 @@ func listProjectsFromSnapshot(snap *accessSnapshot) ([]models.ProjectSummary, er
 			}
 		}
 
-		activeRoleKeys := make([]string, 0, len(activeRoleSet))
-		for roleKey := range activeRoleSet {
-			activeRoleKeys = append(activeRoleKeys, roleKey)
+		roleKeys := make([]string, 0, len(existingRoleKeys[project.ID]))
+		for roleKey := range existingRoleKeys[project.ID] {
+			roleKeys = append(roleKeys, roleKey)
 		}
-		sort.Strings(activeRoleKeys)
+		sort.Strings(roleKeys)
 
 		projectSummaries = append(projectSummaries, models.ProjectSummary{
-			Project:        project,
-			MemberCount:    memberCount,
-			BundleCount:    bundleCount,
-			RuleInCount:    ruleInCount,
-			RuleOutCount:   ruleOutCount,
-			ActiveRoleKeys: activeRoleKeys,
-			SampleMembers:  sampleMembers,
+			Project:       project,
+			MemberCount:   memberCount,
+			BundleCount:   bundleCount,
+			RuleInCount:   ruleInCount,
+			RuleOutCount:  ruleOutCount,
+			RoleKeys:      roleKeys,
+			SampleMembers: sampleMembers,
 		})
 	}
 

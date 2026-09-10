@@ -324,14 +324,18 @@ type ClaimKeyOwner struct {
 	Source        string `json:"source,omitempty"`
 }
 
+// RoleKeys is "roles that exist" for the project — the same question the
+// project detail page answers from the role catalog. It used to be roles
+// with at least one current holder, which let a project with three
+// grantable-but-unassigned roles render as having none.
 type ProjectSummary struct {
-	Project        ProjectCatalog `json:"project"`
-	MemberCount    int            `json:"member_count"`
-	BundleCount    int            `json:"bundle_count"`
-	RuleInCount    int            `json:"rule_in_count"`
-	RuleOutCount   int            `json:"rule_out_count"`
-	ActiveRoleKeys []string       `json:"active_role_keys"`
-	SampleMembers  []string       `json:"sample_members"`
+	Project       ProjectCatalog `json:"project"`
+	MemberCount   int            `json:"member_count"`
+	BundleCount   int            `json:"bundle_count"`
+	RuleInCount   int            `json:"rule_in_count"`
+	RuleOutCount  int            `json:"rule_out_count"`
+	RoleKeys      []string       `json:"role_keys"`
+	SampleMembers []string       `json:"sample_members"`
 }
 
 type CatalogResponse struct {
