@@ -349,3 +349,49 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// One way to count who holds a role.
+//
+// There were two. `GetEffectiveUserCounts` was a UNION over `direct_role_grants`
+// and the bundle tables; `collectUserRoles` walks the same sources plus the
+// mapping rules and resolves them to a fixpoint. They disagreed in the field —
+// a role listed with "4 holders" whose own page said "0 people hold this role" —
+// because the SQL counted ledger rows for people the directory no longer
+// returns and resolved no rules at all.
+//
+// Two implementations of one fact cannot be kept in step by care. The count is
+// now derived from the snapshot that answers "who holds this", so the list and
+// the page are the same statement at two resolutions. This fails if a second
+// one is written.
+func TestOnlyOneThingCountsRoleHolders(t *testing.T) {
+	root, files := trackedFiles(t)
+	var offenders []string
+	for _, path := range files {
+		if !strings.HasPrefix(path, "backend/internal/db/") || !strings.HasSuffix(path, ".go") {
+			continue
+		}
+		body, ok := readText(root, path)
+		if !ok || !strings.Contains(body, "COUNT(DISTINCT user_id)") {
+			continue
+		}
+		// Judged per QUERY, not per file: a file may legitimately hold both.
+		//
+		// Counting the people ASSIGNED a bundle is a different fact and a safe
+		// one — the assignment table IS the record, so a direct count of it
+		// cannot disagree with anything. What this forbids is a second way to
+		// count who holds a ROLE, which is a DERIVED answer, and the derivation
+		// is where the two implementations drifted apart.
+		for _, stmt := range strings.Split(body, "`") {
+			if strings.Contains(stmt, "COUNT(DISTINCT user_id)") && strings.Contains(stmt, "role_key") {
+				offenders = append(offenders, path)
+				break
+			}
+		}
+	}
+	if len(offenders) > 0 {
+		t.Fatalf("a second holder count has appeared in SQL: %v\n"+
+			"Holder counts come from services.RoleHolderCounts, which shares the\n"+
+			"snapshot that answers who holds a role. A count computed another way\n"+
+			"can disagree with the page it links to, and did.", offenders)
+	}
+}
