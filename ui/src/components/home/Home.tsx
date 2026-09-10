@@ -106,7 +106,7 @@ export function Home({ session }: { session: SessionUser }) {
           {who ? `, ${who}` : ""}. <span className="text-ink/40">{headline}</span>
         </h1>
         <div className="mt-2 text-[14.5px] text-faint">
-          {formatWeekday()} · last checked <ClockTime />
+          {formatWeekday()} · last checked <ClockTime at={summary.dataUpdatedAt} />
         </div>
       </div>
 
