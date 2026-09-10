@@ -71,6 +71,15 @@ func UpsertDriftItem(ctx context.Context, target, userID, projectID string, role
 type DriftEvidence struct {
 	UpstreamActor     string
 	UpstreamCreatedAt *time.Time
+
+	// ObservedAt is the org observation this finding was read from —
+	// db.LatestOrgObservation's timestamp at the moment the sweep looked. A nil
+	// value is honest for a webhook detection, which observed nothing; it
+	// reacted to an event. Unlike UpstreamActor/UpstreamCreatedAt this is NOT
+	// coalesced on re-detection: it is evidence of recency, not of origin, so
+	// the most recent confirming read is the one worth keeping — see
+	// UpsertDriftItemWithEvidence.
+	ObservedAt *time.Time
 }
 
 // UpsertDriftItemWithEvidence is UpsertDriftItem plus the upstream evidence a
@@ -90,20 +99,25 @@ func UpsertDriftItemWithEvidence(ctx context.Context, target, userID, projectID 
 	}
 	const q = `
 		INSERT INTO drift_items (target, user_id, project_id, role_keys, zitadel_grant_id, detection_source, drift_type,
-		                         upstream_actor, upstream_created_at, last_seen_at)
-		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,NULLIF($8,''),$9,NOW())
+		                         upstream_actor, upstream_created_at, last_seen_at, zitadel_observed_at)
+		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,NULLIF($8,''),$9,NOW(),$10)
 		ON CONFLICT (target, user_id, project_id, drift_type, role_keys) WHERE (status = 'pending_triage')
 		DO UPDATE SET
 			last_seen_at        = NOW(),
 			-- Never overwrite known evidence with an unknown: a sweep re-detecting
 			-- what a webhook already attributed must not erase the actor.
 			upstream_actor      = COALESCE(drift_items.upstream_actor, EXCLUDED.upstream_actor),
-			upstream_created_at = COALESCE(drift_items.upstream_created_at, EXCLUDED.upstream_created_at)
+			upstream_created_at = COALESCE(drift_items.upstream_created_at, EXCLUDED.upstream_created_at),
+			-- The opposite rule from the two above: this is RECENCY evidence, so
+			-- the newest read wins rather than the first. A nil re-detection
+			-- (webhook, which never carries one) must not blank out a citation a
+			-- sweep already wrote, so an unknown new value keeps the old one too.
+			zitadel_observed_at = COALESCE(EXCLUDED.zitadel_observed_at, drift_items.zitadel_observed_at)
 		RETURNING id, (xmax = 0) AS inserted`
 	var id string
 	var inserted bool
 	err := querier(ctx).QueryRow(ctx, q, target, userID, projectID, roleKeys, zitadelGrantID, detectionSource, driftType,
-		ev.UpstreamActor, ev.UpstreamCreatedAt).Scan(&id, &inserted)
+		ev.UpstreamActor, ev.UpstreamCreatedAt, ev.ObservedAt).Scan(&id, &inserted)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, nil
 	}
@@ -113,6 +127,58 @@ func UpsertDriftItemWithEvidence(ctx context.Context, target, userID, projectID 
 	return id, inserted, nil
 }
 
+// driftItemSelect is the column list every drift-item reader shares, plus two
+// columns computed rather than stored: whether an upstream event can be found
+// for this grant, and whether one was probably missed.
+//
+// DERIVED, NOT STORED (owner's requirement): a webhook that arrives a moment
+// after the sweep saw the grant clears the marker on the very next read, with
+// no row to reconcile — the sweep and the webhook are racing, and computing
+// this at read time is what makes the race harmless instead of a stale flag.
+//
+// Scoped to drift_items alone, and that scoping is load-bearing: Syndra's own
+// writes are dropped by the self-mutation guard before they ever reach
+// webhook_events, so EVERY grant Syndra makes would show "no event" if this
+// ran over the observation store. It runs only here, over rows already known
+// to be unexplained, where "no event" is informative rather than universal.
+//
+// The join is a prefix match on webhook_events.idempotency_key, which
+// translateZitadelEvent (webhook_translate.go) mints as
+// "<aggregateID>:<eventType>:<sequence>" — the aggregate IS the grant ID for
+// every user.grant.* event, so "an event exists for this grant" is exactly
+// "some idempotency_key starts with this grant ID followed by a colon". No
+// grant ID Zitadel issues contains a LIKE wildcard, so the pattern needs no
+// escaping.
+//
+// "Missed" is bounded by the OLDEST event the log still holds
+// (`b.oldest_event`): claiming a miss for a grant first detected before the
+// log's own horizon would blame the pipeline for a period it never covered.
+// Only "no event, and the log reaches back far enough that it would have held
+// one" earns the stronger claim; short of that, attribution is merely
+// unavailable, which is always the true fallback.
+// Column names are left unqualified except inside the two correlated
+// subqueries (which need "d." to reach the outer row) — drift_items is the
+// only table any of them share a column name with is webhook_events'
+// user_id, and that column never appears in the SELECT list or WHERE clause
+// unqualified, only inside the LATERAL's own correlated subquery.
+const driftItemSelect = `
+	SELECT id, target, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'), COALESCE(zitadel_grant_id,''),
+	       detected_at, detection_source, drift_type, status,
+	       resolved_at, COALESCE(resolved_by,''), COALESCE(resolution_payload_json::text,''),
+	       COALESCE(upstream_actor,''), upstream_created_at, last_seen_at, zitadel_observed_at,
+	       (upstream_actor IS NULL AND att.no_event) AS attribution_unavailable,
+	       (upstream_actor IS NULL AND att.no_event
+	            AND b.oldest_event IS NOT NULL AND detected_at >= b.oldest_event) AS event_possibly_missed
+	  FROM drift_items d
+	  CROSS JOIN (SELECT MIN(created_at) AS oldest_event FROM webhook_events) b
+	  CROSS JOIN LATERAL (
+	      SELECT NOT EXISTS (
+	          SELECT 1 FROM webhook_events we
+	          WHERE d.zitadel_grant_id IS NOT NULL
+	            AND we.idempotency_key LIKE d.zitadel_grant_id || ':%'
+	      ) AS no_event
+	  ) att`
+
 // GetDriftItems lists drift rows by filter, newest first (design §7 Q5:
 // detected_at DESC default). An empty Status filter defaults to pending_triage.
 func GetDriftItems(ctx context.Context, f DriftFilter) ([]models.DriftItem, error) {
@@ -120,12 +186,7 @@ func GetDriftItems(ctx context.Context, f DriftFilter) ([]models.DriftItem, erro
 	if status == "" {
 		status = "pending_triage"
 	}
-	const q = `
-		SELECT id, target, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'), COALESCE(zitadel_grant_id,''),
-		       detected_at, detection_source, drift_type, status,
-		       resolved_at, COALESCE(resolved_by,''), COALESCE(resolution_payload_json::text,''),
-		       COALESCE(upstream_actor,''), upstream_created_at, last_seen_at
-		FROM drift_items
+	q := driftItemSelect + `
 		WHERE status = $1
 		  AND ($2 = '' OR target = $2)
 		  AND ($3 = '' OR user_id = $3)
@@ -142,12 +203,7 @@ func GetDriftItems(ctx context.Context, f DriftFilter) ([]models.DriftItem, erro
 
 // GetDriftItem fetches one row by id (any status). ErrDriftNotFound on miss.
 func GetDriftItem(ctx context.Context, id string) (models.DriftItem, error) {
-	const q = `
-		SELECT id, target, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'), COALESCE(zitadel_grant_id,''),
-		       detected_at, detection_source, drift_type, status,
-		       resolved_at, COALESCE(resolved_by,''), COALESCE(resolution_payload_json::text,''),
-		       COALESCE(upstream_actor,''), upstream_created_at, last_seen_at
-		FROM drift_items WHERE id = $1`
+	q := driftItemSelect + ` WHERE id = $1`
 	rows, err := querier(ctx).Query(ctx, q, id)
 	if err != nil {
 		return models.DriftItem{}, fmt.Errorf("get drift item: %w", err)
@@ -179,7 +235,8 @@ func scanDriftItems(rows pgx.Rows) ([]models.DriftItem, error) {
 		if err := rows.Scan(&d.ID, &d.Target, &d.UserID, &d.ProjectID, &d.RoleKeys, &d.ZitadelGrantID,
 			&d.DetectedAt, &d.DetectionSource, &d.DriftType, &d.Status,
 			&d.ResolvedAt, &d.ResolvedBy, &d.ResolutionPayload,
-			&d.UpstreamActor, &d.UpstreamCreatedAt, &d.LastSeenAt); err != nil {
+			&d.UpstreamActor, &d.UpstreamCreatedAt, &d.LastSeenAt, &d.ObservedAt,
+			&d.AttributionUnavailable, &d.EventPossiblyMissed); err != nil {
 			return nil, fmt.Errorf("scan drift item: %w", err)
 		}
 		out = append(out, d)

@@ -23,6 +23,18 @@ export interface DriftTriageItem extends DriftItem {
   upstream_actor?: string;
   upstream_created_at?: string | null;
   last_seen_at?: string | null;
+  /** The org observation this row was read from — what Zitadel returned, and
+   * when, in the read the sweep consumed. Absent for a webhook-detected row,
+   * which observed nothing itself. */
+  observed_at?: string | null;
+  /**
+   * Derived at read time, never stored: whether an event can be found for
+   * this grant, and — separately — whether one was probably missed. Say them
+   * apart on screen: the first is a fact about the evidence, the second is a
+   * fault report about Syndra's own plumbing. See explainDrift below.
+   */
+  attribution_unavailable?: boolean;
+  event_possibly_missed?: boolean;
   role_group?: string;
   role_in_catalogue: boolean;
   /**

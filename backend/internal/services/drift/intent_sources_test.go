@@ -76,16 +76,19 @@ func TestSweep_AccountsForEverySourceOfIntent(t *testing.T) {
 			t.Cleanup(swap(&svcGetExclusions, func(context.Context, string) ([]models.ExternalGrantExclusion, error) {
 				return exclusions, nil
 			}))
-			t.Cleanup(swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-				return &zitadel.SearchResult[zitadel.UserGrant]{
-					Items: append([]zitadel.UserGrant{
-						{ID: "g1", UserID: user, ProjectID: project, RoleKeys: []string{role}},
-					}, extraZitadel...),
-				}, nil
+			t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+				all := append([]zitadel.UserGrant{
+					{ID: "g1", UserID: user, ProjectID: project, RoleKeys: []string{role}},
+				}, extraZitadel...)
+				out := make([]db.ObservedGrant, len(all))
+				for i, g := range all {
+					out[i] = db.ObservedGrant{GrantID: g.ID, UserID: g.UserID, ProjectID: g.ProjectID, RoleKeys: g.RoleKeys}
+				}
+				return out, nil
 			}))
 
 			var raised []string
-			t.Cleanup(swap(&upsertDriftItem, func(_ context.Context, _, u, p string, roles []string, _, _, _ string) (string, bool, error) {
+			t.Cleanup(swap(&upsertDriftItem, func(_ context.Context, _, u, p string, roles []string, _, _, _ string, _ db.DriftEvidence) (string, bool, error) {
 				if u == user && p == project && len(roles) > 0 && roles[0] == role {
 					raised = append(raised, u+"/"+p+"/"+roles[0])
 				}
@@ -121,14 +124,12 @@ func TestSweep_AccountsForEverySourceOfIntent(t *testing.T) {
 // returned true unconditionally would pass the test above.
 func TestSweep_AGrantNothingAccountsForIsStillDrift(t *testing.T) {
 	stubSweep(t)
-	t.Cleanup(swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		return &zitadel.SearchResult[zitadel.UserGrant]{
-			Items: []zitadel.UserGrant{{ID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"the-role"}}},
-		}, nil
+	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "the-role")}, nil
 	}))
 
 	raised := 0
-	t.Cleanup(swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
+	t.Cleanup(swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
 		raised++
 		return "d1", true, nil
 	}))

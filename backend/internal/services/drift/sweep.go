@@ -59,55 +59,57 @@ type DriftResult struct {
 // unprojected. Only source-mediated direct grants can be syndra_only here.
 //
 // The target is a constant, not a parameter, and deliberately so: this function
-// pages the Zitadel Management API and compares role keys against Zitadel
-// projects. Accepting a target it cannot actually reach would be a signature
-// that promises something the body does not do. Add-on targets get their own
+// diffs Syndra's records against what the observer already read of Zitadel.
+// Accepting a target it cannot actually reach would be a signature that
+// promises something the body does not do. Add-on targets get their own
 // sweep, over their own reads, in group 4 — what they share is this one, which
 // every write below now names, so two sweeps can run against the same person
 // without either one's findings landing under the other's name.
+//
+// one-truth-many-checks, "The last two readers": this used to page the Zitadel
+// Management API itself. It now reads internal/observe's store instead — the
+// same one every other surface reads — which is what lets it run at the
+// sweep's cadence instead of paying for a listing of its own. What it may
+// conclude is bounded by the ORG OBSERVATION's own age and completeness, never
+// by a per-row timestamp: a grant given out of band is not in the store at all
+// until a sweep covers it, so no row can speak for that absence.
 func Sweep(ctx context.Context) (DriftResult, error) {
 	const target = db.TargetZitadel
 
-	// A target that cannot answer produces no findings — and says so. The
-	// alternative is not "no drift", it is silence that reads as no drift.
-	//
-	// This pre-flight tests whether Zitadel is CONFIGURED, not whether it
-	// answers: it is a nil check on the client. Passing it is not evidence of
-	// anything, so the read below has to be treated as the real test.
-	if !zitadelReachable(ctx) {
-		return DriftResult{
-			Target:         target,
-			Halted:         true,
-			Reason:         "zitadel_offline",
-			Reconciliation: recordUnreconciled(ctx, target, db.UnreconciledUnreachable),
-		}, nil
+	// "Nobody has looked" and "nothing is there" are different facts, and only
+	// one of them permits a conclusion. ErrNoObservation is not an outage — it
+	// is a fresh deployment, or a sweep that has not finished its first pass —
+	// and it may never render as a clean bill.
+	obs, err := latestOrgObservation(ctx)
+	if err != nil {
+		if errors.Is(err, db.ErrNoObservation) {
+			return DriftResult{
+				Target:         target,
+				Halted:         true,
+				Reason:         "not_checked_yet",
+				Reconciliation: recordUnreconciled(ctx, target, db.UnreconciledUnreachable),
+			}, nil
+		}
+		// A failure to read SYNDRA'S OWN store is not a statement about
+		// Zitadel — the row this would leave behind belongs to the target,
+		// and this failure is not about the target.
+		return DriftResult{}, fmt.Errorf("drift sweep: read latest observation: %w", err)
 	}
+	observedGrants, err := allObservedGrants(ctx)
+	if err != nil {
+		return DriftResult{}, fmt.Errorf("drift sweep: read observed grants: %w", err)
+	}
+	zit := services.ObservedToUserGrants(observedGrants)
+	// truncated, in this sweep's vocabulary, now means what obs.Complete means:
+	// the org observation did not finish, so presence can still be concluded
+	// from what it saw and absence cannot be concluded from what it did not.
+	truncated := !obs.Complete
+	observedAt := obs.ObservedAt
+	evidence := db.DriftEvidence{ObservedAt: &observedAt}
 
 	direct, err := svcAllDirectGrants(ctx)
 	if err != nil {
 		return DriftResult{}, err
-	}
-	// The read failing IS the outage, on any page of it. Returning the error
-	// here would have made a live network failure the one kind of outage that
-	// goes unrecorded — and the row left behind would keep reporting the last
-	// current read for the duration, so the surface built to say "Syndra has
-	// not seen this target since Tuesday" would say "seen Tuesday" instead. It
-	// is the same halt as the branch above, reached by the honest test rather
-	// than the cheap one.
-	//
-	// A partly-read list is discarded rather than diffed: what did not arrive
-	// is unseen, not absent (see the truncation branch below for the same
-	// distinction reached a different way).
-	zit, truncated, err := fetchAllZitadelGrants(ctx)
-	if err != nil {
-		reason, currency := classifyReadFailure(err)
-		log.Printf("[DRIFT] target read failed for %s (%s): %v (recorded unreconciled, nothing diffed)", target, reason, err)
-		return DriftResult{
-			Target:         target,
-			Halted:         true,
-			Reason:         reason,
-			Reconciliation: recordUnreconciled(ctx, target, currency),
-		}, nil
 	}
 	// The reads below are Syndra's own. Their failure is not a statement about
 	// the target and must not be recorded as one — an operator sent to check
@@ -160,7 +162,7 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 				continue // Syndra accounts for this grant — not drift
 			}
 			if _, inserted, err := upsertDriftItem(ctx, target, g.UserID, g.ProjectID,
-				[]string{rk}, g.ID, "reconciliation_sweep", db.DriftTargetOnly); err != nil {
+				[]string{rk}, g.ID, "reconciliation_sweep", db.DriftTargetOnly, evidence); err != nil {
 				log.Printf("[DRIFT] upsert target_only failed user=%s project=%s role=%s: %v", g.UserID, g.ProjectID, rk, err)
 				res.WriteFailures++
 			} else if inserted {
@@ -254,7 +256,7 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 			// replay.
 			observedByHand[k] = true
 			if _, inserted, err := upsertDriftItem(ctx, target, dg.UserID, dg.ProjectID,
-				[]string{dg.RoleKey}, "", "reconciliation_sweep", db.DriftSyndraOnly); err != nil {
+				[]string{dg.RoleKey}, "", "reconciliation_sweep", db.DriftSyndraOnly, evidence); err != nil {
 				log.Printf("[DRIFT] upsert syndra_only failed user=%s project=%s role=%s: %v",
 					dg.UserID, dg.ProjectID, dg.RoleKey, err)
 				res.WriteFailures++
@@ -329,30 +331,6 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	return res, nil
 }
 
-// classifyReadFailure separates a target that did not answer from one that
-// answered and declined to serve the read, returning the result's reason code
-// and the durable currency reason.
-//
-// The split is answered / not answered, and deliberately no finer. A typed
-// status error means bytes came back from Zitadel: the network is fine, the
-// host is up, and the thing to fix is a credential, a permission, or Zitadel
-// itself. Reported as unreachable, an expired service-account key looks like
-// weather — something to wait out rather than repair, and the sweep would go on
-// failing every tick while the record said the target was down.
-//
-// Splitting further, 401 from 500, would be guessing at Zitadel's status
-// semantics to pick an operator's next move. The code is in the log; the
-// durable reason says only what the sweep actually established.
-func classifyReadFailure(err error) (reason, currency string) {
-	var status *zitadel.StatusError
-	if errors.As(err, &status) {
-		return "zitadel_read_refused", db.UnreconciledReadRefused
-	}
-	// Distinct from `zitadel_offline`: not wired up and not answering send an
-	// operator to different places again.
-	return "zitadel_unreachable", db.UnreconciledUnreachable
-}
-
 // recordUnreconciled and recordReconciled write the target's currency and hand
 // it back for the result. A failure to record is logged and reported as an
 // absent Reconciliation rather than as a failed sweep: the findings the pass
@@ -375,28 +353,6 @@ func recordReconciled(ctx context.Context, target string) *db.TargetReconciliati
 		return nil
 	}
 	return &rec
-}
-
-// fetchAllZitadelGrants pages ListAllGrants, capped at driftSafetyCap (B2).
-// Mirrors handlers/reconciliation.go:fetchAllZitadelGrants; kept here so the
-// drift package is self-contained (avoids a handlers→drift→handlers cycle).
-func fetchAllZitadelGrants(ctx context.Context) ([]zitadel.UserGrant, bool, error) {
-	var all []zitadel.UserGrant
-	offset := 0
-	for {
-		page, err := zitadelListAllGrants(ctx, zitadel.SearchParams{Limit: zitadelPageSize, Offset: offset})
-		if err != nil {
-			return nil, false, err
-		}
-		all = append(all, page.Items...)
-		if len(all) >= page.Total || len(page.Items) == 0 {
-			return all, false, nil
-		}
-		if len(all) >= driftSafetyCap {
-			return all, true, nil
-		}
-		offset += len(page.Items)
-	}
 }
 
 // The merge base, in Zitadel's vocabulary (change `reconciliation-as-merge`).

@@ -35,7 +35,7 @@
   everything, not only about a write just made. `internal/observe`, `db.Observation`,
   wired in `cmd/api/main.go` at `OBSERVE_SWEEP_INTERVAL` (default 5m)
 - [ ] 3.2 Counts and dashboard tiles read verdicts rather than records
-- [ ] 3.3 Only the observer may call Zitadel; delete the direct reads from
+- [x] 3.3 Only the observer may call Zitadel; delete the direct reads from
   surfaces and guard against their return. Done, 2026-09-11: the webhook no
   longer writes `zitadel_grants_index` from event payloads (it re-observes
   the affected person instead — `observeAfterEvent`, webhook.go), and
@@ -44,10 +44,35 @@
   `observed_at`/`complete` through to the person page and the reconciliation
   list. `repoguard.TestOnlyTheObserverListsZitadelGrantsLive` guards it, with
   the outbox drain's PRE-FLIGHT read (`liveUserGrantRoles`, which concludes only
-  presence) and the governance reachability probe exempted by argument — the
-  read-back is not exempt and goes through the observer, and reconciliation's
-  own live diff, the drift sweep, and the webhook's grant-lookup fallback
-  still exempted as KNOWN GAPS pending the rest of this task — see NEXT.md
+  presence) and the governance reachability probe exempted by argument.
+  **Finished, 2026-09-11 ("The last two readers"):** the drift sweep
+  (`drift/sweep.go`) no longer pages Zitadel at all — it reads
+  `db.LatestOrgObservation` + `db.AllObservedGrants`, cites the org
+  observation's `observed_at` on every finding it writes
+  (`drift_items.zitadel_observed_at`, migration 000049), refuses a clean
+  bill (`markReconciled`) from `ErrNoObservation` or an incomplete
+  observation, and now runs on the observer's own cadence
+  (`observeInterval()`, ~5m) instead of a dedicated 6h schedule, gated behind
+  `awaitFirstObservation` so it never runs before the first sweep. Addon
+  reconciliation (`drift/addon.go`, `ReconcileAddon`) is a different reader
+  with different failure modes and keeps its own 6h `driftInterval()`.
+  `handlers/reconciliation.go`'s on-demand diff now calls `observe.Org`
+  (recording a fresh observation, shared rather than discarded) and reads
+  `db.AllObservedGrants` back, same as discovery.go's routes.
+  `repoguard.TestOnlyTheObserverListsZitadelGrantsLive` has one exemption
+  left: `zitadel_grant_lookup.go`'s webhook grant-lookup fallback, a
+  single-purpose read that enriches one event rather than answering "how
+  many people hold this" — tracked in NEXT.md.
+  **Also added:** a drift finding sourced from the sweep (no direct upstream
+  evidence) derives, at read time (`db.driftItemSelect`, never stored),
+  whether an event exists for its grant aggregate in `webhook_events` (a
+  prefix match on `idempotency_key`) — `attribution_unavailable` when none
+  does, and the stronger `event_possibly_missed` when the event log's own
+  oldest held row is older than the finding's `detected_at` (otherwise the
+  log simply does not reach back far enough to say so). Scoped to
+  `drift_items` only — the self-mutation guard means Syndra's own grants
+  never have an event, so running this over the observation store would
+  flag every grant Syndra makes.
 - [x] 3.4 The truncation limit is stated AND enforced where it decides
   something: a revoke may only be confirmed from a complete answer. The
   pre-flight stays capped because it concludes presence, where a miss costs a

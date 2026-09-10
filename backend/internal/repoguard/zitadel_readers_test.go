@@ -73,30 +73,20 @@ var mayReadZitadelGrantsLive = map[string]zitadelReadExemption{
 		allow:  1,
 	},
 
-	// KNOWN GAP. The drift sweep keeps its own paginated org-wide listing
-	// (`fetchAllZitadelGrants`), independently declared from reconciliation's
-	// copy of the same loop — already recorded as duplicated judgement in
-	// openspec/NEXT.md ("Two `fetchAllZitadelGrants`... with independently
-	// declared page sizes and caps"). This task (webhook + discovery.go) did
-	// not migrate it; task 3.3 of one-truth-many-checks is not finished.
-	"backend/internal/services/drift/deps.go": {
-		reason: "KNOWN GAP: the drift sweep's own live listing, not yet migrated to observe.Org — tracked in openspec/NEXT.md",
-		allow:  1,
-	},
-
-	// KNOWN GAP. discovery.go's own two grant-listing ROUTES now observe (see
-	// handleListAllZitadelGrants / handleListZitadelUserGrants) — but the two
-	// closures this file defines are still called by two things this task did
-	// not touch: reconciliation.go's own live diff (`fetchAllZitadelGrants`,
-	// a second, independently-capped copy of the drift sweep's loop — same
-	// NEXT.md entry as above) and the webhook's grant-lookup fallback
-	// (zitadel_grant_lookup.go, used by enrichGrantPayload when the local
-	// index has no row for a grant aggregate ID yet). Neither renders a
-	// "how many people hold this" answer to a screen; both are narrower,
-	// single-purpose reads. Tracked in openspec/NEXT.md pending migration.
+	// The last remaining live read (one-truth-many-checks, "The last two
+	// readers" — the drift sweep and reconciliation's own diff are both
+	// migrated as of this pass; the drift sweep's live listing is gone from
+	// drift/deps.go entirely, and reconciliation.go's handler now calls
+	// observeOrg + reads the store, same as discovery.go's grant-listing
+	// routes). What is left is zitadel_grant_lookup.go's fallback
+	// (enrichGrantPayload, called from the webhook's own event handling when
+	// the local index has no row for a grant aggregate ID yet) — a single
+	// grant lookup made to enrich ONE event as it arrives, never a "how many
+	// people hold this" answer rendered to a screen. Out of this pass's scope;
+	// tracked in openspec/NEXT.md pending migration.
 	"backend/internal/handlers/deps.go": {
-		reason: "KNOWN GAP: reconciliation's live diff and the webhook's grant-lookup fallback still read live — tracked in openspec/NEXT.md",
-		allow:  2, // zitadelListAllGrants + zitadelListUserGrants
+		reason: "KNOWN GAP: the webhook's grant-lookup fallback still reads live — tracked in openspec/NEXT.md",
+		allow:  1, // zitadelListUserGrants
 	},
 }
 
