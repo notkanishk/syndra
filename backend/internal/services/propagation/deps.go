@@ -37,8 +37,11 @@ var (
 	undispatchable   = db.UndispatchableTarget
 	awaitingDispatch = db.TargetsAwaitingDispatch
 	markApplied      = db.MarkPropagationApplied
-	markFailed       = db.MarkPropagationFailed
-	requeue          = db.RequeuePropagation
+	// Recorded separately from `applied`, because accepted and observed are
+	// different facts and the gap between them is ordinary.
+	markConfirmed = db.MarkPropagationConfirmed
+	markFailed    = db.MarkPropagationFailed
+	requeue       = db.RequeuePropagation
 	// release returns a row to pending without spending a retry, for the one
 	// case where nothing was attempted at all.
 	release = db.ReleasePropagation

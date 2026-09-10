@@ -11,7 +11,11 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader, CardHeaderLink, CardRow } from "@/components/ui/Card";
 import { Term } from "@/components/ui/Term";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
-import { useGovernanceSummary, type UnreconciledTarget } from "@/lib/queries/useGovernance";
+import {
+  useGovernanceSummary,
+  type UnreconciledTarget,
+  type UnconfirmedWriteSummary,
+} from "@/lib/queries/useGovernance";
 import {
   useDecideRequest,
   useRequestsAdmin,
@@ -82,6 +86,11 @@ export function Home({ session }: { session: SessionUser }) {
   // not been made, and a page that omits them says "nothing needs you" while
   // somebody's access sits disputed.
   const findings = summary.data?.merge_findings ?? 0;
+  // Writes Zitadel accepted that no later read has been able to see, old
+  // enough that the gap is a finding rather than Zitadel's read projection
+  // catching up (see UnconfirmedWrites — the threshold lives on the backend
+  // so this page never invents its own answer to "how long is too long").
+  const unconfirmedWrites = summary.data?.unconfirmed_writes ?? { count: 0, top: [] };
   // Two different gaps that both mean "somebody joined and got nothing": no
   // default is set at all (1, a fact about right now, not a person), and
   // named people the reconciler finds holding no bundle when a default DOES
@@ -100,6 +109,7 @@ export function Home({ session }: { session: SessionUser }) {
       expiring.length +
       onboardingGaps +
       (propagation?.count ?? 0) +
+      unconfirmedWrites.count +
       (drift?.count ?? 0) +
       unvouched.length +
       findings
@@ -163,6 +173,9 @@ export function Home({ session }: { session: SessionUser }) {
               count={propagation!.count}
               reachable={propagation!.zitadel_reachable}
             />
+          )}
+          {advanced && unconfirmedWrites.count > 0 && (
+            <UnconfirmedWrites summary={unconfirmedWrites} />
           )}
           {/* Above unexplained access, because it qualifies it: a target Syndra
               cannot read contributes no findings, so the count below is a
@@ -447,6 +460,78 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
       )}
     </Card>
   );
+}
+
+/**
+ * Writes Zitadel accepted that no read has since observed, old enough that
+ * the gap is a finding rather than the read projection catching up
+ * (`one-truth-many-checks`: accepted is not confirmed).
+ *
+ * Neither of the two states this page already has a block for: not a failed
+ * change — Zitadel said yes — and not one still waiting to be sent — Syndra
+ * already sent it. A 2xx is an acknowledgement of receipt, never evidence
+ * Zitadel can show the change back, and the age is the entire content of the
+ * finding: the backend only lists a row here once it is old enough that the
+ * gap stopped being Zitadel's own read catching up with itself.
+ *
+ * The next move is the person's own page rather than a resend — there is
+ * nothing here to resend, it already went through — so the row points at
+ * where an operator can look at what that person currently holds.
+ */
+function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
+  const count = summary.count;
+  const rows = summary.top ?? [];
+  return (
+    <Card>
+      <CardHeader title="Sent, and not seen back yet" count={count} tone="warn" />
+      <CardRow>
+        <div className="flex-1 text-[14.5px]">
+          Syndra sent {count === 1 ? "this change" : "these changes"} and Zitadel accepted{" "}
+          {count === 1 ? "it" : "them"}
+          <span className="text-faint">
+            {" "}
+            — not a failed change, and not one still waiting to be sent. A later look at Zitadel
+            just hasn&rsquo;t been able to see {count === 1 ? "it" : "them"} yet.
+          </span>
+        </div>
+      </CardRow>
+      <div className="contents arrive-list">
+        {rows.map((row, i) => (
+          <CardRow key={row.id} first={i === 0}>
+            <UserAvatar id={row.user_id} size="list" />
+            <Link
+              href={`/users/${row.user_id}`}
+              className="w-[170px] shrink-0 truncate text-[15px] font-semibold hover:underline"
+            >
+              <UserName id={row.user_id} />
+            </Link>
+            <div className="w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
+              {row.role_keys && row.role_keys.length > 0 ? (
+                row.role_keys.map((key) => (
+                  <RoleRef key={key} projectId={row.project_id} roleKey={key} className="mr-2" />
+                ))
+              ) : (
+                <span className="text-faint">—</span>
+              )}
+            </div>
+            <div className="min-w-0 flex-1 truncate text-[14px] text-muted">
+              {writeNoun(row.op_type)}, accepted <Relative iso={row.applied_at} />
+            </div>
+            <ButtonLink href={`/users/${row.user_id}`} size="sm">
+              Look at their access
+            </ButtonLink>
+          </CardRow>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+/** The write, in the word a reader uses for it — never the raw op_type. */
+function writeNoun(opType: string): string {
+  if (opType === "revoke") return "A withdrawal";
+  if (opType === "replace") return "A change";
+  return "A grant";
 }
 
 /**

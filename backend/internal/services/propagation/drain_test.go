@@ -36,6 +36,8 @@ func stubDrainDeps(t *testing.T) {
 		// The claim cache the drain now clears. Unstubbed it reaches a nil
 		// Redis client and fails every apply test for a reason none is about.
 		swap(&invalidateClaims, func(context.Context, string) error { return nil }),
+		// The confirmation write. Unstubbed it reaches a nil pool.
+		swap(&markConfirmed, func(context.Context, string) error { return nil }),
 		swap(&dbUpsertGrantIndex, func(context.Context, string, string, string, []string) error { return nil }),
 		swap(&pruneTerminal, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&prunePlans, func(context.Context, int) (int64, error) { return 0, nil }),
@@ -1190,5 +1192,165 @@ func TestDrain_AFailedCacheClearStillAppliesTheRow(t *testing.T) {
 	}
 	if appliedID != "o8" || res.Applied != 1 {
 		t.Fatalf("a cache failure stranded an accepted write: applied=%q res=%+v", appliedID, res)
+	}
+}
+
+// A write is followed by a question, and the answer is recorded.
+//
+// `applied` has always meant "Zitadel returned 2xx" — an acknowledgement of
+// receipt, read by the product as evidence of state. These pin the two apart.
+func TestDrain_AnObservedWriteIsConfirmed(t *testing.T) {
+	stubDrainDeps(t)
+	claimPending = oneRow("oc1", "add")
+	seen := false
+	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
+		// Absent before the write, present after it — the read-back is the
+		// second call, and it is the one that must decide.
+		if !seen {
+			seen = true
+			return map[string]bool{}, nil
+		}
+		return map[string]bool{"r": true}, nil
+	}
+	zitadelAddUserGrant = func(context.Context, string, string, []string) error { return nil }
+	var confirmed string
+	markConfirmed = func(_ context.Context, id string) error { confirmed = id; return nil }
+
+	if _, err := Drain(context.Background()); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if confirmed != "oc1" {
+		t.Fatalf("an observed write was not recorded as confirmed; got %q", confirmed)
+	}
+}
+
+// The hazard this design exists around.
+//
+// Zitadel's read path is a projection over its eventstore, so a read issued a
+// millisecond after an accepted write can legitimately not see it yet. A
+// read-back that treated that as a failure would retry a good write and turn a
+// lagging projection into duplicate work. The row stays applied, unconfirmed,
+// and waits to be looked at again.
+func TestDrain_AWriteZitadelHasNotYetSurfacedIsStillApplied(t *testing.T) {
+	stubDrainDeps(t)
+	claimPending = oneRow("oc2", "add")
+	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
+		return map[string]bool{}, nil // never catches up within this pass
+	}
+	zitadelAddUserGrant = func(context.Context, string, string, []string) error { return nil }
+	var appliedID, confirmed string
+	markApplied = func(_ context.Context, id string) error { appliedID = id; return nil }
+	markConfirmed = func(_ context.Context, id string) error { confirmed = id; return nil }
+
+	res, err := Drain(context.Background())
+	if err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if appliedID != "oc2" || res.Applied != 1 {
+		t.Fatalf("a lagging read failed a write Zitadel had accepted: applied=%q res=%+v", appliedID, res)
+	}
+	if confirmed != "" {
+		t.Fatalf("an unobserved write was recorded as confirmed: %q", confirmed)
+	}
+	if res.Failed != 0 || res.Requeued != 0 {
+		t.Fatalf("the write was retried rather than left to be looked at again: %+v", res)
+	}
+}
+
+// A revoke is confirmed by ABSENCE, and the read must be read the other way
+// round. Getting this backwards would confirm exactly the writes that failed.
+func TestDrain_ARevokeIsConfirmedByTheRoleBeingGone(t *testing.T) {
+	stubDrainDeps(t)
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
+		return []models.PendingPropagation{{
+			ID: "oc3", OpType: "revoke", UserID: "u", ProjectID: "p",
+			RoleKeys: []string{"r"}, ZitadelGrantID: "g1",
+		}}, nil
+	}
+	calls := 0
+	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
+		calls++
+		if calls == 1 {
+			return map[string]bool{"r": true}, nil // still there, so the revoke runs
+		}
+		return map[string]bool{}, nil // gone afterwards
+	}
+	zitadelRemoveUserGrant = func(context.Context, string, string) error { return nil }
+	var confirmed string
+	markConfirmed = func(_ context.Context, id string) error { confirmed = id; return nil }
+
+	if _, err := Drain(context.Background()); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if confirmed != "oc3" {
+		t.Fatalf("a revoke whose role is gone was not confirmed; got %q", confirmed)
+	}
+}
+
+// And a revoke whose role is STILL THERE is not confirmed, however cleanly the
+// call returned.
+func TestDrain_ARevokeThatLeftTheRoleInPlaceIsNotConfirmed(t *testing.T) {
+	stubDrainDeps(t)
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
+		return []models.PendingPropagation{{
+			ID: "oc4", OpType: "revoke", UserID: "u", ProjectID: "p",
+			RoleKeys: []string{"r"}, ZitadelGrantID: "g1",
+		}}, nil
+	}
+	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
+		return map[string]bool{"r": true}, nil // there before AND after
+	}
+	zitadelRemoveUserGrant = func(context.Context, string, string) error { return nil }
+	var confirmed string
+	markConfirmed = func(_ context.Context, id string) error { confirmed = id; return nil }
+
+	if _, err := Drain(context.Background()); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if confirmed != "" {
+		t.Fatalf("a revoke that changed nothing was recorded as confirmed: %q", confirmed)
+	}
+}
+
+// The confirmation lands on a row that is already applied.
+//
+// `MarkPropagationConfirmed` is guarded on `status='applied'` so it can never
+// resurrect a failed or superseded row. Called while the row was still
+// `in_flight` — which is what the original ordering did — that guard matches
+// nothing: zero rows updated, no error returned, and no confirmation ever
+// recorded. The write was observed and the observation was thrown away.
+//
+// Neither test layer could see it. The unit tests stub the seam, so the SQL
+// guard never runs; the live tests seeded a row that was already applied, so
+// the sequence never ran. Two halves, each correct about itself. This asserts
+// the ORDER, which is the only thing either half was missing.
+func TestDrain_ARowIsAppliedBeforeItIsConfirmed(t *testing.T) {
+	stubDrainDeps(t)
+	claimPending = oneRow("oc5", "add")
+	seen := false
+	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
+		if !seen {
+			seen = true
+			return map[string]bool{}, nil
+		}
+		return map[string]bool{"r": true}, nil
+	}
+	zitadelAddUserGrant = func(context.Context, string, string, []string) error { return nil }
+
+	var order []string
+	markApplied = func(context.Context, string) error {
+		order = append(order, "applied")
+		return nil
+	}
+	markConfirmed = func(context.Context, string) error {
+		order = append(order, "confirmed")
+		return nil
+	}
+
+	if _, err := Drain(context.Background()); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if len(order) != 2 || order[0] != "applied" || order[1] != "confirmed" {
+		t.Fatalf("the confirmation did not land on an applied row: %v", order)
 	}
 }

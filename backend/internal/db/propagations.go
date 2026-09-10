@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"syndra/internal/models"
+	"time"
 )
 
 // drainAdvisoryLockKey is the stable, arbitrary key for the session-level
@@ -562,6 +563,72 @@ func MarkPropagationApplied(ctx context.Context, id string) error {
 	return settleOne(ctx, "mark propagation applied", id,
 		`UPDATE propagation_outbox SET status='applied', completed_at=NOW(), last_error=NULL
 		 WHERE id=$1 AND status='in_flight'`)
+}
+
+// MarkPropagationConfirmed records that a read of Zitadel OBSERVED this write.
+//
+// Separate from MarkPropagationApplied, and deliberately so. Applied means
+// Zitadel accepted the call; confirmed means somebody has since looked and seen
+// it. Between them is an ordinary state, not a half-written one: Zitadel's read
+// path is a projection over its eventstore, so an immediate read-back can
+// legitimately not see an accepted write yet.
+//
+// Guarded on `status='applied'` so a confirmation can never resurrect a row
+// that failed, was superseded, or was abandoned after it was observed.
+// Not settleOne: that reports zero rows as ErrPropagationNotInFlight, and zero
+// rows here means the row was already confirmed — which is a success, not a
+// fault. A confirmation is idempotent by nature; two reads observing the same
+// write must not produce an error the second time.
+func MarkPropagationConfirmed(ctx context.Context, id string) error {
+	_, err := querier(ctx).Exec(ctx,
+		`UPDATE propagation_outbox SET confirmed_at=NOW()
+		  WHERE id=$1 AND status='applied' AND confirmed_at IS NULL`, id)
+	if err != nil {
+		return fmt.Errorf("mark propagation confirmed: %w", err)
+	}
+	return nil
+}
+
+// AppliedButUnobserved lists writes Zitadel accepted and no read has since
+// seen, older than `olderThan`.
+//
+// Age is what makes one of these a finding. A write accepted a second ago and
+// not yet visible is Zitadel's read projection catching up; the same write
+// still unobserved an hour later is a claim nobody has been able to
+// substantiate, and the operator who acted on it deserves to know.
+func AppliedButUnobserved(ctx context.Context, olderThan time.Duration) ([]PendingPropagationRow, error) {
+	rows, err := querier(ctx).Query(ctx, `
+		SELECT id, op_type, user_id, COALESCE(project_id,''), role_keys, completed_at
+		  FROM propagation_outbox
+		 WHERE status = 'applied' AND confirmed_at IS NULL
+		   AND completed_at < NOW() - $1::interval
+		 ORDER BY completed_at
+		 LIMIT 200`, olderThan.String())
+	if err != nil {
+		return nil, fmt.Errorf("list unobserved writes: %w", err)
+	}
+	defer rows.Close()
+
+	var out []PendingPropagationRow
+	for rows.Next() {
+		var r PendingPropagationRow
+		if err := rows.Scan(&r.ID, &r.OpType, &r.UserID, &r.ProjectID, &r.RoleKeys, &r.AppliedAt); err != nil {
+			return nil, fmt.Errorf("list unobserved writes: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// PendingPropagationRow is one accepted-but-unobserved write, for the surface
+// that has to name it.
+type PendingPropagationRow struct {
+	ID        string    `json:"id"`
+	OpType    string    `json:"op_type"`
+	UserID    string    `json:"user_id"`
+	ProjectID string    `json:"project_id"`
+	RoleKeys  []string  `json:"role_keys"`
+	AppliedAt time.Time `json:"applied_at"`
 }
 
 // MarkPropagationFailed marks a row terminal-failed with the operator-facing

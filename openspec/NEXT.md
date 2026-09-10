@@ -132,6 +132,16 @@ findings are about classes of defect rather than about bundles.
 
 ## 2. Operator-gated
 
+- **A 2xx was being read as evidence of state.** `applied` has always meant
+  Zitadel returned 2xx — an acknowledgement of RECEIPT — and every surface read
+  it as proof the access existed. That is how a row could sit `applied` for a
+  grant no call was ever made for. Fixed 2026-09-10: the drain reads Zitadel
+  back after each accepted write and records `confirmed_at`, a separate fact
+  from `applied`. An unobserved write is never a failure — Zitadel's read path
+  is a projection over its eventstore and can legitimately lag a good write, so
+  it stays applied and waits. Age at twenty minutes is what makes one a finding,
+  surfaced on Home.
+
 - **Auto-onboarding had never once succeeded, and said nothing.** Five real
   accounts between 4 Aug and 9 Sep each fired a `user_created` event, each
   reached `TriggerOnboarding`, and each recorded `failed · no welcome bundle
@@ -485,6 +495,8 @@ states its reason. Left alone on purpose.
   otherwise it re-accumulates.
 
 ## 4c. Owed operator surfaces
+
+- **~~Accepted-but-unconfirmed writes have no dashboard.~~ Built, 2026-09-10.** `db.AppliedButUnobserved` (migration 000047, `one-truth-many-checks`) already recorded the gap between a write Zitadel accepted and a read that has since observed it; nothing surfaced it. It is now in the governance summary (`UnconfirmedWrites`, threshold 20 minutes — long enough that Zitadel's own read-projection lag never pages anybody, short enough that no surface can call a write "in force" on an hour-old acknowledgement) and on the home queue, counted toward the "nothing needs you" decision the same way `unreconciled_targets` is above. Deliberately not folded into `pending_propagation`: that block means "not sent yet", this means "sent, accepted, and not yet seen land" — opposite ends of the write path. Each row's next move is the person's own page rather than a resend, since there is nothing left to resend.
 
 - **~~The unreconciled-target record has no dashboard.~~ Built.** It is in the governance summary and on the home queue, and it counts toward the "nothing needs you" decision — which was the point, since an unread target produces no findings and a blind week otherwise renders exactly like a quiet one (`addon-platform` 1.14a). The note below is the state before that.
 

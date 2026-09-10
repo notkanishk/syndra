@@ -43,6 +43,25 @@ export interface UnreconciledTarget {
   reason?: string;
 }
 
+/**
+ * One write Zitadel accepted that no read has since observed — old enough
+ * that the gap is a finding rather than Zitadel's read projection catching
+ * up (`one-truth-many-checks`: accepted is not confirmed).
+ */
+export interface UnconfirmedWrite {
+  id: string;
+  op_type: string;
+  user_id: string;
+  project_id?: string;
+  role_keys?: string[];
+  applied_at: string;
+}
+
+export interface UnconfirmedWriteSummary {
+  count: number;
+  top?: UnconfirmedWrite[];
+}
+
 export interface GovernanceSummary {
   pending_requests: Array<{ id: string }>;
   expiring_grants: ExpiringGrant[];
@@ -56,6 +75,10 @@ export interface GovernanceSummary {
    * drift is access nobody can explain, this is a disagreement everybody can
    * explain and nobody has decided. */
   merge_findings?: number;
+  /** Writes Zitadel accepted that nobody has since confirmed it kept. Beside
+   * pending_propagation and not inside it: pending is "not sent yet", this is
+   * "sent, accepted, and nobody has seen it land yet." */
+  unconfirmed_writes?: UnconfirmedWriteSummary;
 }
 
 const KEYS = {
@@ -96,6 +119,10 @@ export function mapGovernanceSummary(data: Partial<GovernanceSummary> | undefine
       ? data.unreconciled_targets
       : [],
     merge_findings: typeof data?.merge_findings === "number" ? data.merge_findings : 0,
+    unconfirmed_writes: {
+      count: data?.unconfirmed_writes?.count ?? 0,
+      top: Array.isArray(data?.unconfirmed_writes?.top) ? data.unconfirmed_writes.top : [],
+    },
   };
 }
 
