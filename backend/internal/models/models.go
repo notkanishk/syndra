@@ -634,6 +634,38 @@ type GovernanceSummary struct {
 	// saying nothing needs a person — which is the one thing it must never say
 	// while one does.
 	MergeFindings int `json:"merge_findings"`
+	// UnconfirmedWrites are writes Zitadel accepted that no read has since
+	// observed, old enough that the gap is a finding rather than Zitadel's read
+	// projection catching up (`one-truth-many-checks`: accepted is not
+	// confirmed).
+	//
+	// Beside PendingPropagation and not inside it, because the two sit at
+	// opposite ends of the write path and mean opposite things: pending is
+	// "Syndra has not sent this yet", this is "Syndra sent it, Zitadel said
+	// yes, and nobody has since seen it land." Folding them together would
+	// hide which one an operator is looking at.
+	UnconfirmedWrites UnconfirmedWriteSummary `json:"unconfirmed_writes"`
+}
+
+// UnconfirmedWrite is one accepted write no read has since observed.
+//
+// Restated here rather than reusing `db.PendingPropagationRow` because
+// `models` must not import `db` — the mapping happens at the service seam,
+// same as `UnreconciledTarget`.
+type UnconfirmedWrite struct {
+	ID        string    `json:"id"`
+	OpType    string    `json:"op_type"`
+	UserID    string    `json:"user_id"`
+	ProjectID string    `json:"project_id,omitempty"`
+	RoleKeys  []string  `json:"role_keys,omitempty"`
+	AppliedAt time.Time `json:"applied_at"`
+}
+
+// UnconfirmedWriteSummary is the counted form for the dashboard, plus a
+// preview of the oldest rows — mirrors DriftSummary's Count+Top shape.
+type UnconfirmedWriteSummary struct {
+	Count int                `json:"count"`
+	Top   []UnconfirmedWrite `json:"top,omitempty"`
 }
 
 // UnreconciledTarget is one target Syndra has not read for itself, and since
