@@ -24,6 +24,7 @@ func resetOnboardingDeps(t *testing.T) (
 	origAudit = svcInsertAuditLog
 	origComplete = svcCompleteOnboardingTrigger
 	origFail = svcFailOnboardingTrigger
+	origUnconfigured := svcMarkOnboardingTriggerUnconfigured
 
 	t.Cleanup(func() {
 		svcInsertOnboardingTrigger = origInsert
@@ -32,6 +33,7 @@ func resetOnboardingDeps(t *testing.T) (
 		svcInsertAuditLog = origAudit
 		svcCompleteOnboardingTrigger = origComplete
 		svcFailOnboardingTrigger = origFail
+		svcMarkOnboardingTriggerUnconfigured = origUnconfigured
 	})
 	return
 }
@@ -47,6 +49,7 @@ func happyPathDeps() {
 	svcInsertAuditLog = func(_ context.Context, _, _, _, _ string) error { return nil }
 	svcCompleteOnboardingTrigger = func(_ context.Context, _, _ string) error { return nil }
 	svcFailOnboardingTrigger = func(_ context.Context, _, _ string) error { return nil }
+	svcMarkOnboardingTriggerUnconfigured = func(_ context.Context, _, _ string) error { return nil }
 }
 
 func TestTriggerOnboarding_HappyPath(t *testing.T) {
@@ -104,10 +107,11 @@ func TestTriggerOnboarding_DBFaultOnInsert_Propagates(t *testing.T) {
 	}
 }
 
-func TestTriggerOnboarding_NoBundleAvailable_MarksFailedAndReturnsError(t *testing.T) {
-	// When no welcome bundle is configured, the trigger record is marked failed
-	// (operator visibility) and the named sentinel propagates so callers can
-	// errors.Is against it for alerting.
+func TestTriggerOnboarding_NoBundleAvailable_MarksUnconfiguredNotFailed(t *testing.T) {
+	// No welcome bundle configured is not a fault (migration 000046): the
+	// trigger must be marked 'unconfigured', never 'failed', and the named
+	// sentinel still propagates so callers (the webhook handler) can
+	// errors.Is against it to decide not to retry.
 	resetOnboardingDeps(t)
 
 	svcInsertOnboardingTrigger = func(_ context.Context, _, _, _ string) (string, bool, error) {
@@ -116,9 +120,13 @@ func TestTriggerOnboarding_NoBundleAvailable_MarksFailedAndReturnsError(t *testi
 	svcGetWelcomeBundle = func(_ context.Context) (string, error) {
 		return "", db.ErrNoWelcomeBundleConfigured
 	}
-	failedID := ""
+	unconfiguredID := ""
+	svcMarkOnboardingTriggerUnconfigured = func(_ context.Context, triggerID, _ string) error {
+		unconfiguredID = triggerID
+		return nil
+	}
 	svcFailOnboardingTrigger = func(_ context.Context, triggerID, _ string) error {
-		failedID = triggerID
+		t.Errorf("FailOnboardingTrigger called for a missing bundle (trigger=%s) — that reads as a fault, and it is not one", triggerID)
 		return nil
 	}
 	svcCascadeWelcomeBundle = func(context.Context, string, string, string) (CascadeResult, error) {
@@ -133,8 +141,43 @@ func TestTriggerOnboarding_NoBundleAvailable_MarksFailedAndReturnsError(t *testi
 	if !errors.Is(err, db.ErrNoWelcomeBundleConfigured) {
 		t.Fatalf("expected ErrNoWelcomeBundleConfigured, got %v", err)
 	}
-	if failedID != "trigger-id-2" {
-		t.Fatalf("expected FailOnboardingTrigger called with trigger-id-2, got %q", failedID)
+	if unconfiguredID != "trigger-id-2" {
+		t.Fatalf("expected MarkOnboardingTriggerUnconfigured called with trigger-id-2, got %q", unconfiguredID)
+	}
+}
+
+func TestTriggerOnboarding_WelcomeBundleLookupDBFault_MarksFailed(t *testing.T) {
+	// A real fault reading the bundle table (not the named sentinel) is a
+	// defect, unlike the case above, and belongs in 'failed' — an operator
+	// needs to be able to tell "nothing is configured" from "something broke"
+	// without reading the error text.
+	resetOnboardingDeps(t)
+
+	svcInsertOnboardingTrigger = func(_ context.Context, _, _, _ string) (string, bool, error) {
+		return "trigger-id-fault", true, nil
+	}
+	svcGetWelcomeBundle = func(_ context.Context) (string, error) {
+		return "", errors.New("connection refused")
+	}
+	failedID := ""
+	svcFailOnboardingTrigger = func(_ context.Context, triggerID, _ string) error {
+		failedID = triggerID
+		return nil
+	}
+	svcMarkOnboardingTriggerUnconfigured = func(_ context.Context, triggerID, _ string) error {
+		t.Errorf("MarkOnboardingTriggerUnconfigured called for a DB fault (trigger=%s) — that hides a real defect", triggerID)
+		return nil
+	}
+
+	err := TriggerOnboarding(context.Background(), "u1", "webhook", "key-dbfault")
+	if err == nil {
+		t.Fatal("expected error on DB fault reading the welcome bundle")
+	}
+	if errors.Is(err, db.ErrNoWelcomeBundleConfigured) {
+		t.Fatal("a connection error must not match the no-bundle-configured sentinel")
+	}
+	if failedID != "trigger-id-fault" {
+		t.Fatalf("expected FailOnboardingTrigger called with trigger-id-fault, got %q", failedID)
 	}
 }
 

@@ -135,6 +135,10 @@ var (
 	dbGetWebhookEvents                     = db.GetWebhookEvents
 	dbDropWebhookEventEnrichmentIncomplete = db.DropWebhookEventEnrichmentIncomplete
 
+	// Missed-onboarding reconciler (services/onboarding_reconcile.go) — reads
+	// state, not the trigger log.
+	svcFindMissedOnboarding = services.FindMissedOnboarding
+
 	// Zitadel grants index (event-listener enrichment cache).
 	dbUpsertGrantIndex   = db.UpsertGrantIndex
 	dbGetGrantIndex      = db.GetGrantIndex

@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -391,12 +392,36 @@ func processUserDeactivated(ctx context.Context, event WebhookPayload) error {
 
 // processUserCreated handles user_created events:
 // trigger onboarding (welcome bundle assignment).
+//
+// This used to swallow every error from webhookTriggerOnboarding and return
+// nil unconditionally, so the webhook event was marked completed however
+// onboarding actually went — the trigger row said 'failed' and the delivery
+// record said the opposite, and Zitadel was never asked to retry either way.
+// Five real accounts hit exactly this in production with no escalation.
+//
+// The fix separates two different truths that got flattened into one nil:
+//   - ErrNoWelcomeBundleConfigured is not something a retry can fix (there is
+//     nothing to assign, however many times Zitadel redelivers), so this
+//     still returns nil — Zitadel gets its 200 and moves on. What it must NOT
+//     do is pretend that means success: TriggerOnboarding already recorded
+//     the trigger as 'unconfigured' (never 'failed'), which is where an
+//     operator sees it.
+//   - Anything else — a DB fault, a cascade failure — IS something a retry
+//     might fix, and must propagate so the caller marks the webhook event
+//     failed and Zitadel retries. Reporting that as success was the actual
+//     defect: not the no-retry decision, but pretending nothing went wrong.
 func processUserCreated(ctx context.Context, event WebhookPayload) error {
 	idempotencyKey := fmt.Sprintf("user_created:%s:%s", event.UserID, event.SourceProject)
-	if err := webhookTriggerOnboarding(ctx, event.UserID, "webhook", idempotencyKey); err != nil {
-		log.Printf("[WEBHOOK] Onboarding trigger failed for user=%s: %v", event.UserID, err)
+	err := webhookTriggerOnboarding(ctx, event.UserID, "webhook", idempotencyKey)
+	if err == nil {
+		return nil
 	}
-	return nil
+	if errors.Is(err, db.ErrNoWelcomeBundleConfigured) {
+		log.Printf("[WEBHOOK] no welcome bundle configured for user=%s — trigger recorded as unconfigured, not retried", event.UserID)
+		return nil
+	}
+	log.Printf("[WEBHOOK] Onboarding trigger failed for user=%s: %v", event.UserID, err)
+	return err
 }
 
 // maintainGrantIndex refreshes the local zitadel_grants_index row from a

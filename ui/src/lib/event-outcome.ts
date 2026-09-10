@@ -14,7 +14,11 @@ export type EventOutcome = "all" | "done" | "waiting" | "failed" | "dropped";
  */
 export function outcomeOf(status: string): string {
   if (status === "failed") return "failed";
-  if (status.startsWith("dropped")) return "dropped";
+  // 'unconfigured' is an onboarding trigger that found no welcome bundle to
+  // give — understood and not acted on, same bucket as a dropped webhook
+  // event, and deliberately never "failed": nothing broke, so there is
+  // nothing here for an operator to fix by retrying.
+  if (status.startsWith("dropped") || status === "unconfigured") return "dropped";
   if (status === "pending" || status === "in_flight") return "waiting";
   if (status === "processed" || status === "completed" || status === "succeeded") return "done";
   return status;

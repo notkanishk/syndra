@@ -61,6 +61,29 @@ func FailOnboardingTrigger(ctx context.Context, triggerID, errMsg string) error 
 	return nil
 }
 
+// OnboardingStatusUnconfigured is the onboarding_triggers.status value for
+// ErrNoWelcomeBundleConfigured: the trigger arrived and was understood, but
+// there was nothing to give. Distinct from 'failed' — see migration 000046 —
+// because nothing here is a defect: no write errored, and retrying changes
+// nothing until an operator sets a welcome bundle or decides not to.
+const OnboardingStatusUnconfigured = "unconfigured"
+
+// MarkOnboardingTriggerUnconfigured records that a trigger found no welcome
+// bundle to assign. Same shape as FailOnboardingTrigger — a message, a
+// completion time — but a different status, so the trigger log can tell
+// "nothing was configured" from "something broke" without reading the text.
+func MarkOnboardingTriggerUnconfigured(ctx context.Context, triggerID, errMsg string) error {
+	query := `
+		UPDATE onboarding_triggers
+		SET status = $2, error_message = $3, completed_at = NOW()
+		WHERE id = $1`
+	_, err := querier(ctx).Exec(ctx, query, triggerID, OnboardingStatusUnconfigured, errMsg)
+	if err != nil {
+		return fmt.Errorf("failed to record onboarding as unconfigured: %w", err)
+	}
+	return nil
+}
+
 // GetOnboardingTriggers returns all onboarding triggers ordered by creation time.
 func GetOnboardingTriggers(ctx context.Context) ([]OnboardingTrigger, error) {
 	query := `
