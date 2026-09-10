@@ -83,7 +83,7 @@ export default function ProjectsPage() {
                 <span className="truncate text-[15.5px] font-semibold">
                   {entry.project.name}
                 </span>
-                {entry.active_role_keys.length === 0 && (
+                {entry.role_keys.length === 0 && (
                   <span className="truncate text-[13px] text-faint">
                     No roles yet — nothing here can be granted
                   </span>
@@ -100,9 +100,9 @@ export default function ProjectsPage() {
                   count stays a count so the column reads as one, and the fact
                   is said beside the name, where there is width to say it. */}
               <span className="shrink-0 text-[15px] tablet:w-[60px] tablet:text-right">
-                {entry.active_role_keys.length}
+                {entry.role_keys.length}
                 <span className="text-[13px] text-faint tablet:hidden">
-                  {entry.active_role_keys.length === 1 ? " role" : " roles"}
+                  {entry.role_keys.length === 1 ? " role" : " roles"}
                 </span>
               </span>
               <span className="flex w-full flex-wrap gap-1.5 tablet:w-[240px]">

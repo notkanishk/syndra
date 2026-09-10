@@ -73,7 +73,7 @@ export interface ProjectSummary {
   bundle_count: number;
   rule_in_count: number;
   rule_out_count: number;
-  active_role_keys: string[];
+  role_keys: string[];
   sample_members: string[];
 }
 

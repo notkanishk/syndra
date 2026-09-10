@@ -218,9 +218,9 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load role usage counts: %w", err)
 	}
-	userCounts, err := svcDbGetAssignedUserCounts(ctx)
+	userCounts, err := svcRoleHolderCounts(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("load assigned user counts: %w", err)
+		return nil, fmt.Errorf("count holders: %w", err)
 	}
 
 	// Pre-index directory project names so building the catalog doesn't fan

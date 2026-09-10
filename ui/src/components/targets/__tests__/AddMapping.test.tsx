@@ -40,8 +40,8 @@ vi.mock("@/lib/queries/useMappings", async (importOriginal) => ({
 vi.mock("@/lib/queries/useProjects", () => ({
   useProjects: () => ({
     data: [
-      { project: { id: "pLab", name: "Laser Lab" }, active_role_keys: ["trained", "lead"] },
-      { project: { id: "pEmpty", name: "Studio" }, active_role_keys: [] },
+      { project: { id: "pLab", name: "Laser Lab" }, role_keys: ["trained", "lead"] },
+      { project: { id: "pEmpty", name: "Studio" }, role_keys: [] },
     ],
     isLoading: false,
     error: null,
