@@ -474,21 +474,56 @@ func rememberPropagation(ctx context.Context, row models.PendingPropagation) err
 // 409 AlreadyExists (classified ackApplied) is the real safety net, so a false
 // "no" here is harmless (we call, Zitadel absorbs the dup idempotently). It uses
 // the webhook index first; on any miss it does ONE live grant list per row.
+// The grant index after a revocation Syndra performed itself.
+//
+// The index existed only to be written by Zitadel's own `grant.removed` and
+// `grant.changed` webhooks. Syndra's revocations went out through the
+// Management API and told the cache nothing, so a deployment could revoke a
+// grant and go on holding a record saying the person still had it — for ever,
+// if no webhook ever arrived to correct it.
+//
+// Best-effort on purpose, and only safe to be best-effort because the drain no
+// longer treats this cache as evidence for skipping a call. A failure here
+// leaves a stale row that the drift sweep repairs; it can no longer cause a
+// mutation to be skipped.
+func forgetGrantIndex(ctx context.Context, grantID string) {
+	if grantID == "" {
+		return
+	}
+	if err := dbDeleteGrantIndex(ctx, grantID); err != nil {
+		log.Printf("[PROPAGATION] revoked %s and could not clear its grant index row: %v", grantID, err)
+	}
+}
+
+func rememberGrantIndex(ctx context.Context, grantID, userID, projectID string, roles []string) {
+	if grantID == "" {
+		return
+	}
+	if err := dbUpsertGrantIndex(ctx, grantID, userID, projectID, roles); err != nil {
+		log.Printf("[PROPAGATION] narrowed %s and could not update its grant index row: %v", grantID, err)
+	}
+}
+
 func alreadyExists(ctx context.Context, row models.PendingPropagation) (bool, error) {
 	switch row.OpType {
 	case "add":
-		// add only needs the desired roles PRESENT (superset is fine): the index
-		// can confirm presence, and 409 absorbs any dup if the index is stale.
-		allIndexed := true
-		for _, role := range row.RoleKeys {
-			if ok, err := grantIndexHasRole(ctx, row.UserID, row.ProjectID, role); err != nil || !ok {
-				allIndexed = false
-				break
-			}
-		}
-		if allIndexed {
-			return true, nil // index covers every role; skip the API call
-		}
+		// add only needs the desired roles PRESENT (superset is fine), and the
+		// question is asked of ZITADEL, never of the local grant index.
+		//
+		// It used to accept the index as proof and skip the call entirely. The
+		// index is a cache maintained by Zitadel's `grant.removed` webhook, so
+		// a deployment whose webhooks are not arriving — and every revocation
+		// Syndra itself dispatches, which never wrote to it at all — leaves it
+		// claiming grants that are gone. The drain then read its own stale
+		// cache, concluded the work was already done, and marked the row
+		// `applied` with `attempts = 0`: a grant reported as delivered that no
+		// call was ever made for. The person's page said the change had been
+		// sent and Zitadel had never heard of it.
+		//
+		// Skipping the call was only ever an optimisation — the comment beside
+		// it said so, "409 absorbs any dup" — and an optimisation is not
+		// permitted to decide that a mutation need not happen. One live list
+		// per row is the price of the answer being true.
 		live, err := liveUserGrantRoles(ctx, row.UserID, row.ProjectID) // one list, not per-role
 		if err != nil {
 			return false, nil // can't confirm → proceed; 409 absorbs any dup
@@ -575,8 +610,14 @@ func classifyDispatch(ctx context.Context, row models.PendingPropagation) (ackCl
 		}
 		if len(remaining) == 0 {
 			err = zitadelRemoveUserGrant(ctx, row.UserID, row.ZitadelGrantID)
+			if err == nil {
+				forgetGrantIndex(ctx, row.ZitadelGrantID)
+			}
 		} else {
 			err = zitadelUpdateUserGrant(ctx, row.UserID, row.ZitadelGrantID, remaining)
+			if err == nil {
+				rememberGrantIndex(ctx, row.ZitadelGrantID, row.UserID, row.ProjectID, remaining)
+			}
 		}
 	default:
 		log.Printf("[PROPAGATION] unknown op_type=%s row=%s", row.OpType, row.ID)
