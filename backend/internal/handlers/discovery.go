@@ -37,11 +37,68 @@ type updateProjectRoleRequest struct {
 
 // paginatedResponse wraps a search result with explicit pagination metadata so
 // the consumer always knows whether results are truncated.
+//
+// ObservedAt/Complete are set only by the two grants endpoints, which observe
+// rather than list live (see observationFields) — every other paginated
+// endpoint still lists Zitadel directly and leaves them nil, which omitempty
+// drops rather than rendering as a false "not checked yet".
 type paginatedResponse struct {
-	Items  any `json:"items"`
-	Total  int `json:"total"`
-	Limit  int `json:"limit"`
-	Offset int `json:"offset"`
+	Items      any        `json:"items"`
+	Total      int        `json:"total"`
+	Limit      int        `json:"limit"`
+	Offset     int        `json:"offset"`
+	ObservedAt *time.Time `json:"observed_at,omitempty"`
+	Complete   *bool      `json:"complete,omitempty"`
+}
+
+// observationFields turns a just-made observation into the two fields a
+// grants response adds, so the caller can state how fresh and how whole the
+// answer is. A zero ObservedAt means nothing was actually observed this
+// request (no Zitadel client configured) — omitted entirely rather than
+// rendered as a zero-time reading, which would be indistinguishable from a
+// genuine observation made at the Unix epoch.
+func observationFields(o db.Observation) (*time.Time, *bool) {
+	if o.ObservedAt.IsZero() {
+		return nil, nil
+	}
+	at := o.ObservedAt
+	complete := o.Complete
+	return &at, &complete
+}
+
+// asUserGrants renders the observed shape in the same field names the
+// Zitadel-shape response has always used, so this is the one place that
+// changed rather than every consumer of it.
+func asUserGrants(g []db.ObservedGrant) []zitadel.UserGrant {
+	out := make([]zitadel.UserGrant, 0, len(g))
+	for _, x := range g {
+		out = append(out, zitadel.UserGrant{ID: x.GrantID, UserID: x.UserID, ProjectID: x.ProjectID, RoleKeys: x.RoleKeys})
+	}
+	return out
+}
+
+// paginateObservedGrants applies the caller's limit/offset to a person's full
+// observed set. ObservedGrantsFor returns everything for one person — small
+// at makerspace scale — so pagination happens in memory rather than adding a
+// second, narrower query.
+func paginateObservedGrants(all []db.ObservedGrant, limit, offset int) ([]db.ObservedGrant, int) {
+	total := len(all)
+	if offset >= total {
+		return nil, total
+	}
+	end := offset + limit
+	if limit <= 0 {
+		// Never "everything". `parseSearchParams` guarantees a positive limit
+		// today, so this cannot fire — and a page size that silently means
+		// unbounded, resting on a promise made in another function, is the kind
+		// of contract that holds until somebody adds a second caller.
+		limit = zitadel.DefaultSearchLimit
+		end = offset + limit
+	}
+	if end > total {
+		end = total
+	}
+	return all[offset:end], total
 }
 
 // parseSearchParams extracts ?limit=N&offset=N from query string, applying defaults.
@@ -188,18 +245,32 @@ func handleDeleteZitadelProjectRole(w http.ResponseWriter, r *http.Request) {
 
 // --- Grants ---
 
+// handleListAllZitadelGrants observes the whole org (a live Zitadel read,
+// recorded as it happens — see internal/observe) and then answers from what
+// the store now holds, rather than from the page the live call itself
+// returned. That is what makes this the same answer db.ObservedGrantsFor and
+// every other reader of zitadel_grants_index would give.
 func handleListAllZitadelGrants(w http.ResponseWriter, r *http.Request) {
 	p := parseSearchParams(r)
-	result, err := zitadelListAllGrants(r.Context(), p)
+	obs, err := observeOrg(r.Context())
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
+	items, total, err := dbObservedGrantsPage(r.Context(), p.Limit, p.Offset)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	observedAt, complete := observationFields(obs)
 	jsonResponse(w, http.StatusOK, paginatedResponse{
-		Items: result.Items, Total: result.Total, Limit: p.Limit, Offset: p.Offset,
+		Items: asUserGrants(items), Total: total, Limit: p.Limit, Offset: p.Offset,
+		ObservedAt: observedAt, Complete: complete,
 	})
 }
 
+// handleListZitadelUserGrants is the same act at one person's scope: observe,
+// then answer from the store.
 func handleListZitadelUserGrants(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	if !trimmedNonEmpty(userID) {
@@ -208,13 +279,21 @@ func handleListZitadelUserGrants(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p := parseSearchParams(r)
-	result, err := zitadelListUserGrants(r.Context(), userID, p)
+	obs, err := observeUser(r.Context(), userID)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
+	all, err := dbObservedGrantsFor(r.Context(), userID)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	items, total := paginateObservedGrants(all, p.Limit, p.Offset)
+	observedAt, complete := observationFields(obs)
 	jsonResponse(w, http.StatusOK, paginatedResponse{
-		Items: result.Items, Total: result.Total, Limit: p.Limit, Offset: p.Offset,
+		Items: asUserGrants(items), Total: total, Limit: p.Limit, Offset: p.Offset,
+		ObservedAt: observedAt, Complete: complete,
 	})
 }
 

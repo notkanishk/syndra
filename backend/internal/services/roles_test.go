@@ -21,7 +21,7 @@ func resetRoleDeps(t *testing.T) {
 	origDelete := svcDbDeleteRole
 	origAll := svcDbGetAllLocalRoles
 	origUsage := svcDbGetRoleUsageCounts
-	origUsers := svcRoleHolderCounts
+	origFacts := svcRoleHolderFacts
 	origRefs := svcDbGetAllReferencedRoleKeys
 	origAudit := svcInsertAuditLog
 	origMgmt := zitadel.MgmtClient
@@ -32,7 +32,7 @@ func resetRoleDeps(t *testing.T) {
 		svcDbDeleteRole = origDelete
 		svcDbGetAllLocalRoles = origAll
 		svcDbGetRoleUsageCounts = origUsage
-		svcRoleHolderCounts = origUsers
+		svcRoleHolderFacts = origFacts
 		svcDbGetAllReferencedRoleKeys = origRefs
 		svcInsertAuditLog = origAudit
 		zitadel.MgmtClient = origMgmt
@@ -52,8 +52,8 @@ func noopRoleDeps() {
 	svcDbGetRoleUsageCounts = func(_ context.Context) (map[string]db.RoleUsage, error) {
 		return map[string]db.RoleUsage{}, nil
 	}
-	svcRoleHolderCounts = func(_ context.Context) (map[string]int, error) {
-		return map[string]int{}, nil
+	svcRoleHolderFacts = func(_ context.Context) (map[string]int, map[string]int, models.ObservationBasis, error) {
+		return map[string]int{}, nil, models.ObservationBasis{}, nil
 	}
 	svcDbGetAllReferencedRoleKeys = func(_ context.Context) ([][2]string, error) {
 		return nil, nil

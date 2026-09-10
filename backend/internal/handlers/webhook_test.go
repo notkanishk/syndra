@@ -50,10 +50,9 @@ func resetWebhookDeps(t *testing.T) {
 	origInsert := dbInsertWebhookEvent
 	origComplete := dbCompleteWebhookEvent
 	origFail := dbFailWebhookEvent
-	origUpsertIdx := dbUpsertGrantIndex
 	origGetIdx := dbGetGrantIndex
-	origDeleteIdx := dbDeleteGrantIndex
 	origListLive := dbListUserGrantsLive
+	origObserveUser := observeUser
 	origDrop := dbDropWebhookEventEnrichmentIncomplete
 	origUserExpectsRole := svcUserExpectsRole
 	origHasExclusion := dbHasExclusion
@@ -67,10 +66,9 @@ func resetWebhookDeps(t *testing.T) {
 		dbInsertWebhookEvent = origInsert
 		dbCompleteWebhookEvent = origComplete
 		dbFailWebhookEvent = origFail
-		dbUpsertGrantIndex = origUpsertIdx
 		dbGetGrantIndex = origGetIdx
-		dbDeleteGrantIndex = origDeleteIdx
 		dbListUserGrantsLive = origListLive
+		observeUser = origObserveUser
 		dbDropWebhookEventEnrichmentIncomplete = origDrop
 		svcUserExpectsRole = origUserExpectsRole
 		dbHasExclusion = origHasExclusion
@@ -99,11 +97,10 @@ func setupNoopWebhookDeps(t *testing.T) {
 	}
 	dbCompleteWebhookEvent = func(_ context.Context, _ string) error { return nil }
 	dbFailWebhookEvent = func(_ context.Context, _, _ string) error { return nil }
-	dbUpsertGrantIndex = func(_ context.Context, _, _, _ string, _ []string) error { return nil }
 	dbGetGrantIndex = func(_ context.Context, _ string) (db.ZitadelGrantIndex, error) {
 		return db.ZitadelGrantIndex{}, db.ErrGrantIndexNotFound
 	}
-	dbDeleteGrantIndex = func(_ context.Context, _ string) error { return nil }
+	observeUser = func(_ context.Context, _ string) (db.Observation, error) { return db.Observation{}, nil }
 	dbListUserGrantsLive = func(_ context.Context, _, _ string) (zitadel.UserGrant, error) {
 		return zitadel.UserGrant{}, fmt.Errorf("test default: zitadel lookup not stubbed")
 	}
@@ -206,6 +203,80 @@ func TestWebhook_GrantRemoved(t *testing.T) {
 	}
 	if !invalidateCalled {
 		t.Error("expected cache invalidation")
+	}
+}
+
+// TestWebhook_GrantAdded_ReObservesAffectedUser is task 1 of
+// one-truth-many-checks/3.3: a grant_added event must no longer write
+// zitadel_grants_index from the payload. It re-asks Zitadel for the
+// affected person instead — the event is a reason to look, not a source.
+func TestWebhook_GrantAdded_ReObservesAffectedUser(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	var observedUser string
+	observeUser = func(_ context.Context, userID string) (db.Observation, error) {
+		observedUser = userID
+		return db.Observation{Scope: "user", SubjectID: userID, Complete: true}, nil
+	}
+
+	body := []byte(`{"event_type":"grant_added","user_id":"u1","source_project":"p1","role_key":"editor","grant_id":"g1"}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if observedUser != "u1" {
+		t.Fatalf("expected observeUser to be called for the affected user u1, got %q", observedUser)
+	}
+}
+
+// TestWebhook_GrantRemoved_ReObservesAffectedUser is the mirror for
+// grant_removed: no direct dbDeleteGrantIndex call, a re-observe instead.
+func TestWebhook_GrantRemoved_ReObservesAffectedUser(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	var observedUser string
+	observeUser = func(_ context.Context, userID string) (db.Observation, error) {
+		observedUser = userID
+		return db.Observation{Scope: "user", SubjectID: userID, Complete: true}, nil
+	}
+
+	body := []byte(`{"event_type":"grant_removed","user_id":"u1","source_project":"p1","role_key":"editor","grant_id":"g1"}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if observedUser != "u1" {
+		t.Fatalf("expected observeUser to be called for the affected user u1, got %q", observedUser)
+	}
+}
+
+// TestWebhook_GrantAdded_ProcessingFailure_SkipsReObserve: if the cascade
+// itself failed, the state to re-check has not settled yet — re-observing
+// on a failed dispatch would just record a half-applied moment. The event
+// stays in the retry path (dbFailWebhookEvent) and Zitadel gets retried
+// upstream, so the eventual re-observe happens after a real success.
+func TestWebhook_GrantAdded_ProcessingFailure_SkipsReObserve(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	webhookEnforceMappingRules = func(context.Context, string, string, string) error {
+		return fmt.Errorf("boom")
+	}
+	var observeCalled bool
+	observeUser = func(_ context.Context, userID string) (db.Observation, error) {
+		observeCalled = true
+		return db.Observation{}, nil
+	}
+
+	body := []byte(`{"event_type":"grant_added","user_id":"u1","source_project":"p1","role_key":"editor","grant_id":"g1"}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 on cascade failure, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if observeCalled {
+		t.Error("expected observeUser NOT to be called when processing failed")
 	}
 }
 

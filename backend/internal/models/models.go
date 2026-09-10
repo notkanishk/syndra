@@ -329,13 +329,19 @@ type ClaimKeyOwner struct {
 // with at least one current holder, which let a project with three
 // grantable-but-unassigned roles render as having none.
 type ProjectSummary struct {
-	Project       ProjectCatalog `json:"project"`
-	MemberCount   int            `json:"member_count"`
-	BundleCount   int            `json:"bundle_count"`
-	RuleInCount   int            `json:"rule_in_count"`
-	RuleOutCount  int            `json:"rule_out_count"`
-	RoleKeys      []string       `json:"role_keys"`
-	SampleMembers []string       `json:"sample_members"`
+	Project ProjectCatalog `json:"project"`
+	// MemberCount is what Syndra decided — a Recorded fact. See
+	// ConfirmedMemberCount for what the observation store confirms of it.
+	MemberCount  int `json:"member_count"`
+	BundleCount  int `json:"bundle_count"`
+	RuleInCount  int `json:"rule_in_count"`
+	RuleOutCount int `json:"rule_out_count"`
+	// ConfirmedMemberCount is how many of MemberCount's people the observation
+	// store also shows holding a role here — nil when Observation.ReadAt is nil.
+	ConfirmedMemberCount *int             `json:"confirmed_member_count,omitempty"`
+	Observation          ObservationBasis `json:"observation"`
+	RoleKeys             []string         `json:"role_keys"`
+	SampleMembers        []string         `json:"sample_members"`
 }
 
 type CatalogResponse struct {
@@ -770,6 +776,31 @@ type ShadowCredentialStatus struct {
 	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
 }
 
+// ObservationBasis is what a Recorded count rests on: whether Zitadel has
+// ever been asked, when the covering read last happened, and whether it saw
+// everything or only part of it.
+//
+// One basis covers a whole response, not a row — every CatalogRole or
+// ProjectSummary in the same answer carries an identical copy, so a surface
+// can read `[0].observation` and state the freshness once rather than once
+// per row. Shaped to match `ReadState` in ui/src/components/ui/ReadFreshness.tsx
+// (`read_at`/`current`/`truncated`) so a surface renders it with that
+// component instead of inventing its own wording.
+type ObservationBasis struct {
+	// ReadAt is nil when nothing has ever been observed — db.ErrNoObservation.
+	// That must render as "not checked yet", never as an age of zero.
+	ReadAt *time.Time `json:"read_at,omitempty"`
+	// Current is false when the last attempt to observe failed outright —
+	// "Zitadel did not answer" — as opposed to succeeding but stopping at a
+	// cap. A confirmed count under a non-current basis is the store's last
+	// known answer, not a fresh one.
+	Current bool `json:"current"`
+	// Truncated is true when the covering read stopped at its cap. Orthogonal
+	// to Current: a capped read is still a real, current read, just not a
+	// complete one, and absence can never be concluded from it.
+	Truncated bool `json:"truncated"`
+}
+
 // CatalogRole is the computed view for the global role inventory.
 //
 // Group and the ClonedFrom pair come from the local roles table when Syndra
@@ -788,7 +819,14 @@ type CatalogRole struct {
 	ClonedFromRole    string `json:"cloned_from_role,omitempty"`
 	BundleCount       int    `json:"bundle_count"`
 	RuleCount         int    `json:"rule_count"`
+	// AssignedUserCount is what Syndra decided — a Recorded fact, never
+	// presentable as somebody having access. See ConfirmedUserCount.
 	AssignedUserCount int    `json:"assigned_user_count"`
 	IsUnused          bool   `json:"is_unused"`
 	Source            string `json:"source"` // "syndra" | "demo" | "referenced"
+	// ConfirmedUserCount is how many of AssignedUserCount's holders the
+	// observation store also shows holding the role — nil when Observation.ReadAt
+	// is nil, because "not checked yet" must never render as a confirmed zero.
+	ConfirmedUserCount *int             `json:"confirmed_user_count,omitempty"`
+	Observation        ObservationBasis `json:"observation"`
 }

@@ -31,10 +31,24 @@
 
 ## 3. Not done, in order
 
-- [ ] 3.1 The observation store and its periodic sweep — what a read saw about
-  everything, not only about a write just made
+- [x] 3.1 The observation store and its periodic sweep — what a read saw about
+  everything, not only about a write just made. `internal/observe`, `db.Observation`,
+  wired in `cmd/api/main.go` at `OBSERVE_SWEEP_INTERVAL` (default 5m)
 - [ ] 3.2 Counts and dashboard tiles read verdicts rather than records
 - [ ] 3.3 Only the observer may call Zitadel; delete the direct reads from
-  surfaces and guard against their return
-- [ ] 3.4 The truncation limit stays stated: a capped read can confirm presence
-  and can never conclude absence
+  surfaces and guard against their return. Done, 2026-09-11: the webhook no
+  longer writes `zitadel_grants_index` from event payloads (it re-observes
+  the affected person instead — `observeAfterEvent`, webhook.go), and
+  discovery.go's two grant-listing routes (`/zitadel/grants`,
+  `/zitadel/users/{id}/grants`) observe and answer from the store, carrying
+  `observed_at`/`complete` through to the person page and the reconciliation
+  list. `repoguard.TestOnlyTheObserverListsZitadelGrantsLive` guards it, with
+  the outbox drain's PRE-FLIGHT read (`liveUserGrantRoles`, which concludes only
+  presence) and the governance reachability probe exempted by argument — the
+  read-back is not exempt and goes through the observer, and reconciliation's
+  own live diff, the drift sweep, and the webhook's grant-lookup fallback
+  still exempted as KNOWN GAPS pending the rest of this task — see NEXT.md
+- [x] 3.4 The truncation limit is stated AND enforced where it decides
+  something: a revoke may only be confirmed from a complete answer. The
+  pre-flight stays capped because it concludes presence, where a miss costs a
+  call that 409 absorbs; the confirmation concludes absence and cannot
