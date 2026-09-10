@@ -33,6 +33,9 @@ func stubDrainDeps(t *testing.T) {
 		// reach a nil pool, which would fail every revoke test for a reason
 		// none of them is about.
 		swap(&dbDeleteGrantIndex, func(context.Context, string) error { return nil }),
+		// The claim cache the drain now clears. Unstubbed it reaches a nil
+		// Redis client and fails every apply test for a reason none is about.
+		swap(&invalidateClaims, func(context.Context, string) error { return nil }),
 		swap(&dbUpsertGrantIndex, func(context.Context, string, string, string, []string) error { return nil }),
 		swap(&pruneTerminal, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&prunePlans, func(context.Context, int) (int64, error) { return 0, nil }),
@@ -1137,5 +1140,55 @@ func TestAnAddThatCannotBeRememberedStillSettles(t *testing.T) {
 	})
 	if err != nil || settled != 1 {
 		t.Fatalf("a landed add must settle even unremembered: err=%v settles=%d", err, settled)
+	}
+}
+
+// A grant change clears the token claims compiled from it.
+//
+// Actions v2 serves tokens from a Redis envelope with a 24-hour TTL, and the
+// only things that cleared it were the three webhook paths and the expiry
+// sweep. Syndra's own drain — the thing that actually changes what a person
+// holds — never did, and the gap was hidden because Zitadel's own
+// `grant_removed` event usually arrived moments later and cleared it as a side
+// effect. That event is DROPPED for Syndra's own changes by the self-mutation
+// guard, so for every change Syndra makes there was nothing to cover it:
+// revoking a role stopped removing it from newly issued tokens for up to a day.
+func TestDrain_AppliedChangeClearsTheCachedClaims(t *testing.T) {
+	stubDrainDeps(t)
+	claimPending = oneRow("o7", "add")
+	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
+		return map[string]bool{}, nil
+	}
+	zitadelAddUserGrant = func(context.Context, string, string, []string) error { return nil }
+	var cleared string
+	invalidateClaims = func(_ context.Context, userID string) error { cleared = userID; return nil }
+
+	if _, err := Drain(context.Background()); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if cleared != "u" {
+		t.Fatalf("the applied change left the compiled claims in place; cleared=%q", cleared)
+	}
+}
+
+// A cache is not a ledger. Failing to clear it must not strand a row that
+// Zitadel has already accepted.
+func TestDrain_AFailedCacheClearStillAppliesTheRow(t *testing.T) {
+	stubDrainDeps(t)
+	claimPending = oneRow("o8", "add")
+	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
+		return map[string]bool{}, nil
+	}
+	zitadelAddUserGrant = func(context.Context, string, string, []string) error { return nil }
+	invalidateClaims = func(context.Context, string) error { return errors.New("redis is down") }
+	var appliedID string
+	markApplied = func(_ context.Context, id string) error { appliedID = id; return nil }
+
+	res, err := Drain(context.Background())
+	if err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if appliedID != "o8" || res.Applied != 1 {
+		t.Fatalf("a cache failure stranded an accepted write: applied=%q res=%+v", appliedID, res)
 	}
 }
