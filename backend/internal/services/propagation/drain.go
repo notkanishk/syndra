@@ -376,6 +376,44 @@ func (res *DrainResult) processRow(ctx context.Context, row models.PendingPropag
 // markApplied, so if the delete fails the outbox row stays in_flight and the
 // next drain reclaims it and retries, rather than being stranded terminal with a
 // stale ledger. add is a ledger no-op; only revoke/replace prune rows.
+// observedAfterWrite asks Zitadel whether the change this row made is visible.
+//
+// Reports only what was SEEN. Every uncertainty — a read that errored, an op
+// type with nothing to look for — answers false, because "not confirmed" is the
+// honest reading of "could not check" and the cost of that answer is a row that
+// waits for a later look rather than a claim nobody verified.
+func observedAfterWrite(ctx context.Context, row models.PendingPropagation) bool {
+	if row.ProjectID == "" || len(row.RoleKeys) == 0 {
+		return false
+	}
+	live, err := liveUserGrantRoles(ctx, row.UserID, row.ProjectID)
+	if err != nil {
+		return false
+	}
+	switch row.OpType {
+	case "add", "replace":
+		// Every role asked for is there. A superset is fine for `add` and would
+		// be wrong to require otherwise; `replace` sets an exact state, and the
+		// roles it named being present is what this write was for.
+		for _, role := range row.RoleKeys {
+			if !live[role] {
+				return false
+			}
+		}
+		return true
+	case "revoke":
+		// None of them is left. A grant removed outright lists nothing for the
+		// project, which reads the same way.
+		for _, role := range row.RoleKeys {
+			if live[role] {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 func applyRow(ctx context.Context, row models.PendingPropagation) error {
 	if row.OpType == "revoke" || row.OpType == "replace" {
 		if err := reconcileLedger(ctx, row.ID); err != nil {
@@ -407,12 +445,50 @@ func applyRow(ctx context.Context, row models.PendingPropagation) error {
 	// Best-effort and last: it is a cache, and failing to clear it must not
 	// strand a row that has already been applied. A failure is logged loudly
 	// because the window it leaves is measured in hours.
+	// Terminal FIRST, then the two annotations that follow it.
+	//
+	// The ordering rule above is about durable side-effects: a row whose ledger
+	// or store write did not land must stay in_flight and be reclaimed. Neither
+	// of the two below is one of those. The confirmation is an annotation ON
+	// this row, and the claim cache is a cache — losing either leaves a state
+	// that is honest and self-correcting, while losing a ledger write does not.
+	//
+	// It was written the other way round, and the confirmation silently did
+	// nothing for it: `MarkPropagationConfirmed` is guarded on `status='applied'`
+	// so that it can never resurrect a failed or superseded row, and at that
+	// point the row was still `in_flight`. Zero rows updated, no error, no
+	// confirmation ever recorded. Both test layers missed it — the unit tests
+	// stub the seam so the guard never runs, and the live tests seeded a row
+	// that was already applied — which is two halves each correct about itself.
+	if err := markApplied(ctx, row.ID); err != nil {
+		return err
+	}
+
+	// Read Zitadel back and record whether it can SEE the change.
+	//
+	// A 2xx is an acknowledgement of receipt. It is not evidence of state, and
+	// this product spent a day proving what happens when the two are treated as
+	// one thing. So the write is now followed by a question, and the answer is
+	// recorded rather than assumed.
+	//
+	// A read that does NOT see it is not a failure and must never be treated as
+	// one. Zitadel's read path is a projection over its eventstore, so a read
+	// issued a millisecond after an accepted write can legitimately not see it
+	// yet — and a read-back that failed the row would retry a good write and
+	// turn a lagging projection into duplicate work. The row stays applied and
+	// simply unconfirmed, which is an ordinary state with a name and a surface.
+	if observedAfterWrite(ctx, row) {
+		if err := markConfirmed(ctx, row.ID); err != nil {
+			log.Printf("[PROPAGATION] %s was observed in Zitadel and the confirmation did not record: %v",
+				row.ID, err)
+		}
+	}
 	if err := invalidateClaims(ctx, row.UserID); err != nil {
 		log.Printf("[PROPAGATION] applied %s but could not clear %s's cached claims: %v "+
 			"— tokens issued before the cache expires may still carry the old roles",
 			row.ID, row.UserID, err)
 	}
-	return markApplied(ctx, row.ID)
+	return nil
 }
 
 // rememberPropagation records that the target ACCEPTED this write.

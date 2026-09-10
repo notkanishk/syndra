@@ -260,7 +260,8 @@ Done, in this order and for this reason:
    propagates real faults, distinguishes "nothing to give" from "something
    broke", and answers "who joined and got nothing" from state.
 
-**Read-back after write is next, and it is not a small change.** The naive
+**Read-back after write — DONE, 2026-09-10.** What follows is why it needed
+its own change rather than being the tail of the last one. The naive
 version is a hazard rather than a safeguard: Zitadel's read path is a
 projection over its eventstore, so a read issued immediately after an accepted
 write can legitimately not see it yet. A read-back that treats "not observed"
@@ -279,3 +280,60 @@ is why it is its own change rather than the tail of this one.
 
 The failure that started all of this would have been caught either way: the
 grant was never accepted, because no call was made.
+
+
+## Read-back, as built
+
+`propagation_outbox.confirmed_at` (migration `000047`) holds the second fact.
+Deliberately nullable and deliberately not part of `status`: accepted and
+unconfirmed is an ordinary, temporary state, not a fault.
+
+The drain reads Zitadel back after every accepted write. An add is confirmed by
+PRESENCE, a revoke by ABSENCE — transposing them would confirm exactly the
+writes that failed, so each direction has a test that fails when it is.
+
+**An unobserved write is never a failure.** It is not retried, not requeued,
+not marked failed. It stays applied and waits to be looked at again. This is
+the whole hazard the design named: a read-back that failed the row would retry
+a good write every time Zitadel's projection lagged, and turn latency into
+duplicate work.
+
+**Age is what makes one a finding**, at twenty minutes — long enough that a
+projection catching up, or a burst of onboarding writes, never reaches a
+screen; short enough to bound how stale "in force" can be claimed. Surfaced on
+Home as a block that says what happened, what it is NOT (neither a failed
+change nor one still waiting to be sent), how old it is, and where to look.
+
+Proven rather than asserted. Five unit tests and four live tests against real
+Postgres, each mutation-checked: disabling the read-back fails two, confirming
+a revoke by presence fails one, dropping the age filter fails one, confirming
+regardless of status fails one, and applying after confirming fails one.
+
+**That last test exists because the first version of this recorded nothing.**
+`MarkPropagationConfirmed` is guarded on `status='applied'` so a confirmation can
+never resurrect a failed or superseded row. It was called BEFORE `markApplied`,
+while the row was still `in_flight`, so the guard matched nothing: zero rows
+updated, no error returned, the observation made and thrown away.
+
+Neither layer of tests could see it. The unit tests stub the seam, so the SQL
+guard never ran; the live tests seeded a row that was already applied, so the
+sequence never ran. Two halves, each correct about itself — the recurring defect
+this codebase already names, met while fixing an instance of it. The order is
+now asserted directly, which is the one thing neither half was checking.
+
+The ordering that replaced it respects the rule it looked like it broke.
+`markApplied` comes last AFTER DURABLE SIDE-EFFECTS: a row whose ledger or store
+write did not land must stay in_flight and be reclaimed. Neither the confirmation
+nor the claim invalidation is one of those — the first annotates the row itself
+and the second is a cache, and losing either leaves a state that is honest and
+self-correcting.
+
+## What is left
+
+- **The observation store.** `confirmed_at` records that a read saw a write. It
+  does not yet record what a read saw about everything ELSE — the periodic
+  sweep, and the store surfaces read from instead of calling Zitadel each.
+- **Surfaces read verdicts.** The person page already answers per role from
+  Zitadel; counts and tiles still derive from records alone.
+- **Delete the direct reads and guard them out.** Only the observer may call
+  Zitadel; nothing enforces that yet.
