@@ -639,6 +639,15 @@ func setupSnapshotTestFixtures(t *testing.T, numUsers, numApps, numProjects int)
 	svcGetExpiringDirectGrants = func(context.Context, time.Duration) ([]models.DirectGrant, error) {
 		return nil, nil
 	}
+	// ListProjects now counts roles that exist (catalog union), not roles with
+	// holders — same two bulk reads GlobalRoleCatalog makes. Tests override
+	// these when a case needs a project to have roles.
+	svcDbGetAllLocalRoles = func(context.Context) ([]models.Role, error) {
+		return nil, nil
+	}
+	svcDbGetAllReferencedRoleKeys = func(context.Context) ([][2]string, error) {
+		return nil, nil
+	}
 }
 
 func max1(n int) int {
@@ -664,6 +673,92 @@ func TestListApplications_CollectsUserRolesExactlyOncePerUser(t *testing.T) {
 	}
 	if calls != 3 {
 		t.Fatalf("expected collectUserRoles called exactly 3 times (once per user); got %d", calls)
+	}
+}
+
+// TestListProjects_RoleCountMatchesRoleCatalog pins the fix for the
+// "0 roles" / "3 roles" contradiction: /projects and a project's own detail
+// page (which reads GlobalRoleCatalog) must count the same roles for the
+// same project, because both surfaces render the word "roles" as roles that
+// exist, not roles somebody currently holds.
+func TestListProjects_RoleCountMatchesRoleCatalog(t *testing.T) {
+	setupSnapshotTestFixtures(t, 1, 0, 1)
+
+	// Two roles exist on p0; nobody holds either — collectUserRolesHook sees
+	// no grants, no bundles, no rules for this user, so HolderCounts is empty.
+	svcDbGetAllLocalRoles = func(context.Context) ([]models.Role, error) {
+		return []models.Role{
+			{ProjectID: "p0", RoleKey: "trained"},
+			{ProjectID: "p0", RoleKey: "lead"},
+		}, nil
+	}
+	// Only GlobalRoleCatalog reads usage counts; ListProjects doesn't need
+	// them for "does this role exist", so this stub is local to this test.
+	origUsage := svcDbGetRoleUsageCounts
+	t.Cleanup(func() { svcDbGetRoleUsageCounts = origUsage })
+	svcDbGetRoleUsageCounts = func(context.Context) (map[string]db.RoleUsage, error) {
+		return map[string]db.RoleUsage{}, nil
+	}
+
+	summaries, err := ListProjects(context.Background())
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	catalog, err := GlobalRoleCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("GlobalRoleCatalog: %v", err)
+	}
+
+	var listCount, catalogCount int
+	for _, s := range summaries {
+		if s.Project.ID == "p0" {
+			listCount = len(s.RoleKeys)
+		}
+	}
+	for _, r := range catalog {
+		if r.ProjectID == "p0" {
+			catalogCount++
+		}
+	}
+
+	if listCount != 2 {
+		t.Fatalf("ListProjects p0 role count = %d, want 2", listCount)
+	}
+	if listCount != catalogCount {
+		t.Fatalf("ListProjects counted %d roles for p0, GlobalRoleCatalog counted %d — same project, same word, different answer", listCount, catalogCount)
+	}
+}
+
+// TestListProjects_RolesWithNoHoldersAreStillGrantable pins the false empty
+// state: a project whose roles exist but nobody holds yet is not the same
+// fact as a project with nothing to grant, and must not render as one.
+func TestListProjects_RolesWithNoHoldersAreStillGrantable(t *testing.T) {
+	setupSnapshotTestFixtures(t, 1, 0, 1)
+
+	svcDbGetAllLocalRoles = func(context.Context) ([]models.Role, error) {
+		return []models.Role{{ProjectID: "p0", RoleKey: "trained"}}, nil
+	}
+
+	summaries, err := ListProjects(context.Background())
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+
+	var found bool
+	for _, s := range summaries {
+		if s.Project.ID != "p0" {
+			continue
+		}
+		found = true
+		if s.MemberCount != 0 {
+			t.Fatalf("expected no holders for p0, got MemberCount=%d", s.MemberCount)
+		}
+		if len(s.RoleKeys) == 0 {
+			t.Fatalf("p0 has a role nobody holds yet, but RoleKeys is empty — this is the false \"nothing here can be granted\" state")
+		}
+	}
+	if !found {
+		t.Fatalf("p0 not found in ListProjects result")
 	}
 }
 

@@ -40,14 +40,19 @@ vi.mock("@/lib/queries/useApplications", () => ({
   useApplications: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }),
 }));
 
-function project(id: string, name: string, roles: string[]): ProjectSummaryRow {
+function project(
+  id: string,
+  name: string,
+  roles: string[],
+  memberCount = 19,
+): ProjectSummaryRow {
   return {
     project: { id, name, kind: "internal", description: "", roles: [] },
-    member_count: 19,
+    member_count: memberCount,
     bundle_count: 0,
     rule_in_count: 0,
     rule_out_count: 0,
-    active_role_keys: roles,
+    role_keys: roles,
     sample_members: [],
   };
 }
@@ -108,5 +113,21 @@ describe("the projects table", () => {
       child.className.includes("tablet:w-[60px]"),
     );
     expect(roles?.textContent).toBe("2 roles");
+  });
+
+  // The contradiction this file exists to close: a project with roles nobody
+  // holds yet is not a project with nothing to grant. member_count is 0 here
+  // on purpose — the old count was "roles with a holder", which collapsed
+  // this case to the same "0 roles" the sentence guards.
+  it("does not say nothing can be granted when a role exists but has no holder", () => {
+    state.projects = [project("p3", "Laser Cutter", ["operator"], 0)];
+    render(<ProjectsPage />);
+
+    expect(screen.queryByText(SENTENCE)).toBeNull();
+    const row = screen.getByRole("link", { name: /Laser Cutter/ });
+    const roles = Array.from(row.children).find((child) =>
+      child.className.includes("tablet:w-[60px]"),
+    );
+    expect(roles?.textContent).toBe("1 role");
   });
 });

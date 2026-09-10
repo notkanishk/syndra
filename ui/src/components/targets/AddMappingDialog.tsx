@@ -44,7 +44,7 @@ export function AddMappingDialog({ target, onClose }: { target: string; onClose:
 
   const rows = useMemo(() => projects.data ?? [], [projects.data]);
   const roles = useMemo(
-    () => rows.find((entry) => entry.project.id === projectId)?.active_role_keys ?? [],
+    () => rows.find((entry) => entry.project.id === projectId)?.role_keys ?? [],
     [rows, projectId],
   );
 

@@ -16,7 +16,9 @@ export interface ProjectSummaryRow {
   bundle_count: number;
   rule_in_count: number;
   rule_out_count: number;
-  active_role_keys: string[];
+  // Roles that exist on this project — the same set the project detail page
+  // reads from the role catalog, not roles someone currently holds.
+  role_keys: string[];
   sample_members: string[];
 }
 

@@ -60,7 +60,10 @@ var (
 	dbGetBundlesForUser     = db.GetBundlesForUser
 	dbSetWelcomeBundle      = db.SetWelcomeBundle
 	dbGetBundleHolderCounts = db.GetBundleHolderCounts
-	dbGetAssignedUserCounts = db.GetEffectiveUserCounts
+	// The one holder-count path, shared with the role catalog. It used to be a
+	// SQL union of its own, which is how a rule's holder count and the role
+	// page's holder list came to be two different numbers.
+	dbGetAssignedUserCounts = services.RoleHolderCounts
 
 	// Lookup handler injectable var (single-role accessor, used for UID→name resolution).
 	dbGetRole = db.GetRole

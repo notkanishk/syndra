@@ -140,12 +140,15 @@ var (
 	svcQueuedRevocations = db.QueuedRevocations
 
 	// Role management
-	svcDbCreateRole               = db.CreateRole
-	svcDbGetRole                  = db.GetRole
-	svcDbDeleteRole               = db.DeleteRole
-	svcDbGetAllLocalRoles         = db.GetAllLocalRoles
-	svcDbGetRoleUsageCounts       = db.GetRoleUsageCounts
-	svcDbGetAssignedUserCounts    = db.GetEffectiveUserCounts
+	svcDbCreateRole         = db.CreateRole
+	svcDbGetRole            = db.GetRole
+	svcDbDeleteRole         = db.DeleteRole
+	svcDbGetAllLocalRoles   = db.GetAllLocalRoles
+	svcDbGetRoleUsageCounts = db.GetRoleUsageCounts
+	// The one holder-count path. A seam so tests can stand in for it, and
+	// exactly one of them, because two were what put "4 holders" on a list
+	// beside "0 people hold this role" on the page it opens.
+	svcRoleHolderCounts           = RoleHolderCounts
 	svcDbGetAllReferencedRoleKeys = db.GetAllReferencedRoleKeys
 
 	// Claim shaping (token format + per-application overrides).
