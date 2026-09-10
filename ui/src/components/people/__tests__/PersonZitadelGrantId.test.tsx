@@ -83,12 +83,17 @@ describe("PersonAccess — Zitadel grant id in Advanced (C9a)", () => {
     expect(document.body.textContent).toMatch(/Zitadel grant/);
   });
 
-  it("stays out of Basic", () => {
+  it("stays out of Basic, but the read behind it does not", () => {
     state.advanced = false;
     renderPerson(true);
     expect(screen.queryByText("zg-77")).not.toBeInTheDocument();
-    // Not fetched either — Basic must not pay for a panel it does not render.
-    expect(state.askedFor).toBeNull();
+
+    // Basic used to skip the fetch as well, on the reasoning that it should not
+    // pay for a panel it does not render. That was true while the answer was
+    // only an id to quote in a ticket. It is not an id any more: it is whether
+    // the access on this page is real, and a Basic operator was reading rows
+    // that stated Syndra's records as though they were Zitadel's.
+    expect(state.askedFor).toBe("u1");
   });
 
   // The endpoint behind this is operator-gated, and this route serves a member their own record.
