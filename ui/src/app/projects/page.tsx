@@ -7,6 +7,8 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
+import { confirmedNote } from "@/lib/format";
 import { useApplications } from "@/lib/queries/useApplications";
 import { useProjects } from "@/lib/queries/useProjects";
 
@@ -33,6 +35,15 @@ export default function ProjectsPage() {
   const rows = projects.data ?? [];
   const servedCount = new Set((apps.data ?? []).map((a) => a.application.id)).size;
 
+  // One basis for the whole page — every row carries an identical copy, so
+  // the freshness is stated here once rather than once per row.
+  const basis = rows[0]?.observation;
+  const readState: ReadState = {
+    readAt: basis?.read_at,
+    current: basis ? basis.current : undefined,
+    truncated: basis?.truncated,
+  };
+
   return (
     <div className="flex flex-col gap-[18px]">
       <PageHeader
@@ -45,10 +56,18 @@ export default function ProjectsPage() {
         }
       />
 
+      {/*
+        People is what Syndra decided, not what Zitadel has confirmed — stated
+        once here rather than once per row. See one-truth-many-checks.
+      */}
+      {rows.length > 0 && (
+        <ReadFreshness state={readState} subject="What Zitadel confirmed" className="px-[2px]" />
+      )}
+
       <Card>
         <CardColumns>
           <span className="min-w-0 flex-1">Project</span>
-          <span className="w-[70px] shrink-0 text-right">People</span>
+          <span className="w-[92px] shrink-0 text-right">People</span>
           <span className="w-[60px] shrink-0 text-right">Roles</span>
           <span className="w-[240px]">Apps served</span>
         </CardColumns>
@@ -89,10 +108,15 @@ export default function ProjectsPage() {
                   </span>
                 )}
               </span>
-              <span className="shrink-0 text-[15px] tablet:w-[70px] tablet:text-right">
+              <span className="shrink-0 text-[15px] tablet:w-[92px] tablet:text-right">
                 {entry.member_count}
                 <span className="text-[13px] text-faint tablet:hidden">
                   {entry.member_count === 1 ? " person" : " people"}
+                </span>
+                {/* Recorded is what Syndra decided; this is what Zitadel has
+                    confirmed of it — never the same word, never the same line. */}
+                <span className="block text-[12.5px] text-faint">
+                  {confirmedNote(entry.member_count, entry.confirmed_member_count)}
                 </span>
               </span>
               {/* A project with no roles is not a small number, it is a

@@ -203,10 +203,13 @@ var (
 	svcDbDeleteRole         = db.DeleteRole
 	svcDbGetAllLocalRoles   = db.GetAllLocalRoles
 	svcDbGetRoleUsageCounts = db.GetRoleUsageCounts
-	// The one holder-count path. A seam so tests can stand in for it, and
-	// exactly one of them, because two were what put "4 holders" on a list
-	// beside "0 people hold this role" on the page it opens.
-	svcRoleHolderCounts = RoleHolderCounts
+	// What the observation store confirms of a recorded count, and how
+	// current that confirmation is. Separate seams (not folded into
+	// svcRoleHolderCounts) so a test can exercise the recorded count without
+	// standing up an observation fixture, and vice versa.
+	svcLatestOrgObservation = db.LatestOrgObservation
+	svcObservedGrantsFor    = db.ObservedGrantsFor
+	svcRoleHolderFacts      = RoleHolderFacts
 	// Whether the directory still counts this person as a member. Read on the
 	// entitlement path so a deactivation reaches the accounts Syndra manages,
 	// which it did not before.

@@ -386,9 +386,33 @@ func observedAfterWrite(ctx context.Context, row models.PendingPropagation) bool
 	if row.ProjectID == "" || len(row.RoleKeys) == 0 {
 		return false
 	}
-	live, err := liveUserGrantRoles(ctx, row.UserID, row.ProjectID)
+	// Through the OBSERVER, not the cheap single-page read the pre-flight uses.
+	//
+	// Two reasons, and the second is a correctness hole the first version had.
+	//
+	// The observer records what it saw, so the store stays honest without the
+	// drain writing to it directly — which made the drain a second writer to a
+	// store whose whole design is that only observations write it.
+	//
+	// And it reports whether the answer was COMPLETE. The pre-flight read is
+	// capped at one page and that is fine there: it only concludes PRESENCE,
+	// and a truncated page that misses a grant merely means the call proceeds,
+	// which 409 absorbs. Confirming a REVOKE is the opposite direction — it
+	// concludes ABSENCE — and a capped read that happened not to include the
+	// grant would have confirmed a revocation that may never have happened.
+	// Absence may only be concluded from a whole answer.
+	obs, err := observeUser(ctx, row.UserID)
 	if err != nil {
 		return false
+	}
+	live := map[string]bool{}
+	for _, g := range obs.Grants {
+		if g.ProjectID != row.ProjectID {
+			continue
+		}
+		for _, rk := range g.RoleKeys {
+			live[rk] = true
+		}
 	}
 	switch row.OpType {
 	case "add", "replace":
@@ -402,8 +426,14 @@ func observedAfterWrite(ctx context.Context, row models.PendingPropagation) bool
 		}
 		return true
 	case "revoke":
-		// None of them is left. A grant removed outright lists nothing for the
-		// project, which reads the same way.
+		// None of them is left, AND the answer was whole. A truncated read is
+		// real about what it saw and silent about the rest, so it can never
+		// establish that something is gone.
+		if !obs.Complete {
+			return false
+		}
+		// A grant removed outright lists nothing for the project, which reads
+		// the same way.
 		for _, role := range row.RoleKeys {
 			if live[role] {
 				return false
@@ -573,35 +603,13 @@ func rememberPropagation(ctx context.Context, row models.PendingPropagation) err
 // 409 AlreadyExists (classified ackApplied) is the real safety net, so a false
 // "no" here is harmless (we call, Zitadel absorbs the dup idempotently). It uses
 // the webhook index first; on any miss it does ONE live grant list per row.
-// The grant index after a revocation Syndra performed itself.
+// The store is written by the observer and by nothing else.
 //
-// The index existed only to be written by Zitadel's own `grant.removed` and
-// `grant.changed` webhooks. Syndra's revocations went out through the
-// Management API and told the cache nothing, so a deployment could revoke a
-// grant and go on holding a record saying the person still had it — for ever,
-// if no webhook ever arrived to correct it.
-//
-// Best-effort on purpose, and only safe to be best-effort because the drain no
-// longer treats this cache as evidence for skipping a call. A failure here
-// leaves a stale row that the drift sweep repairs; it can no longer cause a
-// mutation to be skipped.
-func forgetGrantIndex(ctx context.Context, grantID string) {
-	if grantID == "" {
-		return
-	}
-	if err := dbDeleteGrantIndex(ctx, grantID); err != nil {
-		log.Printf("[PROPAGATION] revoked %s and could not clear its grant index row: %v", grantID, err)
-	}
-}
-
-func rememberGrantIndex(ctx context.Context, grantID, userID, projectID string, roles []string) {
-	if grantID == "" {
-		return
-	}
-	if err := dbUpsertGrantIndex(ctx, grantID, userID, projectID, roles); err != nil {
-		log.Printf("[PROPAGATION] narrowed %s and could not update its grant index row: %v", grantID, err)
-	}
-}
+// This used to keep the grant index itself after a revocation, because the
+// index was a webhook-fed cache and Syndra's own changes never reached it. It
+// is not a cache any more: it holds what a read of Zitadel returned, and the
+// read-back below records that. A drain that also wrote to it would be a second
+// writer to a store whose entire design is that only observations write it.
 
 func alreadyExists(ctx context.Context, row models.PendingPropagation) (bool, error) {
 	switch row.OpType {
@@ -709,14 +717,8 @@ func classifyDispatch(ctx context.Context, row models.PendingPropagation) (ackCl
 		}
 		if len(remaining) == 0 {
 			err = zitadelRemoveUserGrant(ctx, row.UserID, row.ZitadelGrantID)
-			if err == nil {
-				forgetGrantIndex(ctx, row.ZitadelGrantID)
-			}
 		} else {
 			err = zitadelUpdateUserGrant(ctx, row.UserID, row.ZitadelGrantID, remaining)
-			if err == nil {
-				rememberGrantIndex(ctx, row.ZitadelGrantID, row.UserID, row.ProjectID, remaining)
-			}
 		}
 	default:
 		log.Printf("[PROPAGATION] unknown op_type=%s row=%s", row.OpType, row.ID)

@@ -21,6 +21,7 @@ import (
 	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/directory"
+	"syndra/internal/observe"
 	"syndra/internal/zitadel"
 )
 
@@ -40,8 +41,15 @@ var (
 	// Recorded separately from `applied`, because accepted and observed are
 	// different facts and the gap between them is ordinary.
 	markConfirmed = db.MarkPropagationConfirmed
-	markFailed    = db.MarkPropagationFailed
-	requeue       = db.RequeuePropagation
+	// The read-back goes through the observer: it records what it saw, so the
+	// store stays honest without the drain writing to it, and it reports
+	// whether the answer was whole — which is what a revoke needs before it can
+	// conclude a role is gone.
+	observeUser = func(ctx context.Context, userID string) (observe.Result, error) {
+		return observe.UserWithGrants(ctx, userID)
+	}
+	markFailed = db.MarkPropagationFailed
+	requeue    = db.RequeuePropagation
 	// release returns a row to pending without spending a retry, for the one
 	// case where nothing was attempted at all.
 	release = db.ReleasePropagation
@@ -84,12 +92,7 @@ var (
 	grantIndexHasRole = db.GrantIndexHasRole
 	// The claim envelope Actions v2 serves. Cleared by the drain, because the
 	// drain is what changed the access it was compiled from.
-	invalidateClaims = cache.InvalidateUser
-	// Syndra's own revocations maintain Syndra's own cache. Left to the
-	// webhooks alone, a revoke Syndra dispatched left the index claiming the
-	// grant still existed.
-	dbDeleteGrantIndex = db.DeleteGrantIndex
-	dbUpsertGrantIndex = db.UpsertGrantIndex
+	invalidateClaims   = cache.InvalidateUser
 	liveUserGrantRoles = func(ctx context.Context, userID, projectID string) (map[string]bool, error) {
 		res, err := zitadel.MgmtClient.ListUserGrants(ctx, userID, zitadel.SearchParams{Limit: 100})
 		if err != nil {

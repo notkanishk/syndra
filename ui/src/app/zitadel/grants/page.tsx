@@ -8,6 +8,7 @@ import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { ProjectName, UserName } from "@/components/names";
 import { useUpstreamGrants } from "@/lib/queries/useUpstream";
 import { useDebounce } from "@/lib/useDebounce";
@@ -48,10 +49,14 @@ export default function UpstreamGrantsPage() {
       syndraHref="/governance/drift?tab=reconciliation"
       syndraLabel="See where the two sides disagree"
     >
-      {grants.data?.truncated && (
-        <div className="warn-note px-5 py-3.5 text-[14px] text-warn-text">
-          Zitadel holds more than this page loads at once, so the list is incomplete. If something
-          is missing here, it may just not have loaded.
+      {grants.data && (
+        <div className="px-5 py-3">
+          <ReadFreshness
+            subject="This list"
+            state={{ readAt: grants.data.observedAt, truncated: grants.data.truncated }}
+            onRefresh={() => grants.refetch()}
+            refreshing={grants.isFetching}
+          />
         </div>
       )}
 
