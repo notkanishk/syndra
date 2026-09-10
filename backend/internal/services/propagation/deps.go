@@ -76,7 +76,12 @@ var (
 
 	// already-exists check (latency optimization only — see alreadyExists):
 	// webhook index first; on miss, ONE live grant list per row (not per role).
-	grantIndexHasRole  = db.GrantIndexHasRole
+	grantIndexHasRole = db.GrantIndexHasRole
+	// Syndra's own revocations maintain Syndra's own cache. Left to the
+	// webhooks alone, a revoke Syndra dispatched left the index claiming the
+	// grant still existed.
+	dbDeleteGrantIndex = db.DeleteGrantIndex
+	dbUpsertGrantIndex = db.UpsertGrantIndex
 	liveUserGrantRoles = func(ctx context.Context, userID, projectID string) (map[string]bool, error) {
 		res, err := zitadel.MgmtClient.ListUserGrants(ctx, userID, zitadel.SearchParams{Limit: 100})
 		if err != nil {
