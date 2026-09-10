@@ -14,6 +14,11 @@ describe("outcomeOf", () => {
     expect(outcomeOf("dropped_enrichment_incomplete")).not.toBe(outcomeOf("processed"));
   });
 
+  it("buckets a missing welcome bundle with dropped, never with failed", () => {
+    expect(outcomeOf("unconfigured")).toBe("dropped");
+    expect(outcomeOf("unconfigured")).not.toBe(outcomeOf("failed"));
+  });
+
   it("keeps in-progress work out of done", () => {
     expect(outcomeOf("pending")).toBe("waiting");
     expect(outcomeOf("in_flight")).toBe("waiting");

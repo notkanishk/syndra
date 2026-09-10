@@ -21,6 +21,12 @@ type resolverFixture struct {
 	roles      []db.RoleRef
 	mappings   []db.RoleMapping
 	allowances []db.Allowance
+	// What the directory says about this person. Empty means "active", which
+	// is what every case that is not about deactivation wants; `dirMissing`
+	// and `dirErr` are the two ways the answer can fail to arrive.
+	status     string
+	dirMissing bool
+	dirErr     bool
 }
 
 func (f *resolverFixture) install(t *testing.T) {
@@ -33,7 +39,23 @@ func (f *resolverFixture) install(t *testing.T) {
 	dbAllowancesInForce = func(context.Context, string, string) ([]db.Allowance, error) {
 		return f.allowances, nil
 	}
-	t.Cleanup(func() { svcEffectiveRoleRefs, dbMappingsForRoles, dbAllowancesInForce = er, mf, af })
+	fu := svcFindUser
+	svcFindUser = func(context.Context, string) (models.UserProfile, bool, error) {
+		switch {
+		case f.dirErr:
+			return models.UserProfile{}, false, errors.New("the directory did not answer")
+		case f.dirMissing:
+			return models.UserProfile{}, false, nil
+		}
+		status := f.status
+		if status == "" {
+			status = "active"
+		}
+		return models.UserProfile{ID: "u1", Status: status}, true, nil
+	}
+	t.Cleanup(func() {
+		svcEffectiveRoleRefs, dbMappingsForRoles, dbAllowancesInForce, svcFindUser = er, mf, af, fu
+	})
 }
 
 func mapping(role, field, value string) db.RoleMapping {
@@ -472,5 +494,70 @@ func TestTheLifecycleExceptionRestsOnEverySchemaFieldBeingSMBMediated(t *testing
 		t.Errorf("the add-on declares a new entitlement field (%s), and `smb_enabled` may no longer withhold "+
 			"everything a role reaches. Decide whether withheldOnRole should still show an SMB denial against "+
 			"every role, or only against roles binding SMB-mediated fields.", name)
+	}
+}
+
+// Deactivating somebody must reach the accounts Syndra manages.
+//
+// Their grants survive deactivation in Zitadel, so every mapped role survives
+// with them and the account this resolves to stayed enabled. The person could
+// no longer sign in to Zitadel while their TrueNAS credential kept working,
+// because that is a different credential — so "deactivated" meant "cannot log
+// in to the thing that grants the access" rather than "has lost the access".
+func TestADeactivatedPersonLosesTheAccountsSyndraManages(t *testing.T) {
+	for _, state := range []string{"inactive", "locked", "deleted"} {
+		t.Run(state, func(t *testing.T) {
+			set := resolve(t, &resolverFixture{
+				roles:    []db.RoleRef{{ProjectID: "pLab", RoleKey: "member"}},
+				mappings: []db.RoleMapping{mapping("member", "group", "lab")},
+				status:   state,
+			})
+			if set.Lifecycle.Enabled || set.Lifecycle.SMBEnabled {
+				t.Fatalf("%s: still enabled for somebody the directory has ended", state)
+			}
+			if !set.Lifecycle.NotAMember || set.Lifecycle.Reason == "" {
+				t.Fatalf("%s: no surface can say why: %+v", state, set.Lifecycle)
+			}
+		})
+	}
+}
+
+// The blast-radius argument, as a test.
+//
+// Reading "cannot confirm" as "not a member" would let ONE failed directory
+// call disable every account in the makerspace at once. Reading it as "still a
+// member" leaves one deactivated person with access until the next resolution.
+// Those are not equally bad, and this pins which way it fails.
+func TestAnUnreadableDirectoryDisablesNobody(t *testing.T) {
+	base := func() *resolverFixture {
+		return &resolverFixture{
+			roles:    []db.RoleRef{{ProjectID: "pLab", RoleKey: "member"}},
+			mappings: []db.RoleMapping{mapping("member", "group", "lab")},
+		}
+	}
+	cases := map[string]*resolverFixture{}
+	f1 := base()
+	f1.dirErr = true
+	cases["the lookup failed"] = f1
+	f2 := base()
+	f2.dirMissing = true
+	cases["the person is not returned"] = f2
+	f3 := base()
+	f3.status = "initial"
+	cases["the account is not set up yet"] = f3
+	f4 := base()
+	f4.status = "unspecified"
+	cases["the state is unspecified"] = f4
+
+	for name, f := range cases {
+		t.Run(name, func(t *testing.T) {
+			set := resolve(t, f)
+			if !set.Lifecycle.Enabled {
+				t.Fatal("an account was disabled on something short of a positive report")
+			}
+			if set.Lifecycle.NotAMember {
+				t.Fatal("reported as not a member without the directory saying so")
+			}
+		})
 	}
 }

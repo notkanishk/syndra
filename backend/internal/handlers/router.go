@@ -166,6 +166,9 @@ func NewRouter() http.Handler {
 
 	// Operator: event and trigger logs
 	mux.HandleFunc("GET /api/v1/onboarding/triggers", withCORS(withUserAuth(handleGetOnboardingTriggers)))
+	// Who joined and got no welcome bundle, computed from state rather than
+	// from having heard a webhook — see services.FindMissedOnboarding.
+	mux.HandleFunc("GET /api/v1/onboarding/missed", withCORS(withUserAuth(handleGetMissedOnboarding)))
 	mux.HandleFunc("GET /api/v1/webhook/events", withCORS(withUserAuth(handleGetWebhookEvents)))
 
 	// Zitadel M2M health check — exercises the full service-account path

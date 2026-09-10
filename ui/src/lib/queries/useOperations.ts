@@ -37,6 +37,19 @@ export interface OnboardingTriggerRow {
   completed_at?: string | null;
 }
 
+/**
+ * Who joined and got no welcome bundle, computed from state (Zitadel's roster
+ * against who actually holds the bundle) rather than from the onboarding
+ * trigger log — see `services.FindMissedOnboarding`. `welcome_bundle_configured`
+ * is a fact about right now: false means nobody CAN be checked against a
+ * default that does not exist, so `missed` is empty in that case, not
+ * "everybody".
+ */
+export interface MissedOnboardingReport {
+  welcome_bundle_configured: boolean;
+  missed: Array<{ user_id: string; name: string; email: string }>;
+}
+
 export type OperationsStatus =
   | "pending"
   | "processed"
@@ -53,6 +66,7 @@ export type OperationsStatus =
 const KEYS = {
   webhookEvents: (status: string) => ["operations", "webhook-events", status] as const,
   onboardingTriggers: ["operations", "onboarding-triggers"] as const,
+  missedOnboarding: ["operations", "missed-onboarding"] as const,
 };
 
 /**
@@ -89,6 +103,20 @@ export function useOnboardingTriggers() {
       const data = await request<unknown>("/onboarding/triggers");
       return Array.isArray(data) ? (data as OnboardingTriggerRow[]) : [];
     },
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: false,
+  });
+}
+
+/**
+ * Returns the missed-onboarding report Home's queue reads. Same 5-second
+ * poll as the rest of this file's queries — this is state computed fresh on
+ * every read, not a cached inference, so polling it is just re-asking.
+ */
+export function useMissedOnboarding() {
+  return useQuery({
+    queryKey: KEYS.missedOnboarding,
+    queryFn: () => request<MissedOnboardingReport>("/onboarding/missed"),
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
   });

@@ -267,6 +267,78 @@ func TestWebhook_UserCreated(t *testing.T) {
 	}
 }
 
+// A missing welcome bundle is not a fault: retrying will never produce one,
+// so the webhook must still ack 200 and the delivery record still completes.
+// The distinct part (unconfigured vs failed) is TriggerOnboarding's job and
+// is covered in services/onboarding_test.go — this only guards that
+// processUserCreated does not turn the sentinel into a 500.
+func TestWebhook_UserCreated_NoWelcomeBundle_StillAcks(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	var completed, failed bool
+	dbCompleteWebhookEvent = func(_ context.Context, _ string) error {
+		completed = true
+		return nil
+	}
+	dbFailWebhookEvent = func(_ context.Context, _, _ string) error {
+		failed = true
+		return nil
+	}
+	webhookTriggerOnboarding = func(_ context.Context, _, _, _ string) error {
+		return fmt.Errorf("welcome bundle: %w", db.ErrNoWelcomeBundleConfigured)
+	}
+
+	body := []byte(`{"event_type":"user_created","user_id":"u-nobundle","source_project":"p1"}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 (no bundle is not something a retry fixes), got %d: %s", rr.Code, rr.Body.String())
+	}
+	if !completed {
+		t.Error("expected the webhook delivery to be marked completed — Zitadel must not be asked to retry this")
+	}
+	if failed {
+		t.Error("dbFailWebhookEvent must not be called for a missing welcome bundle")
+	}
+}
+
+// A real fault (DB down, cascade failure) is exactly what a retry might fix,
+// and must not be swallowed into a 200 the way it used to be — that was the
+// actual defect: not the no-bundle no-retry decision, but every OTHER
+// onboarding failure reading as success too.
+func TestWebhook_UserCreated_RealFault_FailsEventAndReturns500(t *testing.T) {
+	setupNoopWebhookDeps(t)
+
+	var completed, failed bool
+	dbCompleteWebhookEvent = func(_ context.Context, _ string) error {
+		completed = true
+		return nil
+	}
+	dbFailWebhookEvent = func(_ context.Context, _, errMsg string) error {
+		failed = true
+		if errMsg == "" {
+			t.Error("expected a non-empty error message recorded against the webhook event")
+		}
+		return nil
+	}
+	webhookTriggerOnboarding = func(_ context.Context, _, _, _ string) error {
+		return fmt.Errorf("assign welcome bundle: %w", fmt.Errorf("connection refused"))
+	}
+
+	body := []byte(`{"event_type":"user_created","user_id":"u-fault","source_project":"p1"}`)
+	rr := postWebhook(t, body)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 (a real fault must be retried), got %d: %s", rr.Code, rr.Body.String())
+	}
+	if completed {
+		t.Error("dbCompleteWebhookEvent must not be called when onboarding hit a real fault")
+	}
+	if !failed {
+		t.Error("expected the webhook delivery to be marked failed so Zitadel retries")
+	}
+}
+
 func TestWebhook_InvalidEventType(t *testing.T) {
 	setupNoopWebhookDeps(t)
 
