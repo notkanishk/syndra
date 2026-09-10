@@ -3,12 +3,31 @@ package services
 import (
 	"context"
 	"log"
+	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
 )
+
+// unconfirmedWriteThreshold is how long an accepted write may go unobserved
+// before the gap is a finding rather than Zitadel's read projection catching
+// up.
+//
+// 20 minutes: in practice Zitadel's eventstore projection catches up within
+// seconds of an accepted write, so anything still unconfirmed this much later
+// is not projection lag — it is a write nobody has been able to substantiate.
+// Long enough that a burst of ordinary writes (a bundle cascade landing
+// mid-lecture-hall-rush) does not page anybody for lag alone; short enough
+// that no operator surface can call a write "In force" on the strength of an
+// hour-old acknowledgement (`one-truth-many-checks`: accepted is not
+// confirmed).
+const unconfirmedWriteThreshold = 20 * time.Minute
+
+// unconfirmedWriteTopN caps the dashboard preview, mirroring the drift
+// callout's top-3 — the count is exact regardless of this cap.
+const unconfirmedWriteTopN = 5
 
 // Injectable function vars — tests swap these to exercise services without a
 // live database. Direct references to the db funcs; only vars that add logic
@@ -106,6 +125,34 @@ var (
 				Since:    *r.UnreconciledSince,
 				LastSeen: r.LastCurrentReadAt,
 				Reason:   r.UnreconciledReason,
+			})
+		}
+		return out, nil
+	}
+	// Accepted writes no read has since observed, old enough to be a finding
+	// rather than Zitadel's read projection catching up
+	// (`one-truth-many-checks`: accepted is not confirmed). Mapped out of db's
+	// row type at the seam because models must not import db — same rule as
+	// svcGetUnreconciledTargets above.
+	svcGetUnconfirmedWrites = func(ctx context.Context) (models.UnconfirmedWriteSummary, error) {
+		rows, err := db.AppliedButUnobserved(ctx, unconfirmedWriteThreshold)
+		if err != nil {
+			return models.UnconfirmedWriteSummary{}, err
+		}
+		out := models.UnconfirmedWriteSummary{Count: len(rows)}
+		top := rows
+		if len(top) > unconfirmedWriteTopN {
+			top = top[:unconfirmedWriteTopN]
+		}
+		out.Top = make([]models.UnconfirmedWrite, 0, len(top))
+		for _, r := range top {
+			out.Top = append(out.Top, models.UnconfirmedWrite{
+				ID:        r.ID,
+				OpType:    r.OpType,
+				UserID:    r.UserID,
+				ProjectID: r.ProjectID,
+				RoleKeys:  r.RoleKeys,
+				AppliedAt: r.AppliedAt,
 			})
 		}
 		return out, nil

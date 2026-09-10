@@ -803,6 +803,18 @@ func governanceFromSnapshot(snap *accessSnapshot) (models.GovernanceSummary, err
 		unreconciled = []models.UnreconciledTarget{}
 	}
 
+	// Accepted writes no read has since observed, old enough to be a finding.
+	// Non-fatal like the drift and merge-finding reads above — one unreadable
+	// signal on this page must not blank the rest of it.
+	unconfirmedWrites, err := svcGetUnconfirmedWrites(snap.ctx)
+	if err != nil {
+		log.Printf("[GOVERNANCE] could not read unconfirmed writes: %v (degrading to none)", err)
+		unconfirmedWrites = models.UnconfirmedWriteSummary{}
+	}
+	if unconfirmedWrites.Top == nil {
+		unconfirmedWrites.Top = []models.UnconfirmedWrite{}
+	}
+
 	return models.GovernanceSummary{
 		PendingRequests: requests,
 		ExpiringGrants:  expiring,
@@ -814,6 +826,7 @@ func governanceFromSnapshot(snap *accessSnapshot) (models.GovernanceSummary, err
 		Drift:               models.DriftSummary{Count: driftCount, Top: topDrift},
 		UnreconciledTargets: unreconciled,
 		MergeFindings:       svcCountMergeFindings(snap.ctx),
+		UnconfirmedWrites:   unconfirmedWrites,
 	}, nil
 }
 

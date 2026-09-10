@@ -52,6 +52,12 @@ func resetGovernanceDeps(t *testing.T) {
 	origUnreconciled := svcGetUnreconciledTargets
 	t.Cleanup(func() { svcGetUnreconciledTargets = origUnreconciled })
 	svcGetUnreconciledTargets = func(context.Context) ([]models.UnreconciledTarget, error) { return nil, nil }
+	// And the unconfirmed-write read the summary grew, same reason again.
+	origUnconfirmedWrites := svcGetUnconfirmedWrites
+	t.Cleanup(func() { svcGetUnconfirmedWrites = origUnconfirmedWrites })
+	svcGetUnconfirmedWrites = func(context.Context) (models.UnconfirmedWriteSummary, error) {
+		return models.UnconfirmedWriteSummary{}, nil
+	}
 	origGetRequests := svcGetAccessRequests
 	origGetExpiring := svcGetExpiringDirectGrants
 	origGetAllBundles := svcGetAllBundles
@@ -871,6 +877,63 @@ func TestGovernanceSurvivesAFailedUnreconciledRead(t *testing.T) {
 		t.Fatalf("a failed read must not take the summary down: %v", err)
 	}
 	if summary.UnreconciledTargets == nil {
+		t.Fatal("the field must serialise as [] rather than null")
+	}
+}
+
+// A write Zitadel accepted that no read has since observed, old enough to be a
+// finding, must reach the summary with its count agreeing with the list —
+// exactly the property `one-truth-many-checks` requires: nothing computes the
+// count from anything but the same rows the surface renders.
+func TestGovernanceReportsUnconfirmedWrites(t *testing.T) {
+	resetGovernanceDeps(t)
+	stubGovernanceReads(t)
+
+	appliedAt := time.Now().Add(-45 * time.Minute)
+	svcGetUnconfirmedWrites = func(context.Context) (models.UnconfirmedWriteSummary, error) {
+		row := models.UnconfirmedWrite{
+			ID: "outbox-1", OpType: "grant", UserID: "u1", ProjectID: "p1",
+			RoleKeys: []string{"member"}, AppliedAt: appliedAt,
+		}
+		return models.UnconfirmedWriteSummary{Count: 1, Top: []models.UnconfirmedWrite{row}}, nil
+	}
+
+	summary, err := Governance(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.UnconfirmedWrites.Count != 1 {
+		t.Fatalf("expected count 1, got %d", summary.UnconfirmedWrites.Count)
+	}
+	if len(summary.UnconfirmedWrites.Top) != summary.UnconfirmedWrites.Count {
+		t.Fatalf("count %d disagrees with the list it is supposed to describe: %+v",
+			summary.UnconfirmedWrites.Count, summary.UnconfirmedWrites.Top)
+	}
+	got := summary.UnconfirmedWrites.Top[0]
+	if got.ID != "outbox-1" || !got.AppliedAt.Equal(appliedAt) {
+		t.Errorf("row does not carry the write it is reporting on: %+v", got)
+	}
+}
+
+// A failed read degrades to empty rather than failing the whole summary —
+// mirrors TestGovernanceSurvivesAFailedUnreconciledRead. An empty result here
+// must read as "nothing is old enough to be a finding", never as a fault.
+func TestGovernanceSurvivesAFailedUnconfirmedWriteRead(t *testing.T) {
+	resetGovernanceDeps(t)
+	stubGovernanceReads(t)
+
+	svcGetUnconfirmedWrites = func(context.Context) (models.UnconfirmedWriteSummary, error) {
+		return models.UnconfirmedWriteSummary{}, errors.New("the outbox table is unavailable")
+	}
+
+	summary, err := Governance(context.Background())
+	if err != nil {
+		t.Fatalf("a failed read must not take the summary down: %v", err)
+	}
+	if summary.UnconfirmedWrites.Count != 0 {
+		t.Fatalf("a failed read must degrade to zero, got %d", summary.UnconfirmedWrites.Count)
+	}
+	if summary.UnconfirmedWrites.Top == nil {
 		t.Fatal("the field must serialise as [] rather than null")
 	}
 }
