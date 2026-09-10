@@ -6,7 +6,6 @@ import (
 
 	"syndra/internal/db"
 	"syndra/internal/models"
-	"syndra/internal/zitadel"
 )
 
 // A role a bundle grants is not drift.
@@ -31,24 +30,18 @@ func bundleHolderGrant(userID, projectID, roleKey string) db.BundleDerivedGrant 
 	return db.BundleDerivedGrant{UserID: userID, ProjectID: projectID, RoleKey: roleKey}
 }
 
-func zitGrant(id, userID, projectID string, roles ...string) zitadel.UserGrant {
-	return zitadel.UserGrant{ID: id, UserID: userID, ProjectID: projectID, RoleKeys: roles}
-}
-
 func TestSweep_ABundleRoleIsNotDrift(t *testing.T) {
 	stubSweep(t)
 
-	t.Cleanup(swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		return &zitadel.SearchResult[zitadel.UserGrant]{
-			Items: []zitadel.UserGrant{zitGrant("g1", "shikha", "p-admin", "admin-staff")},
-		}, nil
+	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{observedGrant("g1", "shikha", "p-admin", "admin-staff")}, nil
 	}))
 	t.Cleanup(swap(&svcAllBundleDerivedGrants, func(context.Context) ([]db.BundleDerivedGrant, error) {
 		return []db.BundleDerivedGrant{bundleHolderGrant("shikha", "p-admin", "admin-staff")}, nil
 	}))
 
 	var raised []string
-	t.Cleanup(swap(&upsertDriftItem, func(_ context.Context, _, userID, projectID string, roles []string, _, _, _ string) (string, bool, error) {
+	t.Cleanup(swap(&upsertDriftItem, func(_ context.Context, _, userID, projectID string, roles []string, _, _, _ string, _ db.DriftEvidence) (string, bool, error) {
 		raised = append(raised, userID+"/"+projectID+"/"+roles[0])
 		return "d1", true, nil
 	}))
@@ -73,10 +66,8 @@ func TestSweep_ABundleRoleIsNotDrift(t *testing.T) {
 func TestSweep_ARoleTheHoldersVersionDoesNotCarryIsStillDrift(t *testing.T) {
 	stubSweep(t)
 
-	t.Cleanup(swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		return &zitadel.SearchResult[zitadel.UserGrant]{
-			Items: []zitadel.UserGrant{zitGrant("g1", "shikha", "p-admin", "admin-staff")},
-		}, nil
+	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{observedGrant("g1", "shikha", "p-admin", "admin-staff")}, nil
 	}))
 	// Their pin carries a DIFFERENT role. Nothing accounts for admin-staff.
 	t.Cleanup(swap(&svcAllBundleDerivedGrants, func(context.Context) ([]db.BundleDerivedGrant, error) {
@@ -84,7 +75,7 @@ func TestSweep_ARoleTheHoldersVersionDoesNotCarryIsStillDrift(t *testing.T) {
 	}))
 
 	var raised []string
-	t.Cleanup(swap(&upsertDriftItem, func(_ context.Context, _, userID, projectID string, roles []string, _, _, _ string) (string, bool, error) {
+	t.Cleanup(swap(&upsertDriftItem, func(_ context.Context, _, userID, projectID string, roles []string, _, _, _ string, _ db.DriftEvidence) (string, bool, error) {
 		raised = append(raised, userID+"/"+projectID+"/"+roles[0])
 		return "d1", true, nil
 	}))
@@ -104,17 +95,15 @@ func TestSweep_ARoleTheHoldersVersionDoesNotCarryIsStillDrift(t *testing.T) {
 func TestSweep_AFailedBundleReadAbortsRatherThanFlaggingEverything(t *testing.T) {
 	stubSweep(t)
 
-	t.Cleanup(swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		return &zitadel.SearchResult[zitadel.UserGrant]{
-			Items: []zitadel.UserGrant{zitGrant("g1", "shikha", "p-admin", "admin-staff")},
-		}, nil
+	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{observedGrant("g1", "shikha", "p-admin", "admin-staff")}, nil
 	}))
 	t.Cleanup(swap(&svcAllBundleDerivedGrants, func(context.Context) ([]db.BundleDerivedGrant, error) {
 		return nil, context.DeadlineExceeded
 	}))
 
 	wrote := false
-	t.Cleanup(swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
+	t.Cleanup(swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
 		wrote = true
 		return "d1", true, nil
 	}))
@@ -137,10 +126,8 @@ func TestSweep_AFailedBundleReadAbortsRatherThanFlaggingEverything(t *testing.T)
 func TestSweep_RetractsAFindingItCanNowExplain(t *testing.T) {
 	stubSweep(t)
 
-	t.Cleanup(swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		return &zitadel.SearchResult[zitadel.UserGrant]{
-			Items: []zitadel.UserGrant{zitGrant("g1", "shikha", "p-admin", "admin-staff")},
-		}, nil
+	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{observedGrant("g1", "shikha", "p-admin", "admin-staff")}, nil
 	}))
 	t.Cleanup(swap(&svcAllBundleDerivedGrants, func(context.Context) ([]db.BundleDerivedGrant, error) {
 		return []db.BundleDerivedGrant{bundleHolderGrant("shikha", "p-admin", "admin-staff")}, nil

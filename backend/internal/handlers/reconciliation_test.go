@@ -3,32 +3,42 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
 	"time"
 
+	"strings"
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/zitadel"
 )
 
-// withReconciliationDeps swaps in deterministic stub data for the two
-// injection points reconciliation depends on, and restores the originals
-// when the test returns. Keeps tests isolated from the real DB and Zitadel.
+// testReconciliationObservedAt is the fixed observation timestamp every test
+// that does not care about its exact value can share.
+var testReconciliationObservedAt = time.Unix(1_766_000_000, 0).UTC()
+
+// withReconciliationDeps swaps in deterministic stub data for the injection
+// points reconciliation depends on, and restores the originals when the test
+// returns. Keeps tests isolated from the real DB and Zitadel.
+//
+// one-truth-many-checks, "The last two readers": the handler no longer pages
+// Zitadel itself — it observes (recording what it saw) and then reads back
+// the store, exactly as discovery.go's grant-listing routes do. `complete`
+// and `obsErr` stand in for what a real observe.Org would have recorded.
 func withReconciliationDeps(
 	t *testing.T,
 	syndra []models.DirectGrant,
 	zitadelGrants []zitadel.UserGrant,
-	zitadelTotal int,
-	zitadelErr error,
+	complete bool,
+	obsErr string,
 ) {
 	t.Helper()
 
 	origAll := svcAllDirectGrants
-	origZitadel := zitadelListAllGrants
+	origObserveOrg := observeOrg
+	origAllObserved := dbAllObservedGrants
 	origRules := svcGetActiveMappingRulesRecon
 	origExclusions := svcGetExclusions
 	origBundled := svcAllBundleDerivedGrantsRecon
@@ -49,32 +59,21 @@ func withReconciliationDeps(
 	svcAllBundleDerivedGrantsRecon = func(_ context.Context) ([]db.BundleDerivedGrant, error) {
 		return nil, nil
 	}
-	// Pagination-aware stub: slices the master list by the requested offset
-	// and limit so the handler's pagination loop terminates correctly. Total
-	// always reports the master length (or zitadelTotal override) so the loop
-	// knows whether more pages remain.
-	zitadelListAllGrants = func(_ context.Context, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		if zitadelErr != nil {
-			return nil, zitadelErr
+	observeOrg = func(context.Context) (db.Observation, error) {
+		return db.Observation{Scope: "org", ObservedAt: testReconciliationObservedAt, Complete: complete, Error: obsErr}, nil
+	}
+	dbAllObservedGrants = func(context.Context) ([]db.ObservedGrant, error) {
+		out := make([]db.ObservedGrant, len(zitadelGrants))
+		for i, g := range zitadelGrants {
+			out[i] = db.ObservedGrant{GrantID: g.ID, UserID: g.UserID, ProjectID: g.ProjectID, RoleKeys: g.RoleKeys}
 		}
-		total := zitadelTotal
-		if total == 0 {
-			total = len(zitadelGrants)
-		}
-		start := min(p.Offset, len(zitadelGrants))
-		end := min(start+p.Limit, len(zitadelGrants))
-		if p.Limit == 0 {
-			end = len(zitadelGrants)
-		}
-		return &zitadel.SearchResult[zitadel.UserGrant]{
-			Items: zitadelGrants[start:end],
-			Total: total,
-		}, nil
+		return out, nil
 	}
 
 	t.Cleanup(func() {
 		svcAllDirectGrants = origAll
-		zitadelListAllGrants = origZitadel
+		observeOrg = origObserveOrg
+		dbAllObservedGrants = origAllObserved
 		svcGetActiveMappingRulesRecon = origRules
 		svcGetExclusions = origExclusions
 		svcAllBundleDerivedGrantsRecon = origBundled
@@ -119,7 +118,7 @@ func TestReconciliation_OnlyInSyndra(t *testing.T) {
 			directGrant("u-1", "p-1", "viewer"),
 			directGrant("u-1", "p-1", "editor"),
 		},
-		nil, 0, nil,
+		nil, true, "",
 	)
 
 	rr := getReconciliation(t)
@@ -150,7 +149,7 @@ func TestReconciliation_OnlyInZitadel(t *testing.T) {
 		nil,
 		[]zitadel.UserGrant{
 			{ID: "g-7", UserID: "u-1", ProjectID: "p-1", RoleKeys: []string{"derived_role"}},
-		}, 0, nil,
+		}, true, "",
 	)
 
 	rr := getReconciliation(t)
@@ -179,7 +178,7 @@ func TestReconciliation_RoleMismatch(t *testing.T) {
 		},
 		[]zitadel.UserGrant{
 			{ID: "g-1", UserID: "u-1", ProjectID: "p-1", RoleKeys: []string{"viewer", "admin"}},
-		}, 0, nil,
+		}, true, "",
 	)
 
 	got := decodeReconciliation(t, getReconciliation(t))
@@ -219,7 +218,7 @@ func TestReconciliation_RoleSuperset(t *testing.T) {
 		},
 		[]zitadel.UserGrant{
 			{ID: "g-1", UserID: "u-1", ProjectID: "p-1", RoleKeys: []string{"viewer"}},
-		}, 0, nil,
+		}, true, "",
 	)
 
 	got := decodeReconciliation(t, getReconciliation(t))
@@ -242,7 +241,7 @@ func TestReconciliation_Aligned(t *testing.T) {
 		},
 		[]zitadel.UserGrant{
 			{ID: "g-1", UserID: "u-1", ProjectID: "p-1", RoleKeys: []string{"editor", "viewer"}},
-		}, 0, nil,
+		}, true, "",
 	)
 	got := decodeReconciliation(t, getReconciliation(t))
 	if len(got.OnlyInSyndra) != 0 || len(got.OnlyInZitadel) != 0 || len(got.Drift) != 0 {
@@ -253,80 +252,36 @@ func TestReconciliation_Aligned(t *testing.T) {
 	}
 }
 
-// TestReconciliation_TruncationFlag: when the Zitadel grant inventory exceeds
-// the safety cap the handler stops paginating and sets truncated=true.
-// Override the package-level cap to a small number so the test can construct
-// a master list that exceeds it without bloating the test fixture.
-func TestReconciliation_TruncationFlag(t *testing.T) {
-	origCap := reconciliationSafetyCap
-	origPageSize := reconciliationPageSize
-	reconciliationSafetyCap = 3
-	reconciliationPageSize = 2 // force multi-page iteration so cap fires
-	t.Cleanup(func() {
-		reconciliationSafetyCap = origCap
-		reconciliationPageSize = origPageSize
-	})
-
-	// 5 grants × page size 2 → after page 1 (2 items) the loop continues;
-	// after page 2 (4 items) the cap (3) trips on the next iteration.
-	grants := []zitadel.UserGrant{
-		{ID: "g-1", UserID: "u-1", ProjectID: "p-1", RoleKeys: []string{"r"}},
-		{ID: "g-2", UserID: "u-2", ProjectID: "p-1", RoleKeys: []string{"r"}},
-		{ID: "g-3", UserID: "u-3", ProjectID: "p-1", RoleKeys: []string{"r"}},
-		{ID: "g-4", UserID: "u-4", ProjectID: "p-1", RoleKeys: []string{"r"}},
-		{ID: "g-5", UserID: "u-5", ProjectID: "p-1", RoleKeys: []string{"r"}},
-	}
-	withReconciliationDeps(t, nil, grants, 0, nil)
+// TestReconciliation_IncompleteObservationStillDiffsWhatWasSeen: an
+// observation that did not finish still has real grants in it, and the diff
+// must still run over them — only the Truncated flag says the picture might
+// be missing something. Concluding nothing at all from a partial read would
+// throw away findings that are perfectly real.
+func TestReconciliation_IncompleteObservationStillDiffsWhatWasSeen(t *testing.T) {
+	withReconciliationDeps(t,
+		[]models.DirectGrant{directGrant("u-1", "p-1", "viewer")},
+		[]zitadel.UserGrant{
+			{ID: "g-1", UserID: "u-1", ProjectID: "p-1", RoleKeys: []string{"viewer"}},
+			{ID: "g-2", UserID: "u-2", ProjectID: "p-1", RoleKeys: []string{"derived_role"}},
+		}, false, "the read reached its safety limit",
+	)
 
 	got := decodeReconciliation(t, getReconciliation(t))
 	if !got.Truncated {
-		t.Fatalf("expected Truncated=true when zitadel inventory exceeds safety cap")
+		t.Fatal("an incomplete observation must report truncated=true")
+	}
+	if len(got.OnlyInZitadel) != 1 || got.OnlyInZitadel[0].UserID != "u-2" {
+		t.Fatalf("grants actually seen must still be diffed, got %+v", got.OnlyInZitadel)
 	}
 }
 
-// TestReconciliation_PaginatesUntilTotalReached: with a per-page size smaller
-// than the Zitadel inventory, the handler MUST iterate every page so the
-// diff is authoritative. Comparing Syndra's full inventory against only the
-// first page would false-positive grants on later pages into only_in_syndra.
-func TestReconciliation_PaginatesUntilTotalReached(t *testing.T) {
-	origPageSize := reconciliationPageSize
-	reconciliationPageSize = 2
-	t.Cleanup(func() { reconciliationPageSize = origPageSize })
-
-	zitadelGrants := []zitadel.UserGrant{
-		{ID: "g-1", UserID: "u-1", ProjectID: "p-1", RoleKeys: []string{"r"}},
-		{ID: "g-2", UserID: "u-2", ProjectID: "p-1", RoleKeys: []string{"r"}},
-		{ID: "g-3", UserID: "u-3", ProjectID: "p-1", RoleKeys: []string{"r"}},
-		{ID: "g-4", UserID: "u-4", ProjectID: "p-1", RoleKeys: []string{"r"}},
-		{ID: "g-5", UserID: "u-5", ProjectID: "p-1", RoleKeys: []string{"r"}},
-	}
-	// Syndra side mirrors u-3..u-5 — these would false-positive into
-	// only_in_syndra if the loop stopped after page 1 (which only contains
-	// u-1 and u-2 at page size 2).
-	syndraGrants := []models.DirectGrant{
-		directGrant("u-3", "p-1", "r"),
-		directGrant("u-4", "p-1", "r"),
-		directGrant("u-5", "p-1", "r"),
-	}
-	withReconciliationDeps(t, syndraGrants, zitadelGrants, 0, nil)
-
-	got := decodeReconciliation(t, getReconciliation(t))
-	if got.Truncated {
-		t.Fatalf("did not expect truncation under the cap")
-	}
-	if len(got.OnlyInSyndra) != 0 {
-		t.Fatalf("pagination should have matched u-3..u-5 against later Zitadel pages, got only_in_syndra=%+v", got.OnlyInSyndra)
-	}
-	if len(got.Drift) != 0 {
-		t.Fatalf("u-3..u-5 role sets agree on both sides, expected no drift, got %+v", got.Drift)
-	}
-}
-
-// TestReconciliation_ZitadelFailure: the handler must surface a 502 when
-// Zitadel is unreachable rather than returning a misleading "all aligned"
-// snapshot from the Syndra side alone.
+// TestReconciliation_ZitadelFailure: the handler must surface a 502 when the
+// observation came back with nothing at all — an ordinary "all aligned"
+// snapshot from the Syndra side alone would tell an operator everybody in
+// Zitadel lost their access, which is the false negative this design exists
+// to prevent.
 func TestReconciliation_ZitadelFailure(t *testing.T) {
-	withReconciliationDeps(t, nil, nil, 0, errors.New("upstream unavailable"))
+	withReconciliationDeps(t, nil, nil, false, "upstream unavailable")
 
 	rr := getReconciliation(t)
 	if rr.Code != http.StatusBadGateway {
@@ -344,7 +299,7 @@ func TestReconciliation_MultipleUsersStableOrder(t *testing.T) {
 			directGrant("u-1", "p-2", "r"),
 			directGrant("u-1", "p-1", "r"),
 		},
-		nil, 0, nil,
+		nil, true, "",
 	)
 
 	got := decodeReconciliation(t, getReconciliation(t))
@@ -370,7 +325,7 @@ func TestReconciliation_RuleDerivedNotOnlyInZitadel(t *testing.T) {
 		[]zitadel.UserGrant{
 			{ID: "g1", UserID: "u-1", ProjectID: "p1", RoleKeys: []string{"member"}},
 			{ID: "g2", UserID: "u-1", ProjectID: "p2", RoleKeys: []string{"contributor"}},
-		}, 0, nil,
+		}, true, "",
 	)
 	// Active rule: p1:member → p2:contributor.
 	origRules := svcGetActiveMappingRulesRecon
@@ -384,5 +339,35 @@ func TestReconciliation_RuleDerivedNotOnlyInZitadel(t *testing.T) {
 		if e.ProjectID == "p2" {
 			t.Fatalf("rule-derived p2:contributor must NOT be OnlyInZitadel: %+v", got.OnlyInZitadel)
 		}
+	}
+}
+
+// A remembered world is not a comparison made just now.
+//
+// `observe.Org` answers a zero Observation in local-policy-only mode — there is
+// no client to ask — and the store may still hold rows from when there was one.
+// Diffing against those put a stale set on screen under a `GeneratedAt` of the
+// Unix epoch: a comparison nobody made, at a time that never happened.
+func TestReconciliationRefusesWhenThereIsNothingToAsk(t *testing.T) {
+	withReconciliationDeps(t, nil, nil, true, "")
+	// No client, so nothing was observed by this request...
+	observeOrg = func(context.Context) (db.Observation, error) {
+		return db.Observation{}, nil
+	}
+	// ...while the store still remembers a world from when there was one.
+	dbAllObservedGrants = func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{{
+			GrantID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"member"},
+		}}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	handleGetReconciliationDiff(rr, httptest.NewRequest(http.MethodGet, "/api/v1/reconciliation/diff", nil))
+
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("a diff was served from a remembered store: status %d, body %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "nothing to compare against") {
+		t.Fatalf("the refusal does not say why: %s", rr.Body.String())
 	}
 }

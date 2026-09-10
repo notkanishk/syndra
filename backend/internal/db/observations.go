@@ -207,6 +207,29 @@ func ObservedGrantsFor(ctx context.Context, userID string) ([]ObservedGrant, err
 	return out, rows.Err()
 }
 
+// AllObservedGrants returns the whole store, unpaged — for a caller that is
+// about to diff the entire directory in memory (drift's sweep, reconciliation's
+// on-demand diff) rather than render a page of it. Both used to hold their own
+// copy of this loop against a live Zitadel listing; there is now one copy,
+// against the one thing either of them may read.
+func AllObservedGrants(ctx context.Context) ([]ObservedGrant, error) {
+	rows, err := querier(ctx).Query(ctx, `
+		SELECT grant_id, user_id, project_id, role_keys FROM zitadel_grants_index`)
+	if err != nil {
+		return nil, fmt.Errorf("read all observed grants: %w", err)
+	}
+	defer rows.Close()
+	var out []ObservedGrant
+	for rows.Next() {
+		var g ObservedGrant
+		if err := rows.Scan(&g.GrantID, &g.UserID, &g.ProjectID, &g.RoleKeys); err != nil {
+			return nil, fmt.Errorf("read all observed grants: %w", err)
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
 // ObservedGrantsPage returns one page of the whole store, ordered by grant ID
 // for a stable page boundary, plus the total row count — for the org-wide
 // surface that used to page a live Zitadel listing directly and now pages
