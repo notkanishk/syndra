@@ -52,6 +52,15 @@ function tabsFor(isOperator: boolean): Tab[] {
   return isOperator ? ["access", "requests", "activity"] : ["access", "requests"];
 }
 
+/**
+ * Whether Zitadel could be asked, and whether it answered.
+ *
+ * `unknown` is not `false`. A read that has not returned, and one this viewer
+ * is not allowed to make, must never render as "the access is not there" — on
+ * this screen that reading costs somebody their afternoon.
+ */
+type Confirmation = "read" | "unreachable" | "unknown";
+
 interface AccessRole {
   role_key: string;
   reasons: RoleReason[];
@@ -86,11 +95,39 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
   // Keyed by project, because that is Zitadel's own shape. One grant per (user, project) carries
   // every role they hold there, so this id belongs on the project, not repeated onto each role
   // row as though each had its own.
-  const upstreamGrants = useUpstreamUserGrants(advanced && isOperator ? userId : null);
+  // Read for every OPERATOR, not only in Advanced view.
+  //
+  // Zitadel is the truth about who has access; Syndra's tables are the record
+  // of what was decided. Gating the read on a view toggle meant Basic checked
+  // nothing at all — the page stated access as fact and never asked the system
+  // that would know. A member gets no read because the endpoint is operator-only.
+  const upstreamGrants = useUpstreamUserGrants(isOperator ? userId : null);
   const zitadelGrantByProject = useMemo(
     () => new Map((upstreamGrants.data?.items ?? []).map((grant) => [grant.projectId, grant.id])),
     [upstreamGrants.data],
   );
+  // The role keys, which the map above threw away. Per-PROJECT presence cannot
+  // answer a question asked per role: a grant exists for the project while the
+  // one role this row is about is missing from it, and the page said "Granted".
+  const zitadelRolesByProject = useMemo(
+    () =>
+      new Map(
+        (upstreamGrants.data?.items ?? []).map((grant) => [
+          grant.projectId,
+          new Set(grant.roleKeys ?? []),
+        ]),
+      ),
+    [upstreamGrants.data],
+  );
+  // Three states, never two. "Zitadel does not have it" and "Syndra could not
+  // ask" are different facts, and collapsing them would let an outage render as
+  // an absence — the worst reading available, on the screen that decides
+  // whether somebody has access.
+  const confirmation: Confirmation = upstreamGrants.error
+    ? "unreachable"
+    : upstreamGrants.isLoading || !isOperator
+      ? "unknown"
+      : "read";
 
   if (access.isLoading) {
     return (
@@ -322,6 +359,8 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
               </div>
 
               <RoleGroup
+                confirmation={confirmation}
+                inZitadel={zitadelRolesByProject.get(project.project_id)}
                 label="Granted"
                 roles={project.source_roles}
                 projectId={project.project_id}
@@ -334,6 +373,8 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                 onReveal={revealInAdvanced}
               />
               <RoleGroup
+                confirmation={confirmation}
+                inZitadel={zitadelRolesByProject.get(project.project_id)}
                 label="Automatic"
                 roles={project.derived_roles}
                 projectId={project.project_id}
@@ -453,6 +494,8 @@ function ZitadelGrantId({
 
 function RoleGroup({
   label,
+  confirmation,
+  inZitadel,
   roles,
   projectId,
   projectName,
@@ -464,6 +507,10 @@ function RoleGroup({
   onReveal,
 }: {
   label: "Granted" | "Automatic";
+  /** Whether Zitadel could be asked at all, and what it said. */
+  confirmation: Confirmation;
+  /** The roles Zitadel reports for this project. Absent when it was not asked. */
+  inZitadel: Set<string> | undefined;
   roles: AccessRole[];
   projectId: string;
   projectName: string;
@@ -493,6 +540,10 @@ function RoleGroup({
         // the status slot outright: an expiry date on access that does not
         // exist yet is answering a question nobody can ask.
         const waiting = nothingSentYet(role.reasons);
+        // What Zitadel says, which is the only thing that decides whether this
+        // person can actually open the door. Syndra's tables say what was
+        // DECIDED; they were being rendered as though they said what is true.
+        const standing = confirmation === "read" ? Boolean(inZitadel?.has(role.role_key)) : null;
 
         return (
           <div
@@ -512,6 +563,14 @@ function RoleGroup({
             <span className="shrink-0 text-[13.5px]">
               {waiting ? (
                 <NotSentYet />
+              ) : standing === false ? (
+                // Recorded here, absent there, and nothing queued to carry it.
+                // This is the state the whole page exists to make visible: the
+                // one time it happened, every element said "Granted" and only a
+                // note at the top of the project said otherwise.
+                <span className="font-semibold text-danger-text">Not in Zitadel</span>
+              ) : standing === null && confirmation === "unreachable" ? (
+                <span className="text-warn-text">Could not check Zitadel</span>
               ) : expires ? (
                 <span className="font-semibold text-warn-text">
                   Expires {formatShortDate(expires)}
