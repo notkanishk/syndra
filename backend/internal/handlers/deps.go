@@ -159,6 +159,12 @@ var (
 	observeOrg           = observe.Org
 	dbObservedGrantsPage = db.ObservedGrantsPage
 	dbObservedGrantsFor  = db.ObservedGrantsFor
+	// dbAllObservedGrants is reconciliation's on-demand diff (one-truth-many-checks,
+	// "The last two readers"): the operator's [Check Zitadel again] calls
+	// observeOrg to force a fresh, recorded read, then diffs whatever the store
+	// holds afterwards — the same store the drift sweep and discovery.go read,
+	// so a fresh press does not open a second, private pipe into Zitadel.
+	dbAllObservedGrants = db.AllObservedGrants
 
 	// Real-time webhook drift detection (C6): a surviving grant_added event
 	// (already past the self-mutation guard) that Syndra neither expects nor
@@ -182,8 +188,9 @@ var (
 	svcGlobalRoleCatalog = services.GlobalRoleCatalog
 
 	// Reconciliation injectable vars — let tests exercise drift computation
-	// without a database or live Zitadel connection. The Zitadel side reuses
-	// zitadelListAllGrants below so a mocked MgmtClient flows through here too.
+	// without a database or live Zitadel connection. The Zitadel side reads
+	// observeOrg + dbAllObservedGrants above, so a mocked observation flows
+	// through here too.
 	svcAllDirectGrants = services.AllDirectGrants
 	// Rule/exclusion lookups for reconciliation's expected-set filtering (B2).
 	// Errors from these MUST propagate as 500s, not degrade to an empty set —
@@ -261,12 +268,6 @@ var (
 			return errNoClient
 		}
 		return zitadel.MgmtClient.DeleteProjectRole(ctx, projectID, roleKey)
-	}
-	zitadelListAllGrants = func(ctx context.Context, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		if zitadel.MgmtClient == nil {
-			return nil, errNoClient
-		}
-		return zitadel.MgmtClient.ListAllGrants(ctx, p)
 	}
 	zitadelListUserGrants = func(ctx context.Context, userID string, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
 		if zitadel.MgmtClient == nil {

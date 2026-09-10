@@ -47,7 +47,7 @@ func reconcile(t *testing.T) (*httptest.ResponseRecorder, ReconciliationDiff) {
 func TestReconciliation_ABundleRoleIsNotUnexplained(t *testing.T) {
 	withReconciliationDeps(t, nil, []zitadel.UserGrant{
 		{ID: "g1", UserID: "shikha", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"}},
-	}, 0, nil)
+	}, true, "")
 	stubBundleInventory(t, []db.BundleDerivedGrant{
 		{UserID: "shikha", ProjectID: "p-admin", RoleKey: "admin-staff"},
 	}, nil)
@@ -66,7 +66,7 @@ func TestReconciliation_ABundleRoleIsNotUnexplained(t *testing.T) {
 func TestReconciliation_AnUnexplainedGrantIsStillReported(t *testing.T) {
 	withReconciliationDeps(t, nil, []zitadel.UserGrant{
 		{ID: "g1", UserID: "someone", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"}},
-	}, 0, nil)
+	}, true, "")
 	stubBundleInventory(t, nil, nil)
 
 	_, out := reconcile(t)
@@ -82,7 +82,7 @@ func TestReconciliation_AnUnexplainedGrantIsStillReported(t *testing.T) {
 func TestReconciliation_AFailedBundleReadFailsTheRequest(t *testing.T) {
 	withReconciliationDeps(t, nil, []zitadel.UserGrant{
 		{ID: "g1", UserID: "shikha", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"}},
-	}, 0, nil)
+	}, true, "")
 	stubBundleInventory(t, nil, context.DeadlineExceeded)
 
 	rr, _ := reconcile(t)

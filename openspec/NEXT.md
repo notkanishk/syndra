@@ -431,9 +431,14 @@ never taught about a new source. Five were fixed in `bundle-lifecycle-repair`
   about whether a suspension is active. `unconfirmedRevocationPredicate` shows
   the right shape — a named `const` both readers share.
 
-- **Two `fetchAllZitadelGrants`** (sweep and reconciliation) with independently
-  declared page sizes and caps, each commented as mirroring the other.
-  Divergence produces a truncation flag on one surface and not the other.
+- **~~Two `fetchAllZitadelGrants`~~ (sweep and reconciliation) with
+  independently declared page sizes and caps, each commented as mirroring the
+  other.
+  Resolved, 2026-09-11.** (`one-truth-many-checks`, "The last two readers"):
+  both loops are deleted. The drift sweep reads
+  `db.LatestOrgObservation`/`db.AllObservedGrants`; reconciliation's handler
+  calls `observe.Org` and reads the store back. One paged listing (the
+  observer's) instead of three.
 
 Deliberately NOT consolidated: the five outbox direction predicates
 (`revoke OR withdraws_only`, `revoke, replace OR withdraws_only`, and three

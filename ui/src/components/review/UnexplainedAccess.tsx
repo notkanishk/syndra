@@ -871,7 +871,16 @@ function explainDrift(item: DriftTriageItem): string {
   if (when || who) {
     return `Created in Zitadel${when}${who}. Nothing in Syndra — no direct access, no bundle, no automatic rule — gives it.`;
   }
-  return "Found by the scheduled check, which compares lists and cannot see who made the change. Nothing in Syndra — no direct access, no bundle, no automatic rule — gives it.";
+  const base =
+    "Found by the scheduled check, which compares lists and cannot see who made the change. Nothing in Syndra — no direct access, no bundle, no automatic rule — gives it.";
+  // Two separate facts, said separately (owner's requirement): the first
+  // sentence is what the evidence does not show; this one is a guess about
+  // WHY, and only ventured when the event log reaches back far enough to
+  // support it (event_possibly_missed already carries that check).
+  if (item.event_possibly_missed) {
+    return `${base} Zitadel usually tells Syndra about a change like this one on its own; this time nothing arrived, which is worth a look.`;
+  }
+  return base;
 }
 
 // The third copy of "is this person gone", now the shared one. It was missing

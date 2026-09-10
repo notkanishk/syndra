@@ -4,20 +4,36 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
 	"syndra/internal/db"
 	"syndra/internal/models"
-	"syndra/internal/zitadel"
 )
 
 func swap[T any](dst *T, v T) func() { o := *dst; *dst = v; return func() { *dst = o } }
 
+// testObservedAt is the fixed org-observation timestamp every test that does
+// not care about its exact value can share.
+var testObservedAt = time.Unix(1_765_000_000, 0).UTC()
+
+// observedGrant builds a db.ObservedGrant the way the store would hold one —
+// the fixture every test used to build as a zitadel.UserGrant literal before
+// the sweep read the store instead of Zitadel directly.
+func observedGrant(grantID, userID, projectID string, roles ...string) db.ObservedGrant {
+	return db.ObservedGrant{GrantID: grantID, UserID: userID, ProjectID: projectID, RoleKeys: roles}
+}
+
 // stubSweep sets safe no-op defaults; each test overrides only what it asserts.
 func stubSweep(t *testing.T) {
-	t.Cleanup(swap(&zitadelReachable, func(context.Context) bool { return true }))
+	// A complete org observation with nothing in it, by default — the ROLLOUT
+	// state once a sweep has run at least once and Zitadel holds nothing this
+	// test cares about. Tests that need "never observed" or "incomplete"
+	// override latestOrgObservation directly.
+	t.Cleanup(swap(&latestOrgObservation, func(context.Context) (db.Observation, error) {
+		return db.Observation{Scope: "org", ObservedAt: testObservedAt, Complete: true}, nil
+	}))
+	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) { return nil, nil }))
 	t.Cleanup(swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) { return nil, nil }))
 	t.Cleanup(swap(&svcGetActiveMappingRules, func(context.Context) ([]models.MappingRule, error) { return nil, nil }))
 	// The bundle-derived inventory and the retraction pass. Default to "no
@@ -28,10 +44,7 @@ func stubSweep(t *testing.T) {
 	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) { return nil, nil }))
 	t.Cleanup(swap(&retractExplainedDrift, func(context.Context, string, string, string, string) error { return nil }))
 	t.Cleanup(swap(&svcGetExclusions, func(context.Context, string) ([]models.ExternalGrantExclusion, error) { return nil, nil }))
-	t.Cleanup(swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		return &zitadel.SearchResult[zitadel.UserGrant]{}, nil
-	}))
-	t.Cleanup(swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
+	t.Cleanup(swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
 		return "d1", true, nil
 	}))
 	t.Cleanup(swap(&pendingOutboxAddExists, func(context.Context, string, string, string, string) (bool, error) { return false, nil }))
@@ -64,14 +77,11 @@ func stubSweep(t *testing.T) {
 
 func TestSweep_UnexplainedZitadelGrantBecomesDrift(t *testing.T) {
 	stubSweep(t)
-	defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		return &zitadel.SearchResult[zitadel.UserGrant]{
-			Items: []zitadel.UserGrant{{ID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}},
-			Total: 1,
-		}, nil
+	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "viewer")}, nil
 	})()
 	var driftType string
-	defer swap(&upsertDriftItem, func(_ context.Context, _, _, _ string, _ []string, _, _, dtype string) (string, bool, error) {
+	defer swap(&upsertDriftItem, func(_ context.Context, _, _, _ string, _ []string, _, _, dtype string, _ db.DriftEvidence) (string, bool, error) {
 		driftType = dtype
 		return "d1", true, nil
 	})()
@@ -93,16 +103,14 @@ func TestSweep_RuleDerivedGrantIsNotDrift(t *testing.T) {
 	defer swap(&svcGetActiveMappingRules, func(context.Context) ([]models.MappingRule, error) {
 		return []models.MappingRule{{SourceProject: "p1", SourceRole: "member", TargetProject: "p2", TargetRole: "contributor"}}, nil
 	})()
-	defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		return &zitadel.SearchResult[zitadel.UserGrant]{
-			Items: []zitadel.UserGrant{
-				{ID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"member"}},
-				{ID: "g2", UserID: "u1", ProjectID: "p2", RoleKeys: []string{"contributor"}},
-			}, Total: 2,
+	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{
+			observedGrant("g1", "u1", "p1", "member"),
+			observedGrant("g2", "u1", "p2", "contributor"),
 		}, nil
 	})()
 	var created int
-	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
+	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
 		created++
 		return "d", true, nil
 	})()
@@ -154,15 +162,20 @@ func TestSweep_SyndraOnlySkipsReEnqueueWhenPendingOutboxAdd(t *testing.T) {
 	}
 }
 
-func TestSweep_HaltsWhenZitadelOffline(t *testing.T) {
+// "Nobody has looked" and "nothing is there" are different facts, and only one
+// permits a conclusion. A fresh deployment, or one whose sweep has never
+// finished, must halt cleanly and say so — never render as a clean bill.
+func TestSweep_HaltsWhenNeverObserved(t *testing.T) {
 	stubSweep(t)
-	defer swap(&zitadelReachable, func(context.Context) bool { return false })()
+	defer swap(&latestOrgObservation, func(context.Context) (db.Observation, error) {
+		return db.Observation{}, db.ErrNoObservation
+	})()
 	res, err := Sweep(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Halted || res.Reason != "zitadel_offline" {
-		t.Fatalf("offline sweep must halt cleanly, got %+v", res)
+	if !res.Halted || res.Reason != "not_checked_yet" {
+		t.Fatalf("a never-observed target must halt cleanly and say so, got %+v", res)
 	}
 }
 
@@ -171,13 +184,11 @@ func TestSweep_ExcludedGrantIsNotDrift(t *testing.T) {
 	defer swap(&svcGetExclusions, func(_ context.Context, target string) ([]models.ExternalGrantExclusion, error) {
 		return []models.ExternalGrantExclusion{{Target: target, UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
 	})()
-	defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		return &zitadel.SearchResult[zitadel.UserGrant]{
-			Items: []zitadel.UserGrant{{ID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}}, Total: 1,
-		}, nil
+	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "viewer")}, nil
 	})()
 	var created int
-	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
+	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
 		created++
 		return "d", true, nil
 	})()
@@ -199,14 +210,12 @@ func TestSweep_EveryWriteNamesTheTargetItSwept(t *testing.T) {
 	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{{UserID: "u2", ProjectID: "p2", RoleKey: "gone"}}, nil
 	})()
-	defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		return &zitadel.SearchResult[zitadel.UserGrant]{
-			Items: []zitadel.UserGrant{{ID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}}, Total: 1,
-		}, nil
+	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "viewer")}, nil
 	})()
 
 	var upsertTarget, exclusionTarget, queuedTarget string
-	defer swap(&upsertDriftItem, func(_ context.Context, tgt, _, _ string, _ []string, _, _, _ string) (string, bool, error) {
+	defer swap(&upsertDriftItem, func(_ context.Context, tgt, _, _ string, _ []string, _, _, _ string, _ db.DriftEvidence) (string, bool, error) {
 		upsertTarget = tgt
 		return "d1", true, nil
 	})()
@@ -239,7 +248,9 @@ func TestSweep_EveryWriteNamesTheTargetItSwept(t *testing.T) {
 // about an unnamed target reads as a clean bill of health for all of them.
 func TestSweep_HaltedResultStillNamesItsTarget(t *testing.T) {
 	stubSweep(t)
-	defer swap(&zitadelReachable, func(context.Context) bool { return false })()
+	defer swap(&latestOrgObservation, func(context.Context) (db.Observation, error) {
+		return db.Observation{}, db.ErrNoObservation
+	})()
 	res, _ := Sweep(context.Background())
 	if res.Target != "zitadel" {
 		t.Fatalf("a halted sweep must still name its target, got %+v", res)
@@ -254,13 +265,11 @@ func TestSweep_ExclusionOnAnotherTargetDoesNotSuppressDrift(t *testing.T) {
 	defer swap(&svcGetExclusions, func(context.Context, string) ([]models.ExternalGrantExclusion, error) {
 		return []models.ExternalGrantExclusion{{Target: "truenas", UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
 	})()
-	defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		return &zitadel.SearchResult[zitadel.UserGrant]{
-			Items: []zitadel.UserGrant{{ID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}}, Total: 1,
-		}, nil
+	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "viewer")}, nil
 	})()
 	var created int
-	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
+	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
 		created++
 		return "d", true, nil
 	})()
@@ -273,24 +282,27 @@ func TestSweep_ExclusionOnAnotherTargetDoesNotSuppressDrift(t *testing.T) {
 	}
 }
 
-// 1.15 — an outage produces no findings and does record the target as
-// unreconciled, with the age the operator is owed. Silence would read as "no
-// drift", which is the opposite of what happened.
-func TestSweep_AnOutageRecordsAnUnreconciledTargetAndFindsNothing(t *testing.T) {
+// 1.15 — a never-observed target produces no findings and does record itself
+// as unreconciled, with the age the operator is owed. Silence would read as
+// "no drift", which is the opposite of what happened.
+func TestSweep_ANeverObservedTargetRecordsUnreconciledAndFindsNothing(t *testing.T) {
 	stubSweep(t)
-	defer swap(&zitadelReachable, func(context.Context) bool { return false })()
-	// Syndra expects a grant Zitadel is not answering about. Neither half of
-	// the diff may run: one would invent drift, the other would replay it.
+	defer swap(&latestOrgObservation, func(context.Context) (db.Observation, error) {
+		return db.Observation{}, db.ErrNoObservation
+	})()
+	// Nothing has been observed. Neither half of the diff may run: one would
+	// invent drift from a store nobody has asked anything of, the other would
+	// replay against an absence nobody has established.
 	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
-		t.Fatal("an unreachable target must not be diffed at all")
+		t.Fatal("a never-observed target must not be diffed at all")
 		return nil, nil
 	})()
-	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
-		t.Fatal("an outage must not raise drift")
+	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
+		t.Fatal("a never-observed target must not raise drift")
 		return "", false, nil
 	})()
 	defer swap(&insertPending, func(context.Context, string, string, string, []string, string, string, string, string) (string, error) {
-		t.Fatal("an outage must not re-enqueue")
+		t.Fatal("a never-observed target must not re-enqueue")
 		return "", nil
 	})()
 
@@ -303,7 +315,7 @@ func TestSweep_AnOutageRecordsAnUnreconciledTargetAndFindsNothing(t *testing.T) 
 			UnreconciledSince: &since, UnreconciledReason: reason}, nil
 	})()
 	defer swap(&markReconciled, func(context.Context, string) (db.TargetReconciliation, error) {
-		t.Fatal("an outage must not record a current read")
+		t.Fatal("a never-observed target must not be recorded as a current read — no clean bill from nothing")
 		return db.TargetReconciliation{}, nil
 	})()
 
@@ -312,10 +324,10 @@ func TestSweep_AnOutageRecordsAnUnreconciledTargetAndFindsNothing(t *testing.T) 
 		t.Fatal(err)
 	}
 	if !res.Halted || res.DriftItemsCreated != 0 || res.ReEnqueued != 0 {
-		t.Fatalf("an outage must produce no findings, got %+v", res)
+		t.Fatalf("a never-observed target must produce no findings, got %+v", res)
 	}
 	if gotTarget != "zitadel" || gotReason != db.UnreconciledUnreachable {
-		t.Fatalf("the unreachable target must be recorded as such, got %q/%q", gotTarget, gotReason)
+		t.Fatalf("the never-observed target must be recorded unreconciled, got %q/%q", gotTarget, gotReason)
 	}
 	if res.Reconciliation == nil || !res.Reconciliation.Unreconciled() {
 		t.Fatalf("the result must carry the unreconciled record, got %+v", res.Reconciliation)
@@ -327,22 +339,20 @@ func TestSweep_AnOutageRecordsAnUnreconciledTargetAndFindsNothing(t *testing.T) 
 	}
 }
 
-// Reconciliation resumes on return: the sweep diffs the current read, and the
-// unreconciled period ends with the same write that records the read.
+// Reconciliation resumes on return: the sweep diffs the current observation,
+// and the unreconciled period ends with the same write that records it.
 func TestSweep_ResumesOnReturn(t *testing.T) {
 	stubSweep(t)
-	defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		return &zitadel.SearchResult[zitadel.UserGrant]{
-			Items: []zitadel.UserGrant{{ID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}}, Total: 1,
-		}, nil
+	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "viewer")}, nil
 	})()
 	var created int
-	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
+	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
 		created++
 		return "d1", true, nil
 	})()
 	defer swap(&markUnreconciled, func(_ context.Context, _, reason string) (db.TargetReconciliation, error) {
-		t.Fatalf("a current, complete read must not be recorded as unreconciled (%s)", reason)
+		t.Fatalf("a current, complete observation must not be recorded as unreconciled (%s)", reason)
 		return db.TargetReconciliation{}, nil
 	})()
 	read := time.Unix(1_770_000_000, 0)
@@ -357,7 +367,7 @@ func TestSweep_ResumesOnReturn(t *testing.T) {
 	// A change made during the outage is classified on its own merits — as the
 	// unexplained grant it is, not as an outage artefact.
 	if created != 1 {
-		t.Fatalf("a current read must be diffed, drift created = %d", created)
+		t.Fatalf("a current observation must be diffed, drift created = %d", created)
 	}
 	if res.Reconciliation == nil || res.Reconciliation.Unreconciled() {
 		t.Fatalf("returning must end the unreconciled period, got %+v", res.Reconciliation)
@@ -367,25 +377,25 @@ func TestSweep_ResumesOnReturn(t *testing.T) {
 	}
 }
 
-// A capped read has seen everything it reports and nothing about the rest.
-// Concluding absence from it would re-enqueue an `add` for every direct grant
-// beyond the cap — grants that already exist.
-func TestSweep_ATruncatedReadConcludesNoAbsence(t *testing.T) {
+// An incomplete observation has seen everything it reports and nothing about
+// the rest. Concluding absence from it would re-enqueue an `add` for every
+// direct grant beyond what it saw — grants that already exist. It must also
+// never produce a clean bill: no call to markReconciled below.
+func TestSweep_AnIncompleteObservationConcludesNoAbsenceAndNoCleanBill(t *testing.T) {
 	stubSweep(t)
 	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{{UserID: "beyond-the-cap", ProjectID: "p9", RoleKey: "viewer"}}, nil
+		return []models.DirectGrant{{UserID: "beyond-what-was-seen", ProjectID: "p9", RoleKey: "viewer"}}, nil
 	})()
-	// Total exceeds what the page returns and the cap is reached, so the fetch
-	// reports truncation.
-	defer swap(&zitadelListAllGrants, func(_ context.Context, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		items := make([]zitadel.UserGrant, driftSafetyCap)
-		for i := range items {
-			items[i] = zitadel.UserGrant{ID: "g", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}
-		}
-		return &zitadel.SearchResult[zitadel.UserGrant]{Items: items, Total: driftSafetyCap * 2}, nil
+	// The org observation did not finish. What it saw is real; what it did not
+	// reach is unknown, so absence cannot be concluded from it.
+	defer swap(&latestOrgObservation, func(context.Context) (db.Observation, error) {
+		return db.Observation{Scope: "org", ObservedAt: testObservedAt, Complete: false}, nil
+	})()
+	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{observedGrant("g", "u1", "p1", "viewer")}, nil
 	})()
 	defer swap(&insertPending, func(context.Context, string, string, string, []string, string, string, string, string) (string, error) {
-		t.Fatal("a capped read cannot observe an absence, so it must not replay one")
+		t.Fatal("an incomplete observation cannot observe an absence, so it must not replay one")
 		return "", nil
 	})()
 	var reason string
@@ -394,7 +404,7 @@ func TestSweep_ATruncatedReadConcludesNoAbsence(t *testing.T) {
 		return db.TargetReconciliation{Target: target, UnreconciledReason: r}, nil
 	})()
 	defer swap(&markReconciled, func(context.Context, string) (db.TargetReconciliation, error) {
-		t.Fatal("a truncated read is not a read Syndra can stand behind")
+		t.Fatal("an incomplete observation is not one Syndra can stand behind — no clean bill from it")
 		return db.TargetReconciliation{}, nil
 	})()
 
@@ -403,10 +413,10 @@ func TestSweep_ATruncatedReadConcludesNoAbsence(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !res.Truncated || res.ReEnqueued != 0 {
-		t.Fatalf("a truncated sweep must conclude no absence, got %+v", res)
+		t.Fatalf("an incomplete sweep must conclude no absence, got %+v", res)
 	}
 	if reason != db.UnreconciledTruncated {
-		t.Fatalf("the cap must be recorded as the reason, got %q", reason)
+		t.Fatalf("the incompleteness must be recorded as the reason, got %q", reason)
 	}
 	// The half that concludes from what it SAW still runs: those grants were
 	// observed, and suppressing them would lose real findings for the same
@@ -420,10 +430,8 @@ func TestSweep_ATruncatedReadConcludesNoAbsence(t *testing.T) {
 // not lose the findings.
 func TestSweep_AFailedCurrencyRecordDoesNotDiscardTheWork(t *testing.T) {
 	stubSweep(t)
-	defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		return &zitadel.SearchResult[zitadel.UserGrant]{
-			Items: []zitadel.UserGrant{{ID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}}, Total: 1,
-		}, nil
+	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "viewer")}, nil
 	})()
 	defer swap(&markReconciled, func(context.Context, string) (db.TargetReconciliation, error) {
 		return db.TargetReconciliation{}, errors.New("database unreachable")
@@ -441,100 +449,50 @@ func TestSweep_AFailedCurrencyRecordDoesNotDiscardTheWork(t *testing.T) {
 	}
 }
 
-// The reachability pre-flight is a nil check on the client, so passing it is
-// not evidence the target answers. A read that fails is the outage — on the
-// first page or a later one — and must be recorded as one, or the row left
-// behind keeps reporting the last current read for the whole outage.
-func TestSweep_AFailedReadIsAnOutageAndSaysWhichKind(t *testing.T) {
-	for _, tc := range []struct {
-		name       string
-		wantReason string
-		wantRecord string
-		pages      func(int) (*zitadel.SearchResult[zitadel.UserGrant], error)
-	}{
-		{"first page", "zitadel_unreachable", db.UnreconciledUnreachable, func(int) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-			return nil, errors.New("dial tcp: connection refused")
-		}},
-		// Zitadel answered. The network is fine and the host is up; what is
-		// broken is a credential. Reported as unreachable it would look like
-		// weather — something to wait out rather than repair.
-		{"an answered 401", "zitadel_read_refused", db.UnreconciledReadRefused, func(int) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-			return nil, &zitadel.StatusError{Code: 401, Message: "invalid token"}
-		}},
-		{"an answered 403 mid-pagination", "zitadel_read_refused", db.UnreconciledReadRefused, func(call int) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-			if call > 1 {
-				return nil, &zitadel.StatusError{Code: 403, Message: "missing permission"}
-			}
-			items := make([]zitadel.UserGrant, zitadelPageSize)
-			for i := range items {
-				items[i] = zitadel.UserGrant{ID: "g", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}
-			}
-			return &zitadel.SearchResult[zitadel.UserGrant]{Items: items, Total: zitadelPageSize * 4}, nil
-		}},
-		// The shape a revoked machine key actually arrives in: the token
-		// exchange answers 401 and doRequest wraps it. Asserting on a bare
-		// StatusError would have passed while this real path did not.
-		{"a revoked machine key", "zitadel_read_refused", db.UnreconciledReadRefused, func(int) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-			return nil, fmt.Errorf("obtain access token: %w",
-				&zitadel.StatusError{Code: 401, Message: `{"error":"invalid_client"}`})
-		}},
-		{"a later page", "zitadel_unreachable", db.UnreconciledUnreachable, func(call int) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-			if call > 1 {
-				return nil, errors.New("502 from the gateway mid-pagination")
-			}
-			items := make([]zitadel.UserGrant, zitadelPageSize)
-			for i := range items {
-				items[i] = zitadel.UserGrant{ID: "g", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}
-			}
-			return &zitadel.SearchResult[zitadel.UserGrant]{Items: items, Total: zitadelPageSize * 4}, nil
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			stubSweep(t)
-			// The pre-flight passes: the client is configured. Only the read
-			// knows the target is not answering.
-			defer swap(&zitadelReachable, func(context.Context) bool { return true })()
-			defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
-				return []models.DirectGrant{{UserID: "u9", ProjectID: "p9", RoleKey: "viewer"}}, nil
-			})()
-			calls := 0
-			defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-				calls++
-				return tc.pages(calls)
-			})()
-			defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
-				t.Fatal("a failed read must not be diffed — a partly-read list is unseen, not absent")
-				return "", false, nil
-			})()
-			defer swap(&insertPending, func(context.Context, string, string, string, []string, string, string, string, string) (string, error) {
-				t.Fatal("a failed read must not replay an absence it never observed")
-				return "", nil
-			})()
-			defer swap(&markReconciled, func(context.Context, string) (db.TargetReconciliation, error) {
-				t.Fatal("a failed read must not be recorded as a current one")
-				return db.TargetReconciliation{}, nil
-			})()
-			var reason string
-			since := time.Unix(1_759_900_000, 0)
-			defer swap(&markUnreconciled, func(_ context.Context, target, r string) (db.TargetReconciliation, error) {
-				reason = r
-				return db.TargetReconciliation{Target: target, UnreconciledSince: &since, UnreconciledReason: r}, nil
-			})()
+// A finding must say what it is evidence OF — the observation it was read
+// from — so it can be reproduced: the same observation and the same records
+// yield the same findings. See db.driftItemSelect and DriftEvidence.
+func TestSweep_TargetOnlyFindingCitesTheObservation(t *testing.T) {
+	stubSweep(t)
+	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "viewer")}, nil
+	})()
+	var gotObservedAt *time.Time
+	defer swap(&upsertDriftItem, func(_ context.Context, _, _, _ string, _ []string, _, _, _ string, ev db.DriftEvidence) (string, bool, error) {
+		gotObservedAt = ev.ObservedAt
+		return "d1", true, nil
+	})()
 
-			res, err := Sweep(context.Background())
-			if err != nil {
-				t.Fatalf("a target outage is a halt, not a sweep failure: %v", err)
-			}
-			if !res.Halted || res.Reason != tc.wantReason {
-				t.Fatalf("a failed read must halt and say why: want %q, got %+v", tc.wantReason, res)
-			}
-			if reason != tc.wantRecord {
-				t.Fatalf("the durable reason must distinguish not-answering from answered-and-declined, want %q got %q", tc.wantRecord, reason)
-			}
-			if res.Reconciliation == nil || !res.Reconciliation.Unreconciled() {
-				t.Fatalf("the result must carry the unreconciled record, got %+v", res.Reconciliation)
-			}
-		})
+	if _, err := Sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if gotObservedAt == nil || !gotObservedAt.Equal(testObservedAt) {
+		t.Fatalf("a target_only finding must cite the org observation it was read from, got %v want %v", gotObservedAt, testObservedAt)
+	}
+}
+
+// The syndra_only half concludes from an absence rather than a presence, but
+// it is read from the same observation and must cite it too.
+func TestSweep_SyndraOnlyFindingAlsoCitesTheObservation(t *testing.T) {
+	stubSweep(t)
+	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
+	})()
+	// Zitadel was seen holding it, and holds nothing now — triaged as syndra_only.
+	defer swap(&listMergeBases, func(context.Context, string) (map[string]db.MergeBase, error) {
+		return grantsFor("u1", "p1", "viewer"), nil
+	})()
+	var gotObservedAt *time.Time
+	defer swap(&upsertDriftItem, func(_ context.Context, _, _, _ string, _ []string, _, _, _ string, ev db.DriftEvidence) (string, bool, error) {
+		gotObservedAt = ev.ObservedAt
+		return "d1", true, nil
+	})()
+
+	if _, err := Sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if gotObservedAt == nil || !gotObservedAt.Equal(testObservedAt) {
+		t.Fatalf("a syndra_only finding must also cite the org observation, got %v", gotObservedAt)
 	}
 }
 
@@ -637,7 +595,7 @@ func TestSweep_AGrantRemovedInZitadelIsTriagedRatherThanReplayed(t *testing.T) {
 		return "o1", nil
 	})()
 	findings := []string{}
-	defer swap(&upsertDriftItem, func(_ context.Context, _, user, project string, roles []string, _, _, kind string) (string, bool, error) {
+	defer swap(&upsertDriftItem, func(_ context.Context, _, user, project string, roles []string, _, _, kind string, _ db.DriftEvidence) (string, bool, error) {
 		findings = append(findings, kind+":"+user+"/"+project+"/"+roles[0])
 		return "d1", true, nil
 	})()
@@ -672,7 +630,7 @@ func TestSweep_AGrantThatWasNeverProjectedIsStillReplayed(t *testing.T) {
 		return "o1", nil
 	})()
 	findings := 0
-	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string) (string, bool, error) {
+	defer swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
 		findings++
 		return "d1", true, nil
 	})()
@@ -704,10 +662,8 @@ func TestSweep_TheBaseDoesNotAdvancePastAnUnresolvedFinding(t *testing.T) {
 	})()
 	// Zitadel still holds another role for the same user, so the base is
 	// rewritten and the question is what it keeps.
-	defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		return &zitadel.SearchResult[zitadel.UserGrant]{Items: []zitadel.UserGrant{
-			{ID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"editor"}},
-		}}, nil
+	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "editor")}, nil
 	})()
 	defer swap(&svcGetExclusions, func(context.Context, string) ([]models.ExternalGrantExclusion, error) {
 		// So the editor grant is not itself reported as target_only noise.
@@ -735,17 +691,16 @@ func TestSweep_TheBaseDoesNotAdvancePastAnUnresolvedFinding(t *testing.T) {
 	}
 }
 
-// A capped read cannot observe an absence, and a base is a statement about what
-// the target holds. The truncated branch already refuses to conclude; it must
-// also refuse to record.
-func TestSweep_ATruncatedReadRecordsNoObservation(t *testing.T) {
+// An incomplete observation cannot observe an absence, and a base is a
+// statement about what the target holds. The incomplete branch already
+// refuses to conclude; it must also refuse to record.
+func TestSweep_AnIncompleteObservationRecordsNoBase(t *testing.T) {
 	stubSweep(t)
-	defer swap(&zitadelListAllGrants, func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
-		items := make([]zitadel.UserGrant, driftSafetyCap)
-		for i := range items {
-			items[i] = zitadel.UserGrant{ID: "g", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}}
-		}
-		return &zitadel.SearchResult[zitadel.UserGrant]{Items: items, Total: driftSafetyCap * 2}, nil
+	defer swap(&latestOrgObservation, func(context.Context) (db.Observation, error) {
+		return db.Observation{Scope: "org", ObservedAt: testObservedAt, Complete: false}, nil
+	})()
+	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{observedGrant("g", "u1", "p1", "viewer")}, nil
 	})()
 
 	wrote := 0
@@ -756,10 +711,10 @@ func TestSweep_ATruncatedReadRecordsNoObservation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !res.Truncated {
-		t.Fatal("this test needs a truncated read")
+		t.Fatal("this test needs an incomplete observation")
 	}
 	if wrote != 0 {
-		t.Fatalf("a capped read must record no observation, got %d", wrote)
+		t.Fatalf("an incomplete observation must record no merge-base observation, got %d", wrote)
 	}
 }
 
@@ -811,7 +766,7 @@ func TestSweep_AGrantRemovedBeforeAnySweepSawItIsStillTriaged(t *testing.T) {
 		return "o1", nil
 	})()
 	findings := 0
-	defer swap(&upsertDriftItem, func(_ context.Context, _, _, _ string, _ []string, _, _, kind string) (string, bool, error) {
+	defer swap(&upsertDriftItem, func(_ context.Context, _, _, _ string, _ []string, _, _, kind string, _ db.DriftEvidence) (string, bool, error) {
 		if kind == db.DriftSyndraOnly {
 			findings++
 		}

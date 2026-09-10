@@ -101,6 +101,40 @@ func awaitFirstManifests(ctx context.Context) {
 	}
 }
 
+// checkObservation reports whether the store holds an org observation yet.
+// A seam so awaitFirstObservation is testable without a database.
+var checkObservation = func(ctx context.Context) error {
+	_, err := db.LatestOrgObservation(ctx)
+	return err
+}
+
+// awaitFirstObservation blocks, briefly and boundedly, until the observation
+// sweep has written something — so drift's first run reads a store that has
+// actually been asked, not one that is empty because nobody has looked yet.
+//
+// Same shape as awaitFirstManifests and the same reason: the observer's own
+// run-on-boot usually wins this race in a couple of seconds, and this only
+// exists to close the window where drift's run-on-boot could win it instead.
+// Bounded, and gives up onto the schedule rather than blocking forever — a
+// deployment with no Zitadel configured would otherwise never start drift at
+// all, when Sweep already knows how to say "not checked yet" about exactly
+// that case.
+func awaitFirstObservation(ctx context.Context) {
+	for _, wait := range []time.Duration{2, 3, 5, 10, 15, 30, 45} {
+		if checkObservation(ctx) == nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait * time.Second):
+		}
+	}
+	if checkObservation(ctx) != nil {
+		log.Printf("[DRIFT] no observation yet after startup wait; starting on schedule regardless — findings will read \"not checked yet\" until the sweep catches up")
+	}
+}
+
 func warnIfWelcomeBundleMissing(ctx context.Context) {
 	_, err := db.GetWelcomeBundle(ctx)
 	if err == nil {
@@ -192,13 +226,33 @@ func main() {
 	}
 
 	// Drift reconciliation scheduler: periodic Zitadel↔Syndra sweep (B2/C6).
+	//
+	// one-truth-many-checks, "The last two readers": drift no longer pages
+	// Zitadel itself — it diffs internal/observe's store, which the OBSERVE
+	// sweep below already refreshes every five minutes. Paying for a second
+	// listing bought nothing drift ever used for a different purpose, so its
+	// cadence is now the observer's: an out-of-band grant sits undetected for
+	// as long as the store is stale, never longer, and this is a database diff
+	// against data already in memory rather than a network round trip — the
+	// six-hour interval it used to run on was the cost of ITS OWN read, which
+	// is the cost this change removes.
 	var driftSched *periodic.Runner
 	if driftSchedulerEnabled() {
-		driftSched = periodic.New("DRIFT", driftInterval(), 6*time.Hour, func(ctx context.Context) error {
+		driftSched = periodic.New("DRIFT", observeInterval(), 5*time.Minute, func(ctx context.Context) error {
 			_, err := drift.Sweep(ctx)
 			return err
 		})
-		go driftSched.Start(ctx)
+		// Never before the store holds an answer: a periodic.Runner's first run
+		// is immediate, and reading the store before the observer has written
+		// anything to it is indistinguishable from reading it after Zitadel
+		// went quiet forever — both are ErrNoObservation. Sweep already refuses
+		// to turn that into a clean bill, but there is no reason to manufacture
+		// the race when awaitFirstManifests is the exact pattern for waiting on
+		// the thing this depends on.
+		go func(r *periodic.Runner) {
+			awaitFirstObservation(ctx)
+			r.Start(ctx)
+		}(driftSched)
 	} else {
 		log.Println("[DRIFT] Disabled via DRIFT_SCHEDULER_ENABLED=false")
 	}
@@ -463,6 +517,11 @@ func addonRefreshInterval() time.Duration {
 	return d
 }
 
+// driftInterval is the add-on reconciliation cadence (ADDON-RECONCILE) only.
+// The Zitadel drift sweep no longer pays for a read of its own — it uses
+// observeInterval() instead, right above driftSched's wiring in main(). Each
+// add-on target still does its own live read on this schedule, which is the
+// cost this env var controls.
 func driftInterval() time.Duration {
 	v := os.Getenv("DRIFT_RECONCILIATION_INTERVAL_HOURS")
 	if v == "" {

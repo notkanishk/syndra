@@ -99,10 +99,17 @@ func TestTargetColumnsCarryNoDefault(t *testing.T) {
 // findings to a caller that asked about one.
 func TestDriftReadsCarryAndFilterTheTarget(t *testing.T) {
 	src := readDBSource(t, "drift.go")
+	// Both readers now share one column list (driftItemSelect) rather than
+	// each declaring its own — the same guarantee, checked once at the
+	// source and then checked that both functions actually build on it,
+	// so a reader that stopped sharing it would fail here rather than
+	// silently drifting from the other's column order.
+	if !regexp.MustCompile(`(?is)const driftItemSelect = ` + "`" + `\s*SELECT id, target,`).MatchString(src) {
+		t.Error("driftItemSelect must select the target immediately after the id, matching the scan order")
+	}
 	for _, fn := range []string{"GetDriftItems", "GetDriftItem"} {
-		body := funcBody(t, src, fn)
-		if !regexp.MustCompile(`(?is)SELECT id, target,`).MatchString(body) {
-			t.Errorf("%s must select the target immediately after the id, matching the scan order", fn)
+		if !strings.Contains(funcBody(t, src, fn), "driftItemSelect") {
+			t.Errorf("%s must read drift_items through driftItemSelect, not a column list of its own", fn)
 		}
 	}
 	if !regexp.MustCompile(`(?is)\$\d+ = '' OR target = \$\d+`).MatchString(funcBody(t, src, "GetDriftItems")) {
