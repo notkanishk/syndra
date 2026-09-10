@@ -29,6 +29,11 @@ func stubDrainDeps(t *testing.T) {
 		swap(&claimPending, func(context.Context, string, int) ([]models.PendingPropagation, error) { return nil, nil }),
 		swap(&grantIndexHasRole, func(context.Context, string, string, string) (bool, error) { return false, nil }),
 		swap(&liveUserGrantRoles, func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{}, nil }),
+		// The index writes a revocation now makes for itself. Unstubbed they
+		// reach a nil pool, which would fail every revoke test for a reason
+		// none of them is about.
+		swap(&dbDeleteGrantIndex, func(context.Context, string) error { return nil }),
+		swap(&dbUpsertGrantIndex, func(context.Context, string, string, string, []string) error { return nil }),
 		swap(&pruneTerminal, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&prunePlans, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&awaitingDispatch, func(context.Context, string) ([]string, error) { return nil, nil }),
@@ -93,19 +98,79 @@ func TestDrain_HaltsWhenZitadelOffline(t *testing.T) {
 	}
 }
 
-func TestDrain_AlreadyExistsShortCircuits(t *testing.T) {
+// Zitadel already has it, read from Zitadel. Still a short circuit, and still
+// the right one: the call would be a no-op and the row is genuinely settled.
+func TestDrain_ShortCircuitsOnWhatZitadelReports(t *testing.T) {
 	stubDrainDeps(t)
 	claimPending = oneRow("o2", "add")
-	grantIndexHasRole = func(context.Context, string, string, string) (bool, error) { return true, nil }
+	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
+		return map[string]bool{"r": true}, nil
+	}
 	var addCalled bool
 	zitadelAddUserGrant = func(context.Context, string, string, []string) error { addCalled = true; return nil }
 
 	res, _ := Drain(context.Background())
 	if addCalled {
-		t.Fatal("add must be skipped when grant already exists")
+		t.Fatal("Zitadel reported the role present; the call is a no-op and must be skipped")
 	}
 	if res.Applied != 1 {
-		t.Fatalf("want 1 applied via short-circuit, got %+v", res)
+		t.Fatalf("want 1 applied, got %+v", res)
+	}
+}
+
+// The defect this rule exists for.
+//
+// The local grant index is a cache written by Zitadel's `grant.removed`
+// webhook. On a deployment whose webhooks are not arriving — and for every
+// revocation Syndra dispatched itself, which never wrote to it at all — it goes
+// on naming grants that are gone. The drain read that cache, concluded the work
+// was already done, and marked the row `applied` with `attempts = 0`: a grant
+// reported as delivered that no call was ever made for. The person's page said
+// the change had been sent and Zitadel had never heard of it.
+func TestDrain_AStaleIndexCannotSkipTheCall(t *testing.T) {
+	stubDrainDeps(t)
+	claimPending = oneRow("o2", "add")
+	// The cache insists she has it.
+	grantIndexHasRole = func(context.Context, string, string, string) (bool, error) { return true, nil }
+	// Zitadel says otherwise, and Zitadel is the one being changed.
+	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
+		return map[string]bool{}, nil
+	}
+	var addCalled bool
+	zitadelAddUserGrant = func(context.Context, string, string, []string) error { addCalled = true; return nil }
+
+	res, _ := Drain(context.Background())
+	if !addCalled {
+		t.Fatal("the grant was reported delivered on a cache's word, with no call made")
+	}
+	if res.Applied != 1 {
+		t.Fatalf("want 1 applied, got %+v", res)
+	}
+}
+
+// A revocation Syndra performs maintains Syndra's own cache. Left to the
+// webhooks alone it did not, which is how the index came to claim grants that
+// Syndra itself had removed.
+func TestDrain_ARevokeClearsItsOwnIndexRow(t *testing.T) {
+	stubDrainDeps(t)
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
+		return []models.PendingPropagation{{
+			ID: "o9", OpType: "revoke", UserID: "u", ProjectID: "p",
+			RoleKeys: []string{"r"}, ZitadelGrantID: "g1",
+		}}, nil
+	}
+	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
+		return map[string]bool{"r": true}, nil
+	}
+	zitadelRemoveUserGrant = func(context.Context, string, string) error { return nil }
+	var forgotten string
+	dbDeleteGrantIndex = func(_ context.Context, id string) error { forgotten = id; return nil }
+
+	if _, err := Drain(context.Background()); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if forgotten != "g1" {
+		t.Fatalf("the removed grant is still in the index; got %q", forgotten)
 	}
 }
 
