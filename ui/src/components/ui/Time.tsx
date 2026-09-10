@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { formatRelative, formatShortDate } from "@/lib/format";
+import { formatClock, formatRelative, formatShortDate } from "@/lib/format";
 
 /**
  * Anything whose value depends on "now" is rendered client-side only.
@@ -45,17 +45,27 @@ export function LogTime({ iso }: { iso: string | null | undefined }) {
   return <>{time ?? "··:··:··"}</>;
 }
 
-export function ClockTime() {
+export function ClockTime({ at }: { at?: number | null }) {
   const [time, setTime] = useState<string | null>(null);
 
+  // Two things were wrong with the version this replaces, and the second is
+  // the expensive one.
+  //
+  // It formatted with the BROWSER's locale while every other time in the
+  // product uses `formatClock` — en-GB, 24-hour, fixed so a row never renders
+  // "2:05" ambiguously between morning and afternoon. So one page said
+  // "12:08 AM" where the rest of the product would say "00:08". Two clocks in
+  // one product is the same defect as two counts.
+  //
+  // And it read `new Date()` on mount, under the words "last checked". That is
+  // the moment the COMPONENT rendered, not the moment anything was read — a
+  // freshness claim sourced from the render loop. It never ticked either, so
+  // after an hour on the page it still named the minute you arrived. `at` is
+  // the query's own `dataUpdatedAt`, which is when the answer actually came
+  // back.
   useEffect(() => {
-    setTime(
-      new Date().toLocaleTimeString(undefined, {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    );
-  }, []);
+    setTime(formatClock(new Date(at ?? Date.now()).toISOString()));
+  }, [at]);
 
   return <>{time ?? "just now"}</>;
 }
