@@ -132,6 +132,37 @@ findings are about classes of defect rather than about bundles.
 
 ## 2. Operator-gated
 
+- **Auto-onboarding had never once succeeded, and said nothing.** Five real
+  accounts between 4 Aug and 9 Sep each fired a `user_created` event, each
+  reached `TriggerOnboarding`, and each recorded `failed · no welcome bundle
+  configured`. `processUserCreated` returned nil regardless, so the webhook
+  event said `completed` and Zitadel got a 200 and never retried. The one
+  honest record was on no screen. Fixed 2026-09-10: real faults propagate and
+  retry, a missing bundle is its own outcome rather than a defect, and a
+  reconciler answers "who joined and got nothing" from state instead of from
+  having heard an event. **The deployment still has no welcome bundle
+  configured** — that is now a visible choice rather than five silent failures.
+
+- **A deactivated person kept every account Syndra manages.** Grants survive
+  deactivation in Zitadel, so every mapped role survived with them and the
+  downstream account stayed enabled — with its own credential, which goes on
+  working. `processUserDeactivated` invalidated a cache and did nothing else;
+  the cascade it was documented to trigger ran through the LLDAP bridge, which
+  was deleted. Fixed 2026-09-10 in the resolver, where the directory's verdict
+  is now a third cause of a disabled account. Only a POSITIVE report of
+  inactive/locked/deleted disables anything: a failed lookup must never be able
+  to disable the whole makerspace at once.
+
+- **Webhooks were never dead, and twice I said they were.** `webhook_events`
+  reads empty because the self-mutation guard drops Syndra's own changes before
+  recording them — by design, to stop a feedback loop. Zero rows means "nobody
+  changed anything out of band", not "the pipe is broken". Both times the
+  conclusion came from an absence. The guard drops the loop risk and the
+  legitimate housekeeping together, which is why the grant index could only
+  ever mirror OTHER people's changes and why the claim cache was never
+  invalidated for Syndra's own.
+
+
 None of these are code. All need a live instance and a human.
 
 - **~~Walk the whole bundle sequence on the live deployment~~ Done, 2026-09-09** (`bundle-lifecycle-repair` 5.3). Deployed to the dev box and walked end to end, through the API against real Postgres and then through a browser: creation refused without roles; v1 written with its roles and reporting zero unpublished changes (the `bundle_roles`/`bundle_version_roles` pair §4b listed as unproven); the publish rehearsal carrying a `plan_id` at last; `PLAN_REQUIRED` without a citation; `PLAN_REQUEST_MISMATCH` when the working copy moved under a live approval; holders repinned; a publish that leaves them behind applying with `apply: 0`; `NOTHING_TO_PUBLISH` on an empty draft; the move endpoint gated the same way; and the assign panel listing the published roles while naming the unpublished remainder. Test data removed afterwards, deployment back to its prior state.

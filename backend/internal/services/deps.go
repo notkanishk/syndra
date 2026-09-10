@@ -21,6 +21,17 @@ var (
 	svcInsertAuditLog            = db.InsertAuditLog
 	svcCompleteOnboardingTrigger = db.CompleteOnboardingTrigger
 	svcFailOnboardingTrigger     = db.FailOnboardingTrigger
+	// A missing welcome bundle is not a fault (migration 000046) — see
+	// TriggerOnboarding's use of this seam.
+	svcMarkOnboardingTriggerUnconfigured = db.MarkOnboardingTriggerUnconfigured
+
+	// The missed-onboarding reconciler's other read (onboarding_reconcile.go):
+	// everybody Zitadel confirms exists. svcGetUsersForBundle (cascade.go)
+	// already answers "who was actually handed this bundle" — reused rather
+	// than re-declared. Neither is the onboarding_triggers log: that log is
+	// only what a webhook told Syndra, and the whole point of the reconciler
+	// is to answer from state instead.
+	svcDirectoryUsers = directory.Default.Users
 
 	// Governance and lineage (Governance, ExplainUserAccess, BundleImpact,
 	// collectUserRoles)
@@ -148,7 +159,13 @@ var (
 	// The one holder-count path. A seam so tests can stand in for it, and
 	// exactly one of them, because two were what put "4 holders" on a list
 	// beside "0 people hold this role" on the page it opens.
-	svcRoleHolderCounts           = RoleHolderCounts
+	svcRoleHolderCounts = RoleHolderCounts
+	// Whether the directory still counts this person as a member. Read on the
+	// entitlement path so a deactivation reaches the accounts Syndra manages,
+	// which it did not before.
+	svcFindUser = func(ctx context.Context, id string) (models.UserProfile, bool, error) {
+		return directory.Default.FindUser(ctx, id)
+	}
 	svcDbGetAllReferencedRoleKeys = db.GetAllReferencedRoleKeys
 
 	// Claim shaping (token format + per-application overrides).

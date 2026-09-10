@@ -49,6 +49,14 @@ vi.mock("@/lib/queries/useUsers", () => ({
 vi.mock("@/lib/queries/useTargets", () => ({
   useTargets: () => ({ data: [{ target: "truenas", registered: true }], isLoading: false }),
 }));
+vi.mock("@/lib/queries/useOperations", () => ({
+  useMissedOnboarding: () => ({
+    data: { welcome_bundle_configured: true, missed: [] },
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => state.advanced }));
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
 
