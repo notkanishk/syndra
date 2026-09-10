@@ -72,6 +72,20 @@ type LifecycleState struct {
 	Enabled bool `json:"enabled"`
 	// SMBEnabled follows Enabled unless something denies it separately.
 	SMBEnabled bool `json:"smb_enabled"`
+	// NotAMember is set when the DIRECTORY says this person is inactive,
+	// locked or deleted — a third cause of a disabled account, and the one
+	// neither of the other two can express.
+	//
+	// It exists because deactivating somebody in Zitadel used to change
+	// nothing here. Their grants survive deactivation, so they went on holding
+	// every mapped role, and the account this resolves to stayed enabled. The
+	// person could no longer sign in to Zitadel and their TrueNAS credential
+	// kept working, because that is a different credential — so "deactivated"
+	// meant "cannot log in to the thing that grants access" and not "has lost
+	// the access".
+	NotAMember bool `json:"not_a_member,omitempty"`
+	// Reason names which of the three, for a surface that has to say why.
+	Reason string `json:"reason,omitempty"`
 }
 
 // Lifecycle field names. Reserved: structural mapping validation refuses them
@@ -166,6 +180,7 @@ func ResolveEntitlements(ctx context.Context, subjectID, target string) (Entitle
 	}
 
 	set.Lifecycle = resolveLifecycle(mappedAny, denied, &set)
+	applyDirectoryStanding(ctx, subjectID, &set)
 	sort.Slice(set.Suppressed, func(i, j int) bool {
 		if set.Suppressed[i].Field != set.Suppressed[j].Field {
 			return set.Suppressed[i].Field < set.Suppressed[j].Field
@@ -173,6 +188,40 @@ func ResolveEntitlements(ctx context.Context, subjectID, target string) (Entitle
 		return set.Suppressed[i].Value < set.Suppressed[j].Value
 	})
 	return set, nil
+}
+
+// applyDirectoryStanding disables the account of somebody the directory no
+// longer counts as a member.
+//
+// Deactivating a person in Zitadel stops them signing in and does not touch
+// their grants. Every mapped role therefore survives, the resolver saw a
+// subject who "reaches this target", and the downstream account stayed enabled
+// — with its own separate credential, which goes on working. `processUserDeactivated`
+// invalidated a cache and did nothing else; the cascade it was documented to
+// trigger ran through the LLDAP bridge, which has since been deleted.
+//
+// FAIL-SAFE DIRECTION, deliberately chosen. Only a POSITIVE report of inactive,
+// locked or deleted disables anything. A lookup that errors, a person the
+// directory does not return, and the states `initial` and `unspecified` all
+// leave the account exactly as it was.
+//
+// The asymmetry is the whole argument. Reading "cannot confirm" as "not a
+// member" would let one failed directory call disable every account in the
+// makerspace at once; reading it as "still a member" leaves one deactivated
+// person with access until the next resolution, which the periodic pass will
+// take. A blast radius of everybody is not the safer side of that trade.
+func applyDirectoryStanding(ctx context.Context, subjectID string, set *EntitlementSet) {
+	profile, found, err := svcFindUser(ctx, subjectID)
+	if err != nil || !found {
+		return
+	}
+	switch strings.ToLower(profile.Status) {
+	case "inactive", "locked", "deleted":
+		set.Lifecycle.Enabled = false
+		set.Lifecycle.SMBEnabled = false
+		set.Lifecycle.NotAMember = true
+		set.Lifecycle.Reason = "the directory reports this person as " + strings.ToLower(profile.Status)
+	}
 }
 
 // resolveLifecycle derives existence and usability from whether the subject

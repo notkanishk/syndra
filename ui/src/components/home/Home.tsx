@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 
+import Link from "next/link";
+
 import { AccessSource } from "@/components/access/AccessSource";
 import { Makerspace } from "@/components/home/Makerspace";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader, CardHeaderLink, CardRow } from "@/components/ui/Card";
+import { Term } from "@/components/ui/Term";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
 import { useGovernanceSummary, type UnreconciledTarget } from "@/lib/queries/useGovernance";
 import {
@@ -15,6 +18,7 @@ import {
   type AccessRequest,
 } from "@/lib/queries/useRequests";
 import { useDrainPropagations } from "@/lib/queries/usePropagation";
+import { useMissedOnboarding, type MissedOnboardingReport } from "@/lib/queries/useOperations";
 import { useTargets } from "@/lib/queries/useTargets";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
@@ -66,6 +70,7 @@ export function Home({ session }: { session: SessionUser }) {
   const advanced = useIsAdvanced();
   const summary = useGovernanceSummary();
   const requests = useRequestsAdmin("pending");
+  const onboarding = useMissedOnboarding();
 
   const pending = requests.data ?? [];
   const expiring = summary.data?.expiring_grants ?? [];
@@ -77,6 +82,14 @@ export function Home({ session }: { session: SessionUser }) {
   // not been made, and a page that omits them says "nothing needs you" while
   // somebody's access sits disputed.
   const findings = summary.data?.merge_findings ?? 0;
+  // Two different gaps that both mean "somebody joined and got nothing": no
+  // default is set at all (1, a fact about right now, not a person), and
+  // named people the reconciler finds holding no bundle when a default DOES
+  // exist. See OnboardingGaps — this must never be inferred from the trigger
+  // log, which only knows what a webhook happened to report.
+  const onboardingGaps =
+    (onboarding.data && !onboarding.data.welcome_bundle_configured ? 1 : 0) +
+    (onboarding.data?.missed.length ?? 0);
 
   // Counted, and that is the whole point of it. An unreadable target produces
   // no drift findings, so a week of silence lands here as blocks === 0 and the
@@ -85,15 +98,16 @@ export function Home({ session }: { session: SessionUser }) {
   const blocks = advanced
     ? pending.length +
       expiring.length +
+      onboardingGaps +
       (propagation?.count ?? 0) +
       (drift?.count ?? 0) +
       unvouched.length +
       findings
-    : pending.length + expiring.length;
+    : pending.length + expiring.length + onboardingGaps;
 
   const who = firstName(session);
-  const loading = summary.isLoading || requests.isLoading;
-  const error = summary.error ?? requests.error;
+  const loading = summary.isLoading || requests.isLoading || onboarding.isLoading;
+  const error = summary.error ?? requests.error ?? onboarding.error;
   // While the load is failing the count is unknown, and "nothing needs you" is
   // exactly the wrong thing to say to somebody whose queue might be full.
   const headline = error ? "Couldn't check." : workSentence(blocks, loading);
@@ -117,6 +131,7 @@ export function Home({ session }: { session: SessionUser }) {
           onRetry={() => {
             summary.refetch();
             requests.refetch();
+            onboarding.refetch();
           }}
         />
       ) : loading ? (
@@ -141,6 +156,7 @@ export function Home({ session }: { session: SessionUser }) {
         <>
           {pending.length > 0 && <OpenRequests requests={pending} />}
           {expiring.length > 0 && <ExpiringSoon grants={expiring} />}
+          {onboardingGaps > 0 && <OnboardingGaps report={onboarding.data!} />}
 
           {advanced && (propagation?.count ?? 0) > 0 && (
             <PendingChanges
@@ -331,6 +347,52 @@ function ExpiringRow({
 
       {outcome && <ActionOutcome outcome={outcome} placement="inline" className="w-full" />}
     </CardRow>
+  );
+}
+
+/**
+ * Two different gaps, both meaning "somebody joined and got nothing" — never
+ * read from the onboarding trigger log, which only knows what a webhook
+ * happened to report (see `services.FindMissedOnboarding`).
+ *
+ * `!welcomeBundleConfigured` is a fact about right now, not a person: nobody
+ * is named because nobody CAN be checked against a default that does not
+ * exist, and it may be deliberate — this states the fact and links to where
+ * it is decided, rather than guessing at intent. `missed` is the opposite:
+ * named people Zitadel confirms are active, checked against who the default
+ * <Term name="bundle">bundle</Term> was actually given, this moment.
+ */
+function OnboardingGaps({ report }: { report: MissedOnboardingReport }) {
+  const count = (report.welcome_bundle_configured ? 0 : 1) + report.missed.length;
+  return (
+    <Card>
+      <CardHeader title="New people without a bundle" count={count} />
+      {!report.welcome_bundle_configured && (
+        <CardRow>
+          <div className="flex-1 text-[14.5px]">
+            No default <Term name="bundle">bundle</Term> is set for new members
+            <span className="text-faint"> — anybody who joins gets nothing until one is set</span>
+          </div>
+          <ButtonLink href="/bundles" size="sm">
+            Open bundles
+          </ButtonLink>
+        </CardRow>
+      )}
+      {report.missed.map((person) => (
+        <CardRow key={person.user_id}>
+          <UserAvatar id={person.user_id} size="list" />
+          <Link
+            href={`/users/${person.user_id}`}
+            className="w-[170px] shrink-0 truncate text-[15px] font-semibold hover:underline"
+          >
+            <UserName id={person.user_id} />
+          </Link>
+          <div className="min-w-0 flex-1 truncate text-[14px] text-muted">
+            Holds no bundle
+          </div>
+        </CardRow>
+      ))}
+    </Card>
   );
 }
 

@@ -2,8 +2,11 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+
+	"syndra/internal/db"
 )
 
 // TriggerOnboarding initiates backend-owned welcome-bundle assignment for a new user.
@@ -37,7 +40,21 @@ func TriggerOnboarding(ctx context.Context, userID, source, idempotencyKey strin
 	if err != nil {
 		// db.ErrNoWelcomeBundleConfigured is the named cause; preserve via %w
 		// so callers can errors.Is against it for tests + alerting.
-		log.Printf("[ONBOARDING] No welcome bundle configured for user=%s: %v", userID, err)
+		if errors.Is(err, db.ErrNoWelcomeBundleConfigured) {
+			// Not a fault: nothing wrote, nothing to retry, and five real
+			// accounts were once recorded as 'failed' for exactly this reason
+			// (migration 000046). The caller still gets the error back — it
+			// still needs to know nobody was onboarded, and the webhook
+			// handler still needs to decide not to ask Zitadel to retry —
+			// but the trigger row itself must not read as a defect.
+			log.Printf("[ONBOARDING] No welcome bundle configured for user=%s: %v", userID, err)
+			if uErr := svcMarkOnboardingTriggerUnconfigured(ctx, triggerID, err.Error()); uErr != nil {
+				log.Printf("[ONBOARDING] Failed to record unconfigured for trigger=%s: %v", triggerID, uErr)
+			}
+			return fmt.Errorf("welcome bundle: %w", err)
+		}
+		// Anything else (a DB fault reading the bundle) is a real failure.
+		log.Printf("[ONBOARDING] Failed to look up welcome bundle for user=%s: %v", userID, err)
 		if failErr := svcFailOnboardingTrigger(ctx, triggerID, err.Error()); failErr != nil {
 			log.Printf("[ONBOARDING] Failed to record failure for trigger=%s: %v", triggerID, failErr)
 		}
