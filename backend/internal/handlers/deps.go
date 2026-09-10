@@ -9,6 +9,7 @@ import (
 	"syndra/internal/auth"
 	"syndra/internal/cache"
 	"syndra/internal/db"
+	"syndra/internal/observe"
 	"syndra/internal/services"
 	"syndra/internal/services/addonop"
 	"syndra/internal/services/drift"
@@ -139,11 +140,25 @@ var (
 	// state, not the trigger log.
 	svcFindMissedOnboarding = services.FindMissedOnboarding
 
-	// Zitadel grants index (event-listener enrichment cache).
-	dbUpsertGrantIndex   = db.UpsertGrantIndex
+	// Zitadel grants index (event-listener enrichment cache). Read-only from
+	// here on: a grant event no longer writes this table itself, it re-asks
+	// Zitadel (observeUser below) and the observer writes what it saw.
 	dbGetGrantIndex      = db.GetGrantIndex
-	dbDeleteGrantIndex   = db.DeleteGrantIndex
 	dbListUserGrantsLive = listUserGrantsViaZitadel
+
+	// observeUser is the one act a grant event may still trigger: asking
+	// Zitadel what this person now holds, sooner than the periodic sweep
+	// would have. It records the answer itself — see internal/observe — so
+	// this is a re-ask, never a re-record.
+	observeUser = observe.User
+
+	// The two grant-listing surfaces (discovery.go) observe rather than list
+	// live: observeOrg/observeUser do the Zitadel read AND record it, then the
+	// handler reads back what the store now holds so the response is the same
+	// statement everything else reading zitadel_grants_index would make.
+	observeOrg           = observe.Org
+	dbObservedGrantsPage = db.ObservedGrantsPage
+	dbObservedGrantsFor  = db.ObservedGrantsFor
 
 	// Real-time webhook drift detection (C6): a surviving grant_added event
 	// (already past the self-mutation guard) that Syndra neither expects nor

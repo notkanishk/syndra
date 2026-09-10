@@ -5,8 +5,9 @@ import { useMemo } from "react";
 
 import { UserName } from "@/components/names";
 import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
+import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { describeAction, machineName } from "@/lib/audit-vocabulary";
-import { formatClock, humanizeKey } from "@/lib/format";
+import { confirmedNote, formatClock, humanizeKey } from "@/lib/format";
 import { peopleHref } from "@/lib/people-filters";
 import { useAuditEntries } from "@/lib/queries/useAudit";
 import { useBundles } from "@/lib/queries/useBundles";
@@ -239,9 +240,23 @@ function AccessShape() {
   const unused = (roles.data ?? []).filter((role) => role.is_unused).length;
   const emptyBundles = (bundles.data ?? []).filter((bundle) => !bundle.holder_count).length;
 
+  // One basis for the whole tile — every row carries an identical copy, so
+  // the freshness is stated here once rather than once per row.
+  const basis = roles.data?.[0]?.observation;
+  const readState: ReadState = {
+    readAt: basis?.read_at,
+    current: basis ? basis.current : undefined,
+    truncated: basis?.truncated,
+  };
+
   return (
     <Card>
       <CardHeader title="Where access lives" />
+      {top.length > 0 && (
+        <div className="px-5 pb-3">
+          <ReadFreshness state={readState} subject="What Zitadel confirmed" />
+        </div>
+      )}
       {top.length === 0 ? (
         <div className="px-5 py-3.5 text-[14px] text-faint">Nobody holds a role yet.</div>
       ) : (
@@ -260,7 +275,15 @@ function AccessShape() {
             <span className="min-w-0 flex-1 truncate text-[14.5px]">
               {role.display_name || humanizeKey(role.role_key)}
             </span>
-            <span className="shrink-0 truncate text-[13px] text-faint">{role.project_name}</span>
+            <span className="shrink-0 truncate text-right text-[13px] text-faint">
+              {role.project_name}
+              {/* This is Syndra's record of who was granted this role, not a
+                  claim that Zitadel currently shows them holding it — see the
+                  confirmation line above. */}
+              <span className="block text-[12.5px]">
+                {confirmedNote(role.assigned_user_count, role.confirmed_user_count)}
+              </span>
+            </span>
           </Link>
         ))
       )}

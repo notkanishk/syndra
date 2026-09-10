@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import type { ObservationBasis } from "@/lib/queries/useRoles";
 
 export interface ProjectSummaryRow {
   project: {
@@ -12,6 +13,7 @@ export interface ProjectSummaryRow {
     description: string;
     roles: Array<{ key: string; label: string }>;
   };
+  /** Who Syndra decided belongs to this project — a Recorded fact. */
   member_count: number;
   bundle_count: number;
   rule_in_count: number;
@@ -20,6 +22,17 @@ export interface ProjectSummaryRow {
   // reads from the role catalog, not roles someone currently holds.
   role_keys: string[];
   sample_members: string[];
+  /**
+   * How many of member_count the observation store also confirms. Absent —
+   * not zero — when `observation.read_at` is missing: see ObservationBasis.
+   */
+  confirmed_member_count?: number;
+  /**
+   * One basis for the whole response — identical on every row. Optional so
+   * fixtures that don't care about confirmation aren't forced to fabricate
+   * one; a missing basis reads the same as "never observed".
+   */
+  observation?: ObservationBasis;
 }
 
 const KEYS = {

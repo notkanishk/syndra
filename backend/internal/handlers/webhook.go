@@ -205,21 +205,20 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Dispatch by event type. The grants-index ops (upsert/delete) are
-	// best-effort cache maintenance — log on failure, never block dispatch.
+	// Dispatch by event type. A grant event never writes the index itself —
+	// it re-asks Zitadel what this person now holds (best-effort: log on
+	// failure, never block dispatch). See observeAfterEvent.
 	var processingErr error
 	switch event.EventType {
 	case "grant_added", "grant_changed":
 		processingErr = processGrantAdded(r.Context(), event, eventID)
 		if processingErr == nil {
-			maintainGrantIndex(r.Context(), event)
+			observeAfterEvent(r.Context(), event.UserID)
 		}
 	case "grant_removed":
 		processingErr = processGrantRemoved(r.Context(), event, eventID)
-		if processingErr == nil && event.GrantID != "" {
-			if derr := dbDeleteGrantIndex(r.Context(), event.GrantID); derr != nil {
-				log.Printf("[WEBHOOK] index delete failed grant=%s: %v (non-fatal)", event.GrantID, derr)
-			}
+		if processingErr == nil {
+			observeAfterEvent(r.Context(), event.UserID)
 		}
 	case "user_deactivated", "user_locked":
 		processingErr = processUserDeactivated(r.Context(), event)
@@ -424,16 +423,18 @@ func processUserCreated(ctx context.Context, event WebhookPayload) error {
 	return err
 }
 
-// maintainGrantIndex refreshes the local zitadel_grants_index row from a
-// successfully-processed grant_added or grant_changed event so subsequent
-// grant.changed / grant.removed events can be enriched. Skips when the
-// payload lacks fields the schema requires (NOT NULL on grant/user/project)
-// — that case is handled upstream by validation, but defense-in-depth here.
-func maintainGrantIndex(ctx context.Context, event WebhookPayload) {
-	if event.GrantID == "" || event.UserID == "" || event.SourceProject == "" {
-		return
-	}
-	if err := dbUpsertGrantIndex(ctx, event.GrantID, event.UserID, event.SourceProject, event.RoleKeys); err != nil {
-		log.Printf("[WEBHOOK] index upsert failed grant=%s: %v (non-fatal)", event.GrantID, err)
+// observeAfterEvent re-asks Zitadel what a person actually holds, once a
+// grant event has said a change is worth checking sooner than the next sweep.
+//
+// This is the inversion the design calls for: the event carries no state of
+// its own (see the package doc on internal/observe) — it is a reason to ask,
+// not an answer to record. The row this leaves in zitadel_grants_index is
+// what Zitadel said just now, not what the webhook payload claimed, and a
+// complete read still only ever deletes THIS person's stale rows (see
+// db.RecordUserObservation). Best-effort and non-fatal: a delayed refresh
+// costs latency, never correctness — the periodic sweep is the backstop.
+func observeAfterEvent(ctx context.Context, userID string) {
+	if _, err := observeUser(ctx, userID); err != nil {
+		log.Printf("[WEBHOOK] re-observe failed user=%s: %v (non-fatal — the sweep will catch up)", userID, err)
 	}
 }

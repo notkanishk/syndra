@@ -196,3 +196,17 @@ export function formatList(items: string[]): string {
   if (items.length === 2) return `${items[0]} and ${items[1]}`;
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
+
+/**
+ * The confirmed half of a Recorded/Confirmed count pair — what a role's or
+ * project's holder count looks like next to what the observation store backs
+ * up of it (`one-truth-many-checks`).
+ *
+ * `confirmed` is `undefined`, not zero, when the org has never been checked —
+ * that must read as "not confirmed", never as a confirmed absence.
+ */
+export function confirmedNote(recorded: number, confirmed: number | undefined): string {
+  if (confirmed === undefined) return "not confirmed";
+  if (confirmed === recorded) return "confirmed";
+  return `${confirmed} confirmed`;
+}

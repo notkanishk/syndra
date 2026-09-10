@@ -21,9 +21,35 @@ export interface CatalogRole {
   cloned_from_role?: string;
   bundle_count: number;
   rule_count: number;
+  /** Who Syndra decided holds this role — a Recorded fact, not a Zitadel one. */
   assigned_user_count: number;
   is_unused: boolean;
   source: string;
+  /**
+   * How many of assigned_user_count the observation store also shows holding
+   * the role. Absent — not zero — when `observation.read_at` is missing: the
+   * org has never been checked, and that must never render as a confirmed
+   * zero. See ObservationBasis.
+   */
+  confirmed_user_count?: number;
+  /**
+   * One basis for the whole response — identical on every row. Optional so
+   * fixtures that don't care about confirmation aren't forced to fabricate
+   * one; a missing basis reads the same as "never observed".
+   */
+  observation?: ObservationBasis;
+}
+
+/**
+ * What a Recorded count rests on: whether Zitadel has ever been asked, and
+ * whether that read saw everything. Shaped to match `ReadState` in
+ * `@/components/ui/ReadFreshness` so a surface can render it with that
+ * component instead of inventing its own wording.
+ */
+export interface ObservationBasis {
+  read_at?: string | null;
+  current: boolean;
+  truncated: boolean;
 }
 
 export interface CloneRef {

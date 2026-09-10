@@ -330,10 +330,29 @@ self-correcting.
 
 ## What is left
 
-- **The observation store.** `confirmed_at` records that a read saw a write. It
-  does not yet record what a read saw about everything ELSE — the periodic
-  sweep, and the store surfaces read from instead of calling Zitadel each.
+- ~~**The observation store.**~~ Built: `internal/observe`, `db.Observation`,
+  wired in `cmd/api/main.go` at `OBSERVE_SWEEP_INTERVAL` (default 5m).
 - **Surfaces read verdicts.** The person page already answers per role from
   Zitadel; counts and tiles still derive from records alone.
-- **Delete the direct reads and guard them out.** Only the observer may call
-  Zitadel; nothing enforces that yet.
+- ~~**Delete the direct reads and guard them out.**~~ Partly built,
+  2026-09-11: the webhook re-observes the affected person instead of writing
+  `zitadel_grants_index` from event payloads, and discovery.go's two
+  grant-listing routes (`/zitadel/grants`, `/zitadel/users/{id}/grants`)
+  observe and answer from the store, carrying `observed_at`/`complete`
+  through to the person page and the reconciliation list.
+  `repoguard.TestOnlyTheObserverListsZitadelGrantsLive` enforces it from here
+  on, with two exemptions argued in the guard itself — the outbox drain's
+  PRE-FLIGHT read (`liveUserGrantRoles`: a capped single-page check asking only
+  whether a call is still needed) and the governance reachability probes
+  (`Limit:1`, result discarded).
+
+  The pre-flight may stay capped because it concludes only PRESENCE: a page that
+  misses a grant means the call proceeds, and a 409 absorbs it. The drain's
+  READ-BACK is a different question and does not share the exemption — it
+  concludes ABSENCE when confirming a revoke, so it goes through the observer,
+  which reports whether the answer was whole. A capped read that happened not to
+  include the grant would otherwise have confirmed a revocation that may never
+  have happened. Still reading Zitadel live, as KNOWN GAPS in
+  the same guard: reconciliation's own diff, the drift sweep, and the
+  webhook's grant-lookup fallback — all pre-existing and out of this pass's
+  scope.

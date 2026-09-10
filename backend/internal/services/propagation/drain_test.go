@@ -9,6 +9,7 @@ import (
 	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/models"
+	"syndra/internal/observe"
 	"syndra/internal/zitadel"
 )
 
@@ -29,16 +30,6 @@ func stubDrainDeps(t *testing.T) {
 		swap(&claimPending, func(context.Context, string, int) ([]models.PendingPropagation, error) { return nil, nil }),
 		swap(&grantIndexHasRole, func(context.Context, string, string, string) (bool, error) { return false, nil }),
 		swap(&liveUserGrantRoles, func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{}, nil }),
-		// The index writes a revocation now makes for itself. Unstubbed they
-		// reach a nil pool, which would fail every revoke test for a reason
-		// none of them is about.
-		swap(&dbDeleteGrantIndex, func(context.Context, string) error { return nil }),
-		// The claim cache the drain now clears. Unstubbed it reaches a nil
-		// Redis client and fails every apply test for a reason none is about.
-		swap(&invalidateClaims, func(context.Context, string) error { return nil }),
-		// The confirmation write. Unstubbed it reaches a nil pool.
-		swap(&markConfirmed, func(context.Context, string) error { return nil }),
-		swap(&dbUpsertGrantIndex, func(context.Context, string, string, string, []string) error { return nil }),
 		swap(&pruneTerminal, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&prunePlans, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&awaitingDispatch, func(context.Context, string) ([]string, error) { return nil, nil }),
@@ -48,6 +39,15 @@ func stubDrainDeps(t *testing.T) {
 		swap(&registeredAddons, func() []addons.Registration { return nil }),
 		swap(&undispatchable, func(context.Context, string, string) (string, error) { return "", nil }),
 		swap(&markApplied, func(context.Context, string) error { return nil }),
+		// The claim envelope the drain clears, the confirmation it records, and
+		// the read-back it records it from. Unstubbed each reaches a nil client.
+		swap(&invalidateClaims, func(context.Context, string) error { return nil }),
+		swap(&markConfirmed, func(context.Context, string) error { return nil }),
+		swap(&observeUser, func(context.Context, string) (observe.Result, error) {
+			// A WHOLE answer by default, so a test that is not about truncation
+			// is not accidentally about it.
+			return observe.Result{Observation: db.Observation{Complete: true}}, nil
+		}),
 		// The memory that a write landed. Stubbed like every other durable
 		// write here, so a drain test cannot reach a nil pool.
 		swap(&savePropagation, func(context.Context, db.Propagation) error { return nil }),
@@ -150,32 +150,6 @@ func TestDrain_AStaleIndexCannotSkipTheCall(t *testing.T) {
 	}
 	if res.Applied != 1 {
 		t.Fatalf("want 1 applied, got %+v", res)
-	}
-}
-
-// A revocation Syndra performs maintains Syndra's own cache. Left to the
-// webhooks alone it did not, which is how the index came to claim grants that
-// Syndra itself had removed.
-func TestDrain_ARevokeClearsItsOwnIndexRow(t *testing.T) {
-	stubDrainDeps(t)
-	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
-		return []models.PendingPropagation{{
-			ID: "o9", OpType: "revoke", UserID: "u", ProjectID: "p",
-			RoleKeys: []string{"r"}, ZitadelGrantID: "g1",
-		}}, nil
-	}
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{"r": true}, nil
-	}
-	zitadelRemoveUserGrant = func(context.Context, string, string) error { return nil }
-	var forgotten string
-	dbDeleteGrantIndex = func(_ context.Context, id string) error { forgotten = id; return nil }
-
-	if _, err := Drain(context.Background()); err != nil {
-		t.Fatalf("Drain: %v", err)
-	}
-	if forgotten != "g1" {
-		t.Fatalf("the removed grant is still in the index; got %q", forgotten)
 	}
 }
 
@@ -1202,15 +1176,11 @@ func TestDrain_AFailedCacheClearStillAppliesTheRow(t *testing.T) {
 func TestDrain_AnObservedWriteIsConfirmed(t *testing.T) {
 	stubDrainDeps(t)
 	claimPending = oneRow("oc1", "add")
-	seen := false
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		// Absent before the write, present after it — the read-back is the
-		// second call, and it is the one that must decide.
-		if !seen {
-			seen = true
-			return map[string]bool{}, nil
-		}
-		return map[string]bool{"r": true}, nil
+		return map[string]bool{}, nil
+	}
+	observeUser = func(context.Context, string) (observe.Result, error) {
+		return observe.Result{Observation: db.Observation{Complete: true}, Grants: []db.ObservedGrant{{ProjectID: "p", RoleKeys: []string{"r"}}}}, nil
 	}
 	zitadelAddUserGrant = func(context.Context, string, string, []string) error { return nil }
 	var confirmed string
@@ -1235,7 +1205,10 @@ func TestDrain_AWriteZitadelHasNotYetSurfacedIsStillApplied(t *testing.T) {
 	stubDrainDeps(t)
 	claimPending = oneRow("oc2", "add")
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{}, nil // never catches up within this pass
+		return map[string]bool{}, nil
+	}
+	observeUser = func(context.Context, string) (observe.Result, error) {
+		return observe.Result{Observation: db.Observation{Complete: true}, Grants: []db.ObservedGrant{{ProjectID: "p", RoleKeys: []string{}}}}, nil
 	}
 	zitadelAddUserGrant = func(context.Context, string, string, []string) error { return nil }
 	var appliedID, confirmed string
@@ -1267,13 +1240,11 @@ func TestDrain_ARevokeIsConfirmedByTheRoleBeingGone(t *testing.T) {
 			RoleKeys: []string{"r"}, ZitadelGrantID: "g1",
 		}}, nil
 	}
-	calls := 0
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		calls++
-		if calls == 1 {
-			return map[string]bool{"r": true}, nil // still there, so the revoke runs
-		}
-		return map[string]bool{}, nil // gone afterwards
+		return map[string]bool{"r": true}, nil // still there, so the revoke runs
+	}
+	observeUser = func(context.Context, string) (observe.Result, error) {
+		return observe.Result{Observation: db.Observation{Complete: true}, Grants: []db.ObservedGrant{{ProjectID: "p", RoleKeys: []string{}}}}, nil
 	}
 	zitadelRemoveUserGrant = func(context.Context, string, string) error { return nil }
 	var confirmed string
@@ -1298,7 +1269,10 @@ func TestDrain_ARevokeThatLeftTheRoleInPlaceIsNotConfirmed(t *testing.T) {
 		}}, nil
 	}
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{"r": true}, nil // there before AND after
+		return map[string]bool{"r": true}, nil // there before the revoke
+	}
+	observeUser = func(context.Context, string) (observe.Result, error) {
+		return observe.Result{Observation: db.Observation{Complete: true}, Grants: []db.ObservedGrant{{ProjectID: "p", RoleKeys: []string{"r"}}}}, nil
 	}
 	zitadelRemoveUserGrant = func(context.Context, string, string) error { return nil }
 	var confirmed string
@@ -1327,13 +1301,11 @@ func TestDrain_ARevokeThatLeftTheRoleInPlaceIsNotConfirmed(t *testing.T) {
 func TestDrain_ARowIsAppliedBeforeItIsConfirmed(t *testing.T) {
 	stubDrainDeps(t)
 	claimPending = oneRow("oc5", "add")
-	seen := false
 	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		if !seen {
-			seen = true
-			return map[string]bool{}, nil
-		}
-		return map[string]bool{"r": true}, nil
+		return map[string]bool{}, nil
+	}
+	observeUser = func(context.Context, string) (observe.Result, error) {
+		return observe.Result{Observation: db.Observation{Complete: true}, Grants: []db.ObservedGrant{{ProjectID: "p", RoleKeys: []string{"r"}}}}, nil
 	}
 	zitadelAddUserGrant = func(context.Context, string, string, []string) error { return nil }
 
@@ -1352,5 +1324,39 @@ func TestDrain_ARowIsAppliedBeforeItIsConfirmed(t *testing.T) {
 	}
 	if len(order) != 2 || order[0] != "applied" || order[1] != "confirmed" {
 		t.Fatalf("the confirmation did not land on an applied row: %v", order)
+	}
+}
+
+// A truncated answer can never establish that something is gone.
+//
+// The pre-flight read is capped at one page, and that is fine there: it only
+// concludes PRESENCE, and a page that misses a grant merely means the call
+// proceeds, which 409 absorbs. Confirming a REVOKE runs the other way — it
+// concludes ABSENCE — and a capped read that happened not to include the grant
+// would confirm a revocation that may never have happened.
+func TestDrain_ATruncatedReadCannotConfirmARevoke(t *testing.T) {
+	stubDrainDeps(t)
+	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
+		return []models.PendingPropagation{{
+			ID: "oc6", OpType: "revoke", UserID: "u", ProjectID: "p",
+			RoleKeys: []string{"r"}, ZitadelGrantID: "g1",
+		}}, nil
+	}
+	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
+		return map[string]bool{"r": true}, nil
+	}
+	zitadelRemoveUserGrant = func(context.Context, string, string) error { return nil }
+	// The role is not in what was seen — but what was seen is not everything.
+	observeUser = func(context.Context, string) (observe.Result, error) {
+		return observe.Result{Observation: db.Observation{Complete: false}}, nil
+	}
+	var confirmed string
+	markConfirmed = func(_ context.Context, id string) error { confirmed = id; return nil }
+
+	if _, err := Drain(context.Background()); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if confirmed != "" {
+		t.Fatalf("a revocation was confirmed from an answer that did not cover everything: %q", confirmed)
 	}
 }
