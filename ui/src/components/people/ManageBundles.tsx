@@ -298,7 +298,14 @@ export function ManageBundles({
           // Only where it is true: this button records the change and sends
           // nothing. With nothing staged it was describing an act that was not
           // on offer.
-          <span className="text-[13px] text-faint">Queues for confirmation</span>
+          //
+          // "Queues for confirmation" used to sit here, and it isn't always
+          // true — a change that reaches nobody's effective access is
+          // reported as `applied` with nothing queued at all (see `apply()`
+          // above), so a caption promising a queue every time contradicted
+          // that outcome. "Recorded" is true in both cases; the outcome
+          // above states which one this was.
+          <span className="text-[13px] text-faint">Recorded in Syndra first, not sent yet</span>
         )}
       </ModalFooter>
     </Modal>

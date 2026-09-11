@@ -11,9 +11,9 @@ import { Card, CardColumns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
-import { UserName } from "@/components/names";
+import { UserName, BundleName } from "@/components/names";
 import { TraceCell } from "@/components/audit/TraceCell";
-import { describeAction, machineName } from "@/lib/audit-vocabulary";
+import { describeAction, machineName, targetKind, shortId } from "@/lib/audit-vocabulary";
 import { useAuditPages, type AuditEntry } from "@/lib/queries/useAudit";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useDebounce } from "@/lib/useDebounce";
@@ -230,11 +230,33 @@ function Sentence({ entry }: { entry: AuditEntry }) {
       {hasTarget ? (
         <>
           {" — "}
-          <UserName id={entry.target_id} />
+          <TargetRef entry={entry} />
         </>
       ) : null}
     </>
   );
+}
+
+/**
+ * `entry.target_id` is only sometimes a person — see `targetKind`. A raw uuid
+ * must never be the visible label, so a bundle or rule id renders through its
+ * own name (or a "retired" fallback plus its short handle) rather than
+ * through the person resolver, which would report it as an unknown account.
+ */
+function TargetRef({ entry }: { entry: AuditEntry }) {
+  const kind = targetKind(entry.action);
+  if (kind === "bundle") {
+    return (
+      <BundleName
+        id={entry.target_id}
+        fallback={`a retired bundle (${shortId(entry.target_id, "b")})`}
+      />
+    );
+  }
+  if (kind === "rule") {
+    return <>{`a rule (${shortId(entry.target_id, "R")})`}</>;
+  }
+  return <UserName id={entry.target_id} />;
 }
 
 /**
@@ -246,13 +268,23 @@ function downloadCsv(
   resolver: ReturnType<typeof useNameResolver>,
 ): void {
   const header = ["when", "who", "what", "target", "resource"];
-  const lines = rows.map((entry) => [
-    entry.created_at,
-    resolver.resolveUser(entry.actor_id).value?.display_name ?? entry.actor_id,
-    describeAction(entry.action).verb,
-    resolver.resolveUser(entry.target_id).value?.display_name ?? entry.target_id,
-    entry.resource_id,
-  ]);
+  const lines = rows.map((entry) => {
+    const kind = targetKind(entry.action);
+    const target =
+      kind === "bundle"
+        ? (resolver.resolveBundle(entry.target_id).value?.name ??
+          `a retired bundle (${shortId(entry.target_id, "b")})`)
+        : kind === "rule"
+          ? `a rule (${shortId(entry.target_id, "R")})`
+          : (resolver.resolveUser(entry.target_id).value?.display_name ?? entry.target_id);
+    return [
+      entry.created_at,
+      resolver.resolveUser(entry.actor_id).value?.display_name ?? entry.actor_id,
+      describeAction(entry.action).verb,
+      target,
+      entry.resource_id,
+    ];
+  });
   const csv = [header, ...lines]
     .map((cells) => cells.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
     .join("\n");

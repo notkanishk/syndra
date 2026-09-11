@@ -54,6 +54,9 @@ export default function RoleMembersPage({
     return all.filter((member) => member.reasons.some((reason) => reason.kind === filter));
   }, [view, filter]);
 
+  const observedOnly = view?.observed_only ?? [];
+  const holdCount = (view?.members.length ?? 0) + observedOnly.length;
+
   return (
     <div className="flex flex-col gap-[22px]">
       <PageHeader
@@ -87,9 +90,11 @@ export default function RoleMembersPage({
       <Card>
         <div className="flex flex-wrap items-center gap-3 px-5 py-4">
           <span className="type-card-title">
-            {(view?.members.length ?? 0) === 1
-              ? "1 person holds this role"
-              : `${view?.members.length ?? 0} people hold this role`}
+            {/* Syndra's own record plus whoever Zitadel shows holding it with
+                no Syndra record at all — "holding is observed", and a count
+                that dropped the second half would undercount who can
+                actually use this. */}
+            {holdCount === 1 ? "1 person holds this role" : `${holdCount} people hold this role`}
           </span>
           {/* Stated before the list rather than left to be discovered in it.
               "Forty people hold this role" is the sentence an operator acts on,
@@ -164,6 +169,33 @@ export default function RoleMembersPage({
         </ListStates>
       </Card>
 
+      {observedOnly.length > 0 && (
+        <Card>
+          <div className="flex flex-wrap items-center gap-3 px-5 py-4">
+            <span className="type-card-title">In Zitadel without Syndra giving it</span>
+            <Link
+              href={`/governance/drift?project=${id}`}
+              className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text hover:underline desktop:min-h-6"
+            >
+              Review in drift →
+            </Link>
+          </div>
+          {observedOnly.map((person) => (
+            <Link
+              key={person.id}
+              href={`/users/${person.id}`}
+              className="row-divider flex min-h-[60px] items-center gap-3 px-5 py-3 motion-tint hover:bg-[var(--hover)]"
+            >
+              <Avatar name={person.name} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-semibold">{person.name}</span>
+                <span className="block truncate text-[13px] text-faint">{person.email}</span>
+              </span>
+            </Link>
+          ))}
+        </Card>
+      )}
+
       <RemovalDialog
         removal={removal}
         userId={removal?.userId}
@@ -211,9 +243,14 @@ function MemberRow({
         {member.user.name}
       </Link>
       <div className="w-[170px] shrink-0 truncate text-[14px] text-muted">
-        {member.user.title || member.user.team || "—"}
+        {member.user.title || member.user.team || member.user.email}
       </div>
       <div className="min-w-0 flex-1">
+        {member.in_zitadel === false && (
+          <span className="mb-0.5 block text-[12.5px] font-semibold text-warn-text">
+            Not in Zitadel yet
+          </span>
+        )}
         <AccessSourceList reasons={member.reasons} />
         {/* On the row, under the source, because it modifies what the source
             means: "holds it via the maker bundle" and "holds it via the maker

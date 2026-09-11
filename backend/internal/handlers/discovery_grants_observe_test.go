@@ -209,3 +209,35 @@ func TestObservationFields_ZeroObservedAt_OmitsBoth(t *testing.T) {
 		t.Fatalf("expected both nil for a zero observation, got at=%v complete=%v", at, complete)
 	}
 }
+
+// A member reads what Zitadel holds for THEM through the same observer pipe
+// the operator page uses; another person's grants stay operator-only. Routed
+// through the real mux so the guard on the route, not just the wrapper, is
+// what is tested.
+func TestZitadelUserGrantsRoute_SelfReadableByMember(t *testing.T) {
+	resetObserveGrantDeps(t)
+	stubMemberAuth(t, "u1")
+	observeUser = func(_ context.Context, userID string) (db.Observation, error) {
+		return db.Observation{Scope: "user", SubjectID: userID, ObservedAt: time.Now().UTC(), Complete: true}, nil
+	}
+	dbObservedGrantsFor = func(_ context.Context, userID string) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{{GrantID: "g1", UserID: userID, ProjectID: "p1", RoleKeys: []string{"member"}}}, nil
+	}
+	mux := NewRouter()
+
+	self := httptest.NewRequest(http.MethodGet, "/api/v1/zitadel/users/u1/grants", nil)
+	self.Header.Set("Authorization", "Bearer t")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, self)
+	if w.Code != http.StatusOK {
+		t.Fatalf("member reading own observed grants: want 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	other := httptest.NewRequest(http.MethodGet, "/api/v1/zitadel/users/u2/grants", nil)
+	other.Header.Set("Authorization", "Bearer t")
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, other)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("member reading another person's grants: want 403, got %d", w.Code)
+	}
+}

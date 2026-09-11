@@ -7,14 +7,14 @@ import { UserName } from "@/components/names";
 import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { describeAction, machineName } from "@/lib/audit-vocabulary";
-import { confirmedNote, formatClock, humanizeKey } from "@/lib/format";
-import { peopleHref } from "@/lib/people-filters";
+import { holdersLine, holdersToneClass } from "@/lib/holders";
+import { formatWhen, humanizeKey } from "@/lib/format";
+import { hasAccess, isDeparted, peopleHref } from "@/lib/people-filters";
 import { useAuditEntries } from "@/lib/queries/useAudit";
 import { useBundles } from "@/lib/queries/useBundles";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useUsers } from "@/lib/queries/useUsers";
-import { isDeparted } from "@/lib/people-filters";
 
 /**
  * The makerspace, below the work.
@@ -160,9 +160,18 @@ function Gaps() {
   const users = useUsers("");
   const rows = useMemo(() => users.data ?? [], [users.data]);
 
-  const noAccess = rows.filter((entry) => entry.effective_role_count === 0).length;
+  if (users.isLoading) {
+    return (
+      <Card>
+        <CardHeader title="Gaps" />
+        <div className="row-divider px-5 py-3.5 text-[14px] text-faint">Reading…</div>
+      </Card>
+    );
+  }
+
+  const noAccess = rows.filter((entry) => !hasAccess(entry)).length;
   const departedHolding = rows.filter(
-    (entry) => isDeparted(entry.user.status) && entry.effective_role_count > 0,
+    (entry) => isDeparted(entry.user.status) && hasAccess(entry),
   ).length;
 
   return (
@@ -232,8 +241,12 @@ function AccessShape() {
   const top = useMemo(
     () =>
       [...(roles.data ?? [])]
-        .filter((role) => role.assigned_user_count > 0)
-        .sort((a, b) => b.assigned_user_count - a.assigned_user_count)
+        .filter((role) => (role.observed_user_count ?? role.assigned_user_count) > 0)
+        .sort(
+          (a, b) =>
+            (b.observed_user_count ?? b.assigned_user_count) -
+            (a.observed_user_count ?? a.assigned_user_count),
+        )
         .slice(0, 5),
     [roles.data],
   );
@@ -249,43 +262,59 @@ function AccessShape() {
     truncated: basis?.truncated,
   };
 
+  const loading = roles.isLoading || bundles.isLoading;
+
   return (
     <Card>
       <CardHeader title="Where access lives" />
-      {top.length > 0 && (
-        <div className="px-5 pb-3">
-          <ReadFreshness state={readState} subject="What Zitadel confirmed" />
-        </div>
-      )}
-      {top.length === 0 ? (
-        <div className="px-5 py-3.5 text-[14px] text-faint">Nobody holds a role yet.</div>
+      {loading ? (
+        <div className="px-5 py-3.5 text-[14px] text-faint">Reading…</div>
       ) : (
-        top.map((role) => (
-          <Link
-            key={`${role.project_id}:${role.role_key}`}
-            href={peopleHref({ project: role.project_id, role: role.role_key })}
-            className="row-divider flex items-baseline gap-3 px-5 py-3 motion-tint hover:bg-[var(--hover)]"
-          >
-            <span className="w-[36px] shrink-0 font-display text-[18px] leading-none">
-              {role.assigned_user_count}
-            </span>
-            {/* The project is the trailing column, so the name slot carries the
-                role alone — the pair is established by the row, the same way
-                the roles index establishes it with a Project column. */}
-            <span className="min-w-0 flex-1 truncate text-[14.5px]">
-              {role.display_name || humanizeKey(role.role_key)}
-            </span>
-            <span className="shrink-0 truncate text-right text-[13px] text-faint">
-              {role.project_name}
-              {/* This is Syndra's record of who was granted this role, not a
-                  claim that Zitadel currently shows them holding it — see the
-                  confirmation line above. */}
-              <span className="block text-[12.5px]">
-                {confirmedNote(role.assigned_user_count, role.confirmed_user_count)}
-              </span>
-            </span>
-          </Link>
-        ))
+        <>
+          {top.length > 0 && (
+            <div className="px-5 pb-3">
+              <ReadFreshness state={readState} subject="What Zitadel confirmed" />
+            </div>
+          )}
+          {top.length === 0 ? (
+            <div className="px-5 py-3.5 text-[14px] text-faint">Nobody holds a role yet.</div>
+          ) : (
+            top.map((role) => {
+              const holders = holdersLine(
+                role.assigned_user_count,
+                role.confirmed_user_count,
+                role.observed_user_count,
+              );
+              return (
+                <Link
+                  key={`${role.project_id}:${role.role_key}`}
+                  href={peopleHref({ project: role.project_id, role: role.role_key })}
+                  className="row-divider flex items-baseline gap-3 px-5 py-3 motion-tint hover:bg-[var(--hover)]"
+                >
+                  <span className="w-[36px] shrink-0 font-display text-[18px] leading-none">
+                    {holders.headline}
+                  </span>
+                  {/* The project is the trailing column, so the name slot carries the
+                      role alone — the pair is established by the row, the same way
+                      the roles index establishes it with a Project column. */}
+                  <span className="min-w-0 flex-1 truncate text-[14.5px]">
+                    {role.display_name || humanizeKey(role.role_key)}
+                  </span>
+                  <span className="shrink-0 truncate text-right text-[13px] text-faint">
+                    {role.project_name}
+                    {/* What Zitadel shows right now, not Syndra's record of who
+                        was granted this — see the confirmation line above. */}
+                    {holders.note && (
+                      <span className={`block text-[12.5px] ${holdersToneClass[holders.tone]}`}>
+                        {holders.note}
+                      </span>
+                    )}
+                  </span>
+                </Link>
+              );
+            })
+          )}
+        </>
       )}
 
       {/* Dead catalogue entries are not urgent, so they read as one quiet line
@@ -296,31 +325,33 @@ function AccessShape() {
           holds two destinations and a separator and no prose, so the exemption
           does not reach them. They measured 16px tall on the screen this
           product opens on. */}
-      <div className="flex flex-wrap items-center gap-x-1.5 border-t border-line px-5 py-3 text-[13px] text-faint desktop:block desktop:py-3">
-        {unused === 0 && emptyBundles === 0 ? (
-          "Every role and bundle is in use."
-        ) : (
-          <>
-            {unused > 0 && (
-              <Link
-                href="/roles?unused=1"
-                className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6"
-              >
-                {unused} {unused === 1 ? "role" : "roles"} nobody holds
-              </Link>
-            )}
-            {unused > 0 && emptyBundles > 0 && <span aria-hidden>·</span>}
-            {emptyBundles > 0 && (
-              <Link
-                href="/bundles"
-                className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6"
-              >
-                {emptyBundles} empty {emptyBundles === 1 ? "bundle" : "bundles"}
-              </Link>
-            )}
-          </>
-        )}
-      </div>
+      {!loading && (
+        <div className="flex flex-wrap items-center gap-x-1.5 border-t border-line px-5 py-3 text-[13px] text-faint desktop:block desktop:py-3">
+          {unused === 0 && emptyBundles === 0 ? (
+            "Every role and bundle is in use."
+          ) : (
+            <>
+              {unused > 0 && (
+                <Link
+                  href="/roles?unused=1"
+                  className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6"
+                >
+                  {unused} {unused === 1 ? "role" : "roles"} nobody holds
+                </Link>
+              )}
+              {unused > 0 && emptyBundles > 0 && <span aria-hidden>·</span>}
+              {emptyBundles > 0 && (
+                <Link
+                  href="/bundles"
+                  className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6"
+                >
+                  {emptyBundles} empty {emptyBundles === 1 ? "bundle" : "bundles"}
+                </Link>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </Card>
   );
 }
@@ -348,8 +379,11 @@ function RecentActivity() {
           const { verb, destructive } = describeAction(entry.action);
           return (
             <div key={entry.id} className="row-divider flex flex-wrap items-baseline gap-3 px-5 py-2.5">
-              <span className="w-[46px] shrink-0 text-[12.5px] text-faint">
-                {formatClock(entry.created_at)}
+              {/* formatWhen prints a bare time for today ("14:32") but a full
+                  date for anything older ("10 Sept 14:32") — wider than the
+                  clock-only column this used to be. */}
+              <span className="w-[92px] shrink-0 text-[12.5px] text-faint">
+                {formatWhen(entry.created_at)}
               </span>
               <span className="w-[150px] shrink-0 truncate text-[14px] font-semibold">
                 <UserName id={entry.actor_id} fallback={machineName(entry.actor_id)} />

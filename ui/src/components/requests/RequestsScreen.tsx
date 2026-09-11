@@ -88,14 +88,22 @@ function OperatorQueue() {
   const [outcomes, setOutcomes] = useState<Record<string, ActionResult | null>>({});
   const [bulkStatus, setBulkStatus] = useState<"approved" | "rejected" | null>(null);
 
-  const rows = useMemo(
-    () => (requests.data ?? []).filter((entry) => !resolved.has(entry.id)),
-    [requests.data, resolved],
-  );
+  // Decided rows stay in `rows` — the row reports its own outcome below and
+  // only actually leaves once the refetch lands with its new status. Filtering
+  // them out here the instant `act()` fires used to remove the row before its
+  // own "Approved"/"Declined" line could ever be seen, which contradicted the
+  // promise a few lines down that the row "keeps its seat" and "leaves on the
+  // next read, not under the thumb that decided it".
+  const rows = useMemo(() => requests.data ?? [], [requests.data]);
 
-  // Only open requests can be decided, so only they can be selected — offering
-  // a checkbox on a settled row would be offering an action that cannot happen.
-  const openRows = useMemo(() => rows.filter((entry) => entry.status === "pending"), [rows]);
+  // Only open, not-yet-decided-this-session requests can be decided, so only
+  // they can be selected — offering a checkbox on a settled row would be
+  // offering an action that cannot happen, and `resolved` catches the window
+  // before a decided row's cached status has caught up.
+  const openRows = useMemo(
+    () => rows.filter((entry) => entry.status === "pending" && !resolved.has(entry.id)),
+    [rows, resolved],
+  );
 
   // The queue must have a visible end, the way the drift queue and the people
   // list already do. This screen rendered every row it was given: a long queue
@@ -122,7 +130,16 @@ function OperatorQueue() {
         ...prev,
         [entry.id]: {
           kind: "applied",
-          message: next === "approved" ? "Approved" : "Declined",
+          // One sentence, not message+detail: this renders `placement="inline"`,
+          // which shows only `message`. Approving enqueues a grant and drains it
+          // inline best-effort, but the response (`{"message": "Request
+          // resolved"}`) never says whether that drain landed — so this cannot
+          // claim Zitadel has it. Declining never touches Zitadel at all, so it
+          // gets no such caveat.
+          message:
+            next === "approved"
+              ? "Approved. Sent; Zitadel has not been read back yet."
+              : "Declined",
         },
       }));
     } catch (error) {
@@ -243,7 +260,7 @@ function OperatorQueue() {
               <div className="text-[13px] text-faint tablet:w-[66px] tablet:shrink-0">
                 <Relative iso={entry.created_at} />
               </div>
-              {entry.status === "pending" ? (
+              {entry.status === "pending" && !resolved.has(entry.id) ? (
                 <div className="flex w-full flex-row-reverse gap-3 tablet:w-auto tablet:shrink-0 tablet:flex-row tablet:gap-2">
                   <Button
                     variant="accent"
@@ -257,7 +274,13 @@ function OperatorQueue() {
                     Decline
                   </Button>
                 </div>
-              ) : (
+              ) : resolved.has(entry.id) ? null : (
+                // A settled row from the data itself (viewing a non-"Open"
+                // filter) — not one just decided this session, which reports
+                // through its own ActionOutcome below instead. Showing this
+                // badge for a just-decided row would read its stale cached
+                // status ("Open") against the ActionOutcome's fresh one
+                // ("Approved") at the same time.
                 <Badge tone={requestOutcome(entry.status).tone}>
                   {requestOutcome(entry.status).operator}
                 </Badge>
@@ -357,8 +380,9 @@ function MemberRequests({ userId }: { userId: string }) {
         ...prev,
         [entry.id]: {
           kind: "applied",
-          message: "You withdrew this",
-          detail: "Nobody will be asked to decide it.",
+          // One sentence: this renders `placement="inline"` below, which shows
+          // only `message` — a `detail` here would be written and never seen.
+          message: "You withdrew this. Nobody will be asked to decide it.",
         },
       }));
     } catch (error) {

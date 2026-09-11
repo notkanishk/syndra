@@ -18,9 +18,17 @@ const state = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@/lib/queries/useUsers", () => ({ useUsers: () => ({ data: state.users }) }));
-vi.mock("@/lib/queries/useRoles", () => ({ useGlobalRoleCatalog: () => ({ data: state.roles }) }));
-vi.mock("@/lib/queries/useBundles", () => ({ useBundles: () => ({ data: state.bundles }) }));
+const loading = vi.hoisted(() => ({ users: false, roles: false, bundles: false }));
+
+vi.mock("@/lib/queries/useUsers", () => ({
+  useUsers: () => ({ data: state.users, isLoading: loading.users }),
+}));
+vi.mock("@/lib/queries/useRoles", () => ({
+  useGlobalRoleCatalog: () => ({ data: state.roles, isLoading: loading.roles }),
+}));
+vi.mock("@/lib/queries/useBundles", () => ({
+  useBundles: () => ({ data: state.bundles, isLoading: loading.bundles }),
+}));
 vi.mock("@/lib/queries/useAudit", () => ({
   useAuditEntries: () => ({ data: state.audit, isLoading: false, error: null, refetch: () => {} }),
 }));
@@ -68,6 +76,9 @@ beforeEach(() => {
     pending_propagation: { count: 0, zitadel_reachable: true },
     drift: { count: 0 },
   };
+  loading.users = false;
+  loading.roles = false;
+  loading.bundles = false;
 });
 
 describe("Home › The makerspace", () => {
@@ -175,5 +186,58 @@ describe("Home › The makerspace", () => {
     state.bundles = [{ id: "b1", name: "Safety", holder_count: 4 }];
     renderMakerspace();
     expect(screen.getByText("Every role and bundle is in use.")).toBeInTheDocument();
+  });
+
+  it("defers to the observed count once one exists, same as the People filter", () => {
+    // effective_role_count says access, but the observed count is what
+    // hasAccess() (people-filters) treats as the answer once it exists — the
+    // same predicate the Gaps tile is required to reuse rather than
+    // re-implement.
+    state.users = [
+      person({ effective_role_count: 3, observed_role_count: 0 }),
+      person({
+        user: { ...person().user, id: "u2", status: "departed" },
+        effective_role_count: 0,
+        observed_role_count: 4,
+      }),
+    ];
+    renderMakerspace();
+
+    expect(screen.getByRole("link", { name: /no access at all/ })).toHaveTextContent("1");
+    expect(screen.getByRole("link", { name: /still holds roles/ })).toHaveTextContent("1");
+  });
+
+  it("shows a neutral placeholder while people are still loading, never an affirmative empty state", () => {
+    loading.users = true;
+    state.users = [];
+    renderMakerspace();
+
+    expect(screen.getByText("Reading…")).toBeInTheDocument();
+    expect(screen.queryByText("Everybody here has something.")).not.toBeInTheDocument();
+  });
+
+  it("shows a neutral placeholder while the role catalogue is still loading, never an affirmative empty state", () => {
+    loading.roles = true;
+    state.roles = [];
+    renderMakerspace();
+
+    expect(screen.getAllByText("Reading…").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Nobody holds a role yet.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Every role and bundle is in use.")).not.toBeInTheDocument();
+  });
+
+  it("prints a bare clock for today and a dated one for anything older, in Lately", () => {
+    const today = new Date();
+    const lastWeek = new Date(today.getTime() - 7 * 86_400_000);
+    state.audit = [
+      { id: "a1", actor_id: "u1", action: "grant", target_id: "-", created_at: today.toISOString() },
+      { id: "a2", actor_id: "u1", action: "grant", target_id: "-", created_at: lastWeek.toISOString() },
+    ];
+    renderMakerspace();
+
+    // formatWhen: a bare clock for today, a dated one otherwise — Lately used
+    // to always show a bare clock, which read as "today" for a week-old entry.
+    const times = screen.getAllByText(/^\d{2}:\d{2}$|^\d{1,2} \w+ \d{2}:\d{2}$/);
+    expect(times.some((el) => /^\d{1,2} \w+ \d{2}:\d{2}$/.test(el.textContent ?? ""))).toBe(true);
   });
 });

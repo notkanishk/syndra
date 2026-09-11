@@ -24,12 +24,13 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
+import { Term } from "@/components/ui/Term";
 import { Withheld } from "@/components/ui/Withheld";
 import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
-import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
+import { daysUntil, formatClock, formatShortDate, humanizeKey } from "@/lib/format";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 
 type Tab = "access" | "requests" | "activity";
@@ -88,20 +89,19 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
 
   const multiSource = useMemo(() => findMultiSource(access.data?.projects ?? []), [access.data]);
 
-  // Zitadel's own grant ids, in Advanced only, and only for an operator — the endpoint behind
-  // this is operator-gated, so asking as a member would be asking for a 403. Fetched lazily for
-  // the same reason: a member's own page must not fire a request that can only fail.
-  //
-  // Keyed by project, because that is Zitadel's own shape. One grant per (user, project) carries
-  // every role they hold there, so this id belongs on the project, not repeated onto each role
-  // row as though each had its own.
-  // Read for every OPERATOR, not only in Advanced view.
+  // Zitadel's own grants, read through the observation store. Keyed by
+  // project, because that is Zitadel's own shape: one grant per (user,
+  // project) carries every role they hold there, so a grant id belongs on the
+  // project, not repeated onto each role row as though each had its own.
   //
   // Zitadel is the truth about who has access; Syndra's tables are the record
   // of what was decided. Gating the read on a view toggle meant Basic checked
-  // nothing at all — the page stated access as fact and never asked the system
-  // that would know. A member gets no read because the endpoint is operator-only.
-  const upstreamGrants = useUpstreamUserGrants(isOperator ? userId : null);
+  // nothing at all — the page stated access as fact and never asked the
+  // system that would know. The route is self-or-operator, so a member reads
+  // their OWN observed grants through this same pipe — the row-level
+  // confirmation states below are exactly as true for them as for an
+  // operator looking at somebody else.
+  const upstreamGrants = useUpstreamUserGrants(userId);
   const zitadelGrantByProject = useMemo(
     () => new Map((upstreamGrants.data?.items ?? []).map((grant) => [grant.projectId, grant.id])),
     [upstreamGrants.data],
@@ -133,9 +133,13 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
   const confirmation: Confirmation =
     upstreamGrants.error || upstreamGrants.data?.complete === false
       ? "unreachable"
-      : upstreamGrants.isLoading || !isOperator
+      : upstreamGrants.isLoading
         ? "unknown"
         : "read";
+  // When the observation store's read happened — the basis for every "In
+  // Zitadel" claim below. A positive mark with no read time attached is an
+  // assertion with no evidence behind it.
+  const readAt = upstreamGrants.data?.observedAt;
 
   if (access.isLoading) {
     return (
@@ -170,10 +174,15 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
 
   return (
     <div className="flex flex-col gap-[18px]">
-      <div className="flex items-start gap-[22px]">
+      {/* Stacked below `sm`, side by side above it. At phone width the avatar
+          sitting left of the text column left email/id/lede/actions squeezed
+          into a narrow remainder, with the two action buttons forced onto
+          their own stacked rows inside it — full width for the text and
+          actions here is what gives them room to wrap normally instead. */}
+      <div className="flex flex-col items-start gap-4 sm:flex-row sm:gap-[22px]">
         <Avatar name={user.name} size="header" />
         <PageHeader
-          className="flex-1"
+          className="w-full flex-1"
           title={user.name}
           lede="Everything this person can use, and where each piece of access came from. Change it here; Syndra keeps the record of why."
           meta={
@@ -321,7 +330,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
             <Card>
               <div className="px-5 py-4">
                 <Withheld
-                  audience="operator"
+                  audience={isOperator ? "operator" : "member"}
                   items={inForce.map((a) => ({
                     field: a.field,
                     value: a.value,
@@ -351,6 +360,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                 {advanced && isOperator && (
                   <ZitadelGrantId
                     id={zitadelGrantByProject.get(project.project_id)}
+                    readAt={readAt}
                     loading={upstreamGrants.isLoading}
                     unreachable={Boolean(upstreamGrants.error)}
                     // Absent because nothing has been sent yet is not absent
@@ -369,7 +379,8 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
               <RoleGroup
                 confirmation={confirmation}
                 inZitadel={zitadelRolesByProject.get(project.project_id)}
-                label="Granted"
+                readAt={readAt}
+                label="Given"
                 roles={project.source_roles}
                 projectId={project.project_id}
                 projectName={project.project_name}
@@ -383,6 +394,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
               <RoleGroup
                 confirmation={confirmation}
                 inZitadel={zitadelRolesByProject.get(project.project_id)}
+                readAt={readAt}
                 label="Automatic"
                 roles={project.derived_roles}
                 projectId={project.project_id}
@@ -452,9 +464,13 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
 }
 
 /**
- * Zitadel's grant id for this project — the handle an operator needs to find the same grant in
- * Zitadel's own console, or to quote it in a ticket. Advanced only: in Basic, a raw identifier
- * next to a project name is noise around the thing that matters.
+ * What Zitadel showed for this project — advanced only: in Basic, this line is noise around the
+ * thing that matters.
+ *
+ * The truth is Zitadel, so the primary line states what it showed positively ("In Zitadel · read
+ * 04:53"), not a raw grant id — an id on its own answers "what is it called", never "is it
+ * there". The id is still the handle an operator needs for Zitadel's own console or a ticket, so
+ * it stays, as a muted suffix behind the positive statement rather than the statement itself.
  *
  * Four states, and none of them guesses. An absent grant is stated as absent rather than shown
  * as a dash: Syndra listing roles for a project Zitadel has no grant for is a real condition,
@@ -462,11 +478,14 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
  */
 function ZitadelGrantId({
   id,
+  readAt,
   loading,
   unreachable,
   unsent,
 }: {
   id: string | undefined;
+  /** When this observation was taken — the basis the positive statement below cites. */
+  readAt: string | undefined;
   loading: boolean;
   unreachable: boolean;
   /** Every role here is still queued, so Zitadel has not been told yet. */
@@ -494,16 +513,28 @@ function ZitadelGrantId({
     );
   }
   return (
-    <span className="text-[13px] text-faint">
-      Zitadel grant · <Mono>{id}</Mono>
+    <span className="text-[13px] font-semibold text-healthy">
+      In Zitadel{readAt ? ` · read ${formatClock(readAt)}` : ""}{" "}
+      <Mono className="font-normal text-faint">{id}</Mono>
     </span>
   );
+}
+
+/**
+ * The word "Zitadel", introduced with its glossary popover for a member
+ * reading the confirmation states on their OWN page for the first time — an
+ * operator sees this word across a dozen other screens and does not need it
+ * explained again here.
+ */
+function ZitadelWord({ isOperator }: { isOperator: boolean }) {
+  return isOperator ? <>Zitadel</> : <Term name="zitadel">Zitadel</Term>;
 }
 
 function RoleGroup({
   label,
   confirmation,
   inZitadel,
+  readAt,
   roles,
   projectId,
   projectName,
@@ -514,11 +545,16 @@ function RoleGroup({
   onRemove,
   onReveal,
 }: {
-  label: "Granted" | "Automatic";
+  // "Given" (source_roles), not "Granted": the per-row state below is what
+  // carries the truth about whether it landed. A hardcoded "Granted" sitting
+  // above a row that says "Waiting to be sent" contradicted it directly.
+  label: "Given" | "Automatic";
   /** Whether Zitadel could be asked at all, and what it said. */
   confirmation: Confirmation;
   /** The roles Zitadel reports for this project. Absent when it was not asked. */
   inZitadel: Set<string> | undefined;
+  /** When that observation was taken — the basis "In Zitadel" cites. */
+  readAt: string | undefined;
   roles: AccessRole[];
   projectId: string;
   projectName: string;
@@ -560,15 +596,23 @@ function RoleGroup({
             className="flex flex-wrap items-center gap-[18px] px-5 py-3"
           >
             <div className="w-[230px] shrink-0 text-[15px] font-semibold">
-              {humanizeKey(role.role_key)}{" "}
-              <Mono className="font-normal text-faint">{role.role_key}</Mono>
+              {humanizeKey(role.role_key)}
+              {/* The raw key is an operator's handle for this role — a member
+                  reading their own access has no use for it, and MemberAccess's
+                  whole premise is that this screen carries no role keys. */}
+              {isOperator && (
+                <>
+                  {" "}
+                  <Mono className="font-normal text-faint">{role.role_key}</Mono>
+                </>
+              )}
             </div>
 
             <div className="min-w-0 flex-1">
               <AccessSourceList reasons={role.reasons} />
             </div>
 
-            <span className="shrink-0 text-[13.5px]">
+            <span className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13.5px]">
               {waiting ? (
                 <NotSentYet />
               ) : standing === false ? (
@@ -576,20 +620,43 @@ function RoleGroup({
                 // This is the state the whole page exists to make visible: the
                 // one time it happened, every element said "Granted" and only a
                 // note at the top of the project said otherwise.
-                <span className="font-semibold text-danger-text">Not in Zitadel</span>
-              ) : standing === null && confirmation === "unreachable" ? (
-                <span className="text-warn-text">Could not check Zitadel</span>
-              ) : expires ? (
-                <span className="font-semibold text-warn-text">
-                  Expires {formatShortDate(expires)}
-                  {remaining !== null && remaining >= 0 ? ` · ${remaining} days` : ""}
+                <span className="font-semibold text-danger-text">
+                  Not in <ZitadelWord isOperator={isOperator} />
                 </span>
-              ) : sources.length > 1 ? (
-                <span className="text-faint">Held {sources.length} ways</span>
-              ) : strongest?.kind === "mapping" ? (
-                <span className="text-faint">Nobody clicked this</span>
+              ) : standing === null && confirmation === "unreachable" ? (
+                <span className="text-warn-text">
+                  Could not check <ZitadelWord isOperator={isOperator} />
+                </span>
+              ) : standing === null ? (
+                // confirmation === "unknown": still loading, or the read has
+                // not settled yet. Never nothing here — an unlabeled blank
+                // reads as the row having no status at all, which is one more
+                // wrong reading this page exists to rule out.
+                <span className="text-faint">
+                  Checking <ZitadelWord isOperator={isOperator} />…
+                </span>
               ) : (
-                <span className="text-faint">No expiry</span>
+                <>
+                  {/* The positive mark. The truth is Zitadel, so a role it
+                      confirmed says so outright — not only silence where the
+                      negative states would otherwise complain. */}
+                  <span className="font-semibold text-healthy">
+                    In <ZitadelWord isOperator={isOperator} />
+                    {readAt ? ` · read ${formatClock(readAt)}` : ""}
+                  </span>
+                  {expires ? (
+                    <span className="font-semibold text-warn-text">
+                      Expires {formatShortDate(expires)}
+                      {remaining !== null && remaining >= 0 ? ` · ${remaining} days` : ""}
+                    </span>
+                  ) : sources.length > 1 ? (
+                    <span className="text-faint">Held {sources.length} ways</span>
+                  ) : strongest?.kind === "mapping" ? (
+                    <span className="text-faint">Nobody clicked this</span>
+                  ) : (
+                    <span className="text-faint">No expiry</span>
+                  )}
+                </>
               )}
             </span>
 

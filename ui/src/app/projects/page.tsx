@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
-import { confirmedNote } from "@/lib/format";
+import { holdersLine, holdersToneClass } from "@/lib/holders";
 import { useApplications } from "@/lib/queries/useApplications";
 import { useProjects } from "@/lib/queries/useProjects";
 
@@ -86,7 +86,13 @@ export default function ProjectsPage() {
             />
           }
         >
-          {rows.map((entry) => (
+          {rows.map((entry) => {
+            const people = holdersLine(
+              entry.member_count,
+              entry.confirmed_member_count,
+              entry.observed_member_count,
+            );
+            return (
             <Link
               key={entry.project.id}
               href={`/projects/${entry.project.id}`}
@@ -109,15 +115,17 @@ export default function ProjectsPage() {
                 )}
               </span>
               <span className="shrink-0 text-[15px] tablet:w-[92px] tablet:text-right">
-                {entry.member_count}
+                {people.headline}
                 <span className="text-[13px] text-faint tablet:hidden">
-                  {entry.member_count === 1 ? " person" : " people"}
+                  {people.headline === "1" ? " person" : " people"}
                 </span>
-                {/* Recorded is what Syndra decided; this is what Zitadel has
-                    confirmed of it — never the same word, never the same line. */}
-                <span className="block text-[12.5px] text-faint">
-                  {confirmedNote(entry.member_count, entry.confirmed_member_count)}
-                </span>
+                {/* Recorded is what Syndra decided; this is what Zitadel shows
+                    right now — never the same word, never the same line. */}
+                {people.note && (
+                  <span className={`block text-[12.5px] ${holdersToneClass[people.tone]}`}>
+                    {people.note}
+                  </span>
+                )}
               </span>
               {/* A project with no roles is not a small number, it is a
                   different fact: nothing in it can be granted to anybody. The
@@ -138,7 +146,8 @@ export default function ProjectsPage() {
                 )}
               </span>
             </Link>
-          ))}
+            );
+          })}
         </ListStates>
       </Card>
     </div>

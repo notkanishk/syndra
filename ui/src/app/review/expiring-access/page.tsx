@@ -347,7 +347,7 @@ function ExpiringRow({
           // can see whose judgement they would be overriding.
           <span className="min-w-0 text-[14px] text-muted tablet:truncate">
             <span className="font-semibold text-ink/80">
-              <UserName id={ack.by} fallback={ack.by} />
+              <UserName id={ack.by} fallback="somebody no longer listed" />
             </span>{" "}
             let this lapse on {formatShortDate(ack.at)}
             {ack.note ? ` — ${ack.note}` : ""}
@@ -377,16 +377,25 @@ function ExpiringRow({
           isPending={extend.isPending}
           onClick={async () => {
             try {
-              await extend.mutateAsync({
+              const result = await extend.mutateAsync({
                 project_id: grant.project_id,
                 role_key: grant.role_key,
                 reason: "Extended from Expiring access",
                 duration_days: EXTEND_DAYS,
               });
+              // This endpoint enqueues to the outbox in manual mode ("pending")
+              // rather than applying inline — see CreateGrantResult. Reporting
+              // "applied" unconditionally would say Zitadel has it when only
+              // Syndra's own ledger does.
+              const waiting = result?.status === "pending";
               setOutcome({
-                kind: "applied",
-                message: `Extended by ${EXTEND_DAYS} days`,
-                detail: "It leaves this list when the page next refreshes.",
+                kind: waiting ? "queued" : "applied",
+                message: waiting
+                  ? `Will extend by ${EXTEND_DAYS} days once sent`
+                  : `Extended by ${EXTEND_DAYS} days`,
+                detail: waiting
+                  ? "Waiting to be sent — see Pending changes."
+                  : "It leaves this list when the page next refreshes.",
               });
             } catch (error) {
               setOutcome(outcomeFromError(error));

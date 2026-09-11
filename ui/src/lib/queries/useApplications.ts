@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import type { ObservationBasis } from "@/lib/queries/useRoles";
 
 export interface ApplicationView {
   application: {
@@ -16,6 +17,12 @@ export interface ApplicationView {
   };
   consumed_roles: string[];
   assigned_user_count: number;
+  /**
+   * What Zitadel shows holding a role this app reads, right now. Absent, not
+   * zero, when the org has never been read.
+   */
+  observed_user_count?: number;
+  observation?: ObservationBasis;
 }
 
 /**

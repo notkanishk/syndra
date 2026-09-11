@@ -10,7 +10,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 
 import { Card } from "@/components/ui/Card";
 import { TraceCell } from "@/components/audit/TraceCell";
-import { actedOn, describeAction, groupByDay, machineName } from "@/lib/audit-vocabulary";
+import { actedOn, describeAction, machineName } from "@/lib/audit-vocabulary";
 import { formatClock, formatList, formatShortDate } from "@/lib/format";
 import { useAuditEntries, type AuditEntry } from "@/lib/queries/useAudit";
 import { useTargets } from "@/lib/queries/useTargets";
@@ -38,7 +38,14 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
   const entries = useAuditEntries({ userId, limit });
 
   const rows = useMemo(() => entries.data ?? [], [entries.data]);
-  const days = useMemo(() => groupByDay(rows), [rows]);
+  // Keyed by `formatShortDate`, the SAME local-time source the row's own
+  // clock (`formatClock`) reads against. `audit-vocabulary`'s `groupByDay`
+  // keys on `created_at.slice(0, 10)` — the UTC calendar date — so an entry a
+  // few hours either side of UTC midnight landed under yesterday's heading
+  // while its own clock read local time: "10 Sept 04:18" for an instant the
+  // Audit page (which formats each row from its own timestamp, no shared key)
+  // correctly showed as 11 Sept.
+  const days = useMemo(() => groupByLocalDay(rows), [rows]);
   // The backend caps at 200. Past that the feed is genuinely partial, and
   // saying so beats a "Load more" button that quietly stops working.
   const atCap = rows.length >= 200;
@@ -63,7 +70,7 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
         {days.map((group) => (
           <div key={group.day}>
             <div className="row-divider bg-tint-1 px-5 py-2 text-[12.5px] font-semibold text-muted">
-              {formatShortDate(group.day)}
+              {group.day}
             </div>
             {group.entries.map((entry) => (
               <ActivityRow key={entry.id} entry={entry} userId={userId} />
@@ -94,6 +101,23 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
     <OnTheTargets userId={userId} name={name} />
     </div>
   );
+}
+
+/**
+ * Groups already-sorted entries by their local calendar day, labelled with
+ * the same `formatShortDate` string used as the key — so the heading and the
+ * grouping boundary can never disagree with each other the way the UTC-keyed
+ * `groupByDay` disagreed with the row's local-time clock.
+ */
+function groupByLocalDay(rows: AuditEntry[]): Array<{ day: string; entries: AuditEntry[] }> {
+  const groups: Array<{ day: string; entries: AuditEntry[] }> = [];
+  for (const entry of rows) {
+    const day = formatShortDate(entry.created_at);
+    const last = groups[groups.length - 1];
+    if (last && last.day === day) last.entries.push(entry);
+    else groups.push({ day, entries: [entry] });
+  }
+  return groups;
 }
 
 /**
@@ -176,13 +200,21 @@ function TargetActivityCard({
 
       {/* The distinction the whole card exists for. "Could not look" and
           "nothing happened" are the same empty list otherwise, and they are
-          opposite answers. */}
-      {data && !data.readable && (
+          opposite answers. `no_account` is a THIRD thing again: not a failed
+          read, just nothing there to read — neutral tone, no warning colour,
+          and never a raw status code (the backend already keeps those out of
+          `detail`). */}
+      {data && !data.readable && data.reason === "no_account" ? (
+        <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
+          {targetLabel(target)} has no account for this person, so there is nothing to read
+          there.
+        </div>
+      ) : data && !data.readable ? (
         <div className="border-t border-line px-5 py-3 text-[13px] text-warn-text">
           {target}&rsquo;s audit log could not be read, so this is not a claim that nothing
           happened.{data.detail ? ` ${data.detail}` : ""}
         </div>
-      )}
+      ) : null}
 
       {uncovered.length > 0 && (
         <div className="border-t border-line px-5 py-3 text-[13px] text-faint">

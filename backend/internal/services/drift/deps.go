@@ -48,6 +48,12 @@ var (
 	}
 	retractExplainedDrift = db.RetractExplainedDrift
 
+	// The gone-closure half: a target_only row whose grant a COMPLETE
+	// observation no longer contains at all. Distinct seam from
+	// retractExplainedDrift above because the two close rows for opposite
+	// reasons and a test has to be able to fail either independently.
+	closeGoneDriftItem = db.CloseGoneDrift
+
 	// The merge base, written by the Zitadel sweep from its own complete read
 	// and forgotten when a user holds nothing. Seams, because the assertions
 	// that matter are about what is NOT written: a base must not advance past a
@@ -68,7 +74,7 @@ var (
 	// out-of-band grant is not in the store at all until a sweep covers it, and
 	// no row can speak for an absence.
 	latestOrgObservation = db.LatestOrgObservation // ErrNoObservation ⇒ "not checked yet"
-	allObservedGrants     = db.AllObservedGrants
+	allObservedGrants    = db.AllObservedGrants
 
 	// idempotency-key minting for re-enqueued rows: reuse the outbox's crypto/rand
 	// helper (the repo has NO uuid module). Returns (string, error); the sweep

@@ -10,6 +10,7 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { CommandBlock } from "@/components/ui/CommandBlock";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { StatCard } from "@/components/ui/StatCard";
 import { request } from "@/lib/api-client";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useZitadelHealth } from "@/lib/queries/useZitadel";
@@ -85,11 +86,7 @@ export default function IdentityProviderPage() {
           label="Action signing key"
           value={rotationHeadline(rotation.data, rotation.error)}
           tone={rotation.data?.status === "ok" ? "neutral" : "warn"}
-          detail={
-            rotation.data?.last_rotated_at
-              ? `Last replaced ${formatLongDate(rotation.data.last_rotated_at)}`
-              : "A secret Syndra and Zitadel share so each can trust the other during sign-in."
-          }
+          detail={rotationDetail(rotation.data)}
         />
         <StatCard
           label="Projects in Zitadel"
@@ -328,32 +325,6 @@ function HealthVerdict({
   );
 }
 
-function StatCard({
-  label,
-  value,
-  detail,
-  tone,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  tone: "neutral" | "warn";
-}) {
-  return (
-    <div className="card min-w-[260px] flex-1 px-5 py-4">
-      <div className="type-label mb-2">{label}</div>
-      <div
-        className={`font-display text-[24px] font-semibold ${
-          tone === "warn" ? "text-warn-text" : ""
-        }`}
-      >
-        {value}
-      </div>
-      <p className="mt-1.5 max-w-[42ch] text-[13px] leading-[1.5] text-muted">{detail}</p>
-    </div>
-  );
-}
-
 /**
  * Reads only. All three are disabled while the provider is unreachable, with
  * the reason in visible copy rather than a tooltip: they read live, and there
@@ -496,14 +467,40 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
   );
 }
 
+/**
+ * The headline reads as a fact ("N days old") while there is nothing to do,
+ * and only turns into an instruction ("Replace within…") once the threshold
+ * this same status already crossed says so. "Replace within 53 days" beside
+ * a body that says "Nothing to do" is two readings of one number disagreeing
+ * — the number does not change, only which sentence it is allowed to be.
+ */
 function rotationHeadline(status: RotationStatus | undefined, error: unknown): string {
   if (error) return "Unknown";
   if (!status?.key_installed) return "Not set up";
-  const threshold = status.threshold_days ?? 90;
   const age = status.age_days;
   if (age === undefined) return "Installed";
-  const remaining = threshold - age;
-  if (remaining <= 0) return "Due for replacement";
-  // "Replace within", not "rotates in": nothing replaces this key by itself.
-  return `Replace within ${remaining} day${remaining === 1 ? "" : "s"}`;
+  if (status.status === "warn" || status.status === "stale") {
+    const threshold = status.threshold_days ?? 90;
+    const remaining = threshold - age;
+    if (remaining <= 0) return "Due for replacement";
+    // "Replace within", not "rotates in": nothing replaces this key by itself.
+    return `Replace within ${remaining} day${remaining === 1 ? "" : "s"}`;
+  }
+  return `${age} day${age === 1 ? "" : "s"} old`;
+}
+
+function rotationDetail(status: RotationStatus | undefined): string {
+  if (
+    status?.key_installed &&
+    status.last_rotated_at &&
+    status.age_days !== undefined &&
+    (status.status ?? "ok") === "ok"
+  ) {
+    const threshold = status.threshold_days ?? 90;
+    const replaceBy = new Date(status.last_rotated_at);
+    replaceBy.setDate(replaceBy.getDate() + threshold);
+    return `Replace by ${formatLongDate(replaceBy.toISOString())} · nothing to do`;
+  }
+  if (status?.last_rotated_at) return `Last replaced ${formatLongDate(status.last_rotated_at)}`;
+  return "A secret Syndra and Zitadel share so each can trust the other during sign-in.";
 }
