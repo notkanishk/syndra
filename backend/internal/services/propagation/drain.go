@@ -680,7 +680,30 @@ func classifyDispatch(ctx context.Context, row models.PendingPropagation) (ackCl
 	var err error
 	switch row.OpType {
 	case "add":
-		err = zitadelAddUserGrant(ctx, row.UserID, row.ProjectID, row.RoleKeys)
+		// Zitadel holds ONE grant per (user, project). Adding a role to a
+		// person who already has a grant there is an update carrying the union
+		// of roles — a second AddUserGrant answers 409, which this drain treats
+		// as idempotent success, and the role is never written. That is how a
+		// direct grant on production came back "applied" and "Not in Zitadel".
+		grantID, live, lerr := liveUserGrant(ctx, row.UserID, row.ProjectID)
+		if lerr != nil {
+			return classifyZitadelError(lerr), fmt.Sprintf("add: could not read live grant: %v", lerr)
+		}
+		if grantID == "" {
+			err = zitadelAddUserGrant(ctx, row.UserID, row.ProjectID, row.RoleKeys)
+		} else {
+			merged := make([]string, 0, len(live)+len(row.RoleKeys))
+			for rk := range live {
+				merged = append(merged, rk)
+			}
+			for _, rk := range row.RoleKeys {
+				if !live[rk] {
+					merged = append(merged, rk)
+				}
+			}
+			sort.Strings(merged)
+			err = zitadelUpdateUserGrant(ctx, row.UserID, grantID, merged)
+		}
 	case "replace":
 		err = zitadelUpdateUserGrant(ctx, row.UserID, row.ZitadelGrantID, row.RoleKeys)
 	case "revoke":

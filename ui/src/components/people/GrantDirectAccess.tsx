@@ -7,6 +7,7 @@ import { Button, PILL } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
+import { holdersLine } from "@/lib/holders";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant } from "@/lib/queries/useUsers";
@@ -28,6 +29,21 @@ import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
  */
 
 type Preset = "30" | "term" | "date" | "never";
+
+/**
+ * How many people hold the role, from what Zitadel shows — never from
+ * Syndra's own count, which hides everyone Syndra did not give it to.
+ */
+function holdersHint(role: {
+  assigned_user_count: number;
+  confirmed_user_count?: number;
+  observed_user_count?: number;
+}): string {
+  const line = holdersLine(role.assigned_user_count, role.confirmed_user_count, role.observed_user_count);
+  const n = Number(line.headline);
+  const who = `${line.headline} ${n === 1 ? "person holds" : "people hold"} it`;
+  return line.note && line.note !== "confirmed" ? `${who} (${line.note})` : who;
+}
 
 export function GrantDirectAccess({
   userId,
@@ -114,8 +130,7 @@ export function GrantDirectAccess({
             // Plain language, not a spec: what this role unlocks and how many
             // people already carry it.
             <FieldHint>
-              {selectedRole.assigned_user_count}{" "}
-              {selectedRole.assigned_user_count === 1 ? "person holds" : "people hold"} it
+              {holdersHint(selectedRole)}
               {selectedRole.description ? ` · ${selectedRole.description}` : ""}
             </FieldHint>
           )}

@@ -30,6 +30,7 @@ func stubDrainDeps(t *testing.T) {
 		swap(&claimPending, func(context.Context, string, int) ([]models.PendingPropagation, error) { return nil, nil }),
 		swap(&grantIndexHasRole, func(context.Context, string, string, string) (bool, error) { return false, nil }),
 		swap(&liveUserGrantRoles, func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{}, nil }),
+		swap(&liveUserGrant, func(context.Context, string, string) (string, map[string]bool, error) { return "", map[string]bool{}, nil }),
 		swap(&pruneTerminal, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&prunePlans, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&awaitingDispatch, func(context.Context, string) ([]string, error) { return nil, nil }),
@@ -1358,5 +1359,38 @@ func TestDrain_ATruncatedReadCannotConfirmARevoke(t *testing.T) {
 	}
 	if confirmed != "" {
 		t.Fatalf("a revocation was confirmed from an answer that did not cover everything: %q", confirmed)
+	}
+}
+
+// The person already holds a grant on the project with another role. The add
+// must UPDATE that grant with the union of roles; a second AddUserGrant is a
+// 409 the drain absorbs as success, and the role never reaches Zitadel.
+func TestDrain_AddMergesIntoAnExistingGrant(t *testing.T) {
+	stubDrainDeps(t)
+	claimPending = oneRow("o3", "add") // role "r" on project "p"
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{"other": true}, nil
+	}
+	var addCalled bool
+	zitadelAddUserGrant = func(context.Context, string, string, []string) error { addCalled = true; return nil }
+	var updatedGrant string
+	var updatedRoles []string
+	zitadelUpdateUserGrant = func(_ context.Context, _ string, grantID string, roles []string) error {
+		updatedGrant, updatedRoles = grantID, roles
+		return nil
+	}
+
+	res, err := Drain(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if addCalled {
+		t.Fatal("AddUserGrant was called for a person who already has a grant on the project")
+	}
+	if updatedGrant != "g1" || len(updatedRoles) != 2 || updatedRoles[0] != "other" || updatedRoles[1] != "r" {
+		t.Fatalf("want update of g1 with [other r], got grant=%q roles=%v", updatedGrant, updatedRoles)
+	}
+	if res.Applied != 1 {
+		t.Fatalf("want 1 applied, got %+v", res)
 	}
 }

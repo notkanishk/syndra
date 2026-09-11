@@ -93,21 +93,31 @@ var (
 	// The claim envelope Actions v2 serves. Cleared by the drain, because the
 	// drain is what changed the access it was compiled from.
 	invalidateClaims   = cache.InvalidateUser
-	liveUserGrantRoles = func(ctx context.Context, userID, projectID string) (map[string]bool, error) {
+	// liveUserGrant is the one read behind both the add and the revoke path:
+	// Zitadel keeps ONE grant per (user, project) carrying every role, so a
+	// write must know the grant id and the roles already on it. Empty id means
+	// no grant yet.
+	liveUserGrant = func(ctx context.Context, userID, projectID string) (string, map[string]bool, error) {
 		res, err := zitadel.MgmtClient.ListUserGrants(ctx, userID, zitadel.SearchParams{Limit: 100})
 		if err != nil {
-			return nil, err
+			return "", nil, err
 		}
+		id := ""
 		out := map[string]bool{}
 		for _, g := range res.Items {
 			if g.ProjectID != projectID {
 				continue
 			}
+			id = g.ID
 			for _, rk := range g.RoleKeys {
 				out[rk] = true
 			}
 		}
-		return out, nil
+		return id, out, nil
+	}
+	liveUserGrantRoles = func(ctx context.Context, userID, projectID string) (map[string]bool, error) {
+		_, roles, err := liveUserGrant(ctx, userID, projectID)
+		return roles, err
 	}
 
 	pruneTerminal = db.PruneTerminalPropagations

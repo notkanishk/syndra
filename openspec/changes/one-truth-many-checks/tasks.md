@@ -115,3 +115,13 @@
   again. Live test: `TestConfirmFromObservationSettlesARevokeOvertakenByALaterAdd`.
   The SQL also enforces the completeness guard itself (latest org
   observation complete and error-free) rather than trusting the caller.
+- [x] 4.7 Found by the walk, proven by read-back: a direct grant to a person
+  who already holds a grant on that project came back "applied" and "Not in
+  Zitadel". The drain sent AddUserGrant, Zitadel answered 409 (one grant per
+  user+project), and 409 is absorbed as idempotent success. An add now reads
+  the live grant and UPDATES it with the union of roles (`liveUserGrant`, the
+  one read behind add and revoke). Test:
+  `TestDrain_AddMergesIntoAnExistingGrant` (mutation-checked).
+- [x] 4.8 Grant dialog's "N people hold it" and Pending changes' CAUSED BY
+  read observed holders and name a direct grant "Given by hand" — no more
+  "Automatic rule" on a grant somebody chose by hand.

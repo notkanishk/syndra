@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { humanizeKey } from "@/lib/format";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
@@ -241,18 +242,27 @@ function CausedBy({
   const bundle = isBundle ? bundles?.find((b) => b.id === row.source_ref) : undefined;
   const rule = !isBundle ? rules?.find((r) => r.id === row.source_ref) : undefined;
 
+  const isRule = row.source === "rule";
+  // Named by what caused it, never by a handle alone. A direct grant has no
+  // handle: somebody chose it by hand on the person's page.
   const name = bundle
     ? bundle.name
     : rule
       ? `${rule.source_role} → ${rule.target_role}`
       : isBundle
         ? "Bundle"
-        : "Automatic rule";
+        : isRule
+          ? "Automatic rule"
+          : row.source === "direct"
+            ? "Given by hand"
+            : humanizeKey(row.source);
 
   return (
     <span className="flex flex-wrap items-baseline gap-x-1.5">
       <span className="truncate">{name}</span>
-      <Mono className="text-faint">{shortId(row.source_ref, isBundle ? "b" : "R")}</Mono>
+      {(isBundle || isRule) && row.source_ref && (
+        <Mono className="text-faint">{shortId(row.source_ref, isBundle ? "b" : "R")}</Mono>
+      )}
       {row.cascade_id ? (
         <Link
           href={`/operations/cascades?cascade=${encodeURIComponent(row.cascade_id)}`}
