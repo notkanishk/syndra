@@ -93,11 +93,13 @@ export function ManageBundles({
       // Pending changes until you send them" — an instruction to go and
       // confirm an empty screen.
       let waiting = 0;
+      let revoking = 0;
       for (const id of changes) {
-        const result = assignedIds.has(id)
-          ? await remove.mutateAsync(id)
-          : await assign.mutateAsync(id);
-        waiting += result?.cascade?.enqueued ?? 0;
+        const removing = assignedIds.has(id);
+        const result = removing ? await remove.mutateAsync(id) : await assign.mutateAsync(id);
+        const enqueued = result?.cascade?.enqueued ?? 0;
+        waiting += enqueued;
+        if (removing) revoking += enqueued;
       }
       const recorded =
         changes.length === 1 ? "One bundle change recorded" : `${changes.length} bundle changes recorded`;
@@ -107,11 +109,21 @@ export function ManageBundles({
         // empty Pending changes to look for it.
         kind: waiting > 0 ? "queued" : "applied",
         message: recorded,
+        // Revocations do not wait for a person — they send on their own every
+        // few minutes — so telling the operator to go and send them would be
+        // false, and saying nothing about it would leave them wondering why
+        // Pending changes emptied by itself.
         detail:
           waiting > 0
             ? `Nothing has reached Zitadel or a connected system yet. ${
                 waiting === 1 ? "One change waits" : `${waiting} changes wait`
-              } under Pending changes until you send them.`
+              } under Pending changes${
+                revoking === waiting
+                  ? " — revocations send on their own within a few minutes, or send them now."
+                  : revoking > 0
+                    ? `; the ${revoking === 1 ? "revocation sends" : `${revoking} revocations send`} on their own within a few minutes, the rest until you send them.`
+                    : " until you send them."
+              }`
             : "Nothing is waiting to be sent: this left no change for Zitadel or a connected system to carry out. Pending changes is unaffected.",
       });
       setStaged(new Set());

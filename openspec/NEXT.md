@@ -548,7 +548,7 @@ is observed"). What is still open, and whose it is:
   standing into `UserAccessView` itself would make it one response instead of
   two — worth doing when that view is next touched.
 - **Test account.** `testuser` (Syndra admin, the throwaway account)
-  holds the Ops Admin bundle from the walk; remove it and the account when the
+  held the Ops Admin bundle and a 30-day direct grant during the walk; both were revoked and read back as gone. Remove the account when the
   walk is over. Its password was rotated on first login (Zitadel forced it).
 
 ## 5. Declined / deliberately kept
