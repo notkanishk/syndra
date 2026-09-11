@@ -285,6 +285,16 @@ func ConfirmFromObservation(ctx context.Context) (int64, error) {
 		        SELECT 1 FROM zitadel_grants_index g
 		         WHERE g.user_id = o.user_id AND g.project_id = o.project_id
 		           AND g.role_keys && o.role_keys))
+		     OR
+		     -- A revoke followed by a later delivered add for the same roles is
+		     -- settled, not unseen: the index now answers for the later write,
+		     -- and this one's absence can never be observed again.
+		     (o.op_type = 'revoke' AND EXISTS (
+		        SELECT 1 FROM propagation_outbox a
+		         WHERE a.user_id = o.user_id AND a.project_id = o.project_id
+		           AND a.target = 'zitadel' AND a.status = 'applied'
+		           AND a.op_type IN ('add','replace') AND a.role_keys && o.role_keys
+		           AND a.intent_seq > o.intent_seq))
 		   )`)
 	if err != nil {
 		return 0, fmt.Errorf("confirm from observation: %w", err)
