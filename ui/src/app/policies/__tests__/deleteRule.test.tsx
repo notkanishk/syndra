@@ -40,7 +40,12 @@ vi.mock("@/lib/queries/useRoles", () => ({
   }),
 }));
 
-vi.mock("@/components/names", () => ({ ProjectName: () => null }));
+vi.mock("@/components/names", () => ({
+  ProjectName: () => null,
+  RoleRef: ({ projectId, roleKey }: { projectId: string; roleKey: string }) => (
+    <>{`${projectId}/${roleKey}`}</>
+  ),
+}));
 
 function rule(overrides: Partial<MappingRuleRow> = {}): MappingRuleRow {
   return {
@@ -115,6 +120,30 @@ describe("deleting an automatic rule", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete rule" }));
 
     expect(document.body.textContent).toMatch(/deleting it revokes nothing/i);
+  });
+
+  // The dialog title is only ever this rule's short id ("R-aaaa") — meaningless
+  // on its own. The chip above it names the actual project/role pair so the
+  // id is never the only thing identifying which rule is about to be deleted.
+  it("names the rule by its project/role pair, not only its id", () => {
+    openTheRule();
+    fireEvent.click(screen.getByRole("button", { name: "Delete rule" }));
+
+    expect(document.body.textContent).toMatch(/pDoor\/member/);
+    expect(document.body.textContent).toMatch(/pLaser\/trained/);
+  });
+
+  // Modal focuses the panel's first focusable element in DOM order on open.
+  // The destructive button used to be that element — every rule-delete
+  // dialog opened with the cursor already on "revoke this access".
+  it("does not autofocus the destructive button", () => {
+    openTheRule();
+    fireEvent.click(screen.getByRole("button", { name: "Delete rule" }));
+
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Keep the rule" }));
+    expect(document.activeElement).not.toBe(
+      screen.getByRole("button", { name: "Delete rule and revoke access" }),
+    );
   });
 
   it("backs out to the editor rather than closing everything", () => {

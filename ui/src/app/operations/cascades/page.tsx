@@ -160,9 +160,15 @@ function CascadeCard({ group, newest }: { group: CascadeGroupRow; newest: boolea
 }
 
 /**
- * Three words, and only three. Amber when changes are still waiting, accent
- * when everything went through, neutral when an edit produced no changes at
+ * Amber when changes are still waiting, accent when everything went through
+ * AND Zitadel has confirmed it, neutral when an edit produced no changes at
  * all — which is a real and reassuring outcome, not an empty state.
+ *
+ * "Applied" is Syndra's own record of having sent the write; "confirmed" is a
+ * post-write read of Zitadel agreeing it landed. Read-back can lag sending by
+ * a cycle, so a just-applied cascade legitimately shows sent-but-not-yet-
+ * confirmed for a little while — that is a fact worth a word of its own, not
+ * something to fold into "sent".
  */
 function StatePill({ group }: { group: CascadeGroupRow }) {
   if (group.failed > 0) {
@@ -176,7 +182,10 @@ function StatePill({ group }: { group: CascadeGroupRow }) {
     return <Badge tone="warn">{group.waiting} waiting to be sent</Badge>;
   }
   if (group.applied > 0) {
-    return <Badge tone="accent">{group.applied} sent</Badge>;
+    if (group.confirmed === group.applied) {
+      return <Badge tone="accent">{group.applied} confirmed by Zitadel</Badge>;
+    }
+    return <Badge tone="warn">{group.applied} sent, {group.confirmed} confirmed</Badge>;
   }
   return <Badge>no changes</Badge>;
 }
@@ -204,5 +213,9 @@ function consequenceFor(group: CascadeGroupRow): string {
   if (group.waiting > 0) {
     return `${needed}, and none have reached Zitadel yet. Nothing has changed for anybody so far. Send them from Pending changes.`;
   }
-  return `${needed}, and all of them went through. Nothing further is waiting from this edit.`;
+  if (group.confirmed === group.applied) {
+    return `${needed}, and all of them went through. Nothing further is waiting from this edit.`;
+  }
+  const unconfirmed = group.applied - group.confirmed;
+  return `${needed}. Sent; Zitadel has not yet been read back for ${unconfirmed}.`;
 }

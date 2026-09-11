@@ -94,9 +94,11 @@ describe("People index", () => {
     expect(screen.queryByText(/open request/)).not.toBeInTheDocument();
   });
 
-  it("renders a dash rather than nothing when a row is clear", () => {
+  it("renders nothing in Needs attention when a row is clear", () => {
+    // A lone dash under the access text was the only thing in the column at
+    // phone width — worse than nothing there at all.
     renderPeople();
-    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
   it("names bundles instead of counting them", () => {
@@ -106,9 +108,40 @@ describe("People index", () => {
     expect(screen.getByText("Studio Member")).toBeInTheDocument();
   });
 
-  it("says how much access somebody has in words", () => {
+  it("says it hasn't been checked before Zitadel has ever been read", () => {
+    renderPeople();
+    expect(screen.getByText("Not checked yet")).toBeInTheDocument();
+  });
+
+  it("says how much access somebody has in words, off what Zitadel observed", () => {
+    users.data = [
+      person({
+        observation: { read_at: "2026-09-10T00:00:00Z", current: true, truncated: false },
+        observed_role_count: 6,
+        observed_project_count: 3,
+      }),
+    ];
     renderPeople();
     expect(screen.getByText("6 roles across 3 projects")).toBeInTheDocument();
+  });
+
+  it("distinguishes recorded-but-not-in-Zitadel from genuinely nothing", () => {
+    users.data = [
+      person({
+        observation: { read_at: "2026-09-10T00:00:00Z", current: true, truncated: false },
+        observed_role_count: 0,
+        effective_role_count: 4,
+      }),
+      person({
+        user: { ...person().user, id: "u2", name: "Nina Roy" },
+        observation: { read_at: "2026-09-10T00:00:00Z", current: true, truncated: false },
+        observed_role_count: 0,
+        effective_role_count: 0,
+      }),
+    ];
+    renderPeople();
+    expect(screen.getByText("Not in Zitadel yet")).toBeInTheDocument();
+    expect(screen.getByText("Nothing yet")).toBeInTheDocument();
   });
 
   it("keeps a departed account visible, at reduced contrast", () => {

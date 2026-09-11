@@ -525,6 +525,32 @@ states its reason. Left alone on purpose.
   The fix is a bounded refresh-and-retry on `ErrNoManifest` in the dispatch path, single-flighted per target so a burst of refused calls produces ONE capability read rather than one each — the retry must not become the thing that keeps a starting add-on down. Retried once, never in a loop: a target that genuinely has no manifest must still refuse quickly. Complemented by Compose ordering, which narrows the window rather than closing it — `depends_on` cannot promise the add-on has served a manifest by the time the backend asks, and a fix that relies on ordering alone reappears the first time a restart takes longer than expected.
   </details>
 
+## 4d. Production walk as a fresh operator — 2026-09-11
+
+Walked every operator view on production as a throwaway admin (`testuser`),
+Basic and Advanced, desktop and 400px, and drove a bundle give → send →
+read-back on that account. Everything found is fixed under
+[`one-truth-many-checks`](changes/one-truth-many-checks/tasks.md) §4 ("Holding
+is observed"). What is still open, and whose it is:
+
+- **Owner decision — welcome bundle.** No bundle is flagged `is_welcome`; every
+  join since 4 Aug got nothing (now visible on Home, no longer a silent
+  failure). Flag one under Bundles → "Default for new members", or record that
+  auto-onboarding is not wanted.
+- **Owner decision — TrueNAS objects.** Group, dataset and share (one name for
+  all three keeps the member mount line true), the role key, and the Zitadel
+  project that carries it. Syndra's key is `ACCOUNT_WRITE` only; the objects
+  must exist on the NAS before the first mapping validates.
+- **Member landing still lists Syndra's decision, then marks it.**
+  `ExplainUserAccess` builds "My access" from Syndra's tables; the row's
+  "Ready to use / Not there yet" mark now comes from the observer route
+  (`GET /zitadel/users/{id}/grants`, self-readable). Folding the observed
+  standing into `UserAccessView` itself would make it one response instead of
+  two — worth doing when that view is next touched.
+- **Test account.** `testuser` (Syndra admin, the throwaway account)
+  holds the Ops Admin bundle from the walk; remove it and the account when the
+  walk is over. Its password was rotated on first login (Zitadel forced it).
+
 ## 5. Declined / deliberately kept
 
 Don't re-litigate these without new information.

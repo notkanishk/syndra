@@ -11,14 +11,15 @@ import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowled
 import { CountChip, Mono, STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
-import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
+import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { blocksIrreversibleAction, ReadFreshness } from "@/components/ui/ReadFreshness";
+import { StatCard } from "@/components/ui/StatCard";
 import { Relative } from "@/components/ui/Time";
 import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
-import { formatBytes } from "@/lib/format";
+import { formatBytes, formatRelative } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useMappings } from "@/lib/queries/useMappings";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
@@ -51,6 +52,7 @@ export function TargetOverview({ target }: { target: string }) {
   const roster = useTargets();
   const health = useTargetHealth(target);
   const findings = useMergeFindings(target);
+  const inventory = useTargetInventory(target);
   const registered = (roster.data ?? []).find((t) => t.target === target);
 
   const anchorFinding = health.data?.log_anchor?.violation_reason ? 1 : 0;
@@ -63,6 +65,7 @@ export function TargetOverview({ target }: { target: string }) {
     (findings.data?.length ?? 0) + anchorFinding + conflicts.length;
   const waitingKnown = !findings.isLoading && !health.isLoading;
   const name = targetLabel(target);
+  const lifecycle = health.data?.lifecycle ?? "active";
 
   return (
     <div className="grid gap-5">
@@ -76,10 +79,14 @@ export function TargetOverview({ target }: { target: string }) {
             reach {name}, and keeps it in step.
           </>
         }
-        meta={registered ? authLabel(registered.auth_mode, name) : undefined}
+        meta={
+          health.data?.product ? (
+            <Mono>
+              {name} {versionLabel(name, health.data.product_version)}
+            </Mono>
+          ) : undefined
+        }
       />
-
-      <TargetLede target={target} health={health.data} waiting={waiting} known={waitingKnown} />
 
       {/* The touch form of the four regions: a way to skip one rather than a
           way to hide three. Everything below it is present and scrollable, so a
@@ -95,30 +102,78 @@ export function TargetOverview({ target }: { target: string }) {
             a different fact from NOT ANSWERING at 04:00, and an operator who
             reads the second when the first is true walks to the wrong machine.
 
-            Two cards side by side and never merged into one word: the left is
-            Syndra's ability to reach the target, the right is the target's own
-            account of itself. Keeping them apart is what makes "look at Syndra"
-            and "look at the NAS" possible to say at all. */}
+            One status card, matching /zitadel: a dot, a bold sentence with a
+            cause and a timestamp, one line of consequence. The label/value
+            grid this replaced said "Last answered … just now" and then said
+            nothing else for the rest of its height — a card should never be
+            taller than what it has to say. */}
         <Region
           id="answering"
           title="Is it answering"
           lede={`Whether Syndra can reach ${name}, what ${name} says about itself, and whether somebody has paused changes to it.`}
         >
-          <div className="grid gap-4 desktop:grid-cols-2">
-            <Health
-              target={target}
-              health={health.data}
-              isLoading={health.isLoading}
-              // A deployment-side fault, carried into this card because that is
-              // where an operator looks when a target stops working — and it
-              // explains the reading below it rather than sitting beside it.
-              transportError={
-                registered?.transport_status === "error" ? registered.transport_error : undefined
+          <StatusVerdict
+            target={target}
+            health={health.data}
+            isLoading={health.isLoading}
+            // A deployment-side fault, carried into this card because that is
+            // where an operator looks when a target stops working — and it
+            // explains the reading below it rather than sitting beside it.
+            transportError={
+              registered?.transport_status === "error" ? registered.transport_error : undefined
+            }
+          />
+
+          {waitingKnown && anchorFinding + conflicts.length > 0 && (
+            <p className="text-[13.5px] font-semibold text-danger-text">
+              {anchorFinding + conflicts.length === 1
+                ? "One item under Waiting on a person needs a decision before this can be trusted."
+                : `${anchorFinding + conflicts.length} items under Waiting on a person need a decision before this can be trusted.`}
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-[18px]">
+            <StatCard
+              label="Accounts Syndra manages"
+              value={inventory.data?.bound !== undefined ? `${inventory.data.bound}` : "—"}
+              detail={
+                inventory.isLoading
+                  ? "Reading…"
+                  : inventory.data?.read_at
+                    ? `Read ${formatRelative(inventory.data.read_at)}`
+                    : "Not read yet."
               }
-              needsAPerson={waitingKnown ? anchorFinding + conflicts.length : 0}
             />
-            <SystemHealth target={target} />
+            <StatCard
+              label="Waiting on a person"
+              value={waitingKnown ? `${waiting}` : "—"}
+              tone={waitingKnown && waiting > 0 ? "danger" : "neutral"}
+              detail={
+                !waitingKnown
+                  ? "Still checking."
+                  : waiting === 0
+                    ? "Nothing needs a decision."
+                    : "See Waiting on a person below."
+              }
+            />
+            <StatCard
+              label="Maintenance"
+              value={
+                lifecycle === "draining" ? "Finishing up" : lifecycle === "read_only" ? "Read-only" : "Active"
+              }
+              tone={lifecycle === "active" ? "neutral" : "accent"}
+              detail={
+                lifecycle === "draining"
+                  ? "Refusing new changes; finishing what's already sent."
+                  : lifecycle === "read_only"
+                    ? "Refusing every change. Reads keep working."
+                    : "Accepting changes normally."
+              }
+            />
           </div>
+
+          <ConnectionNotices target={target} health={health.data} />
+          <SystemHealth target={target} />
           <LifecycleControl target={target} health={health.data} />
         </Region>
 
@@ -178,17 +233,6 @@ export function TargetOverview({ target }: { target: string }) {
   );
 }
 
-/**
- * Health — five readings a single "status" chip would flatten, plus the one
- * finding that is not about health at all.
- *
- * Each reading sends an operator to a different machine, so each is rendered as
- * itself. The tones are load-bearing and follow §21: a maintenance state
- * somebody chose is ACCENT, because amber would read as a fault and send them
- * looking for one; the backend backing off is danger and says so in words,
- * because an operator who reads `circuit_open` as "the target is down" looks at
- * the wrong machine entirely.
- */
 /**
  * The NAS's own account of itself: alerts, pools, services.
  *
@@ -498,259 +542,200 @@ function ReconcileControl({ target }: { target: string }) {
 }
 
 /**
- * What the roster's `auth_mode` means in words.
- *
- * `derived` is the accurate token and an unhelpful thing to render: it names the
- * mechanism, and the operator's question is whether the channel is authenticated
- * at all. `none` never reaches this page — a target with no secret does not
- * register — but it is spelled out rather than left to a fallback, because the
- * one thing this line must never do is read as reassurance when it is not.
+ * Some add-ons report `product_version` already carrying the product name
+ * ("TrueNAS-25.10.5"), which doubled the name wherever it was shown beside
+ * one ("TrueNAS TrueNAS-25.10.5"). Stripped once, here, so every caller gets
+ * a plain version number.
  */
-function authLabel(mode: string, name: string): string {
-  if (mode === "derived") return `Connection to ${name} signed with this deployment's key`;
-  if (mode === "none") return `Connection to ${name} NOT secured — no key configured`;
-  return `Connection to ${name} secured by ${mode}`;
+function versionLabel(name: string, productVersion?: string): string {
+  if (!productVersion) return "";
+  const stripped = productVersion.replace(new RegExp(`^${name}[-\\s]*`, "i"), "");
+  return stripped || productVersion;
 }
 
-function Health({
+/**
+ * The one status card (matching /zitadel): a dot, a bold sentence with a
+ * cause, one sentence of consequence. Everything this replaced — a dedicated
+ * "Can Syndra reach it" card ending in a label/value grid with a huge gap
+ * beneath its last row — said less in more space.
+ */
+function StatusVerdict({
   target,
   health,
   isLoading,
   transportError,
-  needsAPerson,
 }: {
   target: string;
   health: TargetHealth | undefined;
   isLoading: boolean;
   transportError?: string;
-  /** How many Syndra-side findings are waiting in the region below. */
-  needsAPerson: number;
 }) {
   const name = targetLabel(target);
-  return (
-    <Card>
-      <CardHeader title="Can Syndra reach it" />
-      <div className="grid gap-3 px-5 pb-5">
-        {isLoading && !health && <p className="text-[14px] text-faint">Reading…</p>}
 
-        {/* The two Syndra-side findings used to render HERE, above the
-            reachability reading. The priority was right and the placement was
-            not: neither is a fact about whether Syndra can reach the machine,
-            both stand whether or not it answers, and both wait on a person —
-            which is the definition of the region below. A reader who met them
-            in a list of readings skimmed them in the same rhythm as
-            `in flight: 0`.
+  if (isLoading && !health) {
+    return (
+      <div className="panel px-5 py-4">
+        <p className="text-[14px] text-faint">Checking whether Syndra can reach {name}…</p>
+      </div>
+    );
+  }
 
-            What stays is one red line saying something below needs a person
-            before this card can be trusted. */}
-        {needsAPerson > 0 && (
-          <p className="text-[13.5px] font-semibold text-danger-text">
-            {needsAPerson === 1
-              ? "One item under Waiting on a person needs a decision before this card can be trusted."
-              : `${needsAPerson} items under Waiting on a person need a decision before this card can be trusted.`}
-          </p>
-        )}
+  if (transportError) {
+    return (
+      <div className="danger-note px-5 py-4">
+        <div className="text-[15px] font-semibold text-danger-text">
+          Not answering — connection key missing.
+        </div>
+        <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
+          Syndra cannot read the key it uses to talk to {name}, so it cannot make any request.
+          This is a problem on <strong className="font-semibold">the Syndra server</strong>, not
+          on {name}: {transportError}
+        </p>
+      </div>
+    );
+  }
 
-        {/* Above reachability, because it EXPLAINS it. A target whose transport
-            secret cannot be read will also not answer, and an operator who
-            reads "not answering" first goes to the NAS — which is the wrong
-            machine, and the one that takes longest to rule out. */}
-        {transportError && (
-          <Reading tone="danger" label="Connection key missing">
-            Syndra cannot read the key it uses to talk to {name}, so it cannot make any
-            request. This is a problem on{" "}
-            <strong className="font-semibold">the Syndra server</strong>, not on {name}:{" "}
-            {transportError}
-          </Reading>
-        )}
-
+  // `circuit_open` forces this branch even when the last reading said
+  // `reachable`: it means Syndra itself has stopped attempting requests
+  // after repeated failures, which is not the same fact as the target
+  // answering normally, and an operator who reads the tile below as healthy
+  // would look at the wrong machine when Syndra is the one backing off.
+  if (!health || !health.reachable || health.circuit_open) {
+    return (
+      <div className="danger-note px-5 py-4">
+        <div className="text-[15px] font-semibold text-danger-text">
+          {health?.circuit_open ? "Paused after failures." : "Not answering."}
+        </div>
+        <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
+          {health?.circuit_open ? (
+            <>
+              Syndra has stopped trying to reach {name} for a while after repeated failures, and
+              will try again by itself.{" "}
+              <strong className="font-semibold">This does not mean {name} is down</strong> — look
+              at the Syndra server.
+            </>
+          ) : (
+            <>
+              {health?.detail || `${name} did not answer.`} The program that connects Syndra to{" "}
+              {name}, on the Syndra server, is the thing to look at.
+            </>
+          )}
+        </p>
         {health && !health.reachable && (
-          <Reading tone="danger" label="Not answering">
-            {health.detail || `${name} did not answer.`} The program that connects Syndra to{" "}
-            {name}, on the Syndra server, is the thing to look at.
-          </Reading>
-        )}
-
-        {health?.circuit_open && (
-          <Reading tone="danger" label="Paused after failures">
-            Syndra has stopped trying to reach {name} for a while after repeated failures, and
-            will try again by itself.{" "}
-            <strong className="font-semibold">This does not mean {name} is down</strong> — look
-            at the Syndra server.
-          </Reading>
-        )}
-
-        {health?.reachable && health.lifecycle && health.lifecycle !== "active" && (
-          // Accent, never amber. Somebody chose this, and the same choice is
-          // accent on the withdrawn-access queue for the same reason.
-          <Reading tone="accent" label={health.lifecycle === "draining" ? "Finishing up" : "Read-only"}>
-            Set on purpose{health.lifecycle_note ? `: ${health.lifecycle_note}` : ""}.{" "}
-            {health.lifecycle === "draining"
-              ? "New changes are refused and the ones already sent are being allowed to finish."
-              : "Every change is refused at once. Reads keep working."}
-          </Reading>
-        )}
-
-        {health?.in_flight !== undefined && health.in_flight > 0 && (
-          <Reading tone="warn" label="Still finishing">
-            {health.in_flight} change{health.in_flight === 1 ? "" : "s"} sent before the pause{" "}
-            {health.in_flight === 1 ? "has" : "have"} not completed. Wait for this to reach
-            zero before changing the {name} API key.
-          </Reading>
-        )}
-
-        {/* A credential whose expiry nobody recorded. Not amber for its own
-            sake: the key CAN expire without Syndra knowing, and the day it does
-            the target simply stops answering — which reads as an outage and
-            sends an operator to the NAS. `none` is an operator's deliberate
-            choice and says nothing here. */}
-        {health?.reachable && health.key_expiry === "unrecorded" && (
-          <Reading tone="warn" label="API key expiry not recorded">
-            Syndra does not know when the {name} API key (a password for a program rather
-            than a person) expires. For whoever runs the Syndra server: if it has an expiry,
-            set <Mono>TRUENAS_API_KEY_EXPIRES_AT</Mono> in the deployment&rsquo;s{" "}
-            <Mono>.env</Mono> so Syndra warns before it fails; if it never expires, set it to{" "}
-            <Mono>never</Mono>.
-          </Reading>
-        )}
-
-        {/* Auditing off means activity reports are empty, and an empty report
-            is indistinguishable from a member who did nothing. Said here so it
-            is learned before somebody depends on it. */}
-        {health?.reachable && health.shares_readable && (health.unaudited_shares?.length ?? 0) > 0 && (
-          <Reading tone="warn" label="SMB auditing is off">
-            {health.unaudited_shares!.length === 1 ? "Share" : "Shares"}{" "}
-            {health.unaudited_shares!.map((s, i, all) => (
-              <Fragment key={s}>
-                {/* Separators between, never before the first and never after
-                    the last: two names run together into one that names no
-                    share at all. */}
-                {i > 0 && (i === all.length - 1 ? " and " : ", ")}
-                <Mono>{s}</Mono>
-              </Fragment>
-            ))}{" "}
-            {health.unaudited_shares!.length === 1 ? "has" : "have"} auditing disabled, so a
-            member&rsquo;s activity report comes back empty whether or not they used it.
-            Enable it per share in {name}: Shares → SMB → Edit → Advanced.
-          </Reading>
-        )}
-
-        {health?.reachable && health.version_tested === false && (
-          <Reading tone="warn" label={`Untested ${name} version`}>
-            {health.version_note || `This version of ${name} has not been tested with Syndra.`}{" "}
-            Reads keep working; changes are refused.
-          </Reading>
-        )}
-
-        {health?.reachable &&
-          (health.lifecycle ?? "active") === "active" &&
-          !health.circuit_open &&
-          health.version_tested !== false && (
-            <Reading tone="healthy" label="Serving">
-              {health.product} {health.product_version} · answering, tested, and accepting
-              changes.
-            </Reading>
-          )}
-
-        <dl className="grid gap-2 pt-1 text-[13.5px]">
-          {health?.last_read_at && (
-            <Line label="Last answered">
-              <Relative iso={health.last_read_at} />
-            </Line>
-          )}
-          {health?.key_expires_at && (
-            <Line label="API key expires">
-              <Relative iso={health.key_expires_at} />
-            </Line>
-          )}
-          {health?.log_head && (
-            <Line label="Change log">
-              {health.log_records ?? 0} entries ·{" "}
-              <span className="font-mono text-[12.5px] text-faint">
-                {health.log_head.slice(0, 12)}
-              </span>
-            </Line>
-          )}
-        </dl>
-
-        {/* The add-on's MIRROR, and only while it is what a read would be
-            served FROM.
-
-            `snapshot_taken_at` dates the copy in the add-on's own store, which
-            is rewritten by a subjects read — a reconcile — and by nothing else.
-            It is not the age of anything on this card. Rendered unconditionally
-            it produced a contradiction two lines tall: "answering · last
-            answered just now", then "last known state was read 4 hours ago —
-            too old to act on", on a target that was answering perfectly and
-            simply had not been reconciled since breakfast.
-
-            Both sentences were true and the pairing was not. `STALE_AFTER_MS`
-            is ten minutes because that is the adoption gate — too old to BIND
-            an identity on — and nothing on this card binds anything, so the
-            threshold was answering a question nobody had asked. Worse, with no
-            `onRefresh` the strip printed "reload the page to read it again",
-            and a reload re-reads `/health`, which cannot move this timestamp.
-            An instruction that does nothing is the one thing every reading on
-            this page is forbidden to be.
-
-            So: only when the target is NOT answering, which is exactly when the
-            mirror becomes the thing being shown — and `current: false`, because
-            it is a copy whatever its age. That is the `provisional` reading this
-            component was built for, and it says the true sentence: this is the
-            last state seen, and here is how old it is. */}
-        {health && !health.reachable && (
-          <ReadFreshness
-            subject={`${name}'s last known state`}
-            state={{ readAt: health.snapshot_taken_at, current: false }}
-          />
+          <div className="mt-2">
+            <ReadFreshness
+              subject={`${name}'s last known state`}
+              state={{ readAt: health.snapshot_taken_at, current: false }}
+            />
+          </div>
         )}
       </div>
-    </Card>
+    );
+  }
+
+  const lifecycle = health.lifecycle ?? "active";
+  const paused = lifecycle !== "active";
+
+  return (
+    <div className="panel px-5 py-4">
+      <div className="flex items-center gap-2.5 text-[15px] font-semibold">
+        <span
+          aria-hidden
+          className={`h-2 w-2 flex-none rounded-pill ${paused ? "bg-accent" : "bg-healthy"}`}
+        />
+        Reachable — answered just now.
+      </div>
+      <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
+        {paused
+          ? `Syndra can reach ${name}, but it is ${stateLabel(lifecycle)} — somebody set that on purpose${
+              health.lifecycle_note ? `: ${health.lifecycle_note}.` : "."
+            } ${
+              lifecycle === "draining"
+                ? "New changes are refused and the ones already sent are being allowed to finish."
+                : "Every change is refused at once. Reads keep working."
+            }`
+          : `Syndra is talking to ${name} normally. Changes you send from Pending changes reach it as soon as you send them.`}
+      </p>
+    </div>
   );
 }
 
 /**
- * The page's one-line answer, under its title.
- *
- * The page difference between a quiet target and one with somebody's access
- * disputed is carried HERE and in each region's lede — by copy in a fixed
- * place, never by a panel appearing. That is what lets the structure stay
- * still while the page still reads differently.
+ * Syndra-side warnings that stand whether or not the target is reachable, and
+ * that the one-sentence status card above has no room for. Renders nothing
+ * when there is nothing to say — a healthy target gets no extra card, same as
+ * /zitadel.
  */
-function TargetLede({
+function ConnectionNotices({
   target,
   health,
-  waiting,
-  known,
 }: {
   target: string;
-  health?: TargetHealth;
-  waiting: number;
-  known: boolean;
+  health: TargetHealth | undefined;
 }) {
   const name = targetLabel(target);
-  const reach = !health
-    ? `Reading ${name}.`
-    : !health.reachable
-      ? `${name} is not answering.`
-      : health.lifecycle === "draining"
-        ? `${name} is finishing up (refusing new changes while the ones already sent finish) — somebody set that on purpose.`
-        : health.lifecycle && health.lifecycle !== "active"
-          ? `${name} is read-only (refusing every change) — somebody set that on purpose.`
-          : `${name}${health.product_version ? ` ${health.product_version}` : ""}, answering and accepting changes.`;
+  if (!health?.reachable) return null;
 
-  return (
-    <p className="max-w-[86ch] text-[15px] leading-[1.6] text-muted">
-      {reach}{" "}
-      {!known ? null : waiting === 0 ? (
-        <span className="text-ink">Nothing is waiting on a person.</span>
-      ) : (
-        <span className="font-semibold text-danger-text">
-          {waiting === 1 ? "One thing is" : `${waiting} things are`} waiting on a person.
-        </span>
-      )}
-    </p>
-  );
+  const notices: React.ReactNode[] = [];
+
+  if (health.in_flight !== undefined && health.in_flight > 0) {
+    notices.push(
+      <Reading key="in-flight" tone="warn" label="Still finishing">
+        {health.in_flight} change{health.in_flight === 1 ? "" : "s"} sent before the pause{" "}
+        {health.in_flight === 1 ? "has" : "have"} not completed. Wait for this to reach zero
+        before changing the {name} API key.
+      </Reading>,
+    );
+  }
+
+  // A credential whose expiry nobody recorded. Not amber for its own sake:
+  // the key CAN expire without Syndra knowing, and the day it does the
+  // target simply stops answering — which reads as an outage and sends an
+  // operator to the NAS. `none` is an operator's deliberate choice and says
+  // nothing here.
+  if (health.key_expiry === "unrecorded") {
+    notices.push(
+      <Reading key="key-expiry" tone="warn" label="API key expiry not recorded">
+        Syndra does not know when the {name} API key (a password for a program rather than a
+        person) expires. For whoever runs the Syndra server: if it has an expiry, set{" "}
+        <Mono>TRUENAS_API_KEY_EXPIRES_AT</Mono> in the deployment&rsquo;s <Mono>.env</Mono> so
+        Syndra warns before it fails; if it never expires, set it to <Mono>never</Mono>.
+      </Reading>,
+    );
+  }
+
+  // Auditing off means activity reports are empty, and an empty report is
+  // indistinguishable from a member who did nothing. Said here so it is
+  // learned before somebody depends on it.
+  if (health.shares_readable && (health.unaudited_shares?.length ?? 0) > 0) {
+    notices.push(
+      <Reading key="unaudited" tone="warn" label="SMB auditing is off">
+        {health.unaudited_shares!.length === 1 ? "Share" : "Shares"}{" "}
+        {health.unaudited_shares!.map((s, i, all) => (
+          <Fragment key={s}>
+            {i > 0 && (i === all.length - 1 ? " and " : ", ")}
+            <Mono>{s}</Mono>
+          </Fragment>
+        ))}{" "}
+        {health.unaudited_shares!.length === 1 ? "has" : "have"} auditing disabled, so a
+        member&rsquo;s activity report comes back empty whether or not they used it. Enable it
+        per share in {name}: Shares → SMB → Edit → Advanced.
+      </Reading>,
+    );
+  }
+
+  if (health.version_tested === false) {
+    notices.push(
+      <Reading key="version" tone="warn" label={`Untested ${name} version`}>
+        {health.version_note || `This version of ${name} has not been tested with Syndra.`} Reads
+        keep working; changes are refused.
+      </Reading>,
+    );
+  }
+
+  if (notices.length === 0) return null;
+
+  return <div className="grid gap-2.5 px-1">{notices}</div>;
 }
 
 /**
@@ -805,6 +790,9 @@ const OPERATION_LABEL: Record<string, string> = {
   "account.purge": "delete accounts",
   "account.list": "read the list of accounts",
   "health.get": "read the system's own health report",
+  "activity.get": "read what happened on the system for one person",
+  "password.rotate": "replace a person's password on the system",
+  "storage.status": "read space used and quota",
 };
 
 function Capabilities({ registered }: { registered: TargetSummary }) {
@@ -1241,15 +1229,6 @@ function Reading({
   );
 }
 
-function Line({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex gap-3">
-      <dt className="w-40 shrink-0 text-faint">{label}</dt>
-      <dd className="text-muted">{children}</dd>
-    </div>
-  );
-}
-
 /**
  * How many roles reach this target, and how many people hold them.
  *
@@ -1327,7 +1306,9 @@ function Inventory({ target }: { target: string }) {
   // The outcome is kept WITH the account it happened to. It used to be one
   // unattributed result at the foot of the card, which on a list of eight
   // accounts said "Adopted." about none of them in particular.
-  const [result, setResult] = useState<{ username: string; result: AdoptionResult } | null>(null);
+  const [result, setResult] = useState<
+    { username: string; subjectId: string; result: AdoptionResult } | null
+  >(null);
 
   const read = {
     readAt: inventory.data?.read_at,
@@ -1385,7 +1366,7 @@ function Inventory({ target }: { target: string }) {
                         { username: account.username, subjectId },
                         {
                           onSuccess: (res) => {
-                            setResult({ username: account.username, result: res });
+                            setResult({ username: account.username, subjectId, result: res });
                             setAdopting(null);
                           },
                         },
@@ -1393,7 +1374,12 @@ function Inventory({ target }: { target: string }) {
                     }
                   />
                 ) : result?.username === account.username ? (
-                  <AdoptionOutcome result={result.result} name={name} onDismiss={() => setResult(null)} />
+                  <AdoptionOutcome
+                    result={result.result}
+                    subjectId={result.subjectId}
+                    name={name}
+                    onDismiss={() => setResult(null)}
+                  />
                 ) : null
               }
             >
@@ -1495,6 +1481,13 @@ function AdoptPanel({
           Their Syndra ID — the long code at the end of the address when you open their page
           under People.
         </FieldHint>
+        {/* Typed, not picked — so the one check available before the point of
+            no return is showing whose name that code actually resolves to. */}
+        {subjectId.trim() !== "" && (
+          <p className="text-[13.5px]">
+            <UserName id={subjectId.trim()} fallback="No account matches that ID" />
+          </p>
+        )}
       </div>
       <ConfirmByTyping
         expected={username}
@@ -1548,10 +1541,12 @@ function AdoptPanel({
  */
 function AdoptionOutcome({
   result,
+  subjectId,
   name,
   onDismiss,
 }: {
   result: AdoptionResult;
+  subjectId: string;
   name: string;
   onDismiss: () => void;
 }) {
@@ -1564,8 +1559,16 @@ function AdoptionOutcome({
       }`}
     >
       <span>
-        {result.detail ??
-          (unconfirmed ? `${name} did not confirm it. Nothing was recorded.` : "Assigned.")}
+        {/* The backend's own `detail` never names the person — it is written
+            for the audit trail, not the row. Named here so the operator sees
+            who they just handed the account to, not only that something
+            happened. */}
+        {!unconfirmed && (
+          <>
+            Assigned to <UserName id={subjectId} fallback={subjectId} />.{" "}
+          </>
+        )}
+        {result.detail ?? (unconfirmed ? `${name} did not confirm it. Nothing was recorded.` : "Assigned.")}
       </span>
       {result.warning && <span className="text-warn-text">{result.warning}</span>}
       <span className="flex-1" />
@@ -1599,58 +1602,31 @@ function LifecycleControl({ target, health }: { target: string; health: TargetHe
   const name = targetLabel(target);
 
   const STATES: Array<{ id: string; label: string; blurb: string }> = [
-    { id: "active", label: "Active", blurb: "Accept changes normally." },
+    { id: "active", label: "Active", blurb: "Accept changes normally. Reads keep working." },
     {
       id: "draining",
       label: "Finishing up",
-      blurb: `Refuse new changes, let the ones already sent finish. This is the safe state for changing the ${name} API key.`,
+      blurb: `Refuse new changes, let the ones already sent finish. Reads keep working. This is the safe state for changing the ${name} API key.`,
     },
-    { id: "read_only", label: "Read-only", blurb: "Refuse every change at once." },
+    { id: "read_only", label: "Read-only", blurb: "Refuse every change at once. Reads keep working." },
   ];
+  const selected = STATES.find((state) => state.id === current) ?? STATES[0];
 
   return (
     <Card>
       <CardHeader title="Maintenance" note={`Currently ${stateLabel(current)}`} />
       <div className="grid gap-3 px-5 pb-5">
-        <dl className="grid gap-1.5 text-[13.5px]">
-          {STATES.map((state) => (
-            <div key={state.id} className="flex gap-3">
-              <dt
-                className={`w-24 shrink-0 font-semibold ${
-                  state.id === current ? "text-accent-text" : "text-faint"
-                }`}
-              >
-                {state.label}
-              </dt>
-              <dd className="text-muted">{state.blurb}</dd>
-            </div>
-          ))}
-        </dl>
-        <p className="text-[13px] text-faint">Reads keep working in all three.</p>
-        <Input aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
-        <p className="-mt-1.5 text-[13px] text-faint">
-          Why — this is what the next person to open this page reads.
-        </p>
+        {/* One compact row, current marked by fill and by its own label —
+            not three description-list rows above three buttons that said the
+            same three names twice. */}
         <div className="flex flex-wrap gap-2">
           {STATES.map((state) => (
             <Button
               key={state.id}
-              // All three outline, including the one already in force. A
-              // borderless control between two bordered ones reads as a
-              // rendering fault, not as emphasis — and the label ("Already
-              // active") plus the disabled state already say which is current.
-              variant="outline"
+              variant={state.id === current ? "accentSoft" : "outline"}
               size="sm"
+              aria-pressed={state.id === current}
               disabled={!reason || set.isPending || state.id === current}
-              // Every non-current button, not just the first: "Finishing up"
-              // and "Read-only" went dark from the same missing-reason cause
-              // with nothing said, and the label already covers the
-              // state.id === current case ("Already active").
-              reason={
-                state.id !== current && !reason
-                  ? "Say why first — the reason is recorded against the change."
-                  : undefined
-              }
               onClick={() =>
                 set.mutate({ state: state.id, reason }, { onSuccess: () => setReason("") })
               }
@@ -1659,6 +1635,24 @@ function LifecycleControl({ target, health }: { target: string; health: TargetHe
             </Button>
           ))}
         </div>
+        <p className="text-[13.5px] text-muted">{selected.blurb}</p>
+
+        <FieldLabel htmlFor="lifecycle-reason">Reason</FieldLabel>
+        <Textarea
+          id="lifecycle-reason"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        {/* One helper line, not one per button: the reason blocks every
+            non-current button for the same cause, and saying so three times
+            over three identical dark buttons taught nothing a single line
+            here does not. */}
+        <FieldHint>
+          {reason
+            ? "Recorded against the change, and shown to the next person who opens this page."
+            : "Say why first — a state change needs a reason before any button above will work."}
+        </FieldHint>
+
         {/* A lifecycle change that did not land (design B2).
 
             The refusal and the state are two blocks, in that order, and the

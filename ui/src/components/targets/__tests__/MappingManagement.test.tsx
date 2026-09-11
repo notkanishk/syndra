@@ -6,6 +6,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MappingManagement } from "@/components/targets/MappingManagement";
 import type { MappingHistory, RoleMapping } from "@/lib/queries/useMappings";
 
+const miss = { value: undefined, resolved: true } as const;
+
+// A role key alone is not an identity — "maker" means nothing without the
+// project it belongs to. The resolver stands in for the catalog so ledes and
+// labels are checked against the human-readable pair, not the raw key.
+vi.mock("@/lib/queries/useNameResolver", () => ({
+  useNameResolver: () => ({
+    resolveUser: () => miss,
+    resolveProject: (id: string) => (id === "pLab" ? { value: { name: "Laser Lab" }, resolved: true } : miss),
+    resolveRole: () => miss,
+    resolveBundle: () => miss,
+  }),
+}));
+
 /**
  * §24 — the highest-leverage object in the system, and the ceremony sized to it.
  *
@@ -125,6 +139,18 @@ describe("what roles reach a target", () => {
 
     expect(screen.queryByRole("button", { name: /bring accounts in line/i })).toBeNull();
     expect(screen.getByText(/Nobody holds this role/i)).toBeInTheDocument();
+  });
+
+  // "maker" alone is not an identity — the same key means a different role in
+  // every other project. The edit and delete dialogs used to say "The role
+  // maker currently gives...", naming the key with no project in sight
+  // anywhere else in the dialog either.
+  it("names the role with its project, not the bare key, when editing or removing a mapping", () => {
+    state.holders = ["u1"];
+    renderMappings();
+
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    expect(screen.getByText(/Laser Lab \/ Maker currently gives/)).toBeInTheDocument();
   });
 
   // Rehearse-then-apply, through the shared dialog, so an operator who has read

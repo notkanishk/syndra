@@ -127,6 +127,24 @@ export function shortId(id: string | undefined, prefix: string): string {
   return `${prefix}_${id.replace(/-/g, "").slice(0, 4)}`;
 }
 
+/**
+ * What kind of thing `entry.target_id` names, so the audit row asks the right
+ * resolver for it.
+ *
+ * `target_id` is not always a person: `bundle.role_added`/`role_removed`
+ * record the bundle itself there (see db.CascadeAudit), and a raw bundle uuid
+ * handed to the person resolver renders as "Unknown account <uuid>" — a
+ * confident lie about an id that was never a person's in the first place.
+ * `mapping_rule.*` writes no target today, but is matched here too so that
+ * changes on the write side once again can't silently regress an id no
+ * resolver here has ever been asked to explain.
+ */
+export function targetKind(action: string): "user" | "bundle" | "rule" {
+  if (action === "bundle.role_added" || action === "bundle.role_removed") return "bundle";
+  if (action.startsWith("mapping_rule.")) return "rule";
+  return "user";
+}
+
 export function traceFor(entry: AuditEntry): AuditTrace {
   if (entry.cascade_id) {
     return {

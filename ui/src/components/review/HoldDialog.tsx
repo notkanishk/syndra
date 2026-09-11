@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { targetLabel } from "@/lib/nav";
-import { NOTHING_CHANGED } from "@/lib/outcome";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useCreateHold } from "@/lib/queries/useHolds";
 
 /**
@@ -63,6 +64,8 @@ export function HoldDialog({
   const [ending, setEnding] = useState<Ending>("stays");
   const [date, setDate] = useState("");
   const [reason, setReason] = useState("");
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const succeeded = outcome?.kind === "applied";
 
   const ready = reason.trim() !== "" && date !== "" && !create.isPending;
 
@@ -151,46 +154,59 @@ export function HoldDialog({
           </FieldHint>
         </div>
 
-        {create.error && (
-          <p className="text-[13.5px] text-danger-text">
-            {create.error instanceof Error
-              ? create.error.message
-              : "The hold could not be placed."}{" "}
-            {NOTHING_CHANGED}
-          </p>
-        )}
+        {outcome && <ActionOutcome outcome={outcome} />}
       </div>
 
       <ModalFooter note={`Holding ${spoken} does not remove the role that gives it.`}>
+        {!succeeded && (
+          <Button
+            variant="accent"
+            disabled={!ready}
+            isPending={create.isPending}
+            reason={
+              !ready
+                ? !reason.trim()
+                  ? "Say why this is on hold — it is recorded against the hold."
+                  : "Choose the date the hold should be looked at again."
+                : undefined
+            }
+            onClick={async () => {
+              try {
+                await create.mutateAsync({
+                  subjectId,
+                  target,
+                  field,
+                  value,
+                  reason,
+                  expiresAt: ending === "lifts" ? new Date(date).toISOString() : undefined,
+                  reviewDate: ending === "stays" ? new Date(date).toISOString() : undefined,
+                });
+                // A hold is one write in Syndra's own database (`handleCreateAllowance`,
+                // HTTP 201) — nothing here reaches Zitadel or an outbox, so "waiting to
+                // be sent" would be a lie. What lags is the connected system, which
+                // still shows the access until it is next brought in line.
+                setOutcome({
+                  kind: "applied",
+                  message: `Hold placed on ${spoken} for ${subjectName}.`,
+                  detail:
+                    ending === "stays"
+                      ? `It appears under Review › Holds due on the date you set. ${targetLabel(target)} catches up on its next pass.`
+                      : `It lifts itself on the date you set. ${targetLabel(target)} catches up on its next pass.`,
+                });
+              } catch (error) {
+                setOutcome(outcomeFromError(error));
+              }
+            }}
+          >
+            {create.isPending ? "Holding…" : `Hold ${spoken}`}
+          </Button>
+        )}
         <Button
-          variant="accent"
-          disabled={!ready}
-          reason={
-            !ready
-              ? !reason.trim()
-                ? "Say why this is on hold — it is recorded against the hold."
-                : "Choose the date the hold should be looked at again."
-              : undefined
-          }
-          onClick={() =>
-            create.mutate(
-              {
-                subjectId,
-                target,
-                field,
-                value,
-                reason,
-                expiresAt: ending === "lifts" ? new Date(date).toISOString() : undefined,
-                reviewDate: ending === "stays" ? new Date(date).toISOString() : undefined,
-              },
-              { onSuccess: onClose },
-            )
-          }
+          variant={succeeded ? "accent" : "ghost"}
+          onClick={onClose}
+          disabled={create.isPending}
         >
-          {create.isPending ? "Holding…" : `Hold ${spoken}`}
-        </Button>
-        <Button variant="ghost" onClick={onClose} disabled={create.isPending}>
-          Cancel
+          {succeeded ? "Done" : "Cancel"}
         </Button>
       </ModalFooter>
     </Modal>

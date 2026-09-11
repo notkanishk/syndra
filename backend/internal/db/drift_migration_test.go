@@ -50,7 +50,7 @@ func TestDriftMigrationEnumsMatchCode(t *testing.T) {
 			t.Errorf("drift_type %s is written by code but permitted by no migration's CHECK", v)
 		}
 	}
-	for _, v := range []string{"'pending_triage'", "'attributed'", "'revoked'", "'marked_external'"} {
+	for _, v := range []string{"'pending_triage'", "'attributed'", "'revoked'", "'marked_external'", "'resolved'"} {
 		if !strings.Contains(sql, v) {
 			t.Errorf("status %s written by code but missing from 000016 CHECK", v)
 		}

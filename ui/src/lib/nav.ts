@@ -264,8 +264,6 @@ export interface Crumb {
  * the name resolves (see useCrumb) rather than flashing a raw id.
  */
 export function crumbsFor(pathname: string, audience: Audience): Crumb[] {
-  const entries = navFor(audience);
-
   // A target's own routes, resolved from the PATH rather than from the roster.
   //
   // The per-target rows are appended by `targetNav` from deployment
@@ -276,13 +274,36 @@ export function crumbsFor(pathname: string, audience: Audience): Crumb[] {
   //
   // The target stays a LINK on its sub-routes, because the likeliest move after
   // opening a target's mappings is going back to the page you opened them from.
+  //
+  // Not gated on `audience === "advanced"` any more: the target's own routes
+  // live under System, an Advanced-only section, but the crumb names the PAGE,
+  // not the sidebar — an operator who followed a link there in Basic still
+  // needs to know where they are.
   const onTarget = /^\/system\/targets\/([^/]+)(\/.*)?$/.exec(pathname);
-  if (onTarget && audience === "advanced") {
+  if (onTarget && audience !== "member") {
     const [, target, rest] = onTarget;
     const self: Crumb = { label: targetLabel(target), href: `/system/targets/${target}` };
     return rest ? [{ label: "System" }, self] : [{ label: "System" }, { label: self.label }];
   }
 
+  const own = findCrumb(navFor(audience), pathname);
+  if (own.length > 0) return own;
+
+  // The view toggle governs the SIDEBAR, not the page's own name. Basic is a
+  // subset of Advanced's tree (`ADVANCED_NAV = [...BASIC_NAV, ...]`), so an
+  // operator in Basic who reaches an Advanced-only page (a link, a bookmark, a
+  // direct URL) still landed somewhere real — looking it up in the full
+  // operator nav is what keeps the crumb the page's own name instead of the
+  // "Syndra" fallback below. A member's tree is not a subset of anything here,
+  // so this stays out of that case.
+  if (audience !== "member") {
+    return findCrumb(ADVANCED_NAV, pathname);
+  }
+
+  return [];
+}
+
+function findCrumb(entries: NavEntry[], pathname: string): Crumb[] {
   for (const entry of entries) {
     if (entry.kind === "leaf") {
       if (entry.href === pathname) return [{ label: entry.label }];

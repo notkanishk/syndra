@@ -9,6 +9,7 @@ import { Mono } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { holdersLine, holdersToneClass } from "@/lib/holders";
 import { useCrumb } from "@/lib/page-crumb";
 import { useApplications } from "@/lib/queries/useApplications";
 import { useProjects } from "@/lib/queries/useProjects";
@@ -39,6 +40,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const served = (apps.data ?? []).filter((entry) => entry.application.project_id === id);
   const [creating, setCreating] = useState(false);
 
+  const people = holdersLine(
+    project?.member_count ?? 0,
+    project?.confirmed_member_count,
+    project?.observed_member_count,
+  );
+
   return (
     <div className="flex flex-col gap-[18px]">
       <PageHeader
@@ -48,12 +55,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         meta={
           <span className="flex flex-wrap items-center gap-2">
             <span>
-              {project?.member_count ?? 0} people · {projectRoles.length}{" "}
+              {people.headline} {people.headline === "1" ? "person" : "people"} · {projectRoles.length}{" "}
               {projectRoles.length === 1 ? "role" : "roles"}
               {served.length > 0
                 ? ` · serves ${served.map((entry) => entry.application.name).join(" and ")}`
                 : " · no app reads this yet"}
             </span>
+            {people.note && (
+              <span className={`text-[13.5px] ${holdersToneClass[people.tone]}`}>
+                {people.note}
+              </span>
+            )}
             <Mono className="text-faint">{id}</Mono>
           </span>
         }
@@ -100,7 +112,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             />
           }
         >
-          {projectRoles.map((role) => (
+          {projectRoles.map((role) => {
+            const members = holdersLine(
+              role.assigned_user_count,
+              role.confirmed_user_count,
+              role.observed_user_count,
+            );
+            return (
             <div
               key={role.role_key}
               className="row-divider flex items-start gap-[18px] px-5 py-3.5"
@@ -128,12 +146,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
               <Link
                 href={`/projects/${id}/roles/${encodeURIComponent(role.role_key)}`}
-                className="inline-flex min-h-11 w-[96px] shrink-0 items-center justify-end text-[15px] font-semibold text-accent-text desktop:min-h-6"
+                className="flex min-h-11 w-[96px] shrink-0 flex-col items-end justify-center gap-0.5 text-[15px] font-semibold text-accent-text desktop:min-h-6"
               >
-                {role.assigned_user_count} →
+                <span>{members.headline} →</span>
+                {members.note && (
+                  <span
+                    className={`text-[12.5px] font-normal ${holdersToneClass[members.tone]}`}
+                  >
+                    {members.note}
+                  </span>
+                )}
               </Link>
             </div>
-          ))}
+            );
+          })}
         </ListStates>
       </Card>
 

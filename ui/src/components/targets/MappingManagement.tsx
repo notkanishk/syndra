@@ -11,6 +11,7 @@ import { AddMappingButton, RefusedFields } from "@/components/targets/AddMapping
 import { ConvergeButton } from "@/components/targets/ConvergeEntitlements";
 import { Relative } from "@/components/ui/Time";
 import { RoleRef, UserName } from "@/components/names";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
 import {
   applyMappingDelete,
@@ -27,6 +28,7 @@ import {
   type MappingVersion,
   type RoleMapping,
 } from "@/lib/queries/useMappings";
+import { roleLabel } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { type ActionOutcome as Outcome } from "@/lib/outcome";
@@ -119,6 +121,19 @@ export function MappingManagement({ target }: { target: string }) {
  * the product's only honest cohort source — the entitlement endpoints take an
  * explicit list of subjects, and this row is a surface that already knows one.
  */
+/**
+ * A role, in prose form — "Printing Lab / Trained operator" rather than the
+ * bare key. The same pair `<RoleRef/>` shows in a row, read through
+ * `roleLabel()` because a sentence needs the project name, not a key ("admin"
+ * means nothing on its own, and two different projects both have one).
+ */
+function useRoleName(projectId: string, roleKey: string): string {
+  const resolver = useNameResolver();
+  const project = resolver.resolveProject(projectId).value?.name ?? projectId;
+  const role = resolver.resolveRole(projectId, roleKey).value?.display_name;
+  return roleLabel(project, roleKey, role);
+}
+
 function MappingRow({
   mapping,
   first,
@@ -132,6 +147,7 @@ function MappingRow({
 }) {
   const holders = useMappingHolders(mapping.id);
   const cohort = holders.data?.holders ?? [];
+  const roleName = useRoleName(mapping.project_id, mapping.role_key);
 
   return (
     <CardRow first={first} className="flex-wrap">
@@ -153,7 +169,7 @@ function MappingRow({
       <ConvergeButton
         target={mapping.target}
         subjectIds={cohort}
-        label={`everybody holding the role ${mapping.role_key}`}
+        label={`everybody holding ${roleName}`}
         disabled={cohort.length === 0}
         disabledReason="Nobody holds this role"
       />
@@ -197,12 +213,13 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
   const [value, setValue] = useState(mapping.value);
   const [rehearsed, setRehearsed] = useState<MappingRehearsal | null>(null);
   const touch = useIsTouch();
+  const roleName = useRoleName(mapping.project_id, mapping.role_key);
 
   return (
     <RehearsalDialog
       title="Change what this role gives"
       definitionLabel="Save the change"
-      lede={`The role ${mapping.role_key} currently gives ${mapping.field} = ${mapping.value} on ${targetLabel(mapping.target)}. Change it and everybody holding the role is moved too.`}
+      lede={`${roleName} currently gives ${mapping.field} = ${mapping.value} on ${targetLabel(mapping.target)}. Change it and everybody holding the role is moved too.`}
       noun={["person", "people"]}
       ready={value.trim() !== "" && value !== mapping.value}
       compose={
@@ -267,12 +284,13 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
 
 function DeleteMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose: () => void }) {
   const [rehearsed, setRehearsed] = useState<BulkPlan | null>(null);
+  const roleName = useRoleName(mapping.project_id, mapping.role_key);
 
   return (
     <RehearsalDialog
       title="Remove this mapping"
       definitionLabel="Remove the mapping"
-      lede={`The role ${mapping.role_key} will no longer give ${mapping.field} = ${mapping.value} on ${targetLabel(mapping.target)}. Everybody holding the role keeps the role and loses that group.`}
+      lede={`${roleName} will no longer give ${mapping.field} = ${mapping.value} on ${targetLabel(mapping.target)}. Everybody holding the role keeps the role and loses that group.`}
       noun={["person", "people"]}
       // Destructive, because it takes access away — but still rung 2: the
       // cohort is a role's holders rather than a person somebody named, and the

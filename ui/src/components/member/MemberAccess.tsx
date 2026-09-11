@@ -5,7 +5,15 @@ import { MemberCatalog } from "@/components/member/MemberCatalog";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { orderedSources, sourceQualifier, type RoleReason } from "@/components/access/AccessSource";
+import {
+  NotSentYet,
+  nothingSentYet,
+  orderedSources,
+  sourceQualifier,
+  type RoleReason,
+} from "@/components/access/AccessSource";
+import { Withheld } from "@/components/ui/Withheld";
+import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
 import { daysUntil, formatShortDate, humanizeKey, roleLabel } from "@/lib/format";
@@ -21,6 +29,19 @@ import { daysUntil, formatShortDate, humanizeKey, roleLabel } from "@/lib/format
 export function MemberAccess({ session }: { session: SessionUser }) {
   const access = useUserAccess(session.id);
   const grants = useUserGrants(session.id);
+  // What Zitadel actually holds for this person, read through the observer —
+  // the same pipe the operator page uses. Syndra's own list says what was
+  // decided; this says what is usable right now.
+  const upstream = useUpstreamUserGrants(session.id);
+  const held = new Set(
+    (upstream.data?.items ?? []).flatMap((g) => g.roleKeys.map((rk) => `${g.projectId}:${rk}`)),
+  );
+  const standing = (projectId: string, roleKey: string): Standing => {
+    if (upstream.isLoading) return "checking";
+    if (upstream.error || !upstream.data) return "unreachable";
+    if (held.has(`${projectId}:${roleKey}`)) return "held";
+    return upstream.data.complete === false ? "unreachable" : "missing";
+  };
 
   if (access.isLoading) {
     return (
@@ -60,6 +81,11 @@ export function MemberAccess({ session }: { session: SessionUser }) {
     ]),
   );
 
+  // Only what still applies — a lifted or lapsed hold is history, not
+  // something they need to read about on the page that answers "what can I
+  // use right now". Same object PersonAccess shows an operator, member voice.
+  const inForce = (access.data?.allowances ?? []).filter((allowance) => allowance.in_force);
+
   return (
     <div className="flex flex-col gap-[22px]">
       <div>
@@ -69,6 +95,22 @@ export function MemberAccess({ session }: { session: SessionUser }) {
         </h1>
         <div className="mt-2 text-[14.5px] text-faint">{summarySentence(bundles.length, roleCount, Boolean(expiringGrant))}</div>
       </div>
+
+      {inForce.length > 0 && (
+        <Card>
+          <div className="px-5 py-4">
+            <Withheld
+              items={inForce.map((allowance) => ({
+                field: allowance.field,
+                value: allowance.value,
+                reason: allowance.reason,
+                target: allowance.target,
+                reviewDue: allowance.review_due,
+              }))}
+            />
+          </div>
+        </Card>
+      )}
 
       {projects.length === 0 ? (
         <Card>
@@ -107,6 +149,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
                   <ReasonSentence
                     reasons={role.reasons}
                     expiresAt={expiryFor(grants.data, project.project_id, role.role_key)}
+                    standing={standing(project.project_id, role.role_key)}
                   />
                 </div>
               ))}
@@ -158,15 +201,52 @@ export function MemberAccess({ session }: { session: SessionUser }) {
  *   direct  → "Given to you until 2 Aug"   (amber — it ends)
  *   mapping → "Comes with door access, automatically"
  */
+type Standing = "held" | "missing" | "checking" | "unreachable";
+
+/**
+ * The one line that says whether the role is usable right now, from Zitadel's
+ * own answer. "Not there yet" only after a complete read — a partial or failed
+ * read cannot conclude an absence, so it says it could not check.
+ */
+function StandingMark({ standing }: { standing: Standing }) {
+  switch (standing) {
+    case "held":
+      return <span className="text-[12.5px] font-semibold text-healthy">Ready to use</span>;
+    case "missing":
+      return <span className="text-[12.5px] font-semibold text-warn-text">Not there yet</span>;
+    case "checking":
+      return <span className="text-[12.5px] text-faint">Checking…</span>;
+    default:
+      return <span className="text-[12.5px] text-faint">Couldn&rsquo;t check</span>;
+  }
+}
+
 function ReasonSentence({
   reasons,
   expiresAt,
+  standing,
 }: {
   reasons: RoleReason[];
   expiresAt?: string | null;
+  standing: Standing;
 }) {
   const [strongest] = orderedSources(reasons);
   if (!strongest) return <span className="text-[13.5px] text-faint">Part of your membership</span>;
+
+  // Recorded, not yet sent: nothing that gives this role has left Syndra's
+  // outbox, so this row is a decision on file, not access they can use yet.
+  if (nothingSentYet(reasons)) {
+    return <NotSentYet className="text-[13.5px]" />;
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <Reason strongest={strongest} expiresAt={expiresAt} />
+      <StandingMark standing={standing} />
+    </span>
+  );
+}
+
+function Reason({ strongest, expiresAt }: { strongest: RoleReason; expiresAt?: string | null }) {
 
   if (strongest.kind === "direct") {
     const remaining = daysUntil(expiresAt);

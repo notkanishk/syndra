@@ -246,10 +246,10 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
         {visible.map((entry) => (
           <CardRow key={entry.id}>
             <UserAvatar id={entry.requester_id} size="list" />
-            <div className="w-[170px] shrink-0 truncate text-[15px] font-semibold">
+            <div className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold">
               <UserName id={entry.requester_id} />
           </div>
-          <div className="w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
+          <div className="w-full sm:w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
             <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
           </div>
           <div className="min-w-0 flex-1 truncate text-[14px] text-muted">
@@ -319,10 +319,10 @@ function ExpiringRow({
   return (
     <CardRow>
       <UserAvatar id={grant.user_id} size="list" />
-      <div className="w-[170px] shrink-0 truncate text-[15px] font-semibold">
+      <div className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold">
         <UserName id={grant.user_id} />
       </div>
-      <div className="w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
+      <div className="w-full sm:w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
         <RoleRef projectId={grant.project_id} roleKey={grant.role_key} />
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -396,7 +396,7 @@ function OnboardingGaps({ report }: { report: MissedOnboardingReport }) {
           <UserAvatar id={person.user_id} size="list" />
           <Link
             href={`/users/${person.user_id}`}
-            className="w-[170px] shrink-0 truncate text-[15px] font-semibold hover:underline"
+            className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold hover:underline"
           >
             <UserName id={person.user_id} />
           </Link>
@@ -501,11 +501,11 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
             <UserAvatar id={row.user_id} size="list" />
             <Link
               href={`/users/${row.user_id}`}
-              className="w-[170px] shrink-0 truncate text-[15px] font-semibold hover:underline"
+              className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold hover:underline"
             >
               <UserName id={row.user_id} />
             </Link>
-            <div className="w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
+            <div className="w-full sm:w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
               {row.role_keys && row.role_keys.length > 0 ? (
                 row.role_keys.map((key) => (
                   <RoleRef key={key} projectId={row.project_id} roleKey={key} className="mr-2" />

@@ -111,3 +111,62 @@ func TestOnlyAnAppliedWriteCanBeConfirmed(t *testing.T) {
 		t.Fatal("a superseded row was marked as observed in Zitadel")
 	}
 }
+
+// A complete observation confirms every applied write it substantiates, and
+// leaves alone the one it does not — the index, not the row's age, decides.
+func TestConfirmFromObservationStampsWhatTheIndexShows(t *testing.T) {
+	ctx := liveDB(t)
+	seen := appliedRow(t, ctx, time.Hour) // u1 p1 community
+	var unseen string
+	key, _ := newOutboxIdempotencyKey()
+	if err := PG.QueryRow(ctx, `
+		INSERT INTO propagation_outbox
+			(op_type, user_id, project_id, role_keys, payload_json, idempotency_key,
+			 initiated_by, source, target, status, completed_at)
+		VALUES ('add','u1','p1',ARRAY['admin'],'{}',$1,'tester','direct','zitadel','applied',NOW())
+		RETURNING id`, key).Scan(&unseen); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := RecordOrgObservation(ctx, []ObservedGrant{{GrantID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"community"}}}, true, ""); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	n, err := ConfirmFromObservation(ctx)
+	if err != nil {
+		t.Fatalf("ConfirmFromObservation: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("stamped %d rows, want exactly 1", n)
+	}
+	var seenAt, unseenAt *time.Time
+	PG.QueryRow(ctx, `SELECT confirmed_at FROM propagation_outbox WHERE id=$1`, seen).Scan(&seenAt)
+	PG.QueryRow(ctx, `SELECT confirmed_at FROM propagation_outbox WHERE id=$1`, unseen).Scan(&unseenAt)
+	if seenAt == nil {
+		t.Fatalf("the write the index shows was not confirmed")
+	}
+	if unseenAt != nil {
+		t.Fatalf("a write the index does not show was confirmed")
+	}
+}
+
+// An incomplete org listing confirms nothing, however present the grant looks:
+// the same statement confirms revokes by absence, and a partial list has no
+// absences in it.
+func TestConfirmFromObservationRefusesAPartialListing(t *testing.T) {
+	ctx := liveDB(t)
+	id := appliedRow(t, ctx, time.Hour)
+	if err := RecordOrgObservation(ctx, []ObservedGrant{{GrantID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"community"}}}, false, ""); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	n, err := ConfirmFromObservation(ctx)
+	if err != nil {
+		t.Fatalf("ConfirmFromObservation: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("a partial listing stamped %d rows; it must stamp none", n)
+	}
+	var at *time.Time
+	PG.QueryRow(ctx, `SELECT confirmed_at FROM propagation_outbox WHERE id=$1`, id).Scan(&at)
+	if at != nil {
+		t.Fatalf("row confirmed from a partial listing")
+	}
+}

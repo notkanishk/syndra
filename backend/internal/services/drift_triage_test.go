@@ -51,8 +51,8 @@ func withTriageDeps(t *testing.T, items []models.DriftItem, users map[string]mod
 	svcDbGetRoleUsageCounts = func(context.Context) (map[string]db.RoleUsage, error) {
 		return map[string]db.RoleUsage{}, nil
 	}
-	svcRoleHolderFacts = func(context.Context) (map[string]int, map[string]int, models.ObservationBasis, error) {
-		return map[string]int{}, nil, models.ObservationBasis{}, nil
+	svcRoleHolderFacts = func(context.Context) (HolderFacts, error) {
+		return HolderFacts{Given: map[string]int{}}, nil
 	}
 	svcDbGetAllReferencedRoleKeys = func(context.Context) ([][2]string, error) { return nil, nil }
 	directoryFindUser = func(_ context.Context, id string) (models.UserProfile, bool, error) {

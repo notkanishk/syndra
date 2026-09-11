@@ -174,7 +174,7 @@ export function TakeAwayDialog({
       </div>
 
       <ModalFooter
-        note={`The storage password is replaced now. The hold is recorded now and reaches ${name} when someone sends it from Pending changes.`}
+        note={`The storage password is replaced now. The hold is recorded now — revocations send on their own, every few minutes, not from Pending changes.`}
       >
         <Button
           variant="dangerConfirm"

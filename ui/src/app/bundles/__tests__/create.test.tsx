@@ -106,4 +106,25 @@ describe("creating a bundle", () => {
       ],
     });
   });
+
+  /**
+   * `setOutcome` used to fire in the same breath as `onClose`, which unmounts
+   * the dialog before "Lab Tech created" is ever painted — the operator never
+   * saw it landed, let alone what it carries. The dialog now stays open on
+   * success until Done is pressed.
+   */
+  it("shows what was created and stays open until Done is pressed", async () => {
+    openDialog();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Lab Tech" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Laser trained/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Create with 1 role$/ }));
+
+    await waitFor(() => expect(screen.getByText(/Lab Tech created/)).toBeInTheDocument());
+    expect(screen.getByText(/carries 1 role.*Nobody holds it yet/)).toBeInTheDocument();
+    // The create action retires — a second click must not create it twice.
+    expect(screen.queryByRole("button", { name: /^Create with 1 role$/ })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByText(/Lab Tech created/)).toBeNull();
+  });
 });

@@ -24,6 +24,9 @@ import (
 // RoleMember is one holder of a (project, role) pair.
 type RoleMember struct {
 	User models.UserProfile `json:"user"`
+	// InZitadel is whether the observation store shows this holder actually
+	// holding the role. Nil when never observed; false is "given, not there".
+	InZitadel *bool `json:"in_zitadel,omitempty"`
 	// Reasons is ordered direct → bundle → mapping, the fixed reading order
 	// the Access source component uses everywhere.
 	Reasons []models.RoleReason `json:"reasons"`
@@ -65,6 +68,11 @@ type RoleMembersView struct {
 	Group       string       `json:"group,omitempty"`
 	ClonedFrom  string       `json:"cloned_from,omitempty"`
 	Members     []RoleMember `json:"members"`
+	// ObservedOnly is who Zitadel shows holding this role with no Syndra record
+	// behind it — drift, listed here so the page cannot say "4 people hold
+	// this role" while Zitadel holds twelve. Nil when never observed.
+	ObservedOnly []models.UserProfile `json:"observed_only"`
+	Observation  models.ObservationBasis `json:"observation"`
 	// WithheldCount is how many of them are holding the role with something
 	// taken away. Its own number rather than a length the client computes: the
 	// filter pills below count people per SOURCE, and a carve-out is orthogonal
@@ -155,12 +163,37 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 		view.WithheldUnavailable = true
 	}
 
+	basis, err := snap.Basis()
+	if err != nil {
+		return RoleMembersView{}, fmt.Errorf("observation basis: %w", err)
+	}
+	view.Observation = basis
+	if basis.ReadAt != nil {
+		view.ObservedOnly = []models.UserProfile{}
+	}
+
 	for _, user := range snap.Users() {
 		roleMap, _, ferr := snap.For(user.ID)
 		if ferr != nil {
 			return RoleMembersView{}, ferr
 		}
 		role := roleMap[roleKey{projectID: projectID, roleKey: key}]
+		var inZitadel *bool
+		if basis.ReadAt != nil {
+			observed, oerr := snap.Observed(user.ID)
+			if oerr != nil {
+				return RoleMembersView{}, oerr
+			}
+			// Presence is evidence under any read; absence only under a
+			// complete one. A truncated listing leaves "not held" unknown.
+			held := observed[projectID+":"+key]
+			if held || !basis.Truncated {
+				inZitadel = &held
+			}
+			if role == nil && held {
+				view.ObservedOnly = append(view.ObservedOnly, user)
+			}
+		}
 		if role == nil {
 			continue
 		}
@@ -170,7 +203,7 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 			return reasonRank(reasons[i].Kind) < reasonRank(reasons[j].Kind)
 		})
 
-		member := RoleMember{User: user, Reasons: reasons}
+		member := RoleMember{User: user, Reasons: reasons, InZitadel: inZitadel}
 		for _, reason := range reasons {
 			switch reason.Kind {
 			case "direct":

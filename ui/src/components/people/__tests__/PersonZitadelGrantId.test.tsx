@@ -80,7 +80,9 @@ describe("PersonAccess — Zitadel grant id in Advanced (C9a)", () => {
   it("shows the id, labelled as Zitadel's rather than Syndra's", () => {
     renderPerson(true);
     expect(screen.getByText("zg-77")).toBeInTheDocument();
-    expect(document.body.textContent).toMatch(/Zitadel grant/);
+    // The truth is Zitadel: the primary line states what it showed
+    // ("In Zitadel"), not the raw id — the id survives as a muted suffix.
+    expect(document.body.textContent).toMatch(/In Zitadel/);
   });
 
   it("stays out of Basic, but the read behind it does not", () => {
@@ -96,11 +98,17 @@ describe("PersonAccess — Zitadel grant id in Advanced (C9a)", () => {
     expect(state.askedFor).toBe("u1");
   });
 
-  // The endpoint behind this is operator-gated, and this route serves a member their own record.
-  it("never asks on a member's own page, where the answer could only be a 403", () => {
+  // The route is self-or-operator now: a member reads their OWN observed
+  // grants through the same pipe. The raw id stays an operator's handle —
+  // gated on `isOperator`, not on the read itself — but the row-level
+  // confirmation it feeds is exactly as true for a member as for an operator.
+  it("asks on a member's own page too, but keeps the raw id operator-only", () => {
     renderPerson(false);
-    expect(state.askedFor).toBeNull();
+    expect(state.askedFor).toBe("u1");
     expect(screen.queryByText("zg-77")).not.toBeInTheDocument();
+    // The word is introduced with its glossary popover for a member, rather
+    // than assumed the way it is for an operator.
+    expect(screen.getByRole("button", { name: "Zitadel" })).toBeInTheDocument();
   });
 
   // Syndra listing roles for a project Zitadel has no grant for is a real condition. Saying

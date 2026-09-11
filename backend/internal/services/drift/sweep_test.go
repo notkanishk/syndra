@@ -43,6 +43,7 @@ func stubSweep(t *testing.T) {
 	t.Cleanup(swap(&svcAllBundleDerivedGrants, func(context.Context) ([]db.BundleDerivedGrant, error) { return nil, nil }))
 	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) { return nil, nil }))
 	t.Cleanup(swap(&retractExplainedDrift, func(context.Context, string, string, string, string) error { return nil }))
+	t.Cleanup(swap(&closeGoneDriftItem, func(context.Context, string, string) error { return nil }))
 	t.Cleanup(swap(&svcGetExclusions, func(context.Context, string) ([]models.ExternalGrantExclusion, error) { return nil, nil }))
 	t.Cleanup(swap(&upsertDriftItem, func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
 		return "d1", true, nil

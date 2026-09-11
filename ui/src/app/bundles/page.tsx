@@ -498,32 +498,37 @@ function RenameBundleDialog({
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter>
-        <Button
-          variant="accent"
-          disabled={!trimmed || unchanged}
-          isPending={update.isPending}
-          reason={!trimmed ? "A bundle needs a name." : unchanged ? "Nothing changed yet." : undefined}
-          onClick={async () => {
-            try {
-              await update.mutateAsync({
-                id: bundleId,
-                name: trimmed,
-                description: nextDescription,
-              });
-              setOutcome({
-                kind: "applied",
-                message: trimmed === name ? "Description saved" : `Now called ${trimmed}`,
-              });
-              onClose();
-            } catch (error) {
-              setOutcome(outcomeFromError(error));
-            }
-          }}
-        >
-          Save
-        </Button>
+        {/* Closing on success used to fire in the same breath as `setOutcome`,
+            which unmounts this dialog before the operator can read what it
+            just set — "Now called X" was computed and never shown. Held open
+            until Done is pressed instead, same as the delete dialog. */}
+        {!succeeded(outcome) && (
+          <Button
+            variant="accent"
+            disabled={!trimmed || unchanged}
+            isPending={update.isPending}
+            reason={!trimmed ? "A bundle needs a name." : unchanged ? "Nothing changed yet." : undefined}
+            onClick={async () => {
+              try {
+                await update.mutateAsync({
+                  id: bundleId,
+                  name: trimmed,
+                  description: nextDescription,
+                });
+                setOutcome({
+                  kind: "applied",
+                  message: trimmed === name ? "Description saved" : `Now called ${trimmed}`,
+                });
+              } catch (error) {
+                setOutcome(outcomeFromError(error));
+              }
+            }}
+          >
+            Save
+          </Button>
+        )}
         <Button disabled={update.isPending} onClick={onClose}>
-          Cancel
+          {succeeded(outcome) ? "Done" : "Cancel"}
         </Button>
       </ModalFooter>
     </Modal>
@@ -612,9 +617,27 @@ function DeleteBundleDialog({
         // bundle already deleted, with nothing left to empty.
         note={gone ? undefined : "Emptying the bundle instead leaves it assignable and grants nothing."}
       >
+        {/* `Keep it` precedes the destructive button in DOM order so the
+            focus trap's initial focus (first focusable element) never lands
+            on `Delete and revoke`; `order-1`/`order-2` keep it visually
+            second, matching every other confirm dialog.
+            `onDeleted` clears the parent's selection, and the parent's own
+            comment says why it must: the deleted bundle stays selected
+            otherwise, and the list falls back to the first bundle under the
+            old id's heading. Called from HERE rather than from the mutation,
+            because clearing the selection unmounts this dialog — and the
+            outcome the operator has not read yet goes with it. */}
+        <Button
+          className={gone ? undefined : "order-2"}
+          disabled={remove.isPending}
+          onClick={gone ? onDeleted : onCancel}
+        >
+          {gone ? "Done" : "Keep it"}
+        </Button>
         {!gone && (
         <Button
           variant="dangerConfirm"
+          className="order-1"
           isPending={remove.isPending}
           onClick={async () => {
             try {
@@ -653,15 +676,6 @@ function DeleteBundleDialog({
           Delete and revoke
         </Button>
         )}
-        {/* `onDeleted` clears the parent's selection, and the parent's own
-            comment says why it must: the deleted bundle stays selected
-            otherwise, and the list falls back to the first bundle under the old
-            id's heading. It was never called. Called from HERE rather than from
-            the mutation, because clearing the selection unmounts this dialog —
-            and the outcome the operator has not read yet goes with it. */}
-        <Button disabled={remove.isPending} onClick={gone ? onDeleted : onCancel}>
-          {gone ? "Done" : "Keep it"}
-        </Button>
       </ModalFooter>
     </Modal>
   );
@@ -940,42 +954,55 @@ function CreateBundleDialog({ open, onClose }: { open: boolean; onClose: () => v
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter>
+        {/* Closing on success used to fire alongside `setOutcome`, which
+            unmounts this dialog before "X created" is ever painted — same
+            fix as the rename dialog: hold it open, let Done close it. */}
+        {!succeeded(outcome) && (
+          <Button
+            variant="accent"
+            disabled={Boolean(blocked)}
+            reason={blocked}
+            isPending={create.isPending}
+            onClick={async () => {
+              try {
+                await create.mutateAsync({
+                  name: trimmed,
+                  description,
+                  roles: chosen.map((id) => {
+                    const [project_id, role_key] = splitRoleId(id);
+                    return { project_id, role_key };
+                  }),
+                });
+                setOutcome({
+                  kind: "applied",
+                  message: `${trimmed} created`,
+                  detail: `Its first version carries ${chosen.length} ${
+                    chosen.length === 1 ? "role" : "roles"
+                  }, so it can be assigned now. Nobody holds it yet.`,
+                });
+              } catch (error) {
+                setOutcome(outcomeFromError(error));
+              }
+            }}
+          >
+            {chosen.length === 0
+              ? "Create bundle"
+              : `Create with ${chosen.length} ${chosen.length === 1 ? "role" : "roles"}`}
+          </Button>
+        )}
         <Button
-          variant="accent"
-          disabled={Boolean(blocked)}
-          reason={blocked}
-          isPending={create.isPending}
-          onClick={async () => {
-            try {
-              await create.mutateAsync({
-                name: trimmed,
-                description,
-                roles: chosen.map((id) => {
-                  const [project_id, role_key] = splitRoleId(id);
-                  return { project_id, role_key };
-                }),
-              });
-              setOutcome({
-                kind: "applied",
-                message: `${trimmed} created`,
-                detail: `Its first version carries ${chosen.length} ${
-                  chosen.length === 1 ? "role" : "roles"
-                }, so it can be assigned now. Nobody holds it yet.`,
-              });
+          onClick={() => {
+            onClose();
+            if (succeeded(outcome)) {
               setName("");
               setDescription("");
               setSelected(new Set());
-              onClose();
-            } catch (error) {
-              setOutcome(outcomeFromError(error));
+              setOutcome(null);
             }
           }}
         >
-          {chosen.length === 0
-            ? "Create bundle"
-            : `Create with ${chosen.length} ${chosen.length === 1 ? "role" : "roles"}`}
+          {succeeded(outcome) ? "Done" : "Cancel"}
         </Button>
-        <Button onClick={onClose}>Cancel</Button>
       </ModalFooter>
     </Modal>
   );

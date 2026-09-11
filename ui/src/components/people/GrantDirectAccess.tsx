@@ -230,15 +230,28 @@ export function GrantDirectAccess({
               onClick={async () => {
                 setOutcome(null);
                 try {
-                  await grant.mutateAsync({
+                  const result = await grant.mutateAsync({
                     project_id: projectId,
                     role_key: roleKey,
                     reason,
                     duration_days: resolved.days,
                   });
+                  // This endpoint never applies inline — it always enqueues to
+                  // the outbox for the operator-triggered drain (`status`
+                  // defaults to "pending"). Reporting "applied" here would say
+                  // Zitadel has this when only Syndra's own ledger does.
+                  const waiting = result.status === "pending";
                   setOutcome({
-                    kind: "applied",
-                    message: `${userName} now holds ${selectedLabel}`,
+                    kind: waiting ? "queued" : "applied",
+                    // Present tense only once Zitadel actually has it — "now
+                    // holds" beside "nothing has reached Zitadel yet" is the
+                    // dialog contradicting itself in its own two sentences.
+                    message: waiting
+                      ? `${userName} will hold ${selectedLabel} once this is sent`
+                      : `${userName} now holds ${selectedLabel}`,
+                    detail: waiting
+                      ? "Nothing has reached Zitadel yet. It waits under Pending changes until you send it."
+                      : undefined,
                   });
                 } catch (error) {
                   setOutcome(outcomeFromError(error));
